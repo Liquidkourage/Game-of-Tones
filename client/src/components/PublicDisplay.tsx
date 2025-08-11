@@ -1,0 +1,387 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
+import { useParams } from 'react-router-dom';
+import { 
+  Music, 
+  Users, 
+  Trophy, 
+  Crown,
+  Volume2,
+  Timer,
+  Play,
+  Pause,
+  Sparkles,
+  List,
+  Grid3X3
+} from 'lucide-react';
+
+interface GameState {
+  isPlaying: boolean;
+  currentSong: Song | null;
+  playerCount: number;
+  winners: Winner[];
+  snippetLength: number;
+  playedSongs: Song[];
+  bingoCard: BingoCard;
+}
+
+interface Song {
+  id: string;
+  name: string;
+  artist: string;
+}
+
+interface Winner {
+  playerName: string;
+  timestamp: number;
+}
+
+interface BingoCard {
+  squares: BingoSquare[];
+  size: number;
+}
+
+interface BingoSquare {
+  song: Song;
+  isPlayed: boolean;
+  position: { row: number; col: number };
+}
+
+const PublicDisplay: React.FC = () => {
+  const { roomId } = useParams<{ roomId: string }>();
+  const [currentWinningLine, setCurrentWinningLine] = useState(0);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [gameState, setGameState] = useState<GameState>({
+    isPlaying: false,
+    currentSong: null,
+    playerCount: 0,
+    winners: [],
+    snippetLength: 30,
+    playedSongs: [],
+    bingoCard: {
+      squares: [],
+      size: 5
+    }
+  });
+
+  useEffect(() => {
+    // TODO: Connect to Socket.io for real-time updates
+    console.log('Public display mounted for room:', roomId);
+    
+    // Mock data for demo
+    setTimeout(() => {
+      const mockSongs = [
+        { id: '1', name: 'Bohemian Rhapsody', artist: 'Queen' },
+        { id: '2', name: 'Stairway to Heaven', artist: 'Led Zeppelin' },
+        { id: '3', name: 'Hotel California', artist: 'Eagles' },
+        { id: '4', name: 'Imagine', artist: 'John Lennon' },
+        { id: '5', name: 'Hey Jude', artist: 'The Beatles' },
+        { id: '6', name: 'Wonderwall', artist: 'Oasis' },
+        { id: '7', name: 'Smells Like Teen Spirit', artist: 'Nirvana' },
+        { id: '8', name: 'Sweet Child O Mine', artist: 'Guns N Roses' },
+        { id: '9', name: 'Nothing Else Matters', artist: 'Metallica' },
+        { id: '10', name: 'Comfortably Numb', artist: 'Pink Floyd' },
+        { id: '11', name: 'Wish You Were Here', artist: 'Pink Floyd' },
+        { id: '12', name: 'Black', artist: 'Pearl Jam' },
+        { id: '13', name: 'Creep', artist: 'Radiohead' },
+        { id: '14', name: 'Under the Bridge', artist: 'Red Hot Chili Peppers' },
+        { id: '15', name: 'Californication', artist: 'Red Hot Chili Peppers' },
+        { id: '16', name: 'Zombie', artist: 'The Cranberries' },
+        { id: '17', name: 'Losing My Religion', artist: 'R.E.M.' },
+        { id: '18', name: 'Every Breath You Take', artist: 'The Police' },
+        { id: '19', name: 'Billie Jean', artist: 'Michael Jackson' },
+        { id: '20', name: 'Thriller', artist: 'Michael Jackson' },
+        { id: '21', name: 'Like a Rolling Stone', artist: 'Bob Dylan' },
+        { id: '22', name: 'Blowin in the Wind', artist: 'Bob Dylan' },
+        { id: '23', name: 'The Sound of Silence', artist: 'Simon & Garfunkel' },
+        { id: '24', name: 'Bridge Over Troubled Water', artist: 'Simon & Garfunkel' },
+        { id: '25', name: 'Respect', artist: 'Aretha Franklin' }
+      ];
+
+      // Create mock bingo card
+      const mockBingoCard: BingoCard = {
+        squares: mockSongs.slice(0, 25).map((song, index) => ({
+          song,
+          isPlayed: Math.random() > 0.7, // 30% chance of being played
+          position: { row: Math.floor(index / 5), col: index % 5 }
+        })),
+        size: 5
+      };
+
+      setGameState(prev => ({
+        ...prev,
+        isPlaying: true,
+        currentSong: mockSongs[0],
+        playerCount: 8,
+        playedSongs: mockSongs.slice(0, 7), // First 7 songs played
+        bingoCard: mockBingoCard,
+        winners: [
+          { playerName: 'Alice', timestamp: Date.now() - 30000 },
+          { playerName: 'Bob', timestamp: Date.now() - 15000 },
+          { playerName: 'Charlie', timestamp: Date.now() - 5000 }
+        ]
+      }));
+    }, 2000);
+  }, [roomId]);
+
+  const formatTime = (timestamp: number) => {
+    return new Date(timestamp).toLocaleTimeString();
+  };
+
+  // Function to get the overall pattern name
+  const getPatternName = () => {
+    return 'Pattern: Single Line (any direction)';
+  };
+
+  // Function to check if a square is part of the current winning line
+  const isWinningSquare = (row: number, col: number) => {
+    // 12 possible winning lines: 5 horizontal, 5 vertical, 2 diagonal
+    const winningLines = [
+      // Horizontal lines (rows 0-4)
+      (r: number, c: number) => r === 0, // Row 0
+      (r: number, c: number) => r === 1, // Row 1
+      (r: number, c: number) => r === 2, // Row 2
+      (r: number, c: number) => r === 3, // Row 3
+      (r: number, c: number) => r === 4, // Row 4
+      // Vertical lines (columns 0-4)
+      (r: number, c: number) => c === 0, // Column 0
+      (r: number, c: number) => c === 1, // Column 1
+      (r: number, c: number) => c === 2, // Column 2
+      (r: number, c: number) => c === 3, // Column 3
+      (r: number, c: number) => c === 4, // Column 4
+      // Diagonal lines
+      (r: number, c: number) => r === c, // Top-left to bottom-right
+      (r: number, c: number) => r + c === 4 // Top-right to bottom-left
+    ];
+    
+    return winningLines[currentWinningLine](row, col);
+  };
+
+  // Cycle through winning lines every 0.2 seconds - start immediately
+  useEffect(() => {
+    console.log('Setting up interval for winning lines');
+    
+    // Clear any existing interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+    
+    intervalRef.current = setInterval(() => {
+      console.log('Current winning line:', currentWinningLine);
+      setCurrentWinningLine((prev) => {
+        const next = (prev + 1) % 12;
+        console.log('Changing from', prev, 'to', next);
+        return next;
+      });
+    }, 800);
+    
+    return () => {
+      console.log('Clearing interval');
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, []);
+
+  const renderBingoCard = () => {
+    const { bingoCard } = gameState;
+    console.log('Winners section rendering, winners:', gameState.winners);
+    const grid = [];
+    
+    for (let row = 0; row < bingoCard.size; row++) {
+      const rowSquares = [];
+      for (let col = 0; col < bingoCard.size; col++) {
+        const square = bingoCard.squares.find(s => 
+          s.position.row === row && s.position.col === col
+        );
+        
+        if (square) {
+          // Check if this square is part of the current winning line
+          const isWinningLine = isWinningSquare(row, col);
+          rowSquares.push(
+            <motion.div
+              key={`${row}-${col}`}
+              className={`bingo-square ${square.isPlayed ? 'played' : ''} ${isWinningLine ? 'winning' : ''}`}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: (row + col) * 0.05 }}
+              whileHover={{ scale: 1.05 }}
+            >
+                             <div className="square-content">
+                 {square.isPlayed && (
+                   <motion.div 
+                     className="played-indicator"
+                     initial={{ scale: 0 }}
+                     animate={{ scale: 1 }}
+                     transition={{ duration: 0.3 }}
+                   >
+                     <Music className="played-icon" />
+                   </motion.div>
+                 )}
+               </div>
+            </motion.div>
+          );
+        }
+      }
+      grid.push(
+        <div key={row} className="bingo-row">
+          {rowSquares}
+        </div>
+      );
+    }
+    
+    return grid;
+  };
+
+  return (
+    <div className="public-display">
+      {/* Compact Header */}
+      <motion.div 
+        className="display-header"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+      >
+        <div className="header-content">
+          <div className="logo-section">
+            <Sparkles className="logo-icon" />
+            <h1>Game of Tones</h1>
+          </div>
+          <div className="room-info">
+            <h2>Room: {roomId}</h2>
+            <div className="player-count">
+              <Users className="count-icon" />
+              <span>{gameState.playerCount} Players</span>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Main Content - 16:10 Layout */}
+      <div className="display-content">
+        {/* Two Column Layout: Call List Left, Other Cards Right */}
+        <div className="bottom-row">
+          {/* Call List - Left Half */}
+          <motion.div 
+            className="call-list-display"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.6 }}
+          >
+            <div className="call-list-header">
+              <List className="call-list-icon" />
+              <h2>Call List</h2>
+              <span className="call-count">{gameState.playedSongs.length}</span>
+            </div>
+            <div className="call-list-content">
+              {gameState.playedSongs.length > 0 ? (
+                <div className="call-list">
+                  {gameState.playedSongs.slice(-5).map((song, index) => (
+                    <motion.div
+                      key={song.id}
+                      className="call-item"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.4, delay: 0.8 + index * 0.1 }}
+                    >
+                      <div className="call-number">#{gameState.playedSongs.length - 4 + index}</div>
+                      <div className="call-song-info">
+                        <div className="call-song-name">{song.name}</div>
+                        <div className="call-song-artist">{song.artist}</div>
+                      </div>
+                      <Music className="call-icon" />
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <div className="no-calls">
+                  <p>No songs played yet</p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+
+          {/* Right Half - 3 Cards Grid */}
+          <div className="right-cards-grid">
+            {/* Quick Stats */}
+            <motion.div 
+              className="quick-stats"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+            >
+              <div className="stat-item">
+                <Volume2 className="stat-icon" />
+                <span className="stat-value">{gameState.playerCount}</span>
+                <span className="stat-label">Players</span>
+              </div>
+              <div className="stat-item">
+                <Trophy className="stat-icon" />
+                <span className="stat-value">{gameState.winners.length}</span>
+                <span className="stat-label">Winners</span>
+              </div>
+              <div className="stat-item">
+                <List className="stat-icon" />
+                <span className="stat-value">{gameState.playedSongs.length}</span>
+                <span className="stat-label">Songs</span>
+              </div>
+            </motion.div>
+
+          {/* Bingo Card Visualization */}
+          <motion.div 
+            className="bingo-card-display"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.8 }}
+          >
+            <div className="bingo-card-header">
+              <Grid3X3 className="bingo-card-icon" />
+              <h2>{getPatternName()}</h2>
+            </div>
+            <div className="bingo-card-content">
+              <div className="bingo-grid">
+                {renderBingoCard()}
+              </div>
+            </div>
+          </motion.div>
+          {/* Winners Section - Compact */}
+          <motion.div 
+            className="winners-display"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 1.0 }}
+          >
+            <div className="winners-header">
+              <Trophy className="winners-icon" />
+              <h2>Winners</h2>
+            </div>
+            <div className="winners-list">
+              {(gameState.winners || []).slice(0, 3).map((winner, index) => (
+                <motion.div
+                  key={index}
+                  className="winner-item"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.4, delay: 1.2 + index * 0.1 }}
+                >
+                  <div className="winner-rank">
+                    <Crown className="crown-icon" />
+                    <span>#{index + 1}</span>
+                  </div>
+                  <div className="winner-info">
+                    <h3>{winner.playerName}</h3>
+                    <p>{formatTime(winner.timestamp)}</p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+      </div>
+      </div>
+    </div>
+  );
+};
+
+export default PublicDisplay; 

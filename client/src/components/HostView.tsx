@@ -1,0 +1,1230 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { 
+  Play, 
+  Pause, 
+  SkipForward, 
+  Music, 
+  Trophy
+} from 'lucide-react';
+import io from 'socket.io-client';
+import { API_BASE, SOCKET_URL } from '../config';
+
+interface Playlist {
+  id: string;
+  name: string;
+  tracks: number;
+  description?: string;
+  public?: boolean;
+  collaborative?: boolean;
+  owner?: string;
+}
+
+interface Song {
+  id: string;
+  name: string;
+  artist: string;
+  duration?: number; // Make duration optional
+}
+
+interface Player {
+  id: string;
+  name: string;
+  isHost: boolean;
+  hasBingo: boolean;
+}
+
+interface Device {
+  id: string;
+  name: string;
+  type: string;
+  is_active: boolean;
+  is_private_session: boolean;
+  is_restricted: boolean;
+}
+
+interface PlaybackState {
+  isPlaying: boolean;
+  currentTime: number;
+  duration: number;
+  volume: number;
+  playbackRate: number;
+  currentSong: Song | null;
+  queue: Song[];
+  currentQueueIndex: number;
+}
+
+const HostView: React.FC = () => {
+  const { roomId } = useParams<{ roomId: string }>();
+  const [socket, setSocket] = useState<any>(null);
+  const [gameState, setGameState] = useState<'waiting' | 'playing' | 'ended'>('waiting');
+  const [currentSong, setCurrentSong] = useState<Song | null>(null);
+  const [players] = useState<Player[]>([]);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [selectedPlaylists, setSelectedPlaylists] = useState<Playlist[]>([]);
+  const [snippetLength, setSnippetLength] = useState(30);
+  const [winners, setWinners] = useState<Player[]>([]);
+  const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
+  const [isSpotifyConnecting, setIsSpotifyConnecting] = useState(false);
+  const [mixFinalized, setMixFinalized] = useState(false);
+  const [spotifyError, setSpotifyError] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+  const [isLoadingDevices, setIsLoadingDevices] = useState(false);
+
+  // Advanced playback states
+  const [playbackState, setPlaybackState] = useState<PlaybackState>({
+    isPlaying: false,
+    currentTime: 0,
+    duration: 0,
+    volume: 50,
+    playbackRate: 1,
+    currentSong: null,
+    queue: [],
+    currentQueueIndex: 0
+  });
+   
+  const [isSeeking, setIsSeeking] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [previousVolume, setPreviousVolume] = useState(50);
+  const [songList, setSongList] = useState<Song[]>([]);
+  const [showSongList, setShowSongList] = useState(false);
+  
+  // Pause position tracking
+  const [pausePosition, setPausePosition] = useState<number>(0);
+  const [isPausedByInterface, setIsPausedByInterface] = useState(false);
+
+  const loadPlaylists = useCallback(async () => {
+    try {
+      console.log('Loading playlists...');
+      const response = await fetch(`${API_BASE || ''}/api/spotify/playlists`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setPlaylists(data.playlists);
+        console.log('Playlists loaded:', data.playlists.length, 'playlists');
+      } else {
+        console.error('Failed to load playlists:', data.error);
+      }
+    } catch (error) {
+      console.error('Error loading playlists:', error);
+    }
+  }, []);
+
+  const loadDevices = useCallback(async () => {
+    try {
+      setIsLoadingDevices(true);
+      console.log('Loading Spotify devices...');
+      const response = await fetch(`${API_BASE || ''}/api/spotify/devices`);
+      const data = await response.json();
+      
+      if (data.devices) {
+        setDevices(data.devices);
+        console.log('Devices loaded:', data.devices.length, 'devices');
+        console.log('Device details:', data.devices);
+        
+        // Auto-select the saved device if available, otherwise first device
+        if (data.savedDevice) {
+          const savedDevice = data.devices.find((d: Device) => d.id === data.savedDevice.id);
+          if (savedDevice) {
+            setSelectedDevice(savedDevice);
+            console.log('Auto-selected saved device:', savedDevice.name);
+          }
+        } else if (data.devices.length > 0 && !selectedDevice) {
+          setSelectedDevice(data.devices[0]);
+        }
+      } else {
+        console.error('Failed to load devices:', data.error);
+      }
+    } catch (error) {
+      console.error('Error loading devices:', error);
+    } finally {
+      setIsLoadingDevices(false);
+    }
+  }, []);
+
+  const saveSelectedDevice = useCallback(async () => {
+    if (!selectedDevice) {
+      alert('Please select a device first');
+      return;
+    }
+
+    try {
+      console.log('Saving device:', selectedDevice.name);
+      const response = await fetch(`${API_BASE || ''}/api/spotify/save-device`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ device: selectedDevice })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        console.log('Device saved successfully:', data.message);
+        alert(`Device saved: ${selectedDevice.name}`);
+      } else {
+        console.error('Failed to save device:', data.error);
+        alert('Failed to save device');
+      }
+    } catch (error) {
+      console.error('Error saving device:', error);
+      alert('Error saving device');
+    }
+  }, [selectedDevice]);
+
+  useEffect(() => {
+    console.log('HostView useEffect triggered');
+    console.log('Current window.location.pathname:', window.location.pathname);
+    console.log('Current window.location.href:', window.location.href);
+    console.log('Room ID from params:', roomId);
+
+    // Initialize socket connection
+    const newSocket = io(SOCKET_URL || undefined);
+    setSocket(newSocket);
+
+    // Socket event listeners
+    newSocket.on('player-joined', (data: any) => {
+      console.log('Player joined:', data);
+    });
+
+    newSocket.on('game-started', (data: any) => {
+      setGameState('playing');
+      console.log('Game started:', data);
+    });
+
+    newSocket.on('song-playing', (data: any) => {
+      setCurrentSong({
+        id: data.songId,
+        name: data.songName,
+        artist: data.artistName,
+      });
+      setIsPlaying(true);
+      setPlaybackState(prev => ({
+        ...prev,
+        isPlaying: true,
+        currentSong: {
+          id: data.songId,
+          name: data.songName,
+          artist: data.artistName,
+        },
+        duration: data.snippetLength * 1000, // Convert to milliseconds
+        currentTime: 0
+      }));
+      
+      // Reset pause tracking for new song
+      setPausePosition(0);
+      setIsPausedByInterface(false);
+      
+      console.log('Song playing:', data);
+      
+      // Sync volume when song starts playing
+      setTimeout(() => {
+        fetchCurrentVolume();
+      }, 500);
+    });
+
+    newSocket.on('bingo-called', (data: any) => {
+      setWinners(prev => [...prev, data]);
+      console.log('Bingo called by:', data.playerName);
+    });
+
+    newSocket.on('player-left', (data: any) => {
+      console.log('Player left:', data);
+    });
+
+    newSocket.on('playback-update', (data: any) => {
+      setPlaybackState(prev => ({
+        ...prev,
+        currentTime: data.currentTime,
+        isPlaying: data.isPlaying,
+        volume: data.volume
+      }));
+    });
+
+    newSocket.on('queue-update', (data: any) => {
+      setPlaybackState(prev => ({
+        ...prev,
+        queue: data.queue,
+        currentQueueIndex: data.currentIndex
+      }));
+    });
+
+    // Join room as host
+    if (roomId) {
+      newSocket.emit('join-room', { roomId, playerName: 'Host', isHost: true });
+    }
+
+    // Check Spotify status and load playlists if connected
+    const checkSpotifyStatus = async () => {
+      try {
+        console.log('Host view loaded, checking Spotify status...');
+        const response = await fetch(`${API_BASE || ''}/api/spotify/status`);
+        const data = await response.json();
+
+        if (data.connected) {
+          console.log('Spotify already connected, loading playlists...');
+          setIsSpotifyConnected(true);
+          setIsSpotifyConnecting(false);
+          await loadPlaylists();
+          await loadDevices(); // Load devices when connected
+          
+          // Sync initial volume
+          setTimeout(() => {
+            fetchCurrentVolume();
+          }, 1000);
+        } else {
+          console.log('Spotify not connected');
+          setIsSpotifyConnected(false);
+          setIsSpotifyConnecting(false);
+        }
+      } catch (error) {
+        console.error('Error checking Spotify status:', error);
+        setIsSpotifyConnected(false);
+        setIsSpotifyConnecting(false);
+      }
+    };
+
+    checkSpotifyStatus();
+
+    // Cleanup socket on unmount
+    return () => {
+      newSocket.close();
+      // Clear any pending volume timeout
+      if (volumeTimeout) {
+        clearTimeout(volumeTimeout);
+      }
+    };
+  }, [roomId, loadPlaylists, loadDevices]);
+
+
+
+  const connectSpotify = useCallback(async () => {
+    try {
+      console.log('Initiating Spotify connection...');
+      setIsSpotifyConnecting(true);
+      setSpotifyError(null);
+      
+      // Check if Spotify is already connected
+      const statusResponse = await fetch(`${API_BASE || ''}/api/spotify/status`);
+      const statusData = await statusResponse.json();
+      
+      if (statusData.connected) {
+        console.log('Spotify already connected, loading playlists...');
+        setIsSpotifyConnected(true);
+        setIsSpotifyConnecting(false);
+        await loadPlaylists();
+        return;
+      }
+      
+      // If not connected, initiate OAuth flow
+      const response = await fetch(`${API_BASE || ''}/api/spotify/auth`);
+      const data = await response.json();
+      
+      if (data.authUrl) {
+        console.log('Redirecting to Spotify authorization...');
+        
+        // Store the current URL to return to after Spotify auth
+        const returnUrl = `/host/${roomId}`;
+        localStorage.setItem('spotify_return_url', returnUrl);
+        if (roomId) {
+          localStorage.setItem('spotify_room_id', roomId);
+        }
+        
+        // Redirect to Spotify
+        window.location.href = data.authUrl;
+      } else {
+        console.error('Failed to get Spotify authorization URL');
+        setSpotifyError('Failed to get Spotify authorization URL. Please try again.');
+        setIsSpotifyConnecting(false);
+      }
+    } catch (error) {
+      console.error('Error connecting to Spotify:', error);
+      setSpotifyError('Failed to connect to Spotify. Please check your internet connection and try again.');
+      setIsSpotifyConnecting(false);
+    }
+  }, [roomId]); // Remove loadPlaylists from dependencies
+
+  const finalizeMix = async () => {
+    if (!socket || selectedPlaylists.length === 0) return;
+    
+    try {
+      socket.emit('finalize-mix', {
+        roomId: roomId,
+        playlists: selectedPlaylists
+      });
+      
+      // Listen for mix finalized confirmation
+      socket.once('mix-finalized', (data: any) => {
+        console.log('Mix finalized:', data);
+        setMixFinalized(true);
+      });
+    } catch (error) {
+      console.error('Error finalizing mix:', error);
+    }
+  };
+
+  const startGame = async () => {
+    if (selectedPlaylists.length === 0) {
+      alert('Please select at least one playlist');
+      return;
+    }
+
+    if (!socket) {
+      console.error('Socket not connected');
+      return;
+    }
+
+    try {
+      console.log('Starting game with playlists:', selectedPlaylists);
+      socket.emit('start-game', {
+        roomId,
+        playlists: selectedPlaylists,
+        snippetLength,
+        deviceId: selectedDevice?.id, // Pass the selected device ID
+        songList: songList // Send the shuffled song list to ensure server uses same order
+      });
+    } catch (error) {
+      console.error('Error starting game:', error);
+    }
+  };
+
+  const playSong = async (song: Song) => {
+    if (!socket) {
+      console.error('Socket not connected');
+      return;
+    }
+
+    try {
+      // If we're already playing this song, just resume
+      if (isPlaying && currentSong?.id === song.id) {
+        socket.emit('resume-song', { roomId });
+        setIsPlaying(true);
+        setPlaybackState(prev => ({ ...prev, isPlaying: true }));
+        console.log('Resumed song via socket');
+      } else {
+        // Check if we were paused by the interface and need to resume from exact position
+        if (isPausedByInterface && currentSong?.id === song.id) {
+          console.log(`▶️ Resuming from exact pause position: ${pausePosition}ms`);
+          socket.emit('resume-song', { 
+            roomId, 
+            resumePosition: pausePosition 
+          });
+          setIsPlaying(true);
+          setPlaybackState(prev => ({ 
+            ...prev, 
+            isPlaying: true,
+            currentTime: pausePosition 
+          }));
+          setIsPausedByInterface(false);
+        } else {
+          // For new songs or external changes, just resume normally
+          socket.emit('resume-song', { roomId });
+          setIsPlaying(true);
+          setPlaybackState(prev => ({ ...prev, isPlaying: true }));
+          console.log('Started/resumed song via socket');
+        }
+      }
+    } catch (error) {
+      console.error('Error playing song:', error);
+    }
+  };
+
+  const pauseSong = async () => {
+    try {
+      if (socket) {
+        // Store the exact position where we're pausing
+        setPausePosition(playbackState.currentTime);
+        setIsPausedByInterface(true);
+        
+        socket.emit('pause-song', { roomId });
+        setIsPlaying(false);
+        setPlaybackState(prev => ({ ...prev, isPlaying: false }));
+        console.log(`⏸️ Paused song at position: ${playbackState.currentTime}ms`);
+      }
+    } catch (error) {
+      console.error('Error pausing song:', error);
+    }
+  };
+
+  const skipSong = async () => {
+    try {
+      if (socket) {
+        socket.emit('skip-song', { roomId });
+        console.log('Skipped to next track via socket');
+      }
+    } catch (error) {
+      console.error('Error skipping song:', error);
+    }
+  };
+
+  const selectPlaylist = (playlist: Playlist) => {
+    setSelectedPlaylists(prev => {
+      const isSelected = prev.find(p => p.id === playlist.id);
+      if (isSelected) {
+        return prev.filter(p => p.id !== playlist.id);
+      } else {
+        return [...prev, playlist];
+      }
+    });
+  };
+
+  // Generate and shuffle song list from selected playlists
+  const generateSongList = useCallback(async () => {
+    if (selectedPlaylists.length === 0) {
+      setSongList([]);
+      return;
+    }
+
+    try {
+      const allSongs: Song[] = [];
+      
+      for (const playlist of selectedPlaylists) {
+        const response = await fetch(`${API_BASE || ''}/api/spotify/playlist-tracks/${playlist.id}`);
+        const data = await response.json();
+        
+        if (data.success && data.tracks) {
+          allSongs.push(...data.tracks);
+        }
+      }
+
+      // Shuffle the songs using Fisher-Yates algorithm
+      const shuffledSongs = [...allSongs];
+      for (let i = shuffledSongs.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledSongs[i], shuffledSongs[j]] = [shuffledSongs[j], shuffledSongs[i]];
+      }
+
+      setSongList(shuffledSongs);
+      console.log(`Generated ${shuffledSongs.length} shuffled songs`);
+    } catch (error) {
+      console.error('Error generating song list:', error);
+    }
+  }, [selectedPlaylists]);
+
+  // Advanced playback functions
+  const [volumeTimeout, setVolumeTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  // Function to fetch current Spotify volume
+  const fetchCurrentVolume = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE || ''}/api/spotify/current-playback`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.playbackState) {
+          const spotifyVolume = data.playbackState.volume_percent || 50;
+          setPlaybackState(prev => ({ ...prev, volume: spotifyVolume }));
+          console.log(`🔊 Synced volume from Spotify: ${spotifyVolume}%`);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching current volume:', error);
+    }
+  }, []);
+
+  // Debounced volume change with strict synchronization
+  const handleVolumeChange = useCallback(async (newVolume: number) => {
+    // Clear any existing timeout
+    if (volumeTimeout) {
+      clearTimeout(volumeTimeout);
+    }
+
+    // Set local state immediately for responsive UI
+    setPlaybackState(prev => ({ ...prev, volume: newVolume }));
+    setIsMuted(false);
+
+    // Debounce the actual volume change to prevent rapid API calls
+    const timeout = setTimeout(async () => {
+      try {
+        console.log(`🔊 Setting volume to ${newVolume}% on Spotify`);
+        const response = await fetch(`${API_BASE || ''}/api/spotify/volume`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            volume: newVolume,
+            deviceId: selectedDevice?.id,
+            roomId: roomId
+          })
+        });
+        
+        if (response.ok) {
+          // Verify the volume was set correctly by fetching current state
+          setTimeout(() => {
+            fetchCurrentVolume();
+          }, 100);
+        } else {
+          console.error('Failed to set volume, reverting to Spotify state');
+          fetchCurrentVolume(); // Revert to actual Spotify volume
+        }
+      } catch (error) {
+        console.error('Error setting volume:', error);
+        fetchCurrentVolume(); // Revert to actual Spotify volume
+      }
+    }, 100); // 100ms debounce
+
+    setVolumeTimeout(timeout);
+  }, [selectedDevice?.id, volumeTimeout, fetchCurrentVolume, roomId]);
+
+  const handleMuteToggle = useCallback(async () => {
+    if (isMuted) {
+      // Unmute - restore previous volume
+      setPlaybackState(prev => ({ ...prev, volume: previousVolume }));
+      setIsMuted(false);
+      
+      try {
+        console.log(`🔊 Unmuting, setting volume to ${previousVolume}%`);
+        const response = await fetch(`${API_BASE || ''}/api/spotify/volume`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            volume: previousVolume,
+            deviceId: selectedDevice?.id,
+            roomId: roomId
+          })
+        });
+        
+        if (response.ok) {
+          // Verify the volume was set correctly
+          setTimeout(() => {
+            fetchCurrentVolume();
+          }, 100);
+        } else {
+          console.error('Failed to unmute, reverting to Spotify state');
+          fetchCurrentVolume();
+        }
+      } catch (error) {
+        console.error('Error unmuting:', error);
+        fetchCurrentVolume();
+      }
+    } else {
+      // Mute - save current volume and set to 0
+      setPreviousVolume(playbackState.volume);
+      setPlaybackState(prev => ({ ...prev, volume: 0 }));
+      setIsMuted(true);
+      
+      try {
+        console.log(`🔊 Muting, setting volume to 0%`);
+        const response = await fetch(`${API_BASE || ''}/api/spotify/volume`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            volume: 0,
+            deviceId: selectedDevice?.id,
+            roomId: roomId
+          })
+        });
+        
+        if (response.ok) {
+          // Verify the volume was set correctly
+          setTimeout(() => {
+            fetchCurrentVolume();
+          }, 100);
+        } else {
+          console.error('Failed to mute, reverting to Spotify state');
+          fetchCurrentVolume();
+        }
+      } catch (error) {
+        console.error('Error muting:', error);
+        fetchCurrentVolume();
+      }
+    }
+  }, [isMuted, previousVolume, playbackState.volume, selectedDevice?.id, fetchCurrentVolume, roomId]);
+
+  const handleSeek = useCallback(async (newTime: number) => {
+    setPlaybackState(prev => ({ ...prev, currentTime: newTime }));
+    
+    try {
+        const response = await fetch(`${API_BASE || ''}/api/spotify/seek`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          position: newTime,
+          deviceId: selectedDevice?.id 
+        })
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to seek');
+      }
+    } catch (error) {
+      console.error('Error seeking:', error);
+    }
+  }, [selectedDevice?.id]);
+
+  const handleSkipToNext = useCallback(() => {
+    if (socket) {
+      socket.emit('skip-song', { roomId });
+    }
+  }, [socket, roomId]);
+
+  const handleSkipToPrevious = useCallback(() => {
+    if (socket) {
+      // Send current playback position to determine if we should restart current song or go to previous
+      const currentPosition = playbackState.currentTime;
+      socket.emit('previous-song', { 
+        roomId, 
+        currentPosition: currentPosition 
+      });
+      console.log(`Previous button clicked at position: ${currentPosition}ms`);
+    }
+  }, [socket, roomId, playbackState.currentTime]);
+
+  // Force device detection
+  const forceDeviceDetection = useCallback(async () => {
+    try {
+      setIsLoadingDevices(true);
+      console.log('🔧 Forcing device detection...');
+      
+      const response = await fetch('/api/spotify/force-device', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (response.ok) {
+        console.log('✅ Device detection forced successfully');
+        await loadDevices();
+      } else {
+        console.error('❌ Failed to force device detection');
+      }
+    } catch (error) {
+      console.error('❌ Error forcing device detection:', error);
+    } finally {
+      setIsLoadingDevices(false);
+    }
+  }, [loadDevices]);
+
+  // Refresh Spotify connection
+  const refreshSpotifyConnection = useCallback(async () => {
+    try {
+      setIsLoadingDevices(true);
+      console.log('🔄 Refreshing Spotify connection...');
+      
+      const response = await fetch('/api/spotify/refresh', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (response.ok) {
+        console.log('✅ Spotify connection refreshed');
+        await loadDevices();
+        await loadPlaylists();
+      } else {
+        console.error('❌ Failed to refresh Spotify connection');
+      }
+    } catch (error) {
+      console.error('❌ Error refreshing Spotify connection:', error);
+    } finally {
+      setIsLoadingDevices(false);
+    }
+  }, [loadDevices, loadPlaylists]);
+
+  // Format time helper
+  const formatTime = (milliseconds: number) => {
+    const seconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  // Progress tracking for time slider
+  useEffect(() => {
+    if (!isPlaying || !currentSong) return;
+    
+    const interval = setInterval(() => {
+      setPlaybackState(prev => ({
+        ...prev,
+        currentTime: Math.min(prev.currentTime + 1000, prev.duration)
+      }));
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [isPlaying, currentSong]);
+
+  // Periodic volume synchronization
+  useEffect(() => {
+    if (!isPlaying || !currentSong) return;
+
+    const volumeSyncInterval = setInterval(() => {
+      fetchCurrentVolume();
+    }, 5000); // Sync volume every 5 seconds during playback
+
+    return () => clearInterval(volumeSyncInterval);
+  }, [isPlaying, currentSong, fetchCurrentVolume]);
+
+  // Periodic playback state synchronization
+  useEffect(() => {
+    if (!currentSong) return;
+
+    const playbackSyncInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`${API_BASE || ''}/api/spotify/current-playback`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.playbackState) {
+            const spotifyIsPlaying = data.playbackState.is_playing;
+            const spotifyPosition = data.playbackState.progress_ms || 0;
+            
+            // If Spotify is playing but our interface thinks it's paused, or vice versa
+            if (spotifyIsPlaying !== isPlaying) {
+              console.log(`🔄 Spotify playback state changed: ${spotifyIsPlaying}, updating interface`);
+              setIsPlaying(spotifyIsPlaying);
+              setPlaybackState(prev => ({ 
+                ...prev, 
+                isPlaying: spotifyIsPlaying,
+                currentTime: spotifyPosition
+              }));
+              
+              // If Spotify was resumed externally, clear our pause tracking
+              if (spotifyIsPlaying && isPausedByInterface) {
+                console.log('🔄 Spotify resumed externally, clearing pause tracking');
+                setIsPausedByInterface(false);
+                setPausePosition(0);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error syncing playback state:', error);
+      }
+    }, 2000); // Sync every 2 seconds
+
+    return () => clearInterval(playbackSyncInterval);
+  }, [currentSong, isPlaying, isPausedByInterface]);
+
+  // Generate song list when selected playlists change
+  useEffect(() => {
+    generateSongList();
+  }, [selectedPlaylists, generateSongList]);
+  
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      if (!currentSong) return;
+      
+             switch (event.code) {
+         case 'Space':
+           event.preventDefault();
+           playSong(currentSong);
+           break;
+         case 'ArrowLeft':
+           event.preventDefault();
+           handleSkipToPrevious();
+           break;
+         case 'ArrowRight':
+           event.preventDefault();
+           handleSkipToNext();
+           break;
+         case 'KeyM':
+           event.preventDefault();
+           handleMuteToggle();
+           break;
+       }
+    };
+
+         document.addEventListener('keydown', handleKeyPress);
+     return () => document.removeEventListener('keydown', handleKeyPress);
+   }, [currentSong, handleMuteToggle]);
+
+  return (
+    <div className="host-view">
+      <motion.div 
+        className="host-container"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        {/* Header */}
+        <div className="host-header">
+          <h1>🎵 Game Host</h1>
+          <div className="room-info">
+            <span className="room-code">Room: {roomId}</span>
+            <span className="player-count">{players.length} Players</span>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="host-content">
+          {/* Spotify Connection */}
+          <motion.div 
+            className="spotify-section"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+          >
+                         <h2>🎵 Spotify Connection</h2>
+             {!isSpotifyConnected ? (
+               <div className="spotify-connection-section">
+                 {spotifyError && (
+                   <div className="spotify-error">
+                     <p>{spotifyError}</p>
+                     <button 
+                       className="retry-btn"
+                       onClick={() => {
+                         setSpotifyError(null);
+                         connectSpotify();
+                       }}
+                     >
+                       Try Again
+                     </button>
+                   </div>
+                 )}
+                                   <button 
+                    className="spotify-connect-btn"
+                    onClick={() => {
+                      console.log('Connect Spotify button clicked!');
+                      console.log('About to call connectSpotify function...');
+                      connectSpotify();
+                    }}
+                    disabled={isSpotifyConnecting}
+                  >
+                    <Music className="btn-icon" />
+                    {isSpotifyConnecting ? 'Connecting...' : 'Connect Spotify'}
+                  </button>
+               </div>
+             ) : (
+               <div className="spotify-connected">
+                 <Music className="connected-icon" />
+                 <span>Connected to Spotify</span>
+                 <button 
+                   className="disconnect-btn"
+                   onClick={async () => {
+                     try {
+                      await fetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST' });
+                       setIsSpotifyConnected(false);
+                       setPlaylists([]);
+                       setSpotifyError(null);
+                     } catch (error) {
+                       console.error('Error disconnecting Spotify:', error);
+                     }
+                   }}
+                 >
+                   Disconnect
+                 </button>
+               </div>
+             )}
+          </motion.div>
+
+          {/* Playlist Selection */}
+          <motion.div 
+            className="playlist-section"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+          >
+            <h2>📋 Select Playlists</h2>
+            <div className="playlist-grid">
+              {playlists && playlists.map(playlist => (
+                <motion.div
+                  key={playlist.id}
+                  className={`playlist-card ${selectedPlaylists.find(p => p.id === playlist.id) ? 'selected' : ''}`}
+                  onClick={() => selectPlaylist(playlist)}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <h3>{playlist.name}</h3>
+                  <p>{playlist.tracks || 0} songs</p>
+                </motion.div>
+              ))}
+            </div>
+                     </motion.div>
+
+           {/* Song List */}
+           {songList.length > 0 && (
+             <motion.div 
+               className="song-list-section"
+               initial={{ opacity: 0 }}
+               animate={{ opacity: 1 }}
+               transition={{ delay: 0.4 }}
+             >
+               <h2>🎵 Song List ({songList.length} songs)</h2>
+               <div className="song-list-controls">
+                 <button
+                   onClick={() => setShowSongList(!showSongList)}
+                   className="btn-secondary"
+                 >
+                   {showSongList ? '📋 Hide Song List' : '📋 Show Song List'}
+                 </button>
+                 <button
+                   onClick={generateSongList}
+                   className="btn-secondary"
+                 >
+                   🔀 Reshuffle Songs
+                 </button>
+               </div>
+               
+               {showSongList && (
+                 <motion.div
+                   className="song-list-display"
+                   initial={{ opacity: 0, height: 0 }}
+                   animate={{ opacity: 1, height: 'auto' }}
+                   transition={{ duration: 0.3 }}
+                 >
+                   <div className="song-list">
+                     {songList.map((song, index) => (
+                       <div
+                         key={`${song.id}-${index}`}
+                         className="song-list-item"
+                       >
+                         <span className="song-number">{index + 1}</span>
+                         <div className="song-info">
+                           <span className="song-name">{song.name}</span>
+                           <span className="song-artist">{song.artist}</span>
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                 </motion.div>
+               )}
+             </motion.div>
+           )}
+
+           {/* Device Selection */}
+           {isSpotifyConnected && (
+             <motion.div 
+               className="device-section"
+               initial={{ opacity: 0 }}
+               animate={{ opacity: 1 }}
+               transition={{ delay: 0.35 }}
+             >
+               <h2>📱 Playback Device</h2>
+               <div className="device-controls">
+                 <select
+                   value={selectedDevice?.id || ''}
+                   onChange={(e) => {
+                     const device = devices.find(d => d.id === e.target.value);
+                     setSelectedDevice(device || null);
+                   }}
+                   className="device-select"
+                 >
+                   <option value="">Select a device...</option>
+                   {devices.map((device) => (
+                     <option key={device.id} value={device.id}>
+                       {device.name} ({device.type}) {device.is_active ? '🟢 Active' : '⚪ Inactive'}
+                     </option>
+                   ))}
+                 </select>
+                 <button
+                   onClick={saveSelectedDevice}
+                   disabled={!selectedDevice}
+                   className="btn-secondary"
+                 >
+                   💾 Save Device
+                 </button>
+                 <button
+                   onClick={forceDeviceDetection}
+                   disabled={isLoadingDevices}
+                   className="btn-secondary"
+                 >
+                   🔧 Force Detection
+                 </button>
+                 <button
+                   onClick={refreshSpotifyConnection}
+                   disabled={isLoadingDevices}
+                   className="btn-secondary"
+                 >
+                   🔄 Refresh Connection
+                 </button>
+               </div>
+             </motion.div>
+           )}
+
+          {/* Game Settings */}
+          <motion.div 
+            className="settings-section"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4 }}
+          >
+            <h2>⚙️ Game Settings</h2>
+            <div className="setting-item">
+              <label>Snippet Length (seconds):</label>
+              <input
+                type="range"
+                min="15"
+                max="60"
+                value={snippetLength}
+                onChange={(e) => setSnippetLength(Number(e.target.value))}
+              />
+              <span>{snippetLength}s</span>
+            </div>
+          </motion.div>
+
+                     {/* Game Controls */}
+           <motion.div 
+             className="controls-section"
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             transition={{ delay: 0.5 }}
+           >
+             <h2>🎮 Game Controls</h2>
+             <div className="control-buttons">
+               {gameState === 'waiting' ? (
+                 <>
+                   {!mixFinalized && (
+                     <button 
+                       className="control-button finalize-mix"
+                       onClick={finalizeMix}
+                       disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
+                     >
+                       🎵 Finalize Mix
+                     </button>
+                   )}
+                   {mixFinalized && (
+                     <div className="mix-finalized-status">
+                       <p className="status-text">✅ Mix finalized - Cards generated for players</p>
+                     </div>
+                   )}
+                   <button 
+                     className="start-btn"
+                     onClick={startGame}
+                     disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
+                   >
+                     <Play className="btn-icon" />
+                     {isSpotifyConnecting ? 'Connecting Spotify...' : 'Start Game'}
+                   </button>
+                 </>
+               ) : (
+                 <div className="game-status">
+                   <p className="status-text">🎵 Game is running - Use the Now Playing controls below</p>
+                 </div>
+               )}
+             </div>
+           </motion.div>
+
+                       {/* Now Playing Interface - Integrated into main content */}
+            {currentSong && (
+             <motion.div 
+               className="now-playing-section"
+               initial={{ opacity: 0 }}
+               animate={{ opacity: 1 }}
+               transition={{ delay: 0.6 }}
+             >
+               <h2>🎵 Now Playing</h2>
+               <div className="now-playing-content">
+                 {/* Song Info */}
+                 <div className="song-info-display">
+                   <div className="song-details">
+                     <h3>{currentSong.name}</h3>
+                     <p className="artist">{currentSong.artist}</p>
+                   </div>
+                 </div>
+
+                 {/* Main Controls */}
+                 <div className="main-controls">
+                   <button onClick={handleSkipToPrevious} className="control-btn">
+                     ⏮️
+                   </button>
+                                       <button onClick={isPlaying ? pauseSong : () => playSong(currentSong!)} className="control-btn play-btn">
+                      {isPlaying ? '⏸️ Pause' : '▶️ Play'}
+                    </button>
+                   <button onClick={handleSkipToNext} className="control-btn">
+                     ⏭️
+                   </button>
+                 </div>
+
+                 {/* Progress Bar */}
+                 <div className="progress-container">
+                   <input
+                     type="range"
+                     min="0"
+                     max={playbackState.duration}
+                     value={playbackState.currentTime}
+                     onChange={(e) => handleSeek(Number(e.target.value))}
+                     onMouseDown={() => setIsSeeking(true)}
+                     onMouseUp={() => setIsSeeking(false)}
+                     className="progress-bar"
+                   />
+                   <div className="progress-info">
+                     <span>{formatTime(playbackState.currentTime)}</span>
+                     <span>{formatTime(playbackState.duration)}</span>
+                   </div>
+                 </div>
+
+                 {/* Volume Control */}
+                 <div className="volume-control">
+                   <button
+                     onClick={handleMuteToggle}
+                     className="control-btn"
+                     style={{ 
+                       padding: '4px 8px', 
+                       minWidth: 'auto',
+                       background: isMuted ? 'rgba(255, 107, 107, 0.3)' : 'rgba(255, 255, 255, 0.15)'
+                     }}
+                   >
+                     {isMuted ? '🔇' : '🔊'}
+                   </button>
+                   <input
+                     type="range"
+                     min="0"
+                     max="100"
+                     value={isMuted ? 0 : playbackState.volume}
+                     onChange={(e) => handleVolumeChange(Number(e.target.value))}
+                     className="volume-slider"
+                   />
+                   <span className="volume-label">{isMuted ? '0' : playbackState.volume}%</span>
+                 </div>
+
+                                   {/* Keyboard Shortcuts Help */}
+                  <div className="advanced-controls-toggle">
+                    <button
+                      className="toggle-advanced-btn"
+                      onClick={() => {
+                        alert(`🎹 Keyboard Shortcuts:
+• Spacebar: Play/Pause
+• ← → Arrow Keys: Previous/Next
+• M: Mute/Unmute
+• Click and drag progress bar to seek`);
+                      }}
+                      style={{ fontSize: '0.8rem', padding: '6px 12px' }}
+                    >
+                      ⌨️ Help
+                    </button>
+                  </div>
+               </div>
+             </motion.div>
+           )}
+
+
+
+          {/* Winners */}
+          {winners.length > 0 && (
+            <motion.div 
+              className="winners-section"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.5 }}
+            >
+              <h2>🏆 Winners</h2>
+              <div className="winners-list">
+                {winners.map((winner, index) => (
+                  <div key={winner.id} className="winner-item">
+                    <Trophy className="trophy-icon" />
+                    <span>{winner.name}</span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </div>
+      </motion.div>
+
+      
+    </div>
+  );
+};
+
+export default HostView;
