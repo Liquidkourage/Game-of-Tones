@@ -1,29 +1,33 @@
 FROM node:18-alpine AS builder
 WORKDIR /app
 
-# Install root deps
+# Install root deps (with dev) for build
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 
-# Install and build client
+# Install client deps and build
 COPY client/package*.json ./client/
-RUN cd client && npm ci && npm run build
+RUN cd client && npm ci --no-audit --no-fund
 
-# Copy full source (server code, assets)
+# Copy full source and build client
 COPY . .
+RUN cd client && npm run build
+
+# Prune dev dependencies to production only
+RUN npm prune --omit=dev
 
 FROM node:18-alpine AS runner
 WORKDIR /app
+ENV NODE_ENV=production
 
-# Only production deps for server
+# Use pruned node_modules from builder to avoid reinstall (saves memory)
+COPY --from=builder /app/node_modules ./node_modules
+
+# Copy server and built client
 COPY package*.json ./
-RUN npm ci --omit=dev
-
-# Copy server and prebuilt client
 COPY --from=builder /app/server ./server
 COPY --from=builder /app/client/build ./client/build
 
-ENV NODE_ENV=production
 ENV PORT=8080
 EXPOSE 8080
 
