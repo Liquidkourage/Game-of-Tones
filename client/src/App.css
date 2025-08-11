@@ -1122,7 +1122,8 @@ body {
   margin: 0 auto; /* ensure centering within card */
 }
 
-.bingo-row {
+/* Scope row-flattening to player only to avoid affecting public display */
+.player-container .bingo-row {
   display: contents;
 }
 

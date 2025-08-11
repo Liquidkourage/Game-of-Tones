@@ -1488,9 +1488,11 @@ code {
   padding: 5px;
 }
 
+/* Public display: enforce fixed 5x5 grid */
 .bingo-grid {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(5, 1fr);
   gap: 4px;
   width: 100%;
   height: 100%;
@@ -1498,10 +1500,7 @@ code {
   align-self: center;
 }
 
-.bingo-row {
-  display: flex;
-  gap: 2px;
-}
+.bingo-row { display: contents; }
 
 .bingo-square {
   flex: 1;
