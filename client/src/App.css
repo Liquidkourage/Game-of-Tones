@@ -635,6 +635,9 @@ body {
   padding: 1rem 0;
   overflow-x: hidden;
   overflow-y: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .host-header {
@@ -692,8 +695,10 @@ body {
 .host-content {
   display: grid;
   gap: 1rem;
-  max-width: 1000px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  padding: 0 1rem;
+  margin: 0;
   height: calc(100vh - 280px);
   overflow-y: auto;
 }
@@ -949,12 +954,11 @@ body {
   margin-bottom: 0.5rem;
 }
 
-/* Responsive bingo card sizing - 75% viewport */
+/* Responsive bingo card sizing - scale to window while staying square */
 .bingo-card {
-  max-width: 75vw !important;
-  max-height: 75vh !important;
-  width: 75vw !important;
-  height: 75vh !important;
+  width: min(92vmin, 100%) !important;
+  height: auto !important;
+  aspect-ratio: 1 / 1 !important;
   margin: 0 auto !important;
 }
 
@@ -1120,17 +1124,14 @@ body {
   border: 1px solid rgba(0, 255, 136, 0.2);
   border-radius: 16px;
   padding: 1rem;
-  margin: 0;
-  flex: 1;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
   box-sizing: border-box;
-  max-width: 75vw;
-  max-height: 75vh;
-  width: 75vw;
-  height: 75vh;
-  margin: 0 auto;
+  width: min(92vmin, 100%);
+  height: auto;
+  aspect-ratio: 1 / 1;
 }
 
 .bingo-card-header {
