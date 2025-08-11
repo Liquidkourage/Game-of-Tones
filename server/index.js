@@ -11,6 +11,9 @@ require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
+const clientBuildPath = path.join(__dirname, '..', 'client', 'build');
+const hasClientBuild = fs.existsSync(clientBuildPath);
+console.log('NODE_ENV:', process.env.NODE_ENV, 'Client build exists:', hasClientBuild, 'at', clientBuildPath);
 const allowedOriginsEnv = process.env.CORS_ORIGINS || '';
 const allowedOrigins = allowedOriginsEnv
   ? allowedOriginsEnv.split(',').map(s => s.trim()).filter(Boolean)
@@ -1345,12 +1348,9 @@ app.get('/api/rooms/:roomId', (req, res) => {
   }
 });
 
-// Serve React build (after API routes)
-if (process.env.NODE_ENV === 'production') {
-  const clientBuildPath = path.join(__dirname, '..', 'client', 'build');
-  console.log('Static build path:', clientBuildPath, 'exists:', fs.existsSync(clientBuildPath));
+// Serve React build (after API routes). Do it whenever build exists (prod or not)
+if (hasClientBuild) {
   app.use(express.static(clientBuildPath));
-  // For any non-API route, return index.html
   app.get(/^(?!\/api\/).*/, (req, res) => {
     res.sendFile(path.join(clientBuildPath, 'index.html'));
   });
