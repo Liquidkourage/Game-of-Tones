@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useParams, useSearchParams } from 'react-router-dom';
 import io from 'socket.io-client';
@@ -47,6 +47,8 @@ const PlayerView: React.FC = () => {
 
   const [socket, setSocket] = useState<any>(null);
   const [bingoCard, setBingoCard] = useState<BingoCard | null>(null);
+  const [focusedSquare, setFocusedSquare] = useState<BingoSquare | null>(null);
+  const longPressTimer = useRef<number | null>(null);
   const [gameState, setGameState] = useState<GameState>({
     isPlaying: false,
     currentSong: null,
@@ -164,6 +166,19 @@ const PlayerView: React.FC = () => {
     setBingoCard(updatedCard);
   };
 
+  // Long-press to reveal a readable bottom sheet on mobile
+  const handlePressStart = (square: BingoSquare) => {
+    if (longPressTimer.current) window.clearTimeout(longPressTimer.current);
+    longPressTimer.current = window.setTimeout(() => setFocusedSquare(square), 350);
+  };
+
+  const handlePressEnd = () => {
+    if (longPressTimer.current) {
+      window.clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
   const checkBingo = (card: BingoCard): boolean => {
     // Check rows
     for (let row = 0; row < 5; row++) {
@@ -231,6 +246,11 @@ const PlayerView: React.FC = () => {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => markSquare(square.position)}
+              onMouseDown={() => handlePressStart(square)}
+              onMouseUp={handlePressEnd}
+              onMouseLeave={handlePressEnd}
+              onTouchStart={() => handlePressStart(square)}
+              onTouchEnd={handlePressEnd}
             >
               <div className="song-name">{square.songName}</div>
               <div className="artist-name">{square.artistName}</div>
@@ -369,6 +389,19 @@ const PlayerView: React.FC = () => {
             </ul>
           </div>
         </motion.div>
+
+        {/* Readable bottom sheet for small screens (long-press) */}
+        {focusedSquare && (
+          <div className="mobile-sheet" onClick={() => setFocusedSquare(null)}>
+            <div className="mobile-sheet-content" onClick={(e) => e.stopPropagation()}>
+              <div className="mobile-sheet-title">{focusedSquare.songName}</div>
+              <div className="mobile-sheet-artist">{focusedSquare.artistName}</div>
+              <button className="btn btn-primary" onClick={() => { markSquare(focusedSquare.position); setFocusedSquare(null); }}>
+                Mark Square
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
