@@ -1159,7 +1159,7 @@ body {
   background: rgba(30, 30, 30, 0.8);
   border: 1px solid rgba(0, 255, 136, 0.3);
   border-radius: 4px;
-  padding: 0.28rem;
+  padding: 0; /* remove internal padding for max text area */
   text-align: center;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -1171,6 +1171,9 @@ body {
   position: relative;
   overflow: visible;
   aspect-ratio: 1 / 0.98;
+  touch-action: none; /* suppress gesture handling (e.g., Galaxy Fold) */
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Tooltip shown on long-press for alternate text */
@@ -1191,11 +1194,7 @@ body {
   text-align: center;
 }
 
-.bingo-square:hover {
-  background: rgba(0, 255, 136, 0.1);
-  border-color: rgba(0, 255, 136, 0.6);
-  transform: scale(1.02);
-}
+/* Remove hover/tap glow; only show when marked */
 
 .bingo-square.marked {
   background: rgba(0, 255, 136, 0.2);

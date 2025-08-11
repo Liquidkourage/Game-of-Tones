@@ -252,14 +252,14 @@ const PlayerView: React.FC = () => {
             <motion.div
               key={square.position}
               className={`bingo-square ${square.marked ? 'marked' : ''}`}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
               onClick={() => markSquare(square.position)}
               onPointerDown={(e) => handlePointerDown(square, e)}
               onPointerUp={clearLongPress}
               onPointerCancel={clearLongPress}
               onPointerLeave={clearLongPress}
               onContextMenu={(e) => { e.preventDefault(); return false; }}
+              onSelectStart={(e) => { e.preventDefault(); return false; }}
+              onDragStart={(e) => { e.preventDefault(); return false; }}
             >
               {displayMode === 'title' ? (
                 <div className="song-name">{square.songName}</div>
