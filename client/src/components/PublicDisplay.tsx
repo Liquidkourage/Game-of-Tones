@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import io from 'socket.io-client';
 import { SOCKET_URL } from '../config';
 import { 
@@ -51,6 +51,8 @@ interface BingoSquare {
 
 const PublicDisplay: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
+  const [searchParams] = useSearchParams();
+  const displayRef = useRef<HTMLDivElement | null>(null);
   const [currentWinningLine, setCurrentWinningLine] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const [gameState, setGameState] = useState<GameState>({
@@ -112,6 +114,15 @@ const PublicDisplay: React.FC = () => {
 
     return () => { socket.close(); };
   }, [roomId]);
+
+  // Optional runtime scale: /display/:roomId?scale=1.5 (approximate visual sizing)
+  useEffect(() => {
+    const p = searchParams.get('scale') || searchParams.get('patternScale');
+    const scale = p ? parseFloat(p) : NaN;
+    if (displayRef.current && !Number.isNaN(scale) && scale > 0) {
+      displayRef.current.style.setProperty('--bingo-scale', String(scale));
+    }
+  }, [searchParams]);
 
   useEffect(() => { ensureGrid(); }, []);
 
@@ -240,7 +251,7 @@ const PublicDisplay: React.FC = () => {
   };
 
   return (
-    <div className="public-display">
+    <div ref={displayRef} className="public-display">
       {/* Compact Header */}
       <motion.div 
         className="display-header"
@@ -265,10 +276,10 @@ const PublicDisplay: React.FC = () => {
 
       {/* Main Content - 16:10 Layout */}
       <div className="display-content">
-        {/* Two Column Layout: Left = Bingo + Winners, Right = Tall Call List + Quick Stats */}
+        {/* Three Column Layout: Pattern (25%), Player Info (middle), Tall Call List (right) */}
         <div className="bottom-row">
-          <div className="left-grid">
-            {/* Bingo Card Visualization (upper-left) */}
+          <div className="pattern-col">
+            {/* Bingo Card Visualization (upper-left, fixed to ~25% viewport width) */}
             <motion.div 
               className="bingo-card-display"
               initial={{ opacity: 0, y: 20 }}
@@ -285,13 +296,15 @@ const PublicDisplay: React.FC = () => {
                 </div>
               </div>
             </motion.div>
+          </div>
 
-            {/* Winners below bingo */}
+          <div className="info-col">
+            {/* Player Information - Winners */}
             <motion.div 
               className="winners-display"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
+              transition={{ duration: 0.6, delay: 0.25 }}
             >
               <div className="winners-header">
                 <Trophy className="winners-icon" />
@@ -304,7 +317,7 @@ const PublicDisplay: React.FC = () => {
                     className="winner-item"
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.4, delay: 0.6 + index * 0.1 }}
+                    transition={{ duration: 0.4, delay: 0.35 + index * 0.1 }}
                   >
                     <div className="winner-rank">
                       <Crown className="crown-icon" />
@@ -318,9 +331,33 @@ const PublicDisplay: React.FC = () => {
                 ))}
               </div>
             </motion.div>
+
+            {/* Player Information - Quick Stats */}
+            <motion.div 
+              className="quick-stats"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.35 }}
+            >
+              <div className="stat-item">
+                <Volume2 className="stat-icon" />
+                <span className="stat-value">{gameState.playerCount}</span>
+                <span className="stat-label">Players</span>
+              </div>
+              <div className="stat-item">
+                <Trophy className="stat-icon" />
+                <span className="stat-value">{gameState.winners.length}</span>
+                <span className="stat-label">Winners</span>
+              </div>
+              <div className="stat-item">
+                <List className="stat-icon" />
+                <span className="stat-value">{gameState.playedSongs.length}</span>
+                <span className="stat-label">Songs</span>
+              </div>
+            </motion.div>
           </div>
 
-          <div className="right-column">
+          <div className="call-col">
             {/* Tall Call List */}
             <motion.div 
               className="call-list-display"
@@ -361,29 +398,6 @@ const PublicDisplay: React.FC = () => {
               </div>
             </motion.div>
 
-            {/* Small quick stats at bottom */}
-            <motion.div 
-              className="quick-stats"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.3 }}
-            >
-              <div className="stat-item">
-                <Volume2 className="stat-icon" />
-                <span className="stat-value">{gameState.playerCount}</span>
-                <span className="stat-label">Players</span>
-              </div>
-              <div className="stat-item">
-                <Trophy className="stat-icon" />
-                <span className="stat-value">{gameState.winners.length}</span>
-                <span className="stat-label">Winners</span>
-              </div>
-              <div className="stat-item">
-                <List className="stat-icon" />
-                <span className="stat-value">{gameState.playedSongs.length}</span>
-                <span className="stat-label">Songs</span>
-              </div>
-            </motion.div>
           </div>
         </div>
       </div>
