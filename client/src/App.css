@@ -1054,22 +1054,14 @@ body {
 }
 
 .player-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-  padding: 0.75rem 1rem;
+  display: block;
+  margin-bottom: 0.5rem;
+  padding: 0.35rem 0.6rem;
   background: rgba(42, 42, 42, 0.8);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(0, 255, 136, 0.2);
   border-radius: 12px;
   flex-shrink: 0;
-}
-
-.player-info {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
 }
 
 .player-icon {
@@ -1078,22 +1070,10 @@ body {
   color: var(--accent-color);
 }
 
-.player-info h2 {
-  font-size: 1rem;
-  font-weight: 600;
-  margin-bottom: 0.1rem;
-}
-
-.player-info p {
-  color: var(--secondary-text);
-  font-size: 0.8rem;
-}
-
-.player-stats {
-  display: flex;
-  gap: 1rem;
-  font-size: 0.8rem;
-}
+.player-header-line { display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-line { color: #ddd; font-weight: 600; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; }
+.player-count { margin-left: auto; color: #b3b3b3; font-size: 0.85rem; }
+.player-bingo { color: var(--accent-color-2); font-weight: 800; margin-left: 0.5rem; }
 
 .bingo-stat {
   color: var(--accent-color-2) !important;
@@ -1127,17 +1107,7 @@ body {
   aspect-ratio: 1 / 1;
 }
 
-.bingo-card-header {
-  text-align: center;
-  margin-bottom: 0.5rem;
-  flex-shrink: 0;
-}
-
-.bingo-card-header h3 {
-  color: #00ff88;
-  margin: 0;
-  font-size: 1rem;
-}
+/* removed bingo-card-header and title for player view */
 
 .bingo-card-grid {
   display: grid;

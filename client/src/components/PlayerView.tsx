@@ -286,13 +286,6 @@ const PlayerView: React.FC = () => {
 
     return (
       <div className="bingo-card">
-        <div className="bingo-card-header">
-          <h3>Your Bingo Card</h3>
-          <div className="unique-songs-counter">
-            <span className="counter-label">Unique Songs:</span>
-            <span className="counter-value">{countUniqueSongs(bingoCard)}/25</span>
-          </div>
-        </div>
         <div className={`bingo-card-grid density-${density}`}>
           {bingoCard.squares.map((square) => (
             <motion.div
@@ -339,23 +332,12 @@ const PlayerView: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <div className="player-info">
+          <div className="player-header-line">
             <Users className="player-icon" />
-            <div>
-              <h2>Player: {playerName}</h2>
-              <p>Room: {roomId}</p>
-            </div>
-          </div>
-          <div className="player-stats">
-            <div className="stat">
-              <Users className="stat-icon" />
-              <span>{gameState.playerCount} Players</span>
-            </div>
+            <span className="player-line">{playerName} — Room {roomId}</span>
+            <span className="player-count">{gameState.playerCount} players</span>
             {gameState.hasBingo && (
-              <div className="stat bingo-stat">
-                <Trophy className="stat-icon" />
-                <span>BINGO!</span>
-              </div>
+              <span className="player-bingo">BINGO!</span>
             )}
           </div>
         </motion.div>
@@ -399,9 +381,7 @@ const PlayerView: React.FC = () => {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.6, delay: 0.2 }}
         >
-          <div className="section-header" style={{ alignItems: 'center' }}>
-            <Music className="section-icon" />
-            <h3>Your Bingo Card</h3>
+          <div className="section-header" style={{ alignItems: 'center', justifyContent: 'flex-end' }}>
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>Display</span>
               <label className="toggle-switch">
