@@ -270,6 +270,9 @@ const PublicDisplay: React.FC = () => {
               <Users className="count-icon" />
               <span>{gameState.playerCount} Players</span>
             </div>
+            <div className="qr-join">
+              <img alt="Join QR" className="qr-img" src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(window.location.origin + '/player/' + roomId)}`} />
+            </div>
           </div>
         </div>
       </motion.div>

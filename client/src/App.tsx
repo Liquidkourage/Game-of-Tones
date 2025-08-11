@@ -28,11 +28,7 @@ function App() {
                 <Sparkles className="logo-icon" />
                 <h1>Game of Tones</h1>
               </div>
-              <div className="header-icons">
-                <Music className="header-icon" />
-                <Users className="header-icon" />
-                <Gamepad2 className="header-icon" />
-              </div>
+              {/* icons removed on public display; kept on other routes if desired */}
             </div>
           </motion.header>
 
