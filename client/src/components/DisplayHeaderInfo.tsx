@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import io from 'socket.io-client';
 import { SOCKET_URL } from '../config';
@@ -23,15 +23,11 @@ const DisplayHeaderInfo: React.FC = () => {
 
   if (!roomId) return null;
 
-  const joinUrl = typeof window !== 'undefined'
-    ? window.location.origin + '/player/' + roomId
+  const joinUrl = roomId
+    ? (typeof window !== 'undefined' ? window.location.origin + '/player/' + roomId : '')
     : '';
-  const qrPrimary = useMemo(() => (
-    `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(joinUrl)}`
-  ), [joinUrl]);
-  const qrFallback = useMemo(() => (
-    `https://chart.googleapis.com/chart?cht=qr&chs=120x120&chl=${encodeURIComponent(joinUrl)}`
-  ), [joinUrl]);
+  const qrPrimary = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(joinUrl)}`;
+  const qrFallback = `https://chart.googleapis.com/chart?cht=qr&chs=120x120&chl=${encodeURIComponent(joinUrl)}`;
 
   return (
     <div className="room-info">
