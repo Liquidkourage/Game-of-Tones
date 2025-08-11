@@ -252,28 +252,6 @@ const PublicDisplay: React.FC = () => {
 
   return (
     <div ref={displayRef} className="public-display">
-      {/* Compact Header */}
-      <motion.div 
-        className="display-header"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-      >
-        <div className="header-content">
-          <div className="logo-section" />
-          <div className="room-info">
-            <h2>Room: {roomId}</h2>
-            <div className="player-count">
-              <Users className="count-icon" />
-              <span>{gameState.playerCount} Players</span>
-            </div>
-            <div className="qr-join">
-              <img alt="Join QR" className="qr-img" src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(window.location.origin + '/player/' + roomId)}`} />
-            </div>
-          </div>
-        </div>
-      </motion.div>
-
       {/* Main Content - 16:10 Layout */}
       <div className="display-content">
         {/* Three Column Layout: Pattern (25%), Player Info (middle), Tall Call List (right) */}

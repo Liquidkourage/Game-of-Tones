@@ -10,6 +10,7 @@ import HostView from './components/HostView';
 import PlayerView from './components/PlayerView';
 import PublicDisplay from './components/PublicDisplay';
 import SpotifyCallback from './components/SpotifyCallback';
+import DisplayHeaderInfo from './components/DisplayHeaderInfo';
 
 function App() {
   return (
@@ -28,7 +29,8 @@ function App() {
                 <Sparkles className="logo-icon" />
                 <h1>Game of Tones</h1>
               </div>
-              {/* icons removed on public display; kept on other routes if desired */}
+              {/* Public display embeds room info in header */}
+              <DisplayHeaderInfo />
             </div>
           </motion.header>
 
