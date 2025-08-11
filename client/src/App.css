@@ -1223,6 +1223,40 @@ body {
   white-space: normal;
 }
 
+/* Density scaling for text and grid compactness */
+.density-s .bingo-card-grid { gap: 0 0; }
+.density-m .bingo-card-grid { gap: 0 0; }
+.density-l .bingo-card-grid { gap: 0 0; }
+
+.primary-line.density-s { font-size: clamp(0.54rem, 2.2vw, 0.95rem); letter-spacing: 0.01em; }
+.primary-line.density-m { font-size: clamp(0.60rem, 2.6vw, 1.05rem); letter-spacing: 0.012em; }
+.primary-line.density-l { font-size: clamp(0.66rem, 3.0vw, 1.15rem); letter-spacing: 0.014em; }
+
+@media (max-width: 480px) {
+  .primary-line { letter-spacing: 0.012em; }
+}
+
+/* Controls for density and focus */
+.density-toggle { display: inline-flex; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; overflow: hidden; }
+.density-btn { background: transparent; color: #ddd; border: none; padding: 4px 8px; font-weight: 600; cursor: pointer; }
+.density-btn.active { background: rgba(255,255,255,0.12); color: #fff; }
+.focus-card-btn { background: rgba(0,255,136,0.15); border: 1px solid rgba(0,255,136,0.3); color: #00ff88; padding: 6px 10px; border-radius: 8px; font-weight: 600; }
+
+.player-container.focus .player-header,
+.player-container.focus .current-song-section,
+.player-container.focus .game-status-section,
+.player-container.focus .instructions-section {
+  display: none !important;
+}
+
+.focus-topbar { position: sticky; top: 0; z-index: 50; display: flex; justify-content: space-between; gap: 0.5rem; padding: 6px 10px; margin-bottom: 6px; background: rgba(20,20,20,0.9); border: 1px solid rgba(0,255,136,0.25); border-radius: 10px; color: #b3b3b3; font-size: 0.85rem; }
+.focus-topbar .focus-room { color: #00ff88; font-weight: 700; }
+.focus-topbar .focus-name { color: #b3b3b3; }
+
+/* Big Bingo FAB with hold-to-confirm */
+.bingo-fab { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(135deg, #00ff88, #00ccff); color: #001b12; border: none; border-radius: 999px; padding: 12px 20px; font-weight: 800; letter-spacing: 0.04em; box-shadow: 0 8px 24px rgba(0, 255, 136, 0.4); z-index: 80; }
+.bingo-fab.holding { filter: brightness(0.9); box-shadow: 0 0 0 3px rgba(0,255,136,0.35) inset, 0 8px 24px rgba(0, 255, 136, 0.55); }
+
 /* artist/title share the same style via .primary-line */
 
 /* Mobile readable bottom sheet */

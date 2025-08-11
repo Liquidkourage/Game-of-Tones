@@ -426,6 +426,21 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Player calls BINGO (validated server-side)
+  socket.on('player-bingo', (data) => {
+    const { roomId } = data || {};
+    const room = rooms.get(roomId);
+    if (!room) return;
+    const player = room.players.get(socket.id);
+    if (!player || !player.bingoCard) return;
+    const valid = checkBingo(player.bingoCard);
+    if (valid && !player.hasBingo) {
+      player.hasBingo = true;
+      room.winners.push({ playerId: socket.id, playerName: player.name, timestamp: Date.now() });
+      io.to(roomId).emit('bingo-called', { playerId: socket.id, playerName: player.name, winners: room.winners });
+    }
+  });
+
   socket.on('start-game', async (data) => {
     console.log('🎮 Start game event received:', data);
     const { roomId, playlists, snippetLength = 30, deviceId, songList } = data;

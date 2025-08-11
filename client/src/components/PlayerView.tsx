@@ -49,9 +49,13 @@ const PlayerView: React.FC = () => {
   const [bingoCard, setBingoCard] = useState<BingoCard | null>(null);
   const [focusedSquare, setFocusedSquare] = useState<BingoSquare | null>(null);
   const longPressTimer = useRef<number | null>(null);
-  const [displayMode, setDisplayMode] = useState<'title' | 'artist'>('title');
+  const [displayMode, setDisplayMode] = useState<'title' | 'artist'>(() => (localStorage.getItem('display_mode') as 'title' | 'artist') || 'title');
   const [tooltipSquare, setTooltipSquare] = useState<string | null>(null);
   const [tooltipText, setTooltipText] = useState<string>('');
+  const [density, setDensity] = useState<'s' | 'm' | 'l'>(() => (localStorage.getItem('text_density') as 's' | 'm' | 'l') || 'm');
+  const [focusCard, setFocusCard] = useState<boolean>(() => localStorage.getItem('focus_card') === '1');
+  const [bingoHolding, setBingoHolding] = useState<boolean>(false);
+  const bingoHoldTimer = useRef<number | null>(null);
   const [gameState, setGameState] = useState<GameState>({
     isPlaying: false,
     currentSong: null,
@@ -167,6 +171,7 @@ const PlayerView: React.FC = () => {
 
     const updatedCard = { ...bingoCard, squares: updatedSquares };
     setBingoCard(updatedCard);
+    if (navigator.vibrate) navigator.vibrate(10);
   };
 
   // Long-press to reveal a readable bottom sheet on mobile
@@ -186,6 +191,47 @@ const PlayerView: React.FC = () => {
       longPressTimer.current = null;
     }
     setTooltipSquare(null);
+  };
+
+  const vibrate = (pattern: number | number[]) => {
+    if (navigator.vibrate) navigator.vibrate(pattern);
+  };
+
+  const handleDensityChange = (value: 's' | 'm' | 'l') => {
+    setDensity(value);
+    localStorage.setItem('text_density', value);
+  };
+
+  const handleDisplayModeToggle = (checked: boolean) => {
+    const mode = checked ? 'artist' : 'title';
+    setDisplayMode(mode);
+    localStorage.setItem('display_mode', mode);
+  };
+
+  const toggleFocusCard = () => {
+    const val = !focusCard;
+    setFocusCard(val);
+    localStorage.setItem('focus_card', val ? '1' : '0');
+  };
+
+  const startBingoHold = () => {
+    if (bingoHoldTimer.current) window.clearTimeout(bingoHoldTimer.current);
+    setBingoHolding(true);
+    bingoHoldTimer.current = window.setTimeout(() => {
+      if (socket) {
+        socket.emit('player-bingo', { roomId });
+      }
+      vibrate([10, 50, 20]);
+      setBingoHolding(false);
+    }, 1000);
+  };
+
+  const cancelBingoHold = () => {
+    if (bingoHoldTimer.current) {
+      window.clearTimeout(bingoHoldTimer.current);
+      bingoHoldTimer.current = null;
+    }
+    setBingoHolding(false);
   };
 
   const checkBingo = (card: BingoCard): boolean => {
@@ -247,7 +293,7 @@ const PlayerView: React.FC = () => {
             <span className="counter-value">{countUniqueSongs(bingoCard)}/25</span>
           </div>
         </div>
-        <div className="bingo-card-grid">
+        <div className={`bingo-card-grid density-${density}`}>
           {bingoCard.squares.map((square) => (
             <motion.div
               key={square.position}
@@ -260,7 +306,7 @@ const PlayerView: React.FC = () => {
               onContextMenu={(e) => { e.preventDefault(); return false; }}
               draggable={false}
             >
-              <div className="primary-line">
+              <div className={`primary-line density-${density}`}>
                 {displayMode === 'title' ? square.songName : square.artistName}
               </div>
               {tooltipSquare === square.position && (
@@ -284,39 +330,46 @@ const PlayerView: React.FC = () => {
   };
 
   return (
-    <div className={`player-container ${bingoCard ? 'has-card' : ''}`} style={{ minHeight: 0 }}>
+    <div className={`player-container ${bingoCard ? 'has-card' : ''} ${focusCard ? 'focus' : ''} density-${density}`} style={{ minHeight: 0 }}>
       {/* Header */}
-      <motion.div 
-        className="player-header"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <div className="player-info">
-          <Users className="player-icon" />
-          <div>
-            <h2>Player: {playerName}</h2>
-            <p>Room: {roomId}</p>
-          </div>
-        </div>
-        <div className="player-stats">
-          <div className="stat">
-            <Users className="stat-icon" />
-            <span>{gameState.playerCount} Players</span>
-          </div>
-          {gameState.hasBingo && (
-            <div className="stat bingo-stat">
-              <Trophy className="stat-icon" />
-              <span>BINGO!</span>
+      {!focusCard ? (
+        <motion.div 
+          className="player-header"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <div className="player-info">
+            <Users className="player-icon" />
+            <div>
+              <h2>Player: {playerName}</h2>
+              <p>Room: {roomId}</p>
             </div>
-          )}
+          </div>
+          <div className="player-stats">
+            <div className="stat">
+              <Users className="stat-icon" />
+              <span>{gameState.playerCount} Players</span>
+            </div>
+            {gameState.hasBingo && (
+              <div className="stat bingo-stat">
+                <Trophy className="stat-icon" />
+                <span>BINGO!</span>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      ) : (
+        <div className="focus-topbar" onClick={toggleFocusCard}>
+          <span className="focus-room">Room: {roomId}</span>
+          <span className="focus-name">{playerName}</span>
         </div>
-      </motion.div>
+      )}
 
       {/* Main Content */}
       <div className="player-content">
         {/* Current Song Display */}
-        {gameState.currentSong && (
+        {!focusCard && gameState.currentSong && (
           <motion.div 
             className="current-song-section"
             initial={{ opacity: 0, y: 20 }}
@@ -355,13 +408,20 @@ const PlayerView: React.FC = () => {
                 <input
                   type="checkbox"
                   checked={displayMode === 'artist'}
-                  onChange={(e) => setDisplayMode(e.target.checked ? 'artist' : 'title')}
+                  onChange={(e) => handleDisplayModeToggle(e.target.checked)}
                 />
                 <span className="slider" />
               </label>
               <span style={{ fontSize: '0.85rem', color: '#b3b3b3', minWidth: 60, textAlign: 'right' }}>
                 {displayMode === 'title' ? 'Title' : 'Artist'}
               </span>
+              <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>| Text</span>
+              <div className="density-toggle">
+                <button className={`density-btn ${density === 's' ? 'active' : ''}`} onClick={() => handleDensityChange('s')}>S</button>
+                <button className={`density-btn ${density === 'm' ? 'active' : ''}`} onClick={() => handleDensityChange('m')}>M</button>
+                <button className={`density-btn ${density === 'l' ? 'active' : ''}`} onClick={() => handleDensityChange('l')}>L</button>
+              </div>
+              <button className="focus-card-btn" onClick={toggleFocusCard}>{focusCard ? 'Show Chrome' : 'Focus Card'}</button>
             </div>
           </div>
           
@@ -369,6 +429,7 @@ const PlayerView: React.FC = () => {
         </motion.div>
 
         {/* Game Status */}
+        {!focusCard && (
         <motion.div 
           className="game-status-section"
           initial={{ opacity: 0, y: 20 }}
@@ -397,8 +458,10 @@ const PlayerView: React.FC = () => {
             )}
           </div>
         </motion.div>
+        )}
 
         {/* Instructions */}
+        {!focusCard && (
         <motion.div 
           className="instructions-section"
           initial={{ opacity: 0 }}
@@ -415,8 +478,18 @@ const PlayerView: React.FC = () => {
             </ul>
           </div>
         </motion.div>
+        )}
 
         {/* bottom sheet removed per request */}
+        <button
+          className={`bingo-fab ${bingoHolding ? 'holding' : ''}`}
+          onPointerDown={startBingoHold}
+          onPointerUp={cancelBingoHold}
+          onPointerCancel={cancelBingoHold}
+          onPointerLeave={cancelBingoHold}
+        >
+          Hold to Bingo
+        </button>
       </div>
     </div>
   );
