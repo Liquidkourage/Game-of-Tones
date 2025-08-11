@@ -1147,8 +1147,8 @@ body {
   flex: 1;
   min-height: 0;
   box-sizing: border-box;
-  /* allow slight rectangular cells if needed to eliminate gutters */
-  aspect-ratio: 1 / 0.98;
+  /* make cells ~20% taller than wide */
+  aspect-ratio: 5 / 6;
 }
 
 .bingo-row {
@@ -1170,7 +1170,7 @@ body {
   justify-content: center;
   position: relative;
   overflow: visible;
-  aspect-ratio: 1 / 0.98;
+  aspect-ratio: 5 / 6;
   touch-action: none; /* suppress gesture handling (e.g., Galaxy Fold) */
   -webkit-user-select: none;
   user-select: none;
@@ -1178,9 +1178,9 @@ body {
 
 /* Tooltip shown on long-press for alternate text */
 .hover-tooltip {
-  position: fixed; /* so it appears above finger area as toast */
+  position: absolute; /* immediately above the tapped square */
   left: 50%;
-  bottom: calc(10vh + env(safe-area-inset-bottom));
+  bottom: calc(100% + 6px);
   transform: translateX(-50%);
   background: rgba(20,20,20,0.98);
   border: 1px solid rgba(0,255,136,0.35);
@@ -1189,9 +1189,10 @@ body {
   color: #fff;
   font-size: 1rem;
   box-shadow: 0 8px 24px rgba(0,0,0,0.45);
-  z-index: 9999;
-  max-width: min(92vw, 640px);
+  z-index: 30;
+  max-width: 92vw;
   text-align: center;
+  pointer-events: none;
 }
 
 /* Remove hover/tap glow; only show when marked */
@@ -1205,7 +1206,7 @@ body {
 .bingo-square .song-name {
   font-weight: 600;
   color: white;
-  font-size: clamp(0.58rem, 2.6vw, 0.95rem);
+  font-size: clamp(0.52rem, 2.3vw, 0.9rem);
   margin-bottom: 0.2rem;
   line-height: 1.1;
   word-wrap: break-word;
@@ -1223,7 +1224,7 @@ body {
 
 .bingo-square .artist-name {
   color: #ccc;
-  font-size: clamp(0.52rem, 2.2vw, 0.85rem);
+  font-size: clamp(0.48rem, 2.0vw, 0.8rem);
   line-height: 1.1;
   word-wrap: break-word;
   overflow-wrap: break-word;
