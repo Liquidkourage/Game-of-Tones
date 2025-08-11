@@ -49,6 +49,9 @@ const PlayerView: React.FC = () => {
   const [bingoCard, setBingoCard] = useState<BingoCard | null>(null);
   const [focusedSquare, setFocusedSquare] = useState<BingoSquare | null>(null);
   const longPressTimer = useRef<number | null>(null);
+  const [displayMode, setDisplayMode] = useState<'title' | 'artist'>('title');
+  const [tooltipSquare, setTooltipSquare] = useState<string | null>(null);
+  const [tooltipText, setTooltipText] = useState<string>('');
   const [gameState, setGameState] = useState<GameState>({
     isPlaying: false,
     currentSong: null,
@@ -169,7 +172,11 @@ const PlayerView: React.FC = () => {
   // Long-press to reveal a readable bottom sheet on mobile
   const handlePressStart = (square: BingoSquare) => {
     if (longPressTimer.current) window.clearTimeout(longPressTimer.current);
-    longPressTimer.current = window.setTimeout(() => setFocusedSquare(square), 350);
+    const text = displayMode === 'title' ? square.artistName : square.songName;
+    longPressTimer.current = window.setTimeout(() => {
+      setTooltipSquare(square.position);
+      setTooltipText(text);
+    }, 350);
   };
 
   const handlePressEnd = () => {
@@ -177,6 +184,7 @@ const PlayerView: React.FC = () => {
       window.clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
+    setTooltipSquare(null);
   };
 
   const checkBingo = (card: BingoCard): boolean => {
@@ -252,8 +260,14 @@ const PlayerView: React.FC = () => {
               onTouchStart={() => handlePressStart(square)}
               onTouchEnd={handlePressEnd}
             >
-              <div className="song-name">{square.songName}</div>
-              <div className="artist-name">{square.artistName}</div>
+              {displayMode === 'title' ? (
+                <div className="song-name">{square.songName}</div>
+              ) : (
+                <div className="artist-name">{square.artistName}</div>
+              )}
+              {tooltipSquare === square.position && (
+                <div className="hover-tooltip">{tooltipText}</div>
+              )}
               {square.marked && (
                 <motion.div
                   className="mark-indicator"
@@ -334,9 +348,23 @@ const PlayerView: React.FC = () => {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.6, delay: 0.2 }}
         >
-          <div className="section-header">
+          <div className="section-header" style={{ alignItems: 'center' }}>
             <Music className="section-icon" />
             <h3>Your Bingo Card</h3>
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>Display</span>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={displayMode === 'artist'}
+                  onChange={(e) => setDisplayMode(e.target.checked ? 'artist' : 'title')}
+                />
+                <span className="slider" />
+              </label>
+              <span style={{ fontSize: '0.85rem', color: '#b3b3b3', minWidth: 60, textAlign: 'right' }}>
+                {displayMode === 'title' ? 'Title' : 'Artist'}
+              </span>
+            </div>
           </div>
           
           {renderBingoCard()}
@@ -390,18 +418,7 @@ const PlayerView: React.FC = () => {
           </div>
         </motion.div>
 
-        {/* Readable bottom sheet for small screens (long-press) */}
-        {focusedSquare && (
-          <div className="mobile-sheet" onClick={() => setFocusedSquare(null)}>
-            <div className="mobile-sheet-content" onClick={(e) => e.stopPropagation()}>
-              <div className="mobile-sheet-title">{focusedSquare.songName}</div>
-              <div className="mobile-sheet-artist">{focusedSquare.artistName}</div>
-              <button className="btn btn-primary" onClick={() => { markSquare(focusedSquare.position); setFocusedSquare(null); }}>
-                Mark Square
-              </button>
-            </div>
-          </div>
-        )}
+        {/* bottom sheet removed per request */}
       </div>
     </div>
   );

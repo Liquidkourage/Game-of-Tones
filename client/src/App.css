@@ -722,6 +722,14 @@ body {
   font-weight: 600;
 }
 
+/* Toggle switch styling */
+.toggle-switch { position: relative; display: inline-block; width: 42px; height: 24px; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; inset: 0; background: rgba(255,255,255,0.2); transition: .2s; border-radius: 999px; }
+.slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; top: 3px; background: #fff; transition: .2s; border-radius: 50%; }
+.toggle-switch input:checked + .slider { background: #00ff88; box-shadow: var(--neon-glow); }
+.toggle-switch input:checked + .slider:before { transform: translateX(18px); }
+
 .selection-info {
   margin-left: auto;
   color: var(--secondary-text);
@@ -1161,6 +1169,24 @@ body {
   position: relative;
   overflow: visible;
   aspect-ratio: 1;
+}
+
+/* Tooltip shown on long-press for alternate text */
+.hover-tooltip {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(20,20,20,0.95);
+  border: 1px solid rgba(0,255,136,0.3);
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: #fff;
+  font-size: 0.9rem;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  z-index: 20;
+  max-width: 90%;
+  text-align: center;
 }
 
 .bingo-square:hover {
