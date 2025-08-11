@@ -1119,6 +1119,7 @@ body {
   box-sizing: border-box;
   /* near-square card area; we will widen cells slightly for horizontal butt-up */
   aspect-ratio: 1 / 1;
+  margin: 0 auto; /* ensure centering within card */
 }
 
 .bingo-row {
@@ -1176,10 +1177,11 @@ body {
 /* Remove hover/tap glow; only show when marked */
 
 .bingo-square.marked {
-  background: rgba(0, 255, 136, 0.2);
-  border-color: #00ff88;
-  /* removed ambient glow; keep subtle border only */
-  box-shadow: none;
+  background: rgba(0, 255, 136, 0.18);
+  /* keep border color consistent to avoid seams */
+  border-color: rgba(0, 255, 136, 0.25);
+  /* inner emphasis without changing outer edge thickness */
+  box-shadow: inset 0 0 0 2px rgba(0, 255, 136, 0.75);
 }
 
 .bingo-square .primary-line, .bingo-square .song-name, .bingo-square .artist-name {
