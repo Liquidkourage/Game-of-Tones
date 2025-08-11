@@ -28,6 +28,7 @@ body {
   background: var(--gradient-bg);
   color: var(--primary-text);
   overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .App {
@@ -1028,19 +1029,16 @@ body {
 
 @media (max-width: 480px) {
   .bingo-card {
-    max-width: 90vw !important;
-    max-height: 85vh !important;
-    width: 90vw !important;
-    height: 85vh !important;
+    width: 95vw !important;
+    height: auto !important;
+    aspect-ratio: 1 / 1 !important;
   }
   
   .bingo-card-grid {
     gap: 0.15rem !important;
   }
   
-  .bingo-square {
-    padding: 0.25rem !important;
-  }
+  .bingo-square { padding: 0.5rem !important; }
   
   .bingo-square .song-name {
     font-size: clamp(0.4rem, 2vw, 0.9rem) !important;
@@ -1058,6 +1056,7 @@ body {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .player-header {
