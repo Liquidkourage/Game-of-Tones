@@ -1016,7 +1016,7 @@ code {
   /* Overflow Control */
   overflow: hidden; /* absolutely no page scroll */
   box-sizing: border-box;
-  --bingo-scale: 0.33; /* visual scale for bingo grid */
+  --bingo-scale: 1.0; /* visual scale for bingo grid (container will mask) */
 }
 
 /* ===== HEADER SECTION ===== */
@@ -1484,6 +1484,9 @@ code {
   align-items: start;  /* dock top */
   overflow: hidden;
   padding: 5px;
+  /* mask area for scaled grid */
+  width: 100%;
+  height: 100%;
 }
 
 /* Public display: enforce fixed 5x5 grid */
