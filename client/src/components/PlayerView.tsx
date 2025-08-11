@@ -258,8 +258,7 @@ const PlayerView: React.FC = () => {
               onPointerCancel={clearLongPress}
               onPointerLeave={clearLongPress}
               onContextMenu={(e) => { e.preventDefault(); return false; }}
-              onSelectStart={(e) => { e.preventDefault(); return false; }}
-              onDragStart={(e) => { e.preventDefault(); return false; }}
+              draggable={false}
             >
               {displayMode === 'title' ? (
                 <div className="song-name">{square.songName}</div>
