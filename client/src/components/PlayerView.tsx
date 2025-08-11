@@ -170,7 +170,8 @@ const PlayerView: React.FC = () => {
   };
 
   // Long-press to reveal a readable bottom sheet on mobile
-  const handlePressStart = (square: BingoSquare) => {
+  const handlePointerDown = (square: BingoSquare, e: React.PointerEvent) => {
+    e.preventDefault();
     if (longPressTimer.current) window.clearTimeout(longPressTimer.current);
     const text = displayMode === 'title' ? square.artistName : square.songName;
     longPressTimer.current = window.setTimeout(() => {
@@ -179,7 +180,7 @@ const PlayerView: React.FC = () => {
     }, 350);
   };
 
-  const handlePressEnd = () => {
+  const clearLongPress = () => {
     if (longPressTimer.current) {
       window.clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
@@ -254,11 +255,11 @@ const PlayerView: React.FC = () => {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => markSquare(square.position)}
-              onMouseDown={() => handlePressStart(square)}
-              onMouseUp={handlePressEnd}
-              onMouseLeave={handlePressEnd}
-              onTouchStart={() => handlePressStart(square)}
-              onTouchEnd={handlePressEnd}
+              onPointerDown={(e) => handlePointerDown(square, e)}
+              onPointerUp={clearLongPress}
+              onPointerCancel={clearLongPress}
+              onPointerLeave={clearLongPress}
+              onContextMenu={(e) => { e.preventDefault(); return false; }}
             >
               {displayMode === 'title' ? (
                 <div className="song-name">{square.songName}</div>

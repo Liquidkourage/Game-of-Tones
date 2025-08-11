@@ -29,6 +29,7 @@ body {
   color: var(--primary-text);
   overflow-x: hidden;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none; /* disable iOS callout */
 }
 
 .App {
