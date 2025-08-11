@@ -12,11 +12,11 @@ ENV NPM_CONFIG_AUDIT=false \
 
 # Install root deps (with dev) for build
 COPY package*.json ./
-RUN npm ci --no-audit --no-fund --no-optional
+RUN npm install --no-audit --no-fund --no-optional
 
 # Install client deps and build
 COPY client/package*.json ./client/
-RUN cd client && npm ci --no-audit --no-fund --no-optional
+RUN cd client && npm install --no-audit --no-fund --no-optional
 
 # Copy full source and build client
 COPY . .
