@@ -106,7 +106,7 @@ const PublicDisplay: React.FC = () => {
       setGameState(prev => ({ ...prev, winners: data.winners || prev.winners }));
     });
 
-    return () => socket.close();
+    return () => { socket.close(); };
   }, [roomId]);
 
   const formatTime = (timestamp: number) => {
