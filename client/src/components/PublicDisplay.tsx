@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useParams } from 'react-router-dom';
+import io from 'socket.io-client';
+import { SOCKET_URL } from '../config';
 import { 
   Music, 
   Users, 
@@ -65,63 +67,46 @@ const PublicDisplay: React.FC = () => {
   });
 
   useEffect(() => {
-    // TODO: Connect to Socket.io for real-time updates
-    console.log('Public display mounted for room:', roomId);
-    
-    // Mock data for demo
-    setTimeout(() => {
-      const mockSongs = [
-        { id: '1', name: 'Bohemian Rhapsody', artist: 'Queen' },
-        { id: '2', name: 'Stairway to Heaven', artist: 'Led Zeppelin' },
-        { id: '3', name: 'Hotel California', artist: 'Eagles' },
-        { id: '4', name: 'Imagine', artist: 'John Lennon' },
-        { id: '5', name: 'Hey Jude', artist: 'The Beatles' },
-        { id: '6', name: 'Wonderwall', artist: 'Oasis' },
-        { id: '7', name: 'Smells Like Teen Spirit', artist: 'Nirvana' },
-        { id: '8', name: 'Sweet Child O Mine', artist: 'Guns N Roses' },
-        { id: '9', name: 'Nothing Else Matters', artist: 'Metallica' },
-        { id: '10', name: 'Comfortably Numb', artist: 'Pink Floyd' },
-        { id: '11', name: 'Wish You Were Here', artist: 'Pink Floyd' },
-        { id: '12', name: 'Black', artist: 'Pearl Jam' },
-        { id: '13', name: 'Creep', artist: 'Radiohead' },
-        { id: '14', name: 'Under the Bridge', artist: 'Red Hot Chili Peppers' },
-        { id: '15', name: 'Californication', artist: 'Red Hot Chili Peppers' },
-        { id: '16', name: 'Zombie', artist: 'The Cranberries' },
-        { id: '17', name: 'Losing My Religion', artist: 'R.E.M.' },
-        { id: '18', name: 'Every Breath You Take', artist: 'The Police' },
-        { id: '19', name: 'Billie Jean', artist: 'Michael Jackson' },
-        { id: '20', name: 'Thriller', artist: 'Michael Jackson' },
-        { id: '21', name: 'Like a Rolling Stone', artist: 'Bob Dylan' },
-        { id: '22', name: 'Blowin in the Wind', artist: 'Bob Dylan' },
-        { id: '23', name: 'The Sound of Silence', artist: 'Simon & Garfunkel' },
-        { id: '24', name: 'Bridge Over Troubled Water', artist: 'Simon & Garfunkel' },
-        { id: '25', name: 'Respect', artist: 'Aretha Franklin' }
-      ];
+    const socket = io(SOCKET_URL || undefined);
+    socket.on('connect', () => {
+      socket.emit('join-room', { roomId, playerName: 'Display', isHost: false });
+    });
 
-      // Create mock bingo card
-      const mockBingoCard: BingoCard = {
-        squares: mockSongs.slice(0, 25).map((song, index) => ({
-          song,
-          isPlayed: Math.random() > 0.7, // 30% chance of being played
-          position: { row: Math.floor(index / 5), col: index % 5 }
-        })),
-        size: 5
-      };
+    socket.on('player-joined', (data: any) => {
+      setGameState(prev => ({ ...prev, playerCount: data.playerCount }));
+    });
+    socket.on('player-left', (data: any) => {
+      setGameState(prev => ({ ...prev, playerCount: data.playerCount }));
+    });
 
+    socket.on('bingo-card', (card: any) => {
+      const squares = (card.squares || []).map((s: any) => ({
+        song: { id: s.songId, name: s.songName, artist: s.artistName },
+        isPlayed: false,
+        position: { row: parseInt(s.position.split('-')[0], 10), col: parseInt(s.position.split('-')[1], 10) }
+      }));
+      setGameState(prev => ({ ...prev, bingoCard: { squares, size: 5 } }));
+    });
+
+    socket.on('song-playing', (data: any) => {
+      const song = { id: data.songId, name: data.songName, artist: data.artistName };
       setGameState(prev => ({
         ...prev,
         isPlaying: true,
-        currentSong: mockSongs[0],
-        playerCount: 8,
-        playedSongs: mockSongs.slice(0, 7), // First 7 songs played
-        bingoCard: mockBingoCard,
-        winners: [
-          { playerName: 'Alice', timestamp: Date.now() - 30000 },
-          { playerName: 'Bob', timestamp: Date.now() - 15000 },
-          { playerName: 'Charlie', timestamp: Date.now() - 5000 }
-        ]
+        currentSong: song,
+        playedSongs: [...prev.playedSongs, song].slice(-25)
       }));
-    }, 2000);
+    });
+
+    socket.on('game-started', () => {
+      setGameState(prev => ({ ...prev, isPlaying: true }));
+    });
+
+    socket.on('bingo-called', (data: any) => {
+      setGameState(prev => ({ ...prev, winners: data.winners || prev.winners }));
+    });
+
+    return () => socket.close();
   }, [roomId]);
 
   const formatTime = (timestamp: number) => {
