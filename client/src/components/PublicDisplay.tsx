@@ -254,9 +254,9 @@ const PublicDisplay: React.FC = () => {
     <div ref={displayRef} className="public-display">
       {/* Main Content - 16:10 Layout */}
       <div className="display-content">
-        {/* Three Column Layout: Pattern (25%), Player Info (middle), Tall Call List (right) */}
+        {/* Two Column Layout: Left (pattern + info/winners), Right (call list) */}
         <div className="bottom-row">
-          <div className="pattern-col">
+          <div className="left-col">
             {/* Bingo Card Visualization (upper-left, fixed to ~25% viewport width) */}
             <motion.div 
               className="bingo-card-display"
@@ -274,65 +274,63 @@ const PublicDisplay: React.FC = () => {
                 </div>
               </div>
             </motion.div>
-          </div>
+            {/* Under pattern: side-by-side Quick Stats and Winners */}
+            <div className="info-grid">
+              <motion.div 
+                className="quick-stats"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.6, delay: 0.25 }}
+              >
+                <div className="stat-item">
+                  <Volume2 className="stat-icon" />
+                  <span className="stat-value">{gameState.playerCount}</span>
+                  <span className="stat-label">Players</span>
+                </div>
+                <div className="stat-item">
+                  <Trophy className="stat-icon" />
+                  <span className="stat-value">{gameState.winners.length}</span>
+                  <span className="stat-label">Winners</span>
+                </div>
+                <div className="stat-item">
+                  <List className="stat-icon" />
+                  <span className="stat-value">{gameState.playedSongs.length}</span>
+                  <span className="stat-label">Songs</span>
+                </div>
+              </motion.div>
 
-          <div className="info-col">
-            {/* Player Information - Quick Stats (now first) */}
-            <motion.div 
-              className="quick-stats"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.25 }}
-            >
-              <div className="stat-item">
-                <Volume2 className="stat-icon" />
-                <span className="stat-value">{gameState.playerCount}</span>
-                <span className="stat-label">Players</span>
-              </div>
-              <div className="stat-item">
-                <Trophy className="stat-icon" />
-                <span className="stat-value">{gameState.winners.length}</span>
-                <span className="stat-label">Winners</span>
-              </div>
-              <div className="stat-item">
-                <List className="stat-icon" />
-                <span className="stat-value">{gameState.playedSongs.length}</span>
-                <span className="stat-label">Songs</span>
-              </div>
-            </motion.div>
-
-            {/* Player Information - Winners (now second) */}
-            <motion.div 
-              className="winners-display"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.35 }}
-            >
-              <div className="winners-header">
-                <Trophy className="winners-icon" />
-                <h2>Winners</h2>
-              </div>
-              <div className="winners-list">
-                {(gameState.winners || []).slice(0, 3).map((winner, index) => (
-                  <motion.div
-                    key={index}
-                    className="winner-item"
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.4, delay: 0.45 + index * 0.1 }}
-                  >
-                    <div className="winner-rank">
-                      <Crown className="crown-icon" />
-                      <span>#{index + 1}</span>
-                    </div>
-                    <div className="winner-info">
-                      <h3>{winner.playerName}</h3>
-                      <p>{formatTime(winner.timestamp)}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
+              <motion.div 
+                className="winners-display"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.35 }}
+              >
+                <div className="winners-header">
+                  <Trophy className="winners-icon" />
+                  <h2>Winners</h2>
+                </div>
+                <div className="winners-list">
+                  {(gameState.winners || []).slice(0, 3).map((winner, index) => (
+                    <motion.div
+                      key={index}
+                      className="winner-item"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.4, delay: 0.45 + index * 0.1 }}
+                    >
+                      <div className="winner-rank">
+                        <Crown className="crown-icon" />
+                        <span>#{index + 1}</span>
+                      </div>
+                      <div className="winner-info">
+                        <h3>{winner.playerName}</h3>
+                        <p>{formatTime(winner.timestamp)}</p>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </motion.div>
+            </div>
           </div>
 
           <div className="call-col">

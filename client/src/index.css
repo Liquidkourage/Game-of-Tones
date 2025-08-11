@@ -1291,7 +1291,7 @@ code {
 /* Bottom Row Layout */
 .bottom-row {
   display: grid;
-  grid-template-columns: 0.6fr 0.3fr 1fr; /* pattern 60%, info mid, tall call list right */
+  grid-template-columns: 0.75fr 1fr; /* left stack, right call list */
   gap: 15px;
   flex: 1;
   min-height: 0;
@@ -1301,9 +1301,8 @@ code {
   overflow-y: hidden;
 }
 
-.pattern-col { min-width: 0; min-height: 0; }
-
-.info-col { display: grid; grid-template-rows: auto auto; gap: 10px; min-width: 0; min-height: 0; }
+.left-col { display: grid; grid-template-rows: 1fr auto; gap: 12px; min-width: 0; min-height: 0; }
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
 .call-col { display: grid; grid-template-rows: 1fr; min-width: 0; min-height: 0; }
 
 /* Call List Styles - Compact */
