@@ -1128,6 +1128,9 @@ body {
 .bingo-square {
   background: rgba(30, 30, 30, 0.8);
   border: 1px solid rgba(0, 255, 136, 0.3);
+  /* avoid doubled seams between cells by drawing only top/left borders by default */
+  border-right-width: 0;
+  border-bottom-width: 0;
   border-radius: 4px;
   padding: 0; /* remove internal padding for max text area */
   text-align: center;
@@ -1140,12 +1143,16 @@ body {
   justify-content: center;
   position: relative;
   overflow: visible;
-  /* slightly wider than tall to eliminate horizontal gaps when borders overlap */
+  /* slightly wider than tall to eliminate horizontal gaps */
   aspect-ratio: 1.12 / 1;
   touch-action: none; /* suppress gesture handling (e.g., Galaxy Fold) */
   -webkit-user-select: none;
   user-select: none;
 }
+
+/* Restore the outer edges so the grid has a clean single border around */
+.bingo-card-grid .bingo-square:nth-child(5n) { border-right-width: 1px; }
+.bingo-card-grid .bingo-square:nth-last-child(-n+5) { border-bottom-width: 1px; }
 
 /* Tooltip shown on long-press for alternate text */
 .hover-tooltip {
