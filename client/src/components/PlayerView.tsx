@@ -272,7 +272,7 @@ const PlayerView: React.FC = () => {
   };
 
   return (
-    <div className="player-container" style={{ minHeight: 0 }}>
+    <div className={`player-container ${bingoCard ? 'has-card' : ''}`} style={{ minHeight: 0 }}>
       {/* Header */}
       <motion.div 
         className="player-header"
