@@ -40,14 +40,7 @@ app.use(cors({
 app.use(express.json());
 app.use(express.static('public'));
 
-// In production, serve the React build from the client folder
-if (process.env.NODE_ENV === 'production') {
-  const clientBuildPath = path.join(__dirname, '..', 'client', 'build');
-  app.use(express.static(clientBuildPath));
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(clientBuildPath, 'index.html'));
-  });
-}
+// Note: production static serving is registered after API routes below
 
 // Game state management
 const games = new Map();
@@ -1351,6 +1344,17 @@ app.get('/api/rooms/:roomId', (req, res) => {
     res.status(404).json({ error: 'Room not found' });
   }
 });
+
+// Serve React build (after API routes)
+if (process.env.NODE_ENV === 'production') {
+  const clientBuildPath = path.join(__dirname, '..', 'client', 'build');
+  console.log('Static build path:', clientBuildPath, 'exists:', fs.existsSync(clientBuildPath));
+  app.use(express.static(clientBuildPath));
+  // For any non-API route, return index.html
+  app.get(/^(?!\/api\/).*/, (req, res) => {
+    res.sendFile(path.join(clientBuildPath, 'index.html'));
+  });
+}
 
 // Spotify API Routes
 app.get('/api/spotify/auth', (req, res) => {
