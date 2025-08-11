@@ -1301,8 +1301,9 @@ code {
   overflow-y: hidden;
 }
 
-.left-col { display: grid; grid-template-rows: 0.8fr auto; gap: 12px; min-width: 0; min-height: 0; }
-.info-grid { display: grid; grid-template-columns: 0.5fr 0.5fr; gap: 12px; align-items: start; }
+.left-col { display: grid; grid-template-rows: auto 1fr; gap: 12px; min-width: 0; min-height: 0; }
+.info-grid { display: grid; grid-template-columns: 0.5fr 0.5fr; gap: 12px; align-items: stretch; height: 100%; }
+.info-grid > .quick-stats, .info-grid > .winners-display { height: 100%; }
 .call-col { display: grid; grid-template-rows: 1fr; min-width: 0; min-height: 0; }
 
 /* Call List Styles - Compact */
@@ -1477,8 +1478,8 @@ code {
 
 .bingo-card-content {
   display: grid;
-  justify-items: start; /* dock left */
-  align-items: start;  /* dock top */
+  justify-items: center; /* center grid horizontally */
+  align-items: center;  /* center grid vertically */
   overflow: hidden;
   padding: 5px;
   /* mask area for scaled grid */
@@ -1495,9 +1496,9 @@ code {
   width: 95%;
   height: 95%;
   aspect-ratio: 1 / 1;
-  align-self: start;
+  align-self: center;
   transform: scale(var(--bingo-scale));
-  transform-origin: top left; /* ensure shrink from upper-left */
+  transform-origin: center center; /* ensure centered scaling */
 }
 
 .bingo-row { display: contents; }
