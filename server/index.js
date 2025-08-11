@@ -48,6 +48,15 @@ app.use(express.static('public'));
 // Game state management
 const games = new Map();
 const rooms = new Map();
+// Utility: count non-host players in a room
+function getNonHostPlayerCount(room) {
+  if (!room) return 0;
+  let count = 0;
+  for (const player of room.players.values()) {
+    if (!player.isHost) count++;
+  }
+  return count;
+}
 
 // Token storage file path
 const TOKEN_FILE = path.join(__dirname, 'spotify_tokens.json');
@@ -374,7 +383,7 @@ io.on('connection', (socket) => {
       playerId: socket.id,
       playerName: playerName,
       isHost: isHost,
-      playerCount: room.players.size
+      playerCount: getNonHostPlayerCount(room)
     });
 
     // Log available devices for debugging
@@ -799,7 +808,7 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('player-left', {
           playerId: socket.id,
           playerName: player.name,
-          playerCount: room.players.size
+          playerCount: getNonHostPlayerCount(room)
         });
         
         break; // Player can only be in one room
@@ -1339,7 +1348,7 @@ app.get('/api/rooms/:roomId', (req, res) => {
   if (room) {
     res.json({
       id: room.id,
-      playerCount: room.players.size,
+      playerCount: getNonHostPlayerCount(room),
       gameState: room.gameState,
       currentSong: room.currentSong
     });
