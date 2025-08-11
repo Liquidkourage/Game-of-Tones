@@ -387,7 +387,6 @@ const PublicDisplay: React.FC = () => {
           </div>
         </div>
       </div>
-      </div>
     </div>
   );
 };
