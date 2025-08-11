@@ -1014,7 +1014,7 @@ body {
   
   .bingo-card-grid { gap: 0 !important; }
   
-  .bingo-square { padding: 0.26rem !important; }
+  .bingo-square { padding: 0 !important; aspect-ratio: 1.12 / 1 !important; }
   
   .bingo-square .song-name {
     font-size: clamp(0.5rem, 2.2vw, 1rem) !important;
@@ -1032,7 +1032,7 @@ body {
   
   .bingo-card-grid { gap: 0 !important; }
   
-  .bingo-square { padding: 0.24rem !important; }
+  .bingo-square { padding: 0 !important; aspect-ratio: 1.12 / 1 !important; }
   
   .bingo-square .song-name {
     font-size: clamp(0.52rem, 2.9vw, 0.95rem) !important;
@@ -1171,7 +1171,7 @@ body {
   position: relative;
   overflow: visible;
   /* slightly wider than tall to eliminate horizontal gaps when borders overlap */
-  aspect-ratio: 1.06 / 1;
+  aspect-ratio: 1.12 / 1;
   touch-action: none; /* suppress gesture handling (e.g., Galaxy Fold) */
   -webkit-user-select: none;
   user-select: none;
@@ -1207,7 +1207,7 @@ body {
 .bingo-square .primary-line, .bingo-square .song-name, .bingo-square .artist-name {
   font-weight: 600;
   color: white;
-  font-size: clamp(0.52rem, 2.3vw, 0.9rem);
+  font-size: clamp(0.58rem, 2.6vw, 1.05rem);
   margin-bottom: 0.2rem;
   line-height: 1.1;
   word-wrap: break-word;
@@ -1218,7 +1218,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
-  -webkit-line-clamp: 3; /* allow up to 3 lines */
+  -webkit-line-clamp: 4; /* allow up to 4 lines */
   -webkit-box-orient: vertical;
   white-space: normal;
 }
