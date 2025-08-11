@@ -1014,7 +1014,7 @@ code {
   justify-content: stretch;
   
   /* Overflow Control */
-  overflow: hidden;
+  overflow: hidden; /* absolutely no page scroll */
   box-sizing: border-box;
 }
 
@@ -1120,17 +1120,7 @@ code {
 }
 
 /* Bottom Row */
-.bottom-row {
-  /* Grid Layout */
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px;
-  
-  /* Layout Control */
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-}
+/* remove earlier variant to avoid conflicts */
 
 /* Right Cards Grid */
 .right-cards-grid {
@@ -1310,6 +1300,7 @@ code {
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
+  overflow-y: hidden;
 }
 
 /* Call List Styles - Compact */
@@ -1454,7 +1445,8 @@ code {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  height: auto;
+  height: 100%;
+  min-height: 0;
 }
 
 .bingo-card-header {
