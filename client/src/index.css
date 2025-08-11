@@ -1294,7 +1294,7 @@ code {
 /* Bottom Row Layout */
 .bottom-row {
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) 1fr;
+  grid-template-columns: 1fr 0.9fr; /* left column slightly wider for grid */
   gap: 15px;
   flex: 1;
   min-height: 0;
@@ -1302,6 +1302,20 @@ code {
   max-width: 100%;
   overflow-x: hidden;
   overflow-y: hidden;
+}
+
+.left-grid {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto; /* bingo takes available space, winners below */
+  gap: 10px;
+  min-height: 0;
+}
+
+.right-column {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto; /* tall call list, quick stats at bottom */
+  gap: 10px;
+  min-height: 0;
 }
 
 /* Call List Styles - Compact */

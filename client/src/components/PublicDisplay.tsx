@@ -265,56 +265,108 @@ const PublicDisplay: React.FC = () => {
 
       {/* Main Content - 16:10 Layout */}
       <div className="display-content">
-        {/* Two Column Layout: Call List Left, Other Cards Right */}
+        {/* Two Column Layout: Left = Bingo + Winners, Right = Tall Call List + Quick Stats */}
         <div className="bottom-row">
-          {/* Call List - Left Half */}
-          <motion.div 
-            className="call-list-display"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.6 }}
-          >
-            <div className="call-list-header">
-              <List className="call-list-icon" />
-              <h2>Call List</h2>
-              <span className="call-count">{gameState.playedSongs.length}</span>
-            </div>
-            <div className="call-list-content">
-              {gameState.playedSongs.length > 0 ? (
-                <div className="call-list">
-                  {gameState.playedSongs.slice(-5).map((song, index) => (
-                    <motion.div
-                      key={song.id}
-                      className="call-item"
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.4, delay: 0.8 + index * 0.1 }}
-                    >
-                      <div className="call-number">#{gameState.playedSongs.length - 4 + index}</div>
-                      <div className="call-song-info">
-                        <div className="call-song-name">{song.name}</div>
-                        <div className="call-song-artist">{song.artist}</div>
-                      </div>
-                      <Music className="call-icon" />
-                    </motion.div>
-                  ))}
+          <div className="left-grid">
+            {/* Bingo Card Visualization (upper-left) */}
+            <motion.div 
+              className="bingo-card-display"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+            >
+              <div className="bingo-card-header">
+                <Grid3X3 className="bingo-card-icon" />
+                <h2>{getPatternName()}</h2>
+              </div>
+              <div className="bingo-card-content">
+                <div className="bingo-grid">
+                  {renderBingoCard()}
                 </div>
-              ) : (
-                <div className="no-calls">
-                  <p>No songs played yet</p>
-                </div>
-              )}
-            </div>
-          </motion.div>
+              </div>
+            </motion.div>
 
-          {/* Right Half - 3 Cards Grid */}
-          <div className="right-cards-grid">
-            {/* Quick Stats */}
+            {/* Winners below bingo */}
+            <motion.div 
+              className="winners-display"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+            >
+              <div className="winners-header">
+                <Trophy className="winners-icon" />
+                <h2>Winners</h2>
+              </div>
+              <div className="winners-list">
+                {(gameState.winners || []).slice(0, 3).map((winner, index) => (
+                  <motion.div
+                    key={index}
+                    className="winner-item"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.4, delay: 0.6 + index * 0.1 }}
+                  >
+                    <div className="winner-rank">
+                      <Crown className="crown-icon" />
+                      <span>#{index + 1}</span>
+                    </div>
+                    <div className="winner-info">
+                      <h3>{winner.playerName}</h3>
+                      <p>{formatTime(winner.timestamp)}</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+
+          <div className="right-column">
+            {/* Tall Call List */}
+            <motion.div 
+              className="call-list-display"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+            >
+              <div className="call-list-header">
+                <List className="call-list-icon" />
+                <h2>Call List</h2>
+                <span className="call-count">{gameState.playedSongs.length}</span>
+              </div>
+              <div className="call-list-content">
+                {gameState.playedSongs.length > 0 ? (
+                  <div className="call-list">
+                    {gameState.playedSongs.slice(-10).map((song, index) => (
+                      <motion.div
+                        key={song.id + '-' + index}
+                        className="call-item"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.4, delay: 0.3 + index * 0.05 }}
+                      >
+                        <div className="call-number">#{gameState.playedSongs.length - (Math.min(10, gameState.playedSongs.length) - 1) + index}</div>
+                        <div className="call-song-info">
+                          <div className="call-song-name">{song.name}</div>
+                          <div className="call-song-artist">{song.artist}</div>
+                        </div>
+                        <Music className="call-icon" />
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="no-calls">
+                    <p>No songs played yet</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+
+            {/* Small quick stats at bottom */}
             <motion.div 
               className="quick-stats"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
             >
               <div className="stat-item">
                 <Volume2 className="stat-icon" />
@@ -332,56 +384,7 @@ const PublicDisplay: React.FC = () => {
                 <span className="stat-label">Songs</span>
               </div>
             </motion.div>
-
-          {/* Bingo Card Visualization */}
-          <motion.div 
-            className="bingo-card-display"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.8 }}
-          >
-            <div className="bingo-card-header">
-              <Grid3X3 className="bingo-card-icon" />
-              <h2>{getPatternName()}</h2>
-            </div>
-            <div className="bingo-card-content">
-              <div className="bingo-grid">
-                {renderBingoCard()}
-              </div>
-            </div>
-          </motion.div>
-          {/* Winners Section - Compact */}
-          <motion.div 
-            className="winners-display"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 1.0 }}
-          >
-            <div className="winners-header">
-              <Trophy className="winners-icon" />
-              <h2>Winners</h2>
-            </div>
-            <div className="winners-list">
-              {(gameState.winners || []).slice(0, 3).map((winner, index) => (
-                <motion.div
-                  key={index}
-                  className="winner-item"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.4, delay: 1.2 + index * 0.1 }}
-                >
-                  <div className="winner-rank">
-                    <Crown className="crown-icon" />
-                    <span>#{index + 1}</span>
-                  </div>
-                  <div className="winner-info">
-                    <h3>{winner.playerName}</h3>
-                    <p>{formatTime(winner.timestamp)}</p>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
+          </div>
         </div>
       </div>
       </div>
