@@ -24,7 +24,7 @@
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  font-family: 'Atkinson Hyperlegible', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   background: var(--gradient-bg);
   color: var(--primary-text);
   overflow-x: hidden;
@@ -1009,11 +1009,11 @@ body {
 
 /* Responsive breakpoints for different screen sizes */
 @media (max-width: 768px) {
-  .bingo-card { width: 96vw !important; height: auto !important; aspect-ratio: 1 / 1 !important; }
+  .bingo-card { width: 98vw !important; height: auto !important; aspect-ratio: 1 / 1 !important; }
   
-  .bingo-card-grid { gap: 0.03rem !important; }
+  .bingo-card-grid { gap: 0 !important; }
   
-  .bingo-square { padding: 0.3rem !important; }
+  .bingo-square { padding: 0.26rem !important; }
   
   .bingo-square .song-name {
     font-size: clamp(0.5rem, 2.2vw, 1rem) !important;
@@ -1027,19 +1027,19 @@ body {
 }
 
 @media (max-width: 480px) {
-  .bingo-card { width: 98vw !important; height: auto !important; aspect-ratio: 1 / 1 !important; }
+  .bingo-card { width: 99vw !important; height: auto !important; aspect-ratio: 1 / 1 !important; }
   
-  .bingo-card-grid { gap: 0.02rem !important; }
+  .bingo-card-grid { gap: 0 !important; }
   
-  .bingo-square { padding: 0.35rem !important; }
+  .bingo-square { padding: 0.24rem !important; }
   
   .bingo-square .song-name {
-    font-size: clamp(0.6rem, 3.4vw, 1.1rem) !important;
+    font-size: clamp(0.52rem, 2.9vw, 0.95rem) !important;
     -webkit-line-clamp: 2 !important;
   }
   
   .bingo-square .artist-name {
-    font-size: clamp(0.55rem, 2.8vw, 0.95rem) !important;
+    font-size: clamp(0.48rem, 2.5vw, 0.9rem) !important;
     -webkit-line-clamp: 1 !important;
   }
 }
@@ -1141,12 +1141,13 @@ body {
 .bingo-card-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 0.05rem 0.05rem;
+  gap: 0 0; /* remove horizontal spacing */
   width: 100%;
   flex: 1;
   min-height: 0;
   box-sizing: border-box;
-  aspect-ratio: 1;
+  /* allow slight rectangular cells if needed to eliminate gutters */
+  aspect-ratio: 1 / 0.98;
 }
 
 .bingo-row {
@@ -1157,7 +1158,7 @@ body {
   background: rgba(30, 30, 30, 0.8);
   border: 1px solid rgba(0, 255, 136, 0.3);
   border-radius: 4px;
-  padding: 0.35rem;
+  padding: 0.28rem;
   text-align: center;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -1168,24 +1169,24 @@ body {
   justify-content: center;
   position: relative;
   overflow: visible;
-  aspect-ratio: 1;
+  aspect-ratio: 1 / 0.98;
 }
 
 /* Tooltip shown on long-press for alternate text */
 .hover-tooltip {
-  position: absolute;
+  position: fixed; /* so it appears above finger area as toast */
   left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  background: rgba(20,20,20,0.95);
-  border: 1px solid rgba(0,255,136,0.3);
-  border-radius: 8px;
-  padding: 6px 10px;
+  bottom: calc(10vh + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  background: rgba(20,20,20,0.98);
+  border: 1px solid rgba(0,255,136,0.35);
+  border-radius: 10px;
+  padding: 10px 14px;
   color: #fff;
-  font-size: 0.9rem;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.4);
-  z-index: 20;
-  max-width: 90%;
+  font-size: 1rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  z-index: 9999;
+  max-width: min(92vw, 640px);
   text-align: center;
 }
 
@@ -1204,7 +1205,7 @@ body {
 .bingo-square .song-name {
   font-weight: 600;
   color: white;
-  font-size: clamp(0.7rem, 3.2vw, 1.05rem);
+  font-size: clamp(0.58rem, 2.6vw, 0.95rem);
   margin-bottom: 0.2rem;
   line-height: 1.1;
   word-wrap: break-word;
@@ -1222,7 +1223,7 @@ body {
 
 .bingo-square .artist-name {
   color: #ccc;
-  font-size: clamp(0.6rem, 2.5vw, 0.9rem);
+  font-size: clamp(0.52rem, 2.2vw, 0.85rem);
   line-height: 1.1;
   word-wrap: break-word;
   overflow-wrap: break-word;
