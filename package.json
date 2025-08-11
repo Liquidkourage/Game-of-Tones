@@ -3,11 +3,15 @@
   "version": "1.0.0",
   "description": "A modern music bingo game with Spotify integration",
   "main": "server/index.js",
+  "engines": {
+    "node": ">=18 <20"
+  },
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "nodemon server/index.js",
     "client": "cd client && npm start",
     "build": "cd client && cross-env CI=false npm ci && npm run build",
+    "postinstall": "npm run install-all",
     "install-client": "cd client && npm install",
     "install-server": "npm install",
     "install-all": "npm run install-server && npm run install-client",
