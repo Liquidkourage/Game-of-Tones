@@ -350,29 +350,7 @@ const PlayerView: React.FC = () => {
 
       {/* Main Content */}
       <div className="player-content">
-        {/* Current Song Display */}
-        {!focusCard && gameState.currentSong && (
-          <motion.div 
-            className="current-song-section"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            <div className="current-song-card">
-              <div className="song-info">
-                <Music className="song-icon" />
-                <div>
-                  <h3>{gameState.currentSong.name}</h3>
-                  <p>{gameState.currentSong.artist}</p>
-                </div>
-              </div>
-              <div className="song-timer">
-                <Timer className="timer-icon" />
-                <span>30s snippet</span>
-              </div>
-            </div>
-          </motion.div>
-        )}
+        {/* Current song display removed on player per request */}
 
         {/* Bingo Card */}
         <motion.div 
