@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import io from 'socket.io-client';
 import { SOCKET_URL } from '../config';
@@ -26,6 +26,12 @@ const DisplayHeaderInfo: React.FC = () => {
   const joinUrl = typeof window !== 'undefined'
     ? window.location.origin + '/player/' + roomId
     : '';
+  const qrPrimary = useMemo(() => (
+    `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(joinUrl)}`
+  ), [joinUrl]);
+  const qrFallback = useMemo(() => (
+    `https://chart.googleapis.com/chart?cht=qr&chs=120x120&chl=${encodeURIComponent(joinUrl)}`
+  ), [joinUrl]);
 
   return (
     <div className="room-info">
@@ -38,7 +44,14 @@ const DisplayHeaderInfo: React.FC = () => {
         <img
           alt="Join QR"
           className="qr-img"
-          src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(joinUrl)}`}
+          src={qrPrimary}
+          loading="lazy"
+          onError={(e) => {
+            const img = e.currentTarget as HTMLImageElement;
+            if (img.src !== qrFallback) {
+              img.src = qrFallback;
+            }
+          }}
         />
       </div>
     </div>
