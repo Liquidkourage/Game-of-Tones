@@ -1016,6 +1016,7 @@ code {
   /* Overflow Control */
   overflow: hidden; /* absolutely no page scroll */
   box-sizing: border-box;
+  --bingo-scale: 0.33; /* visual scale for bingo grid */
 }
 
 /* ===== HEADER SECTION ===== */
@@ -1473,9 +1474,9 @@ code {
 }
 
 .bingo-card-content {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  display: grid;
+  justify-items: start; /* dock left */
+  align-items: start;  /* dock top */
   overflow: hidden;
   padding: 5px;
 }
@@ -1489,7 +1490,9 @@ code {
   width: 100%;
   height: 100%;
   aspect-ratio: 1;
-  align-self: center;
+  align-self: start;
+  transform: scale(var(--bingo-scale));
+  transform-origin: top left; /* ensure shrink from upper-left */
 }
 
 .bingo-row { display: contents; }
