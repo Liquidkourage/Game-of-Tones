@@ -386,57 +386,7 @@ const PlayerView: React.FC = () => {
           {renderBingoCard()}
         </motion.div>
 
-        {/* Game Status */}
-        {!focusCard && (
-        <motion.div 
-          className="game-status-section"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-        >
-          <div className="status-card">
-            <div className="status-item">
-              <Volume2 className="status-icon" />
-              <span>Game Status: {gameState.isPlaying ? 'Playing' : 'Waiting'}</span>
-            </div>
-            <div className="status-item">
-              <Users className="status-icon" />
-              <span>{gameState.playerCount} players in room</span>
-            </div>
-            {gameState.hasBingo && (
-              <motion.div 
-                className="status-item bingo-alert"
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 500, damping: 30 }}
-              >
-                <Crown className="status-icon" />
-                <span>🎉 You have BINGO! 🎉</span>
-              </motion.div>
-            )}
-          </div>
-        </motion.div>
-        )}
-
-        {/* Instructions */}
-        {!focusCard && (
-        <motion.div 
-          className="instructions-section"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.4 }}
-        >
-          <div className="instructions-card">
-            <h4>How to Play</h4>
-            <ul>
-              <li>Listen to the song snippets played by the host</li>
-              <li>Click on matching songs on your bingo card</li>
-              <li>Get 5 in a row (horizontal, vertical, or diagonal) to win!</li>
-              <li>Be the first to call BINGO!</li>
-            </ul>
-          </div>
-        </motion.div>
-        )}
+        {/* Game Status and Instructions removed per request */}
 
         {/* bottom sheet removed per request */}
         <button

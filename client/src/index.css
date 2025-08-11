@@ -1516,10 +1516,7 @@ code {
   min-height: 0;
 }
 
-.bingo-square:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 215, 0, 0.5);
-}
+.bingo-square:hover { /* disabled hover glow on player */ }
 
 .bingo-square.played {
   /* Removed styling for played spots */

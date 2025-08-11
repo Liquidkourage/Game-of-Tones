@@ -1171,7 +1171,8 @@ body {
 .bingo-square.marked {
   background: rgba(0, 255, 136, 0.2);
   border-color: #00ff88;
-  box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+  /* removed ambient glow; keep subtle border only */
+  box-shadow: none;
 }
 
 .bingo-square .primary-line, .bingo-square .song-name, .bingo-square .artist-name {
