@@ -1016,7 +1016,7 @@ code {
   /* Overflow Control */
   overflow: hidden; /* absolutely no page scroll */
   box-sizing: border-box;
-  --bingo-scale: 1.0; /* visual scale for bingo grid (container will mask) */
+  --bingo-scale: 0.9; /* visual scale for bingo grid (container will mask) */
 }
 
 /* ===== HEADER SECTION ===== */
@@ -1291,7 +1291,7 @@ code {
 /* Bottom Row Layout */
 .bottom-row {
   display: grid;
-  grid-template-columns: 0.75fr 1fr; /* left stack, right call list */
+  grid-template-columns: 0.45fr 1.55fr; /* left reduced ~40%, right widened for call list */
   gap: 15px;
   flex: 1;
   min-height: 0;
@@ -1301,8 +1301,8 @@ code {
   overflow-y: hidden;
 }
 
-.left-col { display: grid; grid-template-rows: 1fr auto; gap: 12px; min-width: 0; min-height: 0; }
-.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+.left-col { display: grid; grid-template-rows: 0.8fr auto; gap: 12px; min-width: 0; min-height: 0; }
+.info-grid { display: grid; grid-template-columns: 0.5fr 0.5fr; gap: 12px; align-items: start; }
 .call-col { display: grid; grid-template-rows: 1fr; min-width: 0; min-height: 0; }
 
 /* Call List Styles - Compact */
@@ -1492,9 +1492,9 @@ code {
   grid-template-columns: repeat(5, 1fr);
   grid-template-rows: repeat(5, 1fr);
   gap: clamp(2px, 0.4vmin, 8px);
-  width: 100%;
-  height: 100%;
-  aspect-ratio: 1;
+  width: 95%;
+  height: 95%;
+  aspect-ratio: 1 / 1;
   align-self: start;
   transform: scale(var(--bingo-scale));
   transform-origin: top left; /* ensure shrink from upper-left */
