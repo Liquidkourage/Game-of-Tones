@@ -1014,7 +1014,7 @@ body {
   
   .bingo-card-grid { gap: 0 !important; }
   
-  .bingo-square { padding: 0 !important; aspect-ratio: 1.12 / 1 !important; }
+  .bingo-square { padding: 0 !important; aspect-ratio: 1.06 / 1 !important; }
   
   .bingo-square .song-name {
     font-size: clamp(0.5rem, 2.2vw, 1rem) !important;
@@ -1032,7 +1032,7 @@ body {
   
   .bingo-card-grid { gap: 0 !important; }
   
-  .bingo-square { padding: 0 !important; aspect-ratio: 1.12 / 1 !important; }
+  .bingo-square { padding: 0 !important; aspect-ratio: 1.06 / 1 !important; }
   
   .bingo-square .song-name {
     font-size: clamp(0.52rem, 2.9vw, 0.95rem) !important;
@@ -1144,8 +1144,8 @@ body {
   justify-content: center;
   position: relative;
   overflow: visible;
-  /* slightly wider than tall to eliminate horizontal gaps */
-  aspect-ratio: 1.12 / 1;
+  /* slightly wider than tall */
+  aspect-ratio: 1.06 / 1;
   touch-action: none; /* suppress gesture handling (e.g., Galaxy Fold) */
   -webkit-user-select: none;
   user-select: none;
