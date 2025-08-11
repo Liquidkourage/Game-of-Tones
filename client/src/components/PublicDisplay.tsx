@@ -260,10 +260,7 @@ const PublicDisplay: React.FC = () => {
         transition={{ duration: 0.6 }}
       >
         <div className="header-content">
-          <div className="logo-section">
-            <Sparkles className="logo-icon" />
-            <h1>Game of Tones</h1>
-          </div>
+          <div className="logo-section" />
           <div className="room-info">
             <h2>Room: {roomId}</h2>
             <div className="player-count">
@@ -289,7 +286,7 @@ const PublicDisplay: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
             >
-              <div className="bingo-card-header">
+              <div className="bingo-card-header center">
                 <Grid3X3 className="bingo-card-icon" />
                 <h2>{getPatternName()}</h2>
               </div>
