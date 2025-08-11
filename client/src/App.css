@@ -1147,8 +1147,8 @@ body {
   flex: 1;
   min-height: 0;
   box-sizing: border-box;
-  /* make cells ~20% taller than wide */
-  aspect-ratio: 5 / 6;
+  /* near-square card area; we will widen cells slightly for horizontal butt-up */
+  aspect-ratio: 1 / 1;
 }
 
 .bingo-row {
@@ -1170,7 +1170,8 @@ body {
   justify-content: center;
   position: relative;
   overflow: visible;
-  aspect-ratio: 5 / 6;
+  /* slightly wider than tall to eliminate horizontal gaps when borders overlap */
+  aspect-ratio: 1.06 / 1;
   touch-action: none; /* suppress gesture handling (e.g., Galaxy Fold) */
   -webkit-user-select: none;
   user-select: none;
@@ -1203,7 +1204,7 @@ body {
   box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
 }
 
-.bingo-square .song-name {
+.bingo-square .primary-line, .bingo-square .song-name, .bingo-square .artist-name {
   font-weight: 600;
   color: white;
   font-size: clamp(0.52rem, 2.3vw, 0.9rem);
@@ -1217,27 +1218,12 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 3; /* allow up to 3 lines */
   -webkit-box-orient: vertical;
   white-space: normal;
 }
 
-.bingo-square .artist-name {
-  color: #ccc;
-  font-size: clamp(0.48rem, 2.0vw, 0.8rem);
-  line-height: 1.1;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  word-break: break-word;
-  hyphens: auto;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  white-space: normal;
-}
+/* artist/title share the same style via .primary-line */
 
 /* Mobile readable bottom sheet */
 .mobile-sheet {

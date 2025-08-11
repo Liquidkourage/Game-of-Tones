@@ -260,11 +260,9 @@ const PlayerView: React.FC = () => {
               onContextMenu={(e) => { e.preventDefault(); return false; }}
               draggable={false}
             >
-              {displayMode === 'title' ? (
-                <div className="song-name">{square.songName}</div>
-              ) : (
-                <div className="artist-name">{square.artistName}</div>
-              )}
+              <div className="primary-line">
+                {displayMode === 'title' ? square.songName : square.artistName}
+              </div>
               {tooltipSquare === square.position && (
                 <div className="hover-tooltip">{tooltipText}</div>
               )}
