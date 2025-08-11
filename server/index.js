@@ -14,14 +14,18 @@ const server = http.createServer(app);
 const clientBuildPath = path.join(__dirname, '..', 'client', 'build');
 const hasClientBuild = fs.existsSync(clientBuildPath);
 console.log('NODE_ENV:', process.env.NODE_ENV, 'Client build exists:', hasClientBuild, 'at', clientBuildPath);
+
+// CORS configuration
+const isProduction = process.env.NODE_ENV === 'production';
 const allowedOriginsEnv = process.env.CORS_ORIGINS || '';
+const allowAllCors = allowedOriginsEnv === '*' || (!allowedOriginsEnv && isProduction);
 const allowedOrigins = allowedOriginsEnv
   ? allowedOriginsEnv.split(',').map(s => s.trim()).filter(Boolean)
   : ["http://127.0.0.1:7094", "http://localhost:7094", "http://127.0.0.1:3002", "http://localhost:3002"];
 
 const io = socketIo(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: allowAllCors ? '*' : allowedOrigins,
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -32,6 +36,9 @@ app.use(helmet());
 app.use(compression());
 app.use(cors({
   origin: function (origin, callback) {
+    if (allowAllCors) {
+      return callback(null, true);
+    }
     // Allow no origin (same-origin) or any in allowlist
     if (!origin || allowedOrigins.includes(origin)) {
       return callback(null, true);
