@@ -70,6 +70,7 @@ const PublicDisplay: React.FC = () => {
     const socket = io(SOCKET_URL || undefined);
     socket.on('connect', () => {
       socket.emit('join-room', { roomId, playerName: 'Display', isHost: false });
+      ensureGrid();
     });
 
     socket.on('player-joined', (data: any) => {
@@ -100,17 +101,36 @@ const PublicDisplay: React.FC = () => {
 
     socket.on('game-started', () => {
       setGameState(prev => ({ ...prev, isPlaying: true }));
+      ensureGrid();
     });
 
     socket.on('bingo-called', (data: any) => {
       setGameState(prev => ({ ...prev, winners: data.winners || prev.winners }));
     });
 
+    socket.on('mix-finalized', () => { ensureGrid(); });
+
     return () => { socket.close(); };
   }, [roomId]);
 
+  useEffect(() => { ensureGrid(); }, []);
+
   const formatTime = (timestamp: number) => {
     return new Date(timestamp).toLocaleTimeString();
+  };
+
+  // Ensure a visible 5x5 grid exists even if no card received yet
+  const ensureGrid = () => {
+    setGameState(prev => {
+      const squares = prev.bingoCard?.squares || [];
+      if (squares.length === 25) return prev;
+      const placeholders: BingoSquare[] = Array.from({ length: 25 }, (_, index) => ({
+        song: { id: String(index), name: '', artist: '' },
+        isPlayed: false,
+        position: { row: Math.floor(index / 5), col: index % 5 }
+      }));
+      return { ...prev, bingoCard: { squares: placeholders, size: 5 } };
+    });
   };
 
   // Function to get the overall pattern name
