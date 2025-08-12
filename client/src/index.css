@@ -1356,6 +1356,7 @@ code {
 .call-list-content {
   flex: 1;
   overflow: hidden;
+  position: relative; /* for column cutters overlay */
 }
 
 .call-columns-header {
@@ -1381,6 +1382,22 @@ code {
   gap: 8px;
   height: 100%;
   overflow-y: hidden;
+}
+
+/* Visible column cutters over header + list */
+.call-list-content::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(255,255,255,0.25), rgba(255,255,255,0.25)),
+    linear-gradient(to right, rgba(255,255,255,0.18), rgba(255,255,255,0.18)),
+    linear-gradient(to right, rgba(255,255,255,0.18), rgba(255,255,255,0.18)),
+    linear-gradient(to right, rgba(255,255,255,0.25), rgba(255,255,255,0.25));
+  background-size: 1px 100%, 1px 100%, 1px 100%, 1px 100%;
+  background-position: 20% 0, 40% 0, 60% 0, 80% 0;
+  background-repeat: no-repeat;
 }
 
 .call-item {
