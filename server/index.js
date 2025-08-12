@@ -60,7 +60,10 @@ function getNonHostPlayerCount(room) {
   if (!room) return 0;
   let count = 0;
   for (const player of room.players.values()) {
-    if (!player.isHost) count++;
+    // Exclude host and any non-interactive display clients from the count
+    if (!player.isHost && player.name !== 'Display' && player.name !== 'DisplayHeader') {
+      count++;
+    }
   }
   return count;
 }
