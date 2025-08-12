@@ -1038,7 +1038,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     const firstSong = allSongs[0];
     console.log(`🎵 Playing song 1/${allSongs.length}: ${firstSong.name} by ${firstSong.artist}`);
 
-    // Use provided deviceId or fall back to saved device, then any available device
+    // Use provided deviceId or fall back to saved device (STRICT-ONLY: no other fallback)
     let targetDeviceId = deviceId;
     if (!targetDeviceId) {
       const savedDevice = loadSavedDevice();
@@ -1047,28 +1047,17 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         console.log(`🎵 Using saved device for playback: ${savedDevice.name}`);
       }
     }
-
-    // If still no device, try to get any available device
+    // Strict-only: if still no device, abort
     if (!targetDeviceId) {
-      try {
-        console.log('🔍 No device specified, fetching available devices...');
-        const devices = await spotifyService.getUserDevices();
-        if (devices.length > 0) {
-          targetDeviceId = devices[0].id;
-          console.log(`🎵 Using first available device: ${devices[0].name}`);
-        } else {
-          console.error('❌ No devices available for playback');
-          return;
-        }
-      } catch (error) {
-        console.error('❌ Error fetching devices:', error);
-        return;
-      }
+      console.error('❌ Strict mode: no locked device available for playback');
+      io.to(roomId).emit('playback-error', { message: 'Locked device not available. Open Spotify on your chosen device or reselect in Host.' });
+      return;
     }
 
     console.log(`🎵 Starting playback on device: ${targetDeviceId}`);
 
     try {
+      await spotifyService.transferPlayback(targetDeviceId, true);
       await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], 0);
       console.log(`✅ Successfully started playback on device: ${targetDeviceId}`);
       
@@ -1081,40 +1070,12 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         console.error('❌ Error setting initial volume:', volumeError);
       }
     } catch (playbackError) {
-      console.error('❌ Error starting playback:', playbackError);
-      
-      // If the device is not found, try to use any available device
-      if (playbackError.body?.error?.message === 'Device not found') {
-        console.log('🔄 Device not found, trying to use any available device...');
-        try {
-          const devices = await spotifyService.getUserDevices();
-          if (devices.length > 0) {
-            const fallbackDevice = devices[0];
-            console.log(`🔄 Using fallback device: ${fallbackDevice.name}`);
-            await spotifyService.startPlayback(fallbackDevice.id, [`spotify:track:${firstSong.id}`], 0);
-            console.log(`✅ Successfully started playback on fallback device: ${fallbackDevice.name}`);
-            targetDeviceId = fallbackDevice.id;
-            
-            // Set initial volume to 50% (or room's saved volume)
-            try {
-              const initialVolume = room.volume || 50;
-              await spotifyService.setVolume(initialVolume, fallbackDevice.id);
-              console.log(`🔊 Set initial volume to ${initialVolume}% on fallback device`);
-            } catch (volumeError) {
-              console.error('❌ Error setting initial volume on fallback device:', volumeError);
-            }
-          } else {
-            console.error('❌ No fallback devices available');
-            return;
-          }
-        } catch (fallbackError) {
-          console.error('❌ Error with fallback device:', fallbackError);
-          return;
-        }
-      } else if (playbackError.body?.error?.message === 'The access token expired') {
+      console.error('❌ Error starting playback in strict mode:', playbackError);
+      if (playbackError.body?.error?.message === 'The access token expired') {
         console.log('🔄 Token expired, refreshing and retrying...');
         try {
           await spotifyService.refreshAccessToken();
+          await spotifyService.transferPlayback(targetDeviceId, true);
           await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], 0);
           console.log(`✅ Successfully started playback after token refresh`);
           
@@ -1131,7 +1092,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           return;
         }
       } else {
-        console.error('❌ Unknown playback error:', playbackError);
+        io.to(roomId).emit('playback-error', { message: 'Unable to start on locked device. Ensure it is online and try again.' });
         return;
       }
     }
