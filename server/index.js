@@ -203,6 +203,11 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       }
     }
 
+    try {
+      await spotifyService.transferPlayback(targetDeviceId, true);
+    } catch (e) {
+      console.warn('⚠️ Transfer playback failed (will still try play):', e?.message || e);
+    }
     console.log(`🎵 Starting playback on device: ${targetDeviceId}`);
 
     try {
@@ -604,6 +609,13 @@ io.on('connection', (socket) => {
         console.log('▶️ Resuming song in room:', roomId);
         const savedDevice = loadSavedDevice();
         if (savedDevice) {
+          // Ensure playback is locked to the saved device before resuming
+          try {
+            await spotifyService.transferPlayback(savedDevice.id, true);
+          } catch (e) {
+            console.warn('⚠️ Transfer playback failed before resume:', e?.message || e);
+          }
+
           if (resumePosition !== undefined) {
             // Resume from specific position
             console.log(`🎯 Resuming from position: ${resumePosition}ms`);
@@ -1217,6 +1229,12 @@ async function playNextSong(roomId, deviceId) {
       }
     }
 
+    // Assert playback on the locked/saved device to prevent hijacking
+    try {
+      await spotifyService.transferPlayback(targetDeviceId, true);
+    } catch (e) {
+      console.warn('⚠️ Transfer playback failed (will still try play):', e?.message || e);
+    }
     console.log(`🎵 Starting playback on device: ${targetDeviceId}`);
 
     try {

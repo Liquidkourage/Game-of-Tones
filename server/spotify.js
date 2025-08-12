@@ -226,6 +226,18 @@ class SpotifyService {
     }
   }
 
+  // Transfer playback to a specific device (assert control)
+  async transferPlayback(deviceId, play = true) {
+    await this.ensureValidToken();
+    try {
+      await this.spotifyApi.transferMyPlayback({ deviceIds: [deviceId], play });
+      console.log(`🔀 Transferred playback to device ${deviceId} (play=${play})`);
+    } catch (error) {
+      console.error('Error transferring playback:', error);
+      throw error;
+    }
+  }
+
   // Resume playback
   async resumePlayback(deviceId) {
     await this.ensureValidToken();
