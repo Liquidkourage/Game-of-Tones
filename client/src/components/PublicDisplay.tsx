@@ -347,15 +347,14 @@ const PublicDisplay: React.FC = () => {
                 <span className="call-count">{gameState.playedSongs.length}</span>
               </div>
               <div className="call-list-content">
-                {gameState.playedSongs.length > 0 ? (
-                  <>
-                  <div className="call-columns-header">
-                    {['B','I','N','G','O'].map((c) => (
-                      <div key={c} className="call-col-title">{c}</div>
-                    ))}
-                  </div>
-                  <div className="call-list">
-                    {gameState.playedSongs.slice(-10).map((song, index) => (
+                <div className="call-columns-header">
+                  {['B','I','N','G','O'].map((c) => (
+                    <div key={c} className="call-col-title">{c}</div>
+                  ))}
+                </div>
+                <div className="call-list">
+                  {gameState.playedSongs.length > 0 && (
+                    gameState.playedSongs.slice(-10).map((song, index) => (
                       <motion.div
                         key={song.id + '-' + index}
                         className="call-item"
@@ -370,10 +369,10 @@ const PublicDisplay: React.FC = () => {
                         </div>
                         <Music className="call-icon" />
                       </motion.div>
-                    ))}
-                  </div>
-                  </>
-                ) : (
+                    ))
+                  )}
+                </div>
+                {gameState.playedSongs.length === 0 && (
                   <div className="no-calls">
                     <p>No songs played yet</p>
                   </div>
