@@ -76,10 +76,14 @@ const PublicDisplay: React.FC = () => {
     });
 
     socket.on('player-joined', (data: any) => {
-      setGameState(prev => ({ ...prev, playerCount: data.playerCount }));
+      const count = Math.max(0, Number(data.playerCount || 0));
+      setGameState(prev => ({ ...prev, playerCount: count }));
+      window.dispatchEvent(new CustomEvent('display-player-count', { detail: { playerCount: count } }));
     });
     socket.on('player-left', (data: any) => {
-      setGameState(prev => ({ ...prev, playerCount: data.playerCount }));
+      const count = Math.max(0, Number(data.playerCount || 0));
+      setGameState(prev => ({ ...prev, playerCount: count }));
+      window.dispatchEvent(new CustomEvent('display-player-count', { detail: { playerCount: count } }));
     });
 
     socket.on('bingo-card', (card: any) => {
