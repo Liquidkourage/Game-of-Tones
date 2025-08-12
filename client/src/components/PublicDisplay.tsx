@@ -348,6 +348,12 @@ const PublicDisplay: React.FC = () => {
               </div>
               <div className="call-list-content">
                 {gameState.playedSongs.length > 0 ? (
+                  <>
+                  <div className="call-columns-header">
+                    {['B','I','N','G','O'].map((c) => (
+                      <div key={c} className="call-col-title">{c}</div>
+                    ))}
+                  </div>
                   <div className="call-list">
                     {gameState.playedSongs.slice(-10).map((song, index) => (
                       <motion.div
@@ -366,6 +372,7 @@ const PublicDisplay: React.FC = () => {
                       </motion.div>
                     ))}
                   </div>
+                  </>
                 ) : (
                   <div className="no-calls">
                     <p>No songs played yet</p>
