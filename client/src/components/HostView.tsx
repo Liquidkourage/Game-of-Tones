@@ -315,6 +315,22 @@ const HostView: React.FC = () => {
       console.warn('Socket disconnected:', reason);
     });
 
+    newSocket.on('game-ended', () => {
+      setIsPlaying(false);
+      setGameState('ended');
+      console.log('🛑 Game ended');
+    });
+
+    newSocket.on('game-reset', () => {
+      setIsPlaying(false);
+      setGameState('waiting');
+      setCurrentSong(null);
+      setWinners([]);
+      setMixFinalized(false);
+      setSongList([]);
+      console.log('🔁 Game reset');
+    });
+
     newSocket.on('playback-error', (data: any) => {
       const msg = data?.message || 'Playback error: Could not start on locked device.';
       console.error('Playback error:', msg);
@@ -480,6 +496,16 @@ const HostView: React.FC = () => {
       console.error('Error starting game:', error);
       setIsStartingGame(false);
     }
+  };
+
+  const endGame = () => {
+    if (!socket || !roomId) return;
+    socket.emit('end-game', { roomId, stopPlayback: true });
+  };
+
+  const resetGame = () => {
+    if (!socket || !roomId) return;
+    socket.emit('reset-game', { roomId, stopPlayback: true });
   };
 
   const playSong = async (song: Song) => {
@@ -1293,6 +1319,10 @@ const HostView: React.FC = () => {
                ) : (
                  <div className="game-status">
                    <p className="status-text">🎵 Game is running - Use the Now Playing controls below</p>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button className="btn-secondary" onClick={endGame}>🛑 End Game</button>
+                    <button className="btn-secondary" onClick={resetGame}>🔁 Reset</button>
+                  </div>
                  </div>
                )}
              </div>

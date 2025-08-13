@@ -134,6 +134,17 @@ const PlayerView: React.FC = () => {
       }
     });
 
+    newSocket.on('game-ended', () => {
+      setGameState(prev => ({ ...prev, isPlaying: false }));
+      console.log('🛑 Game ended');
+    });
+
+    newSocket.on('game-reset', () => {
+      setGameState({ isPlaying: false, currentSong: null, playerCount: 0, hasBingo: false });
+      setBingoCard(null);
+      console.log('🔁 Game reset');
+    });
+
     newSocket.on('player-left', (data: any) => {
       console.log('Player left:', data);
       setGameState(prev => ({

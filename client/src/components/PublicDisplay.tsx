@@ -116,6 +116,25 @@ const PublicDisplay: React.FC = () => {
 
     socket.on('mix-finalized', () => { ensureGrid(); });
 
+    socket.on('game-ended', () => {
+      setGameState(prev => ({ ...prev, isPlaying: false }));
+      console.log('🛑 Game ended (display)');
+    });
+
+    socket.on('game-reset', () => {
+      setGameState({
+        isPlaying: false,
+        currentSong: null,
+        playerCount: 0,
+        winners: [],
+        snippetLength: 30,
+        playedSongs: [],
+        bingoCard: { squares: [], size: 5 }
+      });
+      ensureGrid();
+      console.log('🔁 Game reset (display)');
+    });
+
     return () => { socket.close(); };
   }, [roomId]);
 

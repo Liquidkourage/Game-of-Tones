@@ -1297,6 +1297,69 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       totalSongs: allSongs.length
     });
 
+  // End current game gracefully (stop timers, optionally pause Spotify, keep cards/history)
+  socket.on('end-game', async (data) => {
+    const { roomId, stopPlayback = true } = data || {};
+    const room = rooms.get(roomId);
+    if (!room) return;
+    if (room.host !== socket.id && !room.players.get(socket.id)?.isHost) return;
+    try {
+      clearRoomTimer(roomId);
+      if (stopPlayback) {
+        try {
+          const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+          if (deviceId) {
+            try { await spotifyService.transferPlayback(deviceId, false); } catch {}
+            await spotifyService.pausePlayback(deviceId);
+          }
+        } catch (e) {
+          console.warn('⚠️ Pause on end-game failed:', e?.message || e);
+        }
+      }
+      room.gameState = 'ended';
+      io.to(roomId).emit('game-ended', { roomId });
+      console.log(`🛑 Game ended gracefully for room ${roomId}`);
+    } catch (e) {
+      console.error('❌ Error ending game:', e?.message || e);
+    }
+  });
+
+  // Reset room to a fresh waiting state (clears cards, winners, playlist order)
+  socket.on('reset-game', async (data) => {
+    const { roomId, stopPlayback = true } = data || {};
+    const room = rooms.get(roomId);
+    if (!room) return;
+    if (room.host !== socket.id && !room.players.get(socket.id)?.isHost) return;
+    try {
+      clearRoomTimer(roomId);
+      if (stopPlayback) {
+        try {
+          const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+          if (deviceId) {
+            try { await spotifyService.transferPlayback(deviceId, false); } catch {}
+            await spotifyService.pausePlayback(deviceId);
+          }
+        } catch (e) {
+          console.warn('⚠️ Pause on reset-game failed:', e?.message || e);
+        }
+      }
+      // Reset state but keep players and host
+      room.gameState = 'waiting';
+      room.winners = [];
+      room.playlistSongs = [];
+      room.currentSongIndex = 0;
+      room.currentSong = null;
+      room.mixFinalized = false;
+      room.finalizedPlaylists = undefined;
+      room.finalizedSongOrder = null;
+      room.bingoCards = new Map();
+      io.to(roomId).emit('game-reset', { roomId });
+      console.log(`🔁 Game reset for room ${roomId}`);
+    } catch (e) {
+      console.error('❌ Error resetting game:', e?.message || e);
+    }
+  });
+
     console.log(`✅ Started automatic playback in room ${roomId}: ${firstSong.name} by ${firstSong.artist} on device ${targetDeviceId}`);
 
     room.playlistSongs = allSongs;
