@@ -519,6 +519,12 @@ io.on('connection', (socket) => {
     if (room && room.host === socket.id) {
       try {
         console.log('⏭️ Skipping to next song in room:', roomId);
+        // Ensure Spotify skips on the actual device, then move server index
+        const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+        if (deviceId) {
+          try { await spotifyService.transferPlayback(deviceId, true); } catch {}
+          try { await spotifyService.nextTrack(deviceId); } catch (e) { console.warn('⚠️ Spotify next failed:', e?.message || e); }
+        }
         // Clear existing timer and immediately play next song
         clearRoomTimer(roomId);
         await playNextSong(roomId, room.selectedDeviceId);
@@ -542,16 +548,22 @@ io.on('connection', (socket) => {
         
         // Clear the timer when pausing
         clearRoomTimer(roomId);
-        const savedDevice = loadSavedDevice();
-        if (savedDevice) {
-          await spotifyService.pausePlayback(savedDevice.id);
-          room.gameState = 'paused';
-          io.to(roomId).emit('playback-paused');
-          console.log('✅ Playback paused successfully');
-        } else {
-          console.error('❌ No saved device found for pause');
+        const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+        if (!deviceId) {
+          console.error('❌ No device found for pause');
           socket.emit('error', { message: 'No device available for pause' });
+          return;
         }
+        try {
+          // Ensure control on the locked device
+          await spotifyService.transferPlayback(deviceId, false);
+        } catch (e) {
+          console.warn('⚠️ Transfer before pause failed:', e?.message || e);
+        }
+        await spotifyService.pausePlayback(deviceId);
+        room.gameState = 'paused';
+        io.to(roomId).emit('playback-paused');
+        console.log('✅ Playback paused successfully');
       } catch (error) {
         console.error('❌ Error pausing song:', error);
         socket.emit('error', { message: 'Failed to pause song' });
@@ -566,46 +578,43 @@ io.on('connection', (socket) => {
     if (room && room.host === socket.id) {
       try {
         console.log('▶️ Resuming song in room:', roomId);
-        const savedDevice = loadSavedDevice();
-        if (savedDevice) {
-          // Ensure playback is locked to the saved device before resuming
-          try {
-            await spotifyService.transferPlayback(savedDevice.id, true);
-          } catch (e) {
-            console.warn('⚠️ Transfer playback failed before resume:', e?.message || e);
-          }
-
-          if (resumePosition !== undefined) {
-            // Resume from specific position
-            console.log(`🎯 Resuming from position: ${resumePosition}ms`);
-            await spotifyService.resumePlayback(savedDevice.id);
-            // Seek to the exact position
-            await spotifyService.seekToPosition(resumePosition, savedDevice.id);
-            console.log(`✅ Resumed and seeked to position: ${resumePosition}ms`);
-          } else {
-            // Normal resume
-            await spotifyService.resumePlayback(savedDevice.id);
-            console.log('✅ Playback resumed successfully');
-          }
-          
-          room.gameState = 'playing';
-          io.to(roomId).emit('playback-resumed');
-          
-          // Calculate remaining time and set timer
-          if (room.snippetLength) {
-            const remainingTime = room.snippetLength * 1000 - (resumePosition || 0);
-            if (remainingTime > 0) {
-              setRoomTimer(roomId, () => {
-                playNextSong(roomId, room.selectedDeviceId);
-              }, remainingTime);
-            } else {
-              // If no time remaining, go to next song
-              playNextSong(roomId, room.selectedDeviceId);
-            }
-          }
-        } else {
-          console.error('❌ No saved device found for resume');
+        const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+        if (!deviceId) {
+          console.error('❌ No device found for resume');
           socket.emit('error', { message: 'No device available for resume' });
+          return;
+        }
+
+        // Ensure playback is locked to the device before resuming
+        try {
+          await spotifyService.transferPlayback(deviceId, true);
+        } catch (e) {
+          console.warn('⚠️ Transfer playback failed before resume:', e?.message || e);
+        }
+
+        if (resumePosition !== undefined) {
+          console.log(`🎯 Resuming from position: ${resumePosition}ms`);
+          await spotifyService.resumePlayback(deviceId);
+          await spotifyService.seekToPosition(resumePosition, deviceId);
+          console.log(`✅ Resumed and seeked to position: ${resumePosition}ms`);
+        } else {
+          await spotifyService.resumePlayback(deviceId);
+          console.log('✅ Playback resumed successfully');
+        }
+
+        room.gameState = 'playing';
+        io.to(roomId).emit('playback-resumed');
+
+        // Calculate remaining time and set timer
+        if (room.snippetLength) {
+          const remainingTime = room.snippetLength * 1000 - (resumePosition || 0);
+          if (remainingTime > 0) {
+            setRoomTimer(roomId, () => {
+              playNextSong(roomId, room.selectedDeviceId);
+            }, remainingTime);
+          } else {
+            playNextSong(roomId, room.selectedDeviceId);
+          }
         }
       } catch (error) {
         console.error('❌ Error resuming song:', error);
