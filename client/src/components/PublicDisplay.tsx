@@ -52,6 +52,7 @@ interface BingoSquare {
 const PublicDisplay: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [searchParams] = useSearchParams();
+  const showNowPlaying = (searchParams.get('np') === '1') || (searchParams.get('nowPlaying') === '1');
   const displayRef = useRef<HTMLDivElement | null>(null);
   const [currentWinningLine, setCurrentWinningLine] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -323,7 +324,7 @@ const PublicDisplay: React.FC = () => {
               <div className="bingo-card-header center">
                 <Grid3X3 className="bingo-card-icon" />
                 <h2>{getPatternName()}</h2>
-                {gameState.currentSong && (
+                {showNowPlaying && gameState.currentSong && (
                   <div className="now-playing-banner" style={{ marginTop: 6, fontSize: '0.95rem' }}>
                     Now Playing: {gameState.currentSong.name} — {gameState.currentSong.artist}
                     {countdownMs > 0 && (
