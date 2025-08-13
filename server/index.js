@@ -173,6 +173,7 @@ function setRoomTimer(roomId, callback, delay) {
 
 // Dedicated fade timers so we can cancel scheduled fades on pause/skip/etc
 const roomFadeTimers = new Map();
+const roomFadeTokens = new Map();
 function clearRoomFadeTimer(roomId) {
   if (roomFadeTimers.has(roomId)) {
     clearTimeout(roomFadeTimers.get(roomId));
@@ -187,11 +188,18 @@ function setRoomFadeTimer(roomId, callback, delay) {
 
 function delay(ms) { return new Promise(res => setTimeout(res, ms)); }
 function clampVolume(v) { return Math.max(0, Math.min(100, Math.round(v))); }
-async function fadeVolume(deviceId, fromVolume, toVolume, durationMs, steps = 8) {
+function nextFadeToken(roomId) {
+  const v = (roomFadeTokens.get(roomId) || 0) + 1;
+  roomFadeTokens.set(roomId, v);
+  return v;
+}
+function getFadeToken(roomId) { return roomFadeTokens.get(roomId) || 0; }
+async function fadeVolume(roomId, deviceId, fromVolume, toVolume, durationMs, steps = 8, tokenAtStart = 0) {
   try {
     const stepDelay = Math.max(50, Math.floor(durationMs / steps));
     const diff = toVolume - fromVolume;
     for (let i = 1; i <= steps; i++) {
+      if (getFadeToken(roomId) !== tokenAtStart) break; // canceled
       const next = clampVolume(fromVolume + (diff * i) / steps);
       try { await spotifyService.setVolume(next, deviceId); } catch (_) {}
       if (i < steps) await delay(stepDelay);
@@ -811,9 +819,10 @@ io.on('connection', (socket) => {
       try {
         console.log(`⏮️ Previous button clicked at position: ${currentPosition}ms in room:`, roomId);
         
-        // Clear existing timers
+        // Clear existing timers and cancel fades
         clearRoomTimer(roomId);
         clearRoomFadeTimer(roomId);
+        nextFadeToken(roomId);
         
         // If we're in the first second of the song, go to previous song
         // Otherwise, restart the current song from the beginning
@@ -1468,12 +1477,13 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     startPlaybackWatchdog(roomId, targetDeviceId, room.snippetLength * 1000);
 
     // Fade in from current volume to target volume over FADE_IN_MS
-    const targetVolume = room.volume || 50;
+    const targetVolume = clampVolume(room.volume || 50);
     try {
       const state = await spotifyService.getCurrentPlaybackState();
       const currentVol = typeof state?.device?.volume_percent === 'number' ? state.device.volume_percent : targetVolume;
       if (FADE_IN_MS > 0 && currentVol < targetVolume) {
-        fadeVolume(targetDeviceId, currentVol, targetVolume, FADE_IN_MS);
+        const token = nextFadeToken(roomId);
+        fadeVolume(roomId, targetDeviceId, currentVol, targetVolume, FADE_IN_MS, 8, token);
       }
     } catch (_) {}
 
@@ -1484,7 +1494,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         try {
           const state = await spotifyService.getCurrentPlaybackState();
           const currentVol = typeof state?.device?.volume_percent === 'number' ? state.device.volume_percent : targetVolume;
-          await fadeVolume(targetDeviceId, currentVol, Math.max(5, Math.floor(targetVolume * 0.2)), FADE_OUT_MS);
+          const token = nextFadeToken(roomId);
+          await fadeVolume(roomId, targetDeviceId, currentVol, Math.max(10, Math.floor(targetVolume * 0.4)), Math.min(FADE_OUT_MS, room.snippetLength * 1000), 8, token);
         } catch (_) {}
       }, fadeOutAt);
     }
@@ -1642,8 +1653,9 @@ async function playNextSong(roomId, deviceId) {
       // Add a small delay to ensure smooth transition
       await new Promise(resolve => setTimeout(resolve, 100));
       if (VERBOSE) console.log(`🔄 Transition delay complete, calling playNextSong`);
-      // restore target volume prior to next song in case fade-out reduced it
-      try { await spotifyService.setVolume(room.volume || 50, targetDeviceId); } catch (_) {}
+      // cancel ongoing fade and restore target volume prior to next song
+      nextFadeToken(roomId);
+      try { await spotifyService.setVolume(clampVolume(room.volume || 50), targetDeviceId); } catch (_) {}
       playNextSong(roomId, targetDeviceId);
     }, room.snippetLength * 1000);
 
