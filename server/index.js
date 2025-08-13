@@ -1012,27 +1012,96 @@ async function generateBingoCards(roomId, playlists) {
 async function generateBingoCardForPlayer(roomId, playerId) {
   const room = rooms.get(roomId);
   if (!room || !Array.isArray(room.playlists)) return;
-  // Reuse the multi-card flow by calling generateBingoCards, but that would regenerate all.
-  // Instead, fetch unique songs and build only for this player.
-  const uniqueSongMap = new Map();
+  // Build a single card using the same 1x75 / 5x15 logic used for all players
   try {
+    // Fetch per-playlist songs and de-duplicate per list
+    const playlistsWithSongs = [];
     for (const playlist of room.playlists) {
-      const songs = await spotifyService.getPlaylistTracks(playlist.id);
-      for (const song of songs) {
-        if (song && song.id && !uniqueSongMap.has(song.id)) {
-          uniqueSongMap.set(song.id, song);
-        }
+      try {
+        const songs = await spotifyService.getPlaylistTracks(playlist.id);
+        playlistsWithSongs.push({ ...playlist, songs });
+      } catch (error) {
+        console.error(`❌ Error fetching songs for playlist ${playlist.id}:`, error);
+        playlistsWithSongs.push({ ...playlist, songs: [] });
       }
     }
-    const uniqueSongs = Array.from(uniqueSongMap.values());
-    if (uniqueSongs.length < 25) return;
-    const shuffled = [...uniqueSongs].sort(() => Math.random() - 0.5);
-    const chosen = shuffled.slice(0, 25);
+
+    const songsNeededPerCard = 25;
+    const dedup = (arr) => {
+      const seen = new Set();
+      const out = [];
+      for (const s of arr) { if (s && s.id && !seen.has(s.id)) { seen.add(s.id); out.push(s); } }
+      return out;
+    };
+
+    const perListUnique = playlistsWithSongs.map(pl => ({
+      id: pl.id,
+      name: pl.name,
+      songs: dedup(Array.isArray(pl.songs) ? pl.songs : [])
+    }));
+
+    let mode = 'fallback';
+    if (perListUnique.length === 1 && perListUnique[0].songs.length >= 75) mode = '1x75';
+    if (perListUnique.length === 5 && perListUnique.every(pl => pl.songs.length >= 15)) mode = '5x15';
+    console.log(`🎯 Late-join card mode: ${mode}`);
+
+    const buildGlobalPool = () => {
+      const map = new Map();
+      for (const pl of perListUnique) { for (const s of pl.songs) { if (!map.has(s.id)) map.set(s.id, s); } }
+      return Array.from(map.values());
+    };
+    const ensureEnough = (available) => {
+      if (available < songsNeededPerCard) {
+        const message = `Need at least ${songsNeededPerCard} unique songs to generate a card. Only ${available} available.`;
+        console.error(`❌ ${message}`);
+        io.to(playerId).emit('bingo-card-error', { message, required: songsNeededPerCard, available });
+        return false;
+      }
+      return true;
+    };
+
+    let chosen25 = [];
+    if (mode === '1x75') {
+      const base = [...perListUnique[0].songs].sort(() => Math.random() - 0.5).slice(0, 75);
+      if (!ensureEnough(base.length)) return;
+      chosen25 = [...base].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
+    } else if (mode === '5x15') {
+      const used = new Set();
+      const columns = [];
+      let ok = true;
+      for (let col = 0; col < 5; col++) {
+        const pool = [...perListUnique[col].songs].sort(() => Math.random() - 0.5);
+        const colPicks = [];
+        for (const s of pool) {
+          if (!used.has(s.id)) { colPicks.push(s); used.add(s.id); }
+          if (colPicks.length === 5) break;
+        }
+        if (colPicks.length < 5) { ok = false; break; }
+        columns.push(colPicks);
+      }
+      if (!ok) {
+        console.warn('⚠️ 5x15 late-join fell short; falling back to global pool');
+        const global = buildGlobalPool();
+        if (!ensureEnough(global.length)) return;
+        chosen25 = [...global].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
+      } else {
+        for (let row = 0; row < 5; row++) {
+          for (let col = 0; col < 5; col++) {
+            chosen25.push(columns[col][row]);
+          }
+        }
+      }
+    } else {
+      const pool = buildGlobalPool();
+      if (!ensureEnough(pool.length)) return;
+      chosen25 = [...pool].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
+    }
+
     const card = { id: playerId, squares: [] };
     let idx = 0;
     for (let row = 0; row < 5; row++) {
       for (let col = 0; col < 5; col++) {
-        const s = chosen[idx++];
+        const s = chosen25[idx++];
         card.squares.push({
           position: `${row}-${col}`,
           songId: s.id,
