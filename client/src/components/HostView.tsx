@@ -421,9 +421,11 @@ const HostView: React.FC = () => {
     if (!socket || selectedPlaylists.length === 0) return;
     
     try {
+      // Include current host-side songList ordering to enforce 1x75 pool deterministically
       socket.emit('finalize-mix', {
         roomId: roomId,
-        playlists: selectedPlaylists
+        playlists: selectedPlaylists,
+        songList
       });
       
       // Listen for mix finalized confirmation

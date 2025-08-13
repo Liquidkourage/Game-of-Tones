@@ -394,7 +394,7 @@ io.on('connection', (socket) => {
 
   // Start game
   socket.on('finalize-mix', async (data) => {
-    const { roomId, playlists } = data;
+    const { roomId, playlists, songList } = data;
     console.log('🎵 Finalizing mix for room:', roomId);
     
     const room = rooms.get(roomId);
@@ -412,12 +412,15 @@ io.on('connection', (socket) => {
     }
 
     try {
-      // Generate bingo cards for all players
-      await generateBingoCards(roomId, playlists);
+      // Persist finalized data, including host-ordered song list if provided
+      room.finalizedPlaylists = playlists;
+      room.finalizedSongOrder = Array.isArray(songList) ? songList : null;
+      
+      // Generate bingo cards for all players (respect host order where applicable)
+      await generateBingoCards(roomId, playlists, room.finalizedSongOrder);
       
       // Update room state to indicate mix is finalized
       room.mixFinalized = true;
-      room.finalizedPlaylists = playlists;
       
       // Notify all players that mix is finalized
       io.to(roomId).emit('mix-finalized', { playlists });
@@ -475,7 +478,8 @@ io.on('connection', (socket) => {
         });
 
         console.log('🎵 Generating bingo cards...');
-        await generateBingoCards(roomId, playlists);
+        // If mix was finalized, reuse finalized song order to enforce 1x75 pool deterministically
+        await generateBingoCards(roomId, playlists, room.finalizedSongOrder || null);
 
         console.log('🎵 Starting automatic playback...');
         // Start automatic playback with the client's shuffled song list
@@ -853,7 +857,7 @@ io.on('connection', (socket) => {
 });
 
 // Helper functions
-async function generateBingoCards(roomId, playlists) {
+async function generateBingoCards(roomId, playlists, songOrder = null) {
   console.log('🎲 Generating bingo cards for room:', roomId);
   const room = rooms.get(roomId);
   if (!room) {
@@ -912,8 +916,11 @@ async function generateBingoCards(roomId, playlists) {
 
     console.log(`🎯 Card generation mode: ${mode}`);
 
-    // Build fallback global pool when needed
+    // Build fallback global pool when needed (prefer host-provided order if available)
     const buildGlobalPool = () => {
+      if (Array.isArray(songOrder) && songOrder.length > 0) {
+        return dedup(songOrder);
+      }
       const map = new Map();
       for (const pl of perListUnique) {
         for (const s of pl.songs) { if (!map.has(s.id)) map.set(s.id, s); }
@@ -938,8 +945,14 @@ async function generateBingoCards(roomId, playlists) {
     for (const [playerId, player] of room.players) {
       let chosen25 = [];
       if (mode === '1x75') {
-        // Shuffle and cap to 75, then draw 25
-        const base = [...perListUnique[0].songs].sort(() => Math.random() - 0.5).slice(0, 75);
+        // Cap to first 75 from host order if provided; otherwise, randomize playlist order then cap
+        let base = [];
+        if (Array.isArray(songOrder) && songOrder.length > 0) {
+          const allowed = new Set(perListUnique[0].songs.map(s => s.id));
+          base = dedup(songOrder.filter(s => allowed.has(s.id))).slice(0, 75);
+        } else {
+          base = [...perListUnique[0].songs].sort(() => Math.random() - 0.5).slice(0, 75);
+        }
         if (!ensureEnough(base.length)) return;
         chosen25 = [...base].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
       } else if (mode === '5x15') {
@@ -1046,6 +1059,9 @@ async function generateBingoCardForPlayer(roomId, playerId) {
     console.log(`🎯 Late-join card mode: ${mode}`);
 
     const buildGlobalPool = () => {
+      if (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) {
+        return dedup(room.finalizedSongOrder);
+      }
       const map = new Map();
       for (const pl of perListUnique) { for (const s of pl.songs) { if (!map.has(s.id)) map.set(s.id, s); } }
       return Array.from(map.values());
@@ -1062,7 +1078,13 @@ async function generateBingoCardForPlayer(roomId, playerId) {
 
     let chosen25 = [];
     if (mode === '1x75') {
-      const base = [...perListUnique[0].songs].sort(() => Math.random() - 0.5).slice(0, 75);
+      let base = [];
+      if (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) {
+        const allowed = new Set(perListUnique[0].songs.map(s => s.id));
+        base = dedup(room.finalizedSongOrder.filter(s => allowed.has(s.id))).slice(0, 75);
+      } else {
+        base = [...perListUnique[0].songs].sort(() => Math.random() - 0.5).slice(0, 75);
+      }
       if (!ensureEnough(base.length)) return;
       chosen25 = [...base].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
     } else if (mode === '5x15') {
