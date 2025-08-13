@@ -318,6 +318,30 @@ class SpotifyService {
     }
   }
 
+  // Activate a specific device by transferring and briefly starting a test track
+  async activateDevice(deviceId) {
+    await this.ensureValidToken();
+    try {
+      await this.transferPlayback(deviceId, true);
+      try {
+        await this.spotifyApi.play({
+          device_id: deviceId,
+          uris: ['spotify:track:4iV5W9uYEdYUVa79Axb7Rh']
+        });
+      } catch (_) {
+        // If play fails, it's fine; device may still become active
+      }
+      // Pause shortly after to avoid audible blip
+      setTimeout(async () => {
+        try { await this.pausePlayback(deviceId); } catch (_) {}
+      }, 800);
+      return true;
+    } catch (error) {
+      console.error('Error activating device:', error);
+      return false;
+    }
+  }
+
   // Get currently playing track
   async getCurrentTrack() {
     await this.ensureValidToken();
@@ -382,12 +406,70 @@ class SpotifyService {
     await this.ensureValidToken();
     
     try {
-      // Convert milliseconds to seconds for Spotify API
-      const positionSeconds = Math.floor(position / 1000);
-      await this.spotifyApi.seek(positionSeconds, { device_id: deviceId });
-      console.log(`✅ Seeked to ${positionSeconds}s on device ${deviceId}`);
+      // Spotify API expects milliseconds
+      await this.spotifyApi.seek(position, { device_id: deviceId });
+      console.log(`✅ Seeked to ${position}ms on device ${deviceId}`);
     } catch (error) {
       console.error('Error seeking:', error);
+      throw error;
+    }
+  }
+
+  // Get full current playback state (raw Spotify shape)
+  async getCurrentPlaybackState() {
+    await this.ensureValidToken();
+    try {
+      const response = await this.spotifyApi.getMyCurrentPlaybackState();
+      return response.body || null;
+    } catch (error) {
+      console.error('Error getting current playback state:', error);
+      throw error;
+    }
+  }
+
+  // Set shuffle state
+  async setShuffleState(state, deviceId) {
+    await this.ensureValidToken();
+    try {
+      await this.spotifyApi.setShuffle(state, { device_id: deviceId });
+      console.log(`✅ Shuffle ${state ? 'enabled' : 'disabled'} on device ${deviceId || '(default)'}`);
+    } catch (error) {
+      console.error('Error setting shuffle state:', error);
+      throw error;
+    }
+  }
+
+  // Set repeat state: 'track' | 'context' | 'off'
+  async setRepeatState(state, deviceId) {
+    await this.ensureValidToken();
+    try {
+      await this.spotifyApi.setRepeat(state, { device_id: deviceId });
+      console.log(`✅ Repeat set to ${state} on device ${deviceId || '(default)'}`);
+    } catch (error) {
+      console.error('Error setting repeat state:', error);
+      throw error;
+    }
+  }
+
+  // Previous track
+  async previousTrack(deviceId) {
+    await this.ensureValidToken();
+    try {
+      await this.spotifyApi.skipToPrevious({ device_id: deviceId });
+    } catch (error) {
+      console.error('Error going to previous track:', error);
+      throw error;
+    }
+  }
+
+  // Add to queue
+  async addToQueue(uri, deviceId) {
+    await this.ensureValidToken();
+    try {
+      await this.spotifyApi.addToQueue(uri, { device_id: deviceId });
+      console.log(`✅ Added to queue: ${uri} on device ${deviceId || '(default)'}`);
+    } catch (error) {
+      console.error('Error adding to queue:', error);
       throw error;
     }
   }

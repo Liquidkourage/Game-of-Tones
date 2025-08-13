@@ -1016,6 +1016,14 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     console.log(`🎵 Starting playback on device: ${targetDeviceId}`);
 
     try {
+      // Ensure device reports in current devices list; try to activate if needed
+      const devices = await spotifyService.getUserDevices();
+      const deviceInList = devices.find(d => d.id === targetDeviceId);
+      if (!deviceInList) {
+        console.log('⚠️ Locked device not in list; attempting activation...');
+        await spotifyService.activateDevice(targetDeviceId);
+      }
+
       await spotifyService.transferPlayback(targetDeviceId, true);
       await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], 0);
       console.log(`✅ Successfully started playback on device: ${targetDeviceId}`);
@@ -1030,10 +1038,18 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       }
     } catch (playbackError) {
       console.error('❌ Error starting playback in strict mode:', playbackError);
-      if (playbackError.body?.error?.message === 'The access token expired') {
+      const message = playbackError?.body?.error?.message || playbackError?.message || '';
+      if (/token expired/i.test(message)) {
         console.log('🔄 Token expired, refreshing and retrying...');
         try {
           await spotifyService.refreshAccessToken();
+          // Re-check device after refresh
+          const devicesAfter = await spotifyService.getUserDevices();
+          const stillMissing = !devicesAfter.find(d => d.id === targetDeviceId);
+          if (stillMissing) {
+            console.log('⚠️ Locked device still missing after refresh; attempting activation...');
+            await spotifyService.activateDevice(targetDeviceId);
+          }
           await spotifyService.transferPlayback(targetDeviceId, true);
           await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], 0);
           console.log(`✅ Successfully started playback after token refresh`);
@@ -1145,6 +1161,14 @@ async function playNextSong(roomId, deviceId) {
     console.log(`🎵 Starting playback on device: ${targetDeviceId}`);
 
     try {
+      // Ensure device still visible; attempt activation if not
+      const devices = await spotifyService.getUserDevices();
+      const deviceInList = devices.find(d => d.id === targetDeviceId);
+      if (!deviceInList) {
+        console.log('⚠️ Locked device not in list before next song; attempting activation...');
+        await spotifyService.activateDevice(targetDeviceId);
+      }
+
       const playbackStartTime = Date.now();
       console.log(`🎵 Starting Spotify playback at ${playbackStartTime} for: ${nextSong.name}`);
       await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], 0);
