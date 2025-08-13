@@ -382,7 +382,7 @@ io.on('connection', (socket) => {
           if (room.bingoCards && room.bingoCards.has(socket.id)) {
             // Re-emit existing card
             io.to(socket.id).emit('bingo-card', room.bingoCards.get(socket.id));
-          } else if (room.playlistSongs?.length || room.playlists?.length) {
+          } else if (room.playlistSongs?.length || room.playlists?.length || room.finalizedPlaylists?.length) {
             await generateBingoCardForPlayer(roomId, socket.id);
           }
         }
@@ -478,8 +478,13 @@ io.on('connection', (socket) => {
         });
 
         console.log('🎵 Generating bingo cards...');
-        // If mix was finalized, reuse finalized song order to enforce 1x75 pool deterministically
-        await generateBingoCards(roomId, playlists, room.finalizedSongOrder || null);
+        // If mix is already finalized and cards exist, do NOT regenerate to avoid reshuffle
+        if (!room.mixFinalized || !room.bingoCards || room.bingoCards.size === 0) {
+          // If mix was finalized, reuse finalized song order to enforce 1x75 deterministically
+          await generateBingoCards(roomId, playlists, room.finalizedSongOrder || null);
+        } else {
+          console.log('🛑 Skipping card regeneration (mix finalized and cards already exist)');
+        }
 
         console.log('🎵 Starting automatic playback...');
         // Start automatic playback with the client's shuffled song list
@@ -529,7 +534,11 @@ io.on('connection', (socket) => {
               deviceId
             });
 
-            await generateBingoCards(roomId, playlists);
+            if (!newRoom.mixFinalized || !newRoom.bingoCards || newRoom.bingoCards.size === 0) {
+              await generateBingoCards(roomId, playlists, newRoom.finalizedSongOrder || null);
+            } else {
+              console.log('🛑 Skipping card regeneration after room recreation');
+            }
             await startAutomaticPlayback(roomId, playlists, deviceId, songList);
             
             console.log('✅ Game state set and playback attempt triggered after room recreation');
