@@ -1376,8 +1376,12 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         if (playing) break;
         try { await spotifyService.resumePlayback(targetDeviceId); } catch {}
       }
+      if (!playing) {
+        io.to(roomId).emit('playback-warning', { message: 'Playback did not start reliably on the locked device. Please check Spotify is active and not muted.' });
+      }
     } catch (e) {
       console.warn('⚠️ Playback verification error:', e?.message || e);
+      io.to(roomId).emit('playback-warning', { message: `Playback verification error: ${e?.message || 'Unknown error'}` });
     }
 
     // Set timer for next song using timer management with transition protection
@@ -1520,8 +1524,12 @@ async function playNextSong(roomId, deviceId) {
         if (playing) break;
         try { await spotifyService.resumePlayback(targetDeviceId); } catch {}
       }
+      if (!playing) {
+        io.to(roomId).emit('playback-warning', { message: 'Playback did not resume on next track. Verify Spotify device and try transferring playback again.' });
+      }
     } catch (e) {
       console.warn('⚠️ Playback verification (next) error:', e?.message || e);
+      io.to(roomId).emit('playback-warning', { message: `Playback verification (next) error: ${e?.message || 'Unknown error'}` });
     }
 
     // Schedule next song using timer management with transition protection

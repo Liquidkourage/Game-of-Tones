@@ -76,6 +76,11 @@ const HostView: React.FC = () => {
   const [shuffleEnabled, setShuffleEnabled] = useState<boolean>(false);
   const [repeatState, setRepeatState] = useState<'off' | 'track' | 'context'>('off');
   const [isStartingGame, setIsStartingGame] = useState(false);
+  const [logs, setLogs] = useState<Array<{ level: 'info' | 'warn' | 'error'; message: string; ts: number }>>([]);
+
+  const addLog = (message: string, level: 'info' | 'warn' | 'error' = 'info') => {
+    setLogs(prev => [{ level, message, ts: Date.now() }, ...prev].slice(0, 50));
+  };
 
   // Advanced playback states
   const [playbackState, setPlaybackState] = useState<PlaybackState>({
@@ -241,6 +246,7 @@ const HostView: React.FC = () => {
       setGameState('playing');
       console.log('Game started:', data);
       setIsStartingGame(false);
+      addLog('Game started', 'info');
     });
 
     newSocket.on('song-playing', (data: any) => {
@@ -267,6 +273,7 @@ const HostView: React.FC = () => {
       setIsPausedByInterface(false);
       
       console.log('Song playing:', data);
+      addLog(`Now playing: ${data.songName} — ${data.artistName}`, 'info');
       
       // Sync volume when song starts playing
       setTimeout(() => {
@@ -305,6 +312,7 @@ const HostView: React.FC = () => {
       console.error('Socket error:', msg);
       setIsStartingGame(false);
       alert(`Server error: ${msg}`);
+      addLog(`Server error: ${msg}`, 'error');
     });
 
     newSocket.on('connect_error', (err: any) => {
@@ -336,6 +344,14 @@ const HostView: React.FC = () => {
       console.error('Playback error:', msg);
       setSpotifyError(msg);
       alert(msg + '\n\nTip: Ensure Spotify is open and active on your chosen device, then use "Transfer Playback" or click Force Detection.');
+      addLog(`Playback error: ${msg}`, 'error');
+    });
+
+    newSocket.on('playback-warning', (data: any) => {
+      const msg = data?.message || 'Playback warning occurred';
+      console.warn('Playback warning:', msg);
+      alert('⚠️ ' + msg);
+      addLog(`Playback warning: ${msg}`, 'warn');
     });
 
     // Join room as host
@@ -501,11 +517,13 @@ const HostView: React.FC = () => {
   const endGame = () => {
     if (!socket || !roomId) return;
     socket.emit('end-game', { roomId, stopPlayback: true });
+    addLog('End game requested', 'info');
   };
 
   const resetGame = () => {
     if (!socket || !roomId) return;
     socket.emit('reset-game', { roomId, stopPlayback: true });
+    addLog('Reset game requested', 'info');
   };
 
   const playSong = async (song: Song) => {
@@ -1327,6 +1345,31 @@ const HostView: React.FC = () => {
                )}
              </div>
            </motion.div>
+
+          {/* Logs */}
+          {logs.length > 0 && (
+            <motion.div 
+              className="logs-section"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.55 }}
+            >
+              <h2>📝 Host Logs</h2>
+              <div style={{ maxHeight: 200, overflowY: 'auto', background: 'rgba(255,255,255,0.05)', borderRadius: 8, padding: 8 }}>
+                {logs.map((entry, idx) => (
+                  <div key={entry.ts + '-' + idx} style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '4px 0' }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: 12, opacity: 0.8 }}>
+                      {new Date(entry.ts).toLocaleTimeString()}
+                    </span>
+                    <span style={{ fontWeight: 600, color: entry.level === 'error' ? '#ff6b6b' : entry.level === 'warn' ? '#ffd166' : '#9be564' }}>
+                      {entry.level.toUpperCase()}
+                    </span>
+                    <span>{entry.message}</span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
 
                        {/* Now Playing Interface - Integrated into main content */}
             {currentSong && (
