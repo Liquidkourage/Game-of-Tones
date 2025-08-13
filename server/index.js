@@ -565,8 +565,9 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('playback-paused');
         console.log('✅ Playback paused successfully');
       } catch (error) {
-        console.error('❌ Error pausing song:', error);
-        socket.emit('error', { message: 'Failed to pause song' });
+        const msg = error?.body?.error?.message || error?.message || 'Failed to pause song';
+        console.error('❌ Error pausing song:', msg);
+        socket.emit('error', { message: `Failed to pause song: ${msg}` });
       }
     }
   });
@@ -617,8 +618,9 @@ io.on('connection', (socket) => {
           }
         }
       } catch (error) {
-        console.error('❌ Error resuming song:', error);
-        socket.emit('error', { message: 'Failed to resume song' });
+        const msg = error?.body?.error?.message || error?.message || 'Failed to resume song';
+        console.error('❌ Error resuming song:', msg);
+        socket.emit('error', { message: `Failed to resume song: ${msg}` });
       }
     }
   });
@@ -1305,7 +1307,10 @@ app.get('/api/rooms/:roomId', (req, res) => {
       id: room.id,
       playerCount: getNonHostPlayerCount(room),
       gameState: room.gameState,
-      currentSong: room.currentSong
+      currentSong: room.currentSong,
+      mixFinalized: !!room.mixFinalized,
+      snippetLength: room.snippetLength,
+      hasPlaylist: Array.isArray(room.playlistSongs) && room.playlistSongs.length > 0
     });
   } else {
     res.status(404).json({ error: 'Room not found' });
