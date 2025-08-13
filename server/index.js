@@ -10,6 +10,8 @@ const path = require('path');
 require('dotenv').config();
 
 const app = express();
+// Logging verbosity
+const VERBOSE = process.env.VERBOSE_LOGS === '1' || process.env.DEBUG === '1';
 const server = http.createServer(app);
 const clientBuildPath = path.join(__dirname, '..', 'client', 'build');
 const hasClientBuild = fs.existsSync(clientBuildPath);
@@ -125,10 +127,12 @@ function clearRoomTimer(roomId) {
   if (roomTimers.has(roomId)) {
     const room = rooms.get(roomId);
     const currentTime = Date.now();
-    console.log(`🔍 TIMER CLEARED - Room: ${roomId}, Time: ${currentTime}`);
-    console.log(`🔍 Reason: Manual interruption (skip/pause/previous)`);
-    console.log(`🔍 Current Song: ${room?.currentSong?.name} by ${room?.currentSong?.artist}`);
-    console.log(`🔍 Stack trace:`, new Error().stack?.split('\n').slice(1, 4).join('\n'));
+    if (VERBOSE) {
+      console.log(`🔍 TIMER CLEARED - Room: ${roomId}, Time: ${currentTime}`);
+      console.log(`🔍 Reason: Manual interruption (skip/pause/previous)`);
+      console.log(`🔍 Current Song: ${room?.currentSong?.name} by ${room?.currentSong?.artist}`);
+      console.log(`🔍 Stack trace:`, new Error().stack?.split('\n').slice(1, 4).join('\n'));
+    }
     
     clearTimeout(roomTimers.get(roomId));
     roomTimers.delete(roomId);
@@ -147,19 +151,21 @@ function setRoomTimer(roomId, callback, delay) {
   const timerId = setTimeout(() => {
     const room = rooms.get(roomId);
     const currentTime = Date.now();
-    console.log(`🔍 TIMER FIRED - Room: ${roomId}, Time: ${currentTime}, Expected Duration: ${delay}ms, Actual Duration: ${bufferedDelay}ms`);
-    console.log(`🔍 Room State - GameState: ${room?.gameState}, CurrentSongIndex: ${room?.currentSongIndex}, TotalSongs: ${room?.playlistSongs?.length}`);
-    console.log(`🔍 Current Song - ${room?.currentSong?.name} by ${room?.currentSong?.artist}`);
-    console.log(`🔍 Room exists: ${!!room}, Room ID: ${room?.id}`);
+    if (VERBOSE) {
+      console.log(`🔍 TIMER FIRED - Room: ${roomId}, Time: ${currentTime}, Expected Duration: ${delay}ms, Actual Duration: ${bufferedDelay}ms`);
+      console.log(`🔍 Room State - GameState: ${room?.gameState}, CurrentSongIndex: ${room?.currentSongIndex}, TotalSongs: ${room?.playlistSongs?.length}`);
+      console.log(`🔍 Current Song - ${room?.currentSong?.name} by ${room?.currentSong?.artist}`);
+      console.log(`🔍 Room exists: ${!!room}, Room ID: ${room?.id}`);
+    }
     
     roomTimers.delete(roomId);
-    console.log(`🔍 About to execute callback for room ${roomId}`);
+    if (VERBOSE) console.log(`🔍 About to execute callback for room ${roomId}`);
     callback();
-    console.log(`🔍 Callback executed for room ${roomId}`);
+    if (VERBOSE) console.log(`🔍 Callback executed for room ${roomId}`);
   }, bufferedDelay);
   
   roomTimers.set(roomId, timerId);
-  console.log(`⏰ Set timer for room ${roomId}: ${bufferedDelay}ms (original: ${delay}ms) at ${Date.now()}`);
+  if (VERBOSE) console.log(`⏰ Set timer for room ${roomId}: ${bufferedDelay}ms (original: ${delay}ms) at ${Date.now()}`);
 }
 
 // Play song at specific index without changing the index
@@ -276,6 +282,41 @@ if (spotifyTokens) {
 
 // Timer management to prevent conflicts
 const roomTimers = new Map();
+// Playback watchdogs per room to recover from mid-snippet stalls
+const roomPlaybackWatchers = new Map();
+
+function clearPlaybackWatcher(roomId) {
+  if (roomPlaybackWatchers.has(roomId)) {
+    clearInterval(roomPlaybackWatchers.get(roomId));
+    roomPlaybackWatchers.delete(roomId);
+  }
+}
+
+function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
+  clearPlaybackWatcher(roomId);
+  let attempts = 0;
+  const intervalId = setInterval(async () => {
+    try {
+      const room = rooms.get(roomId);
+      if (!room || room.gameState !== 'playing') { clearPlaybackWatcher(roomId); return; }
+      const state = await spotifyService.getCurrentPlaybackState();
+      const isPlaying = !!state?.is_playing;
+      if (isPlaying) { attempts = 0; return; }
+      attempts += 1;
+      if (attempts === 1) {
+        try { await spotifyService.resumePlayback(deviceId); } catch {}
+      } else if (attempts >= 2) {
+        io.to(roomId).emit('playback-warning', { message: 'Playback stalled; advancing to next track.' });
+        clearPlaybackWatcher(roomId);
+        clearRoomTimer(roomId);
+        await playNextSong(roomId, deviceId);
+      }
+    } catch (_e) {
+      // ignore
+    }
+  }, Math.max(2500, Math.min(5000, snippetMs / 6)));
+  roomPlaybackWatchers.set(roomId, intervalId);
+}
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
@@ -1388,9 +1429,10 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       io.to(roomId).emit('playback-warning', { message: `Playback verification error: ${e?.message || 'Unknown error'}` });
     }
 
-    // Set timer for next song using timer management with transition protection
+    // Start watchdog to recover from stalls, and set timer for next song
     const songStartTime = Date.now();
-    console.log(`⏰ Setting timer for room ${roomId}: ${room.snippetLength} seconds (${room.snippetLength * 1000}ms) at ${songStartTime}`);
+    if (VERBOSE) console.log(`⏰ Setting timer for room ${roomId}: ${room.snippetLength} seconds (${room.snippetLength * 1000}ms) at ${songStartTime}`);
+    startPlaybackWatchdog(roomId, targetDeviceId, room.snippetLength * 1000);
     setRoomTimer(roomId, async () => {
       const songEndTime = Date.now();
       const actualDuration = songEndTime - songStartTime;
@@ -1536,15 +1578,15 @@ async function playNextSong(roomId, deviceId) {
       io.to(roomId).emit('playback-warning', { message: `Playback verification (next) error: ${e?.message || 'Unknown error'}` });
     }
 
-    // Schedule next song using timer management with transition protection
+    // Start watchdog to recover from stalls, and schedule next song
     setRoomTimer(roomId, async () => {
       const transitionTime = Date.now();
-      console.log(`🔄 TRANSITION STARTING - Room: ${roomId}, Time: ${transitionTime}`);
-      console.log(`🔄 Song ending: ${nextSong.name} by ${nextSong.artist}`);
+      if (VERBOSE) console.log(`🔄 TRANSITION STARTING - Room: ${roomId}, Time: ${transitionTime}`);
+      if (VERBOSE) console.log(`🔄 Song ending: ${nextSong.name} by ${nextSong.artist}`);
       
       // Add a small delay to ensure smooth transition
       await new Promise(resolve => setTimeout(resolve, 100));
-      console.log(`🔄 Transition delay complete, calling playNextSong`);
+      if (VERBOSE) console.log(`🔄 Transition delay complete, calling playNextSong`);
       playNextSong(roomId, targetDeviceId);
     }, room.snippetLength * 1000);
 
