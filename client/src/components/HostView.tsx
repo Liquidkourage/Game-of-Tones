@@ -102,6 +102,14 @@ const HostView: React.FC = () => {
     try {
       console.log('Loading playlists...');
       const response = await fetch(`${API_BASE || ''}/api/spotify/playlists`);
+      if (response.status === 401) {
+        console.warn('Spotify not connected (401) while loading playlists');
+        setIsSpotifyConnected(false);
+        setIsSpotifyConnecting(false);
+        setSpotifyError('Spotify is not connected. Click Connect Spotify.');
+        setPlaylists([]);
+        return;
+      }
       const data = await response.json();
       
       if (data.success) {
@@ -120,6 +128,14 @@ const HostView: React.FC = () => {
       setIsLoadingDevices(true);
       console.log('Loading Spotify devices...');
       const response = await fetch(`${API_BASE || ''}/api/spotify/devices`);
+      if (response.status === 401) {
+        console.warn('Spotify not connected (401) while loading devices');
+        setIsSpotifyConnected(false);
+        setIsSpotifyConnecting(false);
+        setSpotifyError('Spotify is not connected. Click Connect Spotify.');
+        setDevices([]);
+        return;
+      }
       const data = await response.json();
       
       if (data.devices) {
@@ -419,6 +435,16 @@ const HostView: React.FC = () => {
       return;
     }
 
+    if (!isSpotifyConnected) {
+      alert('Spotify is not connected. Click Connect Spotify first.');
+      return;
+    }
+
+    if (songList.length === 0) {
+      alert('No songs loaded from playlists. Ensure Spotify is connected and playlists have tracks, then try again.');
+      return;
+    }
+
     try {
       console.log('Starting game with playlists:', selectedPlaylists);
       socket.emit('start-game', {
@@ -515,6 +541,11 @@ const HostView: React.FC = () => {
 
   // Generate and shuffle song list from selected playlists
   const generateSongList = useCallback(async () => {
+    if (!isSpotifyConnected) {
+      console.warn('Cannot generate song list: Spotify not connected');
+      setSongList([]);
+      return;
+    }
     if (selectedPlaylists.length === 0) {
       setSongList([]);
       return;
@@ -581,7 +612,13 @@ const HostView: React.FC = () => {
         console.log('✅ Transferred playback to selected device');
         await fetchPlaybackState();
       } else {
-        console.error('❌ Failed to transfer playback');
+        let msg = 'Failed to transfer playback';
+        try {
+          const err = await response.json();
+          if (err?.error) msg = String(err.error);
+        } catch {}
+        console.error('❌ Failed to transfer playback:', msg);
+        alert(`Transfer failed: ${msg}`);
       }
     } catch (e) {
       console.error('❌ Error transferring playback:', e);
