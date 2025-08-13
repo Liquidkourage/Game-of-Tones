@@ -1104,6 +1104,21 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     room.playlistSongs = allSongs;
     room.currentSongIndex = 0;
 
+    // Verify playback actually started; attempt resume if needed
+    try {
+      let playing = false;
+      for (let i = 0; i < 5; i++) {
+        await new Promise(r => setTimeout(r, 300));
+        const state = await spotifyService.getCurrentPlaybackState();
+        playing = !!state?.is_playing;
+        console.log(`🔎 Playback verify attempt ${i + 1}: is_playing=${playing}`);
+        if (playing) break;
+        try { await spotifyService.resumePlayback(targetDeviceId); } catch {}
+      }
+    } catch (e) {
+      console.warn('⚠️ Playback verification error:', e?.message || e);
+    }
+
     // Set timer for next song using timer management with transition protection
     const songStartTime = Date.now();
     console.log(`⏰ Setting timer for room ${roomId}: ${room.snippetLength} seconds (${room.snippetLength * 1000}ms) at ${songStartTime}`);
@@ -1232,6 +1247,21 @@ async function playNextSong(roomId, deviceId) {
     });
 
     console.log(`✅ Playing next song in room ${roomId}: ${nextSong.name} by ${nextSong.artist} on device ${targetDeviceId}`);
+
+    // Verify playback actually started; attempt resume if needed
+    try {
+      let playing = false;
+      for (let i = 0; i < 5; i++) {
+        await new Promise(r => setTimeout(r, 300));
+        const state = await spotifyService.getCurrentPlaybackState();
+        playing = !!state?.is_playing;
+        console.log(`🔎 Playback verify (next) attempt ${i + 1}: is_playing=${playing}`);
+        if (playing) break;
+        try { await spotifyService.resumePlayback(targetDeviceId); } catch {}
+      }
+    } catch (e) {
+      console.warn('⚠️ Playback verification (next) error:', e?.message || e);
+    }
 
     // Schedule next song using timer management with transition protection
     setRoomTimer(roomId, async () => {
