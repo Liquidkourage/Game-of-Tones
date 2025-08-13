@@ -1025,6 +1025,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       }
 
       await spotifyService.transferPlayback(targetDeviceId, true);
+      // Use explicit device_id and uris as fallback in case transfer isn't picked up
       await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], 0);
       console.log(`✅ Successfully started playback on device: ${targetDeviceId}`);
       
@@ -1430,6 +1431,11 @@ app.get('/api/spotify/devices', async (req, res) => {
 
     console.log('📱 Fetching available Spotify devices...');
     const devices = await spotifyService.getUserDevices();
+    let currentPlayback = null;
+    try {
+      currentPlayback = await spotifyService.getCurrentPlaybackState();
+    } catch (_) {}
+    const currentDevice = currentPlayback?.device || null;
     
     // Load saved device
     const savedDevice = loadSavedDevice();
@@ -1459,7 +1465,8 @@ app.get('/api/spotify/devices', async (req, res) => {
     
     res.json({ 
       devices: allDevices,
-      savedDevice: savedDevice
+      savedDevice: savedDevice,
+      currentDevice: currentDevice
     });
   } catch (error) {
     console.error('Error getting devices:', error);

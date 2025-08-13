@@ -126,6 +126,9 @@ const HostView: React.FC = () => {
         setDevices(data.devices);
         console.log('Devices loaded:', data.devices.length, 'devices');
         console.log('Device details:', data.devices);
+        if (data.currentDevice) {
+          console.log('Current playback device:', data.currentDevice.name, data.currentDevice.id);
+        }
         
         // Auto-select the saved device if available, otherwise first device
         if (data.savedDevice) {
@@ -133,6 +136,15 @@ const HostView: React.FC = () => {
           if (savedDevice) {
             setSelectedDevice(savedDevice);
             console.log('Auto-selected saved device:', savedDevice.name);
+          }
+        } else if (data.currentDevice) {
+          // Prefer the device currently in playback
+          const current = data.devices.find((d: Device) => d.id === data.currentDevice.id);
+          if (current) {
+            setSelectedDevice(current);
+            console.log('Auto-selected current playback device:', current.name);
+          } else if (data.devices.length > 0 && !selectedDevice) {
+            setSelectedDevice(data.devices[0]);
           }
         } else if (data.devices.length > 0 && !selectedDevice) {
           setSelectedDevice(data.devices[0]);
