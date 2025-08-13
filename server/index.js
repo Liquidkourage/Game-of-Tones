@@ -175,7 +175,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     const song = room.playlistSongs[songIndex];
     console.log(`🎵 Playing song ${songIndex + 1}/${room.playlistSongs.length}: ${song.name} by ${song.artist}`);
 
-    // Use provided deviceId or fall back to saved device, then any available device
+    // STRICT device control: use provided device or saved device only
     let targetDeviceId = deviceId;
     if (!targetDeviceId) {
       const savedDevice = loadSavedDevice();
@@ -184,23 +184,10 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
         console.log(`🎵 Using saved device for song: ${savedDevice.name}`);
       }
     }
-
-    // If still no device, try to get any available device
     if (!targetDeviceId) {
-      try {
-        console.log('🔍 No device specified, fetching available devices...');
-        const devices = await spotifyService.getUserDevices();
-        if (devices.length > 0) {
-          targetDeviceId = devices[0].id;
-          console.log(`🎵 Using first available device: ${devices[0].name}`);
-        } else {
-          console.error('❌ No devices available for playback');
-          return;
-        }
-      } catch (error) {
-        console.error('❌ Error fetching devices:', error);
-        return;
-      }
+      console.error('❌ Strict mode: no locked device available for playback');
+      io.to(roomId).emit('playback-error', { message: 'Locked device not available. Open Spotify on your chosen device or reselect in Host.' });
+      return;
     }
 
     try {
@@ -241,38 +228,10 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     } catch (playbackError) {
       console.error('❌ Error starting playback:', playbackError);
       
-      // If the device is not found, try to use any available device
-      if (playbackError.body?.error?.message === 'Device not found') {
-        console.log('🔄 Device not found, trying to use any available device...');
-        try {
-          const devices = await spotifyService.getUserDevices();
-          if (devices.length > 0) {
-            const fallbackDevice = devices[0];
-            console.log(`🔄 Using fallback device: ${fallbackDevice.name}`);
-            await spotifyService.startPlayback(fallbackDevice.id, [`spotify:track:${song.id}`], 0);
-            console.log(`✅ Successfully started playback on fallback device: ${fallbackDevice.name}`);
-            targetDeviceId = fallbackDevice.id;
-            
-            // Set initial volume to 50% (or room's saved volume)
-            try {
-              const initialVolume = room.volume || 50;
-              await spotifyService.setVolume(initialVolume, fallbackDevice.id);
-              console.log(`🔊 Set initial volume to ${initialVolume}% on fallback device`);
-            } catch (volumeError) {
-              console.error('❌ Error setting initial volume on fallback device:', volumeError);
-            }
-          } else {
-            console.error('❌ No fallback devices available');
-            return;
-          }
-        } catch (fallbackError) {
-          console.error('❌ Error with fallback device:', fallbackError);
-          return;
-        }
-      } else {
-        console.error('❌ Unknown playback error:', playbackError);
-        return;
-      }
+      // In strict mode, do not fallback silently
+      console.error('❌ Playback error in strict mode:', playbackError?.body?.error?.message || playbackError?.message || playbackError);
+      io.to(roomId).emit('playback-error', { message: 'Playback failed on locked device. Ensure it is online and try again.' });
+      return;
     }
 
     room.currentSong = {
@@ -474,27 +433,26 @@ io.on('connection', (socket) => {
     if (room && isCurrentHost) {
       try {
         console.log('✅ Starting game for room:', roomId);
-      room.gameState = 'playing';
-      room.snippetLength = snippetLength;
-      room.playlists = playlists;
+        room.gameState = 'playing';
+        room.snippetLength = snippetLength;
+        room.playlists = playlists;
         room.selectedDeviceId = deviceId; // Store the selected device ID
-      
+
+        // Emit game started as soon as state is ready so UI can show controls
+        io.to(roomId).emit('game-started', {
+          roomId,
+          snippetLength,
+          deviceId
+        });
+
         console.log('🎵 Generating bingo cards...');
-      // Generate bingo cards for all players
         await generateBingoCards(roomId, playlists);
-      
+
         console.log('🎵 Starting automatic playback...');
         // Start automatic playback with the client's shuffled song list
         await startAutomaticPlayback(roomId, playlists, deviceId, songList);
         
-        // Emit game started event
-      io.to(roomId).emit('game-started', {
-          roomId,
-        snippetLength,
-          deviceId
-        });
-        
-        console.log('✅ Game started successfully, emitting game-started event');
+        console.log('✅ Game state set and playback attempt triggered');
       } catch (error) {
         console.error('❌ Error starting game:', error);
         socket.emit('error', { message: 'Failed to start game' });
@@ -530,17 +488,18 @@ io.on('connection', (socket) => {
             newRoom.snippetLength = snippetLength;
             newRoom.playlists = playlists;
             newRoom.selectedDeviceId = deviceId;
-            
-            await generateBingoCards(roomId, playlists);
-            await startAutomaticPlayback(roomId, playlists, deviceId, songList);
-      
-      io.to(roomId).emit('game-started', {
+
+            // Emit immediately so UI updates even if playback has issues
+            io.to(roomId).emit('game-started', {
               roomId,
-        snippetLength,
+              snippetLength,
               deviceId
             });
+
+            await generateBingoCards(roomId, playlists);
+            await startAutomaticPlayback(roomId, playlists, deviceId, songList);
             
-            console.log('✅ Game started successfully after room recreation');
+            console.log('✅ Game state set and playback attempt triggered after room recreation');
           } catch (error) {
             console.error('❌ Error starting game after room recreation:', error);
             socket.emit('error', { message: 'Failed to start game after room recreation' });
@@ -1162,7 +1121,7 @@ async function playNextSong(roomId, deviceId) {
     const nextSong = room.playlistSongs[room.currentSongIndex];
     console.log(`🎵 Playing song ${room.currentSongIndex + 1}/${room.playlistSongs.length}: ${nextSong.name} by ${nextSong.artist}`);
 
-    // Use provided deviceId or fall back to saved device, then any available device
+    // STRICT device control: use provided device or saved device only
     let targetDeviceId = deviceId;
     if (!targetDeviceId) {
       const savedDevice = loadSavedDevice();
@@ -1171,23 +1130,10 @@ async function playNextSong(roomId, deviceId) {
         console.log(`🎵 Using saved device for next song: ${savedDevice.name}`);
       }
     }
-
-    // If still no device, try to get any available device
     if (!targetDeviceId) {
-      try {
-        console.log('🔍 No device specified, fetching available devices...');
-        const devices = await spotifyService.getUserDevices();
-        if (devices.length > 0) {
-          targetDeviceId = devices[0].id;
-          console.log(`🎵 Using first available device: ${devices[0].name}`);
-        } else {
-          console.error('❌ No devices available for playback');
-          return;
-        }
-      } catch (error) {
-        console.error('❌ Error fetching devices:', error);
-        return;
-      }
+      console.error('❌ Strict mode: no locked device available for playback');
+      io.to(roomId).emit('playback-error', { message: 'Locked device not available. Open Spotify on your chosen device or reselect in Host.' });
+      return;
     }
 
     // Assert playback on the locked/saved device to prevent hijacking
@@ -1228,38 +1174,10 @@ async function playNextSong(roomId, deviceId) {
     } catch (playbackError) {
       console.error('❌ Error starting playback:', playbackError);
       
-      // If the device is not found, try to use any available device
-      if (playbackError.body?.error?.message === 'Device not found') {
-        console.log('🔄 Device not found, trying to use any available device...');
-        try {
-          const devices = await spotifyService.getUserDevices();
-          if (devices.length > 0) {
-            const fallbackDevice = devices[0];
-            console.log(`🔄 Using fallback device: ${fallbackDevice.name}`);
-            await spotifyService.startPlayback(fallbackDevice.id, [`spotify:track:${nextSong.id}`], 0);
-            console.log(`✅ Successfully started playback on fallback device: ${fallbackDevice.name}`);
-            targetDeviceId = fallbackDevice.id;
-            
-            // Set initial volume to 50% (or room's saved volume)
-            try {
-              const initialVolume = room.volume || 50;
-              await spotifyService.setVolume(initialVolume, fallbackDevice.id);
-              console.log(`🔊 Set initial volume to ${initialVolume}% on fallback device`);
-            } catch (volumeError) {
-              console.error('❌ Error setting initial volume on fallback device:', volumeError);
-            }
-          } else {
-            console.error('❌ No fallback devices available');
-            return;
-          }
-        } catch (fallbackError) {
-          console.error('❌ Error with fallback device:', fallbackError);
-          return;
-        }
-      } else {
-        console.error('❌ Unknown playback error:', playbackError);
-        return;
-      }
+      // In strict mode, do not fallback silently
+      console.error('❌ Playback error in strict mode:', playbackError?.body?.error?.message || playbackError?.message || playbackError);
+      io.to(roomId).emit('playback-error', { message: 'Playback failed on locked device. Ensure it is online and try again.' });
+      return;
     }
 
     room.currentSong = {
@@ -1581,6 +1499,20 @@ app.post('/api/spotify/next', async (req, res) => {
   }
 });
 
+// Explicit transfer playback control
+app.post('/api/spotify/transfer', async (req, res) => {
+  try {
+    const { deviceId, play = true } = req.body;
+    if (!deviceId) return res.status(400).json({ success: false, error: 'deviceId required' });
+    await spotifyService.ensureValidToken();
+    await spotifyService.transferPlayback(deviceId, !!play);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Error transferring playback:', error);
+    res.status(500).json({ success: false, error: 'Failed to transfer playback' });
+  }
+});
+
 app.get('/api/spotify/current', async (req, res) => {
   try {
     const track = await spotifyService.getCurrentTrack();
@@ -1588,6 +1520,60 @@ app.get('/api/spotify/current', async (req, res) => {
   } catch (error) {
     console.error('Error getting current track:', error);
     res.status(500).json({ error: 'Failed to get current track' });
+  }
+});
+
+// Extended Spotify control endpoints
+app.post('/api/spotify/shuffle', async (req, res) => {
+  try {
+    const { shuffle, deviceId } = req.body;
+    if (shuffle === undefined) return res.status(400).json({ success: false, error: 'shuffle boolean required' });
+    await spotifyService.ensureValidToken();
+    await spotifyService.setShuffleState(!!shuffle, deviceId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Error setting shuffle:', error);
+    res.status(500).json({ success: false, error: 'Failed to set shuffle' });
+  }
+});
+
+app.post('/api/spotify/repeat', async (req, res) => {
+  try {
+    const { state, deviceId } = req.body;
+    if (!['track', 'context', 'off'].includes(state)) {
+      return res.status(400).json({ success: false, error: 'Invalid repeat state' });
+    }
+    await spotifyService.ensureValidToken();
+    await spotifyService.setRepeatState(state, deviceId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Error setting repeat:', error);
+    res.status(500).json({ success: false, error: 'Failed to set repeat' });
+  }
+});
+
+app.post('/api/spotify/previous', async (req, res) => {
+  try {
+    const { deviceId } = req.body;
+    await spotifyService.ensureValidToken();
+    await spotifyService.previousTrack(deviceId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Error going to previous track:', error);
+    res.status(500).json({ success: false, error: 'Failed to go to previous track' });
+  }
+});
+
+app.post('/api/spotify/queue', async (req, res) => {
+  try {
+    const { uri, deviceId } = req.body;
+    if (!uri) return res.status(400).json({ success: false, error: 'uri required' });
+    await spotifyService.ensureValidToken();
+    await spotifyService.addToQueue(uri, deviceId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Error adding to queue:', error);
+    res.status(500).json({ success: false, error: 'Failed to add to queue' });
   }
 });
 
@@ -1717,38 +1703,19 @@ app.post('/api/spotify/seek', async (req, res) => {
   }
 });
 
-// Get current playback state
+// Get current playback state (normalized for client)
 app.get('/api/spotify/current-playback', async (req, res) => {
   try {
     if (!spotifyTokens || !spotifyTokens.accessToken) {
-      return res.status(401).json({ error: 'Spotify not connected' });
+      return res.status(401).json({ success: false, error: 'Spotify not connected' });
     }
-    
+
     await spotifyService.ensureValidToken();
-    const currentTrack = await spotifyService.getCurrentTrack();
-    
-    if (currentTrack) {
-      res.json({
-        isPlaying: currentTrack.is_playing,
-        progress: currentTrack.progress_ms,
-        duration: currentTrack.item?.duration_ms || 0,
-        track: {
-          id: currentTrack.item?.id,
-          name: currentTrack.item?.name,
-          artist: currentTrack.item?.artists?.map(a => a.name).join(', ')
-        }
-      });
-    } else {
-      res.json({
-        isPlaying: false,
-        progress: 0,
-        duration: 0,
-        track: null
-      });
-    }
+    const playback = await spotifyService.getCurrentPlaybackState();
+    res.json({ success: true, playbackState: playback || null });
   } catch (error) {
     console.error('❌ Error getting current playback:', error);
-    res.status(500).json({ error: 'Failed to get current playback' });
+    res.status(500).json({ success: false, error: 'Failed to get current playback' });
   }
 });
 
