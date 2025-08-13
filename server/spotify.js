@@ -358,7 +358,7 @@ class SpotifyService {
   }
 
   // Activate a specific device by transferring and briefly starting a test track
-  async activateDevice(deviceId) {
+  async activateDevice(deviceId, pauseAfterMs = 0) {
     await this.ensureValidToken();
     try {
       await this.transferPlayback(deviceId, true);
@@ -370,10 +370,12 @@ class SpotifyService {
       } catch (_) {
         // If play fails, it's fine; device may still become active
       }
-      // Pause shortly after to avoid audible blip
-      setTimeout(async () => {
-        try { await this.pausePlayback(deviceId); } catch (_) {}
-      }, 800);
+      // Optionally pause shortly after to avoid audible blip
+      if (pauseAfterMs > 0) {
+        setTimeout(async () => {
+          try { await this.pausePlayback(deviceId); } catch (_) {}
+        }, pauseAfterMs);
+      }
       return true;
     } catch (error) {
       console.error('Error activating device:', error);
