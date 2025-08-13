@@ -361,6 +361,35 @@ io.on('connection', (socket) => {
 
     // Log available devices for debugging
     console.log('Available devices:', Array.from(room.players.values()).map(p => p.name));
+
+    // If a game is already in progress or mix is finalized, provide the joining player with state
+    (async () => {
+      try {
+        if (!isHost) {
+          // Emit current song to the joining player to sync display timing
+          if (room.currentSong && room.snippetLength) {
+            socket.emit('song-playing', {
+              songId: room.currentSong.id,
+              songName: room.currentSong.name,
+              artistName: room.currentSong.artist,
+              snippetLength: room.snippetLength,
+              currentIndex: room.currentSongIndex || 0,
+              totalSongs: room.playlistSongs?.length || 0
+            });
+          }
+
+          // Ensure bingo card exists for this player
+          if (room.bingoCards && room.bingoCards.has(socket.id)) {
+            // Re-emit existing card
+            io.to(socket.id).emit('bingo-card', room.bingoCards.get(socket.id));
+          } else if (room.playlistSongs?.length || room.playlists?.length) {
+            await generateBingoCardForPlayer(roomId, socket.id);
+          }
+        }
+      } catch (e) {
+        console.error('❌ Error preparing join-in-progress state:', e?.message || e);
+      }
+    })();
   });
 
   // Start game
@@ -949,6 +978,48 @@ async function generateBingoCards(roomId, playlists) {
   console.log(`✅ Generated bingo cards for room ${roomId}`);
   } catch (error) {
     console.error('❌ Error generating bingo cards:', error);
+  }
+}
+
+// Generate a single bingo card for one player (if they join mid-game)
+async function generateBingoCardForPlayer(roomId, playerId) {
+  const room = rooms.get(roomId);
+  if (!room || !Array.isArray(room.playlists)) return;
+  // Reuse the multi-card flow by calling generateBingoCards, but that would regenerate all.
+  // Instead, fetch unique songs and build only for this player.
+  const uniqueSongMap = new Map();
+  try {
+    for (const playlist of room.playlists) {
+      const songs = await spotifyService.getPlaylistTracks(playlist.id);
+      for (const song of songs) {
+        if (song && song.id && !uniqueSongMap.has(song.id)) {
+          uniqueSongMap.set(song.id, song);
+        }
+      }
+    }
+    const uniqueSongs = Array.from(uniqueSongMap.values());
+    if (uniqueSongs.length < 25) return;
+    const shuffled = [...uniqueSongs].sort(() => Math.random() - 0.5);
+    const chosen = shuffled.slice(0, 25);
+    const card = { id: playerId, squares: [] };
+    let idx = 0;
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 5; col++) {
+        const s = chosen[idx++];
+        card.squares.push({
+          position: `${row}-${col}`,
+          songId: s.id,
+          songName: s.name,
+          artistName: s.artist,
+          marked: false
+        });
+      }
+    }
+    if (!room.bingoCards) room.bingoCards = new Map();
+    room.bingoCards.set(playerId, card);
+    io.to(playerId).emit('bingo-card', card);
+  } catch (e) {
+    console.error('❌ Error generating single player card:', e?.message || e);
   }
 }
 
