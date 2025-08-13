@@ -845,6 +845,41 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Host-triggered staged call reveal (separate from playback)
+  socket.on('reveal-call', (data = {}) => {
+    try {
+      const { roomId, revealToDisplay = true, revealToPlayers = false, hint = 'full' } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      // Only host can reveal
+      const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
+      if (!isCurrentHost) return;
+      const song = room.currentSong;
+      if (!song) return;
+      // Build payload according to hint level
+      let payload = {
+        roomId,
+        songId: song.id,
+        snippetLength: room.snippetLength,
+        revealToDisplay: !!revealToDisplay,
+        revealToPlayers: !!revealToPlayers,
+        hint
+      };
+      if (hint === 'artist') {
+        payload = { ...payload, artistName: song.artist };
+      } else if (hint === 'title') {
+        payload = { ...payload, songName: song.name };
+      } else {
+        payload = { ...payload, songName: song.name, artistName: song.artist };
+      }
+      // Emit one event; clients choose what to show
+      io.to(roomId).emit('call-revealed', payload);
+      if (VERBOSE) console.log('📣 Call revealed:', payload);
+    } catch (e) {
+      console.error('❌ Error revealing call:', e?.message || e);
+    }
+  });
+
   socket.on('set-volume', async (data) => {
     const { roomId, volume } = data;
     const room = rooms.get(roomId);

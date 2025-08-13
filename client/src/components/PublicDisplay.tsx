@@ -100,20 +100,13 @@ const PublicDisplay: React.FC = () => {
 
     socket.on('song-playing', (data: any) => {
       const song = { id: data.songId, name: data.songName, artist: data.artistName };
-      setGameState(prev => {
-        // mark matching squares as played
-        const updatedSquares = (prev.bingoCard.squares || []).map((sq) =>
-          sq.song.id === song.id ? { ...sq, isPlayed: true } : sq
-        );
-        return {
-          ...prev,
-          isPlaying: true,
-          currentSong: song,
-          snippetLength: Number(data.snippetLength) || prev.snippetLength,
-          playedSongs: [...prev.playedSongs, song].slice(-25),
-          bingoCard: { ...prev.bingoCard, squares: updatedSquares }
-        };
-      });
+      setGameState(prev => ({
+        ...prev,
+        isPlaying: true,
+        currentSong: song,
+        snippetLength: Number(data.snippetLength) || prev.snippetLength,
+        playedSongs: [...prev.playedSongs, song].slice(-25)
+      }));
       // reset countdown timer
       if (countdownRef.current) {
         clearInterval(countdownRef.current);
@@ -161,6 +154,21 @@ const PublicDisplay: React.FC = () => {
       });
       ensureGrid();
       console.log('🔁 Game reset (display)');
+    });
+
+    // Staged reveal event: show name/artist hints without changing the bingo grid
+    socket.on('call-revealed', (payload: any) => {
+      if (payload?.revealToDisplay) {
+        // For now, just update the header Now Playing banner content without marking grid
+        setGameState(prev => ({
+          ...prev,
+          currentSong: {
+            id: payload.songId || prev.currentSong?.id,
+            name: payload.songName || prev.currentSong?.name || '',
+            artist: payload.artistName || prev.currentSong?.artist || ''
+          }
+        }));
+      }
     });
 
     return () => {

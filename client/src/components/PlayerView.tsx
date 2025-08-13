@@ -153,6 +153,12 @@ const PlayerView: React.FC = () => {
       }));
     });
 
+    // Optional hint reveal to players (disabled for now; we listen but do not change UI)
+    newSocket.on('call-revealed', (payload: any) => {
+      // If we later want to surface hints to players, gate by payload.revealToPlayers
+      // Currently no-op
+    });
+
     // Cleanup socket on unmount
     return () => {
       newSocket.close();

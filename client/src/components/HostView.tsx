@@ -77,6 +77,7 @@ const HostView: React.FC = () => {
   const [repeatState, setRepeatState] = useState<'off' | 'track' | 'context'>('off');
   const [isStartingGame, setIsStartingGame] = useState(false);
   const [logs, setLogs] = useState<Array<{ level: 'info' | 'warn' | 'error'; message: string; ts: number }>>([]);
+  const [revealMode, setRevealMode] = useState<'off' | 'artist' | 'title' | 'full'>('off');
 
   const addLog = (message: string, level: 'info' | 'warn' | 'error' = 'info') => {
     setLogs(prev => [{ level, message, ts: Date.now() }, ...prev].slice(0, 50));
@@ -354,6 +355,11 @@ const HostView: React.FC = () => {
       addLog(`Playback warning: ${msg}`, 'warn');
     });
 
+    // Acknowledge reveal events
+    newSocket.on('call-revealed', (data: any) => {
+      addLog(`Call revealed: ${data.hint || 'full'} ${data.songName ? '— ' + data.songName : ''} ${data.artistName ? '— ' + data.artistName : ''}`, 'info');
+    });
+
     // Join room as host
     if (roomId) {
       newSocket.emit('join-room', { roomId, playerName: 'Host', isHost: true });
@@ -524,6 +530,12 @@ const HostView: React.FC = () => {
     if (!socket || !roomId) return;
     socket.emit('reset-game', { roomId, stopPlayback: true });
     addLog('Reset game requested', 'info');
+  };
+
+  const revealCall = (mode: 'artist' | 'title' | 'full') => {
+    if (!socket || !roomId) return;
+    socket.emit('reveal-call', { roomId, revealToDisplay: true, revealToPlayers: false, hint: mode });
+    addLog(`Reveal: ${mode}`, 'info');
   };
 
   const playSong = async (song: Song) => {
@@ -1340,6 +1352,12 @@ const HostView: React.FC = () => {
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                     <button className="btn-secondary" onClick={endGame}>🛑 End Game</button>
                     <button className="btn-secondary" onClick={resetGame}>🔁 Reset</button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                    <span style={{ opacity: 0.9 }}>Call Reveal:</span>
+                    <button className="btn-secondary" onClick={() => revealCall('artist')}>Artist</button>
+                    <button className="btn-secondary" onClick={() => revealCall('title')}>Title</button>
+                    <button className="btn-secondary" onClick={() => revealCall('full')}>Full</button>
                   </div>
                  </div>
                )}
