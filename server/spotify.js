@@ -1,4 +1,5 @@
 const SpotifyWebApi = require('spotify-web-api-node');
+const https = require('https');
 
 class SpotifyService {
   constructor() {
@@ -233,9 +234,47 @@ class SpotifyService {
       await this.spotifyApi.transferMyPlayback({ deviceIds: [deviceId], play });
       console.log(`🔀 Transferred playback to device ${deviceId} (play=${play})`);
     } catch (error) {
-      console.error('Error transferring playback:', error);
+      const msg = error?.body?.error?.message || error?.message || '';
+      console.warn('⚠️ transferMyPlayback failed:', msg);
+      // Fallback: send raw request if Spotify complains about JSON shape
+      if (/Malformed json/i.test(msg)) {
+        console.log('🔧 Falling back to direct HTTP transfer request');
+        const ok = await this._transferPlaybackDirect(deviceId, !!play);
+        if (ok) return;
+      }
       throw error;
     }
+  }
+
+  _transferPlaybackDirect(deviceId, play) {
+    return new Promise((resolve, reject) => {
+      const body = JSON.stringify({ device_ids: [deviceId], play: !!play });
+      const req = https.request({
+        hostname: 'api.spotify.com',
+        path: '/v1/me/player',
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body)
+        }
+      }, (res) => {
+        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          console.log('✅ Direct transfer success');
+          resolve(true);
+        } else {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => {
+            console.error('❌ Direct transfer failed:', res.statusCode, data);
+            reject(new Error(`Direct transfer failed: ${res.statusCode} ${data}`));
+          });
+        }
+      });
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
   }
 
   // Resume playback
