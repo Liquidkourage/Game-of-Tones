@@ -67,6 +67,8 @@ const PublicDisplay: React.FC = () => {
       size: 5
     }
   });
+  const [countdownMs, setCountdownMs] = useState<number>(0);
+  const countdownRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const socket = io(SOCKET_URL || undefined);
@@ -97,12 +99,37 @@ const PublicDisplay: React.FC = () => {
 
     socket.on('song-playing', (data: any) => {
       const song = { id: data.songId, name: data.songName, artist: data.artistName };
-      setGameState(prev => ({
-        ...prev,
-        isPlaying: true,
-        currentSong: song,
-        playedSongs: [...prev.playedSongs, song].slice(-25)
-      }));
+      setGameState(prev => {
+        // mark matching squares as played
+        const updatedSquares = (prev.bingoCard.squares || []).map((sq) =>
+          sq.song.id === song.id ? { ...sq, isPlayed: true } : sq
+        );
+        return {
+          ...prev,
+          isPlaying: true,
+          currentSong: song,
+          snippetLength: Number(data.snippetLength) || prev.snippetLength,
+          playedSongs: [...prev.playedSongs, song].slice(-25),
+          bingoCard: { ...prev.bingoCard, squares: updatedSquares }
+        };
+      });
+      // reset countdown timer
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current);
+        countdownRef.current = null;
+      }
+      const total = (Number(data.snippetLength) || 30) * 1000;
+      setCountdownMs(total);
+      countdownRef.current = setInterval(() => {
+        setCountdownMs((ms) => {
+          const next = Math.max(0, ms - 100);
+          if (next === 0 && countdownRef.current) {
+            clearInterval(countdownRef.current);
+            countdownRef.current = null;
+          }
+          return next;
+        });
+      }, 100);
     });
 
     socket.on('game-started', () => {
@@ -135,7 +162,13 @@ const PublicDisplay: React.FC = () => {
       console.log('🔁 Game reset (display)');
     });
 
-    return () => { socket.close(); };
+    return () => {
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current);
+        countdownRef.current = null;
+      }
+      socket.close();
+    };
   }, [roomId]);
 
   // Optional runtime scale: /display/:roomId?scale=1.5 (approximate visual sizing)
@@ -290,6 +323,16 @@ const PublicDisplay: React.FC = () => {
               <div className="bingo-card-header center">
                 <Grid3X3 className="bingo-card-icon" />
                 <h2>{getPatternName()}</h2>
+                {gameState.currentSong && (
+                  <div className="now-playing-banner" style={{ marginTop: 6, fontSize: '0.95rem' }}>
+                    Now Playing: {gameState.currentSong.name} — {gameState.currentSong.artist}
+                    {countdownMs > 0 && (
+                      <span style={{ marginLeft: 8, opacity: 0.8 }}>
+                        ({Math.ceil(countdownMs / 1000)}s)
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="bingo-card-content">
                 <div className="bingo-grid">
