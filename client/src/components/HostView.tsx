@@ -75,6 +75,7 @@ const HostView: React.FC = () => {
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
   const [shuffleEnabled, setShuffleEnabled] = useState<boolean>(false);
   const [repeatState, setRepeatState] = useState<'off' | 'track' | 'context'>('off');
+  const [isStartingGame, setIsStartingGame] = useState(false);
 
   // Advanced playback states
   const [playbackState, setPlaybackState] = useState<PlaybackState>({
@@ -239,6 +240,7 @@ const HostView: React.FC = () => {
     newSocket.on('game-started', (data: any) => {
       setGameState('playing');
       console.log('Game started:', data);
+      setIsStartingGame(false);
     });
 
     newSocket.on('song-playing', (data: any) => {
@@ -296,6 +298,21 @@ const HostView: React.FC = () => {
         queue: data.queue,
         currentQueueIndex: data.currentIndex
       }));
+    });
+
+    newSocket.on('error', (data: any) => {
+      const msg = data?.message || 'Unknown server error';
+      console.error('Socket error:', msg);
+      setIsStartingGame(false);
+      alert(`Server error: ${msg}`);
+    });
+
+    newSocket.on('connect_error', (err: any) => {
+      console.error('Socket connect_error:', err?.message || err);
+    });
+
+    newSocket.on('disconnect', (reason: string) => {
+      console.warn('Socket disconnected:', reason);
     });
 
     newSocket.on('playback-error', (data: any) => {
@@ -447,6 +464,7 @@ const HostView: React.FC = () => {
 
     try {
       console.log('Starting game with playlists:', selectedPlaylists);
+      setIsStartingGame(true);
       socket.emit('start-game', {
         roomId,
         playlists: selectedPlaylists,
@@ -454,8 +472,11 @@ const HostView: React.FC = () => {
         deviceId: selectedDevice.id, // Require the selected device ID
         songList: songList // Send the shuffled song list to ensure server uses same order
       });
+      // Safety timeout in case no response comes back
+      setTimeout(() => setIsStartingGame(false), 8000);
     } catch (error) {
       console.error('Error starting game:', error);
+      setIsStartingGame(false);
     }
   };
 
