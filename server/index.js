@@ -1533,14 +1533,35 @@ app.post('/api/spotify/next', async (req, res) => {
 // Explicit transfer playback control
 app.post('/api/spotify/transfer', async (req, res) => {
   try {
-    const { deviceId, play = true } = req.body;
-    if (!deviceId) return res.status(400).json({ success: false, error: 'deviceId required' });
+    const { deviceId, play = true } = req.body || {};
+    if (!spotifyTokens || !spotifyTokens.accessToken) {
+      return res.status(401).json({ success: false, error: 'Spotify not connected' });
+    }
+    if (!deviceId || typeof deviceId !== 'string') {
+      return res.status(400).json({ success: false, error: 'deviceId required' });
+    }
+
+    console.log(`🔀 Transfer request to device ${deviceId} (play=${!!play})`);
     await spotifyService.ensureValidToken();
+
+    // Verify device presence; attempt activation if missing
+    const devices = await spotifyService.getUserDevices();
+    const found = devices.find(d => d.id === deviceId);
+    if (!found) {
+      console.log('⚠️ Target device not in list; attempting activation...');
+      const activated = await spotifyService.activateDevice(deviceId);
+      if (!activated) {
+        return res.status(404).json({ success: false, error: 'Device not available; open Spotify on that device and try again' });
+      }
+    }
+
     await spotifyService.transferPlayback(deviceId, !!play);
-    res.json({ success: true });
+    console.log(`✅ Transferred playback to ${deviceId}`);
+    res.json({ success: true, deviceId });
   } catch (error) {
-    console.error('❌ Error transferring playback:', error);
-    res.status(500).json({ success: false, error: 'Failed to transfer playback' });
+    const msg = error?.body?.error?.message || error?.message || 'Unknown error';
+    console.error('❌ Error transferring playback:', msg);
+    res.status(500).json({ success: false, error: msg });
   }
 });
 
