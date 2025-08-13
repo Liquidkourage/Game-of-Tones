@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import io from 'socket.io-client';
-import { SOCKET_URL } from '../config';
 import { Users } from 'lucide-react';
 
 const DisplayHeaderInfo: React.FC = () => {
@@ -10,16 +8,17 @@ const DisplayHeaderInfo: React.FC = () => {
   const roomId = match ? match[1] : null;
   const [playerCount, setPlayerCount] = useState<number>(0);
 
+  // Listen for player count forwarded by PublicDisplay to avoid opening a second socket
   useEffect(() => {
-    if (!roomId) return;
-    const socket = io(SOCKET_URL || undefined);
-    socket.on('connect', () => {
-      socket.emit('join-room', { roomId, playerName: 'DisplayHeader', isHost: false });
-    });
-    socket.on('player-joined', (data: any) => setPlayerCount(data.playerCount));
-    socket.on('player-left', (data: any) => setPlayerCount(data.playerCount));
-    return () => { socket.close(); };
-  }, [roomId]);
+    const handler = (e: Event) => {
+      const anyEvent = e as CustomEvent<{ playerCount: number }>;
+      if (typeof anyEvent.detail?.playerCount === 'number') {
+        setPlayerCount(anyEvent.detail.playerCount);
+      }
+    };
+    window.addEventListener('display-player-count', handler as EventListener);
+    return () => window.removeEventListener('display-player-count', handler as EventListener);
+  }, []);
 
   if (!roomId) return null;
 
