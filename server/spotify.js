@@ -473,6 +473,25 @@ class SpotifyService {
       throw error;
     }
   }
+
+  // Get current user profile (to verify correct Spotify account)
+  async getCurrentUserProfile() {
+    await this.ensureValidToken();
+    try {
+      const response = await this.spotifyApi.getMe();
+      const b = response.body || {};
+      return {
+        id: b.id,
+        display_name: b.display_name,
+        email: b.email,
+        product: b.product,
+        country: b.country
+      };
+    } catch (error) {
+      console.error('Error getting current user profile:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = SpotifyService; 

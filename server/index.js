@@ -1557,7 +1557,19 @@ app.post('/api/spotify/transfer', async (req, res) => {
 
     await spotifyService.transferPlayback(deviceId, !!play);
     console.log(`✅ Transferred playback to ${deviceId}`);
-    res.json({ success: true, deviceId });
+
+    // Return diagnostic info to help verify account/device context
+    let profile = null;
+    try { profile = await spotifyService.getCurrentUserProfile(); } catch (_) {}
+    const devicesAfter = await spotifyService.getUserDevices();
+    const currentPlayback = await spotifyService.getCurrentPlaybackState();
+    res.json({ 
+      success: true, 
+      deviceId,
+      profile,
+      devices: devicesAfter,
+      currentPlayback
+    });
   } catch (error) {
     const msg = error?.body?.error?.message || error?.message || 'Unknown error';
     console.error('❌ Error transferring playback:', msg);
