@@ -73,6 +73,8 @@ const HostView: React.FC = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
+  const [shuffleEnabled, setShuffleEnabled] = useState<boolean>(false);
+  const [repeatState, setRepeatState] = useState<'off' | 'track' | 'context'>('off');
 
   // Advanced playback states
   const [playbackState, setPlaybackState] = useState<PlaybackState>({
@@ -142,6 +144,22 @@ const HostView: React.FC = () => {
       console.error('Error loading devices:', error);
     } finally {
       setIsLoadingDevices(false);
+    }
+  }, []);
+
+  const fetchPlaybackState = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE || ''}/api/spotify/current-playback`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.playbackState) {
+          setShuffleEnabled(!!data.playbackState.shuffle_state);
+          const rep = (data.playbackState.repeat_state || 'off') as 'off' | 'track' | 'context';
+          setRepeatState(rep);
+        }
+      }
+    } catch (e) {
+      // no-op
     }
   }, []);
 
@@ -250,6 +268,13 @@ const HostView: React.FC = () => {
         queue: data.queue,
         currentQueueIndex: data.currentIndex
       }));
+    });
+
+    newSocket.on('playback-error', (data: any) => {
+      const msg = data?.message || 'Playback error: Could not start on locked device.';
+      console.error('Playback error:', msg);
+      setSpotifyError(msg);
+      alert(msg + '\n\nTip: Ensure Spotify is open and active on your chosen device, then use "Transfer Playback" or click Force Detection.');
     });
 
     // Join room as host
@@ -372,6 +397,11 @@ const HostView: React.FC = () => {
       return;
     }
 
+    if (!selectedDevice) {
+      alert('Please select a Spotify playback device first (Playback Device section).');
+      return;
+    }
+
     if (!socket) {
       console.error('Socket not connected');
       return;
@@ -383,7 +413,7 @@ const HostView: React.FC = () => {
         roomId,
         playlists: selectedPlaylists,
         snippetLength,
-        deviceId: selectedDevice?.id, // Pass the selected device ID
+        deviceId: selectedDevice.id, // Require the selected device ID
         songList: songList // Send the shuffled song list to ensure server uses same order
       });
     } catch (error) {
@@ -514,7 +544,7 @@ const HostView: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.playbackState) {
-          const spotifyVolume = data.playbackState.volume_percent || 50;
+          const spotifyVolume = (data.playbackState.device?.volume_percent ?? 50) as number;
           setPlaybackState(prev => ({ ...prev, volume: spotifyVolume }));
           console.log(`🔊 Synced volume from Spotify: ${spotifyVolume}%`);
         }
@@ -523,6 +553,70 @@ const HostView: React.FC = () => {
       console.error('Error fetching current volume:', error);
     }
   }, []);
+
+  const transferToSelectedDevice = useCallback(async () => {
+    if (!selectedDevice) {
+      alert('Please select a device first');
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE || ''}/api/spotify/transfer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId: selectedDevice.id, play: true })
+      });
+      if (response.ok) {
+        console.log('✅ Transferred playback to selected device');
+        await fetchPlaybackState();
+      } else {
+        console.error('❌ Failed to transfer playback');
+      }
+    } catch (e) {
+      console.error('❌ Error transferring playback:', e);
+    }
+  }, [selectedDevice, fetchPlaybackState]);
+
+  const toggleShuffle = useCallback(async () => {
+    if (!selectedDevice) {
+      alert('Please select a device first');
+      return;
+    }
+    const next = !shuffleEnabled;
+    try {
+      const response = await fetch(`${API_BASE || ''}/api/spotify/shuffle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shuffle: next, deviceId: selectedDevice.id })
+      });
+      if (response.ok) {
+        setShuffleEnabled(next);
+      }
+    } catch (e) {
+      console.error('❌ Error setting shuffle:', e);
+    }
+  }, [selectedDevice, shuffleEnabled]);
+
+  const cycleRepeat = useCallback(async () => {
+    if (!selectedDevice) {
+      alert('Please select a device first');
+      return;
+    }
+    const order: Array<'off' | 'context' | 'track'> = ['off', 'context', 'track'];
+    const idx = order.indexOf(repeatState as any);
+    const next = order[(idx + 1) % order.length];
+    try {
+      const response = await fetch(`${API_BASE || ''}/api/spotify/repeat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: next, deviceId: selectedDevice.id })
+      });
+      if (response.ok) {
+        setRepeatState(next);
+      }
+    } catch (e) {
+      console.error('❌ Error setting repeat:', e);
+    }
+  }, [selectedDevice, repeatState]);
 
   // Debounced volume change with strict synchronization
   const handleVolumeChange = useCallback(async (newVolume: number) => {
@@ -777,6 +871,9 @@ const HostView: React.FC = () => {
           if (data.success && data.playbackState) {
             const spotifyIsPlaying = data.playbackState.is_playing;
             const spotifyPosition = data.playbackState.progress_ms || 0;
+            setShuffleEnabled(!!data.playbackState.shuffle_state);
+            const rep = (data.playbackState.repeat_state || 'off') as 'off' | 'track' | 'context';
+            setRepeatState(rep);
             
             // If Spotify is playing but our interface thinks it's paused, or vice versa
             if (spotifyIsPlaying !== isPlaying) {
@@ -1025,6 +1122,13 @@ const HostView: React.FC = () => {
                  >
                    💾 Save Device
                  </button>
+                  <button
+                    onClick={transferToSelectedDevice}
+                    disabled={!selectedDevice}
+                    className="btn-secondary"
+                  >
+                    🔀 Transfer Playback
+                  </button>
                  <button
                    onClick={forceDeviceDetection}
                    disabled={isLoadingDevices}
@@ -1040,6 +1144,22 @@ const HostView: React.FC = () => {
                    🔄 Refresh Connection
                  </button>
                </div>
+                <div className="device-controls" style={{ marginTop: '8px' }}>
+                  <button
+                    onClick={toggleShuffle}
+                    disabled={!selectedDevice}
+                    className="btn-secondary"
+                  >
+                    {shuffleEnabled ? '🔀 Shuffle: On' : '🔀 Shuffle: Off'}
+                  </button>
+                  <button
+                    onClick={cycleRepeat}
+                    disabled={!selectedDevice}
+                    className="btn-secondary"
+                  >
+                    🔁 Repeat: {repeatState}
+                  </button>
+                </div>
              </motion.div>
            )}
 
