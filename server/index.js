@@ -876,106 +876,133 @@ async function generateBingoCards(roomId, playlists) {
         console.log(`📋 Fetching songs for playlist: ${playlist.name}`);
         const songs = await spotifyService.getPlaylistTracks(playlist.id);
         console.log(`✅ Found ${songs.length} songs in playlist: ${playlist.name}`);
-        
-        // Debug: Check for duplicates in this playlist
-        const playlistSongIds = songs.map(s => s.id);
-        const playlistDuplicates = playlistSongIds.filter((id, index) => playlistSongIds.indexOf(id) !== index);
-        if (playlistDuplicates.length > 0) {
-          console.error(`❌ DUPLICATES IN PLAYLIST ${playlist.name}: ${playlistDuplicates.length} duplicates`);
-          console.error(`❌ Duplicate IDs: ${playlistDuplicates.slice(0, 3).join(', ')}`);
-        }
-        
-        playlistsWithSongs.push({
-          ...playlist,
-          songs: songs
-        });
+        playlistsWithSongs.push({ ...playlist, songs });
       } catch (error) {
         console.error(`❌ Error fetching songs for playlist ${playlist.id}:`, error);
-        // Use empty songs array as fallback
-        playlistsWithSongs.push({
-          ...playlist,
-          songs: []
-        });
-    }
-  }
-
-  // Build a de-duplicated pool of songs by ID across all provided playlists
-  const uniqueSongMap = new Map();
-  for (const playlist of playlistsWithSongs) {
-    const songs = Array.isArray(playlist.songs) ? playlist.songs : [];
-    for (const song of songs) {
-      if (song && song.id && !uniqueSongMap.has(song.id)) {
-        uniqueSongMap.set(song.id, song);
+        playlistsWithSongs.push({ ...playlist, songs: [] });
       }
     }
-  }
 
-  const uniqueSongs = Array.from(uniqueSongMap.values());
-  console.log(`📊 Total unique songs available: ${uniqueSongs.length}`);
+    const songsNeededPerCard = 25;
 
-  // Debug: Check for duplicate IDs in the "unique" songs
-  const songIds = uniqueSongs.map(s => s.id);
-  const duplicateIds = songIds.filter((id, index) => songIds.indexOf(id) !== index);
-  if (duplicateIds.length > 0) {
-    console.error(`❌ FOUND DUPLICATE SONG IDs: ${duplicateIds.length} duplicates`);
-    console.error(`❌ Duplicate IDs: ${duplicateIds.slice(0, 10).join(', ')}`);
-  }
-
-  const songsNeededPerCard = 25; // 5x5 grid
-  if (uniqueSongs.length < songsNeededPerCard) {
-    const message = `Need at least ${songsNeededPerCard} unique songs to generate a card. Only ${uniqueSongs.length} available.`;
-    console.error(`❌ ${message}`);
-    io.to(roomId).emit('bingo-card-error', { message, required: songsNeededPerCard, available: uniqueSongs.length });
-    return; // Abort generation to preserve bingo rules
-  }
-
-  const cards = new Map();
-  console.log(`👥 Generating cards for ${room.players.size} players`);
-
-  for (const [playerId, player] of room.players) {
-    // Simple approach: shuffle the song list and take first 25
-    const shuffled = [...uniqueSongs].sort(() => Math.random() - 0.5);
-    const chosen = shuffled.slice(0, songsNeededPerCard);
-
-    // Debug: Check for duplicates in the chosen songs
-    const chosenIds = chosen.map(s => s.id);
-    const chosenDuplicates = chosenIds.filter((id, index) => chosenIds.indexOf(id) !== index);
-    if (chosenDuplicates.length > 0) {
-      console.error(`❌ DUPLICATES IN CHOSEN SONGS for ${player.name}: ${chosenDuplicates.length} duplicates`);
-      console.error(`❌ Duplicate IDs: ${chosenDuplicates.slice(0, 5).join(', ')}`);
-    }
-
-    const card = {
-      id: playerId,
-      squares: []
+    // Helper: dedup by ID preserving order
+    const dedup = (arr) => {
+      const seen = new Set();
+      const out = [];
+      for (const s of arr) { if (s && s.id && !seen.has(s.id)) { seen.add(s.id); out.push(s); } }
+      return out;
     };
 
-    // Fill the 5x5 grid with the 25 chosen songs (row-major order)
-    let idx = 0;
-    for (let row = 0; row < 5; row++) {
-      for (let col = 0; col < 5; col++) {
-        const s = chosen[idx++];
-        card.squares.push({
-          position: `${row}-${col}`,
-          songId: s.id,
-          songName: s.name,
-          artistName: s.artist,
-          marked: false
-        });
-      }
+    // Prepare per-playlist unique arrays
+    const perListUnique = playlistsWithSongs.map(pl => ({
+      id: pl.id,
+      name: pl.name,
+      songs: dedup(Array.isArray(pl.songs) ? pl.songs : [])
+    }));
+
+    let mode = 'fallback';
+    // 1x75 mode: exactly 1 playlist with at least 75 unique songs
+    if (perListUnique.length === 1 && perListUnique[0].songs.length >= 75) {
+      mode = '1x75';
+    }
+    // 5x15 mode: exactly 5 playlists each with at least 15 unique songs
+    if (perListUnique.length === 5 && perListUnique.every(pl => pl.songs.length >= 15)) {
+      mode = '5x15';
     }
 
-    // Log the unique count for debugging
-    const uniqueOnCard = new Set(card.squares.map(q => q.songId));
-    console.log(`✅ Generated card for ${player.name} with ${uniqueOnCard.size} unique songs`);
+    console.log(`🎯 Card generation mode: ${mode}`);
 
-    player.bingoCard = card;
-    cards.set(playerId, card);
-    io.to(playerId).emit('bingo-card', card);
-  }
+    // Build fallback global pool when needed
+    const buildGlobalPool = () => {
+      const map = new Map();
+      for (const pl of perListUnique) {
+        for (const s of pl.songs) { if (!map.has(s.id)) map.set(s.id, s); }
+      }
+      return Array.from(map.values());
+    };
 
-  room.bingoCards = cards;
-  console.log(`✅ Generated bingo cards for room ${roomId}`);
+    // Validate we have enough songs in any mode
+    const ensureEnough = (available) => {
+      if (available < songsNeededPerCard) {
+        const message = `Need at least ${songsNeededPerCard} unique songs to generate a card. Only ${available} available.`;
+        console.error(`❌ ${message}`);
+        io.to(roomId).emit('bingo-card-error', { message, required: songsNeededPerCard, available });
+        return false;
+      }
+      return true;
+    };
+
+    const cards = new Map();
+    console.log(`👥 Generating cards for ${room.players.size} players`);
+
+    for (const [playerId, player] of room.players) {
+      let chosen25 = [];
+      if (mode === '1x75') {
+        // Shuffle and cap to 75, then draw 25
+        const base = [...perListUnique[0].songs].sort(() => Math.random() - 0.5).slice(0, 75);
+        if (!ensureEnough(base.length)) return;
+        chosen25 = [...base].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
+      } else if (mode === '5x15') {
+        // For each of 5 playlists, sample 5 unique tracks, ensuring cross-column uniqueness
+        const used = new Set();
+        const columns = [];
+        let ok = true;
+        for (let col = 0; col < 5; col++) {
+          const pool = [...perListUnique[col].songs].sort(() => Math.random() - 0.5);
+          const colPicks = [];
+          for (const s of pool) {
+            if (!used.has(s.id)) { colPicks.push(s); used.add(s.id); }
+            if (colPicks.length === 5) break;
+          }
+          if (colPicks.length < 5) { ok = false; break; }
+          columns.push(colPicks);
+        }
+        if (!ok) {
+          console.warn('⚠️ 5x15 mode fell short; falling back to global pool');
+          const global = buildGlobalPool();
+          if (!ensureEnough(global.length)) return;
+          chosen25 = [...global].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
+        } else {
+          // Flatten column-major into row-major 5x5
+          for (let row = 0; row < 5; row++) {
+            for (let col = 0; col < 5; col++) {
+              chosen25.push(columns[col][row]);
+            }
+          }
+        }
+      } else {
+        const pool = buildGlobalPool();
+        if (!ensureEnough(pool.length)) return;
+        chosen25 = [...pool].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
+      }
+
+      // Build card
+      const card = { id: playerId, squares: [] };
+      let idx = 0;
+      for (let row = 0; row < 5; row++) {
+        for (let col = 0; col < 5; col++) {
+          const s = chosen25[idx++];
+          card.squares.push({
+            position: `${row}-${col}`,
+            songId: s.id,
+            songName: s.name,
+            artistName: s.artist,
+            marked: false
+          });
+        }
+      }
+
+      const uniqueOnCard = new Set(card.squares.map(q => q.songId));
+      console.log(`✅ Generated card for ${player.name} with ${uniqueOnCard.size} unique songs (mode=${mode})`);
+
+      if (!room.bingoCards) room.bingoCards = new Map();
+      player.bingoCard = card;
+      cards.set(playerId, card);
+      io.to(playerId).emit('bingo-card', card);
+    }
+
+    room.bingoCards = cards;
+    console.log(`✅ Generated bingo cards for room ${roomId}`);
   } catch (error) {
     console.error('❌ Error generating bingo cards:', error);
   }
