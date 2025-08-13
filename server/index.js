@@ -12,9 +12,6 @@ require('dotenv').config();
 const app = express();
 // Logging verbosity
 const VERBOSE = process.env.VERBOSE_LOGS === '1' || process.env.DEBUG === '1';
-// Audio fades
-const FADE_IN_MS = parseInt(process.env.FADE_IN_MS || '1200', 10);
-const FADE_OUT_MS = parseInt(process.env.FADE_OUT_MS || '1200', 10);
 const server = http.createServer(app);
 const clientBuildPath = path.join(__dirname, '..', 'client', 'build');
 const hasClientBuild = fs.existsSync(clientBuildPath);
@@ -169,42 +166,6 @@ function setRoomTimer(roomId, callback, delay) {
   
   roomTimers.set(roomId, timerId);
   if (VERBOSE) console.log(`⏰ Set timer for room ${roomId}: ${bufferedDelay}ms (original: ${delay}ms) at ${Date.now()}`);
-}
-
-// Dedicated fade timers so we can cancel scheduled fades on pause/skip/etc
-const roomFadeTimers = new Map();
-const roomFadeTokens = new Map();
-function clearRoomFadeTimer(roomId) {
-  if (roomFadeTimers.has(roomId)) {
-    clearTimeout(roomFadeTimers.get(roomId));
-    roomFadeTimers.delete(roomId);
-  }
-}
-function setRoomFadeTimer(roomId, callback, delay) {
-  clearRoomFadeTimer(roomId);
-  const timerId = setTimeout(callback, Math.max(0, delay));
-  roomFadeTimers.set(roomId, timerId);
-}
-
-function delay(ms) { return new Promise(res => setTimeout(res, ms)); }
-function clampVolume(v) { return Math.max(0, Math.min(100, Math.round(v))); }
-function nextFadeToken(roomId) {
-  const v = (roomFadeTokens.get(roomId) || 0) + 1;
-  roomFadeTokens.set(roomId, v);
-  return v;
-}
-function getFadeToken(roomId) { return roomFadeTokens.get(roomId) || 0; }
-async function fadeVolume(roomId, deviceId, fromVolume, toVolume, durationMs, steps = 8, tokenAtStart = 0) {
-  try {
-    const stepDelay = Math.max(50, Math.floor(durationMs / steps));
-    const diff = toVolume - fromVolume;
-    for (let i = 1; i <= steps; i++) {
-      if (getFadeToken(roomId) !== tokenAtStart) break; // canceled
-      const next = clampVolume(fromVolume + (diff * i) / steps);
-      try { await spotifyService.setVolume(next, deviceId); } catch (_) {}
-      if (i < steps) await delay(stepDelay);
-    }
-  } catch (_) {}
 }
 
 // Play song at specific index without changing the index
@@ -731,9 +692,8 @@ io.on('connection', (socket) => {
         console.log(`⏸️ Current Song: ${room.currentSong?.name} by ${room.currentSong?.artist}`);
         console.log(`⏸️ Game State: ${room.gameState}`);
         
-        // Clear timers when pausing
+        // Clear the timer when pausing
         clearRoomTimer(roomId);
-        clearRoomFadeTimer(roomId);
         const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
         if (!deviceId) {
           console.error('❌ No device found for pause');
@@ -819,10 +779,8 @@ io.on('connection', (socket) => {
       try {
         console.log(`⏮️ Previous button clicked at position: ${currentPosition}ms in room:`, roomId);
         
-        // Clear existing timers and cancel fades
+        // Clear existing timer
         clearRoomTimer(roomId);
-        clearRoomFadeTimer(roomId);
-        nextFadeToken(roomId);
         
         // If we're in the first second of the song, go to previous song
         // Otherwise, restart the current song from the beginning
@@ -1471,34 +1429,10 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       io.to(roomId).emit('playback-warning', { message: `Playback verification error: ${e?.message || 'Unknown error'}` });
     }
 
-    // Start watchdog to recover from stalls, and schedule fades + next song
+    // Start watchdog to recover from stalls, and set timer for next song
     const songStartTime = Date.now();
     if (VERBOSE) console.log(`⏰ Setting timer for room ${roomId}: ${room.snippetLength} seconds (${room.snippetLength * 1000}ms) at ${songStartTime}`);
     startPlaybackWatchdog(roomId, targetDeviceId, room.snippetLength * 1000);
-
-    // Fade in from current volume to target volume over FADE_IN_MS
-    const targetVolume = clampVolume(room.volume || 50);
-    try {
-      const state = await spotifyService.getCurrentPlaybackState();
-      const currentVol = typeof state?.device?.volume_percent === 'number' ? state.device.volume_percent : targetVolume;
-      if (FADE_IN_MS > 0 && currentVol < targetVolume) {
-        const token = nextFadeToken(roomId);
-        fadeVolume(roomId, targetDeviceId, currentVol, targetVolume, FADE_IN_MS, 8, token);
-      }
-    } catch (_) {}
-
-    // Schedule fade out FADE_OUT_MS before the end
-    if (FADE_OUT_MS > 0) {
-      const fadeOutAt = Math.max(0, room.snippetLength * 1000 - FADE_OUT_MS);
-      setRoomFadeTimer(roomId, async () => {
-        try {
-          const state = await spotifyService.getCurrentPlaybackState();
-          const currentVol = typeof state?.device?.volume_percent === 'number' ? state.device.volume_percent : targetVolume;
-          const token = nextFadeToken(roomId);
-          await fadeVolume(roomId, targetDeviceId, currentVol, Math.max(10, Math.floor(targetVolume * 0.4)), Math.min(FADE_OUT_MS, room.snippetLength * 1000), 8, token);
-        } catch (_) {}
-      }, fadeOutAt);
-    }
     setRoomTimer(roomId, async () => {
       const songEndTime = Date.now();
       const actualDuration = songEndTime - songStartTime;
@@ -1558,7 +1492,18 @@ async function playNextSong(roomId, deviceId) {
 
     // Assert playback on the locked/saved device to prevent hijacking
     try {
-      await spotifyService.transferPlayback(targetDeviceId, true);
+      let needTransfer = true;
+      try {
+        const current = await spotifyService.getCurrentPlaybackState();
+        const currentDeviceId = current?.device?.id;
+        if (currentDeviceId === targetDeviceId) {
+          needTransfer = false;
+          if (VERBOSE) console.log('🔒 Already on locked device; skipping transfer');
+        }
+      } catch (_) {}
+      if (needTransfer) {
+        await spotifyService.transferPlayback(targetDeviceId, true);
+      }
     } catch (e) {
       console.warn('⚠️ Transfer playback failed (will still try play):', e?.message || e);
     }
@@ -1574,10 +1519,10 @@ async function playNextSong(roomId, deviceId) {
       }
 
       const playbackStartTime = Date.now();
-      console.log(`🎵 Starting Spotify playback at ${playbackStartTime} for: ${nextSong.name}`);
+      if (VERBOSE) console.log(`🎵 Starting Spotify playback at ${playbackStartTime} for: ${nextSong.name}`);
       await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], 0);
       const playbackEndTime = Date.now();
-      console.log(`✅ Successfully started playback on device: ${targetDeviceId} (took ${playbackEndTime - playbackStartTime}ms)`);
+      if (VERBOSE) console.log(`✅ Successfully started playback on device: ${targetDeviceId} (took ${playbackEndTime - playbackStartTime}ms)`);
       
       // Set initial volume to 50% (or room's saved volume) with retry
       let volumeSet = false;
@@ -1644,7 +1589,7 @@ async function playNextSong(roomId, deviceId) {
       io.to(roomId).emit('playback-warning', { message: `Playback verification (next) error: ${e?.message || 'Unknown error'}` });
     }
 
-    // Start watchdog to recover from stalls, and schedule fades + next song
+    // Start watchdog to recover from stalls, and schedule next song
     setRoomTimer(roomId, async () => {
       const transitionTime = Date.now();
       if (VERBOSE) console.log(`🔄 TRANSITION STARTING - Room: ${roomId}, Time: ${transitionTime}`);
@@ -1653,9 +1598,6 @@ async function playNextSong(roomId, deviceId) {
       // Add a small delay to ensure smooth transition
       await new Promise(resolve => setTimeout(resolve, 100));
       if (VERBOSE) console.log(`🔄 Transition delay complete, calling playNextSong`);
-      // cancel ongoing fade and restore target volume prior to next song
-      nextFadeToken(roomId);
-      try { await spotifyService.setVolume(clampVolume(room.volume || 50), targetDeviceId); } catch (_) {}
       playNextSong(roomId, targetDeviceId);
     }, room.snippetLength * 1000);
 
