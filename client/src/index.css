@@ -1500,6 +1500,8 @@ code {
   /* mask area for scaled grid */
   width: 100%;
   height: 100%;
+  margin-top: auto; /* vertically center within container */
+  margin-bottom: auto;
 }
 
 /* Public display: enforce fixed 5x5 grid */

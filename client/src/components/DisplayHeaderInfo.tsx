@@ -47,12 +47,12 @@ const DisplayHeaderInfo: React.FC = () => {
     const containerStyle: React.CSSProperties = rect
       ? {
           position: 'fixed',
-          top: 8,
+          top: 0,
           left: rect.left,
           width: rect.width,
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'center',
+          alignItems: 'stretch',
           gap: 8,
           pointerEvents: 'none',
           zIndex: 250,
@@ -66,13 +66,17 @@ const DisplayHeaderInfo: React.FC = () => {
             key={c}
             style={{
               width: cardWidth,
+              height: rect ? Math.max(0, (document.querySelector('.app-header') as HTMLElement)?.getBoundingClientRect().bottom || 40) : undefined,
               textAlign: 'center',
               fontWeight: 800,
               letterSpacing: '1px',
               background: 'rgba(255,255,255,0.08)',
               border: '1px solid rgba(255,255,255,0.2)',
               borderRadius: 8,
-              padding: '6px 0'
+              paddingTop: 6,
+              display: 'flex',
+              alignItems: 'flex-end',
+              justifyContent: 'center'
             }}
           >
             {c}
