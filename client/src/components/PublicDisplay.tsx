@@ -71,6 +71,7 @@ const PublicDisplay: React.FC = () => {
   const [countdownMs, setCountdownMs] = useState<number>(0);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   const [revealMode, setRevealMode] = useState<'none' | '1x75' | '5x15'>('none');
+  const [revealSequence75, setRevealSequence75] = useState<Array<{ id: string; name: string; artist: string }>>([]);
   const [revealedCount, setRevealedCount] = useState<number>(0);
 
   useEffect(() => {
@@ -144,22 +145,7 @@ const PublicDisplay: React.FC = () => {
       const sequence = Array.isArray(payload?.sequence) ? payload.sequence : [];
       if (mode === '1x75' && sequence.length >= 75) {
         setRevealMode('1x75');
-        // Build a 5x5 placeholder grid with positional mapping 1..25 indices into 75-pool columns
-        setGameState(prev => {
-          const placeholders: BingoSquare[] = [] as any;
-          for (let row = 0; row < 5; row++) {
-            for (let col = 0; col < 5; col++) {
-              const idx1to25 = row * 5 + col + 1; // 1..25
-              // Map by columns: col 0 => 1..15, col 1 => 16..30, ...
-              const base = col * 15; // 0,15,30,45,60
-              const withinColumn = idx1to25 - row * 5 - (col); // keep order per row, but we will reveal sequentially anyway
-              const revealIndex = Math.min(base + withinColumn, 74);
-              const placeholderSong = { id: String(revealIndex), name: '', artist: '' };
-              placeholders.push({ song: placeholderSong as any, isPlayed: false, position: { row, col } });
-            }
-          }
-          return { ...prev, bingoCard: { squares: placeholders, size: 5 } };
-        });
+        setRevealSequence75(sequence);
         setRevealedCount(0);
       }
     });
@@ -298,55 +284,35 @@ const PublicDisplay: React.FC = () => {
   }, []);
 
   const renderBingoCard = () => {
-    const { bingoCard } = gameState;
-    console.log('Winners section rendering, winners:', gameState.winners);
+    // Always render a 5x5 pattern grid. For 1x75, fill with obfuscated sequence 1..25 from the 75-pool by vertical columns.
     const grid = [];
-    
-    for (let row = 0; row < bingoCard.size; row++) {
+    for (let row = 0; row < 5; row++) {
       const rowSquares = [];
-      for (let col = 0; col < bingoCard.size; col++) {
-        const square = bingoCard.squares.find(s => 
-          s.position.row === row && s.position.col === col
-        );
-        
-        if (square) {
-          // Check if this square is part of the current winning line
-           const isWinningLine = isWinningSquare(row, col);
-           const revealThisSquare = revealMode === '1x75' ? (row * 5 + col) < revealedCount : square.isPlayed;
-          rowSquares.push(
-            <motion.div
-              key={`${row}-${col}`}
-              className={`bingo-square ${revealThisSquare ? 'played' : ''} ${isWinningLine ? 'winning' : ''}`}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3, delay: (row + col) * 0.05 }}
-              whileHover={{ scale: 1.05 }}
-            >
-                             <div className="square-content">
-                {revealMode === '1x75' ? (
-                  <span className="placeholder">{revealThisSquare ? (square.song.name || '?') : '?'}</span>
-                ) : square.isPlayed && (
-                   <motion.div 
-                     className="played-indicator"
-                     initial={{ scale: 0 }}
-                     animate={{ scale: 1 }}
-                     transition={{ duration: 0.3 }}
-                   >
-                     <Music className="played-icon" />
-                   </motion.div>
-                 )}
-               </div>
-            </motion.div>
-          );
+      for (let col = 0; col < 5; col++) {
+        let content: React.ReactNode = null;
+        let playedClass = '';
+        if (revealMode === '1x75' && revealSequence75.length >= 75) {
+          const indexIn75 = col * 15 + row; // vertical down 1..15, 16..30, etc.
+          const revealed = (row * 5 + col) < revealedCount;
+          const song = revealSequence75[indexIn75];
+          content = <span className="placeholder">{revealed ? (song?.name || '?') : '?'}</span>;
+          playedClass = revealed ? 'played' : '';
         }
+        rowSquares.push(
+          <motion.div
+            key={`${row}-${col}`}
+            className={`bingo-square ${playedClass}`}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3, delay: (row + col) * 0.05 }}
+            whileHover={{ scale: 1.05 }}
+          >
+            <div className="square-content">{content}</div>
+          </motion.div>
+        );
       }
-      grid.push(
-        <div key={row} className="bingo-row">
-          {rowSquares}
-        </div>
-      );
+      grid.push(<div key={row} className="bingo-row">{rowSquares}</div>);
     }
-    
     return grid;
   };
 
