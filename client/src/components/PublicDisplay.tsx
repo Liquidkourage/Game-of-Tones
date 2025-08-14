@@ -481,21 +481,55 @@ const PublicDisplay: React.FC = () => {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.6, delay: 0.2 }}
               >
-                <div className="stat-item" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <QrCode className="stat-icon" />
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div className="stat-item" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <span className="stat-label" style={{ fontWeight: 700 }}>Info</span>
                     <span className="stat-value" style={{ fontSize: '1rem' }}>Room: {roomInfo?.id || roomId}</span>
-                    <span className="stat-value" style={{ fontSize: '0.95rem' }}>{gameState.playerCount} Players</span>
-                    <a
-                      href={roomId ? `${typeof window !== 'undefined' ? window.location.origin : ''}/player/${roomId}` : '#'}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ fontSize: '0.85rem', color: '#b3b3b3', textDecoration: 'underline', marginTop: 4 }}
-                    >
-                      Join Link
-                    </a>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <QrCode className="stat-icon" />
+                      <a
+                        href={roomId ? `${typeof window !== 'undefined' ? window.location.origin : ''}/player/${roomId}` : '#'}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ fontSize: '0.85rem', color: '#b3b3b3', textDecoration: 'underline' }}
+                      >
+                        Join Link
+                      </a>
+                    </div>
                   </div>
+                  {/* QR image */}
+                  <div style={{ marginLeft: 'auto' }}>
+                    {roomId && (
+                      <img
+                        alt="Join QR"
+                        style={{ width: 96, height: 96, borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }}
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=192x192&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
+                        onError={(e) => {
+                          const img = e.currentTarget as HTMLImageElement;
+                          const fb = `https://chart.googleapis.com/chart?cht=qr&chs=192x192&chl=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`;
+                          if (img.src !== fb) img.src = fb;
+                        }}
+                      />
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+              {/* Quick stats: players and songs */}
+              <motion.div 
+                className="quick-stats"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.6, delay: 0.25 }}
+              >
+                <div className="stat-item">
+                  <Users className="stat-icon" />
+                  <span className="stat-value">{gameState.playerCount}</span>
+                  <span className="stat-label">Players</span>
+                </div>
+                <div className="stat-item">
+                  <List className="stat-icon" />
+                  <span className="stat-value">{gameState.playedSongs.length}</span>
+                  <span className="stat-label">Songs</span>
                 </div>
               </motion.div>
             </div>
