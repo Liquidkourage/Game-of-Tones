@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useSearchParams } from 'react-router-dom';
 import io from 'socket.io-client';
 import { SOCKET_URL } from '../config';
@@ -74,6 +74,7 @@ const PublicDisplay: React.FC = () => {
   const [oneBy75Ids, setOneBy75Ids] = useState<string[] | null>(null);
   const oneBy75IdsRef = useRef<string[] | null>(null);
   const playedOrderRef = useRef<string[]>([]);
+  const idMetaRef = useRef<Record<string, { name: string; artist: string }>>({});
 
   useEffect(() => {
     const socket = io(SOCKET_URL || undefined);
@@ -113,6 +114,8 @@ const PublicDisplay: React.FC = () => {
 
     socket.on('song-playing', (data: any) => {
       const song = { id: data.songId, name: data.songName, artist: data.artistName };
+      // cache metadata for reveal lookups
+      idMetaRef.current[song.id] = { name: song.name, artist: song.artist };
       setGameState(prev => ({
         ...prev,
         isPlaying: true,
@@ -358,15 +361,51 @@ const PublicDisplay: React.FC = () => {
                 const poolIdx = oneBy75Ids.indexOf(id);
                 const playedIdx = playedOrderRef.current.indexOf(id);
                 const revealed = playedIdx > -1 && playedIdx < revealThreshold;
-                const text = revealed ? (gameState.playedSongs.find(s => s.id === id)?.name || 'Unknown') : '??????';
+                const meta = idMetaRef.current[id];
+                const title = revealed ? (meta?.name || 'Unknown') : '??????';
+                const artist = revealed ? (meta?.artist || '') : '??????';
+                const isCurrent = gameState.currentSong?.id === id;
                 return (
-                  <div key={id} className="call-item" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}>
+                  <motion.div
+                    key={id}
+                    className="call-item"
+                    initial={false}
+                    animate={{
+                      backgroundColor: isCurrent ? 'rgba(0,255,136,0.12)' : 'rgba(255,255,255,0.05)',
+                      boxShadow: isCurrent ? '0 0 16px rgba(0,255,136,0.35)' : 'none',
+                      borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)'
+                    }}
+                    transition={{ duration: 0.25 }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}
+                  >
                     <div className="call-number">{poolIdx + 1}</div>
-                    <div className="call-song-info">
-                      <div className="call-song-name">{text}</div>
-                      {/* Artist hidden per request; future: staged reveal could set artist */}
+                    <div className="call-song-info" style={{ flex: 1 }}>
+                      <AnimatePresence mode="popLayout" initial={false}>
+                        <motion.div
+                          key={revealed ? 'title-'+id : 'title-hidden-'+id}
+                          initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                          transition={{ duration: 0.25 }}
+                          className="call-song-name"
+                          style={{ fontWeight: 700 }}
+                        >
+                          {title}
+                        </motion.div>
+                        <motion.div
+                          key={revealed ? 'artist-'+id : 'artist-hidden-'+id}
+                          initial={{ opacity: 0, y: 4 }}
+                          animate={{ opacity: 0.85, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                          transition={{ duration: 0.25 }}
+                          className="call-song-artist"
+                          style={{ fontSize: '0.85rem', color: '#b3b3b3' }}
+                        >
+                          {artist}
+                        </motion.div>
+                      </AnimatePresence>
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>
