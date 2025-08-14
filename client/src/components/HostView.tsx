@@ -78,6 +78,7 @@ const HostView: React.FC = () => {
   const [isStartingGame, setIsStartingGame] = useState(false);
   const [logs, setLogs] = useState<Array<{ level: 'info' | 'warn' | 'error'; message: string; ts: number }>>([]);
   const [revealMode, setRevealMode] = useState<'off' | 'artist' | 'title' | 'full'>('off');
+  const [pattern, setPattern] = useState<'line' | 'four_corners' | 'x' | 'full_card'>('line');
 
   const addLog = (message: string, level: 'info' | 'warn' | 'error' = 'info') => {
     setLogs(prev => [{ level, message, ts: Date.now() }, ...prev].slice(0, 50));
@@ -542,6 +543,14 @@ const HostView: React.FC = () => {
     if (!socket || !roomId) return;
     socket.emit('force-refresh', { roomId, reason: 'host-request' });
     addLog('Force refresh broadcast', 'warn');
+  };
+
+  const updatePattern = (next: 'line' | 'four_corners' | 'x' | 'full_card') => {
+    setPattern(next);
+    if (socket && roomId) {
+      socket.emit('set-pattern', { roomId, pattern: next });
+      addLog(`Pattern set to ${next}`, 'info');
+    }
   };
 
   const playSong = async (song: Song) => {
@@ -1316,6 +1325,15 @@ const HostView: React.FC = () => {
               />
               <span>{snippetLength}s</span>
             </div>
+            <div className="setting-item">
+              <label>Pattern:</label>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className={`btn-secondary ${pattern==='line'?'active':''}`} onClick={() => updatePattern('line')}>Line</button>
+                <button className={`btn-secondary ${pattern==='four_corners'?'active':''}`} onClick={() => updatePattern('four_corners')}>Four Corners</button>
+                <button className={`btn-secondary ${pattern==='x'?'active':''}`} onClick={() => updatePattern('x')}>X</button>
+                <button className={`btn-secondary ${pattern==='full_card'?'active':''}`} onClick={() => updatePattern('full_card')}>Full Card</button>
+              </div>
+            </div>
           </motion.div>
 
                      {/* Game Controls */}
@@ -1358,6 +1376,7 @@ const HostView: React.FC = () => {
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                     <button className="btn-secondary" onClick={endGame}>🛑 End Game</button>
                     <button className="btn-secondary" onClick={resetGame}>🔁 Reset</button>
+                    <button className="btn-secondary" onClick={() => socket?.emit('new-round', { roomId })}>🆕 New Round</button>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
                     <span style={{ opacity: 0.9 }}>Call Reveal:</span>

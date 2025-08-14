@@ -473,6 +473,23 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Set game pattern
+  socket.on('set-pattern', (data = {}) => {
+    try {
+      const { roomId, pattern } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
+      if (!isCurrentHost) return;
+      const allowed = new Set(['line', 'four_corners', 'x', 'full_card']);
+      room.pattern = allowed.has(pattern) ? pattern : 'line';
+      io.to(roomId).emit('pattern-updated', { pattern: room.pattern });
+      console.log(`🎯 Pattern set to ${room.pattern} for room ${roomId}`);
+    } catch (e) {
+      console.error('❌ Error setting pattern:', e?.message || e);
+    }
+  });
+
   // Player calls BINGO (validated server-side)
   socket.on('player-bingo', (data) => {
     const { roomId } = data || {};
@@ -480,11 +497,32 @@ io.on('connection', (socket) => {
     if (!room) return;
     const player = room.players.get(socket.id);
     if (!player || !player.bingoCard) return;
-    const valid = checkBingo(player.bingoCard);
+    const valid = validateBingoForPattern(player.bingoCard, room);
     if (valid && !player.hasBingo) {
       player.hasBingo = true;
       room.winners.push({ playerId: socket.id, playerName: player.name, timestamp: Date.now() });
       io.to(roomId).emit('bingo-called', { playerId: socket.id, playerName: player.name, winners: room.winners });
+    }
+  });
+
+  // New Round (preserve device and snippet)
+  socket.on('new-round', (data = {}) => {
+    const { roomId } = data;
+    const room = rooms.get(roomId);
+    if (!room) return;
+    const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
+    if (!isCurrentHost) return;
+    try {
+      room.winners = [];
+      room.calledSongIds = [];
+      room.bingoCards = new Map();
+      room.currentSong = null;
+      room.currentSongIndex = 0;
+      room.round = (room.round || 0) + 1;
+      io.to(roomId).emit('round-reset', { round: room.round });
+      console.log(`🔄 New round started for room ${roomId} (round ${room.round})`);
+    } catch (e) {
+      console.error('❌ Error starting new round:', e?.message || e);
     }
   });
 
@@ -511,6 +549,11 @@ io.on('connection', (socket) => {
         room.snippetLength = snippetLength;
         room.playlists = playlists;
         room.selectedDeviceId = deviceId; // Store the selected device ID
+        // Initialize call history and round
+        room.calledSongIds = [];
+        room.round = (room.round || 0) + 1;
+        // Default pattern if not set
+        room.pattern = room.pattern || 'line';
 
         // Emit game started as soon as state is ready so UI can show controls
         io.to(roomId).emit('game-started', {
@@ -1448,6 +1491,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       }
     }
 
+    // Track called song
+    room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
+    room.calledSongIds.push(firstSong.id);
     room.currentSong = {
       id: firstSong.id,
       name: firstSong.name,
@@ -1615,6 +1661,9 @@ async function playNextSong(roomId, deviceId) {
       return;
     }
 
+    // Track called song
+    room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
+    room.calledSongIds.push(nextSong.id);
     room.currentSong = {
       id: nextSong.id,
       name: nextSong.name,
@@ -1711,6 +1760,37 @@ function checkBingo(card) {
   }
   
   return diag1Complete || diag2Complete;
+}
+
+function validateBingoForPattern(card, room) {
+  const pattern = room?.pattern || 'line';
+  if (pattern === 'full_card') {
+    // All squares must be marked
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 5; col++) {
+        const square = card.squares.find(s => s.position === `${row}-${col}`);
+        if (!square || !square.marked) return false;
+      }
+    }
+    return true;
+  }
+  if (pattern === 'four_corners') {
+    const required = ['0-0', '0-4', '4-0', '4-4'];
+    return required.every(pos => {
+      const sq = card.squares.find(s => s.position === pos);
+      return !!sq && !!sq.marked;
+    });
+  }
+  if (pattern === 'x') {
+    for (let i = 0; i < 5; i++) {
+      const a = card.squares.find(s => s.position === `${i}-${i}`);
+      const b = card.squares.find(s => s.position === `${i}-${4 - i}`);
+      if (!a || !a.marked || !b || !b.marked) return false;
+    }
+    return true;
+  }
+  // default: any single line using existing checker
+  return checkBingo(card);
 }
 
 // API Routes
