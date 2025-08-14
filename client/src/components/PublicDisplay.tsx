@@ -134,36 +134,10 @@ const PublicDisplay: React.FC = () => {
         playedSongs: [...prev.playedSongs, song].slice(-25)
       }));
       
-      // Wheel of Fortune: Reveal a random letter across all displayed songs
-      setRevealedSongIds(prev => {
-        const newRevealed = new Set(prev);
-        newRevealed.add(song.id);
-        return newRevealed;
-      });
-      
-      // Get all song and artist names currently displayed
-      const allText = [
-        song.name,
-        song.artist,
-        ...gameState.playedSongs.map(s => s.name),
-        ...gameState.playedSongs.map(s => s.artist)
-      ].join(' ').toUpperCase();
-      
-      // Find all unique letters in the text
-      const availableLetters = new Set(
-        allText.split('').filter(char => /[A-Z]/.test(char))
-      );
-      
-      // Remove already revealed letters
-      const unrevealedLetters = Array.from(availableLetters).filter(
-        letter => !revealedLetters.has(letter)
-      );
-      
-      // Reveal a random letter
-      if (unrevealedLetters.length > 0) {
-        const randomLetter = unrevealedLetters[Math.floor(Math.random() * unrevealedLetters.length)];
-        setRevealedLetters(prev => new Set([...prev, randomLetter]));
-      }
+      // Wheel of Fortune: Pick a random letter of the alphabet and reveal it in all currently displayed songs
+      const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+      const randomLetter = alphabet[Math.floor(Math.random() * alphabet.length)];
+      setRevealedLetters(prev => new Set([...prev, randomLetter]));
       
       // reset countdown timer
       if (countdownRef.current) {
@@ -451,10 +425,9 @@ const PublicDisplay: React.FC = () => {
   const renderOneBy75Columns = () => {
     if (!oneBy75Ids) return null;
     const played = new Set(playedOrderRef.current);
-    // Only include songs that have played, preserving pool order
+    // Show all songs that have played, preserving pool order
     const visibleIds = oneBy75Ids.filter(id => played.has(id));
     const cols = [0,1,2,3,4].map(c => visibleIds.slice(c*15, c*15 + 15));
-    const revealThreshold = Math.max(0, playedOrderRef.current.length - 5);
     return (
       <div className="call-list-content">
         <div className="call-columns-header">
@@ -474,6 +447,7 @@ const PublicDisplay: React.FC = () => {
                 const poolIdx = oneBy75Ids.indexOf(id);
                 const playedIdx = playedOrderRef.current.indexOf(id);
                 const meta = idMetaRef.current[id];
+                // All songs show with Wheel of Fortune reveals - no more 5-song delay
                 const title = meta?.name ? renderWheelOfFortuneText(meta.name) : '??????';
                 const artist = meta?.artist ? renderWheelOfFortuneText(meta.artist) : '??????';
                 const isCurrent = gameState.currentSong?.id === id;
