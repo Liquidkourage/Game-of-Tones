@@ -532,13 +532,9 @@ const PublicDisplay: React.FC = () => {
                   <List className="call-list-icon" />
                 <span className="call-count">{gameState.playedSongs.length}</span>
                 </div>
-                {oneBy75Ids ? renderOneBy75Columns() : (
+              {oneBy75Ids ? renderOneBy75Columns() : (
                   <div className="call-list-content">
-                    <div className="call-columns-header">
-                      {['B','I','N','G','O'].map((c) => (
-                        <div key={c} className="call-col-title">{c}</div>
-                      ))}
-                    </div>
+                  {/* Column headers moved to App header to free vertical space */}
                     <div className="call-list">
                       {gameState.playedSongs.length > 0 && (
                         gameState.playedSongs.slice(-10).map((song, index) => (

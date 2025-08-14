@@ -1355,21 +1355,7 @@ code {
   position: relative; /* for column cutters overlay */
 }
 
-.call-columns-header {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 6px;
-}
-.call-col-title {
-  text-align: center;
-  font-weight: 800;
-  letter-spacing: 1px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  padding: 6px 0;
-}
+/* Column headers now appear in the app header on display route */
 
 .call-list {
   display: grid;
