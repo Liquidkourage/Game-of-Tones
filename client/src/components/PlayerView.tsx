@@ -32,6 +32,7 @@ interface GameState {
   currentSong: Song | null;
   playerCount: number;
   hasBingo: boolean;
+  pattern: string;
 }
 
 interface Song {
@@ -142,7 +143,7 @@ const PlayerView: React.FC = () => {
     });
 
     newSocket.on('game-reset', () => {
-      setGameState({ isPlaying: false, currentSong: null, playerCount: 0, hasBingo: false });
+      setGameState({ isPlaying: false, currentSong: null, playerCount: 0, hasBingo: false, pattern: 'full_card' });
       setBingoCard(null);
       console.log('🔁 Game reset');
     });
