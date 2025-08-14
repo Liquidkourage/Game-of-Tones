@@ -1301,8 +1301,8 @@ code {
   overflow-y: hidden;
 }
 
-.left-col { display: grid; grid-template-rows: auto auto; gap: 12px; min-width: 0; min-height: 0; }
-.info-grid { display: grid; grid-template-columns: 1fr 225px; gap: 12px; align-items: center; }
+.left-col { display: grid; grid-template-rows: auto 1fr; gap: 12px; min-width: 0; min-height: 0; }
+.info-grid { display: grid; grid-template-columns: 1fr 225px; gap: 12px; align-items: stretch; height: 100%; }
 .info-grid > .quick-stats, .info-grid > .winners-display { height: 100%; }
 .call-col { display: grid; grid-template-rows: 1fr; min-width: 0; min-height: 0; }
 

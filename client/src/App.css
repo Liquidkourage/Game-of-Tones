@@ -110,14 +110,12 @@ body {
   padding: 0;
   width: 100%;
   min-height: 0;
-  max-height: calc(100vh - 160px);
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 /* Shrink app-main slightly for public display */
 .app-main .public-display {
-  height: calc(100vh - 9rem);
+  height: 100%;
   max-width: 100vw;
   overflow-x: hidden;
   margin: 0;
