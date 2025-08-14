@@ -503,15 +503,15 @@ const PublicDisplay: React.FC = () => {
                   </div>
                 </div>
                 {/* QR inside the info card, right of the info text */}
-                <div style={{ alignSelf: 'center', textAlign: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: 8, width: 225, minWidth: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', height: '100%' }}>
+                <div style={{ alignSelf: 'center', textAlign: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: 6, width: 280, minWidth: 250, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', height: '100%' }}>
                   {roomId && (
                     <>
                       <img
                         alt="Join QR"
-                        style={{ width: '100%', height: 'calc(100% - 26px)', aspectRatio: '1 / 1', objectFit: 'contain', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }}
-                        src={`${API_BASE || ''}/api/qr?size=450&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
+                        style={{ width: '100%', height: 'calc(100% - 20px)', aspectRatio: '1 / 1', objectFit: 'contain', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }}
+                        src={`${API_BASE || ''}/api/qr?size=600&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
                       />
-                      <div style={{ fontSize: '1rem', fontWeight: 800, color: '#ddd', marginTop: 6, lineHeight: 1 }}>Scan to join</div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#ddd', marginTop: 4, lineHeight: 1 }}>Scan to join</div>
                     </>
                   )}
                 </div>
