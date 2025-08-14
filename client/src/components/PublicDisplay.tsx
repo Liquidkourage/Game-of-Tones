@@ -473,7 +473,7 @@ const PublicDisplay: React.FC = () => {
                 </div>
               </div>
             </motion.div>
-            {/* Under pattern: Info (room + QR + stats) */}
+            {/* Under pattern: Info (room + stats) */}
             <div className="info-grid">
               <motion.div 
                 className="quick-stats"
@@ -481,7 +481,7 @@ const PublicDisplay: React.FC = () => {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.6, delay: 0.2 }}
               >
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 12, alignItems: 'stretch' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, alignItems: 'stretch' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%' }}>
                     <div style={{ fontWeight: 800, letterSpacing: '0.04em', opacity: 0.9 }}>INFO</div>
                     <div style={{ fontWeight: 900, fontSize: '1.6rem', color: '#00ff88' }}>Room: {roomInfo?.id || roomId}</div>
@@ -502,19 +502,6 @@ const PublicDisplay: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                  {/* QR image and caption - flush into card */}
-                  <div style={{ justifySelf: 'stretch', textAlign: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: 8 }}>
-                    {roomId && (
-                      <>
-                        <img
-                          alt="Join QR"
-                          style={{ width: '100%', height: 'auto', aspectRatio: '1 / 1', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }}
-                          src={`${API_BASE || ''}/api/qr?size=360&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
-                        />
-                        <div style={{ fontSize: '1rem', fontWeight: 700, color: '#ddd', marginTop: 6 }}>Scan to join</div>
-                      </>
-                    )}
-                  </div>
                 </div>
               </motion.div>
             </div>
@@ -527,46 +514,63 @@ const PublicDisplay: React.FC = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
+              style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: 12, alignItems: 'stretch' }}
             >
-              <div className="call-list-header" style={{ marginTop: -36 }}>
-                <List className="call-list-icon" />
-                <h2>Call List</h2>
-                <span className="call-count">{gameState.playedSongs.length}</span>
+              {/* QR docked to the left of call list */}
+              <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: 10 }}>
+                {roomId && (
+                  <>
+                    <img
+                      alt="Join QR"
+                      style={{ width: '100%', height: 'auto', aspectRatio: '1 / 1', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }}
+                      src={`${API_BASE || ''}/api/qr?size=450&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
+                    />
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#fff', marginTop: 6 }}>Scan to join</div>
+                  </>
+                )}
               </div>
-              {oneBy75Ids ? renderOneBy75Columns() : (
-                <div className="call-list-content">
-                  <div className="call-columns-header">
-                    {['B','I','N','G','O'].map((c) => (
-                      <div key={c} className="call-col-title">{c}</div>
-                    ))}
-                  </div>
-                  <div className="call-list">
-                    {gameState.playedSongs.length > 0 && (
-                      gameState.playedSongs.slice(-10).map((song, index) => (
-                        <motion.div
-                          key={song.id + '-' + index}
-                          className="call-item"
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ duration: 0.4, delay: 0.3 + index * 0.05 }}
-                        >
-                          <div className="call-number">#{gameState.playedSongs.length - (Math.min(10, gameState.playedSongs.length) - 1) + index}</div>
-                          <div className="call-song-info">
-                            <div className="call-song-name">{song.name}</div>
-                            <div className="call-song-artist">{song.artist}</div>
-                          </div>
-                          <Music className="call-icon" />
-                        </motion.div>
-                      ))
+              {/* Call list proper */}
+              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                <div className="call-list-header" style={{ marginTop: -36 }}>
+                  <List className="call-list-icon" />
+                  {/* Removed text label */}
+                  <span className="call-count">{gameState.playedSongs.length}</span>
+                </div>
+                {oneBy75Ids ? renderOneBy75Columns() : (
+                  <div className="call-list-content">
+                    <div className="call-columns-header">
+                      {['B','I','N','G','O'].map((c) => (
+                        <div key={c} className="call-col-title">{c}</div>
+                      ))}
+                    </div>
+                    <div className="call-list">
+                      {gameState.playedSongs.length > 0 && (
+                        gameState.playedSongs.slice(-10).map((song, index) => (
+                          <motion.div
+                            key={song.id + '-' + index}
+                            className="call-item"
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.4, delay: 0.3 + index * 0.05 }}
+                          >
+                            <div className="call-number">#{gameState.playedSongs.length - (Math.min(10, gameState.playedSongs.length) - 1) + index}</div>
+                            <div className="call-song-info">
+                              <div className="call-song-name">{song.name}</div>
+                              <div className="call-song-artist">{song.artist}</div>
+                            </div>
+                            <Music className="call-icon" />
+                          </motion.div>
+                        ))
+                      )}
+                    </div>
+                    {gameState.playedSongs.length === 0 && (
+                      <div className="no-calls">
+                        <p>No songs played yet</p>
+                      </div>
                     )}
                   </div>
-                  {gameState.playedSongs.length === 0 && (
-                    <div className="no-calls">
-                      <p>No songs played yet</p>
-                    </div>
-                  )}
-                </div>
-              )}
+                )}
+              </div>
             </motion.div>
 
           </div>
