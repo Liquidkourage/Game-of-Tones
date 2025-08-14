@@ -483,21 +483,21 @@ const PublicDisplay: React.FC = () => {
                 style={{ display: 'flex', flexDirection: 'row', gap: 12, alignItems: 'stretch', height: '100%' }}
               >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
-                  <div style={{ fontWeight: 800, letterSpacing: '0.04em', opacity: 0.9 }}>INFO</div>
-                  <div style={{ fontWeight: 900, fontSize: '1.6rem', color: '#00ff88' }}>Room: {roomInfo?.id || roomId}</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 6 }}>
+                  <div style={{ fontWeight: 800, letterSpacing: '0.06em', opacity: 0.9, fontSize: '1.1rem' }}>INFO</div>
+                  <div style={{ fontWeight: 900, fontSize: '2.2rem', color: '#00ff88' }}>Room: {roomInfo?.id || roomId}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Users className="stat-icon" />
                       <div>
-                        <div style={{ fontSize: '1.35rem', fontWeight: 900 }}>{gameState.playerCount}</div>
-                        <div style={{ fontSize: '1rem', color: '#b3b3b3' }}>Players</div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 900 }}>{gameState.playerCount}</div>
+                        <div style={{ fontSize: '1.2rem', color: '#b3b3b3' }}>Players</div>
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <List className="stat-icon" />
                       <div>
-                        <div style={{ fontSize: '1.35rem', fontWeight: 900 }}>{gameState.playedSongs.length}</div>
-                        <div style={{ fontSize: '1rem', color: '#b3b3b3' }}>Songs</div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 900 }}>{gameState.playedSongs.length}</div>
+                        <div style={{ fontSize: '1.2rem', color: '#b3b3b3' }}>Songs</div>
                       </div>
                     </div>
                   </div>
@@ -527,15 +527,15 @@ const PublicDisplay: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
             >
-              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1, minHeight: 0 }}>
               <div className="call-list-header" style={{ marginTop: -36 }}>
                   <List className="call-list-icon" />
                 <span className="call-count">{gameState.playedSongs.length}</span>
                 </div>
               {oneBy75Ids ? renderOneBy75Columns() : (
-                  <div className="call-list-content">
+                  <div className="call-list-content" style={{ height: '100%' }}>
                   {/* Column headers moved to App header to free vertical space */}
-                    <div className="call-list">
+                    <div className="call-list" style={{ height: '100%' }}>
                       {gameState.playedSongs.length > 0 && (
                         gameState.playedSongs.slice(-10).map((song, index) => (
                           <motion.div
