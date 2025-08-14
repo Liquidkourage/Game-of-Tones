@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const https = require('https');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -2015,6 +2016,36 @@ app.get('/api/spotify/current', async (req, res) => {
   } catch (error) {
     console.error('Error getting current track:', error);
     res.status(500).json({ error: 'Failed to get current track' });
+  }
+});
+
+// QR proxy to avoid cross-origin embed restrictions
+app.get('/api/qr', (req, res) => {
+  try {
+    const data = req.query.data;
+    const size = String(req.query.size || '192');
+    if (!data) return res.status(400).send('data required');
+    const primary = `https://api.qrserver.com/v1/create-qr-code/?size=${encodeURIComponent(size)}x${encodeURIComponent(size)}&data=${encodeURIComponent(data)}`;
+    const fallback = `https://chart.googleapis.com/chart?cht=qr&chs=${encodeURIComponent(size)}x${encodeURIComponent(size)}&chl=${encodeURIComponent(data)}`;
+
+    const pipeImage = (url) => {
+      https.get(url, (r) => {
+        if (r.statusCode && r.statusCode >= 400) {
+          // try fallback
+          if (url !== fallback) return pipeImage(fallback);
+          return res.status(502).send('QR service failed');
+        }
+        res.setHeader('Content-Type', r.headers['content-type'] || 'image/png');
+        r.pipe(res);
+      }).on('error', () => {
+        if (url !== fallback) return pipeImage(fallback);
+        res.status(502).send('QR fetch error');
+      });
+    };
+
+    pipeImage(primary);
+  } catch (e) {
+    res.status(500).send('QR error');
   }
 });
 

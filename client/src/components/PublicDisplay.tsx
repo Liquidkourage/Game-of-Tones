@@ -487,14 +487,7 @@ const PublicDisplay: React.FC = () => {
                     <span className="stat-value" style={{ fontSize: '1rem' }}>Room: {roomInfo?.id || roomId}</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <QrCode className="stat-icon" />
-                      <a
-                        href={roomId ? `${typeof window !== 'undefined' ? window.location.origin : ''}/player/${roomId}` : '#'}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{ fontSize: '0.85rem', color: '#b3b3b3', textDecoration: 'underline' }}
-                      >
-                        Join Link
-                      </a>
+                      <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>Scan to join</span>
                     </div>
                   </div>
                   {/* QR image */}
@@ -503,12 +496,7 @@ const PublicDisplay: React.FC = () => {
                       <img
                         alt="Join QR"
                         style={{ width: 96, height: 96, borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }}
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=192x192&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
-                        onError={(e) => {
-                          const img = e.currentTarget as HTMLImageElement;
-                          const fb = `https://chart.googleapis.com/chart?cht=qr&chs=192x192&chl=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`;
-                          if (img.src !== fb) img.src = fb;
-                        }}
+                        src={`${API_BASE || ''}/api/qr?size=192&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
                       />
                     )}
                   </div>
