@@ -167,6 +167,7 @@ body {
    so these rules reliably win over any legacy duplicates in index.css. */
 
 .App .public-display { padding-top: 44px; }
+.App .display-content { height: 100%; min-height: 0; }
 
 .App .call-list-display { position: relative; height: 100%; }
 .App .call-list-display::after {
