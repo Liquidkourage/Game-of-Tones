@@ -78,7 +78,7 @@ const HostView: React.FC = () => {
   const [isStartingGame, setIsStartingGame] = useState(false);
   const [logs, setLogs] = useState<Array<{ level: 'info' | 'warn' | 'error'; message: string; ts: number }>>([]);
   const [revealMode, setRevealMode] = useState<'off' | 'artist' | 'title' | 'full'>('off');
-  const [pattern, setPattern] = useState<'line' | 'four_corners' | 'x' | 'full_card'>('line');
+  const [pattern, setPattern] = useState<'line' | 'four_corners' | 'x' | 'full_card'>('full_card');
 
   const addLog = (message: string, level: 'info' | 'warn' | 'error' = 'info') => {
     setLogs(prev => [{ level, message, ts: Date.now() }, ...prev].slice(0, 50));

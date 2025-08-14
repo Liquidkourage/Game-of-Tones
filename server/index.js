@@ -553,7 +553,7 @@ io.on('connection', (socket) => {
         room.calledSongIds = [];
         room.round = (room.round || 0) + 1;
         // Default pattern if not set
-        room.pattern = room.pattern || 'line';
+        room.pattern = room.pattern || 'full_card';
 
         // Emit game started as soon as state is ready so UI can show controls
         io.to(roomId).emit('game-started', {
@@ -1763,7 +1763,7 @@ function checkBingo(card) {
 }
 
 function validateBingoForPattern(card, room) {
-  const pattern = room?.pattern || 'line';
+  const pattern = room?.pattern || 'full_card';
   if (pattern === 'full_card') {
     // All squares must be marked
     for (let row = 0; row < 5; row++) {
