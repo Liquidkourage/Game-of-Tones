@@ -353,8 +353,28 @@ const PublicDisplay: React.FC = () => {
               key={`${row}-${col}`}
               className={`bingo-square ${square.isPlayed ? 'played' : ''} ${isWinningLine ? 'winning' : ''}`}
               initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3, delay: (row + col) * 0.05 }}
+              animate={{ 
+                opacity: 1, 
+                scale: 1,
+                ...(isWinningLine && pattern === 'full_card' && {
+                  boxShadow: [
+                    '0 0 0 rgba(0, 255, 136, 0.3)',
+                    '0 0 20px rgba(0, 255, 136, 0.6)',
+                    '0 0 0 rgba(0, 255, 136, 0.3)'
+                  ]
+                })
+              }}
+              transition={{ 
+                duration: 0.3, 
+                delay: (row + col) * 0.05,
+                ...(isWinningLine && pattern === 'full_card' && {
+                  boxShadow: {
+                    duration: 2,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }
+                })
+              }}
               whileHover={{ scale: 1.05 }}
             >
                              <div className="square-content">
