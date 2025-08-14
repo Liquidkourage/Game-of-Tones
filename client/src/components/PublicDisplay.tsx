@@ -480,8 +480,41 @@ const PublicDisplay: React.FC = () => {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.6, delay: 0.2 }}
+                style={{ display: 'flex', gap: 12, alignItems: 'stretch', height: '100%' }}
               >
-                {/* TEMP: intentionally empty to debug stretching */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+                  <div style={{ fontWeight: 800, letterSpacing: '0.04em', opacity: 0.9 }}>INFO</div>
+                  <div style={{ fontWeight: 900, fontSize: '1.6rem', color: '#00ff88' }}>Room: {roomInfo?.id || roomId}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Users className="stat-icon" />
+                      <div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>{gameState.playerCount}</div>
+                        <div style={{ fontSize: '0.8rem', color: '#b3b3b3' }}>Players</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <List className="stat-icon" />
+                      <div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>{gameState.playedSongs.length}</div>
+                        <div style={{ fontSize: '0.8rem', color: '#b3b3b3' }}>Songs</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {/* QR inside the info card, right-aligned to sit beside call list */}
+                <div style={{ alignSelf: 'stretch', textAlign: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: 8, width: 225 }}>
+                  {roomId && (
+                    <>
+                      <img
+                        alt="Join QR"
+                        style={{ width: '100%', height: 'auto', aspectRatio: '1 / 1', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }}
+                        src={`${API_BASE || ''}/api/qr?size=450&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
+                      />
+                      <div style={{ fontSize: '1rem', fontWeight: 800, color: '#ddd', marginTop: 6 }}>Scan to join</div>
+                    </>
+                  )}
+                </div>
               </motion.div>
             </div>
           </div>
