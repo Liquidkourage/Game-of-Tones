@@ -473,7 +473,7 @@ const PublicDisplay: React.FC = () => {
                 </div>
               </div>
             </motion.div>
-            {/* Under pattern: Info (room) */}
+            {/* Under pattern: Info (room + QR + stats) */}
             <div className="info-grid">
               <motion.div 
                 className="quick-stats"
@@ -481,11 +481,26 @@ const PublicDisplay: React.FC = () => {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.6, delay: 0.2 }}
               >
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px', gap: 12, alignItems: 'center' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <span className="stat-label" style={{ fontWeight: 700 }}>Info</span>
-                    <span className="stat-value" style={{ fontSize: '1rem' }}>Room: {roomInfo?.id || roomId}</span>
-                    <span className="stat-value" style={{ fontSize: '0.95rem' }}>{gameState.playerCount} Players</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px', gap: 14, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ fontWeight: 800, letterSpacing: '0.04em', opacity: 0.9 }}>INFO</div>
+                    <div style={{ fontWeight: 900, fontSize: '1.6rem', color: '#00ff88' }}>Room: {roomInfo?.id || roomId}</div>
+                    <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Users className="stat-icon" />
+                        <div>
+                          <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>{gameState.playerCount}</div>
+                          <div style={{ fontSize: '0.8rem', color: '#b3b3b3' }}>Players</div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <List className="stat-icon" />
+                        <div>
+                          <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>{gameState.playedSongs.length}</div>
+                          <div style={{ fontSize: '0.8rem', color: '#b3b3b3' }}>Songs</div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   {/* QR image and caption */}
                   <div style={{ justifySelf: 'end', textAlign: 'center' }}>
@@ -493,31 +508,13 @@ const PublicDisplay: React.FC = () => {
                       <>
                         <img
                           alt="Join QR"
-                          style={{ width: 150, height: 150, borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)' }}
-                          src={`${API_BASE || ''}/api/qr?size=300&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
+                          style={{ width: 180, height: 180, borderRadius: 12, border: '1px solid rgba(255,255,255,0.15)' }}
+                          src={`${API_BASE || ''}/api/qr?size=360&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
                         />
-                        <div style={{ fontSize: '0.8rem', color: '#b3b3b3', marginTop: 6 }}>Scan to join</div>
+                        <div style={{ fontSize: '0.85rem', color: '#b3b3b3', marginTop: 8 }}>Scan to join</div>
                       </>
                     )}
                   </div>
-                </div>
-              </motion.div>
-              {/* Quick stats: players and songs */}
-              <motion.div 
-                className="quick-stats"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.6, delay: 0.25 }}
-              >
-                <div className="stat-item">
-                  <Users className="stat-icon" />
-                  <span className="stat-value">{gameState.playerCount}</span>
-                  <span className="stat-label">Players</span>
-                </div>
-                <div className="stat-item">
-                  <List className="stat-icon" />
-                  <span className="stat-value">{gameState.playedSongs.length}</span>
-                  <span className="stat-label">Songs</span>
                 </div>
               </motion.div>
             </div>
