@@ -20,7 +20,14 @@ const DisplayHeaderInfo: React.FC = () => {
     return () => window.removeEventListener('display-player-count', handler as EventListener);
   }, []);
 
-  // Hide header room info on the public display; it will be shown in the left column Info card instead
+  // On the public display, show the Call List heading in the header bar next to the logomark
+  if (roomId) {
+    return (
+      <div className="room-info">
+        <h2>Call List</h2>
+      </div>
+    );
+  }
   return null;
 };
 
