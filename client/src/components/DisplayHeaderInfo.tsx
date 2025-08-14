@@ -66,17 +66,17 @@ const DisplayHeaderInfo: React.FC = () => {
             key={c}
             style={{
               width: cardWidth,
-              height: rect ? Math.max(0, (document.querySelector('.app-header') as HTMLElement)?.getBoundingClientRect().bottom || 40) : undefined,
+              height: rect ? Math.max(0, ((document.querySelector('.app-header') as HTMLElement)?.getBoundingClientRect().bottom || 40) - 5) : undefined,
               textAlign: 'center',
-              fontWeight: 800,
-              letterSpacing: '1px',
+              fontWeight: 900,
+              letterSpacing: '0.08em',
               background: 'rgba(255,255,255,0.08)',
               border: '1px solid rgba(255,255,255,0.2)',
               borderRadius: 8,
-              paddingTop: 6,
               display: 'flex',
-              alignItems: 'flex-end',
-              justifyContent: 'center'
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '1.6rem'
             }}
           >
             {c}

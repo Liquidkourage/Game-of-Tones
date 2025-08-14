@@ -1514,7 +1514,7 @@ code {
   height: 95%;
   aspect-ratio: 1 / 1;
   align-self: center;
-  transform: scale(var(--bingo-scale));
+  transform: translateY(-5%) scale(var(--bingo-scale));
   transform-origin: center center; /* ensure centered scaling */
 }
 
