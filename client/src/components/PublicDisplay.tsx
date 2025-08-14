@@ -481,23 +481,23 @@ const PublicDisplay: React.FC = () => {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.6, delay: 0.2 }}
               >
-                <div className="stat-item" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px', gap: 12, alignItems: 'center' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <span className="stat-label" style={{ fontWeight: 700 }}>Info</span>
                     <span className="stat-value" style={{ fontSize: '1rem' }}>Room: {roomInfo?.id || roomId}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <QrCode className="stat-icon" />
-                      <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>Scan to join</span>
-                    </div>
+                    <span className="stat-value" style={{ fontSize: '0.95rem' }}>{gameState.playerCount} Players</span>
                   </div>
-                  {/* QR image */}
-                  <div style={{ marginLeft: 'auto' }}>
+                  {/* QR image and caption */}
+                  <div style={{ justifySelf: 'end', textAlign: 'center' }}>
                     {roomId && (
-                      <img
-                        alt="Join QR"
-                        style={{ width: 96, height: 96, borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }}
-                        src={`${API_BASE || ''}/api/qr?size=192&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
-                      />
+                      <>
+                        <img
+                          alt="Join QR"
+                          style={{ width: 150, height: 150, borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)' }}
+                          src={`${API_BASE || ''}/api/qr?size=300&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
+                        />
+                        <div style={{ fontSize: '0.8rem', color: '#b3b3b3', marginTop: 6 }}>Scan to join</div>
+                      </>
                     )}
                   </div>
                 </div>
