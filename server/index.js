@@ -559,7 +559,8 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('game-started', {
           roomId,
           snippetLength,
-          deviceId
+          deviceId,
+          pattern: room.pattern
         });
 
         console.log('🎵 Generating bingo cards...');
@@ -616,7 +617,8 @@ io.on('connection', (socket) => {
             io.to(roomId).emit('game-started', {
               roomId,
               snippetLength,
-              deviceId
+              deviceId,
+              pattern: room.pattern
             });
 
             if (!newRoom.mixFinalized || !newRoom.bingoCards || newRoom.bingoCards.size === 0) {

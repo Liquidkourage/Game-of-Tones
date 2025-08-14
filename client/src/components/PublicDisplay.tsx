@@ -71,6 +71,7 @@ const PublicDisplay: React.FC = () => {
       size: 5
     }
   });
+  const [pattern, setPattern] = useState<string>('full_card');
   const [countdownMs, setCountdownMs] = useState<number>(0);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   // 1x75 call list state
@@ -155,8 +156,11 @@ const PublicDisplay: React.FC = () => {
       }, 100);
     });
 
-    socket.on('game-started', () => {
+    socket.on('game-started', (data: any) => {
       setGameState(prev => ({ ...prev, isPlaying: true }));
+      if (data?.pattern) {
+        setPattern(data.pattern);
+      }
       ensureGrid();
     });
 
@@ -255,7 +259,17 @@ const PublicDisplay: React.FC = () => {
 
   // Function to get the overall pattern name
   const getPatternName = () => {
-    return 'Pattern: Single Line (any direction)';
+    switch (pattern) {
+      case 'full_card':
+        return 'Pattern: Full Card';
+      case 'four_corners':
+        return 'Pattern: Four Corners';
+      case 'x':
+        return 'Pattern: X';
+      case 'line':
+      default:
+        return 'Pattern: Single Line (any direction)';
+    }
   };
 
   // Function to check if a square is part of the current winning line
