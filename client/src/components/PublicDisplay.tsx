@@ -70,9 +70,9 @@ const PublicDisplay: React.FC = () => {
   });
   const [countdownMs, setCountdownMs] = useState<number>(0);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
-  const [revealMode, setRevealMode] = useState<'none' | '1x75' | '5x15'>('none');
-  const [revealSequence75, setRevealSequence75] = useState<Array<{ id: string; name: string; artist: string }>>([]);
-  const [revealedCount, setRevealedCount] = useState<number>(0);
+  // 1x75 obfuscation state
+  const [oneBy75Ids, setOneBy75Ids] = useState<string[] | null>(null);
+  const [obfuscated, setObfuscated] = useState<string[]>([]);
 
   useEffect(() => {
     const socket = io(SOCKET_URL || undefined);
@@ -90,6 +90,14 @@ const PublicDisplay: React.FC = () => {
       const count = Math.max(0, Number(data.playerCount || 0));
       setGameState(prev => ({ ...prev, playerCount: count }));
       window.dispatchEvent(new CustomEvent('display-player-count', { detail: { playerCount: count } }));
+    });
+
+    // Receive 1x75 pool ordering (ids only)
+    socket.on('oneby75-pool', (data: any) => {
+      if (Array.isArray(data?.ids) && data.ids.length === 75) {
+        setOneBy75Ids(data.ids);
+        setObfuscated(Array(75).fill('?'));
+      }
     });
 
     socket.on('bingo-card', (card: any) => {
@@ -110,6 +118,17 @@ const PublicDisplay: React.FC = () => {
         snippetLength: Number(data.snippetLength) || prev.snippetLength,
         playedSongs: [...prev.playedSongs, song].slice(-25)
       }));
+      // If in 1x75 mode and we have the pool, progressively reveal this song's position
+      setObfuscated(prev => {
+        if (!oneBy75Ids) return prev;
+        const idx = oneBy75Ids.indexOf(song.id);
+        if (idx >= 0 && prev[idx] === '?') {
+          const next = [...prev];
+          next[idx] = song.name;
+          return next;
+        }
+        return prev;
+      });
       // reset countdown timer
       if (countdownRef.current) {
         clearInterval(countdownRef.current);
@@ -139,16 +158,6 @@ const PublicDisplay: React.FC = () => {
     });
 
     socket.on('mix-finalized', () => { ensureGrid(); });
-    // Receive reveal sequence for 1x75
-    socket.on('reveal-sequence', (payload: any) => {
-      const mode = payload?.mode;
-      const sequence = Array.isArray(payload?.sequence) ? payload.sequence : [];
-      if (mode === '1x75' && sequence.length >= 75) {
-        setRevealMode('1x75');
-        setRevealSequence75(sequence);
-        setRevealedCount(0);
-      }
-    });
 
     socket.on('game-ended', () => {
       setGameState(prev => ({ ...prev, isPlaying: false }));
@@ -172,12 +181,7 @@ const PublicDisplay: React.FC = () => {
     // Staged reveal event: show name/artist hints without changing the bingo grid
     socket.on('call-revealed', (payload: any) => {
       if (payload?.revealToDisplay) {
-        // If this is a step command in 1x75 mode, increment reveal count
-        if (revealMode === '1x75' && payload.hint === 'step') {
-          setRevealedCount((c) => Math.min(25, c + 1));
-          return;
-        }
-        // Otherwise update banner hints
+        // For now, just update the header Now Playing banner content without marking grid
         setGameState(prev => ({
           ...prev,
           currentSong: {
@@ -284,36 +288,86 @@ const PublicDisplay: React.FC = () => {
   }, []);
 
   const renderBingoCard = () => {
-    // Always render a 5x5 pattern grid. For 1x75, fill with obfuscated sequence 1..25 from the 75-pool by vertical columns.
+    const { bingoCard } = gameState;
+    console.log('Winners section rendering, winners:', gameState.winners);
     const grid = [];
-    for (let row = 0; row < 5; row++) {
+    
+    for (let row = 0; row < bingoCard.size; row++) {
       const rowSquares = [];
-      for (let col = 0; col < 5; col++) {
-        let content: React.ReactNode = null;
-        let playedClass = '';
-        if (revealMode === '1x75' && revealSequence75.length >= 75) {
-          const indexIn75 = col * 15 + row; // vertical down 1..15, 16..30, etc.
-          const revealed = (row * 5 + col) < revealedCount;
-          const song = revealSequence75[indexIn75];
-          content = <span className="placeholder">{revealed ? (song?.name || '?') : '?'}</span>;
-          playedClass = revealed ? 'played' : '';
-        }
-        rowSquares.push(
-          <motion.div
-            key={`${row}-${col}`}
-            className={`bingo-square ${playedClass}`}
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3, delay: (row + col) * 0.05 }}
-            whileHover={{ scale: 1.05 }}
-          >
-            <div className="square-content">{content}</div>
-          </motion.div>
+      for (let col = 0; col < bingoCard.size; col++) {
+        const square = bingoCard.squares.find(s => 
+          s.position.row === row && s.position.col === col
         );
+        
+        if (square) {
+          // Check if this square is part of the current winning line
+          const isWinningLine = isWinningSquare(row, col);
+          rowSquares.push(
+            <motion.div
+              key={`${row}-${col}`}
+              className={`bingo-square ${square.isPlayed ? 'played' : ''} ${isWinningLine ? 'winning' : ''}`}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: (row + col) * 0.05 }}
+              whileHover={{ scale: 1.05 }}
+            >
+                             <div className="square-content">
+                 {square.isPlayed && (
+                   <motion.div 
+                     className="played-indicator"
+                     initial={{ scale: 0 }}
+                     animate={{ scale: 1 }}
+                     transition={{ duration: 0.3 }}
+                   >
+                     <Music className="played-icon" />
+                   </motion.div>
+                 )}
+               </div>
+            </motion.div>
+          );
+        }
       }
-      grid.push(<div key={row} className="bingo-row">{rowSquares}</div>);
+      grid.push(
+        <div key={row} className="bingo-row">
+          {rowSquares}
+        </div>
+      );
     }
+    
     return grid;
+  };
+
+  const renderOneBy75Columns = () => {
+    if (!oneBy75Ids || obfuscated.length !== 75) return null;
+    const cols = [0,1,2,3,4].map(c => oneBy75Ids.slice(c*15, c*15 + 15));
+    return (
+      <div className="call-list-content">
+        <div className="call-columns-header">
+          {['','','','',''].map((c, i) => (
+            <div key={i} className="call-col-title">&nbsp;</div>
+          ))}
+        </div>
+        <div className="call-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+          {cols.map((col, ci) => (
+            <div key={ci} className="call-col">
+              {col.map((id, ri) => {
+                const idx = ci*15 + ri;
+                const text = obfuscated[idx] || '?';
+                return (
+                  <div key={id} className="call-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div className="call-number">{idx + 1}</div>
+                    <div className="call-song-info">
+                      <div className="call-song-name">{text}</div>
+                      {/* Artist hidden per request; future: staged reveal could set artist */}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -422,42 +476,40 @@ const PublicDisplay: React.FC = () => {
                 <h2>Call List</h2>
                 <span className="call-count">{gameState.playedSongs.length}</span>
               </div>
-              <div className="call-list-content">
-              <div className="call-columns-header">
-                {revealMode === '1x75'
-                  ? [1,2,3,4,5].map((c) => (
-                      <div key={c} className="call-col-title">{c}</div>
-                    ))
-                  : ['B','I','N','G','O'].map((c) => (
+              {oneBy75Ids ? renderOneBy75Columns() : (
+                <div className="call-list-content">
+                  <div className="call-columns-header">
+                    {['B','I','N','G','O'].map((c) => (
                       <div key={c} className="call-col-title">{c}</div>
                     ))}
-              </div>
-                <div className="call-list">
-                  {gameState.playedSongs.length > 0 && (
-                    gameState.playedSongs.slice(-10).map((song, index) => (
-                      <motion.div
-                        key={song.id + '-' + index}
-                        className="call-item"
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.4, delay: 0.3 + index * 0.05 }}
-                      >
-                        <div className="call-number">#{gameState.playedSongs.length - (Math.min(10, gameState.playedSongs.length) - 1) + index}</div>
-                        <div className="call-song-info">
-                          <div className="call-song-name">{song.name}</div>
-                          <div className="call-song-artist">{song.artist}</div>
-                        </div>
-                        <Music className="call-icon" />
-                      </motion.div>
-                    ))
+                  </div>
+                  <div className="call-list">
+                    {gameState.playedSongs.length > 0 && (
+                      gameState.playedSongs.slice(-10).map((song, index) => (
+                        <motion.div
+                          key={song.id + '-' + index}
+                          className="call-item"
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ duration: 0.4, delay: 0.3 + index * 0.05 }}
+                        >
+                          <div className="call-number">#{gameState.playedSongs.length - (Math.min(10, gameState.playedSongs.length) - 1) + index}</div>
+                          <div className="call-song-info">
+                            <div className="call-song-name">{song.name}</div>
+                            <div className="call-song-artist">{song.artist}</div>
+                          </div>
+                          <Music className="call-icon" />
+                        </motion.div>
+                      ))
+                    )}
+                  </div>
+                  {gameState.playedSongs.length === 0 && (
+                    <div className="no-calls">
+                      <p>No songs played yet</p>
+                    </div>
                   )}
                 </div>
-                {gameState.playedSongs.length === 0 && (
-                  <div className="no-calls">
-                    <p>No songs played yet</p>
-                  </div>
-                )}
-              </div>
+              )}
             </motion.div>
 
           </div>

@@ -462,15 +462,6 @@ io.on('connection', (socket) => {
       
       // Update room state to indicate mix is finalized
       room.mixFinalized = true;
-      // Prepare reveal sequence for 1x75 mode
-      try {
-        if (Array.isArray(playlists) && playlists.length === 1 && Array.isArray(room.finalizedSongOrder)) {
-          const order75 = room.finalizedSongOrder.slice(0, 75).map(s => ({ id: s.id, name: s.name, artist: s.artist }));
-          room.revealSequence = order75;
-          io.to(roomId).emit('reveal-sequence', { mode: '1x75', sequence: order75 });
-          if (VERBOSE) console.log(`📜 Sent reveal sequence (1x75) length=${order75.length}`);
-        }
-      } catch (_) {}
       
       // Notify all players that mix is finalized
       io.to(roomId).emit('mix-finalized', { playlists });
@@ -1096,20 +1087,30 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       return true;
     };
 
+    // If 1x75, compute the fixed pool of 75 and share it with clients (ids only)
+    if (mode === '1x75') {
+      let base = [];
+      if (Array.isArray(songOrder) && songOrder.length > 0) {
+        const allowed = new Set(perListUnique[0].songs.map(s => s.id));
+        base = dedup(songOrder.filter(s => allowed.has(s.id))).slice(0, 75);
+      } else {
+        base = [...perListUnique[0].songs].sort(() => Math.random() - 0.5).slice(0, 75);
+      }
+      const roomRef = rooms.get(roomId);
+      if (roomRef) {
+        roomRef.oneBySeventyFivePool = base.map(s => ({ id: s.id }));
+        io.to(roomId).emit('oneby75-pool', { ids: base.map(s => s.id) });
+      }
+    }
+
     const cards = new Map();
     console.log(`👥 Generating cards for ${room.players.size} players`);
 
     for (const [playerId, player] of room.players) {
       let chosen25 = [];
       if (mode === '1x75') {
-        // Cap to first 75 from host order if provided; otherwise, randomize playlist order then cap
-        let base = [];
-        if (Array.isArray(songOrder) && songOrder.length > 0) {
-          const allowed = new Set(perListUnique[0].songs.map(s => s.id));
-          base = dedup(songOrder.filter(s => allowed.has(s.id))).slice(0, 75);
-        } else {
-          base = [...perListUnique[0].songs].sort(() => Math.random() - 0.5).slice(0, 75);
-        }
+        // Use the same base computed above to ensure consistency
+        const base = (rooms.get(roomId)?.oneBySeventyFivePool || []).map(x => perListUnique[0].songs.find(s => s.id === x.id)).filter(Boolean);
         if (!ensureEnough(base.length)) return;
         chosen25 = [...base].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
       } else if (mode === '5x15') {
