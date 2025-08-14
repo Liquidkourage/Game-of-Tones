@@ -20,14 +20,8 @@ const DisplayHeaderInfo: React.FC = () => {
     return () => window.removeEventListener('display-player-count', handler as EventListener);
   }, []);
 
-  // On the public display, show the Call List heading in the header bar next to the logomark
-  if (roomId) {
-    return (
-      <div className="room-info">
-        <h2>Call List</h2>
-      </div>
-    );
-  }
+  // For the public display header, we no longer render any title text
+  if (roomId) return null;
   return null;
 };
 
