@@ -44,7 +44,7 @@ const DisplayHeaderInfo: React.FC = () => {
   if (roomId) {
     const gap = 5;
     const baseWidth = rect ? (rect.width - gap * 4) / 5 : 40;
-    const cardWidth = Math.floor(baseWidth * 1.1);
+    const cardWidth = Math.max(0, Math.floor(baseWidth * 1.1) - 1);
     const containerStyle: React.CSSProperties = rect
       ? {
           position: 'fixed',
