@@ -1737,8 +1737,30 @@ app.get('/api/rooms/:roomId', (req, res) => {
 
 // Serve React build (after API routes). Do it whenever build exists (prod or not)
 if (hasClientBuild) {
-  app.use(express.static(clientBuildPath));
+  // Strong-cache hashed assets, but keep index.html no-cache so UI updates immediately.
+  app.use(express.static(clientBuildPath, {
+    etag: true,
+    lastModified: true,
+    setHeaders: (res, filePath) => {
+      const ext = path.extname(filePath).toLowerCase();
+      const isHtml = ext === '.html' || /index\.html$/i.test(filePath);
+      if (isHtml) {
+        // Ensure the HTML shell is always revalidated
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      } else if (/\.(js|css|png|jpg|jpeg|svg|ico|webp|woff2?|ttf|eot|map)$/i.test(ext)) {
+        // Fingerprinted assets can be cached for a year
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else {
+        // Default
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+      }
+    }
+  }));
+
   app.get(/^(?!\/api\/).*/, (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(clientBuildPath, 'index.html'));
   });
 }
