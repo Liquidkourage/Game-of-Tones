@@ -353,12 +353,12 @@ const PublicDisplay: React.FC = () => {
             <div key={i} className="call-col-title">&nbsp;</div>
           ))}
         </div>
-        <div className="call-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, height: '100%' }}>
+        <div className="call-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, height: '100%' }}>
           {cols.map((col, ci) => (
             <div
               key={ci}
               className="call-col"
-              style={{ display: 'grid', gridTemplateRows: 'repeat(15, 1fr)', gap: 8, height: '100%' }}
+              style={{ display: 'grid', gridTemplateRows: 'repeat(15, minmax(0, 1fr))', gap: 6, height: '100%' }}
             >
               {col.map((id, ri) => {
                 // Find original pool index and played index
@@ -380,9 +380,9 @@ const PublicDisplay: React.FC = () => {
                       borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)'
                     }}
                     transition={{ duration: 0.25 }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, height: '100%', overflow: 'hidden' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, height: '100%', overflow: 'hidden' }}
                   >
-                    <div className="call-number">{poolIdx + 1}</div>
+                    <div className="call-number" style={{ fontSize: '0.8rem', minWidth: 18 }}>{poolIdx + 1}</div>
                     <div className="call-song-info" style={{ flex: 1 }}>
                       <AnimatePresence mode="popLayout" initial={false}>
                         <motion.div
@@ -392,7 +392,7 @@ const PublicDisplay: React.FC = () => {
                           exit={{ opacity: 0, y: -6, scale: 0.98 }}
                           transition={{ duration: 0.25 }}
                           className="call-song-name"
-                          style={{ fontWeight: 700, lineHeight: 1.2 }}
+                          style={{ fontWeight: 700, lineHeight: 1.14, fontSize: '0.95rem' }}
                         >
                           {title}
                         </motion.div>
@@ -403,7 +403,7 @@ const PublicDisplay: React.FC = () => {
                           exit={{ opacity: 0, y: -4 }}
                           transition={{ duration: 0.25 }}
                           className="call-song-artist"
-                          style={{ fontSize: '0.85rem', color: '#b3b3b3', lineHeight: 1.1 }}
+                          style={{ fontSize: '0.8rem', color: '#b3b3b3', lineHeight: 1.05 }}
                         >
                           {artist}
                         </motion.div>
