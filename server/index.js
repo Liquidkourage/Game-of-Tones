@@ -880,6 +880,22 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Host-triggered hard refresh/reset for all clients in room
+  socket.on('force-refresh', (data = {}) => {
+    try {
+      const { roomId, reason = 'host-request' } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
+      if (!isCurrentHost) return;
+      const ts = Date.now();
+      io.to(roomId).emit('force-refresh', { ts, reason });
+      if (VERBOSE) console.log(`🔁 Force refresh broadcast to room ${roomId} (reason=${reason})`);
+    } catch (e) {
+      console.error('❌ Error forcing refresh:', e?.message || e);
+    }
+  });
+
   socket.on('set-volume', async (data) => {
     const { roomId, volume } = data;
     const room = rooms.get(roomId);

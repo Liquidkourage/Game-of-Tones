@@ -538,6 +538,12 @@ const HostView: React.FC = () => {
     addLog(`Reveal: ${mode}`, 'info');
   };
 
+  const forceRefreshAll = () => {
+    if (!socket || !roomId) return;
+    socket.emit('force-refresh', { roomId, reason: 'host-request' });
+    addLog('Force refresh broadcast', 'warn');
+  };
+
   const playSong = async (song: Song) => {
     if (!socket) {
       console.error('Socket not connected');
@@ -1358,17 +1364,9 @@ const HostView: React.FC = () => {
                     <button className="btn-secondary" onClick={() => revealCall('artist')}>Artist</button>
                     <button className="btn-secondary" onClick={() => revealCall('title')}>Title</button>
                     <button className="btn-secondary" onClick={() => revealCall('full')}>Full</button>
-                    {/* Staged sequential reveal for 1x75 (placeholder driver): increments display-only revealCount */}
-                    <button
-                      className="btn-secondary"
-                      onClick={() => {
-                        if (!socket || !roomId) return;
-                        socket.emit('call-revealed', { roomId, revealToDisplay: true, hint: 'step' });
-                        addLog('Reveal Step: +1', 'info');
-                      }}
-                    >
-                      Reveal Step
-                    </button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button className="btn-secondary" onClick={forceRefreshAll}>🧹 Force Refresh Clients</button>
                   </div>
                  </div>
                )}

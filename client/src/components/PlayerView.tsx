@@ -159,6 +159,14 @@ const PlayerView: React.FC = () => {
       // Currently no-op
     });
 
+    // Hard refresh from host
+    newSocket.on('force-refresh', (_: any) => {
+      try {
+        localStorage.clear();
+      } catch {}
+      window.location.reload();
+    });
+
     // Cleanup socket on unmount
     return () => {
       newSocket.close();
