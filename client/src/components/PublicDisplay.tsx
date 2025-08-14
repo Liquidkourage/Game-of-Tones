@@ -487,29 +487,29 @@ const PublicDisplay: React.FC = () => {
                   <div style={{ fontWeight: 800, letterSpacing: '0.06em', opacity: 0.9, fontSize: '1.4rem' }}>INFO</div>
                 </div>
                 
-                {/* Room code and stats side by side */}
-                <div style={{ display: 'flex', flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
-                  {/* Room code on the left */}
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                {/* Room code and stats in same row */}
+                <div style={{ display: 'flex', flexDirection: 'row', gap: 20, alignItems: 'center', justifyContent: 'space-around' }}>
+                  {/* Room code */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <div style={{ fontWeight: 800, fontSize: '1.4rem', color: '#b3b3b3', textAlign: 'center' }}>Room Number:</div>
                     <div style={{ fontWeight: 900, fontSize: '2.4rem', color: '#00ff88', textAlign: 'center' }}>{roomInfo?.id || roomId}</div>
                   </div>
                   
-                  {/* Stats on the right */}
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Users className="stat-icon" />
-                      <div>
-                        <div style={{ fontSize: '2.0rem', fontWeight: 900 }}>{gameState.playerCount}</div>
-                        <div style={{ fontSize: '1.4rem', color: '#b3b3b3' }}>Players</div>
-                      </div>
+                  {/* Players */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Users className="stat-icon" />
+                    <div>
+                      <div style={{ fontSize: '2.0rem', fontWeight: 900 }}>{gameState.playerCount}</div>
+                      <div style={{ fontSize: '1.4rem', color: '#b3b3b3' }}>Players</div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <List className="stat-icon" />
-                      <div>
-                        <div style={{ fontSize: '2.0rem', fontWeight: 900 }}>{gameState.playedSongs.length}</div>
-                        <div style={{ fontSize: '1.4rem', color: '#b3b3b3' }}>Songs</div>
-                      </div>
+                  </div>
+                  
+                  {/* Songs */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <List className="stat-icon" />
+                    <div>
+                      <div style={{ fontSize: '2.0rem', fontWeight: 900 }}>{gameState.playedSongs.length}</div>
+                      <div style={{ fontSize: '1.4rem', color: '#b3b3b3' }}>Songs</div>
                     </div>
                   </div>
                 </div>
