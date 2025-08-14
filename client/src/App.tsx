@@ -38,11 +38,14 @@ function AppHeader() {
 }
 
 function App() {
+  const location = useLocation();
+  const isDisplay = /^\/display\//.test(location.pathname);
   return (
     <div className="App">
       <Router>
         <div className="app-container">
           <AppHeader />
+          {isDisplay && <div style={{ height: 52 }} />}
           <main className="app-main">
             <Routes>
               <Route path="/" element={<Home />} />
