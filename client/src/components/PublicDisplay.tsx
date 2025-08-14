@@ -481,11 +481,11 @@ const PublicDisplay: React.FC = () => {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.6, delay: 0.2 }}
               >
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px', gap: 14, alignItems: 'center' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 12, alignItems: 'stretch' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%' }}>
                     <div style={{ fontWeight: 800, letterSpacing: '0.04em', opacity: 0.9 }}>INFO</div>
                     <div style={{ fontWeight: 900, fontSize: '1.6rem', color: '#00ff88' }}>Room: {roomInfo?.id || roomId}</div>
-                    <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <Users className="stat-icon" />
                         <div>
@@ -502,16 +502,16 @@ const PublicDisplay: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                  {/* QR image and caption */}
-                  <div style={{ justifySelf: 'end', textAlign: 'center' }}>
+                  {/* QR image and caption - flush into card */}
+                  <div style={{ justifySelf: 'stretch', textAlign: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: 8 }}>
                     {roomId && (
                       <>
                         <img
                           alt="Join QR"
-                          style={{ width: 180, height: 180, borderRadius: 12, border: '1px solid rgba(255,255,255,0.15)' }}
+                          style={{ width: '100%', height: 'auto', aspectRatio: '1 / 1', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }}
                           src={`${API_BASE || ''}/api/qr?size=360&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
                         />
-                        <div style={{ fontSize: '0.85rem', color: '#b3b3b3', marginTop: 8 }}>Scan to join</div>
+                        <div style={{ fontSize: '1rem', fontWeight: 700, color: '#ddd', marginTop: 6 }}>Scan to join</div>
                       </>
                     )}
                   </div>
