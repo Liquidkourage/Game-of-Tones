@@ -274,6 +274,11 @@ const PublicDisplay: React.FC = () => {
 
   // Function to check if a square is part of the current winning line
   const isWinningSquare = (row: number, col: number) => {
+    if (pattern === 'full_card') {
+      // For full card, all squares are winning squares
+      return true;
+    }
+    
     // 12 possible winning lines: 5 horizontal, 5 vertical, 2 diagonal
     const winningLines = [
       // Horizontal lines (rows 0-4)
@@ -305,6 +310,11 @@ const PublicDisplay: React.FC = () => {
       clearInterval(intervalRef.current);
     }
     
+    // For full card pattern, no need to cycle through lines since all squares are winning
+    if (pattern === 'full_card') {
+      return;
+    }
+    
     intervalRef.current = setInterval(() => {
       console.log('Current winning line:', currentWinningLine);
       setCurrentWinningLine((prev) => {
@@ -321,7 +331,7 @@ const PublicDisplay: React.FC = () => {
         intervalRef.current = null;
       }
     };
-  }, []);
+  }, [pattern]);
 
   const renderBingoCard = () => {
     const { bingoCard } = gameState;
