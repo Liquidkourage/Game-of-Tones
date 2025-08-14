@@ -44,7 +44,7 @@ function App() {
     <div className="App">
       <div className="app-container">
         <AppHeader />
-        {isDisplay && <div style={{ height: 52 }} />}
+        {isDisplay && <div style={{ height: 68 }} />}
         <main className="app-main">
           <Routes>
             <Route path="/" element={<Home />} />
