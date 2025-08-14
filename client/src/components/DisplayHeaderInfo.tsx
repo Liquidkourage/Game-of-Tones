@@ -22,24 +22,49 @@ const DisplayHeaderInfo: React.FC = () => {
 
   // For the public display header, render BINGO column headers to free vertical space below
   if (roomId) {
-    return (
-      <div
-        className="bingo-header"
-        style={{
-          position: 'absolute',
+    const [rect, setRect] = useState<{ left: number; width: number } | null>(null);
+    useEffect(() => {
+      const update = () => {
+        const el = document.querySelector('.call-list-display') as HTMLElement | null;
+        if (el) {
+          const r = el.getBoundingClientRect();
+          setRect({ left: Math.round(r.left), width: Math.round(r.width) });
+        }
+      };
+      update();
+      window.addEventListener('resize', update);
+      window.addEventListener('orientationchange', update);
+      const id = window.setInterval(update, 500);
+      return () => {
+        window.removeEventListener('resize', update);
+        window.removeEventListener('orientationchange', update);
+        window.clearInterval(id);
+      };
+    }, []);
+
+    const cardWidth = rect ? Math.floor(rect.width / 5.5) : 40;
+    const containerStyle: React.CSSProperties = rect
+      ? {
+          position: 'fixed',
           top: 8,
-          left: 'calc(30vw + 24px)',
-          right: 12,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(5, 1fr)',
+          left: rect.left,
+          width: rect.width,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           gap: 8,
-          pointerEvents: 'none'
-        }}
-      >
-        {['B','I','N','G','O'].map((c) => (
+          pointerEvents: 'none',
+          zIndex: 250,
+        }
+      : { display: 'none' };
+
+    return (
+      <div className="bingo-header" style={containerStyle}>
+        {['B', 'I', 'N', 'G', 'O'].map((c) => (
           <div
             key={c}
             style={{
+              width: cardWidth,
               textAlign: 'center',
               fontWeight: 800,
               letterSpacing: '1px',
