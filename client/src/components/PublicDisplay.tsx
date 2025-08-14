@@ -70,10 +70,10 @@ const PublicDisplay: React.FC = () => {
   });
   const [countdownMs, setCountdownMs] = useState<number>(0);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
-  // 1x75 obfuscation state
+  // 1x75 call list state
   const [oneBy75Ids, setOneBy75Ids] = useState<string[] | null>(null);
   const oneBy75IdsRef = useRef<string[] | null>(null);
-  const [obfuscated, setObfuscated] = useState<string[]>([]);
+  const playedOrderRef = useRef<string[]>([]);
 
   useEffect(() => {
     const socket = io(SOCKET_URL || undefined);
@@ -98,7 +98,7 @@ const PublicDisplay: React.FC = () => {
       if (Array.isArray(data?.ids) && data.ids.length === 75) {
         setOneBy75Ids(data.ids);
         oneBy75IdsRef.current = data.ids;
-        setObfuscated(Array(75).fill('?'));
+        playedOrderRef.current = [];
       }
     });
 
@@ -120,18 +120,14 @@ const PublicDisplay: React.FC = () => {
         snippetLength: Number(data.snippetLength) || prev.snippetLength,
         playedSongs: [...prev.playedSongs, song].slice(-25)
       }));
-      // If in 1x75 mode and we have the pool, progressively reveal this song's position
-      setObfuscated(prev => {
-        const ids = oneBy75IdsRef.current;
-        if (!ids) return prev;
-        const idx = ids.indexOf(song.id);
-        if (idx >= 0 && prev[idx] === '?') {
-          const next = [...prev];
-          next[idx] = song.name;
-          return next;
+      // Track played order for reveal lag
+      const ids = oneBy75IdsRef.current;
+      if (ids && ids.includes(song.id)) {
+        const arr = playedOrderRef.current;
+        if (!arr.includes(song.id)) {
+          playedOrderRef.current = [...arr, song.id];
         }
-        return prev;
-      });
+      }
       // reset countdown timer
       if (countdownRef.current) {
         clearInterval(countdownRef.current);
@@ -341,8 +337,12 @@ const PublicDisplay: React.FC = () => {
   };
 
   const renderOneBy75Columns = () => {
-    if (!oneBy75Ids || obfuscated.length !== 75) return null;
-    const cols = [0,1,2,3,4].map(c => oneBy75Ids.slice(c*15, c*15 + 15));
+    if (!oneBy75Ids) return null;
+    const played = new Set(playedOrderRef.current);
+    // Only include songs that have played, preserving pool order
+    const visibleIds = oneBy75Ids.filter(id => played.has(id));
+    const cols = [0,1,2,3,4].map(c => visibleIds.slice(c*15, c*15 + 15));
+    const revealThreshold = Math.max(0, playedOrderRef.current.length - 5);
     return (
       <div className="call-list-content">
         <div className="call-columns-header">
@@ -354,11 +354,14 @@ const PublicDisplay: React.FC = () => {
           {cols.map((col, ci) => (
             <div key={ci} className="call-col">
               {col.map((id, ri) => {
-                const idx = ci*15 + ri;
-                const text = obfuscated[idx] || '?';
+                // Find original pool index and played index
+                const poolIdx = oneBy75Ids.indexOf(id);
+                const playedIdx = playedOrderRef.current.indexOf(id);
+                const revealed = playedIdx > -1 && playedIdx < revealThreshold;
+                const text = revealed ? (gameState.playedSongs.find(s => s.id === id)?.name || 'Unknown') : '??????';
                 return (
                   <div key={id} className="call-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div className="call-number">{idx + 1}</div>
+                    <div className="call-number">{poolIdx + 1}</div>
                     <div className="call-song-info">
                       <div className="call-song-name">{text}</div>
                       {/* Artist hidden per request; future: staged reveal could set artist */}
