@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Music, Users, Gamepad2, Sparkles } from 'lucide-react';
 import './App.css';
@@ -42,36 +42,34 @@ function App() {
   const isDisplay = /^\/display\//.test(location.pathname);
   return (
     <div className="App">
-      <Router>
-        <div className="app-container">
-          <AppHeader />
-          {isDisplay && <div style={{ height: 52 }} />}
-          <main className="app-main">
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/host/:roomId" element={<HostView />} />
-              <Route path="/player/:roomId" element={<PlayerView />} />
-              <Route path="/display/:roomId" element={<PublicDisplay />} />
-              <Route path="/callback" element={<SpotifyCallback />} />
-            </Routes>
-          </main>
-          <motion.footer
-            className="app-footer"
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.8, delay: 0.2, ease: 'easeOut' }}
-          >
-            <div className="footer-content">
-              <p>🎵 Where Music Meets Bingo 🎵</p>
-              <div className="footer-links">
-                <a href="#" className="footer-link">About</a>
-                <a href="#" className="footer-link">Help</a>
-                <a href="#" className="footer-link">Contact</a>
-              </div>
+      <div className="app-container">
+        <AppHeader />
+        {isDisplay && <div style={{ height: 52 }} />}
+        <main className="app-main">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/host/:roomId" element={<HostView />} />
+            <Route path="/player/:roomId" element={<PlayerView />} />
+            <Route path="/display/:roomId" element={<PublicDisplay />} />
+            <Route path="/callback" element={<SpotifyCallback />} />
+          </Routes>
+        </main>
+        <motion.footer
+          className="app-footer"
+          initial={{ y: 100, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.8, delay: 0.2, ease: 'easeOut' }}
+        >
+          <div className="footer-content">
+            <p>🎵 Where Music Meets Bingo 🎵</p>
+            <div className="footer-links">
+              <a href="#" className="footer-link">About</a>
+              <a href="#" className="footer-link">Help</a>
+              <a href="#" className="footer-link">Contact</a>
             </div>
-          </motion.footer>
-        </div>
-      </Router>
+          </div>
+        </motion.footer>
+      </div>
     </div>
   );
 }
