@@ -480,10 +480,10 @@ const PublicDisplay: React.FC = () => {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.6, delay: 0.2 }}
-                style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', height: '100%', position: 'relative', gap: 16 }}
+                style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}
               >
-                {/* Stats on the left */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: '0 0 auto', minWidth: 0 }}>
+                {/* Stats at the top */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div style={{ fontWeight: 800, letterSpacing: '0.06em', opacity: 0.9, fontSize: '1.1rem' }}>INFO</div>
                   <div style={{ fontWeight: 900, fontSize: '2.2rem', color: '#00ff88' }}>Room: {roomInfo?.id || roomId}</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 8 }}>
@@ -503,7 +503,7 @@ const PublicDisplay: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                {/* QR code on the right - now takes up remaining space */}
+                {/* QR code below stats - fills remaining space */}
                 {roomId && (
                   <div style={{ 
                     flex: 1,
