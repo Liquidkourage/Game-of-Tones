@@ -42,14 +42,14 @@ const DisplayHeaderInfo: React.FC = () => {
   }, [roomId]);
 
   if (roomId) {
-    const gap = 6;
+    const gap = 5;
     const baseWidth = rect ? (rect.width - gap * 4) / 5 : 40;
     const cardWidth = Math.floor(baseWidth * 1.1);
     const containerStyle: React.CSSProperties = rect
       ? {
           position: 'fixed',
           top: 0,
-          left: Math.max(rect.left - 10, 0),
+          left: Math.max(rect.left - 9, 0),
           width: rect.width,
           display: 'flex',
           justifyContent: 'flex-start',
