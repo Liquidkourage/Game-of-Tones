@@ -1358,6 +1358,17 @@ const HostView: React.FC = () => {
                     <button className="btn-secondary" onClick={() => revealCall('artist')}>Artist</button>
                     <button className="btn-secondary" onClick={() => revealCall('title')}>Title</button>
                     <button className="btn-secondary" onClick={() => revealCall('full')}>Full</button>
+                    {/* Staged sequential reveal for 1x75 (placeholder driver): increments display-only revealCount */}
+                    <button
+                      className="btn-secondary"
+                      onClick={() => {
+                        if (!socket || !roomId) return;
+                        socket.emit('call-revealed', { roomId, revealToDisplay: true, hint: 'step' });
+                        addLog('Reveal Step: +1', 'info');
+                      }}
+                    >
+                      Reveal Step
+                    </button>
                   </div>
                  </div>
                )}

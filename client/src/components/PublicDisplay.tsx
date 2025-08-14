@@ -70,6 +70,8 @@ const PublicDisplay: React.FC = () => {
   });
   const [countdownMs, setCountdownMs] = useState<number>(0);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
+  const [revealMode, setRevealMode] = useState<'none' | '1x75' | '5x15'>('none');
+  const [revealedCount, setRevealedCount] = useState<number>(0);
 
   useEffect(() => {
     const socket = io(SOCKET_URL || undefined);
@@ -136,6 +138,31 @@ const PublicDisplay: React.FC = () => {
     });
 
     socket.on('mix-finalized', () => { ensureGrid(); });
+    // Receive reveal sequence for 1x75
+    socket.on('reveal-sequence', (payload: any) => {
+      const mode = payload?.mode;
+      const sequence = Array.isArray(payload?.sequence) ? payload.sequence : [];
+      if (mode === '1x75' && sequence.length >= 75) {
+        setRevealMode('1x75');
+        // Build a 5x5 placeholder grid with positional mapping 1..25 indices into 75-pool columns
+        setGameState(prev => {
+          const placeholders: BingoSquare[] = [] as any;
+          for (let row = 0; row < 5; row++) {
+            for (let col = 0; col < 5; col++) {
+              const idx1to25 = row * 5 + col + 1; // 1..25
+              // Map by columns: col 0 => 1..15, col 1 => 16..30, ...
+              const base = col * 15; // 0,15,30,45,60
+              const withinColumn = idx1to25 - row * 5 - (col); // keep order per row, but we will reveal sequentially anyway
+              const revealIndex = Math.min(base + withinColumn, 74);
+              const placeholderSong = { id: String(revealIndex), name: '', artist: '' };
+              placeholders.push({ song: placeholderSong as any, isPlayed: false, position: { row, col } });
+            }
+          }
+          return { ...prev, bingoCard: { squares: placeholders, size: 5 } };
+        });
+        setRevealedCount(0);
+      }
+    });
 
     socket.on('game-ended', () => {
       setGameState(prev => ({ ...prev, isPlaying: false }));
@@ -159,7 +186,12 @@ const PublicDisplay: React.FC = () => {
     // Staged reveal event: show name/artist hints without changing the bingo grid
     socket.on('call-revealed', (payload: any) => {
       if (payload?.revealToDisplay) {
-        // For now, just update the header Now Playing banner content without marking grid
+        // If this is a step command in 1x75 mode, increment reveal count
+        if (revealMode === '1x75' && payload.hint === 'step') {
+          setRevealedCount((c) => Math.min(25, c + 1));
+          return;
+        }
+        // Otherwise update banner hints
         setGameState(prev => ({
           ...prev,
           currentSong: {
@@ -279,18 +311,21 @@ const PublicDisplay: React.FC = () => {
         
         if (square) {
           // Check if this square is part of the current winning line
-          const isWinningLine = isWinningSquare(row, col);
+           const isWinningLine = isWinningSquare(row, col);
+           const revealThisSquare = revealMode === '1x75' ? (row * 5 + col) < revealedCount : square.isPlayed;
           rowSquares.push(
             <motion.div
               key={`${row}-${col}`}
-              className={`bingo-square ${square.isPlayed ? 'played' : ''} ${isWinningLine ? 'winning' : ''}`}
+              className={`bingo-square ${revealThisSquare ? 'played' : ''} ${isWinningLine ? 'winning' : ''}`}
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.3, delay: (row + col) * 0.05 }}
               whileHover={{ scale: 1.05 }}
             >
                              <div className="square-content">
-                 {square.isPlayed && (
+                {revealMode === '1x75' ? (
+                  <span className="placeholder">{revealThisSquare ? (square.song.name || '?') : '?'}</span>
+                ) : square.isPlayed && (
                    <motion.div 
                      className="played-indicator"
                      initial={{ scale: 0 }}
@@ -422,11 +457,15 @@ const PublicDisplay: React.FC = () => {
                 <span className="call-count">{gameState.playedSongs.length}</span>
               </div>
               <div className="call-list-content">
-                <div className="call-columns-header">
-                  {['B','I','N','G','O'].map((c) => (
-                    <div key={c} className="call-col-title">{c}</div>
-                  ))}
-                </div>
+              <div className="call-columns-header">
+                {revealMode === '1x75'
+                  ? [1,2,3,4,5].map((c) => (
+                      <div key={c} className="call-col-title">{c}</div>
+                    ))
+                  : ['B','I','N','G','O'].map((c) => (
+                      <div key={c} className="call-col-title">{c}</div>
+                    ))}
+              </div>
                 <div className="call-list">
                   {gameState.playedSongs.length > 0 && (
                     gameState.playedSongs.slice(-10).map((song, index) => (

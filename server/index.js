@@ -462,6 +462,15 @@ io.on('connection', (socket) => {
       
       // Update room state to indicate mix is finalized
       room.mixFinalized = true;
+      // Prepare reveal sequence for 1x75 mode
+      try {
+        if (Array.isArray(playlists) && playlists.length === 1 && Array.isArray(room.finalizedSongOrder)) {
+          const order75 = room.finalizedSongOrder.slice(0, 75).map(s => ({ id: s.id, name: s.name, artist: s.artist }));
+          room.revealSequence = order75;
+          io.to(roomId).emit('reveal-sequence', { mode: '1x75', sequence: order75 });
+          if (VERBOSE) console.log(`📜 Sent reveal sequence (1x75) length=${order75.length}`);
+        }
+      } catch (_) {}
       
       // Notify all players that mix is finalized
       io.to(roomId).emit('mix-finalized', { playlists });
