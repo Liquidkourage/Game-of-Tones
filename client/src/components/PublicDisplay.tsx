@@ -489,21 +489,21 @@ const PublicDisplay: React.FC = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Users className="stat-icon" />
                       <div>
-                        <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>{gameState.playerCount}</div>
-                        <div style={{ fontSize: '0.8rem', color: '#b3b3b3' }}>Players</div>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{gameState.playerCount}</div>
+                        <div style={{ fontSize: '0.9rem', color: '#b3b3b3' }}>Players</div>
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <List className="stat-icon" />
                       <div>
-                        <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>{gameState.playedSongs.length}</div>
-                        <div style={{ fontSize: '0.8rem', color: '#b3b3b3' }}>Songs</div>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{gameState.playedSongs.length}</div>
+                        <div style={{ fontSize: '0.9rem', color: '#b3b3b3' }}>Songs</div>
                       </div>
                     </div>
                   </div>
                 </div>
                 {/* QR inside the info card, right of the info text */}
-                <div style={{ alignSelf: 'stretch', textAlign: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: 8, width: 225 }}>
+                <div style={{ alignSelf: 'center', textAlign: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: 8, width: 225, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                   {roomId && (
                     <>
                       <img
