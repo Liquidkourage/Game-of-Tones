@@ -491,7 +491,8 @@ const PublicDisplay: React.FC = () => {
                 <div style={{ display: 'flex', flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
                   {/* Room code on the left */}
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <div style={{ fontWeight: 900, fontSize: '2.2rem', color: '#00ff88', textAlign: 'center' }}>Room: {roomInfo?.id || roomId}</div>
+                    <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#b3b3b3', textAlign: 'center' }}>Room Number:</div>
+                    <div style={{ fontWeight: 900, fontSize: '2.2rem', color: '#00ff88', textAlign: 'center' }}>{roomInfo?.id || roomId}</div>
                   </div>
                   
                   {/* Stats on the right */}
