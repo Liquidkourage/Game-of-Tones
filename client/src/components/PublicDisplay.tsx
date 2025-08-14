@@ -480,7 +480,7 @@ const PublicDisplay: React.FC = () => {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.6, delay: 0.2 }}
-                style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}
+                style={{ display: 'flex', flexDirection: 'row', gap: 12, alignItems: 'stretch', height: '100%' }}
               >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
                   <div style={{ fontWeight: 800, letterSpacing: '0.04em', opacity: 0.9 }}>INFO</div>
@@ -503,7 +503,7 @@ const PublicDisplay: React.FC = () => {
                   </div>
                 </div>
                 {/* QR inside the info card, right of the info text */}
-                <div style={{ alignSelf: 'center', textAlign: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: 8, width: 225 }}>
+                <div style={{ alignSelf: 'stretch', textAlign: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: 8, width: 225 }}>
                   {roomId && (
                     <>
                       <img
