@@ -1291,7 +1291,7 @@ code {
 /* Bottom Row Layout */
 .bottom-row {
   display: grid;
-  grid-template-columns: 0.45fr 1.55fr; /* left reduced ~40%, right widened for call list */
+  grid-template-columns: 0.6fr 1.4fr; /* make left wider to match pattern card width */
   gap: 15px;
   flex: 1;
   min-height: 0;
@@ -1301,8 +1301,8 @@ code {
   overflow-y: hidden;
 }
 
-.left-col { display: grid; grid-template-rows: auto 1fr; gap: 12px; min-width: 0; min-height: 0; }
-.info-grid { display: grid; grid-template-columns: 1fr 225px; gap: 12px; align-items: stretch; height: 100%; }
+.left-col { display: grid; grid-template-rows: auto auto; gap: 12px; min-width: 0; min-height: 0; }
+.info-grid { display: grid; grid-template-columns: 1fr 225px; gap: 12px; align-items: center; }
 .info-grid > .quick-stats, .info-grid > .winners-display { height: 100%; }
 .call-col { display: grid; grid-template-rows: 1fr; min-width: 0; min-height: 0; }
 
@@ -1317,7 +1317,7 @@ code {
   flex-direction: column;
   overflow: hidden;
   max-height: none;
-  height: 100%;
+  height: 100%; /* fill to sticky footer */
 }
 
 .call-list-header {
@@ -1336,12 +1336,7 @@ code {
   color: #ffd700;
 }
 
-.call-list-header h2 {
-  margin: 0;
-  font-size: 1.2rem;
-  font-weight: 600;
-  flex: 1;
-}
+.call-list-header h2 { display: none; }
 
 .call-count {
   background: rgba(255, 215, 0, 0.2);

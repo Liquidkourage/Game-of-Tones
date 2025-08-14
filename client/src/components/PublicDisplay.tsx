@@ -529,10 +529,9 @@ const PublicDisplay: React.FC = () => {
               transition={{ duration: 0.6, delay: 0.2 }}
             >
               <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                <div className="call-list-header" style={{ marginTop: -36 }}>
+              <div className="call-list-header" style={{ marginTop: -36 }}>
                   <List className="call-list-icon" />
-                  {/* Removed text label */}
-                  <span className="call-count">{gameState.playedSongs.length}</span>
+                <span className="call-count">{gameState.playedSongs.length}</span>
                 </div>
                 {oneBy75Ids ? renderOneBy75Columns() : (
                   <div className="call-list-content">
