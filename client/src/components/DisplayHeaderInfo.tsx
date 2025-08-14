@@ -21,27 +21,28 @@ const DisplayHeaderInfo: React.FC = () => {
   }, []);
 
   // For the public display header, render BINGO column headers to free vertical space below
-  if (roomId) {
-    const [rect, setRect] = useState<{ left: number; width: number } | null>(null);
-    useEffect(() => {
-      const update = () => {
-        const el = document.querySelector('.call-list-display') as HTMLElement | null;
-        if (el) {
-          const r = el.getBoundingClientRect();
-          setRect({ left: Math.round(r.left), width: Math.round(r.width) });
-        }
-      };
-      update();
-      window.addEventListener('resize', update);
-      window.addEventListener('orientationchange', update);
-      const id = window.setInterval(update, 500);
-      return () => {
-        window.removeEventListener('resize', update);
-        window.removeEventListener('orientationchange', update);
-        window.clearInterval(id);
-      };
-    }, []);
+  const [rect, setRect] = useState<{ left: number; width: number } | null>(null);
+  useEffect(() => {
+    if (!roomId) return;
+    const update = () => {
+      const el = document.querySelector('.call-list-display') as HTMLElement | null;
+      if (el) {
+        const r = el.getBoundingClientRect();
+        setRect({ left: Math.round(r.left), width: Math.round(r.width) });
+      }
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('orientationchange', update);
+    const id = window.setInterval(update, 500);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('orientationchange', update);
+      window.clearInterval(id);
+    };
+  }, [roomId]);
 
+  if (roomId) {
     const cardWidth = rect ? Math.floor(rect.width / 5.5) : 40;
     const containerStyle: React.CSSProperties = rect
       ? {
