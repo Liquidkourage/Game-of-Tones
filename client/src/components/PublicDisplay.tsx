@@ -485,19 +485,19 @@ const PublicDisplay: React.FC = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
                   <div style={{ fontWeight: 800, letterSpacing: '0.04em', opacity: 0.9 }}>INFO</div>
                   <div style={{ fontWeight: 900, fontSize: '1.6rem', color: '#00ff88' }}>Room: {roomInfo?.id || roomId}</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 6 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Users className="stat-icon" />
                       <div>
-                        <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{gameState.playerCount}</div>
-                        <div style={{ fontSize: '0.9rem', color: '#b3b3b3' }}>Players</div>
+                        <div style={{ fontSize: '1.35rem', fontWeight: 900 }}>{gameState.playerCount}</div>
+                        <div style={{ fontSize: '1rem', color: '#b3b3b3' }}>Players</div>
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <List className="stat-icon" />
                       <div>
-                        <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{gameState.playedSongs.length}</div>
-                        <div style={{ fontSize: '0.9rem', color: '#b3b3b3' }}>Songs</div>
+                        <div style={{ fontSize: '1.35rem', fontWeight: 900 }}>{gameState.playedSongs.length}</div>
+                        <div style={{ fontSize: '1rem', color: '#b3b3b3' }}>Songs</div>
                       </div>
                     </div>
                   </div>

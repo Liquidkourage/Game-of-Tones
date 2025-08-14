@@ -50,7 +50,7 @@ const DisplayHeaderInfo: React.FC = () => {
       ? {
           position: 'fixed',
           top: 0,
-          left: rect.left,
+          left: Math.max(rect.left - 10, 0),
           width: rect.width,
           display: 'flex',
           justifyContent: 'flex-start',
