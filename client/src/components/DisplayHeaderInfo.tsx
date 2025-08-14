@@ -23,21 +23,30 @@ const DisplayHeaderInfo: React.FC = () => {
   // For the public display header, render BINGO column headers to free vertical space below
   if (roomId) {
     return (
-      <div className="bingo-header" style={{ display: 'flex', gap: 8, alignItems: 'center', paddingLeft: 8 }}>
+      <div
+        className="bingo-header"
+        style={{
+          position: 'absolute',
+          top: 8,
+          left: 'calc(30vw + 24px)',
+          right: 12,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(5, 1fr)',
+          gap: 8,
+          pointerEvents: 'none'
+        }}
+      >
         {['B','I','N','G','O'].map((c) => (
           <div
             key={c}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 36,
-              height: 28,
-              borderRadius: 8,
-              border: '1px solid rgba(255,255,255,0.25)',
-              background: 'rgba(255,255,255,0.08)',
+              textAlign: 'center',
               fontWeight: 800,
-              letterSpacing: '0.06em'
+              letterSpacing: '1px',
+              background: 'rgba(255,255,255,0.08)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              borderRadius: 8,
+              padding: '6px 0'
             }}
           >
             {c}
