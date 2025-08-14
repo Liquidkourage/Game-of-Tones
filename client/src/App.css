@@ -166,8 +166,10 @@ body {
 /* Public Display overrides (source of truth). The .App prefix increases specificity
    so these rules reliably win over any legacy duplicates in index.css. */
 
-.App .public-display { padding-top: 44px; }
+.App .public-display { padding-top: 44px; height: 100vh; display: flex; flex-direction: column; }
 .App .display-content { height: 100%; min-height: 0; }
+.App .bottom-row { height: 100%; min-height: 0; }
+.App .call-col, .App .left-col { height: 100%; min-height: 0; }
 
 .App .call-list-display { position: relative; height: 100%; }
 .App .call-list-display::after {
