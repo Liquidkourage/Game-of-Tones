@@ -72,6 +72,7 @@ const PublicDisplay: React.FC = () => {
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   // 1x75 obfuscation state
   const [oneBy75Ids, setOneBy75Ids] = useState<string[] | null>(null);
+  const oneBy75IdsRef = useRef<string[] | null>(null);
   const [obfuscated, setObfuscated] = useState<string[]>([]);
 
   useEffect(() => {
@@ -96,6 +97,7 @@ const PublicDisplay: React.FC = () => {
     socket.on('oneby75-pool', (data: any) => {
       if (Array.isArray(data?.ids) && data.ids.length === 75) {
         setOneBy75Ids(data.ids);
+        oneBy75IdsRef.current = data.ids;
         setObfuscated(Array(75).fill('?'));
       }
     });
@@ -120,8 +122,9 @@ const PublicDisplay: React.FC = () => {
       }));
       // If in 1x75 mode and we have the pool, progressively reveal this song's position
       setObfuscated(prev => {
-        if (!oneBy75Ids) return prev;
-        const idx = oneBy75Ids.indexOf(song.id);
+        const ids = oneBy75IdsRef.current;
+        if (!ids) return prev;
+        const idx = ids.indexOf(song.id);
         if (idx >= 0 && prev[idx] === '?') {
           const next = [...prev];
           next[idx] = song.name;
