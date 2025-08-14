@@ -352,7 +352,7 @@ const PublicDisplay: React.FC = () => {
         </div>
         <div className="call-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
           {cols.map((col, ci) => (
-            <div key={ci} className="call-col">
+            <div key={ci} className="call-col" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {col.map((id, ri) => {
                 // Find original pool index and played index
                 const poolIdx = oneBy75Ids.indexOf(id);
@@ -360,7 +360,7 @@ const PublicDisplay: React.FC = () => {
                 const revealed = playedIdx > -1 && playedIdx < revealThreshold;
                 const text = revealed ? (gameState.playedSongs.find(s => s.id === id)?.name || 'Unknown') : '??????';
                 return (
-                  <div key={id} className="call-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div key={id} className="call-item" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}>
                     <div className="call-number">{poolIdx + 1}</div>
                     <div className="call-song-info">
                       <div className="call-song-name">{text}</div>
