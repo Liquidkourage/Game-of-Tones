@@ -79,10 +79,6 @@ const PublicDisplay: React.FC = () => {
   const oneBy75IdsRef = useRef<string[] | null>(null);
   const playedOrderRef = useRef<string[]>([]);
   const idMetaRef = useRef<Record<string, { name: string; artist: string }>>({});
-  
-  // Wheel of Fortune letter reveal state
-  const [revealedLetters, setRevealedLetters] = useState<Set<string>>(new Set());
-  const [revealedSongIds, setRevealedSongIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const socket = io(SOCKET_URL || undefined);
@@ -133,16 +129,14 @@ const PublicDisplay: React.FC = () => {
         snippetLength: Number(data.snippetLength) || prev.snippetLength,
         playedSongs: [...prev.playedSongs, song].slice(-25)
       }));
-      
-      // Wheel of Fortune: Pick a random letter of the alphabet and reveal it in all currently displayed songs
-      const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-      const randomLetter = alphabet[Math.floor(Math.random() * alphabet.length)];
-      setRevealedLetters(prev => {
-        const newSet = new Set(prev);
-        newSet.add(randomLetter);
-        return newSet;
-      });
-      
+      // Track played order for reveal lag
+      const ids = oneBy75IdsRef.current;
+      if (ids && ids.includes(song.id)) {
+        const arr = playedOrderRef.current;
+        if (!arr.includes(song.id)) {
+          playedOrderRef.current = [...arr, song.id];
+        }
+      }
       // reset countdown timer
       if (countdownRef.current) {
         clearInterval(countdownRef.current);
@@ -193,8 +187,6 @@ const PublicDisplay: React.FC = () => {
         playedSongs: [],
         bingoCard: { squares: [], size: 5 }
       });
-      setRevealedLetters(new Set());
-      setRevealedSongIds(new Set());
       ensureGrid();
       console.log('🔁 Game reset (display)');
     });
@@ -280,19 +272,6 @@ const PublicDisplay: React.FC = () => {
       default:
         return 'Pattern: Single Line (any direction)';
     }
-  };
-
-  // Wheel of Fortune text renderer
-  const renderWheelOfFortuneText = (text: string) => {
-    if (!text) return '';
-    
-    return text.split('').map((char, index) => {
-      const upperChar = char.toUpperCase();
-      if (/[A-Z]/.test(upperChar)) {
-        return revealedLetters.has(upperChar) ? char : '?';
-      }
-      return char;
-    }).join('');
   };
 
   // Function to check if a square is part of the current winning line
@@ -429,9 +408,10 @@ const PublicDisplay: React.FC = () => {
   const renderOneBy75Columns = () => {
     if (!oneBy75Ids) return null;
     const played = new Set(playedOrderRef.current);
-    // Show all songs that have played, preserving pool order
+    // Only include songs that have played, preserving pool order
     const visibleIds = oneBy75Ids.filter(id => played.has(id));
     const cols = [0,1,2,3,4].map(c => visibleIds.slice(c*15, c*15 + 15));
+    const revealThreshold = Math.max(0, playedOrderRef.current.length - 5);
     return (
       <div className="call-list-content">
         <div className="call-columns-header">
@@ -450,10 +430,10 @@ const PublicDisplay: React.FC = () => {
                 // Find original pool index and played index
                 const poolIdx = oneBy75Ids.indexOf(id);
                 const playedIdx = playedOrderRef.current.indexOf(id);
+                const revealed = playedIdx > -1 && playedIdx < revealThreshold;
                 const meta = idMetaRef.current[id];
-                // All songs show with Wheel of Fortune reveals - no more 5-song delay
-                const title = meta?.name ? renderWheelOfFortuneText(meta.name) : '??????';
-                const artist = meta?.artist ? renderWheelOfFortuneText(meta.artist) : '??????';
+                const title = revealed ? (meta?.name || 'Unknown') : '??????';
+                const artist = revealed ? (meta?.artist || '') : '??????';
                 const isCurrent = gameState.currentSong?.id === id;
                 return (
                   <motion.div
@@ -470,12 +450,30 @@ const PublicDisplay: React.FC = () => {
                   >
                     <div className="call-number" style={{ fontSize: '0.8rem', minWidth: 18 }}>{poolIdx + 1}</div>
                     <div className="call-song-info" style={{ flex: 1 }}>
-                      <div className="call-song-name" style={{ fontWeight: 700, lineHeight: 1.14, fontSize: '0.95rem' }}>
-                        {title}
-                      </div>
-                      <div className="call-song-artist" style={{ fontSize: '0.8rem', color: '#b3b3b3', lineHeight: 1.05 }}>
-                        {artist}
-                      </div>
+                      <AnimatePresence mode="popLayout" initial={false}>
+                        <motion.div
+                          key={revealed ? 'title-'+id : 'title-hidden-'+id}
+                          initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                          transition={{ duration: 0.25 }}
+                          className="call-song-name"
+                          style={{ fontWeight: 700, lineHeight: 1.14, fontSize: '0.95rem' }}
+                        >
+                          {title}
+                        </motion.div>
+                        <motion.div
+                          key={revealed ? 'artist-'+id : 'artist-hidden-'+id}
+                          initial={{ opacity: 0, y: 4 }}
+                          animate={{ opacity: 0.85, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                          transition={{ duration: 0.25 }}
+                          className="call-song-artist"
+                          style={{ fontSize: '0.8rem', color: '#b3b3b3', lineHeight: 1.05 }}
+                        >
+                          {artist}
+                        </motion.div>
+                      </AnimatePresence>
                     </div>
                   </motion.div>
                 );
