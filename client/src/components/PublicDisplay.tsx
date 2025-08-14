@@ -480,9 +480,9 @@ const PublicDisplay: React.FC = () => {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.6, delay: 0.2 }}
-                style={{ display: 'flex', flexDirection: 'row', gap: 12, alignItems: 'stretch', height: '100%' }}
+                style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', position: 'relative' }}
               >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div style={{ fontWeight: 800, letterSpacing: '0.06em', opacity: 0.9, fontSize: '1.1rem' }}>INFO</div>
                   <div style={{ fontWeight: 900, fontSize: '2.2rem', color: '#00ff88' }}>Room: {roomInfo?.id || roomId}</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 8 }}>
@@ -502,19 +502,40 @@ const PublicDisplay: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                {/* QR inside the info card, right of the info text */}
-                <div style={{ alignSelf: 'center', textAlign: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: 6, width: 280, minWidth: 250, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', height: '100%' }}>
-                  {roomId && (
-                    <>
-                      <img
-                        alt="Join QR"
-                        style={{ width: '100%', height: 'calc(100% - 20px)', aspectRatio: '1 / 1', objectFit: 'contain', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }}
-                        src={`${API_BASE || ''}/api/qr?size=600&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
-                      />
-                      <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#ddd', marginTop: 4, lineHeight: 1 }}>Scan to join</div>
-                    </>
-                  )}
-                </div>
+                {/* QR code positioned absolutely to fill remaining space */}
+                {roomId && (
+                  <div style={{ 
+                    position: 'absolute', 
+                    top: '50%', 
+                    right: 12, 
+                    transform: 'translateY(-50%)', 
+                    textAlign: 'center', 
+                    background: 'rgba(255,255,255,0.06)', 
+                    border: '1px solid rgba(255,255,255,0.12)', 
+                    borderRadius: 12, 
+                    padding: 8, 
+                    width: 320, 
+                    height: 'calc(100% - 24px)',
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between' 
+                  }}>
+                    <img
+                      alt="Join QR"
+                      style={{ 
+                        width: '100%', 
+                        height: 'calc(100% - 24px)', 
+                        aspectRatio: '1 / 1', 
+                        objectFit: 'contain', 
+                        borderRadius: 8, 
+                        border: '1px solid rgba(255,255,255,0.15)' 
+                      }}
+                      src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
+                    />
+                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#ddd', lineHeight: 1 }}>Scan to join</div>
+                  </div>
+                )}
               </motion.div>
             </div>
           </div>
