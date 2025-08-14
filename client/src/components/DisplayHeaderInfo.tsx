@@ -6,17 +6,31 @@ const DisplayHeaderInfo: React.FC = () => {
   const match = location.pathname.match(/^\/display\/([^/]+)/);
   const roomId = match ? match[1] : null;
   const [playerCount, setPlayerCount] = useState<number>(0);
+  const [pattern, setPattern] = useState<string>('full_card');
 
-  // Listen for player count forwarded by PublicDisplay to avoid opening a second socket
+  // Listen for player count and pattern updates forwarded by PublicDisplay
   useEffect(() => {
-    const handler = (e: Event) => {
+    const playerCountHandler = (e: Event) => {
       const anyEvent = e as CustomEvent<{ playerCount: number }>;
       if (typeof anyEvent.detail?.playerCount === 'number') {
         setPlayerCount(anyEvent.detail.playerCount);
       }
     };
-    window.addEventListener('display-player-count', handler as EventListener);
-    return () => window.removeEventListener('display-player-count', handler as EventListener);
+    
+    const patternHandler = (e: Event) => {
+      const anyEvent = e as CustomEvent<{ pattern: string }>;
+      if (typeof anyEvent.detail?.pattern === 'string') {
+        setPattern(anyEvent.detail.pattern);
+      }
+    };
+    
+    window.addEventListener('display-player-count', playerCountHandler as EventListener);
+    window.addEventListener('display-pattern', patternHandler as EventListener);
+    
+    return () => {
+      window.removeEventListener('display-player-count', playerCountHandler as EventListener);
+      window.removeEventListener('display-pattern', patternHandler as EventListener);
+    };
   }, []);
 
   // For the public display header, render BINGO column headers to free vertical space below
@@ -60,6 +74,33 @@ const DisplayHeaderInfo: React.FC = () => {
         }
       : { display: 'none' };
 
+    // For full card pattern, show game stats instead of BINGO headers
+    if (pattern === 'full_card') {
+      return (
+        <div className="full-card-header" style={containerStyle}>
+          <div
+            style={{
+              width: '100%',
+              height: rect ? Math.max(0, ((document.querySelector('.app-header') as HTMLElement)?.getBoundingClientRect().bottom || 40) - 5) : undefined,
+              textAlign: 'center',
+              fontWeight: 800,
+              background: 'rgba(255,255,255,0.08)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              borderRadius: 8,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '1.2rem',
+              color: '#00ff88'
+            }}
+          >
+            FULL CARD • {playerCount} PLAYERS
+          </div>
+        </div>
+      );
+    }
+    
+    // For other patterns, show BINGO headers
     return (
       <div className="bingo-header" style={containerStyle}>
         {['B', 'I', 'N', 'G', 'O'].map((c) => (

@@ -60,7 +60,8 @@ const PlayerView: React.FC = () => {
     isPlaying: false,
     currentSong: null,
     playerCount: 0,
-    hasBingo: false
+    hasBingo: false,
+    pattern: 'full_card'
   });
 
   const countUniqueSongs = (card: BingoCard): number => {
@@ -97,7 +98,8 @@ const PlayerView: React.FC = () => {
       console.log('Game started:', data);
       setGameState(prev => ({
         ...prev,
-        isPlaying: true
+        isPlaying: true,
+        pattern: data?.pattern || 'full_card'
       }));
     });
 
@@ -260,6 +262,12 @@ const PlayerView: React.FC = () => {
   };
 
   const checkBingo = (card: BingoCard): boolean => {
+    // For full card pattern, check if ALL squares are marked
+    if (gameState.pattern === 'full_card') {
+      return card.squares.every(square => square.marked);
+    }
+    
+    // For other patterns, check rows, columns, and diagonals
     // Check rows
     for (let row = 0; row < 5; row++) {
       let rowComplete = true;

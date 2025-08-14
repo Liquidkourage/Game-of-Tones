@@ -160,6 +160,8 @@ const PublicDisplay: React.FC = () => {
       setGameState(prev => ({ ...prev, isPlaying: true }));
       if (data?.pattern) {
         setPattern(data.pattern);
+        // Emit pattern to header
+        window.dispatchEvent(new CustomEvent('display-pattern', { detail: { pattern: data.pattern } }));
       }
       ensureGrid();
     });
