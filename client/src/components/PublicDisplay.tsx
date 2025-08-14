@@ -484,15 +484,15 @@ const PublicDisplay: React.FC = () => {
               >
                 {/* Centered INFO header */}
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontWeight: 800, letterSpacing: '0.06em', opacity: 0.9, fontSize: '1.4rem' }}>INFO</div>
+                  <div style={{ fontWeight: 800, letterSpacing: '0.06em', opacity: 0.9, fontSize: '1.8rem' }}>INFO</div>
                 </div>
                 
                 {/* Room code and stats side by side */}
                 <div style={{ display: 'flex', flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
                   {/* Room code on the left */}
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <div style={{ fontWeight: 800, fontSize: '1.4rem', color: '#b3b3b3', textAlign: 'center' }}>Room Number:</div>
-                    <div style={{ fontWeight: 900, fontSize: '2.6rem', color: '#00ff88', textAlign: 'center' }}>{roomInfo?.id || roomId}</div>
+                    <div style={{ fontWeight: 800, fontSize: '1.8rem', color: '#b3b3b3', textAlign: 'center' }}>Room Number:</div>
+                    <div style={{ fontWeight: 900, fontSize: '3.2rem', color: '#00ff88', textAlign: 'center' }}>{roomInfo?.id || roomId}</div>
                   </div>
                   
                   {/* Stats on the right */}
@@ -500,15 +500,15 @@ const PublicDisplay: React.FC = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Users className="stat-icon" />
                       <div>
-                        <div style={{ fontSize: '2.2rem', fontWeight: 900 }}>{gameState.playerCount}</div>
-                        <div style={{ fontSize: '1.5rem', color: '#b3b3b3' }}>Players</div>
+                        <div style={{ fontSize: '2.8rem', fontWeight: 900 }}>{gameState.playerCount}</div>
+                        <div style={{ fontSize: '1.9rem', color: '#b3b3b3' }}>Players</div>
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <List className="stat-icon" />
                       <div>
-                        <div style={{ fontSize: '2.2rem', fontWeight: 900 }}>{gameState.playedSongs.length}</div>
-                        <div style={{ fontSize: '1.5rem', color: '#b3b3b3' }}>Songs</div>
+                        <div style={{ fontSize: '2.8rem', fontWeight: 900 }}>{gameState.playedSongs.length}</div>
+                        <div style={{ fontSize: '1.9rem', color: '#b3b3b3' }}>Songs</div>
                       </div>
                     </div>
                   </div>
@@ -540,7 +540,7 @@ const PublicDisplay: React.FC = () => {
                       }}
                       src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
                     />
-                    <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#ddd', lineHeight: 1 }}>Scan to join</div>
+                    <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#ddd', lineHeight: 1 }}>Scan to join</div>
                   </div>
                 )}
               </motion.div>
