@@ -480,9 +480,10 @@ const PublicDisplay: React.FC = () => {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.6, delay: 0.2 }}
-                style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', position: 'relative' }}
+                style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', height: '100%', position: 'relative', gap: 16 }}
               >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {/* Stats on the left */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: '0 0 auto', minWidth: 0 }}>
                   <div style={{ fontWeight: 800, letterSpacing: '0.06em', opacity: 0.9, fontSize: '1.1rem' }}>INFO</div>
                   <div style={{ fontWeight: 900, fontSize: '2.2rem', color: '#00ff88' }}>Room: {roomInfo?.id || roomId}</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 8 }}>
@@ -502,24 +503,20 @@ const PublicDisplay: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                {/* QR code positioned absolutely to fill remaining space */}
+                {/* QR code on the right - now takes up remaining space */}
                 {roomId && (
                   <div style={{ 
-                    position: 'absolute', 
-                    top: '50%', 
-                    right: 12, 
-                    transform: 'translateY(-50%)', 
+                    flex: 1,
                     textAlign: 'center', 
                     background: 'rgba(255,255,255,0.06)', 
                     border: '1px solid rgba(255,255,255,0.12)', 
                     borderRadius: 12, 
                     padding: 8, 
-                    width: 320, 
-                    height: 'calc(100% - 24px)',
                     display: 'flex', 
                     flexDirection: 'column', 
                     alignItems: 'center', 
-                    justifyContent: 'space-between' 
+                    justifyContent: 'space-between',
+                    minHeight: 0
                   }}>
                     <img
                       alt="Join QR"
