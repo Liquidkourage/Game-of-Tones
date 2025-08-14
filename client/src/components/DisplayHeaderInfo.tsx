@@ -20,37 +20,8 @@ const DisplayHeaderInfo: React.FC = () => {
     return () => window.removeEventListener('display-player-count', handler as EventListener);
   }, []);
 
-  if (!roomId) return null;
-
-  const joinUrl = roomId
-    ? (typeof window !== 'undefined' ? window.location.origin + '/player/' + roomId : '')
-    : '';
-  const qrPrimary = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(joinUrl)}`;
-  const qrFallback = `https://chart.googleapis.com/chart?cht=qr&chs=120x120&chl=${encodeURIComponent(joinUrl)}`;
-
-  return (
-    <div className="room-info">
-      <h2>Room: {roomId}</h2>
-      <div className="player-count">
-        <Users className="count-icon" />
-        <span>{playerCount} Players</span>
-      </div>
-      <div className="qr-join">
-        <img
-          alt="Join QR"
-          className="qr-img"
-          src={qrPrimary}
-          loading="lazy"
-          onError={(e) => {
-            const img = e.currentTarget as HTMLImageElement;
-            if (img.src !== qrFallback) {
-              img.src = qrFallback;
-            }
-          }}
-        />
-      </div>
-    </div>
-  );
+  // Hide header room info on the public display; it will be shown in the left column Info card instead
+  return null;
 };
 
 export default DisplayHeaderInfo;

@@ -14,8 +14,10 @@ import {
   Pause,
   Sparkles,
   List,
-  Grid3X3
+  Grid3X3,
+  QrCode
 } from 'lucide-react';
+import { API_BASE } from '../config';
 
 interface GameState {
   isPlaying: boolean;
@@ -54,6 +56,7 @@ const PublicDisplay: React.FC = () => {
   const [searchParams] = useSearchParams();
   const showNowPlaying = (searchParams.get('np') === '1') || (searchParams.get('nowPlaying') === '1');
   const displayRef = useRef<HTMLDivElement | null>(null);
+  const [roomInfo, setRoomInfo] = useState<{ id: string; playerCount: number } | null>(null);
   const [currentWinningLine, setCurrentWinningLine] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const [gameState, setGameState] = useState<GameState>({
@@ -87,11 +90,13 @@ const PublicDisplay: React.FC = () => {
       const count = Math.max(0, Number(data.playerCount || 0));
       setGameState(prev => ({ ...prev, playerCount: count }));
       window.dispatchEvent(new CustomEvent('display-player-count', { detail: { playerCount: count } }));
+      setRoomInfo(prev => (prev ? { ...prev, playerCount: count } : prev));
     });
     socket.on('player-left', (data: any) => {
       const count = Math.max(0, Number(data.playerCount || 0));
       setGameState(prev => ({ ...prev, playerCount: count }));
       window.dispatchEvent(new CustomEvent('display-player-count', { detail: { playerCount: count } }));
+      setRoomInfo(prev => (prev ? { ...prev, playerCount: count } : prev));
     });
 
     // Receive 1x75 pool ordering (ids only)
@@ -202,6 +207,21 @@ const PublicDisplay: React.FC = () => {
       }
       socket.close();
     };
+  }, [roomId]);
+
+  // Fetch initial room info for display card
+  useEffect(() => {
+    const fetchRoom = async () => {
+      if (!roomId) return;
+      try {
+        const res = await fetch(`${API_BASE || ''}/api/rooms/${roomId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setRoomInfo({ id: data.id, playerCount: data.playerCount });
+        }
+      } catch {}
+    };
+    fetchRoom();
   }, [roomId]);
 
   // Optional runtime scale: /display/:roomId?scale=1.5 (approximate visual sizing)
@@ -453,8 +473,31 @@ const PublicDisplay: React.FC = () => {
                 </div>
               </div>
             </motion.div>
-            {/* Under pattern: side-by-side Quick Stats and Winners */}
+            {/* Under pattern: Info (room), Quick Stats and Winners */}
             <div className="info-grid">
+              <motion.div 
+                className="quick-stats"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.6, delay: 0.2 }}
+              >
+                <div className="stat-item" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <QrCode className="stat-icon" />
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span className="stat-label" style={{ fontWeight: 700 }}>Info</span>
+                    <span className="stat-value" style={{ fontSize: '1rem' }}>Room: {roomInfo?.id || roomId}</span>
+                    <span className="stat-value" style={{ fontSize: '0.95rem' }}>{gameState.playerCount} Players</span>
+                    <a
+                      href={roomId ? `${typeof window !== 'undefined' ? window.location.origin : ''}/player/${roomId}` : '#'}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ fontSize: '0.85rem', color: '#b3b3b3', textDecoration: 'underline', marginTop: 4 }}
+                    >
+                      Join Link
+                    </a>
+                  </div>
+                </div>
+              </motion.div>
               <motion.div 
                 className="quick-stats"
                 initial={{ opacity: 0, x: 20 }}
@@ -520,7 +563,7 @@ const PublicDisplay: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
             >
-              <div className="call-list-header">
+              <div className="call-list-header" style={{ marginTop: -36 }}>
                 <List className="call-list-icon" />
                 <h2>Call List</h2>
                 <span className="call-count">{gameState.playedSongs.length}</span>
