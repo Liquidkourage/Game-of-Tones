@@ -482,11 +482,20 @@ const PublicDisplay: React.FC = () => {
                 transition={{ duration: 0.6, delay: 0.2 }}
                 style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}
               >
-                {/* Stats at the top */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {/* Centered INFO header */}
+                <div style={{ textAlign: 'center' }}>
                   <div style={{ fontWeight: 800, letterSpacing: '0.06em', opacity: 0.9, fontSize: '1.1rem' }}>INFO</div>
-                  <div style={{ fontWeight: 900, fontSize: '2.2rem', color: '#00ff88' }}>Room: {roomInfo?.id || roomId}</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 8 }}>
+                </div>
+                
+                {/* Room code and stats side by side */}
+                <div style={{ display: 'flex', flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
+                  {/* Room code on the left */}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div style={{ fontWeight: 900, fontSize: '2.2rem', color: '#00ff88', textAlign: 'center' }}>Room: {roomInfo?.id || roomId}</div>
+                  </div>
+                  
+                  {/* Stats on the right */}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Users className="stat-icon" />
                       <div>
