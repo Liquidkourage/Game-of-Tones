@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Users } from 'lucide-react';
 
 const DisplayHeaderInfo: React.FC = () => {
   const location = useLocation();

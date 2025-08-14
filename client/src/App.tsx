@@ -1,7 +1,7 @@
 import React from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Music, Users, Gamepad2, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import './App.css';
 
 // Components
