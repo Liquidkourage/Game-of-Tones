@@ -453,9 +453,9 @@ const PublicDisplay: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
             >
-              <div className="bingo-card-header center">
+              <div className="bingo-card-header center" style={{ justifyContent: 'center' }}>
                 <Grid3X3 className="bingo-card-icon" />
-                <h2>{getPatternName()}</h2>
+                <h2 style={{ fontSize: '1.4rem' }}>{getPatternName()}</h2>
                 {showNowPlaying && gameState.currentSong && (
                   <div className="now-playing-banner" style={{ marginTop: 6, fontSize: '0.95rem' }}>
                     Now Playing: {gameState.currentSong.name} — {gameState.currentSong.artist}
