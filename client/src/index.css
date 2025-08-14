@@ -1367,19 +1367,7 @@ code {
   overflow-y: hidden;
 }
 
-/* Visible column gutters over entire call list card */
-.call-list-display::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-  background:
-    linear-gradient(to right, rgba(255,255,255,0.22), rgba(255,255,255,0.22)) 20% 0 / 1px 100% no-repeat,
-    linear-gradient(to right, rgba(255,255,255,0.18), rgba(255,255,255,0.18)) 40% 0 / 1px 100% no-repeat,
-    linear-gradient(to right, rgba(255,255,255,0.18), rgba(255,255,255,0.18)) 60% 0 / 1px 100% no-repeat,
-    linear-gradient(to right, rgba(255,255,255,0.22), rgba(255,255,255,0.22)) 80% 0 / 1px 100% no-repeat;
-}
+/* moved gutters overlay to App.css with higher specificity */
 
 .call-item {
   display: flex;

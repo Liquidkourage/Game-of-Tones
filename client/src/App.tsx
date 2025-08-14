@@ -68,6 +68,7 @@ function App() {
               <a href="#" className="footer-link">Help</a>
               <a href="#" className="footer-link">Contact</a>
             </div>
+            <div style={{ marginLeft: 'auto', color: '#777', fontSize: '0.8rem' }}>Build: {process.env.REACT_APP_BUILD_ID || 'dev'}</div>
           </div>
         </motion.footer>
       </div>
