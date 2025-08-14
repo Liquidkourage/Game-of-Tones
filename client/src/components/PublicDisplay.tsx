@@ -137,7 +137,11 @@ const PublicDisplay: React.FC = () => {
       // Wheel of Fortune: Pick a random letter of the alphabet and reveal it in all currently displayed songs
       const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
       const randomLetter = alphabet[Math.floor(Math.random() * alphabet.length)];
-      setRevealedLetters(prev => new Set([...prev, randomLetter]));
+      setRevealedLetters(prev => {
+        const newSet = new Set(prev);
+        newSet.add(randomLetter);
+        return newSet;
+      });
       
       // reset countdown timer
       if (countdownRef.current) {
