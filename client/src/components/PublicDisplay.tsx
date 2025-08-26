@@ -446,9 +446,9 @@ const PublicDisplay: React.FC = () => {
                       borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)'
                     }}
                     transition={{ duration: 0.25 }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, height: '100%', overflow: 'hidden' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, height: '100%', overflow: 'hidden', background: 'rgba(255,255,255,0.08)' }}
                   >
-                    <div className="call-number" style={{ fontSize: '0.8rem', minWidth: 18 }}>{poolIdx + 1}</div>
+                    <div className="call-number" style={{ fontSize: '1.0rem', minWidth: 24, fontWeight: 900 }}>{poolIdx + 1}</div>
                     <div className="call-song-info" style={{ flex: 1 }}>
                       <AnimatePresence mode="popLayout" initial={false}>
                         <motion.div
@@ -458,7 +458,7 @@ const PublicDisplay: React.FC = () => {
                           exit={{ opacity: 0, y: -6, scale: 0.98 }}
                           transition={{ duration: 0.25 }}
                           className="call-song-name"
-                          style={{ fontWeight: 700, lineHeight: 1.14, fontSize: '0.95rem' }}
+                          style={{ fontWeight: 800, lineHeight: 1.2, fontSize: '1.3rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
                         >
                           {title}
                         </motion.div>
@@ -469,7 +469,7 @@ const PublicDisplay: React.FC = () => {
                           exit={{ opacity: 0, y: -4 }}
                           transition={{ duration: 0.25 }}
                           className="call-song-artist"
-                          style={{ fontSize: '0.8rem', color: '#b3b3b3', lineHeight: 1.05 }}
+                          style={{ fontSize: '1.1rem', color: '#e0e0e0', lineHeight: 1.1, fontWeight: 600, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}
                         >
                           {artist}
                         </motion.div>
