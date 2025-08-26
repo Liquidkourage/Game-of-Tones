@@ -1509,6 +1509,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       }
 
       await spotifyService.transferPlayback(targetDeviceId, true);
+      // Enforce deterministic playback mode to avoid context/radio fallbacks
+      try { await spotifyService.setShuffleState(false, targetDeviceId); } catch (_) {}
+      try { await spotifyService.setRepeatState('off', targetDeviceId); } catch (_) {}
       // Use explicit device_id and uris as fallback in case transfer isn't picked up
       await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], 0);
       console.log(`✅ Successfully started playback on device: ${targetDeviceId}`);
@@ -1582,18 +1585,25 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     room.playlistSongs = allSongs;
     room.currentSongIndex = 0;
 
-    // Verify playback actually started; attempt resume if needed
+    // Verify playback actually started and is the correct track; attempt resume/correct if needed
     try {
       let playing = false;
+      let correctTrack = false;
       for (let i = 0; i < 5; i++) {
         await new Promise(r => setTimeout(r, 300));
         const state = await spotifyService.getCurrentPlaybackState();
         playing = !!state?.is_playing;
-        console.log(`🔎 Playback verify attempt ${i + 1}: is_playing=${playing}`);
+        const currentId = state?.item?.id;
+        correctTrack = currentId === firstSong.id;
+        console.log(`🔎 Playback verify attempt ${i + 1}: is_playing=${playing} correct_track=${correctTrack}`);
         if (playing) break;
         try { await spotifyService.resumePlayback(targetDeviceId); } catch (e) {
           console.warn('⚠️ Resume during verify failed:', e?.message || e);
         }
+      }
+      if (!playing || !correctTrack) {
+        // Attempt to correct to the intended track once
+        try { await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], 0); } catch {}
       }
       if (!playing) {
         io.to(roomId).emit('playback-warning', { message: 'Playback did not start reliably on the locked device. Please check Spotify is active and not muted.' });
@@ -1711,6 +1721,9 @@ async function playNextSong(roomId, deviceId) {
 
       const playbackStartTime = Date.now();
       if (VERBOSE) console.log(`🎵 Starting Spotify playback at ${playbackStartTime} for: ${nextSong.name}`);
+      // Enforce deterministic playback mode on each advance
+      try { await spotifyService.setShuffleState(false, targetDeviceId); } catch (_) {}
+      try { await spotifyService.setRepeatState('off', targetDeviceId); } catch (_) {}
       await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], 0);
       const playbackEndTime = Date.now();
       if (VERBOSE) console.log(`✅ Successfully started playback on device: ${targetDeviceId} (took ${playbackEndTime - playbackStartTime}ms)`);
@@ -1764,16 +1777,23 @@ async function playNextSong(roomId, deviceId) {
 
     console.log(`✅ Playing next song in room ${roomId}: ${nextSong.name} by ${nextSong.artist} on device ${targetDeviceId}`);
 
-    // Verify playback actually started; attempt resume if needed
+    // Verify playback actually started and is the correct track; attempt resume/correct if needed
     try {
       let playing = false;
+      let correctTrack = false;
       for (let i = 0; i < 5; i++) {
         await new Promise(r => setTimeout(r, 300));
         const state = await spotifyService.getCurrentPlaybackState();
         playing = !!state?.is_playing;
-        console.log(`🔎 Playback verify (next) attempt ${i + 1}: is_playing=${playing}`);
+        const currentId = state?.item?.id;
+        correctTrack = currentId === nextSong.id;
+        console.log(`🔎 Playback verify (next) attempt ${i + 1}: is_playing=${playing} correct_track=${correctTrack}`);
         if (playing) break;
         try { await spotifyService.resumePlayback(targetDeviceId); } catch {}
+      }
+      if (!playing || !correctTrack) {
+        // Attempt to correct to the intended track once
+        try { await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], 0); } catch {}
       }
       if (!playing) {
         io.to(roomId).emit('playback-warning', { message: 'Playback did not resume on next track. Verify Spotify device and try transferring playback again.' });
