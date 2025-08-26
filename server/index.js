@@ -771,13 +771,7 @@ io.on('connection', (socket) => {
     if (room && room.host === socket.id) {
       try {
         console.log('⏭️ Skipping to next song in room:', roomId);
-        // Ensure Spotify skips on the actual device, then move server index
-        const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
-        if (deviceId) {
-          try { await spotifyService.transferPlayback(deviceId, true); } catch {}
-          try { await spotifyService.nextTrack(deviceId); } catch (e) { console.warn('⚠️ Spotify next failed:', e?.message || e); }
-        }
-        // Clear existing timer and immediately play next song
+        // Clear existing timer and immediately play next song under our control
         clearRoomTimer(roomId);
         await playNextSong(roomId, room.selectedDeviceId);
       } catch (error) {
@@ -1789,15 +1783,16 @@ async function playNextSong(roomId, deviceId) {
       io.to(roomId).emit('playback-warning', { message: `Playback verification (next) error: ${e?.message || 'Unknown error'}` });
     }
 
-    // Early-fail check: if progress is still near zero after a few seconds, force skip to next queued track
+    // Early-fail check: if progress is still near zero after a few seconds, advance using our controlled flow
     try {
       await new Promise(r => setTimeout(r, 3500));
       const state = await spotifyService.getCurrentPlaybackState();
       const progress = Number(state?.progress_ms || 0);
       const isPlaying = !!state?.is_playing;
       if (!isPlaying || progress < 1000) {
-        console.warn('⚠️ Early-fail detected; forcing next track');
-        try { await spotifyService.nextTrack(targetDeviceId); } catch {}
+        console.warn('⚠️ Early-fail detected; advancing via playNextSong');
+        clearRoomTimer(roomId);
+        await playNextSong(roomId, targetDeviceId);
       }
     } catch (e) {
       console.warn('⚠️ Early-fail check error:', e?.message || e);
@@ -1833,6 +1828,7 @@ async function playNextSong(roomId, deviceId) {
       // Add a small delay to ensure smooth transition
       await new Promise(resolve => setTimeout(resolve, 100));
       if (VERBOSE) console.log(`🔄 Transition delay complete, calling playNextSong`);
+      clearRoomTimer(roomId);
       playNextSong(roomId, targetDeviceId);
     }, room.snippetLength * 1000);
 
