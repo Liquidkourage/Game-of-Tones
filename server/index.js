@@ -58,6 +58,7 @@ app.use(express.static('public'));
 // Game state management
 const games = new Map();
 const rooms = new Map();
+const PREQUEUE_WINDOW_DEFAULT = 5;
 // Utility: count non-host players in a room
 function getNonHostPlayerCount(room) {
   if (!room) return 0;
@@ -346,7 +347,10 @@ io.on('connection', (socket) => {
         repeatMode: false,
         volume: 50,
         playlistSongs: [],
-        currentSongIndex: 0
+        currentSongIndex: 0,
+        preQueueEnabled: false,
+        preQueueWindow: PREQUEUE_WINDOW_DEFAULT,
+        queuedIndices: new Set()
       };
       rooms.set(roomId, newRoom);
     }
@@ -538,6 +542,7 @@ io.on('connection', (socket) => {
       room.clientCards = new Map();
       room.currentSong = null;
       room.currentSongIndex = 0;
+      room.queuedIndices = new Set();
       room.round = (room.round || 0) + 1;
       io.to(roomId).emit('round-reset', { round: room.round });
       console.log(`🔄 New round started for room ${roomId} (round ${room.round})`);
@@ -559,6 +564,25 @@ io.on('connection', (socket) => {
       console.log(`🔒 Lock joins set to ${room.lockJoins} for room ${roomId}`);
     } catch (e) {
       console.error('❌ Error setting lock joins:', e?.message || e);
+    }
+  });
+
+  // Host can enable/disable pre-queue and adjust window
+  socket.on('set-prequeue', (data = {}) => {
+    try {
+      const { roomId, enabled, window = PREQUEUE_WINDOW_DEFAULT } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
+      if (!isCurrentHost) return;
+      room.preQueueEnabled = !!enabled;
+      const w = Number(window);
+      room.preQueueWindow = Number.isFinite(w) && w > 0 && w <= 20 ? w : PREQUEUE_WINDOW_DEFAULT;
+      if (!room.preQueueEnabled) room.queuedIndices = new Set();
+      io.to(roomId).emit('prequeue-updated', { enabled: room.preQueueEnabled, window: room.preQueueWindow });
+      console.log(`🎚️ Pre-queue set to ${room.preQueueEnabled} (window=${room.preQueueWindow}) for room ${roomId}`);
+    } catch (e) {
+      console.error('❌ Error setting pre-queue:', e?.message || e);
     }
   });
 
@@ -1585,6 +1609,23 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       io.to(roomId).emit('playback-warning', { message: `Playback verification error: ${e?.message || 'Unknown error'}` });
     }
 
+    // Optionally pre-queue next window of songs
+    room.queuedIndices = room.queuedIndices instanceof Set ? room.queuedIndices : new Set();
+    if (room.preQueueEnabled) {
+      try {
+        const w = room.preQueueWindow || PREQUEUE_WINDOW_DEFAULT;
+        for (let i = 1; i <= w; i++) {
+          const idx = (room.currentSongIndex + i) % allSongs.length;
+          if (!room.queuedIndices.has(idx)) {
+            await spotifyService.addToQueue(`spotify:track:${allSongs[idx].id}`, targetDeviceId);
+            room.queuedIndices.add(idx);
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ Pre-queue (initial) failed:', e?.message || e);
+      }
+    }
+
     // Start watchdog to recover from stalls, and set timer for next song
     const songStartTime = Date.now();
     if (VERBOSE) console.log(`⏰ Setting timer for room ${roomId}: ${room.snippetLength} seconds (${room.snippetLength * 1000}ms) at ${songStartTime}`);
@@ -1746,6 +1787,41 @@ async function playNextSong(roomId, deviceId) {
     } catch (e) {
       console.warn('⚠️ Playback verification (next) error:', e?.message || e);
       io.to(roomId).emit('playback-warning', { message: `Playback verification (next) error: ${e?.message || 'Unknown error'}` });
+    }
+
+    // Early-fail check: if progress is still near zero after a few seconds, force skip to next queued track
+    try {
+      await new Promise(r => setTimeout(r, 3500));
+      const state = await spotifyService.getCurrentPlaybackState();
+      const progress = Number(state?.progress_ms || 0);
+      const isPlaying = !!state?.is_playing;
+      if (!isPlaying || progress < 1000) {
+        console.warn('⚠️ Early-fail detected; forcing next track');
+        try { await spotifyService.nextTrack(targetDeviceId); } catch {}
+      }
+    } catch (e) {
+      console.warn('⚠️ Early-fail check error:', e?.message || e);
+    }
+
+    // Optionally maintain pre-queue window by topping up
+    if (room.preQueueEnabled) {
+      try {
+        const w = room.preQueueWindow || PREQUEUE_WINDOW_DEFAULT;
+        for (let i = 1; i <= w; i++) {
+          const idx = (room.currentSongIndex + i) % room.playlistSongs.length;
+          if (!room.queuedIndices.has(idx)) {
+            await spotifyService.addToQueue(`spotify:track:${room.playlistSongs[idx].id}`, targetDeviceId);
+            room.queuedIndices.add(idx);
+          }
+        }
+        // clear indices that are behind current index to keep set small
+        room.queuedIndices.forEach((idx) => {
+          const distance = (idx - room.currentSongIndex + room.playlistSongs.length) % room.playlistSongs.length;
+          if (distance === 0 || distance > w) room.queuedIndices.delete(idx);
+        });
+      } catch (e) {
+        console.warn('⚠️ Pre-queue (top-up) failed:', e?.message || e);
+      }
     }
 
     // Start watchdog to recover from stalls, and schedule next song

@@ -80,6 +80,8 @@ const HostView: React.FC = () => {
   const [revealMode, setRevealMode] = useState<'off' | 'artist' | 'title' | 'full'>('off');
   const [pattern, setPattern] = useState<'line' | 'four_corners' | 'x' | 'full_card'>('full_card');
   const [lockJoins, setLockJoins] = useState<boolean>(false);
+  const [preQueueEnabled, setPreQueueEnabled] = useState<boolean>(false);
+  const [preQueueWindow, setPreQueueWindow] = useState<number>(5);
 
   const addLog = (message: string, level: 'info' | 'warn' | 'error' = 'info') => {
     setLogs(prev => [{ level, message, ts: Date.now() }, ...prev].slice(0, 50));
@@ -247,6 +249,11 @@ const HostView: React.FC = () => {
     newSocket.on('lock-joins-updated', (data: any) => {
       setLockJoins(!!data?.locked);
       addLog(`Room lock ${data?.locked ? 'enabled' : 'disabled'}`, 'info');
+    });
+    newSocket.on('prequeue-updated', (data: any) => {
+      setPreQueueEnabled(!!data?.enabled);
+      if (typeof data?.window === 'number') setPreQueueWindow(data.window);
+      addLog(`Pre-queue ${data?.enabled ? 'enabled' : 'disabled'} (window=${data?.window ?? preQueueWindow})`, 'info');
     });
 
     newSocket.on('game-started', (data: any) => {
@@ -1362,6 +1369,32 @@ const HostView: React.FC = () => {
                 />
                 <span>Lock new joins</span>
               </label>
+              <span style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.2)' }} />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={preQueueEnabled}
+                  onChange={(e) => {
+                    const val = e.target.checked;
+                    setPreQueueEnabled(val);
+                    if (socket && roomId) socket.emit('set-prequeue', { roomId, enabled: val, window: preQueueWindow });
+                  }}
+                />
+                <span>Pre-queue next</span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={preQueueWindow}
+                onChange={(e) => {
+                  const val = Math.max(1, Math.min(20, Number(e.target.value) || 1));
+                  setPreQueueWindow(val);
+                  if (socket && roomId && preQueueEnabled) socket.emit('set-prequeue', { roomId, enabled: true, window: val });
+                }}
+                style={{ width: 56, padding: '2px 6px', background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6 }}
+              />
+              <span>tracks</span>
             </div>
              <div className="control-buttons">
                {gameState === 'waiting' ? (
