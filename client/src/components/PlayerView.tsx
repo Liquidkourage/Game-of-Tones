@@ -45,6 +45,17 @@ const PlayerView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [searchParams] = useSearchParams();
   const playerName = searchParams.get('name') || 'Player';
+  const [clientId] = useState<string>(() => {
+    try {
+      const existing = localStorage.getItem('client_id');
+      if (existing && existing.length > 0) return existing;
+      const generated = (typeof crypto !== 'undefined' && (crypto as any).randomUUID) ? (crypto as any).randomUUID() : Math.random().toString(36).slice(2);
+      localStorage.setItem('client_id', generated);
+      return generated;
+    } catch (_e) {
+      return Math.random().toString(36).slice(2);
+    }
+  });
 
   const [socket, setSocket] = useState<any>(null);
   const [bingoCard, setBingoCard] = useState<BingoCard | null>(null);
@@ -83,7 +94,8 @@ const PlayerView: React.FC = () => {
       newSocket.emit('join-room', { 
         roomId, 
         playerName, 
-        isHost: false 
+        isHost: false,
+        clientId
       });
     });
 

@@ -325,7 +325,7 @@ io.on('connection', (socket) => {
 
   // Join room
   socket.on('join-room', (data) => {
-    const { roomId, playerName, isHost = false } = data;
+    const { roomId, playerName, isHost = false, clientId } = data;
     console.log(`Player ${playerName} (${isHost ? 'host' : 'player'}) joining room: ${roomId}`);
     
     // Create room if it doesn't exist
@@ -356,7 +356,8 @@ io.on('connection', (socket) => {
       id: socket.id,
       name: playerName,
       isHost: isHost,
-      hasBingo: false
+      hasBingo: false,
+      clientId: clientId || null
     };
     
     room.players.set(socket.id, player);
@@ -420,12 +421,24 @@ io.on('connection', (socket) => {
             });
           }
 
-          // Ensure bingo card exists for this player
-          if (room.bingoCards && room.bingoCards.has(socket.id)) {
-            // Re-emit existing card
-            io.to(socket.id).emit('bingo-card', room.bingoCards.get(socket.id));
+          // Ensure bingo card exists for this player, reusing clientId mapping if provided
+          if (!room.bingoCards) room.bingoCards = new Map();
+          const bySocket = room.bingoCards.get(socket.id);
+          if (bySocket) {
+            io.to(socket.id).emit('bingo-card', bySocket);
+          } else if (clientId && room.clientCards && room.clientCards.has(clientId)) {
+            const existingCard = room.clientCards.get(clientId);
+            room.bingoCards.set(socket.id, existingCard);
+            const p = room.players.get(socket.id);
+            if (p) p.bingoCard = existingCard;
+            io.to(socket.id).emit('bingo-card', existingCard);
           } else if (room.playlistSongs?.length || room.playlists?.length || room.finalizedPlaylists?.length) {
-            await generateBingoCardForPlayer(roomId, socket.id);
+            // generate and store mapping by clientId if present
+            const card = await generateBingoCardForPlayer(roomId, socket.id);
+            if (clientId) {
+              if (!room.clientCards) room.clientCards = new Map();
+              room.clientCards.set(clientId, card);
+            }
           }
         }
       } catch (e) {
@@ -516,6 +529,8 @@ io.on('connection', (socket) => {
       room.winners = [];
       room.calledSongIds = [];
       room.bingoCards = new Map();
+      // Reset persistent client-to-card mapping for the new round
+      room.clientCards = new Map();
       room.currentSong = null;
       room.currentSongIndex = 0;
       room.round = (room.round || 0) + 1;
@@ -1166,6 +1181,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
     }
 
     const cards = new Map();
+    if (!room.clientCards) room.clientCards = new Map();
     console.log(`👥 Generating cards for ${room.players.size} players`);
 
     for (const [playerId, player] of room.players) {
@@ -1231,6 +1247,10 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       if (!room.bingoCards) room.bingoCards = new Map();
       player.bingoCard = card;
       cards.set(playerId, card);
+      // Persist by clientId if available to survive refreshes
+      if (player.clientId) {
+        room.clientCards.set(player.clientId, card);
+      }
       io.to(playerId).emit('bingo-card', card);
     }
 
@@ -1355,7 +1375,11 @@ async function generateBingoCardForPlayer(roomId, playerId) {
     }
     if (!room.bingoCards) room.bingoCards = new Map();
     room.bingoCards.set(playerId, card);
+    // Also store on player if present
+    const p = room.players.get(playerId);
+    if (p) p.bingoCard = card;
     io.to(playerId).emit('bingo-card', card);
+    return card;
   } catch (e) {
     console.error('❌ Error generating single player card:', e?.message || e);
   }
