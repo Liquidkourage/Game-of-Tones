@@ -127,6 +127,11 @@ function saveDevice(device) {
 function clearRoomTimer(roomId) {
   if (roomTimers.has(roomId)) {
     const room = rooms.get(roomId);
+    // Enforce lock-joins if enabled (non-hosts only)
+    if (!isHost && room && room.lockJoins) {
+      socket.emit('room-locked', { message: 'Room is locked. Please wait for the next round.' });
+      return;
+    }
     const currentTime = Date.now();
     if (VERBOSE) {
       console.log(`🔍 TIMER CLEARED - Room: ${roomId}, Time: ${currentTime}`);
@@ -538,6 +543,22 @@ io.on('connection', (socket) => {
       console.log(`🔄 New round started for room ${roomId} (round ${room.round})`);
     } catch (e) {
       console.error('❌ Error starting new round:', e?.message || e);
+    }
+  });
+
+  // Host can lock/unlock room joins
+  socket.on('set-lock-joins', (data = {}) => {
+    try {
+      const { roomId, locked } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
+      if (!isCurrentHost) return;
+      room.lockJoins = !!locked;
+      io.to(roomId).emit('lock-joins-updated', { locked: room.lockJoins });
+      console.log(`🔒 Lock joins set to ${room.lockJoins} for room ${roomId}`);
+    } catch (e) {
+      console.error('❌ Error setting lock joins:', e?.message || e);
     }
   });
 
@@ -1019,7 +1040,8 @@ io.on('connection', (socket) => {
         const card = player.bingoCard;
         const square = card.squares.find(s => s.position === position);
         if (square && square.songId === songId) {
-          square.marked = true;
+          // Toggle mark state to support unmarking
+          square.marked = !square.marked;
           
           // Check for bingo
           const hasBingo = checkBingo(card);

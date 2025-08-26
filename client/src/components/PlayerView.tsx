@@ -188,6 +188,31 @@ const PlayerView: React.FC = () => {
     };
   }, [roomId, playerName]);
 
+  // Keep screen awake during game using Wake Lock API
+  useEffect(() => {
+    let wakeLock: any = null;
+    const requestWakeLock = async () => {
+      try {
+        // @ts-ignore
+        if ('wakeLock' in navigator && (navigator as any).wakeLock?.request) {
+          // @ts-ignore
+          wakeLock = await (navigator as any).wakeLock.request('screen');
+        }
+      } catch (_e) {
+        // ignore failures silently
+      }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && !wakeLock) requestWakeLock();
+    };
+    requestWakeLock();
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      try { if (wakeLock && wakeLock.release) wakeLock.release(); } catch {}
+    };
+  }, []);
+
   const markSquare = (position: string) => {
     if (!bingoCard || !socket) return;
 
@@ -201,16 +226,12 @@ const PlayerView: React.FC = () => {
       position
     });
 
-    // Update local state optimistically
-    const updatedSquares = bingoCard.squares.map(s => {
-      if (s.position === position) {
-        return { ...s, marked: !s.marked };
-      }
-      return s;
+    // Update local state optimistically (toggle)
+    setBingoCard(prev => {
+      if (!prev) return prev;
+      const updatedSquares = prev.squares.map(s => s.position === position ? { ...s, marked: !s.marked } : s);
+      return { ...prev, squares: updatedSquares };
     });
-
-    const updatedCard = { ...bingoCard, squares: updatedSquares };
-    setBingoCard(updatedCard);
     if (navigator.vibrate) navigator.vibrate(10);
   };
 

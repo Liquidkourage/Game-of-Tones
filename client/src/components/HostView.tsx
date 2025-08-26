@@ -79,6 +79,7 @@ const HostView: React.FC = () => {
   const [logs, setLogs] = useState<Array<{ level: 'info' | 'warn' | 'error'; message: string; ts: number }>>([]);
   const [revealMode, setRevealMode] = useState<'off' | 'artist' | 'title' | 'full'>('off');
   const [pattern, setPattern] = useState<'line' | 'four_corners' | 'x' | 'full_card'>('full_card');
+  const [lockJoins, setLockJoins] = useState<boolean>(false);
 
   const addLog = (message: string, level: 'info' | 'warn' | 'error' = 'info') => {
     setLogs(prev => [{ level, message, ts: Date.now() }, ...prev].slice(0, 50));
@@ -242,6 +243,10 @@ const HostView: React.FC = () => {
     // Socket event listeners
     newSocket.on('player-joined', (data: any) => {
       console.log('Player joined:', data);
+    });
+    newSocket.on('lock-joins-updated', (data: any) => {
+      setLockJoins(!!data?.locked);
+      addLog(`Room lock ${data?.locked ? 'enabled' : 'disabled'}`, 'info');
     });
 
     newSocket.on('game-started', (data: any) => {
@@ -1344,6 +1349,20 @@ const HostView: React.FC = () => {
              transition={{ delay: 0.5 }}
            >
              <h2>🎮 Game Controls</h2>
+             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={lockJoins}
+                  onChange={(e) => {
+                    const val = e.target.checked;
+                    setLockJoins(val);
+                    if (socket && roomId) socket.emit('set-lock-joins', { roomId, locked: val });
+                  }}
+                />
+                <span>Lock new joins</span>
+              </label>
+            </div>
              <div className="control-buttons">
                {gameState === 'waiting' ? (
                  <>
