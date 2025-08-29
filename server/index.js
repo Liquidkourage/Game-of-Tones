@@ -308,12 +308,20 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
       if (!room || room.gameState !== 'playing') { clearPlaybackWatcher(roomId); return; }
       const state = await spotifyService.getCurrentPlaybackState();
       const isPlaying = !!state?.is_playing;
+      const currentId = state?.item?.id;
+      const progress = Number(state?.progress_ms || 0);
       if (isPlaying) { attempts = 0; return; }
       attempts += 1;
       if (attempts === 1) {
         try { await spotifyService.resumePlayback(deviceId); } catch {}
       } else if (attempts >= 2) {
         io.to(roomId).emit('playback-warning', { message: 'Playback stalled; advancing to next track.' });
+        clearPlaybackWatcher(roomId);
+        clearRoomTimer(roomId);
+        await playNextSong(roomId, deviceId);
+      }
+      // Overrun guard: if snippet time essentially elapsed on same track, force advance
+      if (room?.currentSong?.id && currentId === room.currentSong.id && progress >= Math.max(0, snippetMs - 300)) {
         clearPlaybackWatcher(roomId);
         clearRoomTimer(roomId);
         await playNextSong(roomId, deviceId);
