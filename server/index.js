@@ -266,11 +266,10 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
 
     console.log(`✅ Playing song in room ${roomId}: ${song.name} by ${song.artist} on device ${targetDeviceId}`);
 
-    // Schedule next song using timer management
+    // Schedule next song using timer management and ensure watchdog running
     setRoomTimer(roomId, () => {
       playNextSong(roomId, targetDeviceId);
     }, room.snippetLength * 1000);
-    // Ensure watchdog is running to recover from stalls
     startPlaybackWatchdog(roomId, targetDeviceId, room.snippetLength * 1000);
   } catch (error) {
     console.error('❌ Error playing song at index:', error);
@@ -783,9 +782,8 @@ io.on('connection', (socket) => {
     if (room && room.host === socket.id) {
       try {
         console.log('⏭️ Skipping to next song in room:', roomId);
-        // Clear existing timer and watchdog, then immediately play next song under our control
+        // Clear existing timer and immediately play next song under our control
         clearRoomTimer(roomId);
-        clearPlaybackWatcher(roomId);
         await playNextSong(roomId, room.selectedDeviceId);
       } catch (error) {
         console.error('❌ Error skipping song:', error);
@@ -805,9 +803,8 @@ io.on('connection', (socket) => {
         console.log(`⏸️ Current Song: ${room.currentSong?.name} by ${room.currentSong?.artist}`);
         console.log(`⏸️ Game State: ${room.gameState}`);
         
-        // Clear the timer and watchdog when pausing
+        // Clear the timer when pausing
         clearRoomTimer(roomId);
-        clearPlaybackWatcher(roomId);
         const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
         if (!deviceId) {
           console.error('❌ No device found for pause');
@@ -866,14 +863,13 @@ io.on('connection', (socket) => {
         room.gameState = 'playing';
         io.to(roomId).emit('playback-resumed');
 
-        // Calculate remaining time, set timer, and restart watchdog
+        // Calculate remaining time and set timer
         if (room.snippetLength) {
           const remainingTime = room.snippetLength * 1000 - (resumePosition || 0);
           if (remainingTime > 0) {
             setRoomTimer(roomId, () => {
               playNextSong(roomId, room.selectedDeviceId);
             }, remainingTime);
-            startPlaybackWatchdog(roomId, room.selectedDeviceId, remainingTime);
           } else {
             playNextSong(roomId, room.selectedDeviceId);
           }
@@ -894,9 +890,8 @@ io.on('connection', (socket) => {
       try {
         console.log(`⏮️ Previous button clicked at position: ${currentPosition}ms in room:`, roomId);
         
-        // Clear existing timer and watchdog
+        // Clear existing timer
         clearRoomTimer(roomId);
-        clearPlaybackWatcher(roomId);
         
         // If we're in the first second of the song, go to previous song
         // Otherwise, restart the current song from the beginning
