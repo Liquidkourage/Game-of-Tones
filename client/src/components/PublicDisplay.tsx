@@ -79,6 +79,9 @@ const PublicDisplay: React.FC = () => {
   const oneBy75IdsRef = useRef<string[] | null>(null);
   const playedOrderRef = useRef<string[]>([]);
   const idMetaRef = useRef<Record<string, { name: string; artist: string }>>({});
+  // Carousel state for grouped 15x5 columns (show 3 at a time)
+  const [carouselIndex, setCarouselIndex] = useState<number>(0);
+  const [animating, setAnimating] = useState<boolean>(true);
 
   useEffect(() => {
     const socket = io(SOCKET_URL || undefined);
@@ -106,6 +109,7 @@ const PublicDisplay: React.FC = () => {
         setOneBy75Ids(data.ids);
         oneBy75IdsRef.current = data.ids;
         playedOrderRef.current = [];
+        setCarouselIndex(0);
       }
     });
 
@@ -214,6 +218,25 @@ const PublicDisplay: React.FC = () => {
       socket.close();
     };
   }, [roomId]);
+
+  // Auto-advance the 15x5 grouped columns carousel
+  useEffect(() => {
+    if (!oneBy75Ids) return;
+    const interval = setInterval(() => {
+      setCarouselIndex((idx) => {
+        const next = idx + 1;
+        // 15 groups total; we append 3 duplicates for smooth wrap
+        if (next > 15) {
+          // jump back to 0 without animation, then re-enable animation on next frame
+          setAnimating(false);
+          requestAnimationFrame(() => setAnimating(true));
+          return 0;
+        }
+        return next;
+      });
+    }, 3500);
+    return () => clearInterval(interval);
+  }, [oneBy75Ids]);
 
   // Fetch initial room info for display card
   useEffect(() => {
@@ -485,6 +508,94 @@ const PublicDisplay: React.FC = () => {
     );
   };
 
+  // New: 15 groups of 5, auto-scrolling horizontally with 3 columns visible
+  const renderOneBy75GroupedColumns = () => {
+    if (!oneBy75Ids) return null;
+    const played = new Set(playedOrderRef.current);
+    // Build 15 groups from the full pool, then filter to only played IDs within each group
+    const groups: string[][] = Array.from({ length: 15 }, (_, g) => {
+      const start = g * 5;
+      const slice = oneBy75Ids.slice(start, start + 5);
+      return slice.filter((id) => played.has(id));
+    });
+    // Duplicate the first 3 groups to the end for smoother wrap when sliding to last pages
+    const extendedGroups: string[][] = [...groups, ...groups.slice(0, 3)];
+    const revealThreshold = Math.max(0, playedOrderRef.current.length - 5);
+
+    // Each column is 1/3 of the viewport width; compute translate as percentage
+    const xPercent = -(carouselIndex * (100 / 3));
+
+    return (
+      <div className="call-list-content">
+        <div className="call-carousel-viewport">
+          <motion.div
+            className="call-carousel-track"
+            animate={{ x: animating ? `${xPercent}%` : `${-(0 * (100 / 3))}%` }}
+            transition={{ duration: 0.5, ease: 'easeInOut' }}
+          >
+            {extendedGroups.map((group, gi) => (
+              <div key={gi} className="call-carousel-col">
+                <div className="call-carousel-col-inner">
+                  {group.map((id) => {
+                    const poolIdx = oneBy75Ids.indexOf(id);
+                    const playedIdx = playedOrderRef.current.indexOf(id);
+                    const revealed = playedIdx > -1 && playedIdx < revealThreshold;
+                    const meta = idMetaRef.current[id];
+                    const title = revealed ? (meta?.name || 'Unknown') : '??????';
+                    const artist = revealed ? (meta?.artist || '') : '??????';
+                    const isCurrent = gameState.currentSong?.id === id;
+                    return (
+                      <motion.div
+                        key={id}
+                        className="call-item"
+                        initial={false}
+                        animate={{
+                          backgroundColor: isCurrent ? 'rgba(0,255,136,0.12)' : 'rgba(255,255,255,0.05)',
+                          boxShadow: isCurrent ? '0 0 16px rgba(0,255,136,0.35)' : 'none',
+                          borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)'
+                        }}
+                        transition={{ duration: 0.25 }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, height: '100%', overflow: 'hidden', background: 'rgba(255,255,255,0.08)' }}
+                      >
+                        <div className="call-number" style={{ fontSize: '1.0rem', minWidth: 24, fontWeight: 900 }}>{poolIdx + 1}</div>
+                        <div className="call-song-info" style={{ flex: 1 }}>
+                          <AnimatePresence mode="popLayout" initial={false}>
+                            <motion.div
+                              key={revealed ? 'title-'+id : 'title-hidden-'+id}
+                              initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                              transition={{ duration: 0.25 }}
+                              className="call-song-name"
+                              style={{ fontWeight: 800, lineHeight: 1.2, fontSize: '1.3rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
+                            >
+                              {title}
+                            </motion.div>
+                            <motion.div
+                              key={revealed ? 'artist-'+id : 'artist-hidden-'+id}
+                              initial={{ opacity: 0, y: 4 }}
+                              animate={{ opacity: 0.85, y: 0 }}
+                              exit={{ opacity: 0, y: -4 }}
+                              transition={{ duration: 0.25 }}
+                              className="call-song-artist"
+                              style={{ fontSize: '1.1rem', color: '#e0e0e0', lineHeight: 1.1, fontWeight: 600, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}
+                            >
+                              {artist}
+                            </motion.div>
+                          </AnimatePresence>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </motion.div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div ref={displayRef} className="public-display">
       {/* Main Content - 16:10 Layout */}
@@ -606,7 +717,7 @@ const PublicDisplay: React.FC = () => {
                   <List className="call-list-icon" />
                 <span className="call-count">{gameState.playedSongs.length}</span>
                 </div>
-              {oneBy75Ids ? renderOneBy75Columns() : (
+              {oneBy75Ids ? renderOneBy75GroupedColumns() : (
                   <div className="call-list-content" style={{ height: '100%' }}>
                   {/* Column headers moved to App header to free vertical space */}
                     <div className="call-list" style={{ height: '100%' }}>
