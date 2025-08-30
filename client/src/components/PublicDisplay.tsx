@@ -88,6 +88,8 @@ const PublicDisplay: React.FC = () => {
   // Carousel state for grouped 15x5 columns (show 3 at a time)
   const [carouselIndex, setCarouselIndex] = useState<number>(0);
   const [animating, setAnimating] = useState<boolean>(true);
+  const carouselViewportRef = useRef<HTMLDivElement | null>(null);
+  const [viewportWidth, setViewportWidth] = useState<number>(0);
 
   useEffect(() => {
     const socket = io(SOCKET_URL || undefined);
@@ -255,6 +257,21 @@ const PublicDisplay: React.FC = () => {
     }, 3500);
     return () => clearInterval(interval);
   }, [oneBy75Ids, gameState.playedSongs.length, visibleCols]);
+
+  // Measure viewport width for pixel-perfect slides (one column per step)
+  useEffect(() => {
+    const el = carouselViewportRef.current;
+    if (!el) return;
+    const update = () => setViewportWidth(el.clientWidth || 0);
+    update();
+    window.addEventListener('resize', update);
+    const ro = new (window as any).ResizeObserver ? new ResizeObserver(update) : null;
+    if (ro) ro.observe(el);
+    return () => {
+      window.removeEventListener('resize', update);
+      if (ro) ro.disconnect();
+    };
+  }, [visibleCols]);
 
   // Fetch initial room info for display card
   useEffect(() => {
@@ -545,14 +562,15 @@ const PublicDisplay: React.FC = () => {
 
     // Each column is 1/3 of the viewport width; compute translate as percentage
     const effectiveIndex = shouldScroll ? Math.min(carouselIndex, total) : 0;
-    const xPercent = -(effectiveIndex * (100 / visibleCols));
+    const colWidth = viewportWidth > 0 ? viewportWidth / visibleCols : 0;
+    const xPx = -(effectiveIndex * colWidth);
 
     return (
       <div className="call-list-content">
-        <div className="call-carousel-viewport" style={{ ['--carousel-visible-cols' as any]: String(visibleCols) }}>
+        <div ref={carouselViewportRef} className="call-carousel-viewport" style={{ ['--carousel-visible-cols' as any]: String(visibleCols) }}>
           <motion.div
             className="call-carousel-track"
-            animate={{ x: animating && shouldScroll ? `${xPercent}%` : '0%' }}
+            animate={{ x: animating && shouldScroll ? xPx : 0 }}
             transition={{ duration: 0.5, ease: 'easeInOut' }}
           >
             {extendedGroups.map((group, gi) => (
@@ -577,10 +595,10 @@ const PublicDisplay: React.FC = () => {
                           borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)'
                         }}
                         transition={{ duration: 0.25 }}
-                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, height: '100%', overflow: 'hidden', background: 'rgba(255,255,255,0.08)' }}
+                        style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 12px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, height: '100%', overflow: 'hidden', background: 'rgba(255,255,255,0.08)' }}
                       >
-                        <div className="call-number" style={{ fontSize: '1.0rem', minWidth: 24, fontWeight: 900 }}>{poolIdx + 1}</div>
-                        <div className="call-song-info" style={{ flex: 1 }}>
+                        <div className="call-number" style={{ fontSize: '1.35rem', minWidth: 34, fontWeight: 900, lineHeight: 1.1 }}>{poolIdx + 1}</div>
+                        <div className="call-song-info" style={{ flex: 1, minWidth: 0 }}>
                           <AnimatePresence mode="popLayout" initial={false}>
                             <motion.div
                               key={revealed ? 'title-'+id : 'title-hidden-'+id}
@@ -589,7 +607,7 @@ const PublicDisplay: React.FC = () => {
                               exit={{ opacity: 0, y: -6, scale: 0.98 }}
                               transition={{ duration: 0.25 }}
                               className="call-song-name"
-                              style={{ fontWeight: 800, lineHeight: 1.2, fontSize: '1.3rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
+                              style={{ fontWeight: 900, lineHeight: 1.1, fontSize: '1.6rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'break-word' }}
                             >
                               {title}
                             </motion.div>
@@ -600,7 +618,7 @@ const PublicDisplay: React.FC = () => {
                               exit={{ opacity: 0, y: -4 }}
                               transition={{ duration: 0.25 }}
                               className="call-song-artist"
-                              style={{ fontSize: '1.1rem', color: '#e0e0e0', lineHeight: 1.1, fontWeight: 600, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}
+                              style={{ fontSize: '1.3rem', color: '#e0e0e0', lineHeight: 1.05, fontWeight: 700, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'break-word' }}
                             >
                               {artist}
                             </motion.div>
