@@ -74,6 +74,12 @@ const PublicDisplay: React.FC = () => {
   const [pattern, setPattern] = useState<string>('full_card');
   const [countdownMs, setCountdownMs] = useState<number>(0);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
+  // Visible carousel columns (default 3; can be overridden via ?cols=5)
+  const visibleCols = (() => {
+    const p = Number.parseInt(searchParams.get('cols') || '', 10);
+    if (Number.isFinite(p) && p >= 1 && p <= 5) return p;
+    return 3;
+  })();
   // 1x75 call list state
   const [oneBy75Ids, setOneBy75Ids] = useState<string[] | null>(null);
   const oneBy75IdsRef = useRef<string[] | null>(null);
@@ -229,7 +235,7 @@ const PublicDisplay: React.FC = () => {
       .filter(group => group.some(id => played.has(id)))
       .length;
 
-    if (totalGroups <= 3) {
+    if (totalGroups <= visibleCols) {
       setAnimating(false);
       setCarouselIndex(0);
       return;
@@ -248,7 +254,7 @@ const PublicDisplay: React.FC = () => {
       });
     }, 3500);
     return () => clearInterval(interval);
-  }, [oneBy75Ids, gameState.playedSongs.length]);
+  }, [oneBy75Ids, gameState.playedSongs.length, visibleCols]);
 
   // Fetch initial room info for display card
   useEffect(() => {
@@ -532,18 +538,18 @@ const PublicDisplay: React.FC = () => {
     });
     const visibleGroups = groups.filter(g => g.length > 0);
     const total = visibleGroups.length;
-    const shouldScroll = total > 3;
-    // Duplicate first 3 for smooth wrap only if scrolling
-    const extendedGroups: string[][] = shouldScroll ? [...visibleGroups, ...visibleGroups.slice(0, 3)] : visibleGroups;
+    const shouldScroll = total > visibleCols;
+    // Duplicate first N for smooth wrap only if scrolling
+    const extendedGroups: string[][] = shouldScroll ? [...visibleGroups, ...visibleGroups.slice(0, visibleCols)] : visibleGroups;
     const revealThreshold = Math.max(0, playedOrderRef.current.length - 5);
 
     // Each column is 1/3 of the viewport width; compute translate as percentage
     const effectiveIndex = shouldScroll ? Math.min(carouselIndex, total) : 0;
-    const xPercent = -(effectiveIndex * (100 / 3));
+    const xPercent = -(effectiveIndex * (100 / visibleCols));
 
     return (
       <div className="call-list-content">
-        <div className="call-carousel-viewport">
+        <div className="call-carousel-viewport" style={{ ['--carousel-visible-cols' as any]: String(visibleCols) }}>
           <motion.div
             className="call-carousel-track"
             animate={{ x: animating && shouldScroll ? `${xPercent}%` : '0%' }}

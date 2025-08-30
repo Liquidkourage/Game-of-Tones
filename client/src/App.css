@@ -203,8 +203,9 @@ body {
 
 /* Each column occupies 1/3 of viewport width so 3 columns are visible */
 .App .call-carousel-col {
-  flex: 0 0 calc(100% / 3);
-  max-width: calc(100% / 3);
+  /* Supports dynamic visible column count via CSS var; default to 3 */
+  flex: 0 0 calc(100% / var(--carousel-visible-cols, 3));
+  max-width: calc(100% / var(--carousel-visible-cols, 3));
   height: 100%;
   padding: 0 6px;
   box-sizing: border-box;
