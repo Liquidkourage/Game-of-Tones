@@ -78,7 +78,7 @@ const PublicDisplay: React.FC = () => {
   const visibleCols = (() => {
     const p = Number.parseInt(searchParams.get('cols') || '', 10);
     if (Number.isFinite(p) && p >= 1 && p <= 5) return p;
-    return 3;
+    return 5;
   })();
   // 1x75 call list state
   const [oneBy75Ids, setOneBy75Ids] = useState<string[] | null>(null);
