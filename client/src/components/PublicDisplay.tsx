@@ -85,6 +85,7 @@ const PublicDisplay: React.FC = () => {
   const oneBy75IdsRef = useRef<string[] | null>(null);
   const playedOrderRef = useRef<string[]>([]);
   const idMetaRef = useRef<Record<string, { name: string; artist: string }>>({});
+  const currentIndexRef = useRef<number>(-1);
   // Carousel state for grouped 15x5 columns (show 3 at a time)
   const [carouselIndex, setCarouselIndex] = useState<number>(0);
   const [animating, setAnimating] = useState<boolean>(true); // kept for compatibility but no longer toggled
@@ -134,6 +135,9 @@ const PublicDisplay: React.FC = () => {
       const song = { id: data.songId, name: data.songName, artist: data.artistName };
       // cache metadata for reveal lookups
       idMetaRef.current[song.id] = { name: song.name, artist: song.artist };
+      if (typeof data.currentIndex === 'number') {
+        currentIndexRef.current = data.currentIndex;
+      }
       setGameState(prev => ({
         ...prev,
         isPlaying: true,
@@ -232,10 +236,8 @@ const PublicDisplay: React.FC = () => {
     // Auto-advance only as far as we have populated groups; stop if <= 3 groups
     const ids = oneBy75IdsRef.current;
     if (!ids) return;
-    const played = new Set(playedOrderRef.current);
-    const totalGroups = Array.from({ length: 15 }, (_, g) => ids.slice(g * 5, g * 5 + 5))
-      .filter(group => group.some(id => played.has(id)))
-      .length;
+    const playedCount = Math.max(0, (currentIndexRef.current ?? -1) + 1);
+    const totalGroups = Math.ceil(Math.min(playedCount, 75) / 5);
 
     if (totalGroups <= visibleCols) { setCarouselIndex(0); return; }
     const interval = setInterval(() => { setCarouselIndex((idx) => idx + 1); }, 3500);
@@ -530,7 +532,8 @@ const PublicDisplay: React.FC = () => {
   // New: 15 groups of 5, auto-scrolling horizontally with 3 columns visible
   const renderOneBy75GroupedColumns = () => {
     if (!oneBy75Ids) return null;
-    const played = new Set(playedOrderRef.current);
+    const playedCount = Math.max(0, (currentIndexRef.current ?? -1) + 1);
+    const played = new Set(oneBy75Ids.slice(0, playedCount));
     // Build 15 groups from the full pool, then filter to only played IDs within each group
     const groups: string[][] = Array.from({ length: 15 }, (_, g) => {
       const start = g * 5;
@@ -542,7 +545,7 @@ const PublicDisplay: React.FC = () => {
     const shouldScroll = total > visibleCols;
     // Duplicate first N for smooth wrap
     const extendedGroups: string[][] = shouldScroll ? [...visibleGroups, ...visibleGroups.slice(0, visibleCols)] : visibleGroups;
-    const revealThreshold = Math.max(0, playedOrderRef.current.length - 5);
+    const revealThreshold = Math.max(0, playedCount - 5);
 
     // Each column is 1/3 of the viewport width; compute translate as percentage
     const wrap = shouldScroll ? total : 1;
