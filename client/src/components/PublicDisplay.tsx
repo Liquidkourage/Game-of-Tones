@@ -91,6 +91,7 @@ const PublicDisplay: React.FC = () => {
   const [animating, setAnimating] = useState<boolean>(true); // kept for compatibility but no longer toggled
   const carouselViewportRef = useRef<HTMLDivElement | null>(null);
   const [viewportWidth, setViewportWidth] = useState<number>(0);
+  const [playedCount, setPlayedCount] = useState<number>(0);
 
   useEffect(() => {
     const socket = io(SOCKET_URL || undefined);
@@ -137,6 +138,7 @@ const PublicDisplay: React.FC = () => {
       idMetaRef.current[song.id] = { name: song.name, artist: song.artist };
       if (typeof data.currentIndex === 'number') {
         currentIndexRef.current = data.currentIndex;
+        setPlayedCount(Math.max(0, data.currentIndex + 1));
       }
       setGameState(prev => ({
         ...prev,
@@ -236,13 +238,12 @@ const PublicDisplay: React.FC = () => {
     // Auto-advance only as far as we have populated groups; stop if <= 3 groups
     const ids = oneBy75IdsRef.current;
     if (!ids) return;
-    const playedCount = Math.max(0, (currentIndexRef.current ?? -1) + 1);
     const totalGroups = Math.ceil(Math.min(playedCount, 75) / 5);
 
     if (totalGroups <= visibleCols) { setCarouselIndex(0); return; }
     const interval = setInterval(() => { setCarouselIndex((idx) => idx + 1); }, 3500);
     return () => clearInterval(interval);
-  }, [oneBy75Ids, gameState.playedSongs.length, visibleCols]);
+  }, [oneBy75Ids, visibleCols, playedCount]);
 
   // Measure viewport width for pixel-perfect slides (one column per step)
   useEffect(() => {
@@ -532,7 +533,6 @@ const PublicDisplay: React.FC = () => {
   // New: 15 groups of 5, auto-scrolling horizontally with 3 columns visible
   const renderOneBy75GroupedColumns = () => {
     if (!oneBy75Ids) return null;
-    const playedCount = Math.max(0, (currentIndexRef.current ?? -1) + 1);
     const played = new Set(oneBy75Ids.slice(0, playedCount));
     // Build 15 groups from the full pool, then filter to only played IDs within each group
     const groups: string[][] = Array.from({ length: 15 }, (_, g) => {
@@ -555,6 +555,11 @@ const PublicDisplay: React.FC = () => {
 
     return (
       <div className="call-list-content">
+        {searchParams.get('debug') === '1' && (
+          <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 5, padding: '6px 10px', background: 'rgba(0,0,0,0.5)', borderRadius: 8, fontSize: 12 }}>
+            groups: {total} • visibleCols: {visibleCols} • played: {playedCount} • index: {carouselIndex % (Math.max(1,total))}
+          </div>
+        )}
         <div ref={carouselViewportRef} className="call-carousel-viewport" style={{ ['--carousel-visible-cols' as any]: String(visibleCols) }}>
           <motion.div
             className="call-carousel-track"
