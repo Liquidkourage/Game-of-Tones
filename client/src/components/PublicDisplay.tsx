@@ -221,13 +221,25 @@ const PublicDisplay: React.FC = () => {
 
   // Auto-advance the 15x5 grouped columns carousel
   useEffect(() => {
-    if (!oneBy75Ids) return;
+    // Auto-advance only as far as we have populated groups; stop if <= 3 groups
+    const ids = oneBy75IdsRef.current;
+    if (!ids) return;
+    const played = new Set(playedOrderRef.current);
+    const totalGroups = Array.from({ length: 15 }, (_, g) => ids.slice(g * 5, g * 5 + 5))
+      .filter(group => group.some(id => played.has(id)))
+      .length;
+
+    if (totalGroups <= 3) {
+      setAnimating(false);
+      setCarouselIndex(0);
+      return;
+    }
+
+    setAnimating(true);
     const interval = setInterval(() => {
       setCarouselIndex((idx) => {
         const next = idx + 1;
-        // 15 groups total; we append 3 duplicates for smooth wrap
-        if (next > 15) {
-          // jump back to 0 without animation, then re-enable animation on next frame
+        if (next > totalGroups) {
           setAnimating(false);
           requestAnimationFrame(() => setAnimating(true));
           return 0;
@@ -236,7 +248,7 @@ const PublicDisplay: React.FC = () => {
       });
     }, 3500);
     return () => clearInterval(interval);
-  }, [oneBy75Ids]);
+  }, [oneBy75Ids, gameState.playedSongs.length]);
 
   // Fetch initial room info for display card
   useEffect(() => {
@@ -518,19 +530,23 @@ const PublicDisplay: React.FC = () => {
       const slice = oneBy75Ids.slice(start, start + 5);
       return slice.filter((id) => played.has(id));
     });
-    // Duplicate the first 3 groups to the end for smoother wrap when sliding to last pages
-    const extendedGroups: string[][] = [...groups, ...groups.slice(0, 3)];
+    const visibleGroups = groups.filter(g => g.length > 0);
+    const total = visibleGroups.length;
+    const shouldScroll = total > 3;
+    // Duplicate first 3 for smooth wrap only if scrolling
+    const extendedGroups: string[][] = shouldScroll ? [...visibleGroups, ...visibleGroups.slice(0, 3)] : visibleGroups;
     const revealThreshold = Math.max(0, playedOrderRef.current.length - 5);
 
     // Each column is 1/3 of the viewport width; compute translate as percentage
-    const xPercent = -(carouselIndex * (100 / 3));
+    const effectiveIndex = shouldScroll ? Math.min(carouselIndex, total) : 0;
+    const xPercent = -(effectiveIndex * (100 / 3));
 
     return (
       <div className="call-list-content">
         <div className="call-carousel-viewport">
           <motion.div
             className="call-carousel-track"
-            animate={{ x: animating ? `${xPercent}%` : `${-(0 * (100 / 3))}%` }}
+            animate={{ x: animating && shouldScroll ? `${xPercent}%` : '0%' }}
             transition={{ duration: 0.5, ease: 'easeInOut' }}
           >
             {extendedGroups.map((group, gi) => (
