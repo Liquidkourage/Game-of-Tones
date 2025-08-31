@@ -1201,29 +1201,7 @@ const HostView: React.FC = () => {
              )}
           </motion.div>
 
-          {/* Playlist Selection */}
-          <motion.div 
-            className="playlist-section"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
-          >
-            <h2>📋 Select Playlists</h2>
-            <div className="playlist-grid">
-              {playlists && playlists.map(playlist => (
-                <motion.div
-                  key={playlist.id}
-                  className={`playlist-card ${selectedPlaylists.find(p => p.id === playlist.id) ? 'selected' : ''}`}
-                  onClick={() => selectPlaylist(playlist)}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <h3>{playlist.name}</h3>
-                  <p>{playlist.tracks || 0} songs</p>
-                </motion.div>
-              ))}
-            </div>
-                     </motion.div>
+          {/* Legacy playlist grid removed in favor of paged list above */}
 
            {/* Song List */}
            {songList.length > 0 && (
