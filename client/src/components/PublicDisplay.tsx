@@ -233,16 +233,22 @@ const PublicDisplay: React.FC = () => {
 
   // Auto-advance the 15x5 grouped columns carousel
   useEffect(() => {
-    // Auto-advance only as far as we have populated groups; stop if <= 3 groups
     const ids = oneBy75IdsRef.current;
     if (!ids) return;
-    const playedCount = Math.max(0, (currentIndexRef.current ?? -1) + 1);
-    const totalGroups = Math.ceil(Math.min(playedCount, 75) / 5);
-
-    if (totalGroups <= visibleCols) { setCarouselIndex(0); return; }
-    const interval = setInterval(() => { setCarouselIndex((idx) => idx + 1); }, 3500);
+    const interval = setInterval(() => {
+      const effectivePlayed = Math.max(
+        Math.max(0, (currentIndexRef.current ?? -1) + 1),
+        playedOrderRef.current.length
+      );
+      const totalGroups = Math.ceil(Math.min(effectivePlayed, 75) / 5);
+      if (totalGroups > visibleCols) {
+        setCarouselIndex((idx) => idx + 1);
+      } else {
+        setCarouselIndex(0);
+      }
+    }, 3500);
     return () => clearInterval(interval);
-  }, [oneBy75Ids, gameState.playedSongs.length, visibleCols]);
+  }, [oneBy75Ids, visibleCols]);
 
   // Measure viewport width for pixel-perfect slides (one column per step)
   useEffect(() => {
@@ -552,13 +558,14 @@ const PublicDisplay: React.FC = () => {
     const effectiveIndex = shouldScroll ? (carouselIndex % wrap) : 0;
     const colWidth = viewportWidth > 0 ? viewportWidth / visibleCols : 0;
     const xPx = -(effectiveIndex * colWidth);
+    const xPercent = -(effectiveIndex * (100 / visibleCols));
 
     return (
       <div className="call-list-content">
         <div ref={carouselViewportRef} className="call-carousel-viewport" style={{ ['--carousel-visible-cols' as any]: String(visibleCols) }}>
           <motion.div
             className="call-carousel-track"
-            animate={{ x: shouldScroll ? xPx : 0 }}
+            animate={{ x: shouldScroll ? (colWidth > 0 ? xPx : xPercent + '%') : 0 }}
             transition={{ duration: 0.5, ease: 'easeInOut' }}
           >
             {extendedGroups.map((group, gi) => (
