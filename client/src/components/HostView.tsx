@@ -218,17 +218,19 @@ const HostView: React.FC = () => {
 
   const fetchPlaybackState = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE || ''}/api/spotify/current-playback`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.playbackState) {
-          setShuffleEnabled(!!data.playbackState.shuffle_state);
-          const rep = (data.playbackState.repeat_state || 'off') as 'off' | 'track' | 'context';
-          setRepeatState(rep);
-        }
+      const resp = await fetch(`${API_BASE || ''}/api/spotify/current-playback`);
+      if (!resp.ok) {
+        if (resp.status >= 500) return; // ignore transient 5xx
+        return;
+      }
+      const data = await resp.json();
+      if (data.success && data.playbackState) {
+        setShuffleEnabled(!!data.playbackState.shuffle_state);
+        const rep = (data.playbackState.repeat_state || 'off') as 'off' | 'track' | 'context';
+        setRepeatState(rep);
       }
     } catch (e) {
-      // no-op
+      // ignore
     }
   }, []);
 
@@ -719,17 +721,16 @@ const HostView: React.FC = () => {
   // Function to fetch current Spotify volume
   const fetchCurrentVolume = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE || ''}/api/spotify/current-playback`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.playbackState) {
-          const spotifyVolume = (data.playbackState.device?.volume_percent ?? 50) as number;
-          setPlaybackState(prev => ({ ...prev, volume: spotifyVolume }));
-          console.log(`🔊 Synced volume from Spotify: ${spotifyVolume}%`);
-        }
+      const resp = await fetch(`${API_BASE || ''}/api/spotify/current-playback`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (data.success && data.playbackState) {
+        const spotifyVolume = (data.playbackState.device?.volume_percent ?? 50) as number;
+        setPlaybackState(prev => ({ ...prev, volume: spotifyVolume }));
+        console.log(`🔊 Synced volume from Spotify: ${spotifyVolume}%`);
       }
-    } catch (error) {
-      console.error('Error fetching current volume:', error);
+    } catch {
+      // ignore
     }
   }, []);
 
@@ -1036,54 +1037,46 @@ const HostView: React.FC = () => {
   // Periodic volume synchronization
   useEffect(() => {
     if (!isPlaying || !currentSong) return;
-
     const volumeSyncInterval = setInterval(() => {
+      // Only sync volume every 15s to reduce noise
       fetchCurrentVolume();
-    }, 5000); // Sync volume every 5 seconds during playback
-
+    }, 15000);
     return () => clearInterval(volumeSyncInterval);
   }, [isPlaying, currentSong, fetchCurrentVolume]);
 
   // Periodic playback state synchronization
   useEffect(() => {
     if (!currentSong) return;
-
     const playbackSyncInterval = setInterval(async () => {
       try {
-        const response = await fetch(`${API_BASE || ''}/api/spotify/current-playback`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.playbackState) {
-            const spotifyIsPlaying = data.playbackState.is_playing;
-            const spotifyPosition = data.playbackState.progress_ms || 0;
-            setShuffleEnabled(!!data.playbackState.shuffle_state);
-            const rep = (data.playbackState.repeat_state || 'off') as 'off' | 'track' | 'context';
-            setRepeatState(rep);
-            
-            // If Spotify is playing but our interface thinks it's paused, or vice versa
-            if (spotifyIsPlaying !== isPlaying) {
-              console.log(`🔄 Spotify playback state changed: ${spotifyIsPlaying}, updating interface`);
-              setIsPlaying(spotifyIsPlaying);
-              setPlaybackState(prev => ({ 
-                ...prev, 
-                isPlaying: spotifyIsPlaying,
-                currentTime: spotifyPosition
-              }));
-              
-              // If Spotify was resumed externally, clear our pause tracking
-              if (spotifyIsPlaying && isPausedByInterface) {
-                console.log('🔄 Spotify resumed externally, clearing pause tracking');
-                setIsPausedByInterface(false);
-                setPausePosition(0);
-              }
+        const resp = await fetch(`${API_BASE || ''}/api/spotify/current-playback`);
+        if (!resp.ok) {
+          if (resp.status >= 500) return; // ignore 5xx
+          return;
+        }
+        const data = await resp.json();
+        if (data.success && data.playbackState) {
+          const spotifyIsPlaying = !!data.playbackState.is_playing;
+          const spotifyPosition = data.playbackState.progress_ms || 0;
+          setShuffleEnabled(!!data.playbackState.shuffle_state);
+          const rep = (data.playbackState.repeat_state || 'off') as 'off' | 'track' | 'context';
+          setRepeatState(rep);
+          // Only update if it diverges AND we haven't received a recent socket start
+          if (spotifyIsPlaying !== isPlaying) {
+            console.log(`🔄 Spotify playback state changed: ${spotifyIsPlaying}, updating interface`);
+            setIsPlaying(spotifyIsPlaying);
+            setPlaybackState(prev => ({ ...prev, isPlaying: spotifyIsPlaying, currentTime: spotifyPosition }));
+            if (spotifyIsPlaying && isPausedByInterface) {
+              console.log('🔄 Spotify resumed externally, clearing pause tracking');
+              setIsPausedByInterface(false);
+              setPausePosition(0);
             }
           }
         }
-      } catch (error) {
-        console.error('Error syncing playback state:', error);
+      } catch {
+        // ignore
       }
-    }, 2000); // Sync every 2 seconds
-
+    }, 30000); // 30s throttle
     return () => clearInterval(playbackSyncInterval);
   }, [currentSong, isPlaying, isPausedByInterface]);
 
