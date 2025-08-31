@@ -242,7 +242,16 @@ const PublicDisplay: React.FC = () => {
       );
       const totalGroups = Math.ceil(Math.min(effectivePlayed, 75) / 5);
       if (totalGroups > visibleCols) {
-        setCarouselIndex((idx) => idx + 1);
+        setCarouselIndex((prev) => {
+          const next = prev + 1;
+          if (next > totalGroups) {
+            // seamless wrap: snap to 0 without animation; next tick resumes anim
+            setAnimating(false);
+            requestAnimationFrame(() => setAnimating(true));
+            return 0;
+          }
+          return next;
+        });
       } else {
         setCarouselIndex(0);
       }
@@ -555,7 +564,7 @@ const PublicDisplay: React.FC = () => {
 
     // Each column is 1/3 of the viewport width; compute translate as percentage
     const wrap = shouldScroll ? total : 1;
-    const effectiveIndex = shouldScroll ? (carouselIndex % wrap) : 0;
+    const effectiveIndex = shouldScroll ? Math.min(carouselIndex, total) : 0;
     const colWidth = viewportWidth > 0 ? viewportWidth / visibleCols : 0;
     const xPx = -(effectiveIndex * colWidth);
     const xPercent = -(effectiveIndex * (100 / visibleCols));
@@ -566,7 +575,7 @@ const PublicDisplay: React.FC = () => {
           <motion.div
             className="call-carousel-track"
             animate={{ x: shouldScroll ? (colWidth > 0 ? xPx : xPercent + '%') : 0 }}
-            transition={{ duration: 0.5, ease: 'easeInOut' }}
+            transition={{ duration: animating && shouldScroll ? 0.5 : 0, ease: 'easeInOut' }}
           >
             {extendedGroups.map((group, gi) => (
               <div key={gi} className="call-carousel-col">
