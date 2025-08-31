@@ -74,6 +74,7 @@ const PublicDisplay: React.FC = () => {
   const [pattern, setPattern] = useState<string>('full_card');
   const [countdownMs, setCountdownMs] = useState<number>(0);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
+  const [totalPlayedCount, setTotalPlayedCount] = useState<number>(0);
   // Visible carousel columns (default 3; can be overridden via ?cols=5)
   const visibleCols = (() => {
     const p = Number.parseInt(searchParams.get('cols') || '', 10);
@@ -138,6 +139,7 @@ const PublicDisplay: React.FC = () => {
       if (typeof data.currentIndex === 'number') {
         currentIndexRef.current = data.currentIndex;
       }
+      setTotalPlayedCount(prev => (typeof data.currentIndex === 'number' ? (data.currentIndex + 1) : prev + 1));
       setGameState(prev => ({
         ...prev,
         isPlaying: true,
@@ -255,7 +257,7 @@ const PublicDisplay: React.FC = () => {
       } else {
         setCarouselIndex(0);
       }
-    }, 3500);
+    }, 5000);
     return () => clearInterval(interval);
   }, [oneBy75Ids, visibleCols]);
 
@@ -575,7 +577,7 @@ const PublicDisplay: React.FC = () => {
           <motion.div
             className="call-carousel-track"
             animate={{ x: shouldScroll ? (colWidth > 0 ? xPx : xPercent + '%') : 0 }}
-            transition={{ duration: animating && shouldScroll ? 0.5 : 0, ease: 'easeInOut' }}
+            transition={{ duration: animating && shouldScroll ? 5 : 0, ease: 'easeInOut' }}
           >
             {extendedGroups.map((group, gi) => (
               <div key={gi} className="call-carousel-col">
@@ -709,7 +711,7 @@ const PublicDisplay: React.FC = () => {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <List className="stat-icon" />
                     <div>
-                      <div style={{ fontSize: '2.0rem', fontWeight: 900 }}>{gameState.playedSongs.length}</div>
+                      <div style={{ fontSize: '2.0rem', fontWeight: 900 }}>{totalPlayedCount}</div>
                       <div style={{ fontSize: '1.4rem', color: '#b3b3b3' }}>Songs</div>
                     </div>
                   </div>
@@ -759,13 +761,13 @@ const PublicDisplay: React.FC = () => {
               <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1, minHeight: 0 }}>
               <div className="call-list-header" style={{ marginTop: -36 }}>
                   <List className="call-list-icon" />
-                <span className="call-count">{gameState.playedSongs.length}</span>
+                <span className="call-count">{totalPlayedCount}</span>
                 </div>
               {oneBy75Ids ? renderOneBy75GroupedColumns() : (
                   <div className="call-list-content" style={{ height: '100%' }}>
                   {/* Column headers moved to App header to free vertical space */}
                     <div className="call-list" style={{ height: '100%' }}>
-                      {gameState.playedSongs.length > 0 && (
+                      {totalPlayedCount > 0 && (
                         gameState.playedSongs.slice(-10).map((song, index) => (
                           <motion.div
                             key={song.id + '-' + index}
@@ -774,7 +776,7 @@ const PublicDisplay: React.FC = () => {
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ duration: 0.4, delay: 0.3 + index * 0.05 }}
                           >
-                            <div className="call-number">#{gameState.playedSongs.length - (Math.min(10, gameState.playedSongs.length) - 1) + index}</div>
+                            <div className="call-number">#{Math.max(1, totalPlayedCount - (Math.min(10, gameState.playedSongs.length) - 1) + index)}</div>
                             <div className="call-song-info">
                               <div className="call-song-name">{song.name}</div>
                               <div className="call-song-artist">{song.artist}</div>
@@ -784,7 +786,7 @@ const PublicDisplay: React.FC = () => {
                         ))
                       )}
                     </div>
-                    {gameState.playedSongs.length === 0 && (
+                    {totalPlayedCount === 0 && (
                       <div className="no-calls">
                         <p>No songs played yet</p>
                       </div>
