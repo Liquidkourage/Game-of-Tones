@@ -599,7 +599,7 @@ const PublicDisplay: React.FC = () => {
                           borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)'
                         }}
                         transition={{ duration: 0.25 }}
-                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, height: '100%', overflow: 'hidden', background: 'rgba(255,255,255,0.08)' }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px 14px 12px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, height: '100%', overflow: 'hidden', background: 'rgba(255,255,255,0.08)' }}
                       >
                         <div className="call-number" style={{ fontSize: '1.6rem', minWidth: 38, fontWeight: 900, lineHeight: 1 }}>{poolIdx + 1}</div>
                         <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
@@ -611,7 +611,7 @@ const PublicDisplay: React.FC = () => {
                               exit={{ opacity: 0, y: -6, scale: 0.98 }}
                               transition={{ duration: 0.25 }}
                               className="call-song-name"
-                              style={{ fontWeight: 900, lineHeight: 1.05, fontSize: '1.85rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'break-word' }}
+                              style={{ fontWeight: 900, lineHeight: 1.15, fontSize: '1.85rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'break-word' }}
                             >
                               {title}
                             </motion.div>
@@ -622,7 +622,7 @@ const PublicDisplay: React.FC = () => {
                               exit={{ opacity: 0, y: -4 }}
                               transition={{ duration: 0.25 }}
                               className="call-song-artist"
-                              style={{ fontSize: '1.5rem', color: '#e0e0e0', lineHeight: 1.05, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'break-word' }}
+                              style={{ fontSize: '1.5rem', color: '#e0e0e0', lineHeight: 1.15, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'break-word' }}
                             >
                               {artist}
                             </motion.div>
