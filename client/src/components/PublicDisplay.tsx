@@ -599,10 +599,10 @@ const PublicDisplay: React.FC = () => {
                           borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)'
                         }}
                         transition={{ duration: 0.25 }}
-                        style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 12px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, height: '100%', overflow: 'hidden', background: 'rgba(255,255,255,0.08)' }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, height: '100%', overflow: 'hidden', background: 'rgba(255,255,255,0.08)' }}
                       >
                         <div className="call-number" style={{ fontSize: '1.6rem', minWidth: 38, fontWeight: 900, lineHeight: 1 }}>{poolIdx + 1}</div>
-                        <div className="call-song-info" style={{ flex: 1, minWidth: 0 }}>
+                        <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                           <AnimatePresence mode="popLayout" initial={false}>
                             <motion.div
                               key={revealed ? 'title-'+id : 'title-hidden-'+id}
