@@ -159,7 +159,8 @@ class SpotifyService {
             artist: item.track.artists.map(artist => artist.name).join(', '),
             album: item.track.album.name,
             duration: item.track.duration_ms,
-            uri: item.track.uri
+            uri: item.track.uri,
+            previewUrl: item.track.preview_url || null
           }));
         
         tracks.push(...validTracks);

@@ -1114,6 +1114,61 @@ const HostView: React.FC = () => {
      return () => document.removeEventListener('keydown', handleKeyPress);
    }, [currentSong, handleMuteToggle]);
 
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = React.useRef<string | null>(null);
+
+  useEffect(() => {
+    // Ensure a single audio element exists
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
+      audioRef.current.preload = 'auto';
+      audioRef.current.crossOrigin = 'anonymous';
+      audioRef.current.volume = 1.0;
+    }
+  }, []);
+
+  // When a new song starts via socket, prefetch preview if available
+  useEffect(() => {
+    if (!currentSong) return;
+    const handlePrefetch = async () => {
+      try {
+        // previewUrl is delivered on song-playing payload via server
+        const previewUrl = (currentSong as any).previewUrl as string | undefined;
+        if (previewUrl) {
+          audioUrlRef.current = previewUrl;
+          if (audioRef.current) {
+            audioRef.current.src = previewUrl;
+            await audioRef.current.load?.();
+          }
+        } else {
+          audioUrlRef.current = null;
+        }
+      } catch {}
+    };
+    handlePrefetch();
+  }, [currentSong]);
+
+  // Early-fail guard on the host (client-side): if playback hasn't advanced soon after start, play preview
+  useEffect(() => {
+    if (!isPlaying || !currentSong) return;
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      if (cancelled) return;
+      try {
+        const resp = await fetch(`${API_BASE || ''}/api/spotify/current-playback`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const progress = Number(data?.playbackState?.progress_ms || 0);
+        const is_sp_playing = !!data?.playbackState?.is_playing;
+        if ((!is_sp_playing || progress < 1000) && audioRef.current && audioUrlRef.current) {
+          console.warn('⚠️ Spotify stall detected on host; playing preview fallback');
+          try { await audioRef.current.play(); } catch {}
+        }
+      } catch {}
+    }, 4000);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [isPlaying, currentSong]);
+
   return (
     <div className="host-view">
       <motion.div 

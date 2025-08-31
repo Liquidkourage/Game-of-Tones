@@ -261,7 +261,8 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       artistName: song.artist,
       snippetLength: room.snippetLength,
       currentIndex: songIndex,
-      totalSongs: room.playlistSongs.length
+      totalSongs: room.playlistSongs.length,
+      previewUrl: (room.playlistSongs[songIndex]?.previewUrl) || null
     });
 
     console.log(`✅ Playing song in room ${roomId}: ${song.name} by ${song.artist} on device ${targetDeviceId}`);
@@ -437,7 +438,8 @@ io.on('connection', (socket) => {
               artistName: room.currentSong.artist,
               snippetLength: room.snippetLength,
               currentIndex: room.currentSongIndex || 0,
-              totalSongs: room.playlistSongs?.length || 0
+              totalSongs: room.playlistSongs?.length || 0,
+              previewUrl: (room.playlistSongs?.[room.currentSongIndex || 0]?.previewUrl) || null
             });
           }
 
@@ -1620,7 +1622,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       artistName: firstSong.artist,
       snippetLength: room.snippetLength,
       currentIndex: 0,
-      totalSongs: allSongs.length
+      totalSongs: allSongs.length,
+      previewUrl: (allSongs[0]?.previewUrl) || null
     });
 
   
@@ -1817,7 +1820,8 @@ async function playNextSong(roomId, deviceId) {
       artistName: nextSong.artist,
       snippetLength: room.snippetLength,
       currentIndex: room.currentSongIndex,
-      totalSongs: room.playlistSongs.length
+      totalSongs: room.playlistSongs.length,
+      previewUrl: (room.playlistSongs[room.currentSongIndex]?.previewUrl) || null
     });
 
     console.log(`✅ Playing next song in room ${roomId}: ${nextSong.name} by ${nextSong.artist} on device ${targetDeviceId}`);
