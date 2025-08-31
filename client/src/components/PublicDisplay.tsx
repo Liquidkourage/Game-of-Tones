@@ -257,7 +257,8 @@ const PublicDisplay: React.FC = () => {
       } else {
         setCarouselIndex(0);
       }
-    }, 5000);
+    // Tick period = shift duration (~1s) + desired pause (5s) ⇒ 6000ms
+    }, 6000);
     return () => clearInterval(interval);
   }, [oneBy75Ids, visibleCols]);
 
@@ -577,7 +578,7 @@ const PublicDisplay: React.FC = () => {
           <motion.div
             className="call-carousel-track"
             animate={{ x: shouldScroll ? (colWidth > 0 ? xPx : xPercent + '%') : 0 }}
-            transition={{ duration: animating && shouldScroll ? 5 : 0, ease: 'easeInOut' }}
+            transition={{ duration: animating && shouldScroll ? 1 : 0, ease: 'easeInOut' }}
           >
             {extendedGroups.map((group, gi) => (
               <div key={gi} className="call-carousel-col">
