@@ -812,19 +812,53 @@ io.on('connection', (socket) => {
           return;
         }
         try {
-          // Ensure control on the locked device
+          // Ensure control on the locked device (do not auto-play)
           await spotifyService.transferPlayback(deviceId, false);
         } catch (e) {
           console.warn('⚠️ Transfer before pause failed:', e?.message || e);
         }
-        await spotifyService.pausePlayback(deviceId);
+
+        // If already paused, treat as success
+        try {
+          const state = await spotifyService.getCurrentPlaybackState();
+          const isPlaying = !!state?.is_playing;
+          if (!isPlaying) {
+            console.log('⏸️ Already paused according to playback state — treating as success');
+            room.gameState = 'paused';
+            io.to(roomId).emit('playback-paused');
+            return;
+          }
+        } catch (_) {}
+
+        // Attempt to pause; add fallbacks for restriction errors
+        try {
+          await spotifyService.pausePlayback(deviceId);
+        } catch (pauseErr) {
+          const msg = pauseErr?.body?.error?.message || pauseErr?.message || String(pauseErr);
+          const status = pauseErr?.body?.error?.status || pauseErr?.statusCode;
+          const isRestriction = /Restriction/i.test(msg) || status === 403;
+          if (isRestriction) {
+            console.warn('⚠️ Pause restricted; attempting device activation then retry');
+            try {
+              await spotifyService.activateDevice(deviceId);
+              await new Promise(r => setTimeout(r, 200));
+              await spotifyService.pausePlayback(deviceId);
+            } catch (retryErr) {
+              console.warn('⚠️ Pause retry failed; muting as fallback:', retryErr?.message || retryErr);
+              // Last-resort mute so show continues silently
+              try { await spotifyService.setVolume(0, deviceId); } catch {}
+            }
+          } else {
+            throw pauseErr;
+          }
+        }
         room.gameState = 'paused';
         io.to(roomId).emit('playback-paused');
         console.log('✅ Playback paused successfully');
       } catch (error) {
         const msg = error?.body?.error?.message || error?.message || 'Failed to pause song';
         console.error('❌ Error pausing song:', msg);
-        socket.emit('error', { message: `Failed to pause song: ${msg}` });
+        io.to(roomId).emit('playback-warning', { message: `Pause problem: ${msg}` });
       }
     }
   });
