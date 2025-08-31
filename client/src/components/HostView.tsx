@@ -103,6 +103,11 @@ const HostView: React.FC = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [previousVolume, setPreviousVolume] = useState(50);
   const [songList, setSongList] = useState<Song[]>([]);
+  // Playlists paging/virtualization state
+  const [playlistPage, setPlaylistPage] = useState(1); // pages of 50
+  const [visiblePlaylists, setVisiblePlaylists] = useState<Playlist[]>([]);
+  const [playlistQuery, setPlaylistQuery] = useState('');
+  const [isLoadingMorePlaylists, setIsLoadingMorePlaylists] = useState(false);
   const [showSongList, setShowSongList] = useState(false);
   
   // Pause position tracking
@@ -125,6 +130,9 @@ const HostView: React.FC = () => {
       
       if (data.success) {
         setPlaylists(data.playlists);
+        // initialize first page (50)
+        setPlaylistPage(1);
+        setVisiblePlaylists(data.playlists.slice(0, 50));
         console.log('Playlists loaded:', data.playlists.length, 'playlists');
       } else {
         console.error('Failed to load playlists:', data.error);
@@ -133,6 +141,28 @@ const HostView: React.FC = () => {
       console.error('Error loading playlists:', error);
     }
   }, []);
+
+  // Append next page of playlists
+  const loadMorePlaylists = useCallback(() => {
+    if (!playlists || playlists.length === 0) return;
+    if (isLoadingMorePlaylists) return;
+    setIsLoadingMorePlaylists(true);
+    const nextPage = playlistPage + 1;
+    const next = playlists.slice(0, nextPage * 50);
+    setVisiblePlaylists(next);
+    setPlaylistPage(nextPage);
+    setIsLoadingMorePlaylists(false);
+  }, [playlists, playlistPage, isLoadingMorePlaylists]);
+
+  // Filter playlists by query (client-side, debounced simple contains)
+  const filteredPlaylists = (playlistQuery ? visiblePlaylists.filter(p => {
+    const q = playlistQuery.toLowerCase();
+    return (
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.owner || '').toLowerCase().includes(q) ||
+      (p.description || '').toLowerCase().includes(q)
+    );
+  }) : visiblePlaylists);
 
   const loadDevices = useCallback(async () => {
     try {
@@ -1345,6 +1375,53 @@ const HostView: React.FC = () => {
                 <button className={`btn-secondary ${pattern==='x'?'active':''}`} onClick={() => updatePattern('x')}>X</button>
                 <button className={`btn-secondary ${pattern==='full_card'?'active':''}`} onClick={() => updatePattern('full_card')}>Full Card</button>
               </div>
+            </div>
+
+            {/* Playlists - Virtualized + Paged */}
+            <div className="setting-item">
+              <label>Playlists:</label>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                <input
+                  type="text"
+                  placeholder="Search playlists..."
+                  value={playlistQuery}
+                  onChange={(e) => setPlaylistQuery(e.target.value)}
+                  className="input"
+                  style={{ flex: 1 }}
+                />
+                <button className="btn-secondary" onClick={() => { setPlaylistQuery(''); }}>Clear</button>
+              </div>
+              <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8 }}>
+                {filteredPlaylists.length === 0 && (
+                  <div style={{ color: '#b3b3b3', fontStyle: 'italic' }}>No playlists</div>
+                )}
+                {filteredPlaylists.map((p) => {
+                  const isSelected = !!selectedPlaylists.find(sp => sp.id === p.id);
+                  return (
+                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                        <div style={{ fontSize: 12, color: '#b3b3b3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.owner} • {p.tracks} tracks</div>
+                      </div>
+                      <button
+                        className={isSelected ? 'btn-secondary active' : 'btn-secondary'}
+                        onClick={() => {
+                          setSelectedPlaylists(prev => (
+                            isSelected ? prev.filter(sp => sp.id !== p.id) : [...prev, p]
+                          ));
+                        }}
+                      >
+                        {isSelected ? 'Remove' : 'Add'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              {visiblePlaylists.length < playlists.length && (
+                <button disabled={isLoadingMorePlaylists} className="btn-secondary" style={{ marginTop: 8 }} onClick={loadMorePlaylists}>
+                  {isLoadingMorePlaylists ? 'Loading…' : `Load more (${playlists.length - visiblePlaylists.length} left)`}
+                </button>
+              )}
             </div>
           </motion.div>
 
