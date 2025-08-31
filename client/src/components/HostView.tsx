@@ -1330,7 +1330,7 @@ const HostView: React.FC = () => {
               <label>Snippet Length (seconds):</label>
               <input
                 type="range"
-                min="15"
+                min="5"
                 max="60"
                 value={snippetLength}
                 onChange={(e) => setSnippetLength(Number(e.target.value))}
