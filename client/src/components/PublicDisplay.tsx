@@ -94,6 +94,10 @@ const PublicDisplay: React.FC = () => {
   const [animating, setAnimating] = useState<boolean>(true); // kept for compatibility but no longer toggled
   const carouselViewportRef = useRef<HTMLDivElement | null>(null);
   const [viewportWidth, setViewportWidth] = useState<number>(0);
+  // 5x15 vertical scroll state
+  const [vertIndex, setVertIndex] = useState<number>(0);
+  const vertViewportRef = useRef<HTMLDivElement | null>(null);
+  const [rowHeightPx, setRowHeightPx] = useState<number>(0);
 
   useEffect(() => {
     const socket = io(SOCKET_URL || undefined);
@@ -313,6 +317,41 @@ const PublicDisplay: React.FC = () => {
     };
   }, [visibleCols]);
 
+  // Measure per-column viewport height to derive row height (5 visible rows)
+  useEffect(() => {
+    const el = vertViewportRef.current;
+    if (!el) return;
+    const compute = () => {
+      const h = el.clientHeight || 0;
+      if (h > 0) setRowHeightPx(h / 5);
+    };
+    compute();
+    window.addEventListener('resize', compute);
+    const ro = new (window as any).ResizeObserver ? new ResizeObserver(compute) : null;
+    if (ro) ro.observe(el);
+    return () => {
+      window.removeEventListener('resize', compute);
+      if (ro) ro.disconnect();
+    };
+  }, [vertViewportRef.current]);
+
+  // Auto-advance vertical index for 5x15 (show 5 at a time, scroll by 1)
+  useEffect(() => {
+    const ids = oneBy75IdsRef.current;
+    if (!ids) return;
+    const played = new Set(playedOrderRef.current);
+    const visibleIds = ids.filter(id => played.has(id));
+    // Build 5 columns of up to 15 each
+    const cols = [0,1,2,3,4].map(c => visibleIds.slice(c*15, c*15 + 15));
+    const maxRows = Math.max(0, ...cols.map(c => c.length));
+    const maxIndex = Math.max(0, maxRows - 5);
+    if (maxIndex === 0) { setVertIndex(0); return; }
+    const interval = setInterval(() => {
+      setVertIndex((prev) => (prev >= maxIndex ? 0 : prev + 1));
+    }, 6000); // 5s dwell + ~1s anim
+    return () => clearInterval(interval);
+  }, [oneBy75Ids, totalPlayedCount]);
+
   // Fetch initial room info for display card
   useEffect(() => {
     const fetchRoom = async () => {
@@ -509,7 +548,18 @@ const PublicDisplay: React.FC = () => {
     // Only include songs that have played, preserving pool order
     const visibleIds = oneBy75Ids.filter(id => played.has(id));
     const cols = [0,1,2,3,4].map(c => visibleIds.slice(c*15, c*15 + 15));
-    const revealThreshold = Math.max(0, playedOrderRef.current.length - 5);
+    // Helper: Wheel-of-Fortune style masking using per-song baseline
+    const maskByLetterSet = (text: string, set: Set<string>) => {
+      if (!text) return '';
+      const chars = Array.from(text);
+      return chars.map((ch) => {
+        const u = ch.toUpperCase();
+        if (/^[A-Z0-9]$/.test(u)) {
+          return set.has(u) ? ch : '?';
+        }
+        return ch === ' ' ? ' ' : ch;
+      }).join('');
+    };
     return (
       <div className="call-list-content">
         <div className="call-columns-header">
@@ -522,60 +572,68 @@ const PublicDisplay: React.FC = () => {
             <div
               key={ci}
               className="call-col"
-              style={{ display: 'grid', gridTemplateRows: 'repeat(15, minmax(0, 1fr))', gap: 6, height: '100%' }}
+              style={{ position: 'relative', overflow: 'hidden', height: '100%' }}
+              {...(ci === 0 ? { ref: vertViewportRef as any } : {})}
             >
-              {col.map((id, ri) => {
-                // Find original pool index and played index
-                const poolIdx = oneBy75Ids.indexOf(id);
-                const playedIdx = playedOrderRef.current.indexOf(id);
-                const revealed = playedIdx > -1 && playedIdx < revealThreshold;
-                const meta = idMetaRef.current[id];
-                const title = revealed ? (meta?.name || 'Unknown') : '??????';
-                const artist = revealed ? (meta?.artist || '') : '??????';
-                const isCurrent = gameState.currentSong?.id === id;
-                return (
-                  <motion.div
-                    key={id}
-                    className="call-item"
-                    initial={false}
-                    animate={{
-                      backgroundColor: isCurrent ? 'rgba(0,255,136,0.12)' : 'rgba(255,255,255,0.05)',
-                      boxShadow: isCurrent ? '0 0 16px rgba(0,255,136,0.35)' : 'none',
-                      borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)'
-                    }}
-                    transition={{ duration: 0.25 }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, height: '100%', overflow: 'hidden', background: 'rgba(255,255,255,0.08)' }}
-                  >
-                    <div className="call-number" style={{ fontSize: '1.0rem', minWidth: 24, fontWeight: 900 }}>{poolIdx + 1}</div>
-                    <div className="call-song-info" style={{ flex: 1 }}>
-                      <AnimatePresence mode="popLayout" initial={false}>
-                        <motion.div
-                          key={revealed ? 'title-'+id : 'title-hidden-'+id}
-                          initial={{ opacity: 0, y: 6, scale: 0.98 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                          transition={{ duration: 0.25 }}
-                          className="call-song-name"
-                          style={{ fontWeight: 800, lineHeight: 1.2, fontSize: '1.3rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
-                        >
-                          {title}
-                        </motion.div>
-                        <motion.div
-                          key={revealed ? 'artist-'+id : 'artist-hidden-'+id}
-                          initial={{ opacity: 0, y: 4 }}
-                          animate={{ opacity: 0.85, y: 0 }}
-                          exit={{ opacity: 0, y: -4 }}
-                          transition={{ duration: 0.25 }}
-                          className="call-song-artist"
-                          style={{ fontSize: '1.1rem', color: '#e0e0e0', lineHeight: 1.1, fontWeight: 600, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}
-                        >
-                          {artist}
-                        </motion.div>
-                      </AnimatePresence>
-                    </div>
-                  </motion.div>
-                );
-              })}
+              <motion.div
+                className="call-vert-track"
+                initial={false}
+                animate={{ y: -(vertIndex * (rowHeightPx || 0)) }}
+                transition={{ duration: 1, ease: 'easeInOut' }}
+                style={{ position: 'absolute', left: 0, right: 0, top: 0 }}
+              >
+                {col.map((id, ri) => {
+                  const poolIdx = oneBy75Ids.indexOf(id);
+                  const meta = idMetaRef.current[id];
+                  const isCurrent = gameState.currentSong?.id === id;
+                  const baseline = songBaselineRef.current[id] ?? 0;
+                  const revealedForThisSong = new Set(revealSequenceRef.current.slice(baseline));
+                  const title = isCurrent ? '??????' : maskByLetterSet(meta?.name || 'Unknown', revealedForThisSong);
+                  const artist = isCurrent ? '??????' : maskByLetterSet(meta?.artist || '', revealedForThisSong);
+                  return (
+                    <motion.div
+                      key={id}
+                      className="call-item"
+                      initial={false}
+                      animate={{
+                        backgroundColor: isCurrent ? 'rgba(0,255,136,0.12)' : 'rgba(255,255,255,0.05)',
+                        boxShadow: isCurrent ? '0 0 16px rgba(0,255,136,0.35)' : 'none',
+                        borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)'
+                      }}
+                      transition={{ duration: 0.25 }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px 14px 12px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, height: rowHeightPx ? `${rowHeightPx}px` : undefined, overflow: 'hidden', background: 'rgba(255,255,255,0.08)' }}
+                    >
+                      <div className="call-number" style={{ fontSize: '1.4rem', minWidth: 32, fontWeight: 900, lineHeight: 1 }}>{poolIdx + 1}</div>
+                      <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                        <AnimatePresence mode="popLayout" initial={false}>
+                          <motion.div
+                            key={title}
+                            initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                            transition={{ duration: 0.25 }}
+                            className="call-song-name"
+                            style={{ fontWeight: 900, lineHeight: 1.15, fontSize: '1.6rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'break-word' }}
+                          >
+                            {title}
+                          </motion.div>
+                          <motion.div
+                            key={artist}
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 0.85, y: 0 }}
+                            exit={{ opacity: 0, y: -4 }}
+                            transition={{ duration: 0.25 }}
+                            className="call-song-artist"
+                            style={{ fontSize: '1.3rem', color: '#e0e0e0', lineHeight: 1.15, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'break-word' }}
+                          >
+                            {artist}
+                          </motion.div>
+                        </AnimatePresence>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </motion.div>
             </div>
           ))}
         </div>
@@ -817,7 +875,7 @@ const PublicDisplay: React.FC = () => {
                   <List className="call-list-icon" />
                 <span className="call-count">{totalPlayedCount}</span>
                 </div>
-              {oneBy75Ids ? renderOneBy75GroupedColumns() : (
+              {oneBy75Ids ? ((searchParams.get('mode') === '5x15') ? renderOneBy75Columns() : renderOneBy75GroupedColumns()) : (
                   <div className="call-list-content" style={{ height: '100%' }}>
                   {/* Column headers moved to App header to free vertical space */}
                     <div className="call-list" style={{ height: '100%' }}>
