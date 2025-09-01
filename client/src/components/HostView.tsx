@@ -308,6 +308,7 @@ const HostView: React.FC = () => {
         name: data.songName,
         artist: data.artistName,
       });
+      lastSongEventAtRef.current = Date.now();
       setIsPlaying(true);
       setPlaybackState(prev => ({
         ...prev,
@@ -381,6 +382,7 @@ const HostView: React.FC = () => {
     newSocket.io.on('reconnect', () => {
       console.log('Socket reconnected. Refreshing Spotify status and devices.');
       lastReconnectAtRef.current = Date.now();
+      ignorePollingUntilRef.current = Date.now() + 15000; // ignore polling flips for 15s
       if (roomId && gameState === 'playing') {
         const now = Date.now();
         if (now - lastResumePingAtRef.current > 10000) {
@@ -1092,11 +1094,11 @@ const HostView: React.FC = () => {
           setShuffleEnabled(!!data.playbackState.shuffle_state);
           const rep = (data.playbackState.repeat_state || 'off') as 'off' | 'track' | 'context';
           setRepeatState(rep);
-          // Only update if it diverges AND not within 10s after reconnect (avoid false negatives)
-          const sinceReconnectMs = Date.now() - (lastReconnectAtRef.current || 0);
-          const withinReconnectWindow = sinceReconnectMs >= 0 && sinceReconnectMs < 10000;
-          if (withinReconnectWindow && !spotifyIsPlaying) {
-            return;
+          // Guards: ignore polling false near reconnect or a recent song event
+          const now = Date.now();
+          if (!spotifyIsPlaying) {
+            if (now < ignorePollingUntilRef.current) return;
+            if (now - lastSongEventAtRef.current < 15000) return;
           }
           if (spotifyIsPlaying !== isPlaying) {
             console.log(`🔄 Spotify playback state changed: ${spotifyIsPlaying}, updating interface`);
@@ -1154,6 +1156,8 @@ const HostView: React.FC = () => {
   const audioUrlRef = React.useRef<string | null>(null);
   const lastReconnectAtRef = React.useRef<number>(0);
   const lastResumePingAtRef = React.useRef<number>(0);
+  const ignorePollingUntilRef = React.useRef<number>(0);
+  const lastSongEventAtRef = React.useRef<number>(0);
 
   useEffect(() => {
     // Ensure a single audio element exists
