@@ -182,8 +182,8 @@ const PublicDisplay: React.FC = () => {
               if (!already.has(ch)) candidates.push(ch);
             });
             if (candidates.length > 0) {
-              candidates.sort();
-              revealSequenceRef.current.push(candidates[0]);
+              const idx = Math.floor(Math.random() * candidates.length);
+              revealSequenceRef.current.push(candidates[idx]);
             }
           }
         } catch {}
