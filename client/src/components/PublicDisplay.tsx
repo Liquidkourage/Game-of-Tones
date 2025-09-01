@@ -637,7 +637,8 @@ const PublicDisplay: React.FC = () => {
                     const isCurrent = gameState.currentSong?.id === id;
                     // Use baseline for that song so letters revealed before it started are not shown
                     const baseline = songBaselineRef.current[id] ?? 0;
-                    const revealedForThisSong = new Set(revealSequenceRef.current.slice(0, baseline));
+                    // Show only letters revealed AFTER this song started
+                    const revealedForThisSong = new Set(revealSequenceRef.current.slice(baseline));
                     const title = isCurrent ? '??????' : maskByLetterSet(meta?.name || 'Unknown', revealedForThisSong);
                     const artist = isCurrent ? '??????' : maskByLetterSet(meta?.artist || '', revealedForThisSong);
                     return (
