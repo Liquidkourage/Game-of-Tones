@@ -380,6 +380,16 @@ const HostView: React.FC = () => {
     });
     newSocket.io.on('reconnect', () => {
       console.log('Socket reconnected. Refreshing Spotify status and devices.');
+      lastReconnectAtRef.current = Date.now();
+      if (roomId && gameState === 'playing') {
+        const now = Date.now();
+        if (now - lastResumePingAtRef.current > 10000) {
+          lastResumePingAtRef.current = now;
+          setTimeout(() => {
+            try { newSocket.emit('resume-song', { roomId }); } catch {}
+          }, 500);
+        }
+      }
       (async () => {
         await fetchPlaybackState();
         await loadDevices();
@@ -1082,7 +1092,12 @@ const HostView: React.FC = () => {
           setShuffleEnabled(!!data.playbackState.shuffle_state);
           const rep = (data.playbackState.repeat_state || 'off') as 'off' | 'track' | 'context';
           setRepeatState(rep);
-          // Only update if it diverges AND we haven't received a recent socket start
+          // Only update if it diverges AND not within 10s after reconnect (avoid false negatives)
+          const sinceReconnectMs = Date.now() - (lastReconnectAtRef.current || 0);
+          const withinReconnectWindow = sinceReconnectMs >= 0 && sinceReconnectMs < 10000;
+          if (withinReconnectWindow && !spotifyIsPlaying) {
+            return;
+          }
           if (spotifyIsPlaying !== isPlaying) {
             console.log(`🔄 Spotify playback state changed: ${spotifyIsPlaying}, updating interface`);
             setIsPlaying(spotifyIsPlaying);
@@ -1137,6 +1152,8 @@ const HostView: React.FC = () => {
 
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = React.useRef<string | null>(null);
+  const lastReconnectAtRef = React.useRef<number>(0);
+  const lastResumePingAtRef = React.useRef<number>(0);
 
   useEffect(() => {
     // Ensure a single audio element exists
