@@ -87,6 +87,7 @@ const PublicDisplay: React.FC = () => {
   const playedOrderRef = useRef<string[]>([]);
   const idMetaRef = useRef<Record<string, { name: string; artist: string }>>({});
   const currentIndexRef = useRef<number>(-1);
+  const revealedLettersRef = useRef<Set<string>>(new Set());
   // Carousel state for grouped 15x5 columns (show 3 at a time)
   const [carouselIndex, setCarouselIndex] = useState<number>(0);
   const [animating, setAnimating] = useState<boolean>(true); // kept for compatibility but no longer toggled
@@ -119,6 +120,7 @@ const PublicDisplay: React.FC = () => {
         setOneBy75Ids(data.ids);
         oneBy75IdsRef.current = data.ids;
         playedOrderRef.current = [];
+        revealedLettersRef.current = new Set();
         setCarouselIndex(0);
       }
     });
@@ -154,6 +156,29 @@ const PublicDisplay: React.FC = () => {
         if (!arr.includes(song.id)) {
           playedOrderRef.current = [...arr, song.id];
         }
+        // Reveal one new letter (if any) that appears in previous songs and is not yet revealed
+        try {
+          const previousIds = playedOrderRef.current.filter(id => id !== song.id);
+          if (previousIds.length > 0) {
+            const presentLetters = new Set<string>();
+            for (const pid of previousIds) {
+              const meta = idMetaRef.current[pid];
+              if (!meta) continue;
+              const text = `${meta.name || ''} ${meta.artist || ''}`;
+              for (const ch of text.toUpperCase()) {
+                if (/[A-Z0-9]/.test(ch)) presentLetters.add(ch);
+              }
+            }
+            const candidates: string[] = [];
+            for (const ch of presentLetters) {
+              if (!revealedLettersRef.current.has(ch)) candidates.push(ch);
+            }
+            if (candidates.length > 0) {
+              candidates.sort();
+              revealedLettersRef.current.add(candidates[0]);
+            }
+          }
+        } catch {}
       }
       // reset countdown timer
       if (countdownRef.current) {
@@ -207,6 +232,7 @@ const PublicDisplay: React.FC = () => {
       });
       ensureGrid();
       console.log('🔁 Game reset (display)');
+      revealedLettersRef.current = new Set();
     });
 
     // Staged reveal event: show name/artist hints without changing the bingo grid
@@ -563,10 +589,8 @@ const PublicDisplay: React.FC = () => {
     const shouldScroll = total > visibleCols;
     // Duplicate first N for smooth wrap
     const extendedGroups: string[][] = shouldScroll ? [...visibleGroups, ...visibleGroups.slice(0, visibleCols)] : visibleGroups;
-    // Wheel-of-Fortune style: reveal an accumulating set of letters (A,B,C,...) across all previously played songs
-    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const letterCount = Math.min(Math.max(0, playedCount - 1), alphabet.length); // previous songs only
-    const revealedLetters = new Set(alphabet.slice(0, letterCount).split(''));
+    // Wheel-of-Fortune style: use the dynamically built revealed set
+    const revealedLetters = revealedLettersRef.current;
 
     const maskByLetterSet = (text: string, set: Set<string>) => {
       if (!text) return '';
