@@ -151,17 +151,14 @@ const PublicDisplay: React.FC = () => {
         snippetLength: Number(data.snippetLength) || prev.snippetLength,
         playedSongs: [...prev.playedSongs, song].slice(-25)
       }));
-      // Track played order for reveal behavior
+      // Track played order for reveal lag
       const ids = oneBy75IdsRef.current;
       if (ids && ids.includes(song.id)) {
         const arr = playedOrderRef.current;
         if (!arr.includes(song.id)) {
           playedOrderRef.current = [...arr, song.id];
         }
-        // Record baseline for this song and then reveal one new letter (if any) for previous songs only
-        if (songBaselineRef.current[song.id] === undefined) {
-          songBaselineRef.current[song.id] = revealSequenceRef.current.length;
-        }
+        // Reveal one new letter (if any) that appears in previous songs and is not yet revealed
         try {
           const previousIds = playedOrderRef.current.filter(id => id !== song.id);
           if (previousIds.length > 0) {
@@ -187,6 +184,10 @@ const PublicDisplay: React.FC = () => {
             }
           }
         } catch {}
+        // Set baseline AFTER revealing for this turn so the new letter does not show on the current song
+        if (songBaselineRef.current[song.id] === undefined) {
+          songBaselineRef.current[song.id] = revealSequenceRef.current.length;
+        }
       }
       // reset countdown timer
       if (countdownRef.current) {
