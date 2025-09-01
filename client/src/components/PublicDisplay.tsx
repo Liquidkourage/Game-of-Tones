@@ -166,19 +166,21 @@ const PublicDisplay: React.FC = () => {
           const previousIds = playedOrderRef.current.filter(id => id !== song.id);
           if (previousIds.length > 0) {
             const presentLetters = new Set<string>();
-            for (const pid of previousIds) {
+            for (let i = 0; i < previousIds.length; i++) {
+              const pid = previousIds[i];
               const meta = idMetaRef.current[pid];
               if (!meta) continue;
-              const text = `${meta.name || ''} ${meta.artist || ''}`;
-              for (const ch of text.toUpperCase()) {
-                if (/[A-Z0-9]/.test(ch)) presentLetters.add(ch);
+              const textUpper = (`${meta.name || ''} ${meta.artist || ''}`).toUpperCase();
+              for (let j = 0; j < textUpper.length; j++) {
+                const ch = textUpper[j];
+                if (/^[A-Z0-9]$/.test(ch)) presentLetters.add(ch);
               }
             }
             const already = new Set(revealSequenceRef.current);
             const candidates: string[] = [];
-            for (const ch of presentLetters) {
+            Array.from(presentLetters).forEach((ch) => {
               if (!already.has(ch)) candidates.push(ch);
-            }
+            });
             if (candidates.length > 0) {
               candidates.sort();
               revealSequenceRef.current.push(candidates[0]);
