@@ -1712,13 +1712,25 @@ async function playNextSong(roomId, deviceId) {
   }
 
   try {
-    // Handle repeat mode
+    // Handle repeat mode / end-of-playlist (prevent wrap for 1x75)
     if (room.repeatMode) {
       // Stay on the same song
       console.log('🔁 Repeat mode: staying on current song');
     } else {
+      // If we're at the end, end the game instead of wrapping
+      if (room.currentSongIndex + 1 >= room.playlistSongs.length) {
+        console.log('🏁 Playlist complete. Ending game for room', roomId);
+        room.gameState = 'ended';
+        clearRoomTimer(roomId);
+        try {
+          const deviceToPause = deviceId || room.selectedDeviceId || loadSavedDevice()?.id;
+          if (deviceToPause) { await spotifyService.pausePlayback(deviceToPause); }
+        } catch (_) {}
+        io.to(roomId).emit('game-ended', { roomId, reason: 'playlist-complete' });
+        return;
+      }
       // Move to next song
-      room.currentSongIndex = (room.currentSongIndex + 1) % room.playlistSongs.length;
+      room.currentSongIndex = room.currentSongIndex + 1;
     }
     
     const nextSong = room.playlistSongs[room.currentSongIndex];
