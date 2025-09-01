@@ -271,7 +271,14 @@ const HostView: React.FC = () => {
     console.log('Room ID from params:', roomId);
 
     // Initialize socket connection
-    const newSocket = io(SOCKET_URL || undefined);
+    const newSocket = io(SOCKET_URL || undefined, {
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
+    });
     setSocket(newSocket);
 
     // Socket event listeners
@@ -367,6 +374,20 @@ const HostView: React.FC = () => {
 
     newSocket.on('disconnect', (reason: string) => {
       console.warn('Socket disconnected:', reason);
+    });
+    newSocket.io.on('reconnect_attempt', (attempt) => {
+      console.log(`Reconnecting socket (attempt ${attempt})...`);
+    });
+    newSocket.io.on('reconnect', () => {
+      console.log('Socket reconnected. Refreshing Spotify status and devices.');
+      (async () => {
+        await fetchPlaybackState();
+        await loadDevices();
+        await loadPlaylists();
+      })();
+    });
+    newSocket.io.on('reconnect_error', (err: any) => {
+      console.warn('Reconnection error:', err?.message || err);
     });
 
     newSocket.on('game-ended', () => {
