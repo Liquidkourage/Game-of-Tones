@@ -623,7 +623,7 @@ const PublicDisplay: React.FC = () => {
                         <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                           <AnimatePresence mode="popLayout" initial={false}>
                             <motion.div
-                              key={revealed ? 'title-'+id : 'title-hidden-'+id}
+                              key={title}
                               initial={{ opacity: 0, y: 6, scale: 0.98 }}
                               animate={{ opacity: 1, y: 0, scale: 1 }}
                               exit={{ opacity: 0, y: -6, scale: 0.98 }}
@@ -634,7 +634,7 @@ const PublicDisplay: React.FC = () => {
                               {title}
                             </motion.div>
                             <motion.div
-                              key={revealed ? 'artist-'+id : 'artist-hidden-'+id}
+                              key={artist}
                               initial={{ opacity: 0, y: 4 }}
                               animate={{ opacity: 0.85, y: 0 }}
                               exit={{ opacity: 0, y: -4 }}
