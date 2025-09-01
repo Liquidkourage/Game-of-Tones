@@ -1228,6 +1228,24 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
 
     console.log(`🎯 Card generation mode: ${mode}`);
 
+    // If 5x15, compute and broadcast fixed 5 columns × 15 songs for the display
+    if (mode === '5x15') {
+      try {
+        const fiveCols = [];
+        for (let col = 0; col < 5; col++) {
+          const src = [...perListUnique[col].songs].sort(() => Math.random() - 0.5).slice(0, 15);
+          fiveCols.push(src);
+        }
+        const roomRef = rooms.get(roomId);
+        if (roomRef) {
+          roomRef.fiveByFifteenColumns = fiveCols.map(col => col.map(s => ({ id: s.id })));
+          io.to(roomId).emit('fiveby15-pool', { columns: fiveCols.map(col => col.map(s => s.id)) });
+        }
+      } catch (e) {
+        console.warn('⚠️ Failed to compute/emit fiveby15-pool:', e?.message || e);
+      }
+    }
+
     // Build fallback global pool when needed (prefer host-provided order if available)
     const buildGlobalPool = () => {
       if (Array.isArray(songOrder) && songOrder.length > 0) {
@@ -1508,6 +1526,28 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         } catch (error) {
           console.error(`❌ Error fetching songs for playlist ${playlist.id}:`, error);
         }
+      }
+    }
+
+    // If 5x15 columns were finalized during card generation, prefer those 75 songs for playback
+    const fiveCols = Array.isArray(room.fiveByFifteenColumns) ? room.fiveByFifteenColumns : null;
+    if (!songList && fiveCols && fiveCols.length === 5 && fiveCols.every(c => Array.isArray(c) && c.length === 15)) {
+      try {
+        const idToSong = new Map(allSongs.map(s => [s.id, s]));
+        const flattened = [];
+        for (let col = 0; col < 5; col++) {
+          for (let row = 0; row < 15; row++) {
+            const entry = fiveCols[col][row];
+            const s = idToSong.get(entry.id);
+            if (s) flattened.push(s);
+          }
+        }
+        if (flattened.length === 75) {
+          console.log('🎼 Using finalized 5x15 columns (75 songs) for playback');
+          allSongs = flattened;
+        }
+      } catch (e) {
+        console.warn('⚠️ Failed to align playback with 5x15 columns:', e?.message || e);
       }
     }
 

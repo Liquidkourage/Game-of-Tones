@@ -84,6 +84,7 @@ const PublicDisplay: React.FC = () => {
   // 1x75 call list state
   const [oneBy75Ids, setOneBy75Ids] = useState<string[] | null>(null);
   const oneBy75IdsRef = useRef<string[] | null>(null);
+  const [fiveBy15Columns, setFiveBy15Columns] = useState<string[][] | null>(null);
   const playedOrderRef = useRef<string[]>([]);
   const idMetaRef = useRef<Record<string, { name: string; artist: string }>>({});
   const currentIndexRef = useRef<number>(-1);
@@ -128,6 +129,25 @@ const PublicDisplay: React.FC = () => {
         revealSequenceRef.current = [];
         songBaselineRef.current = {};
         setCarouselIndex(0);
+        setFiveBy15Columns(null);
+      }
+    });
+
+    // Receive 5x15 pool as 5 columns of 15 ids
+    socket.on('fiveby15-pool', (data: any) => {
+      if (Array.isArray(data?.columns) && data.columns.length === 5 && data.columns.every((c: any) => Array.isArray(c))) {
+        try {
+          const cols = data.columns.map((col: any) => col.slice(0, 15));
+          setFiveBy15Columns(cols);
+          // Flatten for meta resolution and baseline tracking order
+          const flat = ([] as string[]).concat(...cols);
+          setOneBy75Ids(flat);
+          oneBy75IdsRef.current = flat;
+          playedOrderRef.current = [];
+          revealSequenceRef.current = [];
+          songBaselineRef.current = {};
+          setCarouselIndex(0);
+        } catch {}
       }
     });
 
@@ -545,9 +565,10 @@ const PublicDisplay: React.FC = () => {
   const renderOneBy75Columns = () => {
     if (!oneBy75Ids) return null;
     const played = new Set(playedOrderRef.current);
-    // Only include songs that have played, preserving pool order
-    const visibleIds = oneBy75Ids.filter(id => played.has(id));
-    const cols = [0,1,2,3,4].map(c => visibleIds.slice(c*15, c*15 + 15));
+    // If we have explicit 5x15 columns, respect those per-column lists; otherwise derive from flat pool
+    const cols = fiveBy15Columns
+      ? fiveBy15Columns.map(col => col.filter(id => played.has(id)))
+      : [0,1,2,3,4].map(c => oneBy75Ids.filter(id => played.has(id)).slice(c*15, c*15 + 15));
     // Helper: Wheel-of-Fortune style masking using per-song baseline
     const maskByLetterSet = (text: string, set: Set<string>) => {
       if (!text) return '';
