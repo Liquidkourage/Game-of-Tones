@@ -563,7 +563,23 @@ const PublicDisplay: React.FC = () => {
     const shouldScroll = total > visibleCols;
     // Duplicate first N for smooth wrap
     const extendedGroups: string[][] = shouldScroll ? [...visibleGroups, ...visibleGroups.slice(0, visibleCols)] : visibleGroups;
-    const revealThreshold = Math.max(0, playedCount - 5);
+    // Wheel-of-Fortune style: reveal an accumulating set of letters (A,B,C,...) across all previously played songs
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const letterCount = Math.min(Math.max(0, playedCount - 1), alphabet.length); // previous songs only
+    const revealedLetters = new Set(alphabet.slice(0, letterCount).split(''));
+
+    const maskByLetterSet = (text: string, set: Set<string>) => {
+      if (!text) return '';
+      const chars = Array.from(text);
+      return chars.map((ch) => {
+        const u = ch.toUpperCase();
+        if (/^[A-Z0-9]$/.test(u)) {
+          return set.has(u) ? ch : '?';
+        }
+        // preserve spaces and punctuation
+        return ch === ' ' ? ' ' : ch;
+      }).join('');
+    };
 
     // Each column is 1/3 of the viewport width; compute translate as percentage
     const wrap = shouldScroll ? total : 1;
@@ -586,11 +602,10 @@ const PublicDisplay: React.FC = () => {
                   {group.map((id) => {
                     const poolIdx = oneBy75Ids.indexOf(id);
                     const playedIdx = playedOrderRef.current.indexOf(id);
-                    const revealed = playedIdx > -1 && playedIdx < revealThreshold;
                     const meta = idMetaRef.current[id];
-                    const title = revealed ? (meta?.name || 'Unknown') : '??????';
-                    const artist = revealed ? (meta?.artist || '') : '??????';
                     const isCurrent = gameState.currentSong?.id === id;
+                    const title = isCurrent ? '??????' : maskByLetterSet(meta?.name || 'Unknown', revealedLetters);
+                    const artist = isCurrent ? '??????' : maskByLetterSet(meta?.artist || '', revealedLetters);
                     return (
                       <motion.div
                         key={id}
