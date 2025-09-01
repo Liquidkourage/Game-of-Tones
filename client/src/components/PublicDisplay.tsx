@@ -87,7 +87,8 @@ const PublicDisplay: React.FC = () => {
   const playedOrderRef = useRef<string[]>([]);
   const idMetaRef = useRef<Record<string, { name: string; artist: string }>>({});
   const currentIndexRef = useRef<number>(-1);
-  const revealedLettersRef = useRef<Set<string>>(new Set());
+  const revealSequenceRef = useRef<string[]>([]);
+  const songBaselineRef = useRef<Record<string, number>>({});
   // Carousel state for grouped 15x5 columns (show 3 at a time)
   const [carouselIndex, setCarouselIndex] = useState<number>(0);
   const [animating, setAnimating] = useState<boolean>(true); // kept for compatibility but no longer toggled
@@ -120,7 +121,8 @@ const PublicDisplay: React.FC = () => {
         setOneBy75Ids(data.ids);
         oneBy75IdsRef.current = data.ids;
         playedOrderRef.current = [];
-        revealedLettersRef.current = new Set();
+        revealSequenceRef.current = [];
+        songBaselineRef.current = {};
         setCarouselIndex(0);
       }
     });
@@ -149,14 +151,17 @@ const PublicDisplay: React.FC = () => {
         snippetLength: Number(data.snippetLength) || prev.snippetLength,
         playedSongs: [...prev.playedSongs, song].slice(-25)
       }));
-      // Track played order for reveal lag
+      // Track played order for reveal behavior
       const ids = oneBy75IdsRef.current;
       if (ids && ids.includes(song.id)) {
         const arr = playedOrderRef.current;
         if (!arr.includes(song.id)) {
           playedOrderRef.current = [...arr, song.id];
         }
-        // Reveal one new letter (if any) that appears in previous songs and is not yet revealed
+        // Record baseline for this song and then reveal one new letter (if any) for previous songs only
+        if (songBaselineRef.current[song.id] === undefined) {
+          songBaselineRef.current[song.id] = revealSequenceRef.current.length;
+        }
         try {
           const previousIds = playedOrderRef.current.filter(id => id !== song.id);
           if (previousIds.length > 0) {
@@ -169,13 +174,14 @@ const PublicDisplay: React.FC = () => {
                 if (/[A-Z0-9]/.test(ch)) presentLetters.add(ch);
               }
             }
+            const already = new Set(revealSequenceRef.current);
             const candidates: string[] = [];
             for (const ch of presentLetters) {
-              if (!revealedLettersRef.current.has(ch)) candidates.push(ch);
+              if (!already.has(ch)) candidates.push(ch);
             }
             if (candidates.length > 0) {
               candidates.sort();
-              revealedLettersRef.current.add(candidates[0]);
+              revealSequenceRef.current.push(candidates[0]);
             }
           }
         } catch {}
@@ -232,7 +238,8 @@ const PublicDisplay: React.FC = () => {
       });
       ensureGrid();
       console.log('🔁 Game reset (display)');
-      revealedLettersRef.current = new Set();
+      revealSequenceRef.current = [];
+      songBaselineRef.current = {};
     });
 
     // Staged reveal event: show name/artist hints without changing the bingo grid
@@ -589,8 +596,8 @@ const PublicDisplay: React.FC = () => {
     const shouldScroll = total > visibleCols;
     // Duplicate first N for smooth wrap
     const extendedGroups: string[][] = shouldScroll ? [...visibleGroups, ...visibleGroups.slice(0, visibleCols)] : visibleGroups;
-    // Wheel-of-Fortune style: use the dynamically built revealed set
-    const revealedLetters = revealedLettersRef.current;
+    // Wheel-of-Fortune style: use the dynamically built revealed sequence
+    const currentRevealed = new Set(revealSequenceRef.current);
 
     const maskByLetterSet = (text: string, set: Set<string>) => {
       if (!text) return '';
@@ -628,8 +635,11 @@ const PublicDisplay: React.FC = () => {
                     const playedIdx = playedOrderRef.current.indexOf(id);
                     const meta = idMetaRef.current[id];
                     const isCurrent = gameState.currentSong?.id === id;
-                    const title = isCurrent ? '??????' : maskByLetterSet(meta?.name || 'Unknown', revealedLetters);
-                    const artist = isCurrent ? '??????' : maskByLetterSet(meta?.artist || '', revealedLetters);
+                    // Use baseline for that song so letters revealed before it started are not shown
+                    const baseline = songBaselineRef.current[id] ?? 0;
+                    const revealedForThisSong = new Set(revealSequenceRef.current.slice(0, baseline));
+                    const title = isCurrent ? '??????' : maskByLetterSet(meta?.name || 'Unknown', revealedForThisSong);
+                    const artist = isCurrent ? '??????' : maskByLetterSet(meta?.artist || '', revealedForThisSong);
                     return (
                       <motion.div
                         key={id}
