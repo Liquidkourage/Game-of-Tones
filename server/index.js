@@ -1534,16 +1534,18 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         console.log('📋 5x15 detected: overriding client-provided songList with fixed 5x15 columns');
         // Build id->song map from client list for metadata
         const idToSongFromClient = new Map(songList.map(s => [s.id, s]));
-        const flattened = [];
-        for (let col = 0; col < 5; col++) {
-          const colIds = room.fiveByFifteenColumnsIds[col] || [];
-          for (let i = 0; i < colIds.length; i++) {
-            const id = colIds[i];
+        // Interleave B,I,N,G,O by rows to avoid long runs from a single column
+        const interleaved = [];
+        for (let row = 0; row < 15; row++) {
+          for (let col = 0; col < 5; col++) {
+            const colIds = room.fiveByFifteenColumnsIds[col] || [];
+            const id = colIds[row];
+            if (!id) continue;
             const s = idToSongFromClient.get(id) || songList.find(x => x.id === id);
-            if (s) flattened.push(s);
+            if (s) interleaved.push(s);
           }
         }
-        allSongs = flattened.length > 0 ? flattened : songList;
+        allSongs = interleaved.length > 0 ? interleaved : songList;
       } else {
         // Use the song list provided by the client (already shuffled)
         console.log(`📋 Using client-provided song list with ${songList.length} songs`);
@@ -1618,18 +1620,19 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     if (!songList && fiveCols && Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5) {
       try {
         const idToSong = new Map(allSongs.map(s => [s.id, s]));
-        const flattened = [];
-        for (let col = 0; col < 5; col++) {
-          const colIds = room.fiveByFifteenColumnsIds[col];
-          for (let row = 0; row < colIds.length; row++) {
+        const interleaved = [];
+        for (let row = 0; row < 15; row++) {
+          for (let col = 0; col < 5; col++) {
+            const colIds = room.fiveByFifteenColumnsIds[col] || [];
             const id = colIds[row];
+            if (!id) continue;
             const s = idToSong.get(id);
-            if (s) flattened.push(s);
+            if (s) interleaved.push(s);
           }
         }
-        if (flattened.length >= 1) {
-          console.log('🎼 Using finalized 5x15 columns (75 songs) for playback');
-          allSongs = flattened;
+        if (interleaved.length >= 1) {
+          console.log('🎼 Using finalized 5x15 columns with interleaved playback order (B→O by rows)');
+          allSongs = interleaved;
         }
       } catch (e) {
         console.warn('⚠️ Failed to align playback with 5x15 columns:', e?.message || e);
