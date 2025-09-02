@@ -55,6 +55,7 @@ const PublicDisplay: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [searchParams] = useSearchParams();
   const showNowPlaying = (searchParams.get('np') === '1') || (searchParams.get('nowPlaying') === '1');
+  const debugMode = (searchParams.get('debug') === '1') || (searchParams.get('dbg') === '1');
   const displayRef = useRef<HTMLDivElement | null>(null);
   const [roomInfo, setRoomInfo] = useState<{ id: string; playerCount: number } | null>(null);
   const [currentWinningLine, setCurrentWinningLine] = useState(0);
@@ -206,6 +207,10 @@ const PublicDisplay: React.FC = () => {
         // Append only the current song id for this tick (actual playback order)
         if (!playedOrderRef.current.includes(song.id)) {
           playedOrderRef.current = [...playedOrderRef.current, song.id];
+        }
+        if (debugMode) {
+          const col = idToColumnRef.current[song.id];
+          try { console.log('[Display] song-playing', { index: currentIndexRef.current, id: song.id, col, name: song.name }); } catch {}
         }
         // Reveal one new letter (if any) that appears in previous songs and is not yet revealed
         try {
@@ -649,6 +654,14 @@ const PublicDisplay: React.FC = () => {
         return col.indexOf(a) - col.indexOf(b);
       })
     );
+    if (debugMode) {
+      try {
+        console.log('[Display] columns snapshot', {
+          playedCount: playedOrderRef.current.length,
+          perColCounts: cols.map(c => c.length)
+        });
+      } catch {}
+    }
     // Helper: Wheel-of-Fortune style masking using per-song baseline
     const maskByLetterSet = (text: string, set: Set<string>) => {
       if (!text) return '';
