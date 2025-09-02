@@ -598,6 +598,11 @@ const PublicDisplay: React.FC = () => {
   };
 
   const renderOneBy75Columns = () => {
+    // In 5x15 mode, wait until columns arrive to avoid misplacement
+    const requestedFiveByFifteen = (searchParams.get('mode') === '5x15') || !!fiveBy15Columns;
+    if (requestedFiveByFifteen && !fiveBy15Columns) return (
+      <div className="call-list-content"><div className="no-calls"><p>Initializing columns…</p></div></div>
+    );
     if (!oneBy75Ids) return null;
     const playedCount = Math.max(0, (currentIndexRef.current ?? -1) + 1);
     const played = new Set(oneBy75Ids.slice(0, playedCount));

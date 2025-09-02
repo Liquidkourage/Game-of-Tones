@@ -645,6 +645,11 @@ io.on('connection', (socket) => {
           console.log('🛑 Skipping card regeneration (mix finalized and cards already exist)');
         }
 
+        // Emit fiveby15 columns if computed during card generation
+        if (room.fiveByFifteenColumns) {
+          io.to(roomId).emit('fiveby15-pool', { columns: room.fiveByFifteenColumns.map(col => col.map(x => x.id)) });
+        }
+
         console.log('🎵 Starting automatic playback...');
         // Start automatic playback with the client's shuffled song list
         await startAutomaticPlayback(roomId, playlists, deviceId, songList);
