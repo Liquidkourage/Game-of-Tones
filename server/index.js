@@ -1256,6 +1256,9 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           roomRef.fiveByFifteenColumnsIds = fiveCols.map(col => col.map(s => s.id));
           roomRef.fiveByFifteenPlaylistNames = colNames;
           roomRef.fiveByFifteenMeta = metaMap;
+          // Finalize a single global shuffled order of the 75 picks
+          const globalOrder = fiveCols.flat().map(s => s.id).sort(() => Math.random() - 0.5);
+          roomRef.finalizedSongOrder = globalOrder;
           io.to(roomId).emit('fiveby15-pool', { columns: roomRef.fiveByFifteenColumnsIds, names: colNames, meta: metaMap });
         }
       } catch (e) {
@@ -1619,20 +1622,11 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     }
     if (!songList && fiveCols && Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5) {
       try {
-        const idToSong = new Map(allSongs.map(s => [s.id, s]));
-        const interleaved = [];
-        for (let row = 0; row < 15; row++) {
-          for (let col = 0; col < 5; col++) {
-            const colIds = room.fiveByFifteenColumnsIds[col] || [];
-            const id = colIds[row];
-            if (!id) continue;
-            const s = idToSong.get(id);
-            if (s) interleaved.push(s);
-          }
-        }
-        if (interleaved.length >= 1) {
-          console.log('🎼 Using finalized 5x15 columns with interleaved playback order (B→O by rows)');
-          allSongs = interleaved;
+        // Use the finalized global shuffle order if present
+        if (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) {
+          const idToSong = new Map(allSongs.map(s => [s.id, s]));
+          allSongs = room.finalizedSongOrder.map(id => idToSong.get(id)).filter(Boolean);
+          console.log('🎼 Using finalized 5x15 global shuffled order (75 songs)');
         }
       } catch (e) {
         console.warn('⚠️ Failed to align playback with 5x15 columns:', e?.message || e);
