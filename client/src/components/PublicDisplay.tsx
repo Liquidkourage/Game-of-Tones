@@ -87,6 +87,7 @@ const PublicDisplay: React.FC = () => {
   const oneBy75IdsRef = useRef<string[] | null>(null);
   const [fiveBy15Columns, setFiveBy15Columns] = useState<string[][] | null>(null);
   const idToColumnRef = useRef<Record<string, number>>({});
+  const pendingPlacementRef = useRef<Set<string>>(new Set());
   const playedOrderRef = useRef<string[]>([]);
   const idMetaRef = useRef<Record<string, { name: string; artist: string }>>({});
   const currentIndexRef = useRef<number>(-1);
@@ -162,6 +163,19 @@ const PublicDisplay: React.FC = () => {
           songBaselineRef.current = {};
           setCarouselIndex(0);
           // Do not seed by flattened pool; rely solely on actual play events
+          // Reconcile any pending placements now that columns are known
+          try {
+            if (pendingPlacementRef.current.size > 0) {
+              pendingPlacementRef.current.forEach((pid) => {
+                if (idToColumnRef.current[pid] === undefined) {
+                  for (let c = 0; c < cols.length; c++) {
+                    if (cols[c].includes(pid)) { idToColumnRef.current[pid] = c; break; }
+                  }
+                }
+                if (idToColumnRef.current[pid] !== undefined) pendingPlacementRef.current.delete(pid);
+              });
+            }
+          } catch {}
         } catch {}
       }
     });
@@ -170,6 +184,14 @@ const PublicDisplay: React.FC = () => {
     socket.on('fiveby15-map', (data: any) => {
       if (data && data.idToColumn && typeof data.idToColumn === 'object') {
         idToColumnRef.current = data.idToColumn;
+        // Reconcile pending after receiving authoritative map
+        try {
+          if (pendingPlacementRef.current.size > 0) {
+            pendingPlacementRef.current.forEach((pid) => {
+              if (idToColumnRef.current[pid] !== undefined) pendingPlacementRef.current.delete(pid);
+            });
+          }
+        } catch {}
       }
     });
 
@@ -203,6 +225,27 @@ const PublicDisplay: React.FC = () => {
         if (playedSeqRef.current[song.id] === undefined) {
           playedSeqCounterRef.current = playedSeqCounterRef.current + 1;
           playedSeqRef.current[song.id] = playedSeqCounterRef.current;
+        }
+        // If we don't yet know the column for this id, attempt to derive it
+        if (idToColumnRef.current[song.id] === undefined) {
+          let derived: number | undefined = undefined;
+          try {
+            if (fiveBy15Columns && oneBy75IdsRef.current) {
+              // Prefer explicit columns list
+              for (let c = 0; c < fiveBy15Columns.length; c++) {
+                if (fiveBy15Columns[c].includes(song.id)) { derived = c; break; }
+              }
+            }
+            if (derived === undefined && Array.isArray(oneBy75IdsRef.current)) {
+              const idx = oneBy75IdsRef.current.indexOf(song.id);
+              if (idx >= 0) derived = Math.floor(idx / 15);
+            }
+          } catch {}
+          if (derived !== undefined && derived >= 0 && derived < 5) {
+            idToColumnRef.current[song.id] = derived;
+          } else {
+            pendingPlacementRef.current.add(song.id);
+          }
         }
         // Append only the current song id for this tick (actual playback order)
         if (!playedOrderRef.current.includes(song.id)) {
