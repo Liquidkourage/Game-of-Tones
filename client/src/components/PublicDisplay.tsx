@@ -197,8 +197,7 @@ const PublicDisplay: React.FC = () => {
         playedSongs: [...prev.playedSongs, song].slice(-25)
       }));
       // Track played order for reveal lag
-      const ids = oneBy75IdsRef.current;
-      if (ids && ids.includes(song.id)) {
+      {
         // Record a stable per-song play sequence for sorting within columns
         if (playedSeqRef.current[song.id] === undefined) {
           playedSeqCounterRef.current = playedSeqCounterRef.current + 1;
