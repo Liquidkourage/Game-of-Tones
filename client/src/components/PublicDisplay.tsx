@@ -85,6 +85,7 @@ const PublicDisplay: React.FC = () => {
   const [oneBy75Ids, setOneBy75Ids] = useState<string[] | null>(null);
   const oneBy75IdsRef = useRef<string[] | null>(null);
   const [fiveBy15Columns, setFiveBy15Columns] = useState<string[][] | null>(null);
+  const idToColumnRef = useRef<Record<string, number>>({});
   const playedOrderRef = useRef<string[]>([]);
   const idMetaRef = useRef<Record<string, { name: string; artist: string }>>({});
   const currentIndexRef = useRef<number>(-1);
@@ -156,6 +157,13 @@ const PublicDisplay: React.FC = () => {
       }
     });
 
+    // Receive explicit id->column map (authoritative placement)
+    socket.on('fiveby15-map', (data: any) => {
+      if (data && data.idToColumn && typeof data.idToColumn === 'object') {
+        idToColumnRef.current = data.idToColumn;
+      }
+    });
+
     socket.on('bingo-card', (card: any) => {
       const squares = (card.squares || []).map((s: any) => ({
         song: { id: s.songId, name: s.songName, artist: s.artistName },
@@ -187,11 +195,6 @@ const PublicDisplay: React.FC = () => {
         if (playedSeqRef.current[song.id] === undefined) {
           playedSeqCounterRef.current = playedSeqCounterRef.current + 1;
           playedSeqRef.current[song.id] = playedSeqCounterRef.current;
-        }
-        // Ensure playedOrder has all songs up to currentIndex (fallback)
-        if (typeof data.currentIndex === 'number' && (!Array.isArray(playedOrderRef.current) || playedOrderRef.current.length < data.currentIndex + 1)) {
-          const upTo = ids.slice(0, data.currentIndex + 1);
-          playedOrderRef.current = upTo;
         }
         const arr = playedOrderRef.current;
         if (!arr.includes(song.id)) {
@@ -605,12 +608,22 @@ const PublicDisplay: React.FC = () => {
       <div className="call-list-content"><div className="no-calls"><p>Initializing columns…</p></div></div>
     );
     if (!oneBy75Ids) return null;
-    const playedCount = Math.max(0, (currentIndexRef.current ?? -1) + 1);
-    const played = new Set(oneBy75Ids.slice(0, playedCount));
+    const played = new Set(playedOrderRef.current);
     // If we have explicit 5x15 columns, respect those per-column lists; otherwise derive from flat pool
-    const baseCols = fiveBy15Columns
-      ? fiveBy15Columns
-      : [0,1,2,3,4].map(c => oneBy75Ids.slice(c*15, c*15 + 15));
+    // Build base columns from authoritative map if available, else fallback
+    let baseCols: string[][];
+    if (fiveBy15Columns) {
+      baseCols = fiveBy15Columns;
+    } else if (idToColumnRef.current && Object.keys(idToColumnRef.current).length > 0) {
+      const colsInit: string[][] = [[], [], [], [], []];
+      for (const id of oneBy75Ids) {
+        const col = idToColumnRef.current[id];
+        if (col >= 0 && col < 5) colsInit[col].push(id);
+      }
+      baseCols = colsInit;
+    } else {
+      baseCols = [0,1,2,3,4].map(c => oneBy75Ids.slice(c*15, c*15 + 15));
+    }
     // Build visible columns: filter by played and sort by per-song play sequence so new items append
     const cols = baseCols.map(col => col
       .filter(id => played.has(id))

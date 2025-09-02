@@ -494,7 +494,7 @@ io.on('connection', (socket) => {
       room.finalizedSongOrder = Array.isArray(songList) ? songList : null;
       
       // Generate bingo cards for all players (respect host order where applicable)
-      await generateBingoCards(roomId, playlists, room.finalizedSongOrder);
+      await generateBingoCards(roomId, playlists, room.finalizedSongOrder || null);
       
       // Update room state to indicate mix is finalized
       room.mixFinalized = true;
@@ -646,8 +646,14 @@ io.on('connection', (socket) => {
         }
 
         // Emit fiveby15 columns if computed during card generation
-        if (room.fiveByFifteenColumns) {
-          io.to(roomId).emit('fiveby15-pool', { columns: room.fiveByFifteenColumns.map(col => col.map(x => x.id)) });
+        if (room.fiveByFifteenColumnsIds) {
+          io.to(roomId).emit('fiveby15-pool', { columns: room.fiveByFifteenColumnsIds, names: room.fiveByFifteenPlaylistNames || [] });
+          // Build id->column map for clients
+          const idToCol = {};
+          room.fiveByFifteenColumnsIds.forEach((colIds, colIdx) => {
+            colIds.forEach((id) => { idToCol[id] = colIdx; });
+          });
+          io.to(roomId).emit('fiveby15-map', { idToColumn: idToCol });
         }
 
         console.log('🎵 Starting automatic playback...');
