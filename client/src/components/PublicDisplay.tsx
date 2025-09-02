@@ -130,7 +130,7 @@ const PublicDisplay: React.FC = () => {
       if (Array.isArray(data?.ids) && data.ids.length === 75) {
         setOneBy75Ids(data.ids);
         oneBy75IdsRef.current = data.ids;
-        playedOrderRef.current = [];
+        // Do not clear playedOrder; preserve any songs already recorded
         revealSequenceRef.current = [];
         songBaselineRef.current = {};
         setCarouselIndex(0);
@@ -138,7 +138,10 @@ const PublicDisplay: React.FC = () => {
         // Seed played list up to current index (handles first song already in progress)
         const ci = typeof currentIndexRef.current === 'number' ? currentIndexRef.current : -1;
         if (ci >= 0) {
-          playedOrderRef.current = data.ids.slice(0, ci + 1);
+          const seed = data.ids.slice(0, ci + 1);
+          const set = new Set(playedOrderRef.current);
+          for (const id of seed) set.add(id);
+          playedOrderRef.current = Array.from(set);
         }
       }
     });
@@ -154,14 +157,17 @@ const PublicDisplay: React.FC = () => {
           const flat = ([] as string[]).concat(...cols);
           setOneBy75Ids(flat);
           oneBy75IdsRef.current = flat;
-          playedOrderRef.current = [];
+          // Preserve playedOrder; do not clear
           revealSequenceRef.current = [];
           songBaselineRef.current = {};
           setCarouselIndex(0);
           // Seed played list up to current index (handles first song already in progress)
           const ci = typeof currentIndexRef.current === 'number' ? currentIndexRef.current : -1;
           if (ci >= 0) {
-            playedOrderRef.current = flat.slice(0, ci + 1);
+            const seed = flat.slice(0, ci + 1);
+            const set = new Set(playedOrderRef.current);
+            for (const id of seed) set.add(id);
+            playedOrderRef.current = Array.from(set);
           }
         } catch {}
       }
