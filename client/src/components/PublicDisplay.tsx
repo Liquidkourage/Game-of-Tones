@@ -135,14 +135,7 @@ const PublicDisplay: React.FC = () => {
         songBaselineRef.current = {};
         setCarouselIndex(0);
         setFiveBy15Columns(null);
-        // Seed played list up to current index (handles first song already in progress)
-        const ci = typeof currentIndexRef.current === 'number' ? currentIndexRef.current : -1;
-        if (ci >= 0) {
-          const seed = data.ids.slice(0, ci + 1);
-          const set = new Set(playedOrderRef.current);
-          for (const id of seed) set.add(id);
-          playedOrderRef.current = Array.from(set);
-        }
+        // Do not auto-seed played list by pool order; rely on actual song-playing events
       }
     });
 
@@ -167,14 +160,7 @@ const PublicDisplay: React.FC = () => {
           revealSequenceRef.current = [];
           songBaselineRef.current = {};
           setCarouselIndex(0);
-          // Seed played list up to current index (handles first song already in progress)
-          const ci = typeof currentIndexRef.current === 'number' ? currentIndexRef.current : -1;
-          if (ci >= 0) {
-            const seed = flat.slice(0, ci + 1);
-            const set = new Set(playedOrderRef.current);
-            for (const id of seed) set.add(id);
-            playedOrderRef.current = Array.from(set);
-          }
+          // Do not seed by flattened pool; rely solely on actual play events
         } catch {}
       }
     });
@@ -218,15 +204,7 @@ const PublicDisplay: React.FC = () => {
           playedSeqCounterRef.current = playedSeqCounterRef.current + 1;
           playedSeqRef.current[song.id] = playedSeqCounterRef.current;
         }
-        // Ensure playedOrder includes all songs up to currentIndex (handles any missed events)
-        const ci = typeof currentIndexRef.current === 'number' ? currentIndexRef.current : -1;
-        if (ci >= 0) {
-          const upTo = ids.slice(0, ci + 1);
-          const set = new Set(playedOrderRef.current);
-          for (const id of upTo) set.add(id);
-          playedOrderRef.current = Array.from(set);
-        }
-        // Append only the current song id for this tick
+        // Append only the current song id for this tick (actual playback order)
         if (!playedOrderRef.current.includes(song.id)) {
           playedOrderRef.current = [...playedOrderRef.current, song.id];
         }
@@ -423,16 +401,8 @@ const PublicDisplay: React.FC = () => {
     if (!ids) return;
     // Only run when in 5x15 context
     if (!fiveBy15Columns) { setVertIndex(0); setVertIndices([0,0,0,0,0]); return; }
-    const ci = typeof currentIndexRef.current === 'number' ? currentIndexRef.current : -1;
-    // Only include up-to-currentIndex from pool, but ensure current song is present
-    const seed = ci >= 0 && Array.isArray(oneBy75Ids) ? oneBy75Ids.slice(0, ci + 1) : [];
-    const played = new Set<string>(seed);
-    // Merge in explicitly tracked order but clamp to currentIndex
-    for (const id of playedOrderRef.current) {
-      if (!Array.isArray(oneBy75Ids)) { played.add(id); continue; }
-      const idx = oneBy75Ids.indexOf(id);
-      if (idx >= 0 && (ci < 0 || idx <= ci)) played.add(id);
-    }
+    // Use ONLY explicitly tracked played order to avoid phantom pool-seeded entries
+    const played = new Set<string>(playedOrderRef.current);
     // Compute per-column max index
     const perColLengths = fiveBy15Columns.map(col => col.filter(id => played.has(id)).length);
     const perColMax = perColLengths.map(len => Math.max(0, len - 5));
