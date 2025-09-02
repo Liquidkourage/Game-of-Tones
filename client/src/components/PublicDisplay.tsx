@@ -329,7 +329,8 @@ const PublicDisplay: React.FC = () => {
     const update = () => setViewportWidth(el.clientWidth || 0);
     update();
     window.addEventListener('resize', update);
-    const ro = new (window as any).ResizeObserver ? new ResizeObserver(update) : null;
+    const RO: any = (window as any).ResizeObserver;
+    const ro = RO ? new RO(update) : null;
     if (ro) ro.observe(el);
     return () => {
       window.removeEventListener('resize', update);
@@ -347,7 +348,8 @@ const PublicDisplay: React.FC = () => {
     };
     compute();
     window.addEventListener('resize', compute);
-    const ro = new (window as any).ResizeObserver ? new ResizeObserver(compute) : null;
+    const RO2: any = (window as any).ResizeObserver;
+    const ro = RO2 ? new RO2(compute) : null;
     if (ro) ro.observe(el);
     return () => {
       window.removeEventListener('resize', compute);
