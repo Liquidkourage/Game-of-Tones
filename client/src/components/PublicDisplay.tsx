@@ -226,6 +226,7 @@ const PublicDisplay: React.FC = () => {
           for (const id of upTo) set.add(id);
           playedOrderRef.current = Array.from(set);
         }
+        // Append only the current song id for this tick
         if (!playedOrderRef.current.includes(song.id)) {
           playedOrderRef.current = [...playedOrderRef.current, song.id];
         }
@@ -286,6 +287,12 @@ const PublicDisplay: React.FC = () => {
         // Emit pattern to header
         window.dispatchEvent(new CustomEvent('display-pattern', { detail: { pattern: data.pattern } }));
       }
+      // New round/game start: reset played/reveal sequencing so old entries don't leak
+      playedOrderRef.current = [];
+      revealSequenceRef.current = [];
+      songBaselineRef.current = {};
+      playedSeqRef.current = {} as any;
+      playedSeqCounterRef.current = 0;
       ensureGrid();
     });
 
@@ -417,8 +424,15 @@ const PublicDisplay: React.FC = () => {
     // Only run when in 5x15 context
     if (!fiveBy15Columns) { setVertIndex(0); setVertIndices([0,0,0,0,0]); return; }
     const ci = typeof currentIndexRef.current === 'number' ? currentIndexRef.current : -1;
+    // Only include up-to-currentIndex from pool, but ensure current song is present
     const seed = ci >= 0 && Array.isArray(oneBy75Ids) ? oneBy75Ids.slice(0, ci + 1) : [];
-    const played = new Set<string>([...seed, ...playedOrderRef.current]);
+    const played = new Set<string>(seed);
+    // Merge in explicitly tracked order but clamp to currentIndex
+    for (const id of playedOrderRef.current) {
+      if (!Array.isArray(oneBy75Ids)) { played.add(id); continue; }
+      const idx = oneBy75Ids.indexOf(id);
+      if (idx >= 0 && (ci < 0 || idx <= ci)) played.add(id);
+    }
     // Compute per-column max index
     const perColLengths = fiveBy15Columns.map(col => col.filter(id => played.has(id)).length);
     const perColMax = perColLengths.map(len => Math.max(0, len - 5));
