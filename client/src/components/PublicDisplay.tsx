@@ -95,6 +95,7 @@ const PublicDisplay: React.FC = () => {
   const [animating, setAnimating] = useState<boolean>(true); // kept for compatibility but no longer toggled
   const carouselViewportRef = useRef<HTMLDivElement | null>(null);
   const [viewportWidth, setViewportWidth] = useState<number>(0);
+  const [playlistNames, setPlaylistNames] = useState<string[]>([]);
   // 5x15 vertical scroll state
   const [vertIndex, setVertIndex] = useState<number>(0);
   const [vertIndices, setVertIndices] = useState<number[]>([0,0,0,0,0]);
@@ -247,7 +248,13 @@ const PublicDisplay: React.FC = () => {
       setGameState(prev => ({ ...prev, winners: data.winners || prev.winners }));
     });
 
-    socket.on('mix-finalized', () => { ensureGrid(); });
+    socket.on('mix-finalized', (payload: any) => {
+      try {
+        const names = Array.isArray(payload?.playlists) ? payload.playlists.map((p: any) => String(p?.name || '')) : [];
+        setPlaylistNames(names);
+      } catch {}
+      ensureGrid();
+    });
 
     socket.on('game-ended', () => {
       setGameState(prev => ({ ...prev, isPlaying: false }));
@@ -599,10 +606,21 @@ const PublicDisplay: React.FC = () => {
     };
     return (
       <div className="call-list-content">
-        <div className="call-columns-header">
-          {["B","I","N","G","O"].map((c, i) => (
-            <div key={i} className="call-col-title" style={{ textAlign: 'center', fontWeight: 900, opacity: 0.9 }}>{c}</div>
-          ))}
+        <div className="call-columns-header" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, alignItems: 'center' }}>
+          {[0,1,2,3,4].map((i) => {
+            const raw = playlistNames[i] || '';
+            const name = raw.replace(/^\s*GoT\s*[-–:]\s*/i, '').trim();
+            return (
+              <div key={i} className="call-col-title" style={{ textAlign: 'center' }}>
+                <div style={{ fontWeight: 900, opacity: 0.95 }}>{['B','I','N','G','O'][i]}</div>
+                {name && (
+                  <div style={{ fontSize: '0.9rem', opacity: 0.85, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {name}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
         <div className="call-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, height: '100%' }}>
           {cols.map((col, ci) => (
