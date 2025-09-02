@@ -1529,9 +1529,26 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     const perListFetched = [];
     
     if (songList && songList.length > 0) {
-      // Use the song list provided by the client (already shuffled)
-      console.log(`📋 Using client-provided song list with ${songList.length} songs`);
-      allSongs = songList;
+      // If we are in 5x15 mode with finalized columns, IGNORE client-provided order and use columns
+      if (Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5) {
+        console.log('📋 5x15 detected: overriding client-provided songList with fixed 5x15 columns');
+        // Build id->song map from client list for metadata
+        const idToSongFromClient = new Map(songList.map(s => [s.id, s]));
+        const flattened = [];
+        for (let col = 0; col < 5; col++) {
+          const colIds = room.fiveByFifteenColumnsIds[col] || [];
+          for (let i = 0; i < colIds.length; i++) {
+            const id = colIds[i];
+            const s = idToSongFromClient.get(id) || songList.find(x => x.id === id);
+            if (s) flattened.push(s);
+          }
+        }
+        allSongs = flattened.length > 0 ? flattened : songList;
+      } else {
+        // Use the song list provided by the client (already shuffled)
+        console.log(`📋 Using client-provided song list with ${songList.length} songs`);
+        allSongs = songList;
+      }
     } else {
       // Fallback: fetch songs from playlists (for backward compatibility)
       console.log('📋 Fetching songs from playlists for playback...');

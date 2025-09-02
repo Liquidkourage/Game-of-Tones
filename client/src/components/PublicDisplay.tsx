@@ -236,6 +236,11 @@ const PublicDisplay: React.FC = () => {
                 if (fiveBy15Columns[c].includes(song.id)) { derived = c; break; }
               }
             }
+            if (derived === undefined) {
+              // As fallback use server-emitted map if present
+              const mapCol = idToColumnRef.current[song.id];
+              if (mapCol !== undefined) derived = mapCol;
+            }
             if (derived === undefined && Array.isArray(oneBy75IdsRef.current)) {
               const idx = oneBy75IdsRef.current.indexOf(song.id);
               if (idx >= 0) derived = Math.floor(idx / 15);
