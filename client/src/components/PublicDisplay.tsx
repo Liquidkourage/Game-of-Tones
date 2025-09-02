@@ -97,6 +97,7 @@ const PublicDisplay: React.FC = () => {
   const [viewportWidth, setViewportWidth] = useState<number>(0);
   // 5x15 vertical scroll state
   const [vertIndex, setVertIndex] = useState<number>(0);
+  const [vertIndices, setVertIndices] = useState<number[]>([0,0,0,0,0]);
   const vertViewportRef = useRef<HTMLDivElement | null>(null);
   const [rowHeightPx, setRowHeightPx] = useState<number>(0);
 
@@ -357,19 +358,32 @@ const PublicDisplay: React.FC = () => {
     };
   }, [vertViewportRef.current]);
 
-  // Auto-advance vertical index for 5x15 (show 5 at a time, scroll by 1)
+  // Auto-advance vertical index for 5x15 (per column; show 5 at a time, scroll by 1)
   useEffect(() => {
     const ids = oneBy75IdsRef.current;
     if (!ids) return;
     // Only run when in 5x15 context
-    if (!fiveBy15Columns) { setVertIndex(0); return; }
+    if (!fiveBy15Columns) { setVertIndex(0); setVertIndices([0,0,0,0,0]); return; }
     const played = new Set(playedOrderRef.current);
-    // Determine the tallest column among played items
-    const maxRows = Math.max(0, ...fiveBy15Columns.map(col => col.filter(id => played.has(id)).length));
-    const maxIndex = Math.max(0, maxRows - 5);
-    if (maxIndex === 0) { setVertIndex(0); return; }
+    // Compute per-column max index
+    const perColLengths = fiveBy15Columns.map(col => col.filter(id => played.has(id)).length);
+    const perColMax = perColLengths.map(len => Math.max(0, len - 5));
+    // Reset indices if no scrolling needed
+    if (perColMax.every(m => m === 0)) { setVertIndex(0); setVertIndices([0,0,0,0,0]); return; }
     const interval = setInterval(() => {
-      setVertIndex((prev) => (prev >= maxIndex ? 0 : prev + 1));
+      setVertIndices((prev) => {
+        const next = [...prev];
+        for (let i = 0; i < 5; i++) {
+          const maxI = perColMax[i] || 0;
+          if (maxI > 0) {
+            const cur = (prev[i] || 0);
+            next[i] = cur >= maxI ? 0 : (cur + 1);
+          } else {
+            next[i] = 0;
+          }
+        }
+        return next;
+      });
     }, 6000);
     return () => clearInterval(interval);
   }, [oneBy75Ids, totalPlayedCount, fiveBy15Columns]);
@@ -601,7 +615,7 @@ const PublicDisplay: React.FC = () => {
               <motion.div
                 className="call-vert-track"
                 initial={false}
-                animate={{ y: -(vertIndex * (rowHeightPx || 0)) }}
+                animate={{ y: -((vertIndices[ci] || 0) * (rowHeightPx || 0)) }}
                 transition={{ duration: 1, ease: 'easeInOut' }}
                 style={{ position: 'absolute', left: 0, right: 0, top: 0 }}
               >
@@ -624,7 +638,7 @@ const PublicDisplay: React.FC = () => {
                         borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)'
                       }}
                       transition={{ duration: 0.25 }}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px 14px 12px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, height: rowHeightPx ? `${rowHeightPx}px` : undefined, overflow: 'hidden', background: 'rgba(255,255,255,0.08)' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, height: rowHeightPx ? `${rowHeightPx}px` : undefined, overflow: 'hidden', background: 'rgba(255,255,255,0.08)', boxSizing: 'border-box' }}
                     >
                       <div className="call-number" style={{ fontSize: '1.4rem', minWidth: 32, fontWeight: 900, lineHeight: 1 }}>{poolIdx + 1}</div>
                       <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
