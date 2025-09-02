@@ -1563,6 +1563,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       if (perListUnique.every(pl => pl.songs.length >= 15)) {
         try {
           const built = [];
+          const colNames = [];
+          const metaMap = {};
           // Ensure cross-column uniqueness to avoid duplicates
           const used = new Set();
           for (let col = 0; col < 5; col++) {
@@ -1578,11 +1580,19 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
               for (const s of topUp) { picks.push(s); }
             }
             built.push(picks);
+            colNames.push(perListUnique[col].name || `Column ${col + 1}`);
+            picks.forEach(s => { if (s && s.id) metaMap[s.id] = { name: s.name, artist: s.artist }; });
           }
           fiveCols = built.map(col => col.map(s => ({ id: s.id })));
           room.fiveByFifteenColumns = fiveCols;
-          // Emit to clients so Public Display can render immediately
-          io.to(roomId).emit('fiveby15-pool', { columns: built.map(col => col.map(s => s.id)) });
+          room.fiveByFifteenColumnsIds = built.map(col => col.map(s => s.id));
+          room.fiveByFifteenPlaylistNames = colNames;
+          room.fiveByFifteenMeta = metaMap;
+          // Emit to clients so Public Display can render immediately (columns + names + meta + map)
+          io.to(roomId).emit('fiveby15-pool', { columns: room.fiveByFifteenColumnsIds, names: colNames, meta: metaMap });
+          const idToCol = {};
+          room.fiveByFifteenColumnsIds.forEach((colIds, colIdx) => { colIds.forEach(id => { idToCol[id] = colIdx; }); });
+          io.to(roomId).emit('fiveby15-map', { idToColumn: idToCol });
         } catch (e) {
           console.warn('⚠️ Could not compute 5x15 columns at playback start:', e?.message || e);
         }
