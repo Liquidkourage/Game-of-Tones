@@ -1244,16 +1244,19 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       try {
         const fiveCols = [];
         const colNames = [];
+        const metaMap = {};
         for (let col = 0; col < 5; col++) {
           const src = [...perListUnique[col].songs].sort(() => Math.random() - 0.5).slice(0, 15);
           fiveCols.push(src);
           colNames.push(perListUnique[col].name || `Column ${col+1}`);
+          src.forEach(s => { if (s && s.id) metaMap[s.id] = { name: s.name, artist: s.artist }; });
         }
         const roomRef = rooms.get(roomId);
         if (roomRef) {
           roomRef.fiveByFifteenColumnsIds = fiveCols.map(col => col.map(s => s.id));
           roomRef.fiveByFifteenPlaylistNames = colNames;
-          io.to(roomId).emit('fiveby15-pool', { columns: roomRef.fiveByFifteenColumnsIds, names: colNames });
+          roomRef.fiveByFifteenMeta = metaMap;
+          io.to(roomId).emit('fiveby15-pool', { columns: roomRef.fiveByFifteenColumnsIds, names: colNames, meta: metaMap });
         }
       } catch (e) {
         console.warn('⚠️ Failed to compute/emit fiveby15-pool:', e?.message || e);

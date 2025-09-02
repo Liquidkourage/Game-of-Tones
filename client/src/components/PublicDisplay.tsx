@@ -153,6 +153,12 @@ const PublicDisplay: React.FC = () => {
           const cols = data.columns.map((col: any) => col.slice(0, 15));
           setFiveBy15Columns(cols);
           if (Array.isArray(data?.names)) setPlaylistNames(data.names);
+          // Preload metadata for revealed titles to avoid 'Unknown'
+          if (data?.meta && typeof data.meta === 'object') {
+            Object.entries(data.meta).forEach(([id, m]: any) => {
+              idMetaRef.current[id] = { name: m?.name || 'Unknown', artist: m?.artist || '' };
+            });
+          }
           // Flatten for meta resolution and baseline tracking order
           const flat = ([] as string[]).concat(...cols);
           setOneBy75Ids(flat);
@@ -706,8 +712,8 @@ const PublicDisplay: React.FC = () => {
                 style={{ position: 'absolute', left: 0, right: 0, top: 0 }}
               >
                 {col.map((id, ri) => {
-                  const poolIdx = oneBy75Ids.indexOf(id);
-                  const meta = idMetaRef.current[id];
+                  const poolIdx = Array.isArray(oneBy75Ids) ? oneBy75Ids.indexOf(id) : -1;
+                  const meta = idMetaRef.current[id] || { name: '', artist: '' };
                   const isCurrent = gameState.currentSong?.id === id;
                   const baseline = songBaselineRef.current[id] ?? 0;
                   const revealedForThisSong = new Set(revealSequenceRef.current.slice(baseline));
