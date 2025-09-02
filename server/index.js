@@ -1549,15 +1549,15 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           // Ensure cross-column uniqueness to avoid duplicates
           const used = new Set();
           for (let col = 0; col < 5; col++) {
-            const pool = [...perListUnique[col].songs];
+            const pool = [...perListUnique[col].songs].sort(() => Math.random() - 0.5);
             const picks = [];
             for (const s of pool) {
               if (!used.has(s.id)) { picks.push(s); used.add(s.id); }
               if (picks.length === 15) break;
             }
             if (picks.length < 15) {
-              // Top up without uniqueness if needed
-              const topUp = perListUnique[col].songs.slice(0, 15 - picks.length);
+              // Top up without uniqueness if needed (still from shuffled pool)
+              const topUp = pool.slice(0, 15 - picks.length);
               for (const s of topUp) { picks.push(s); }
             }
             built.push(picks);
