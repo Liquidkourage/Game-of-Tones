@@ -135,6 +135,11 @@ const PublicDisplay: React.FC = () => {
         songBaselineRef.current = {};
         setCarouselIndex(0);
         setFiveBy15Columns(null);
+        // Seed played list up to current index (handles first song already in progress)
+        const ci = typeof currentIndexRef.current === 'number' ? currentIndexRef.current : -1;
+        if (ci >= 0) {
+          playedOrderRef.current = data.ids.slice(0, ci + 1);
+        }
       }
     });
 
@@ -153,6 +158,11 @@ const PublicDisplay: React.FC = () => {
           revealSequenceRef.current = [];
           songBaselineRef.current = {};
           setCarouselIndex(0);
+          // Seed played list up to current index (handles first song already in progress)
+          const ci = typeof currentIndexRef.current === 'number' ? currentIndexRef.current : -1;
+          if (ci >= 0) {
+            playedOrderRef.current = flat.slice(0, ci + 1);
+          }
         } catch {}
       }
     });
