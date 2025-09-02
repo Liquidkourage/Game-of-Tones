@@ -90,6 +90,8 @@ const PublicDisplay: React.FC = () => {
   const currentIndexRef = useRef<number>(-1);
   const revealSequenceRef = useRef<string[]>([]);
   const songBaselineRef = useRef<Record<string, number>>({});
+  const playedSeqRef = useRef<Record<string, number>>({});
+  const playedSeqCounterRef = useRef<number>(0);
   // Carousel state for grouped 15x5 columns (show 3 at a time)
   const [carouselIndex, setCarouselIndex] = useState<number>(0);
   const [animating, setAnimating] = useState<boolean>(true); // kept for compatibility but no longer toggled
@@ -180,8 +182,13 @@ const PublicDisplay: React.FC = () => {
       // Track played order for reveal lag
       const ids = oneBy75IdsRef.current;
       if (ids && ids.includes(song.id)) {
-        // Ensure playedOrder has all songs up to currentIndex
-        if (typeof data.currentIndex === 'number') {
+        // Record a stable per-song play sequence for sorting within columns
+        if (playedSeqRef.current[song.id] === undefined) {
+          playedSeqCounterRef.current = playedSeqCounterRef.current + 1;
+          playedSeqRef.current[song.id] = playedSeqCounterRef.current;
+        }
+        // Ensure playedOrder has all songs up to currentIndex (fallback)
+        if (typeof data.currentIndex === 'number' && (!Array.isArray(playedOrderRef.current) || playedOrderRef.current.length < data.currentIndex + 1)) {
           const upTo = ids.slice(0, data.currentIndex + 1);
           playedOrderRef.current = upTo;
         }
@@ -595,9 +602,20 @@ const PublicDisplay: React.FC = () => {
     const playedCount = Math.max(0, (currentIndexRef.current ?? -1) + 1);
     const played = new Set(oneBy75Ids.slice(0, playedCount));
     // If we have explicit 5x15 columns, respect those per-column lists; otherwise derive from flat pool
-    const cols = fiveBy15Columns
-      ? fiveBy15Columns.map(col => col.filter(id => played.has(id)))
-      : [0,1,2,3,4].map(c => oneBy75Ids.filter(id => played.has(id)).slice(c*15, c*15 + 15));
+    const baseCols = fiveBy15Columns
+      ? fiveBy15Columns
+      : [0,1,2,3,4].map(c => oneBy75Ids.slice(c*15, c*15 + 15));
+    // Build visible columns: filter by played and sort by per-song play sequence so new items append
+    const cols = baseCols.map(col => col
+      .filter(id => played.has(id))
+      .sort((a, b) => {
+        const sa = playedSeqRef.current[a] ?? Number.MAX_SAFE_INTEGER;
+        const sb = playedSeqRef.current[b] ?? Number.MAX_SAFE_INTEGER;
+        if (sa !== sb) return sa - sb;
+        // fallback to original column order
+        return col.indexOf(a) - col.indexOf(b);
+      })
+    );
     // Helper: Wheel-of-Fortune style masking using per-song baseline
     const maskByLetterSet = (text: string, set: Set<string>) => {
       if (!text) return '';
@@ -664,7 +682,7 @@ const PublicDisplay: React.FC = () => {
                       transition={{ duration: 0.25 }}
                       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, height: rowHeightPx ? `${rowHeightPx}px` : undefined, overflow: 'hidden', background: 'rgba(255,255,255,0.08)', boxSizing: 'border-box' }}
                     >
-                      <div className="call-number" style={{ fontSize: '1.4rem', minWidth: 32, fontWeight: 900, lineHeight: 1 }}>{poolIdx + 1}</div>
+                      {/* No numeric badge in 5×15 mode */}
                       <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                         <AnimatePresence mode="popLayout" initial={false}>
                           <motion.div
