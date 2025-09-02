@@ -600,8 +600,8 @@ const PublicDisplay: React.FC = () => {
     return (
       <div className="call-list-content">
         <div className="call-columns-header">
-          {['','','','',''].map((c, i) => (
-            <div key={i} className="call-col-title">&nbsp;</div>
+          {["B","I","N","G","O"].map((c, i) => (
+            <div key={i} className="call-col-title" style={{ textAlign: 'center', fontWeight: 900, opacity: 0.9 }}>{c}</div>
           ))}
         </div>
         <div className="call-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, height: '100%' }}>
@@ -908,7 +908,7 @@ const PublicDisplay: React.FC = () => {
               transition={{ duration: 0.6, delay: 0.2 }}
             >
               <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1, minHeight: 0 }}>
-              <div className="call-list-header" style={{ marginTop: -36 }}>
+              <div className="call-list-header" style={{ marginTop: 0 }}>
                   <List className="call-list-icon" />
                 <span className="call-count">{totalPlayedCount}</span>
                 </div>
