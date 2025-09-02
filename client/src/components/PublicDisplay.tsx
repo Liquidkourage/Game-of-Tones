@@ -411,7 +411,7 @@ const PublicDisplay: React.FC = () => {
     // Only run when in 5x15 context
     if (!fiveBy15Columns) { setVertIndex(0); setVertIndices([0,0,0,0,0]); return; }
     const ci = typeof currentIndexRef.current === 'number' ? currentIndexRef.current : -1;
-    const seed = ci >= 0 ? oneBy75Ids.slice(0, ci + 1) : [];
+    const seed = ci >= 0 && Array.isArray(oneBy75Ids) ? oneBy75Ids.slice(0, ci + 1) : [];
     const played = new Set<string>([...seed, ...playedOrderRef.current]);
     // Compute per-column max index
     const perColLengths = fiveBy15Columns.map(col => col.filter(id => played.has(id)).length);
