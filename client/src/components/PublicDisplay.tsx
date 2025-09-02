@@ -143,6 +143,7 @@ const PublicDisplay: React.FC = () => {
         try {
           const cols = data.columns.map((col: any) => col.slice(0, 15));
           setFiveBy15Columns(cols);
+          if (Array.isArray(data?.names)) setPlaylistNames(data.names);
           // Flatten for meta resolution and baseline tracking order
           const flat = ([] as string[]).concat(...cols);
           setOneBy75Ids(flat);

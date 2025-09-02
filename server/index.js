@@ -1237,14 +1237,17 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
     if (mode === '5x15') {
       try {
         const fiveCols = [];
+        const colNames = [];
         for (let col = 0; col < 5; col++) {
           const src = [...perListUnique[col].songs].sort(() => Math.random() - 0.5).slice(0, 15);
           fiveCols.push(src);
+          colNames.push(perListUnique[col].name || `Column ${col+1}`);
         }
         const roomRef = rooms.get(roomId);
         if (roomRef) {
-          roomRef.fiveByFifteenColumns = fiveCols.map(col => col.map(s => ({ id: s.id })));
-          io.to(roomId).emit('fiveby15-pool', { columns: fiveCols.map(col => col.map(s => s.id)) });
+          roomRef.fiveByFifteenColumnsIds = fiveCols.map(col => col.map(s => s.id));
+          roomRef.fiveByFifteenPlaylistNames = colNames;
+          io.to(roomId).emit('fiveby15-pool', { columns: roomRef.fiveByFifteenColumnsIds, names: colNames });
         }
       } catch (e) {
         console.warn('⚠️ Failed to compute/emit fiveby15-pool:', e?.message || e);
@@ -1576,18 +1579,19 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         }
       }
     }
-    if (!songList && fiveCols && fiveCols.length === 5 && fiveCols.every(c => Array.isArray(c) && c.length === 15)) {
+    if (!songList && fiveCols && Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5) {
       try {
         const idToSong = new Map(allSongs.map(s => [s.id, s]));
         const flattened = [];
         for (let col = 0; col < 5; col++) {
-          for (let row = 0; row < 15; row++) {
-            const entry = fiveCols[col][row];
-            const s = idToSong.get(entry.id);
+          const colIds = room.fiveByFifteenColumnsIds[col];
+          for (let row = 0; row < colIds.length; row++) {
+            const id = colIds[row];
+            const s = idToSong.get(id);
             if (s) flattened.push(s);
           }
         }
-        if (flattened.length === 75) {
+        if (flattened.length >= 1) {
           console.log('🎼 Using finalized 5x15 columns (75 songs) for playback');
           allSongs = flattened;
         }
