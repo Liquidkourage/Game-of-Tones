@@ -180,6 +180,11 @@ const PublicDisplay: React.FC = () => {
       // Track played order for reveal lag
       const ids = oneBy75IdsRef.current;
       if (ids && ids.includes(song.id)) {
+        // Ensure playedOrder has all songs up to currentIndex
+        if (typeof data.currentIndex === 'number') {
+          const upTo = ids.slice(0, data.currentIndex + 1);
+          playedOrderRef.current = upTo;
+        }
         const arr = playedOrderRef.current;
         if (!arr.includes(song.id)) {
           playedOrderRef.current = [...arr, song.id];
@@ -587,7 +592,8 @@ const PublicDisplay: React.FC = () => {
 
   const renderOneBy75Columns = () => {
     if (!oneBy75Ids) return null;
-    const played = new Set(playedOrderRef.current);
+    const playedCount = Math.max(0, (currentIndexRef.current ?? -1) + 1);
+    const played = new Set(oneBy75Ids.slice(0, playedCount));
     // If we have explicit 5x15 columns, respect those per-column lists; otherwise derive from flat pool
     const cols = fiveBy15Columns
       ? fiveBy15Columns.map(col => col.filter(id => played.has(id)))
