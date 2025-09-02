@@ -359,18 +359,18 @@ const PublicDisplay: React.FC = () => {
   useEffect(() => {
     const ids = oneBy75IdsRef.current;
     if (!ids) return;
+    // Only run when in 5x15 context
+    if (!fiveBy15Columns) { setVertIndex(0); return; }
     const played = new Set(playedOrderRef.current);
-    const visibleIds = ids.filter(id => played.has(id));
-    // Build 5 columns of up to 15 each
-    const cols = [0,1,2,3,4].map(c => visibleIds.slice(c*15, c*15 + 15));
-    const maxRows = Math.max(0, ...cols.map(c => c.length));
+    // Determine the tallest column among played items
+    const maxRows = Math.max(0, ...fiveBy15Columns.map(col => col.filter(id => played.has(id)).length));
     const maxIndex = Math.max(0, maxRows - 5);
     if (maxIndex === 0) { setVertIndex(0); return; }
     const interval = setInterval(() => {
       setVertIndex((prev) => (prev >= maxIndex ? 0 : prev + 1));
-    }, 6000); // 5s dwell + ~1s anim
+    }, 6000);
     return () => clearInterval(interval);
-  }, [oneBy75Ids, totalPlayedCount]);
+  }, [oneBy75Ids, totalPlayedCount, fiveBy15Columns]);
 
   // Fetch initial room info for display card
   useEffect(() => {
@@ -896,7 +896,7 @@ const PublicDisplay: React.FC = () => {
                   <List className="call-list-icon" />
                 <span className="call-count">{totalPlayedCount}</span>
                 </div>
-              {oneBy75Ids ? ((searchParams.get('mode') === '5x15') ? renderOneBy75Columns() : renderOneBy75GroupedColumns()) : (
+              {oneBy75Ids ? ((fiveBy15Columns || (searchParams.get('mode') === '5x15')) ? renderOneBy75Columns() : renderOneBy75GroupedColumns()) : (
                   <div className="call-list-content" style={{ height: '100%' }}>
                   {/* Column headers moved to App header to free vertical space */}
                     <div className="call-list" style={{ height: '100%' }}>

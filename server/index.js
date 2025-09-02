@@ -1509,6 +1509,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     await spotifyService.ensureValidToken();
     
     let allSongs = [];
+    const perListFetched = [];
     
     if (songList && songList.length > 0) {
       // Use the song list provided by the client (already shuffled)
@@ -1522,15 +1523,54 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           console.log(`📋 Fetching songs for playlist: ${playlist.name}`);
           const songs = await spotifyService.getPlaylistTracks(playlist.id);
           console.log(`✅ Found ${songs.length} songs in playlist: ${playlist.name}`);
+          perListFetched.push({ id: playlist.id, name: playlist.name, songs });
           allSongs.push(...songs);
         } catch (error) {
           console.error(`❌ Error fetching songs for playlist ${playlist.id}:`, error);
+          perListFetched.push({ id: playlist.id, name: playlist.name, songs: [] });
         }
       }
     }
 
     // If 5x15 columns were finalized during card generation, prefer those 75 songs for playback
-    const fiveCols = Array.isArray(room.fiveByFifteenColumns) ? room.fiveByFifteenColumns : null;
+    let fiveCols = Array.isArray(room.fiveByFifteenColumns) ? room.fiveByFifteenColumns : null;
+    // If not present (e.g., starting without regenerating cards), compute columns now from fetched playlists
+    if (!fiveCols && Array.isArray(perListFetched) && perListFetched.length === 5) {
+      const dedup = (arr) => {
+        const seen = new Set();
+        const out = [];
+        for (const s of arr) { if (s && s.id && !seen.has(s.id)) { seen.add(s.id); out.push(s); } }
+        return out;
+      };
+      const perListUnique = perListFetched.map(pl => ({ id: pl.id, name: pl.name, songs: dedup(Array.isArray(pl.songs) ? pl.songs : []) }));
+      if (perListUnique.every(pl => pl.songs.length >= 15)) {
+        try {
+          const built = [];
+          // Ensure cross-column uniqueness to avoid duplicates
+          const used = new Set();
+          for (let col = 0; col < 5; col++) {
+            const pool = [...perListUnique[col].songs];
+            const picks = [];
+            for (const s of pool) {
+              if (!used.has(s.id)) { picks.push(s); used.add(s.id); }
+              if (picks.length === 15) break;
+            }
+            if (picks.length < 15) {
+              // Top up without uniqueness if needed
+              const topUp = perListUnique[col].songs.slice(0, 15 - picks.length);
+              for (const s of topUp) { picks.push(s); }
+            }
+            built.push(picks);
+          }
+          fiveCols = built.map(col => col.map(s => ({ id: s.id })));
+          room.fiveByFifteenColumns = fiveCols;
+          // Emit to clients so Public Display can render immediately
+          io.to(roomId).emit('fiveby15-pool', { columns: built.map(col => col.map(s => s.id)) });
+        } catch (e) {
+          console.warn('⚠️ Could not compute 5x15 columns at playback start:', e?.message || e);
+        }
+      }
+    }
     if (!songList && fiveCols && fiveCols.length === 5 && fiveCols.every(c => Array.isArray(c) && c.length === 15)) {
       try {
         const idToSong = new Map(allSongs.map(s => [s.id, s]));
