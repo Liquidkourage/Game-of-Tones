@@ -212,9 +212,16 @@ const PublicDisplay: React.FC = () => {
           playedSeqCounterRef.current = playedSeqCounterRef.current + 1;
           playedSeqRef.current[song.id] = playedSeqCounterRef.current;
         }
-        const arr = playedOrderRef.current;
-        if (!arr.includes(song.id)) {
-          playedOrderRef.current = [...arr, song.id];
+        // Ensure playedOrder includes all songs up to currentIndex (handles any missed events)
+        const ci = typeof currentIndexRef.current === 'number' ? currentIndexRef.current : -1;
+        if (ci >= 0) {
+          const upTo = ids.slice(0, ci + 1);
+          const set = new Set(playedOrderRef.current);
+          for (const id of upTo) set.add(id);
+          playedOrderRef.current = Array.from(set);
+        }
+        if (!playedOrderRef.current.includes(song.id)) {
+          playedOrderRef.current = [...playedOrderRef.current, song.id];
         }
         // Reveal one new letter (if any) that appears in previous songs and is not yet revealed
         try {
@@ -403,7 +410,9 @@ const PublicDisplay: React.FC = () => {
     if (!ids) return;
     // Only run when in 5x15 context
     if (!fiveBy15Columns) { setVertIndex(0); setVertIndices([0,0,0,0,0]); return; }
-    const played = new Set(playedOrderRef.current);
+    const ci = typeof currentIndexRef.current === 'number' ? currentIndexRef.current : -1;
+    const seed = ci >= 0 ? oneBy75Ids.slice(0, ci + 1) : [];
+    const played = new Set<string>([...seed, ...playedOrderRef.current]);
     // Compute per-column max index
     const perColLengths = fiveBy15Columns.map(col => col.filter(id => played.has(id)).length);
     const perColMax = perColLengths.map(len => Math.max(0, len - 5));
