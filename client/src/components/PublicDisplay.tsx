@@ -604,19 +604,20 @@ const PublicDisplay: React.FC = () => {
               );
             }
             // Render a tall rectangular box sized relative to current font
+            // Aim for cap-height (~0.7em) to fit within the current line-height
             return (
               <span
                 key={idx}
                 style={{
                   display: 'inline-block',
-                  width: '1.4em',
-                  height: '1.8em',
-                  border: '0.18em solid rgba(255,255,255,0.7)',
-                  borderRadius: '0.2em',
-                  verticalAlign: '-0.5em',
-                  margin: '0 0.1em',
+                  width: '0.6em',
+                  height: '0.72em',
+                  border: '0.08em solid rgba(255,255,255,0.75)',
+                  borderRadius: '0.12em',
+                  verticalAlign: '-0.06em',
+                  margin: '0 0.06em',
                   boxSizing: 'border-box',
-                  background: 'rgba(255,255,255,0.12)'
+                  background: 'rgba(255,255,255,0.10)'
                 }}
               />
             );
