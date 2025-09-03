@@ -58,6 +58,8 @@ const PlayerView: React.FC = () => {
   });
 
   const [socket, setSocket] = useState<any>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
+  const [reconnectAttempts, setReconnectAttempts] = useState<number>(0);
   const [bingoCard, setBingoCard] = useState<BingoCard | null>(null);
   const [focusedSquare, setFocusedSquare] = useState<BingoSquare | null>(null);
   const longPressTimer = useRef<number | null>(null);
@@ -83,13 +85,22 @@ const PlayerView: React.FC = () => {
   };
 
   useEffect(() => {
-    // Initialize socket connection
-    const newSocket = io(SOCKET_URL || undefined);
+    // Initialize socket connection with robust reconnection
+    const newSocket = io(SOCKET_URL || undefined, {
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
+    });
     setSocket(newSocket);
 
     // Socket event listeners
     newSocket.on('connect', () => {
       console.log('Connected to server');
+      setConnectionStatus('connected');
+      setReconnectAttempts(0);
       // Join the room
       newSocket.emit('join-room', { 
         roomId, 
@@ -97,6 +108,24 @@ const PlayerView: React.FC = () => {
         isHost: false,
         clientId
       });
+    });
+
+    newSocket.on('reconnect_attempt', (attempt: number) => {
+      setConnectionStatus('reconnecting');
+      setReconnectAttempts(attempt || 1);
+    });
+    newSocket.on('reconnect', () => {
+      setConnectionStatus('connected');
+      setReconnectAttempts(0);
+    });
+    newSocket.on('disconnect', () => {
+      setConnectionStatus('disconnected');
+    });
+    newSocket.on('connect_error', () => {
+      setConnectionStatus('reconnecting');
+    });
+    newSocket.on('reconnect_error', () => {
+      setConnectionStatus('reconnecting');
     });
 
     newSocket.on('player-joined', (data: any) => {
@@ -187,6 +216,13 @@ const PlayerView: React.FC = () => {
       newSocket.close();
     };
   }, [roomId, playerName]);
+
+  const handleResync = () => {
+    if (!socket) return;
+    try {
+      socket.emit('join-room', { roomId, playerName, isHost: false, clientId });
+    } catch (_e) {}
+  };
 
   // Keep screen awake during game using Wake Lock API
   useEffect(() => {
@@ -406,6 +442,41 @@ const PlayerView: React.FC = () => {
             {gameState.hasBingo && (
               <span className="player-bingo">BINGO!</span>
             )}
+            <span
+              className="conn-chip"
+              onClick={handleResync}
+              style={{
+                marginLeft: 'auto',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '2px 8px',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                border: '1px solid rgba(255,255,255,0.15)',
+                background: connectionStatus === 'connected' ? 'rgba(0,128,0,0.15)'
+                  : connectionStatus === 'reconnecting' ? 'rgba(255,165,0,0.15)'
+                  : 'rgba(255,0,0,0.15)'
+              }}
+              title="Tap to resync if you think you missed a call"
+            >
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 999,
+                  background: connectionStatus === 'connected' ? '#1DB954'
+                    : connectionStatus === 'reconnecting' ? '#FFA500'
+                    : '#FF4D4F'
+                }}
+              />
+              <span style={{ fontSize: '0.8rem', color: '#e0e0e0' }}>
+                {connectionStatus === 'connected' && 'Connected'}
+                {connectionStatus === 'reconnecting' && `Reconnecting… (${reconnectAttempts})`}
+                {connectionStatus === 'disconnected' && 'Disconnected'}
+              </span>
+              <span style={{ fontSize: '0.8rem', color: '#9aa0a6' }}>Resync</span>
+            </span>
           </div>
         </motion.div>
       ) : (
