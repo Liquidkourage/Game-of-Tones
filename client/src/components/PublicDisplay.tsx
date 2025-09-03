@@ -587,6 +587,30 @@ const PublicDisplay: React.FC = () => {
     });
   };
 
+  // Shared helper: render masked text with per-song reveal baseline and optional highlight
+  const renderMaskedText = (text: string, set: Set<string>, highlightChar: string | null) => {
+    if (!text) return null;
+    const chars = Array.from(text);
+    return (
+      <span>
+        {chars.map((ch, idx) => {
+          const u = ch.toUpperCase();
+          if (/^[A-Z0-9]$/.test(u)) {
+            const revealed = set.has(u);
+            if (revealed) {
+              const isHighlight = !!highlightChar && u === highlightChar;
+              return (
+                <span key={idx} style={isHighlight ? { color: '#f5d061', textShadow: '0 0 6px rgba(245,208,97,0.6)' } : undefined}>{ch}</span>
+              );
+            }
+            return <span key={idx} style={{ opacity: 0.9 }}>{'□'}</span>;
+          }
+          return <span key={idx}>{ch}</span>;
+        })}
+      </span>
+    );
+  };
+
   // Function to get the overall pattern name
   const getPatternName = () => {
     switch (pattern) {
