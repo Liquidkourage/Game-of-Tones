@@ -103,6 +103,7 @@ const HostView: React.FC = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [previousVolume, setPreviousVolume] = useState(50);
   const [songList, setSongList] = useState<Song[]>([]);
+  const [finalizedOrder, setFinalizedOrder] = useState<Song[] | null>(null);
   // Playlists paging/virtualization state
   const [playlistPage, setPlaylistPage] = useState(1); // pages of 50
   const [visiblePlaylists, setVisiblePlaylists] = useState<Playlist[]>([]);
@@ -300,6 +301,19 @@ const HostView: React.FC = () => {
       console.log('Game started:', data);
       setIsStartingGame(false);
       addLog('Game started', 'info');
+    });
+
+    // Receive the finalized shuffled order for 5x15
+    newSocket.on('finalized-order', (data: any) => {
+      try {
+        const arr = Array.isArray(data?.order) ? data.order.map((o: any) => ({ id: o.id, name: o.name, artist: o.artist })) : [];
+        if (arr.length > 0) {
+          setFinalizedOrder(arr);
+          addLog(`Finalized order received (${arr.length} tracks)`, 'info');
+        }
+      } catch (e) {
+        console.warn('Failed to parse finalized order:', e);
+      }
     });
 
     newSocket.on('song-playing', (data: any) => {
@@ -1293,15 +1307,15 @@ const HostView: React.FC = () => {
 
           {/* Legacy playlist grid removed in favor of paged list above */}
 
-           {/* Song List */}
-           {songList.length > 0 && (
+           {/* Song List (Finalized 5x15 order if present) */}
+           {(finalizedOrder?.length || songList.length) > 0 && (
              <motion.div 
                className="song-list-section"
                initial={{ opacity: 0 }}
                animate={{ opacity: 1 }}
                transition={{ delay: 0.4 }}
              >
-               <h2>🎵 Song List ({songList.length} songs)</h2>
+               <h2>🎵 {finalizedOrder ? 'Finalized Order' : 'Song List'} ({(finalizedOrder?.length || songList.length)} songs)</h2>
                <div className="song-list-controls">
                  <button
                    onClick={() => setShowSongList(!showSongList)}
@@ -1309,12 +1323,14 @@ const HostView: React.FC = () => {
                  >
                    {showSongList ? '📋 Hide Song List' : '📋 Show Song List'}
                  </button>
-                 <button
-                   onClick={generateSongList}
-                   className="btn-secondary"
-                 >
-                   🔀 Reshuffle Songs
-                 </button>
+                 {!finalizedOrder && (
+                   <button
+                     onClick={generateSongList}
+                     className="btn-secondary"
+                   >
+                     🔀 Reshuffle Songs
+                   </button>
+                 )}
                </div>
                
                {showSongList && (
@@ -1325,7 +1341,7 @@ const HostView: React.FC = () => {
                    transition={{ duration: 0.3 }}
                  >
                    <div className="song-list">
-                     {songList.map((song, index) => (
+                     {(finalizedOrder || songList).map((song, index) => (
                        <div
                          key={`${song.id}-${index}`}
                          className="song-list-item"

@@ -1260,6 +1260,11 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           const globalOrder = fiveCols.flat().map(s => s.id).sort(() => Math.random() - 0.5);
           roomRef.finalizedSongOrder = globalOrder;
           io.to(roomId).emit('fiveby15-pool', { columns: roomRef.fiveByFifteenColumnsIds, names: colNames, meta: metaMap });
+          // Emit finalized global order for Host UI
+          try {
+            const orderWithMeta = globalOrder.map(id => ({ id, name: metaMap[id]?.name || '', artist: metaMap[id]?.artist || '' }));
+            io.to(roomId).emit('finalized-order', { order: orderWithMeta });
+          } catch (_) {}
         }
       } catch (e) {
         console.warn('⚠️ Failed to compute/emit fiveby15-pool:', e?.message || e);
