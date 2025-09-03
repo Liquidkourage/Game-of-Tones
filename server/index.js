@@ -1537,23 +1537,12 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     const perListFetched = [];
     
     if (songList && songList.length > 0) {
-      // If we are in 5x15 mode with finalized columns, IGNORE client-provided order and use columns
-      if (Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5) {
-        console.log('📋 5x15 detected: overriding client-provided songList with fixed 5x15 columns');
-        // Build id->song map from client list for metadata
-        const idToSongFromClient = new Map(songList.map(s => [s.id, s]));
-        // Interleave B,I,N,G,O by rows to avoid long runs from a single column
-        const interleaved = [];
-        for (let row = 0; row < 15; row++) {
-          for (let col = 0; col < 5; col++) {
-            const colIds = room.fiveByFifteenColumnsIds[col] || [];
-            const id = colIds[row];
-            if (!id) continue;
-            const s = idToSongFromClient.get(id) || songList.find(x => x.id === id);
-            if (s) interleaved.push(s);
-          }
-        }
-        allSongs = interleaved.length > 0 ? interleaved : songList;
+      // If we are in 5x15 mode and have a finalized global order, honor it exactly
+      if (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) {
+        console.log('📋 5x15 detected: overriding client-provided songList with finalized global shuffle');
+        const idToSong = new Map(songList.map(s => [s.id, s]));
+        const mapped = room.finalizedSongOrder.map(id => idToSong.get(id)).filter(Boolean);
+        allSongs = mapped.length > 0 ? mapped : songList;
       } else {
         // Use the song list provided by the client (already shuffled)
         console.log(`📋 Using client-provided song list with ${songList.length} songs`);
