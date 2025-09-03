@@ -14,6 +14,49 @@ class SpotifyService {
     this.tokenExpirationTime = null;
   }
 
+  // Classify common Spotify Web API errors
+  isTokenExpiredError(error) {
+    const status = error?.body?.error?.status || error?.statusCode;
+    const msg = (error?.body?.error?.message || error?.message || '').toLowerCase();
+    return status === 401 || /token.*expired|access.*token/i.test(msg);
+  }
+
+  isRestrictionError(error) {
+    const status = error?.body?.error?.status || error?.statusCode;
+    const msg = (error?.body?.error?.message || error?.message || '').toLowerCase();
+    return status === 403 && /restriction/i.test(msg);
+  }
+
+  async withRetries(label, fn, options = {}) {
+    const attempts = Math.max(1, options.attempts || 3);
+    const baseDelayMs = Math.max(0, options.backoffMs || 250);
+    let lastErr;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        if (attempt > 1) {
+          await new Promise(r => setTimeout(r, baseDelayMs * Math.pow(2, attempt - 2)));
+        }
+        // Ensure token each attempt
+        try { await this.ensureValidToken(); } catch (_) {}
+        return await fn();
+      } catch (err) {
+        lastErr = err;
+        // If token expired, refresh once and retry immediately
+        if (this.isTokenExpiredError(err)) {
+          try { await this.refreshAccessToken(); } catch (_) {}
+          continue;
+        }
+        // If 403 restriction on resume-type operations, treat as non-fatal for subsequent logic
+        if (this.isRestrictionError(err) && /resume|playback|seek|transfer|start/i.test(String(label))) {
+          console.warn(`⚠️ ${label} got restriction (ignored):`, err?.body?.error?.message || err?.message || err);
+          return null;
+        }
+        if (attempt === attempts) break;
+      }
+    }
+    throw lastErr;
+  }
+
   // Get authorization URL for Spotify login
   getAuthorizationURL() {
     const scopes = [

@@ -199,7 +199,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     }
 
     try {
-      await spotifyService.transferPlayback(targetDeviceId, true);
+      await spotifyService.withRetries('transferPlayback(initial)', () => spotifyService.transferPlayback(targetDeviceId, true), { attempts: 3, backoffMs: 300 });
     } catch (e) {
       console.warn('⚠️ Transfer playback failed (will still try play):', e?.message || e);
     }
@@ -1668,16 +1668,16 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
 
       await spotifyService.transferPlayback(targetDeviceId, true);
       // Enforce deterministic playback mode to avoid context/radio fallbacks
-      try { await spotifyService.setShuffleState(false, targetDeviceId); } catch (_) {}
-      try { await spotifyService.setRepeatState('off', targetDeviceId); } catch (_) {}
+      try { await spotifyService.withRetries('setShuffle(false)', () => spotifyService.setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
+      try { await spotifyService.withRetries('setRepeat(off)', () => spotifyService.setRepeatState('off', targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
       // Use explicit device_id and uris as fallback in case transfer isn't picked up
-      await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], 0);
+      await spotifyService.withRetries('startPlayback(initial)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], 0), { attempts: 3, backoffMs: 400 });
       console.log(`✅ Successfully started playback on device: ${targetDeviceId}`);
       
       // Set initial volume to 50% (or room's saved volume)
       try {
         const initialVolume = room.volume || 50;
-        await spotifyService.setVolume(initialVolume, targetDeviceId);
+        await spotifyService.withRetries('setVolume(initial)', () => spotifyService.setVolume(initialVolume, targetDeviceId), { attempts: 3, backoffMs: 200 });
         console.log(`🔊 Set initial volume to ${initialVolume}%`);
       } catch (volumeError) {
         console.error('❌ Error setting initial volume:', volumeError);
@@ -1696,14 +1696,14 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
             console.log('⚠️ Locked device still missing after refresh; attempting activation...');
             await spotifyService.activateDevice(targetDeviceId);
           }
-          await spotifyService.transferPlayback(targetDeviceId, true);
-          await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], 0);
+          await spotifyService.withRetries('transferPlayback(after-refresh)', () => spotifyService.transferPlayback(targetDeviceId, true), { attempts: 3, backoffMs: 300 });
+          await spotifyService.withRetries('startPlayback(after-refresh)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], 0), { attempts: 3, backoffMs: 400 });
           console.log(`✅ Successfully started playback after token refresh`);
           
           // Set initial volume to 50% (or room's saved volume)
           try {
             const initialVolume = room.volume || 50;
-            await spotifyService.setVolume(initialVolume, targetDeviceId);
+            await spotifyService.withRetries('setVolume(after-refresh)', () => spotifyService.setVolume(initialVolume, targetDeviceId), { attempts: 3, backoffMs: 200 });
             console.log(`🔊 Set initial volume to ${initialVolume}% after token refresh`);
           } catch (volumeError) {
             console.error('❌ Error setting initial volume after token refresh:', volumeError);
@@ -1780,7 +1780,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         for (let i = 1; i <= w; i++) {
           const idx = (room.currentSongIndex + i) % allSongs.length;
           if (!room.queuedIndices.has(idx)) {
-            await spotifyService.addToQueue(`spotify:track:${allSongs[idx].id}`, targetDeviceId);
+            await spotifyService.withRetries('addToQueue(initial)', () => spotifyService.addToQueue(`spotify:track:${allSongs[idx].id}`, targetDeviceId), { attempts: 2, backoffMs: 150 });
             room.queuedIndices.add(idx);
           }
         }
@@ -1874,7 +1874,7 @@ async function playNextSong(roomId, deviceId) {
         }
       } catch (_) {}
       if (needTransfer) {
-        await spotifyService.transferPlayback(targetDeviceId, true);
+        await spotifyService.withRetries('transferPlayback(next)', () => spotifyService.transferPlayback(targetDeviceId, true), { attempts: 3, backoffMs: 300 });
       }
     } catch (e) {
       console.warn('⚠️ Transfer playback failed (will still try play):', e?.message || e);
@@ -1893,9 +1893,9 @@ async function playNextSong(roomId, deviceId) {
       const playbackStartTime = Date.now();
       if (VERBOSE) console.log(`🎵 Starting Spotify playback at ${playbackStartTime} for: ${nextSong.name}`);
       // Enforce deterministic playback mode on each advance
-      try { await spotifyService.setShuffleState(false, targetDeviceId); } catch (_) {}
-      try { await spotifyService.setRepeatState('off', targetDeviceId); } catch (_) {}
-      await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], 0);
+      try { await spotifyService.withRetries('setShuffle(false,next)', () => spotifyService.setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
+      try { await spotifyService.withRetries('setRepeat(off,next)', () => spotifyService.setRepeatState('off', targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
+      await spotifyService.withRetries('startPlayback(next)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], 0), { attempts: 3, backoffMs: 400 });
       const playbackEndTime = Date.now();
       if (VERBOSE) console.log(`✅ Successfully started playback on device: ${targetDeviceId} (took ${playbackEndTime - playbackStartTime}ms)`);
       
@@ -1904,7 +1904,7 @@ async function playNextSong(roomId, deviceId) {
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           const initialVolume = room.volume || 50;
-          await spotifyService.setVolume(initialVolume, targetDeviceId);
+          await spotifyService.withRetries('setVolume(next)', () => spotifyService.setVolume(initialVolume, targetDeviceId), { attempts: 3, backoffMs: 200 });
           console.log(`🔊 Set initial volume to ${initialVolume}% (attempt ${attempt + 1})`);
           volumeSet = true;
           break;
@@ -1961,11 +1961,11 @@ async function playNextSong(roomId, deviceId) {
         correctTrack = currentId === nextSong.id;
         console.log(`🔎 Playback verify (next) attempt ${i + 1}: is_playing=${playing} correct_track=${correctTrack}`);
         if (playing) break;
-        try { await spotifyService.resumePlayback(targetDeviceId); } catch {}
+        try { await spotifyService.withRetries('resumePlayback(verify-next)', () => spotifyService.resumePlayback(targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch {}
       }
       if (!playing || !correctTrack) {
         // Attempt to correct to the intended track once
-        try { await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], 0); } catch {}
+        try { await spotifyService.withRetries('startPlayback(correct-next)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], 0), { attempts: 2, backoffMs: 300 }); } catch {}
       }
       if (!playing) {
         io.to(roomId).emit('playback-warning', { message: 'Playback did not resume on next track. Verify Spotify device and try transferring playback again.' });
@@ -1997,7 +1997,7 @@ async function playNextSong(roomId, deviceId) {
         for (let i = 1; i <= w; i++) {
           const idx = (room.currentSongIndex + i) % room.playlistSongs.length;
           if (!room.queuedIndices.has(idx)) {
-            await spotifyService.addToQueue(`spotify:track:${room.playlistSongs[idx].id}`, targetDeviceId);
+            await spotifyService.withRetries('addToQueue(top-up)', () => spotifyService.addToQueue(`spotify:track:${room.playlistSongs[idx].id}`, targetDeviceId), { attempts: 2, backoffMs: 150 });
             room.queuedIndices.add(idx);
           }
         }
