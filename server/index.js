@@ -128,11 +128,6 @@ function saveDevice(device) {
 function clearRoomTimer(roomId) {
   if (roomTimers.has(roomId)) {
     const room = rooms.get(roomId);
-    // Enforce lock-joins if enabled (non-hosts only)
-    if (!isHost && room && room.lockJoins) {
-      socket.emit('room-locked', { message: 'Room is locked. Please wait for the next round.' });
-      return;
-    }
     const currentTime = Date.now();
     if (VERBOSE) {
       console.log(`🔍 TIMER CLEARED - Room: ${roomId}, Time: ${currentTime}`);
