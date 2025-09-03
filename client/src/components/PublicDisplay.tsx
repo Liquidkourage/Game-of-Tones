@@ -776,16 +776,27 @@ const PublicDisplay: React.FC = () => {
       } catch {}
     }
     // Helper: Wheel-of-Fortune style masking using per-song baseline
-    const maskByLetterSet = (text: string, set: Set<string>) => {
-      if (!text) return '';
+    const renderMaskedText = (text: string, set: Set<string>, highlightChar: string | null) => {
+      if (!text) return null;
       const chars = Array.from(text);
-      return chars.map((ch) => {
-        const u = ch.toUpperCase();
-        if (/^[A-Z0-9]$/.test(u)) {
-          return set.has(u) ? ch : '•';
-        }
-        return ch;
-      }).join('');
+      return (
+        <span>
+          {chars.map((ch, idx) => {
+            const u = ch.toUpperCase();
+            if (/^[A-Z0-9]$/.test(u)) {
+              const revealed = set.has(u);
+              if (revealed) {
+                const isHighlight = !!highlightChar && u === highlightChar;
+                return (
+                  <span key={idx} style={isHighlight ? { color: '#f5d061', textShadow: '0 0 6px rgba(245,208,97,0.6)' } : undefined}>{ch}</span>
+                );
+              }
+              return <span key={idx} style={{ opacity: 0.9 }}>{'□'}</span>;
+            }
+            return <span key={idx}>{ch}</span>;
+          })}
+        </span>
+      );
     };
     return (
       <div className="call-list-content">
@@ -839,8 +850,8 @@ const PublicDisplay: React.FC = () => {
                   const isCurrent = gameState.currentSong?.id === id;
                   const baseline = songBaselineRef.current[id] ?? 0;
                   const revealedForThisSong = new Set(revealSequenceRef.current.slice(baseline));
-                  const title = maskByLetterSet(meta?.name || 'Unknown', revealedForThisSong);
-                  const artist = maskByLetterSet(meta?.artist || '', revealedForThisSong);
+                  const title = renderMaskedText(meta?.name || 'Unknown', revealedForThisSong, revealToast);
+                  const artist = renderMaskedText(meta?.artist || '', revealedForThisSong, revealToast);
                   return (
                     <motion.div
                       key={id + '-' + ri}
@@ -858,24 +869,24 @@ const PublicDisplay: React.FC = () => {
                       <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                         <AnimatePresence mode="popLayout" initial={false}>
                           <motion.div
-                            key={title + '-' + ri}
+                            key={(meta?.name || '') + '-' + ri}
                             initial={{ opacity: 0, y: 6, scale: 0.98 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: -6, scale: 0.98 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-name"
-                            style={{ fontWeight: 900, lineHeight: 1.12, fontSize: '2.0rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            style={{ fontWeight: 900, lineHeight: 1.1, fontSize: '2.2rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                           >
                             {title}
                           </motion.div>
                           <motion.div
-                            key={artist + '-' + ri}
+                            key={(meta?.artist || '') + '-' + ri}
                             initial={{ opacity: 0, y: 4 }}
                             animate={{ opacity: 0.85, y: 0 }}
                             exit={{ opacity: 0, y: -4 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-artist"
-                            style={{ fontSize: '1.6rem', color: '#e0e0e0', lineHeight: 1.15, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            style={{ fontSize: '1.8rem', color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                           >
                             {artist}
                           </motion.div>
@@ -952,8 +963,8 @@ const PublicDisplay: React.FC = () => {
                     const baseline = songBaselineRef.current[id] ?? 0;
                     // Show only letters revealed AFTER this song started
                     const revealedForThisSong = new Set(revealSequenceRef.current.slice(baseline));
-                    const title = maskByLetterSet(meta?.name || 'Unknown', revealedForThisSong);
-                    const artist = maskByLetterSet(meta?.artist || '', revealedForThisSong);
+                    const title = renderMaskedText(meta?.name || 'Unknown', revealedForThisSong, revealToast);
+                    const artist = renderMaskedText(meta?.artist || '', revealedForThisSong, revealToast);
                     return (
                       <motion.div
                         key={id}
@@ -971,24 +982,24 @@ const PublicDisplay: React.FC = () => {
                         <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                           <AnimatePresence mode="popLayout" initial={false}>
                             <motion.div
-                              key={title}
+                              key={(meta?.name || '')}
                               initial={{ opacity: 0, y: 6, scale: 0.98 }}
                               animate={{ opacity: 1, y: 0, scale: 1 }}
                               exit={{ opacity: 0, y: -6, scale: 0.98 }}
                               transition={{ duration: 0.25 }}
                               className="call-song-name"
-                              style={{ fontWeight: 900, lineHeight: 1.12, fontSize: '2.15rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                              style={{ fontWeight: 900, lineHeight: 1.1, fontSize: '2.35rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                             >
                               {title}
                             </motion.div>
                             <motion.div
-                              key={artist}
+                              key={(meta?.artist || '')}
                               initial={{ opacity: 0, y: 4 }}
                               animate={{ opacity: 0.85, y: 0 }}
                               exit={{ opacity: 0, y: -4 }}
                               transition={{ duration: 0.25 }}
                               className="call-song-artist"
-                              style={{ fontSize: '1.75rem', color: '#e0e0e0', lineHeight: 1.15, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                              style={{ fontSize: '1.95rem', color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                             >
                               {artist}
                             </motion.div>
