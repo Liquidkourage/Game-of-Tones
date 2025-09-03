@@ -277,34 +277,48 @@ const PublicDisplay: React.FC = () => {
             const playedInCol = colList.filter(id => playedOrderRef.current.includes(id));
             if (playedInCol.length > 5) {
               const targetRows = playedInCol.length - 5;
-              setPhasePx(targetRows * rowHeightPx);
-              setFreezeAll(true);
+              // Freeze only this column and snap its offset so the newest is at bottom
+              setFrozenCols([0,1,2,3,4].map((_, i) => i === colIdx));
+              setFreezeRows((prev) => prev.map((v, i) => (i === colIdx ? targetRows : v)));
             } else {
-              setFreezeAll(false);
+              // Unfreeze all if not yet over 5
+              setFrozenCols([false,false,false,false,false]);
+              setFreezeRows([0,0,0,0,0]);
             }
           }
         } catch {}
-        // Reveal one new letter (if any) that appears in previous songs and is not yet revealed
+        // Reveal one new letter, weighted by how frequently it remains unrevealed across previous songs
         try {
           const previousIds = playedOrderRef.current.filter(id => id !== song.id);
           if (previousIds.length > 0) {
-            const presentLetters = new Set<string>();
+            const weights: Record<string, number> = {};
             for (let i = 0; i < previousIds.length; i++) {
               const pid = previousIds[i];
               const meta = idMetaRef.current[pid];
               if (!meta) continue;
+              const baseline = songBaselineRef.current[pid] ?? 0;
+              const visibleForSong = new Set(revealSequenceRef.current.slice(baseline));
               const textUpper = (`${meta.name || ''} ${meta.artist || ''}`).toUpperCase();
               for (let j = 0; j < textUpper.length; j++) {
                 const ch = textUpper[j];
-                if (/^[A-Z0-9]$/.test(ch)) presentLetters.add(ch);
+                if (!/^[A-Z0-9]$/.test(ch)) continue;
+                // Count only if this character is not yet revealed for that specific previous song
+                if (!visibleForSong.has(ch)) {
+                  weights[ch] = (weights[ch] || 0) + 1;
+                }
               }
             }
-            const presentArray = Array.from(presentLetters);
-            // Always choose from letters present among previously displayed songs (allow repeats).
-            let pool: string[] = presentArray;
-            if (pool.length > 0) {
-              const idx = Math.floor(Math.random() * pool.length);
-              const revealedChar = pool[idx];
+            const entries = Object.entries(weights);
+            if (entries.length > 0) {
+              // Weighted random choice
+              const total = entries.reduce((sum, [, w]) => sum + w, 0);
+              let r = Math.random() * total;
+              let revealedChar = entries[0][0];
+              for (let k = 0; k < entries.length; k++) {
+                const [ch, w] = entries[k];
+                if (r < w) { revealedChar = ch; break; }
+                r -= w;
+              }
               revealSequenceRef.current.push(revealedChar);
               // Toast for revealed letter
               try {
@@ -584,7 +598,7 @@ const PublicDisplay: React.FC = () => {
         return 'Pattern: X';
       case 'line':
       default:
-        return 'Pattern: Single Line (any direction)';
+    return 'Pattern: Single Line (any direction)';
     }
   };
 
@@ -801,7 +815,9 @@ const PublicDisplay: React.FC = () => {
             >
               {(() => {
                 const shouldScroll = col.length > 5 && rowHeightPx > 0;
-                // Per-column freeze: if frozen, snap newest to bottom; else follow global phase
+                // Build display items duplicated for seamless wrap
+                const displayItems = shouldScroll ? [...col, ...col] : col;
+                // Determine how many rows we need to offset to ensure no gap
                 let yPx = 0;
                 if (shouldScroll) {
                   if (Array.isArray(frozenCols) && frozenCols[ci]) {
@@ -812,7 +828,6 @@ const PublicDisplay: React.FC = () => {
                     yPx = phasePx % loopPx;
                   }
                 }
-                const displayItems = col;
                 return (
                   <div
                     className="call-vert-track"
@@ -1068,8 +1083,8 @@ const PublicDisplay: React.FC = () => {
                     <div>
                       <div style={{ fontSize: '2.0rem', fontWeight: 900 }}>{gameState.playerCount}</div>
                       <div style={{ fontSize: '1.4rem', color: '#b3b3b3' }}>Players</div>
-                    </div>
-                  </div>
+                </div>
+                </div>
                   
                   {/* Songs */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1077,8 +1092,8 @@ const PublicDisplay: React.FC = () => {
                     <div>
                       <div style={{ fontSize: '2.0rem', fontWeight: 900 }}>{totalPlayedCount}</div>
                       <div style={{ fontSize: '1.4rem', color: '#b3b3b3' }}>Songs</div>
-                    </div>
-                  </div>
+                      </div>
+                      </div>
                 </div>
                 {/* QR code below stats - fills remaining space */}
                 {roomId && (
@@ -1124,7 +1139,7 @@ const PublicDisplay: React.FC = () => {
             >
               <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1, minHeight: 0 }}>
               <div className="call-list-header" style={{ marginTop: 0 }}>
-                  <List className="call-list-icon" />
+                <List className="call-list-icon" />
                 <span className="call-count">{totalPlayedCount}</span>
                 </div>
               {oneBy75Ids ? ((fiveBy15Columns || (searchParams.get('mode') === '5x15')) ? renderOneBy75Columns() : renderOneBy75GroupedColumns()) : (
@@ -1132,27 +1147,27 @@ const PublicDisplay: React.FC = () => {
                   {/* Column headers moved to App header to free vertical space */}
                     <div className="call-list" style={{ height: '100%' }}>
                       {totalPlayedCount > 0 && (
-                        gameState.playedSongs.slice(-10).map((song, index) => (
-                          <motion.div
-                            key={song.id + '-' + index}
-                            className="call-item"
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.4, delay: 0.3 + index * 0.05 }}
-                          >
+                    gameState.playedSongs.slice(-10).map((song, index) => (
+                      <motion.div
+                        key={song.id + '-' + index}
+                        className="call-item"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.4, delay: 0.3 + index * 0.05 }}
+                      >
                             <div className="call-number">#{Math.max(1, totalPlayedCount - (Math.min(10, gameState.playedSongs.length) - 1) + index)}</div>
-                            <div className="call-song-info">
-                              <div className="call-song-name">{song.name}</div>
-                              <div className="call-song-artist">{song.artist}</div>
-                            </div>
-                            <Music className="call-icon" />
-                          </motion.div>
-                        ))
-                      )}
-                    </div>
+                        <div className="call-song-info">
+                          <div className="call-song-name">{song.name}</div>
+                          <div className="call-song-artist">{song.artist}</div>
+                        </div>
+                        <Music className="call-icon" />
+                      </motion.div>
+                    ))
+                  )}
+                </div>
                     {totalPlayedCount === 0 && (
-                      <div className="no-calls">
-                        <p>No songs played yet</p>
+                  <div className="no-calls">
+                    <p>No songs played yet</p>
                       </div>
                     )}
                   </div>
