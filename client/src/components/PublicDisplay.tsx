@@ -603,7 +603,23 @@ const PublicDisplay: React.FC = () => {
                 <span key={idx} style={isHighlight ? { color: '#f5d061', textShadow: '0 0 6px rgba(245,208,97,0.6)' } : undefined}>{ch}</span>
               );
             }
-            return <span key={idx} style={{ opacity: 0.9 }}>{'□'}</span>;
+            // Render a tall rectangular box sized relative to current font
+            return (
+              <span
+                key={idx}
+                style={{
+                  display: 'inline-block',
+                  width: '0.62em',
+                  height: '0.95em',
+                  border: '0.1em solid rgba(255,255,255,0.55)',
+                  borderRadius: '0.12em',
+                  verticalAlign: '-0.08em',
+                  margin: '0 0.05em',
+                  boxSizing: 'border-box',
+                  background: 'rgba(255,255,255,0.06)'
+                }}
+              />
+            );
           }
           return <span key={idx}>{ch}</span>;
         })}
