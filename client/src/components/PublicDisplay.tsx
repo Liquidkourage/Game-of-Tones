@@ -788,11 +788,16 @@ const PublicDisplay: React.FC = () => {
             >
               {(() => {
                 const shouldScroll = col.length > 5 && rowHeightPx > 0;
-                // Global phase keeps columns aligned
+                // Per-column freeze: if frozen, snap newest to bottom; else follow global phase
                 let yPx = 0;
                 if (shouldScroll) {
-                  const loopPx = Math.max(1, col.length * rowHeightPx);
-                  yPx = phasePx % loopPx;
+                  if (Array.isArray(frozenCols) && frozenCols[ci]) {
+                    const rows = Math.max(0, (freezeRows?.[ci] || (col.length - 5)));
+                    yPx = rows * rowHeightPx;
+                  } else {
+                    const loopPx = Math.max(1, col.length * rowHeightPx);
+                    yPx = phasePx % loopPx;
+                  }
                 }
                 const displayItems = col;
                 return (
