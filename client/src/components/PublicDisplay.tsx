@@ -847,7 +847,7 @@ const PublicDisplay: React.FC = () => {
             return (
               <div key={i} className="call-col-title" style={{ textAlign: 'center' }}>
                 {name && (
-                  <div style={{ fontSize: '1.15rem', fontWeight: 800, opacity: 0.92, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div style={{ fontSize: '1.35rem', fontWeight: 900, opacity: 0.95, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {name}
                   </div>
                 )}
@@ -925,7 +925,7 @@ const PublicDisplay: React.FC = () => {
                             exit={{ opacity: 0, y: -4 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-artist"
-                            style={{ fontSize: '1.8rem', color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            style={{ fontSize: '1.8rem', color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'break-word' }}
                           >
                             {artist}
                           </motion.div>
@@ -1027,7 +1027,7 @@ const PublicDisplay: React.FC = () => {
                               exit={{ opacity: 0, y: -6, scale: 0.98 }}
                               transition={{ duration: 0.25 }}
                               className="call-song-name"
-                              style={{ fontWeight: 900, lineHeight: 1.1, fontSize: '2.35rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                              style={{ fontWeight: 900, lineHeight: 1.08, fontSize: '2.5rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                             >
                               {title}
                             </motion.div>
