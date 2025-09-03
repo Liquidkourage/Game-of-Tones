@@ -299,14 +299,12 @@ const PublicDisplay: React.FC = () => {
                 if (/^[A-Z0-9]$/.test(ch)) presentLetters.add(ch);
               }
             }
-            const already = new Set(revealSequenceRef.current);
-            const candidates: string[] = [];
-            Array.from(presentLetters).forEach((ch) => {
-              if (!already.has(ch)) candidates.push(ch);
-            });
-            if (candidates.length > 0) {
-              const idx = Math.floor(Math.random() * candidates.length);
-              const revealedChar = candidates[idx];
+            const presentArray = Array.from(presentLetters);
+            // Always choose from letters present among previously displayed songs (allow repeats).
+            let pool: string[] = presentArray;
+            if (pool.length > 0) {
+              const idx = Math.floor(Math.random() * pool.length);
+              const revealedChar = pool[idx];
               revealSequenceRef.current.push(revealedChar);
               // Toast for revealed letter
               try {
