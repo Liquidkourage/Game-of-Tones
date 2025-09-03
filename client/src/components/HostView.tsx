@@ -75,6 +75,7 @@ const HostView: React.FC = () => {
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
   const [shuffleEnabled, setShuffleEnabled] = useState<boolean>(false);
   const [repeatState, setRepeatState] = useState<'off' | 'track' | 'context'>('off');
+  const [randomStarts, setRandomStarts] = useState<boolean>(false);
   const [isStartingGame, setIsStartingGame] = useState(false);
   const [logs, setLogs] = useState<Array<{ level: 'info' | 'warn' | 'error'; message: string; ts: number }>>([]);
   const [revealMode, setRevealMode] = useState<'off' | 'artist' | 'title' | 'full'>('off');
@@ -602,7 +603,8 @@ const HostView: React.FC = () => {
         playlists: selectedPlaylists,
         snippetLength,
         deviceId: selectedDevice.id, // Require the selected device ID
-        songList: songList // Send the shuffled song list to ensure server uses same order
+        songList: songList, // Send the shuffled song list to ensure server uses same order
+        randomStarts
       });
       // Safety timeout in case no response comes back
       setTimeout(() => setIsStartingGame(false), 8000);
@@ -1459,6 +1461,18 @@ const HostView: React.FC = () => {
                 <button className={`btn-secondary ${pattern==='x'?'active':''}`} onClick={() => updatePattern('x')}>X</button>
                 <button className={`btn-secondary ${pattern==='full_card'?'active':''}`} onClick={() => updatePattern('full_card')}>Full Card</button>
               </div>
+            </div>
+
+            <div className="setting-item">
+              <label>Clip Start:</label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={randomStarts}
+                  onChange={(e) => setRandomStarts(!!e.target.checked)}
+                />
+                <span>Randomize start within track (enough time left)</span>
+              </label>
             </div>
 
             {/* Playlists - Virtualized + Paged */}

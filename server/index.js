@@ -596,7 +596,7 @@ io.on('connection', (socket) => {
 
   socket.on('start-game', async (data) => {
     console.log('🎮 Start game event received:', data);
-    const { roomId, playlists, snippetLength = 30, deviceId, songList } = data;
+    const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = false } = data;
     const room = rooms.get(roomId);
     
     console.log('🔍 Room found:', !!room);
@@ -617,6 +617,7 @@ io.on('connection', (socket) => {
         room.snippetLength = snippetLength;
         room.playlists = playlists;
         room.selectedDeviceId = deviceId; // Store the selected device ID
+        room.randomStarts = !!randomStarts;
         // Initialize call history and round
         room.calledSongIds = [];
         room.round = (room.round || 0) + 1;
@@ -1671,7 +1672,16 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       try { await spotifyService.withRetries('setShuffle(false)', () => spotifyService.setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
       try { await spotifyService.withRetries('setRepeat(off)', () => spotifyService.setRepeatState('off', targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
       // Use explicit device_id and uris as fallback in case transfer isn't picked up
-      await spotifyService.withRetries('startPlayback(initial)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], 0), { attempts: 3, backoffMs: 400 });
+      // Randomized start position within track when enabled and safe
+      let startMs = 0;
+      if (room.randomStarts && Number.isFinite(firstSong.duration)) {
+        const dur = Math.max(0, Number(firstSong.duration));
+        const safeWindow = Math.max(0, dur - (room.snippetLength * 1000) - 1500);
+        if (safeWindow > 3000) {
+          startMs = Math.floor(Math.random() * safeWindow);
+        }
+      }
+      await spotifyService.withRetries('startPlayback(initial)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
       console.log(`✅ Successfully started playback on device: ${targetDeviceId}`);
       
       // Set initial volume to 50% (or room's saved volume)
@@ -1697,7 +1707,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
             await spotifyService.activateDevice(targetDeviceId);
           }
           await spotifyService.withRetries('transferPlayback(after-refresh)', () => spotifyService.transferPlayback(targetDeviceId, true), { attempts: 3, backoffMs: 300 });
-          await spotifyService.withRetries('startPlayback(after-refresh)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], 0), { attempts: 3, backoffMs: 400 });
+          await spotifyService.withRetries('startPlayback(after-refresh)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
           console.log(`✅ Successfully started playback after token refresh`);
           
           // Set initial volume to 50% (or room's saved volume)
@@ -1895,7 +1905,16 @@ async function playNextSong(roomId, deviceId) {
       // Enforce deterministic playback mode on each advance
       try { await spotifyService.withRetries('setShuffle(false,next)', () => spotifyService.setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
       try { await spotifyService.withRetries('setRepeat(off,next)', () => spotifyService.setRepeatState('off', targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
-      await spotifyService.withRetries('startPlayback(next)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], 0), { attempts: 3, backoffMs: 400 });
+      // Randomized start position within track when enabled and safe
+      let startMs = 0;
+      if (room.randomStarts && Number.isFinite(nextSong.duration)) {
+        const dur = Math.max(0, Number(nextSong.duration));
+        const safeWindow = Math.max(0, dur - (room.snippetLength * 1000) - 1500);
+        if (safeWindow > 3000) {
+          startMs = Math.floor(Math.random() * safeWindow);
+        }
+      }
+      await spotifyService.withRetries('startPlayback(next)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
       const playbackEndTime = Date.now();
       if (VERBOSE) console.log(`✅ Successfully started playback on device: ${targetDeviceId} (took ${playbackEndTime - playbackStartTime}ms)`);
       
@@ -1965,7 +1984,7 @@ async function playNextSong(roomId, deviceId) {
       }
       if (!playing || !correctTrack) {
         // Attempt to correct to the intended track once
-        try { await spotifyService.withRetries('startPlayback(correct-next)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], 0), { attempts: 2, backoffMs: 300 }); } catch {}
+        try { await spotifyService.withRetries('startPlayback(correct-next)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], startMs), { attempts: 2, backoffMs: 300 }); } catch {}
       }
       if (!playing) {
         io.to(roomId).emit('playback-warning', { message: 'Playback did not resume on next track. Verify Spotify device and try transferring playback again.' });
