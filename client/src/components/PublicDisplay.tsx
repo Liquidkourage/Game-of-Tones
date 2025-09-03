@@ -590,39 +590,49 @@ const PublicDisplay: React.FC = () => {
   // Shared helper: render masked text with per-song reveal baseline and optional highlight
   const renderMaskedText = (text: string, set: Set<string>, highlightChar: string | null) => {
     if (!text) return null;
-    const chars = Array.from(text);
+    const tokens = text.split(/(\s+)/); // keep whitespace tokens
     return (
       <span>
-        {chars.map((ch, idx) => {
-          const u = ch.toUpperCase();
-          if (/^[A-Z0-9]$/.test(u)) {
-            const revealed = set.has(u);
-            if (revealed) {
-              const isHighlight = !!highlightChar && u === highlightChar;
-              return (
-                <span key={idx} style={isHighlight ? { color: '#f5d061', textShadow: '0 0 6px rgba(245,208,97,0.6)' } : undefined}>{ch}</span>
-              );
-            }
-            // Render a tall rectangular box sized relative to current font
-            // Aim for cap-height (~0.7em) to fit within the current line-height
-            return (
-              <span
-                key={idx}
-                style={{
-                  display: 'inline-block',
-                  width: '0.6em',
-                  height: '0.72em',
-                  border: '0.08em solid rgba(255,255,255,0.75)',
-                  borderRadius: '0.12em',
-                  verticalAlign: '-0.06em',
-                  margin: '0 0.06em',
-                  boxSizing: 'border-box',
-                  background: 'rgba(255,255,255,0.10)'
-                }}
-              />
-            );
+        {tokens.map((token, ti) => {
+          // Preserve whitespace exactly
+          if (/^\s+$/.test(token)) {
+            return <span key={`ws-${ti}`}>{token}</span>;
           }
-          return <span key={idx}>{ch}</span>;
+          const chars = Array.from(token);
+          // Wrap each word in a no-wrap span so it never splits across lines
+          return (
+            <span key={`w-${ti}`} style={{ whiteSpace: 'nowrap', display: 'inline-block' }}>
+              {chars.map((ch, ci) => {
+                const u = ch.toUpperCase();
+                if (/^[A-Z0-9]$/.test(u)) {
+                  const revealed = set.has(u);
+                  if (revealed) {
+                    const isHighlight = !!highlightChar && u === highlightChar;
+                    return (
+                      <span key={`c-${ti}-${ci}`} style={isHighlight ? { color: '#f5d061', textShadow: '0 0 6px rgba(245,208,97,0.6)' } : undefined}>{ch}</span>
+                    );
+                  }
+                  return (
+                    <span
+                      key={`c-${ti}-${ci}`}
+                      style={{
+                        display: 'inline-block',
+                        width: '0.75em',
+                        height: '1.0em',
+                        border: '0.1em solid rgba(255,255,255,0.8)',
+                        borderRadius: '0.14em',
+                        verticalAlign: '-0.12em',
+                        margin: '0 0.08em',
+                        boxSizing: 'border-box',
+                        background: 'rgba(255,255,255,0.12)'
+                      }}
+                    />
+                  );
+                }
+                return <span key={`c-${ti}-${ci}`}>{ch}</span>;
+              })}
+            </span>
+          );
         })}
       </span>
     );
