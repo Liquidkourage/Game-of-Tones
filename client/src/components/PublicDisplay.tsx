@@ -106,6 +106,10 @@ const PublicDisplay: React.FC = () => {
   const [vertIndices, setVertIndices] = useState<number[]>([0,0,0,0,0]);
   const vertViewportRef = useRef<HTMLDivElement | null>(null);
   const [rowHeightPx, setRowHeightPx] = useState<number>(0);
+  // Global scroll phase to keep columns aligned + freeze control
+  const [phasePx, setPhasePx] = useState<number>(0);
+  const rafRef = useRef<number | null>(null);
+  const [freezeAll, setFreezeAll] = useState<boolean>(false);
 
   useEffect(() => {
     const socket = io(SOCKET_URL || undefined);
@@ -260,6 +264,21 @@ const PublicDisplay: React.FC = () => {
           const col = idToColumnRef.current[song.id];
           try { console.log('[Display] song-playing', { index: currentIndexRef.current, id: song.id, col, name: song.name }); } catch {}
         }
+        // Snap + freeze: if column now has >5 items, snap newest to bottom and freeze global scroll
+        try {
+          const colIdx = idToColumnRef.current[song.id];
+          if (typeof colIdx === 'number' && fiveBy15Columns && rowHeightPx > 0) {
+            const colList = fiveBy15Columns[colIdx] || [];
+            const playedInCol = colList.filter(id => playedOrderRef.current.includes(id));
+            if (playedInCol.length > 5) {
+              const targetRows = playedInCol.length - 5;
+              setPhasePx(targetRows * rowHeightPx);
+              setFreezeAll(true);
+            } else {
+              setFreezeAll(false);
+            }
+          }
+        } catch {}
         // Reveal one new letter (if any) that appears in previous songs and is not yet revealed
         try {
           const previousIds = playedOrderRef.current.filter(id => id !== song.id);
@@ -446,6 +465,25 @@ const PublicDisplay: React.FC = () => {
       if (ro) ro.disconnect();
     };
   }, [vertViewportRef.current]);
+
+  // Global smooth phase driver (keeps columns aligned)
+  useEffect(() => {
+    const secondsPerRow = 6; // 1 row every 6s
+    let last = performance.now();
+    let running = true;
+    const step = (now: number) => {
+      if (!running) return;
+      const dt = (now - last) / 1000;
+      last = now;
+      if (!freezeAll && rowHeightPx > 0) {
+        const delta = (rowHeightPx / secondsPerRow) * dt;
+        setPhasePx((p) => p + delta);
+      }
+      rafRef.current = requestAnimationFrame(step);
+    };
+    rafRef.current = requestAnimationFrame(step);
+    return () => { running = false; if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [rowHeightPx, freezeAll]);
 
   // Auto-advance vertical index for 5x15 (per column; show 5 at a time, scroll by 1)
   useEffect(() => {
@@ -750,17 +788,17 @@ const PublicDisplay: React.FC = () => {
             >
               {(() => {
                 const shouldScroll = col.length > 5 && rowHeightPx > 0;
-                const secondsPerRow = 6; // constant speed across all columns
-                const loopDistance = rowHeightPx * col.length;
-                const loopDuration = col.length * secondsPerRow;
-                const displayItems = shouldScroll ? [...col, ...col] : col;
+                // Global phase keeps columns aligned
+                let yPx = 0;
+                if (shouldScroll) {
+                  const loopPx = Math.max(1, col.length * rowHeightPx);
+                  yPx = phasePx % loopPx;
+                }
+                const displayItems = col;
                 return (
-                  <motion.div
+                  <div
                     className="call-vert-track"
-                    initial={false}
-                    animate={shouldScroll ? { y: [0, -loopDistance] } : { y: 0 }}
-                    transition={shouldScroll ? { duration: loopDuration, ease: 'linear', repeat: Infinity } : { duration: 0 }}
-                    style={{ position: 'absolute', left: 0, right: 0, top: 0, willChange: 'transform' }}
+                    style={{ position: 'absolute', left: 0, right: 0, top: 0, willChange: 'transform', transform: `translateY(${-yPx}px)` }}
                   >
                 {displayItems.map((id, ri) => {
                   const poolIdx = Array.isArray(oneBy75Ids) ? oneBy75Ids.indexOf(id) : -1;
@@ -813,7 +851,7 @@ const PublicDisplay: React.FC = () => {
                     </motion.div>
                   );
                 })}
-                  </motion.div>
+                  </div>
                 );
               })()}
             </div>
