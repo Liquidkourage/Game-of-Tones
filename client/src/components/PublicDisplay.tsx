@@ -748,14 +748,21 @@ const PublicDisplay: React.FC = () => {
               style={{ position: 'relative', overflow: 'hidden', height: '100%' }}
               {...(ci === 0 ? { ref: vertViewportRef as any } : {})}
             >
-              <motion.div
-                className="call-vert-track"
-                initial={false}
-                animate={{ y: -((vertIndices[ci] || 0) * (rowHeightPx || 0)) }}
-                transition={{ duration: 1, ease: 'easeInOut' }}
-                style={{ position: 'absolute', left: 0, right: 0, top: 0 }}
-              >
-                {col.map((id, ri) => {
+              {(() => {
+                const shouldScroll = col.length > 5 && rowHeightPx > 0;
+                const secondsPerRow = 6; // constant speed across all columns
+                const loopDistance = rowHeightPx * col.length;
+                const loopDuration = col.length * secondsPerRow;
+                const displayItems = shouldScroll ? [...col, ...col] : col;
+                return (
+                  <motion.div
+                    className="call-vert-track"
+                    initial={false}
+                    animate={shouldScroll ? { y: [0, -loopDistance] } : { y: 0 }}
+                    transition={shouldScroll ? { duration: loopDuration, ease: 'linear', repeat: Infinity } : { duration: 0 }}
+                    style={{ position: 'absolute', left: 0, right: 0, top: 0, willChange: 'transform' }}
+                  >
+                {displayItems.map((id, ri) => {
                   const poolIdx = Array.isArray(oneBy75Ids) ? oneBy75Ids.indexOf(id) : -1;
                   const meta = idMetaRef.current[id] || { name: '', artist: '' };
                   const isCurrent = gameState.currentSong?.id === id;
@@ -765,7 +772,7 @@ const PublicDisplay: React.FC = () => {
                   const artist = isCurrent ? '??????' : maskByLetterSet(meta?.artist || '', revealedForThisSong);
                   return (
                     <motion.div
-                      key={id}
+                      key={id + '-' + ri}
                       className="call-item"
                       initial={false}
                       animate={{
@@ -780,7 +787,7 @@ const PublicDisplay: React.FC = () => {
                       <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                         <AnimatePresence mode="popLayout" initial={false}>
                           <motion.div
-                            key={title}
+                            key={title + '-' + ri}
                             initial={{ opacity: 0, y: 6, scale: 0.98 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: -6, scale: 0.98 }}
@@ -791,7 +798,7 @@ const PublicDisplay: React.FC = () => {
                             {title}
                           </motion.div>
                           <motion.div
-                            key={artist}
+                            key={artist + '-' + ri}
                             initial={{ opacity: 0, y: 4 }}
                             animate={{ opacity: 0.85, y: 0 }}
                             exit={{ opacity: 0, y: -4 }}
@@ -806,7 +813,9 @@ const PublicDisplay: React.FC = () => {
                     </motion.div>
                   );
                 })}
-              </motion.div>
+                  </motion.div>
+                );
+              })()}
             </div>
           ))}
         </div>
