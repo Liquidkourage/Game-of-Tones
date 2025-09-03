@@ -287,52 +287,7 @@ const PublicDisplay: React.FC = () => {
             }
           }
         } catch {}
-        // Reveal one new letter, weighted by how frequently it remains unrevealed across previous songs
-        try {
-          const previousIds = playedOrderRef.current.filter(id => id !== song.id);
-          if (previousIds.length > 0) {
-            const weights: Record<string, number> = {};
-            for (let i = 0; i < previousIds.length; i++) {
-              const pid = previousIds[i];
-              const meta = idMetaRef.current[pid];
-              if (!meta) continue;
-              const baseline = songBaselineRef.current[pid] ?? 0;
-              const visibleForSong = new Set(revealSequenceRef.current.slice(baseline));
-              const textUpper = (`${meta.name || ''} ${meta.artist || ''}`).toUpperCase();
-              for (let j = 0; j < textUpper.length; j++) {
-                const ch = textUpper[j];
-                if (!/^[A-Z0-9]$/.test(ch)) continue;
-                // Count only if this character is not yet revealed for that specific previous song
-                if (!visibleForSong.has(ch)) {
-                  weights[ch] = (weights[ch] || 0) + 1;
-                }
-              }
-            }
-            const entries = Object.entries(weights);
-            if (entries.length > 0) {
-              // Weighted random choice
-              const total = entries.reduce((sum, [, w]) => sum + w, 0);
-              let r = Math.random() * total;
-              let revealedChar = entries[0][0];
-              for (let k = 0; k < entries.length; k++) {
-                const [ch, w] = entries[k];
-                if (r < w) { revealedChar = ch; break; }
-                r -= w;
-              }
-              revealSequenceRef.current.push(revealedChar);
-              // Toast for revealed letter
-              try {
-                if (revealToastTimerRef.current) { clearTimeout(revealToastTimerRef.current); revealToastTimerRef.current = null; }
-                setRevealToast(revealedChar);
-                revealToastTimerRef.current = setTimeout(() => {
-                  setRevealToast(null);
-                  revealToastTimerRef.current = null;
-                }, 2500);
-              } catch {}
-            }
-          }
-        } catch {}
-        // Set baseline AFTER revealing for this turn so the new letter does not show on the current song
+        // Set baseline when song starts so letters revealed before it started stay hidden on that song
         if (songBaselineRef.current[song.id] === undefined) {
           songBaselineRef.current[song.id] = revealSequenceRef.current.length;
         }
@@ -428,6 +383,51 @@ const PublicDisplay: React.FC = () => {
       socket.close();
     };
   }, [roomId]);
+
+  // Time-based letter reveal every 10 seconds (weighted by unrevealed frequency across played songs)
+  useEffect(() => {
+    if (!gameState.isPlaying) return;
+    const interval = setInterval(() => {
+      try {
+        const ids = playedOrderRef.current;
+        if (!ids || ids.length === 0) return;
+        const weights: Record<string, number> = {};
+        for (let i = 0; i < ids.length; i++) {
+          const pid = ids[i];
+          const meta = idMetaRef.current[pid];
+          if (!meta) continue;
+          const baseline = songBaselineRef.current[pid] ?? 0;
+          const visibleForSong = new Set(revealSequenceRef.current.slice(baseline));
+          const textUpper = (`${meta.name || ''} ${meta.artist || ''}`).toUpperCase();
+          for (let j = 0; j < textUpper.length; j++) {
+            const ch = textUpper[j];
+            if (!/^[A-Z0-9]$/.test(ch)) continue;
+            if (!visibleForSong.has(ch)) {
+              weights[ch] = (weights[ch] || 0) + 1;
+            }
+          }
+        }
+        const entries = Object.entries(weights);
+        if (entries.length === 0) return;
+        const total = entries.reduce((sum, [, w]) => sum + w, 0);
+        let r = Math.random() * total;
+        let revealedChar = entries[0][0];
+        for (let k = 0; k < entries.length; k++) {
+          const [ch, w] = entries[k];
+          if (r < w) { revealedChar = ch; break; }
+          r -= w;
+        }
+        revealSequenceRef.current.push(revealedChar);
+        if (revealToastTimerRef.current) { clearTimeout(revealToastTimerRef.current); revealToastTimerRef.current = null; }
+        setRevealToast(revealedChar);
+        revealToastTimerRef.current = setTimeout(() => {
+          setRevealToast(null);
+          revealToastTimerRef.current = null;
+        }, 3000);
+      } catch {}
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [gameState.isPlaying]);
 
   // Auto-advance the 15x5 grouped columns carousel
   useEffect(() => {
@@ -782,9 +782,9 @@ const PublicDisplay: React.FC = () => {
       return chars.map((ch) => {
         const u = ch.toUpperCase();
         if (/^[A-Z0-9]$/.test(u)) {
-          return set.has(u) ? ch : '?';
+          return set.has(u) ? ch : '•';
         }
-        return ch === ' ' ? ' ' : ch;
+        return ch;
       }).join('');
     };
     return (
@@ -839,8 +839,8 @@ const PublicDisplay: React.FC = () => {
                   const isCurrent = gameState.currentSong?.id === id;
                   const baseline = songBaselineRef.current[id] ?? 0;
                   const revealedForThisSong = new Set(revealSequenceRef.current.slice(baseline));
-                  const title = isCurrent ? '??????' : maskByLetterSet(meta?.name || 'Unknown', revealedForThisSong);
-                  const artist = isCurrent ? '??????' : maskByLetterSet(meta?.artist || '', revealedForThisSong);
+                  const title = maskByLetterSet(meta?.name || 'Unknown', revealedForThisSong);
+                  const artist = maskByLetterSet(meta?.artist || '', revealedForThisSong);
                   return (
                     <motion.div
                       key={id + '-' + ri}
@@ -919,10 +919,9 @@ const PublicDisplay: React.FC = () => {
       return chars.map((ch) => {
         const u = ch.toUpperCase();
         if (/^[A-Z0-9]$/.test(u)) {
-          return set.has(u) ? ch : '?';
+          return set.has(u) ? ch : '•';
         }
-        // preserve spaces and punctuation
-        return ch === ' ' ? ' ' : ch;
+        return ch;
       }).join('');
     };
 
@@ -953,8 +952,8 @@ const PublicDisplay: React.FC = () => {
                     const baseline = songBaselineRef.current[id] ?? 0;
                     // Show only letters revealed AFTER this song started
                     const revealedForThisSong = new Set(revealSequenceRef.current.slice(baseline));
-                    const title = isCurrent ? '??????' : maskByLetterSet(meta?.name || 'Unknown', revealedForThisSong);
-                    const artist = isCurrent ? '??????' : maskByLetterSet(meta?.artist || '', revealedForThisSong);
+                    const title = maskByLetterSet(meta?.name || 'Unknown', revealedForThisSong);
+                    const artist = maskByLetterSet(meta?.artist || '', revealedForThisSong);
                     return (
                       <motion.div
                         key={id}
@@ -1019,9 +1018,9 @@ const PublicDisplay: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.25 }}
-              style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.7)', color: '#00ff88', padding: '8px 12px', borderRadius: 8, fontWeight: 900, letterSpacing: '0.04em', boxShadow: '0 4px 16px rgba(0,0,0,0.4)', zIndex: 1000 }}
+              style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.8)', color: '#00ff88', padding: '14px 18px', borderRadius: 12, fontWeight: 900, letterSpacing: '0.06em', fontSize: '2.0rem', boxShadow: '0 8px 28px rgba(0,0,0,0.5)', zIndex: 1000, border: '1px solid rgba(0,255,136,0.35)' }}
             >
-              Letter revealed: {revealToast}
+              Revealed: {revealToast}
             </motion.div>
           )}
         </AnimatePresence>
