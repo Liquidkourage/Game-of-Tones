@@ -832,7 +832,22 @@ const PublicDisplay: React.FC = () => {
                   <span key={idx} style={isHighlight ? { color: '#f5d061', textShadow: '0 0 6px rgba(245,208,97,0.6)' } : undefined}>{ch}</span>
                 );
               }
-              return <span key={idx} style={{ opacity: 0.9 }}>{'□'}</span>;
+              return (
+                <span
+                  key={idx}
+                  style={{
+                    display: 'inline-block',
+                    width: '0.75em',
+                    height: '1.0em',
+                    border: '0.1em solid rgba(255,255,255,0.8)',
+                    borderRadius: '0.14em',
+                    verticalAlign: '-0.12em',
+                    margin: '0 0.08em',
+                    boxSizing: 'border-box',
+                    background: 'rgba(255,255,255,0.12)'
+                  }}
+                />
+              );
             }
             return <span key={idx}>{ch}</span>;
           })}
@@ -915,7 +930,7 @@ const PublicDisplay: React.FC = () => {
                             exit={{ opacity: 0, y: -6, scale: 0.98 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-name"
-                            style={{ fontWeight: 900, lineHeight: 1.1, fontSize: '2.2rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            style={{ fontWeight: 900, lineHeight: 1.25, fontSize: '2.2rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                           >
                             {title}
                           </motion.div>
@@ -1028,7 +1043,7 @@ const PublicDisplay: React.FC = () => {
                               exit={{ opacity: 0, y: -6, scale: 0.98 }}
                               transition={{ duration: 0.25 }}
                               className="call-song-name"
-                              style={{ fontWeight: 900, lineHeight: 1.08, fontSize: '2.5rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                              style={{ fontWeight: 900, lineHeight: 1.25, fontSize: '2.5rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                             >
                               {title}
                             </motion.div>
