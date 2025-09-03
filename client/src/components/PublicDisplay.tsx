@@ -106,6 +106,9 @@ const PublicDisplay: React.FC = () => {
   const [vertIndices, setVertIndices] = useState<number[]>([0,0,0,0,0]);
   const vertViewportRef = useRef<HTMLDivElement | null>(null);
   const [rowHeightPx, setRowHeightPx] = useState<number>(0);
+  // Toast for revealed letter
+  const [revealToast, setRevealToast] = useState<string | null>(null);
+  const revealToastTimerRef = useRef<NodeJS.Timeout | null>(null);
   // Global scroll phase to keep columns aligned + freeze control
   const [phasePx, setPhasePx] = useState<number>(0);
   const rafRef = useRef<number | null>(null);
@@ -303,7 +306,17 @@ const PublicDisplay: React.FC = () => {
             });
             if (candidates.length > 0) {
               const idx = Math.floor(Math.random() * candidates.length);
-              revealSequenceRef.current.push(candidates[idx]);
+              const revealedChar = candidates[idx];
+              revealSequenceRef.current.push(revealedChar);
+              // Toast for revealed letter
+              try {
+                if (revealToastTimerRef.current) { clearTimeout(revealToastTimerRef.current); revealToastTimerRef.current = null; }
+                setRevealToast(revealedChar);
+                revealToastTimerRef.current = setTimeout(() => {
+                  setRevealToast(null);
+                  revealToastTimerRef.current = null;
+                }, 2500);
+              } catch {}
             }
           }
         } catch {}
@@ -985,6 +998,20 @@ const PublicDisplay: React.FC = () => {
     <div ref={displayRef} className="public-display">
       {/* Main Content - 16:10 Layout */}
       <div className="display-content">
+        <AnimatePresence>
+          {revealToast && (
+            <motion.div
+              key={`toast-${revealToast}-${totalPlayedCount}`}
+              initial={{ opacity: 0, y: -12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.25 }}
+              style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.7)', color: '#00ff88', padding: '8px 12px', borderRadius: 8, fontWeight: 900, letterSpacing: '0.04em', boxShadow: '0 4px 16px rgba(0,0,0,0.4)', zIndex: 1000 }}
+            >
+              Letter revealed: {revealToast}
+            </motion.div>
+          )}
+        </AnimatePresence>
         {/* Two Column Layout: Left (pattern + info/winners), Right (call list) */}
         <div className="bottom-row">
           <div className="left-col">
