@@ -609,14 +609,14 @@ const PublicDisplay: React.FC = () => {
                 key={idx}
                 style={{
                   display: 'inline-block',
-                  width: '0.8em',
-                  height: '1.6em',
-                  border: '0.14em solid rgba(255,255,255,0.65)',
-                  borderRadius: '0.16em',
-                  verticalAlign: '-0.4em',
-                  margin: '0 0.08em',
+                  width: '1.4em',
+                  height: '1.8em',
+                  border: '0.18em solid rgba(255,255,255,0.7)',
+                  borderRadius: '0.2em',
+                  verticalAlign: '-0.5em',
+                  margin: '0 0.1em',
                   boxSizing: 'border-box',
-                  background: 'rgba(255,255,255,0.10)'
+                  background: 'rgba(255,255,255,0.12)'
                 }}
               />
             );
