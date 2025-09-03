@@ -840,15 +840,14 @@ const PublicDisplay: React.FC = () => {
     };
     return (
       <div className="call-list-content">
-        <div className="call-columns-header" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, alignItems: 'center' }}>
+        <div className="call-columns-header" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, alignItems: 'center', marginBottom: 6 }}>
           {[0,1,2,3,4].map((i) => {
             const raw = playlistNames[i] || '';
-            const name = raw.replace(/^\s*GoT\s*[-–:]\s*/i, '').trim();
+            const name = raw.replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
             return (
               <div key={i} className="call-col-title" style={{ textAlign: 'center' }}>
-                <div style={{ fontWeight: 900, opacity: 0.95 }}>{['B','I','N','G','O'][i]}</div>
                 {name && (
-                  <div style={{ fontSize: '0.9rem', opacity: 0.85, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, opacity: 0.92, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {name}
                   </div>
                 )}
@@ -1185,10 +1184,7 @@ const PublicDisplay: React.FC = () => {
               transition={{ duration: 0.6, delay: 0.2 }}
             >
               <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1, minHeight: 0 }}>
-              <div className="call-list-header" style={{ marginTop: 0 }}>
-                <List className="call-list-icon" />
-                <span className="call-count">{totalPlayedCount}</span>
-                </div>
+              {/* Removed call count header and redundant BINGO row; playlist titles shown above columns */}
               {oneBy75Ids ? ((fiveBy15Columns || (searchParams.get('mode') === '5x15')) ? renderOneBy75Columns() : renderOneBy75GroupedColumns()) : (
                   <div className="call-list-content" style={{ height: '100%' }}>
                   {/* Column headers moved to App header to free vertical space */}
