@@ -110,6 +110,8 @@ const PublicDisplay: React.FC = () => {
   const [phasePx, setPhasePx] = useState<number>(0);
   const rafRef = useRef<number | null>(null);
   const [freezeAll, setFreezeAll] = useState<boolean>(false);
+  const [frozenCols, setFrozenCols] = useState<boolean[]>([false, false, false, false, false]);
+  const [freezeRows, setFreezeRows] = useState<number[]>([0, 0, 0, 0, 0]);
 
   useEffect(() => {
     const socket = io(SOCKET_URL || undefined);
