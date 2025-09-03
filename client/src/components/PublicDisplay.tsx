@@ -425,7 +425,7 @@ const PublicDisplay: React.FC = () => {
           revealToastTimerRef.current = null;
         }, 3000);
       } catch {}
-    }, 10000);
+    }, 15000);
     return () => clearInterval(interval);
   }, [gameState.isPlaying]);
 
@@ -1114,10 +1114,7 @@ const PublicDisplay: React.FC = () => {
                 transition={{ duration: 0.6, delay: 0.2 }}
                 style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}
               >
-                {/* Centered INFO header */}
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontWeight: 800, letterSpacing: '0.06em', opacity: 0.9, fontSize: '1.4rem' }}>INFO</div>
-                </div>
+                {/* Removed redundant INFO header */}
                 
                 {/* Room code and stats in same row */}
                 <div style={{ display: 'flex', flexDirection: 'row', gap: 20, alignItems: 'center', justifyContent: 'space-around' }}>
