@@ -480,7 +480,7 @@ const PublicDisplay: React.FC = () => {
     if (!el) return;
     const compute = () => {
       const h = el.clientHeight || 0;
-      if (h > 0) setRowHeightPx(h / 5);
+      if (h > 0) setRowHeightPx((h / 5) * 0.95); // 5% slimmer to ensure 5 fit
     };
     compute();
     window.addEventListener('resize', compute);
