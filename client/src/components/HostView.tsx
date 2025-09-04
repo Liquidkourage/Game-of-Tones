@@ -79,7 +79,7 @@ const HostView: React.FC = () => {
   const [isStartingGame, setIsStartingGame] = useState(false);
   const [logs, setLogs] = useState<Array<{ level: 'info' | 'warn' | 'error'; message: string; ts: number }>>([]);
   const [revealMode, setRevealMode] = useState<'off' | 'artist' | 'title' | 'full'>('off');
-  const [pattern, setPattern] = useState<'line' | 'four_corners' | 'x' | 'full_card'>('full_card');
+  const [pattern, setPattern] = useState<'line' | 'four_corners' | 'x' | 'full_card'>('line');
   const [lockJoins, setLockJoins] = useState<boolean>(false);
   const [preQueueEnabled, setPreQueueEnabled] = useState<boolean>(false);
   const [preQueueWindow, setPreQueueWindow] = useState<number>(5);
