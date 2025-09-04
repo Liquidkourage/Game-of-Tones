@@ -845,7 +845,7 @@ const PublicDisplay: React.FC = () => {
                       const isHighlight = !!highlightChar && u === highlightChar;
                       return <span key={`c-${ti}-${ci}`} style={isHighlight ? { color: '#f5d061', textShadow: '0 0 6px rgba(245,208,97,0.6)' } : undefined}>{ch}</span>;
                     }
-                    return <span key={`c-${ti}-${ci}`} style={{ display: 'inline-block', width: '0.58em', height: '0.78em', border: '0.08em solid rgba(255,255,255,0.8)', borderRadius: '0.11em', verticalAlign: '-0.08em', margin: '0 0.05em', boxSizing: 'border-box', background: 'rgba(255,255,255,0.12)' }} />;
+                    return <span key={`c-${ti}-${ci}`} style={{ display: 'inline-block', width: '0.52em', height: '0.70em', border: '0.072em solid rgba(255,255,255,0.8)', borderRadius: '0.11em', verticalAlign: '-0.06em', margin: '0 0.05em', boxSizing: 'border-box', background: 'rgba(255,255,255,0.12)' }} />;
                   }
                   return <span key={`c-${ti}-${ci}`}>{ch}</span>;
                 })}
@@ -921,9 +921,30 @@ const PublicDisplay: React.FC = () => {
                       transition={{ duration: 0.25 }}
                       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, height: rowHeightPx ? `${rowHeightPx}px` : undefined, overflow: 'hidden', background: 'rgba(255,255,255,0.08)', boxSizing: 'border-box' }}
                     >
-                      {/* No numeric badge in 5×15 mode */}
-                      <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                        <AnimatePresence mode="popLayout" initial={false}>
+                      {/* Numeric badge: play order index */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+                        <div
+                          className="call-number"
+                          style={{
+                            minWidth: 34,
+                            height: 34,
+                            borderRadius: 8,
+                            background: 'rgba(255,255,255,0.08)',
+                            border: '1px solid rgba(255,255,255,0.2)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 900,
+                            color: '#e6e6e6'
+                          }}
+                        >
+                          {(() => {
+                            const idx = playedOrderRef.current.indexOf(id);
+                            return idx >= 0 ? (idx + 1) : '';
+                          })()}
+                        </div>
+                        <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                          <AnimatePresence mode="popLayout" initial={false}>
                           <motion.div
                             key={(meta?.name || '') + '-' + ri}
                             initial={{ opacity: 0, y: 6, scale: 0.98 }}
@@ -931,7 +952,7 @@ const PublicDisplay: React.FC = () => {
                             exit={{ opacity: 0, y: -6, scale: 0.98 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-name"
-                            style={{ fontWeight: 900, lineHeight: 1.12, fontSize: (() => { const rh = rowHeightPx || 0; const px = Math.round(rh * 0.51); return Math.min(51, Math.max(24, px)); })() + 'px', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            style={{ fontWeight: 900, lineHeight: 1.12, fontSize: (() => { const rh = rowHeightPx || 0; const px = Math.round(rh * 0.46); return Math.min(46, Math.max(22, px)); })() + 'px', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                           >
                             {title}
                           </motion.div>
@@ -942,11 +963,23 @@ const PublicDisplay: React.FC = () => {
                             exit={{ opacity: 0, y: -4 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-artist"
-                            style={{ fontSize: (() => { const rh = rowHeightPx || 0; const px = Math.round(rh * 0.42); return Math.min(42, Math.max(18, px)); })() + 'px', color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            style={{ fontSize: (() => { const rh = rowHeightPx || 0; const px = Math.round(rh * 0.38); return Math.min(38, Math.max(16, px)); })() + 'px', color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                           >
                             {artist}
                           </motion.div>
-                        </AnimatePresence>
+                          <motion.div
+                            key={(meta?.artist || '') + '-' + ri}
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 0.85, y: 0 }}
+                            exit={{ opacity: 0, y: -4 }}
+                            transition={{ duration: 0.25 }}
+                            className="call-song-artist"
+                            style={{ fontSize: (() => { const rh = rowHeightPx || 0; const px = Math.round(rh * 0.38); return Math.min(38, Math.max(16, px)); })() + 'px', color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                          >
+                            {artist}
+                          </motion.div>
+                          </AnimatePresence>
+                        </div>
                       </div>
                     </motion.div>
                   );
