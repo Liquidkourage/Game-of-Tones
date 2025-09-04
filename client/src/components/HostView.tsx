@@ -83,6 +83,7 @@ const HostView: React.FC = () => {
   const [lockJoins, setLockJoins] = useState<boolean>(false);
   const [preQueueEnabled, setPreQueueEnabled] = useState<boolean>(false);
   const [preQueueWindow, setPreQueueWindow] = useState<number>(5);
+  const [stripGoTPrefix, setStripGoTPrefix] = useState<boolean>(true);
 
   const addLog = (message: string, level: 'info' | 'warn' | 'error' = 'info') => {
     setLogs(prev => [{ level, message, ts: Date.now() }, ...prev].slice(0, 50));
@@ -1227,6 +1228,21 @@ const HostView: React.FC = () => {
     return () => { cancelled = true; clearTimeout(t); };
   }, [isPlaying, currentSong]);
 
+  const confirmAndResetGame = () => {
+    if (!roomId) return;
+    if (window.confirm('Reset the current game? This clears current round state.')) {
+      resetGame();
+    }
+  };
+
+  const confirmAndNewRound = () => {
+    if (!roomId || !socket) return;
+    if (window.confirm('Start a new round? This keeps playlists but resets progress.')) {
+      socket.emit('new-round', { roomId });
+      addLog('New Round requested', 'info');
+    }
+  };
+
   return (
     <div className="host-view">
       <motion.div 
@@ -1455,11 +1471,11 @@ const HostView: React.FC = () => {
             </div>
             <div className="setting-item">
               <label>Pattern:</label>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button className={`btn-secondary ${pattern==='line'?'active':''}`} onClick={() => updatePattern('line')}>Line</button>
-                <button className={`btn-secondary ${pattern==='four_corners'?'active':''}`} onClick={() => updatePattern('four_corners')}>Four Corners</button>
-                <button className={`btn-secondary ${pattern==='x'?'active':''}`} onClick={() => updatePattern('x')}>X</button>
-                <button className={`btn-secondary ${pattern==='full_card'?'active':''}`} onClick={() => updatePattern('full_card')}>Full Card</button>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <button className={`btn-secondary ${pattern==='line'?'active':''}`} style={{ padding: '10px 16px', fontSize: '1rem', fontWeight: 800 }} onClick={() => updatePattern('line')}>Line</button>
+                <button className={`btn-secondary ${pattern==='four_corners'?'active':''}`} style={{ padding: '10px 16px', fontSize: '1rem', fontWeight: 800 }} onClick={() => updatePattern('four_corners')}>Four Corners</button>
+                <button className={`btn-secondary ${pattern==='x'?'active':''}`} style={{ padding: '10px 16px', fontSize: '1rem', fontWeight: 800 }} onClick={() => updatePattern('x')}>X</button>
+                <button className={`btn-secondary ${pattern==='full_card'?'active':''}`} style={{ padding: '10px 16px', fontSize: '1rem', fontWeight: 800 }} onClick={() => updatePattern('full_card')}>Full Card</button>
               </div>
             </div>
 
@@ -1478,48 +1494,69 @@ const HostView: React.FC = () => {
             {/* Playlists - Virtualized + Paged */}
             <div className="setting-item">
               <label>Playlists:</label>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
                 <input
                   type="text"
                   placeholder="Search playlists..."
                   value={playlistQuery}
                   onChange={(e) => setPlaylistQuery(e.target.value)}
                   className="input"
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, minWidth: 240 }}
                 />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input type="checkbox" checked={stripGoTPrefix} onChange={(e) => setStripGoTPrefix(!!e.target.checked)} />
+                  <span>Strip "GoT" preview</span>
+                </label>
                 <button className="btn-secondary" onClick={() => { setPlaylistQuery(''); }}>Clear</button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => {
+                    const toAdd = filteredPlaylists.slice(0, 5).filter(fp => !selectedPlaylists.some(sp => sp.id === fp.id));
+                    setSelectedPlaylists(prev => [...prev, ...toAdd]);
+                  }}
+                >Add first 5 visible</button>
               </div>
-              <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8 }}>
-                {filteredPlaylists.length === 0 && (
-                  <div style={{ color: '#b3b3b3', fontStyle: 'italic' }}>No playlists</div>
-                )}
-                {filteredPlaylists.map((p) => {
-                  const isSelected = !!selectedPlaylists.find(sp => sp.id === p.id);
-                  return (
-                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
-                        <div style={{ fontSize: 12, color: '#b3b3b3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.owner} • {p.tracks} tracks</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 12 }}>
+                <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8 }}>
+                  {filteredPlaylists.length === 0 && (
+                    <div style={{ color: '#b3b3b3', fontStyle: 'italic' }}>No playlists</div>
+                  )}
+                  {filteredPlaylists.map((p) => {
+                    const isSelected = !!selectedPlaylists.find(sp => sp.id === p.id);
+                    const previewName = stripGoTPrefix ? (p.name || '').replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim() : p.name;
+                    return (
+                      <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{previewName}</div>
+                          <div style={{ fontSize: 12, color: '#b3b3b3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.owner} • {p.tracks} tracks</div>
+                        </div>
+                        <button
+                          className={isSelected ? 'btn-secondary active' : 'btn-secondary'}
+                          onClick={() => {
+                            setSelectedPlaylists(prev => (
+                              isSelected ? prev.filter(sp => sp.id !== p.id) : [...prev, p]
+                            ));
+                          }}
+                        >
+                          {isSelected ? 'Remove' : 'Add'}
+                        </button>
                       </div>
-                      <button
-                        className={isSelected ? 'btn-secondary active' : 'btn-secondary'}
-                        onClick={() => {
-                          setSelectedPlaylists(prev => (
-                            isSelected ? prev.filter(sp => sp.id !== p.id) : [...prev, p]
-                          ));
-                        }}
-                      >
-                        {isSelected ? 'Remove' : 'Add'}
-                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8, position: 'sticky', top: 8 }}>
+                  <div style={{ fontWeight: 800, marginBottom: 6 }}>Selected ({selectedPlaylists.length})</div>
+                  {selectedPlaylists.length === 0 && (
+                    <div style={{ color: '#b3b3b3', fontStyle: 'italic' }}>None selected</div>
+                  )}
+                  {selectedPlaylists.map((sp) => (
+                    <div key={sp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: '1px dashed rgba(255,255,255,0.08)' }}>
+                      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stripGoTPrefix ? (sp.name || '').replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim() : sp.name}</div>
+                      <button className="btn-secondary" onClick={() => setSelectedPlaylists(prev => prev.filter(x => x.id !== sp.id))}>Remove</button>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
-              {visiblePlaylists.length < playlists.length && (
-                <button disabled={isLoadingMorePlaylists} className="btn-secondary" style={{ marginTop: 8 }} onClick={loadMorePlaylists}>
-                  {isLoadingMorePlaylists ? 'Loading…' : `Load more (${playlists.length - visiblePlaylists.length} left)`}
-                </button>
-              )}
             </div>
           </motion.div>
 
@@ -1602,8 +1639,8 @@ const HostView: React.FC = () => {
                    <p className="status-text">🎵 Game is running - Use the Now Playing controls below</p>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                     <button className="btn-secondary" onClick={endGame}>🛑 End Game</button>
-                    <button className="btn-secondary" onClick={resetGame}>🔁 Reset</button>
-                    <button className="btn-secondary" onClick={() => socket?.emit('new-round', { roomId })}>🆕 New Round</button>
+                    <button className="btn-secondary" onClick={confirmAndResetGame}>🔁 Reset</button>
+                    <button className="btn-secondary" onClick={confirmAndNewRound}>🆕 New Round</button>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
                     <span style={{ opacity: 0.9 }}>Call Reveal:</span>
