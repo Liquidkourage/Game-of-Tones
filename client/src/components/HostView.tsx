@@ -122,12 +122,11 @@ const HostView: React.FC = () => {
   const [visiblePlaylists, setVisiblePlaylists] = useState<Playlist[]>([]);
   const [playlistQuery, setPlaylistQuery] = useState('');
   const [isLoadingMorePlaylists, setIsLoadingMorePlaylists] = useState(false);
-  const [showSongList, setShowSongList] = useState(false);
-  const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]);
+  // const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]); // duplicate removed
   
-  // Pause position tracking
-  const [pausePosition, setPausePosition] = useState<number>(0);
-  const [isPausedByInterface, setIsPausedByInterface] = useState(false);
+  // Pause position tracking (duplicates removed below)
+  // const [pausePosition, setPausePosition] = useState<number>(0);
+  // const [isPausedByInterface, setIsPausedByInterface] = useState(false);
 
   const loadPlaylists = useCallback(async () => {
     try {
