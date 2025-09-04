@@ -1112,59 +1112,59 @@ const PublicDisplay: React.FC = () => {
             transition={{ duration: 0.35 }}
             style={{
               position: 'fixed', inset: 0, zIndex: 2000,
-              background: 'radial-gradient(900px 500px at 50% -120px, rgba(0,255,136,0.28), rgba(0,0,0,0) 55%), linear-gradient(180deg, #101a24 0%, #132b3f 100%)',
+              background: 'radial-gradient(1200px 650px at 50% -180px, rgba(0,255,170,0.35), rgba(0,0,0,0) 60%), radial-gradient(900px 700px at -20% 120%, rgba(0,140,255,0.18), rgba(0,0,0,0) 55%), linear-gradient(180deg, #0f2333 0%, #0b1824 100%)',
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              padding: 32
+              padding: 40
             }}
           >
-            <div style={{ textAlign: 'center', marginBottom: 36 }}>
+            <div style={{ textAlign: 'center', marginBottom: 44 }}>
               <div
                 style={{
-                  fontSize: 'clamp(2.4rem, 6vw, 5rem)',
+                  fontSize: 'clamp(3.2rem, 8vw, 6.2rem)',
                   fontWeight: 1000,
-                  letterSpacing: '0.045em',
-                  backgroundImage: 'linear-gradient(90deg,#00ff88 0%, #5bffcc 40%, #ffffff 50%, #5bffcc 60%, #00ff88 100%)',
+                  letterSpacing: '0.05em',
+                  backgroundImage: 'linear-gradient(90deg,#00ffa3 0%, #7bffd9 35%, #ffffff 50%, #7bffd9 65%, #00ffa3 100%)',
                   WebkitBackgroundClip: 'text',
                   backgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
-                  textShadow: '0 4px 24px rgba(0,255,136,0.35)'
+                  textShadow: '0 6px 28px rgba(0,255,170,0.45), 0 0 22px rgba(0,255,170,0.25)'
                 }}
               >
                 Game of Tones
               </div>
-              <div style={{ fontSize: 'clamp(1.1rem, 2.2vw, 1.6rem)', opacity: 0.9, marginTop: 10 }}>Join the music bingo party</div>
+              <div style={{ fontSize: 'clamp(1.2rem, 2.6vw, 1.8rem)', opacity: 0.95, marginTop: 12 }}>Join the music bingo party</div>
             </div>
-            <div style={{ display: 'flex', gap: 36, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 48, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
               {roomId && (
                 <div style={{
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.18)',
-                  borderRadius: 16,
-                  padding: 18,
-                  width: 360,
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  borderRadius: 18,
+                  padding: 22,
+                  width: 460,
                   textAlign: 'center'
                 }}>
                   <img
                     alt="Join QR"
-                    style={{ width: '100%', aspectRatio: '1/1', objectFit: 'contain', borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)', boxShadow: '0 10px 30px rgba(0,0,0,0.35)' }}
+                    style={{ width: '100%', aspectRatio: '1/1', objectFit: 'contain', borderRadius: 14, border: '1px solid rgba(255,255,255,0.22)', boxShadow: '0 16px 40px rgba(0,0,0,0.45), 0 0 36px rgba(0,255,170,0.35)' }}
                     src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
                   />
-                  <div style={{ fontSize: 'clamp(1rem, 2vw, 1.3rem)', fontWeight: 900, marginTop: 12, opacity: 0.98 }}>Scan to Join</div>
+                  <div style={{ fontSize: 'clamp(1.2rem, 2.2vw, 1.6rem)', fontWeight: 1000, marginTop: 16, opacity: 1 }}>Scan to Join</div>
                 </div>
               )}
               <div style={{ minWidth: 260, textAlign: 'center' }}>
-                <div style={{ fontSize: 'clamp(1rem, 2vw, 1.3rem)', opacity: 0.9 }}>Room</div>
-                <div style={{ fontSize: 'clamp(2rem, 4vw, 3.2rem)', fontWeight: 1000, color: '#00ff88', textShadow: '0 3px 18px rgba(0,255,136,0.35)' }}>{roomInfo?.id || roomId || '—'}</div>
-                <div style={{ fontSize: 'clamp(1rem, 2vw, 1.3rem)', opacity: 0.9, marginTop: 14 }}>Go to</div>
-                <div style={{ fontSize: 'clamp(1.1rem, 2.2vw, 1.5rem)', fontWeight: 900 }}>{typeof window !== 'undefined' ? window.location.origin : ''}/player/{roomId}</div>
-                <div style={{ marginTop: 22, display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'flex-end' }}>
-                  {[10,16,24,16,10,14,20].map((h, i) => (
+                <div style={{ fontSize: 'clamp(1.1rem, 2.2vw, 1.5rem)', opacity: 0.95 }}>Room</div>
+                <div style={{ fontSize: 'clamp(2.4rem, 5vw, 3.8rem)', fontWeight: 1000, color: '#00ffb0', textShadow: '0 4px 22px rgba(0,255,170,0.45)' }}>{roomInfo?.id || roomId || '—'}</div>
+                <div style={{ fontSize: 'clamp(1.1rem, 2.2vw, 1.6rem)', opacity: 0.95, marginTop: 18 }}>Go to</div>
+                <div style={{ fontSize: 'clamp(1.3rem, 2.6vw, 1.8rem)', fontWeight: 1000 }}>{typeof window !== 'undefined' ? window.location.origin : ''}/player/{roomId}</div>
+                <div style={{ marginTop: 26, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'flex-end' }}>
+                  {[12,18,28,18,12,16,22,30].map((h, i) => (
                     <motion.div
                       key={i}
                       initial={{ height: h }}
-                      animate={{ height: [h, h*1.8, h*0.7, h] }}
-                      transition={{ duration: 1.4 + i*0.08, repeat: Infinity, ease: 'easeInOut' }}
-                      style={{ width: 8, background: 'rgba(0,255,136,0.85)', boxShadow: '0 6px 18px rgba(0,255,136,0.35)', borderRadius: 4 }}
+                      animate={{ height: [h, h*2.0, h*0.65, h] }}
+                      transition={{ duration: 1.2 + i*0.07, repeat: Infinity, ease: 'easeInOut' }}
+                      style={{ width: 10, background: 'rgba(0,255,170,0.95)', boxShadow: '0 8px 24px rgba(0,255,170,0.45)', borderRadius: 5 }}
                     />
                   ))}
                 </div>
