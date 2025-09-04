@@ -118,6 +118,33 @@ const PublicDisplay: React.FC = () => {
   const [freezeAll, setFreezeAll] = useState<boolean>(false);
   const [frozenCols, setFrozenCols] = useState<boolean[]>([false, false, false, false, false]);
   const [freezeRows, setFreezeRows] = useState<number[]>([0, 0, 0, 0, 0]);
+  // Per-ball animation seeds (stable for component lifetime)
+  const ballAnimSeedsRef = useRef<Array<{
+    dx: number; dy: number; rz: number; rx: number; ry: number;
+    dur: number; delay: number; shadeDur: number; hiliteDur: number; hiliteDelay: number;
+    sparkleDX: number; sparkleDY: number; shadowAmp: number;
+  }>>([]);
+  if (ballAnimSeedsRef.current.length === 0) {
+    // Generate small random jitters so each ball feels unique but cohesive
+    for (let i = 0; i < 5; i++) {
+      const rand = (min: number, max: number) => min + Math.random() * (max - min);
+      ballAnimSeedsRef.current.push({
+        dx: rand(-3, 3),
+        dy: rand(-3, 3),
+        rz: rand(-1.2, 1.2),
+        rx: rand(-2, 2),
+        ry: rand(-2.5, 2.5),
+        dur: rand(3.4, 4.8),
+        delay: rand(0, 0.35) + i * 0.1,
+        shadeDur: rand(5.0, 7.0),
+        hiliteDur: rand(5.8, 7.6),
+        hiliteDelay: rand(0.0, 0.35) + i * 0.12,
+        sparkleDX: rand(-2, 3),
+        sparkleDY: rand(-2, 2),
+        shadowAmp: rand(2, 6)
+      });
+    }
+  }
 
   useEffect(() => {
     const socket = io(SOCKET_URL || undefined);
@@ -1147,19 +1174,20 @@ const PublicDisplay: React.FC = () => {
                     'radial-gradient(circle at 35% 30%, #fff4fa 10%, #ffb1cf 55%, #ff82b8 100%)', // pink (darker)
                     'radial-gradient(circle at 35% 30%, #fff3d2 10%, #ffcf6e 55%, #ffb020 100%)'  // gold (darker)
                   ];
-                  // Per-ball motion parameters to desynchronize and avoid uncanny sync
-                  const ampX = 6 + (i * 2);
-                  const ampY = 10 + ((i % 3) * 2);
-                  const rotX = 3 + i; // degrees
-                  const rotY = 4 + ((i % 2) * 2);
-                  const rotZ = 1 + (i % 2);
-                  const dur = 3.6 + i * 0.45;
-                  const delay = i * 0.18;
-                  const shadeDur = 5.5 + i * 0.5;
-                  const highlightDur = 6.4 + i * 0.4;
-                  const highlightDelay = 0.1 + i * 0.22;
-                  const sparkleDelay = 0.15 + i * 0.17;
-                  const shadowAmp = Math.round(ampX * 0.6);
+                  // Per-ball motion parameters to desynchronize and add light randomness
+                  const seed = ballAnimSeedsRef.current[i] || { dx:0,dy:0,rz:0,rx:0,ry:0,dur:4,delay:0,shadeDur:6,hiliteDur:6.5,hiliteDelay:0.1,sparkleDX:1,sparkleDY:-1,shadowAmp:4 };
+                  const ampX = 6 + (i * 2) + seed.dx;
+                  const ampY = 10 + ((i % 3) * 2) + seed.dy;
+                  const rotX = 3 + i + seed.rx; // degrees
+                  const rotY = 4 + ((i % 2) * 2) + seed.ry;
+                  const rotZ = 1 + (i % 2) + seed.rz;
+                  const dur = (3.6 + i * 0.45) + (seed.dur - 4);
+                  const delay = (i * 0.18) + seed.delay;
+                  const shadeDur = (5.5 + i * 0.5) + (seed.shadeDur - 6);
+                  const highlightDur = (6.4 + i * 0.4) + (seed.hiliteDur - 6.5);
+                  const highlightDelay = (0.1 + i * 0.22) + seed.hiliteDelay;
+                  const sparkleDelay = (0.15 + i * 0.17) + seed.delay;
+                  const shadowAmp = Math.round((ampX * 0.6) + seed.shadowAmp);
                   return (
                     <motion.div
                       key={i}
