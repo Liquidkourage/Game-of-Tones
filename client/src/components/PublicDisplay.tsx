@@ -1134,62 +1134,67 @@ const PublicDisplay: React.FC = () => {
                 Tempo - Music Bingo
               </div>
               <div style={{ fontSize: 'clamp(1.8rem, 3.8vw, 2.6rem)', opacity: 0.98, marginTop: 18, display: 'none' }}>The game is on, the volume is up, the win is yours.</div>
-              {/* TEMPO balls row with enhanced 3D floating animation */}
-              <div style={{ display: 'flex', gap: 22, justifyContent: 'center', marginTop: 22, perspective: '900px', position: 'relative' }}>
-                {['T','E','M','P','O'].map((ch, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ y: 0, rotateZ: 0, rotateX: 0, rotateY: 0, scale: 1 }}
-                    animate={{
-                      y: [0, -10, 0],
-                      rotateZ: [0, 2.5, 0],
-                      rotateX: [0, 6, 0],
-                      rotateY: [0, -6, 0],
-                      scale: [1, 1.025, 1]
-                    }}
-                    transition={{ duration: 3.4 + i * 0.25, repeat: Infinity, ease: 'easeInOut' }}
-                    style={{
-                      width: 96, height: 96, borderRadius: '50%', position: 'relative', transformStyle: 'preserve-3d',
-                      background: 'radial-gradient(circle at 35% 30%, #ffffff, #eef4fb 40%, #d2deea 64%, #b0c4d8 100%)',
-                      boxShadow: '0 14px 30px rgba(0,0,0,0.35), inset 0 -10px 12px rgba(0,0,0,0.18), inset 0 12px 16px rgba(255,255,255,0.55)',
-                      border: '1px solid rgba(0,0,0,0.06)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: '#102436', fontWeight: 1000, fontSize: '2.2rem'
-                    }}
-                  >
-                    {/* colored glow rim */}
-                    <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'radial-gradient(circle, transparent 66%, rgba(0,255,170,0.25) 85%, rgba(0,215,255,0.18) 100%)', pointerEvents: 'none' }} />
-                    {/* specular highlight */}
+              {/* TEMPO balls row with enhanced 3D floating animation (colored, angular motion) */}
+              <div style={{ display: 'flex', gap: 28, justifyContent: 'center', marginTop: 26, perspective: '1000px', position: 'relative' }}>
+                {['T','E','M','P','O'].map((ch, i) => {
+                  const glow = ['rgba(0,255,163,0.45)','rgba(0,215,255,0.45)','rgba(158,123,255,0.45)','rgba(255,110,199,0.45)','rgba(255,209,102,0.45)'][i];
+                  const rimInner = ['rgba(0,255,170,0.28)','rgba(0,215,255,0.28)','rgba(158,123,255,0.28)','rgba(255,110,199,0.28)','rgba(255,209,102,0.28)'][i];
+                  const rimOuter = ['rgba(0,255,170,0.18)','rgba(0,215,255,0.18)','rgba(158,123,255,0.18)','rgba(255,110,199,0.18)','rgba(255,209,102,0.18)'][i];
+                  return (
                     <motion.div
-                      initial={{ x: '-20%', y: '0%', opacity: 0.8 }}
-                      animate={{ x: ['-20%', '80%', '-20%'], y: ['0%', '-10%', '0%'], opacity: [0.8, 0.4, 0.8] }}
-                      transition={{ duration: 7 + i * 0.4, repeat: Infinity, ease: 'easeInOut' }}
-                      style={{ position: 'absolute', width: '38%', height: '38%', borderRadius: '50%', top: '10%', left: 0, background: 'radial-gradient(circle, rgba(255,255,255,0.95), rgba(255,255,255,0.1) 60%, transparent 70%)', filter: 'blur(1px)', mixBlendMode: 'screen', pointerEvents: 'none' }}
-                    />
-                    {/* rim light */}
-                    <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', boxShadow: 'inset 0 0 16px rgba(255,255,255,0.45)' }} />
-                    {/* sparkle */}
-                    <motion.div
-                      initial={{ opacity: 0.0, scale: 0.6 }}
-                      animate={{ opacity: [0.0, 0.9, 0.0], scale: [0.6, 1.2, 0.6] }}
-                      transition={{ duration: 2.8 + i * 0.3, repeat: Infinity, ease: 'easeInOut', delay: i * 0.15 }}
-                      style={{ position: 'absolute', top: '18%', right: '16%', width: 10, height: 10, borderRadius: '50%', background: 'radial-gradient(circle, #ffffff, rgba(255,255,255,0.1) 60%, transparent 70%)', filter: 'blur(0.5px)', pointerEvents: 'none' }}
-                    />
-                    {/* floating shadow */}
-                    <motion.div
-                      initial={{ scale: 1, opacity: 0.5 }}
-                      animate={{ scale: [1, 0.92, 1], opacity: [0.5, 0.35, 0.5] }}
-                      transition={{ duration: 3.4 + i * 0.25, repeat: Infinity, ease: 'easeInOut' }}
-                      style={{ position: 'absolute', bottom: -12, left: 12, right: 12, height: 12, borderRadius: 12, background: 'rgba(0,0,0,0.55)', filter: 'blur(6px)', zIndex: -1 }}
-                    />
-                    {ch}
-                  </motion.div>
-                ))}
+                      key={i}
+                      initial={{ y: 0, rotateZ: 0, rotateX: 0, rotateY: 0, scale: 1 }}
+                      animate={{
+                        y: [0, -16, 0],
+                        rotateZ: [-6, 6, -6],
+                        rotateX: [-8, 8, -8],
+                        rotateY: [-10, 10, -10],
+                        scale: [1, 1.03, 1]
+                      }}
+                      transition={{ duration: 3.8 + i * 0.3, repeat: Infinity, ease: 'easeInOut' }}
+                      style={{
+                        width: 112, height: 112, borderRadius: '50%', position: 'relative', transformStyle: 'preserve-3d',
+                        background: 'radial-gradient(circle at 35% 30%, #ffffff, #eef4fb 38%, #d2deea 62%, #b0c4d8 100%)',
+                        boxShadow: `0 18px 34px rgba(0,0,0,0.35), inset 0 -12px 14px rgba(0,0,0,0.18), inset 0 14px 18px rgba(255,255,255,0.55), 0 0 36px ${glow}`,
+                        border: '1px solid rgba(0,0,0,0.06)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#102436', fontWeight: 1000, fontSize: '2.6rem'
+                      }}
+                    >
+                      {/* colored glow rim */}
+                      <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `radial-gradient(circle, transparent 66%, ${rimInner} 85%, ${rimOuter} 100%)`, pointerEvents: 'none' }} />
+                      {/* specular highlight */}
+                      <motion.div
+                        initial={{ x: '-20%', y: '0%', opacity: 0.8 }}
+                        animate={{ x: ['-20%', '80%', '-20%'], y: ['0%', '-10%', '0%'], opacity: [0.8, 0.4, 0.8] }}
+                        transition={{ duration: 7 + i * 0.4, repeat: Infinity, ease: 'easeInOut' }}
+                        style={{ position: 'absolute', width: '38%', height: '38%', borderRadius: '50%', top: '10%', left: 0, background: 'radial-gradient(circle, rgba(255,255,255,0.95), rgba(255,255,255,0.1) 60%, transparent 70%)', filter: 'blur(1px)', mixBlendMode: 'screen', pointerEvents: 'none' }}
+                      />
+                      {/* rim light */}
+                      <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', boxShadow: 'inset 0 0 16px rgba(255,255,255,0.45)' }} />
+                      {/* sparkle */}
+                      <motion.div
+                        initial={{ opacity: 0.0, scale: 0.6 }}
+                        animate={{ opacity: [0.0, 0.9, 0.0], scale: [0.6, 1.2, 0.6] }}
+                        transition={{ duration: 2.8 + i * 0.3, repeat: Infinity, ease: 'easeInOut', delay: i * 0.15 }}
+                        style={{ position: 'absolute', top: '18%', right: '16%', width: 12, height: 12, borderRadius: '50%', background: 'radial-gradient(circle, #ffffff, rgba(255,255,255,0.1) 60%, transparent 70%)', filter: 'blur(0.5px)', pointerEvents: 'none' }}
+                      />
+                      {/* floating shadow */}
+                      <motion.div
+                        initial={{ scale: 1, opacity: 0.5 }}
+                        animate={{ scale: [1, 0.9, 1], opacity: [0.5, 0.35, 0.5] }}
+                        transition={{ duration: 3.8 + i * 0.3, repeat: Infinity, ease: 'easeInOut' }}
+                        style={{ position: 'absolute', bottom: -14, left: 14, right: 14, height: 14, borderRadius: 14, background: 'rgba(0,0,0,0.55)', filter: 'blur(7px)', zIndex: -1 }}
+                      />
+                      {ch}
+                    </motion.div>
+                  );
+                })}
               </div>
               {/* Music Bingo subtitle and byline under hero TEMPO */}
               <div style={{
-                marginTop: 14,
-                fontSize: 'clamp(2.2rem, 6vw, 4.4rem)',
+                marginTop: 18,
+                fontSize: 'clamp(3rem, 8vw, 6rem)',
                 fontWeight: 1000,
                 letterSpacing: '0.02em',
                 backgroundImage: 'linear-gradient(90deg,#7bffd9 0%, #ffffff 50%, #7bffd9 100%)',
@@ -1198,7 +1203,7 @@ const PublicDisplay: React.FC = () => {
                 WebkitTextFillColor: 'transparent',
                 textShadow: '0 6px 22px rgba(123,255,217,0.45), 0 0 16px rgba(255,255,255,0.18)'
               }}>Music Bingo</div>
-              <div style={{ fontSize: 'clamp(1.4rem, 3.2vw, 2.2rem)', opacity: 0.95, marginTop: 10 }}>The game is on, the volume is up, the win is yours.</div>
+              <div style={{ fontSize: 'clamp(1.8rem, 4.5vw, 3rem)', opacity: 0.96, marginTop: 12 }}>The game is on, the volume is up, the win is yours.</div>
               <motion.div
                 initial={{ x: '-40%' }}
                 animate={{ x: ['-40%', '140%'] }}
