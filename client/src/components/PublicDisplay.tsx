@@ -1135,7 +1135,7 @@ const PublicDisplay: React.FC = () => {
               </div>
               <div style={{ fontSize: 'clamp(1.8rem, 3.8vw, 2.6rem)', opacity: 0.98, marginTop: 18, display: 'none' }}>The game is on, the volume is up, the win is yours.</div>
               {/* TEMPO balls row with enhanced 3D floating animation (colored, angular motion) */}
-              <div style={{ display: 'flex', gap: 28, justifyContent: 'center', marginTop: 26, perspective: '1000px', position: 'relative' }}>
+              <div style={{ display: 'flex', gap: 36, justifyContent: 'center', marginTop: 18, perspective: '1000px', position: 'relative' }}>
                 {['T','E','M','P','O'].map((ch, i) => {
                   const glow = ['rgba(0,255,163,0.45)','rgba(0,215,255,0.45)','rgba(158,123,255,0.45)','rgba(255,110,199,0.45)','rgba(255,209,102,0.45)'][i];
                   const rimInner = ['rgba(0,255,170,0.28)','rgba(0,215,255,0.28)','rgba(158,123,255,0.28)','rgba(255,110,199,0.28)','rgba(255,209,102,0.28)'][i];
@@ -1152,7 +1152,7 @@ const PublicDisplay: React.FC = () => {
                       key={i}
                       initial={{ y: 0, rotateZ: 0, rotateX: 0, rotateY: 0, scale: 1 }}
                       animate={{
-                        y: [0, -16, 0],
+                        y: [0, -28, 0],
                         rotateZ: [-6, 6, -6],
                         rotateX: [-8, 8, -8],
                         rotateY: [-10, 10, -10],
@@ -1160,12 +1160,12 @@ const PublicDisplay: React.FC = () => {
                       }}
                       transition={{ duration: 3.8 + i * 0.3, repeat: Infinity, ease: 'easeInOut' }}
                       style={{
-                        width: 112, height: 112, borderRadius: '50%', position: 'relative', transformStyle: 'preserve-3d',
+                        width: 320, height: 320, borderRadius: '50%', position: 'relative', transformStyle: 'preserve-3d',
                         background: tintGradients[i] || 'radial-gradient(circle at 35% 30%, #ffffff, #eef4fb 38%, #d2deea 62%, #b0c4d8 100%)',
-                        boxShadow: `0 18px 34px rgba(0,0,0,0.35), inset 0 -12px 14px rgba(0,0,0,0.18), inset 0 14px 18px rgba(255,255,255,0.55), 0 0 36px ${glow}`,
+                        boxShadow: `0 40px 60px rgba(0,0,0,0.35), inset 0 -24px 26px rgba(0,0,0,0.18), inset 0 26px 30px rgba(255,255,255,0.55), 0 0 56px ${glow}`,
                         border: '1px solid rgba(0,0,0,0.06)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: '#102436', fontWeight: 1000, fontSize: '2.6rem'
+                        color: '#102436', fontWeight: 1000, fontSize: '7.6rem'
                       }}
                     >
                       {/* colored glow rim */}
@@ -1175,7 +1175,7 @@ const PublicDisplay: React.FC = () => {
                         initial={{ x: '-20%', y: '0%', opacity: 0.8 }}
                         animate={{ x: ['-20%', '80%', '-20%'], y: ['0%', '-10%', '0%'], opacity: [0.8, 0.4, 0.8] }}
                         transition={{ duration: 7 + i * 0.4, repeat: Infinity, ease: 'easeInOut' }}
-                        style={{ position: 'absolute', width: '38%', height: '38%', borderRadius: '50%', top: '10%', left: 0, background: 'radial-gradient(circle, rgba(255,255,255,0.95), rgba(255,255,255,0.1) 60%, transparent 70%)', filter: 'blur(1px)', mixBlendMode: 'screen', pointerEvents: 'none' }}
+                        style={{ position: 'absolute', width: '34%', height: '34%', borderRadius: '50%', top: '10%', left: 0, background: 'radial-gradient(circle, rgba(255,255,255,0.95), rgba(255,255,255,0.1) 60%, transparent 70%)', filter: 'blur(1px)', mixBlendMode: 'screen', pointerEvents: 'none' }}
                       />
                       {/* rim light */}
                       <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', boxShadow: 'inset 0 0 16px rgba(255,255,255,0.45)' }} />
@@ -1184,14 +1184,14 @@ const PublicDisplay: React.FC = () => {
                         initial={{ opacity: 0.0, scale: 0.6 }}
                         animate={{ opacity: [0.0, 0.9, 0.0], scale: [0.6, 1.2, 0.6] }}
                         transition={{ duration: 2.8 + i * 0.3, repeat: Infinity, ease: 'easeInOut', delay: i * 0.15 }}
-                        style={{ position: 'absolute', top: '18%', right: '16%', width: 12, height: 12, borderRadius: '50%', background: 'radial-gradient(circle, #ffffff, rgba(255,255,255,0.1) 60%, transparent 70%)', filter: 'blur(0.5px)', pointerEvents: 'none' }}
+                        style={{ position: 'absolute', top: '18%', right: '16%', width: 28, height: 28, borderRadius: '50%', background: 'radial-gradient(circle, #ffffff, rgba(255,255,255,0.1) 60%, transparent 70%)', filter: 'blur(0.5px)', pointerEvents: 'none' }}
                       />
                       {/* floating shadow */}
                       <motion.div
                         initial={{ scale: 1, opacity: 0.5 }}
-                        animate={{ scale: [1, 0.9, 1], opacity: [0.5, 0.35, 0.5] }}
+                        animate={{ scale: [1, 0.88, 1], opacity: [0.5, 0.35, 0.5] }}
                         transition={{ duration: 3.8 + i * 0.3, repeat: Infinity, ease: 'easeInOut' }}
-                        style={{ position: 'absolute', bottom: -14, left: 14, right: 14, height: 14, borderRadius: 14, background: 'rgba(0,0,0,0.55)', filter: 'blur(7px)', zIndex: -1 }}
+                        style={{ position: 'absolute', bottom: -40, left: 40, right: 40, height: 40, borderRadius: 40, background: 'rgba(0,0,0,0.55)', filter: 'blur(14px)', zIndex: -1 }}
                       />
                       {ch}
                     </motion.div>
@@ -1323,7 +1323,7 @@ const PublicDisplay: React.FC = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <div style={{ fontWeight: 800, fontSize: '1.4rem', color: '#b3b3b3', textAlign: 'center' }}>Room Number:</div>
                     <div style={{ fontWeight: 900, fontSize: '2.4rem', color: '#00ff88', textAlign: 'center' }}>{roomInfo?.id || roomId}</div>
-                  </div>
+                </div>
                   
                   {/* Players */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1340,9 +1340,9 @@ const PublicDisplay: React.FC = () => {
                     <div>
                       <div style={{ fontSize: '2.0rem', fontWeight: 900 }}>{totalPlayedCount}</div>
                       <div style={{ fontSize: '1.4rem', color: '#b3b3b3' }}>Songs</div>
-                      </div>
-                      </div>
                 </div>
+                      </div>
+                      </div>
                 {/* QR code below stats - fills remaining space */}
                 {roomId && (
                   <div style={{ 
@@ -1371,7 +1371,7 @@ const PublicDisplay: React.FC = () => {
                       src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
                     />
                     <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#ddd', lineHeight: 1 }}>Scan to join</div>
-                  </div>
+                </div>
                 )}
               </motion.div>
             </div>
