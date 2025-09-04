@@ -1186,7 +1186,48 @@ const PublicDisplay: React.FC = () => {
                         transition={{ duration: 3.8 + i * 0.3, repeat: Infinity, ease: 'easeInOut' }}
                         style={{ position: 'absolute', bottom: -14, left: 14, right: 14, height: 14, borderRadius: 14, background: 'rgba(0,0,0,0.55)', filter: 'blur(7px)', zIndex: -1 }}
                       />
-                      {ch}
+                      {(() => {
+                        const letterStyles: React.CSSProperties[] = [
+                          {
+                            // T: neon teal glow
+                            color: '#0d2433',
+                            textShadow: '0 0 2px rgba(13,36,51,0.5), 0 2px 2px rgba(0,0,0,0.25), 0 0 18px rgba(0,255,170,0.65)',
+                            letterSpacing: '0.04em',
+                          },
+                          {
+                            // E: metallic silver gradient
+                            backgroundImage: 'linear-gradient(180deg,#ffffff 0%, #e8eef6 30%, #cfd9e5 60%, #b6c6d8 100%)',
+                            WebkitBackgroundClip: 'text',
+                            backgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            textShadow: '0 1px 0 rgba(255,255,255,0.6), 0 3px 8px rgba(0,0,0,0.25)'
+                          },
+                          {
+                            // M: bold outlined letter
+                            color: 'transparent',
+                            WebkitTextStroke: '3px #0e2232',
+                            textShadow: '0 0 16px rgba(0,215,255,0.45)'
+                          },
+                          {
+                            // P: candy gradient with slight italic
+                            backgroundImage: 'linear-gradient(180deg,#ff9ad6 0%, #b68cff 60%, #8a6dff 100%)',
+                            WebkitBackgroundClip: 'text',
+                            backgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            textShadow: '0 2px 10px rgba(182,140,255,0.55)',
+                            transform: 'skewX(-5deg)'
+                          },
+                          {
+                            // O: golden retro
+                            backgroundImage: 'linear-gradient(180deg,#fff3c2 0%, #ffd166 45%, #ffb703 100%)',
+                            WebkitBackgroundClip: 'text',
+                            backgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            textShadow: '0 1px 0 rgba(255,255,255,0.6), 0 3px 10px rgba(255,193,79,0.6), 0 0 14px rgba(255,193,79,0.35)'
+                          }
+                        ];
+                        return <span style={letterStyles[i] || {}}>{ch}</span>;
+                      })()}
                     </motion.div>
                   );
                 })}
