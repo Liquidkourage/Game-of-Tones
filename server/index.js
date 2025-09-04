@@ -596,7 +596,7 @@ io.on('connection', (socket) => {
 
   socket.on('start-game', async (data) => {
     console.log('🎮 Start game event received:', data);
-    const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = false } = data;
+    const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = false, pattern: incomingPattern } = data;
     const room = rooms.get(roomId);
     
     console.log('🔍 Room found:', !!room);
@@ -621,8 +621,14 @@ io.on('connection', (socket) => {
         // Initialize call history and round
         room.calledSongIds = [];
         room.round = (room.round || 0) + 1;
-        // Default pattern if not set
-        room.pattern = room.pattern || 'full_card';
+        // Apply pattern from host if provided; default to 'line' if still unset
+        try {
+          const allowed = new Set(['line', 'four_corners', 'x', 'full_card']);
+          if (incomingPattern && allowed.has(incomingPattern)) {
+            room.pattern = incomingPattern;
+          }
+        } catch {}
+        room.pattern = room.pattern || 'line';
 
         // Emit game started as soon as state is ready so UI can show controls
         io.to(roomId).emit('game-started', {

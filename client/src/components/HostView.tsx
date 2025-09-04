@@ -620,7 +620,8 @@ const HostView: React.FC = () => {
         snippetLength,
         deviceId: selectedDevice.id, // Require the selected device ID
         songList: songList, // Send the shuffled song list to ensure server uses same order
-        randomStarts
+        randomStarts,
+        pattern // ensure display gets the intended pattern on game start
       });
       // Safety timeout in case no response comes back
       setTimeout(() => setIsStartingGame(false), 8000);
