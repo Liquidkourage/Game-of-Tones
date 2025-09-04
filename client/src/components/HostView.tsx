@@ -77,6 +77,7 @@ const HostView: React.FC = () => {
   const [repeatState, setRepeatState] = useState<'off' | 'track' | 'context'>('off');
   const [randomStarts, setRandomStarts] = useState<boolean>(false);
   const [isStartingGame, setIsStartingGame] = useState(false);
+  const [playedSoFar, setPlayedSoFar] = useState<Array<{ id: string; name: string; artist: string }>>([]);
   const [logs, setLogs] = useState<Array<{ level: 'info' | 'warn' | 'error'; message: string; ts: number }>>([]);
   const [revealMode, setRevealMode] = useState<'off' | 'artist' | 'title' | 'full'>('off');
   const [pattern, setPattern] = useState<'line' | 'four_corners' | 'x' | 'full_card'>('line');
@@ -113,6 +114,7 @@ const HostView: React.FC = () => {
   const [playlistQuery, setPlaylistQuery] = useState('');
   const [isLoadingMorePlaylists, setIsLoadingMorePlaylists] = useState(false);
   const [showSongList, setShowSongList] = useState(false);
+  const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]);
   
   // Pause position tracking
   const [pausePosition, setPausePosition] = useState<number>(0);
@@ -304,6 +306,8 @@ const HostView: React.FC = () => {
       console.log('Game started:', data);
       setIsStartingGame(false);
       addLog('Game started', 'info');
+      // Auto-collapse lists during gameplay
+      setShowSongList(false);
     });
 
     // Receive the finalized shuffled order for 5x15
@@ -338,6 +342,10 @@ const HostView: React.FC = () => {
         duration: data.snippetLength * 1000, // Convert to milliseconds
         currentTime: 0
       }));
+      setPlayedInOrder(prev => {
+        if (prev.find(p => p.id === data.songId)) return prev; // prevent dupes
+        return [...prev, { id: data.songId, name: data.songName, artist: data.artistName }];
+      });
       
       // Reset pause tracking for new song
       setPausePosition(0);
@@ -420,9 +428,9 @@ const HostView: React.FC = () => {
     });
 
     newSocket.on('game-ended', () => {
-      setIsPlaying(false);
       setGameState('ended');
       console.log('🛑 Game ended');
+      // Keep played list, but you can re-open lists now
     });
 
     newSocket.on('game-reset', () => {
@@ -1511,6 +1519,30 @@ const HostView: React.FC = () => {
            </motion.div>
           )}
 
+          {/* Compact Played List (always visible during game) */}
+          {gameState === 'playing' && playedInOrder.length > 0 && (
+            <motion.div 
+              className="played-list-section"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              style={{ marginTop: 12 }}
+            >
+              <h2>📻 Played (in order)</h2>
+              <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8 }}>
+                {playedInOrder.map((s, i) => (
+                  <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    <span style={{ minWidth: 26, textAlign: 'right', opacity: 0.85 }}>{i + 1}</span>
+                    <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <strong>{s.name}</strong>
+                      <span style={{ opacity: 0.8 }}> — {s.artist}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
           {/* Song List (moved below to avoid shifting playlist picker) */}
           {(finalizedOrder?.length || songList.length) > 0 && gameState !== 'playing' && (
             <motion.div 
@@ -1677,6 +1709,22 @@ const HostView: React.FC = () => {
                     </button>
                   </div>
                </div>
+
+               {/* Played so far */}
+               {playedInOrder.length > 0 && (
+                 <div style={{ marginTop: 12 }}>
+                   <div style={{ fontWeight: 800, opacity: 0.9, marginBottom: 6 }}>Songs Played (order)</div>
+                   <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: 8 }}>
+                     {playedInOrder.map((s, i) => (
+                       <div key={s.id + '-' + i} style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '2px 0' }}>
+                         <span style={{ width: 28, textAlign: 'right', opacity: 0.8 }}>{i + 1}.</span>
+                         <span style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                         <span style={{ opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>— {s.artist}</span>
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+               )}
              </motion.div>
            )}
 
