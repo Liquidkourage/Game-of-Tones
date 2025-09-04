@@ -1323,281 +1323,83 @@ const HostView: React.FC = () => {
              )}
           </motion.div>
 
-          {/* Legacy playlist grid removed in favor of paged list above */}
+          {/* Playlists - Virtualized + Paged */}
+          <div className="setting-item">
+            <label>Playlists:</label>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                placeholder="Search playlists..."
+                value={playlistQuery}
+                onChange={(e) => setPlaylistQuery(e.target.value)}
+                className="input"
+                style={{ flex: 1, minWidth: 240 }}
+              />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input type="checkbox" checked={stripGoTPrefix} onChange={(e) => setStripGoTPrefix(!!e.target.checked)} />
+                <span>Strip "GoT" preview</span>
+              </label>
+              <button className="btn-secondary" onClick={() => { setPlaylistQuery(''); }}>Clear</button>
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  const toAdd = filteredPlaylists.slice(0, 5).filter(fp => !selectedPlaylists.some(sp => sp.id === fp.id));
+                  setSelectedPlaylists(prev => [...prev, ...toAdd]);
+                }}
+              >Add first 5 visible</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 12 }}>
+              <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8 }}>
+                {filteredPlaylists.length === 0 && (
+                  <div style={{ color: '#b3b3b3', fontStyle: 'italic' }}>No playlists</div>
+                )}
+                {filteredPlaylists.map((p) => {
+                  const isSelected = !!selectedPlaylists.find(sp => sp.id === p.id);
+                  const previewName = stripGoTPrefix ? (p.name || '').replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim() : p.name;
+                  return (
+                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{previewName}</div>
+                        <div style={{ fontSize: 12, color: '#b3b3b3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.owner} • {p.tracks} tracks</div>
+                      </div>
+                      <button
+                        className={isSelected ? 'btn-secondary active' : 'btn-secondary'}
+                        onClick={() => {
+                          setSelectedPlaylists(prev => (
+                            isSelected ? prev.filter(sp => sp.id !== p.id) : [...prev, p]
+                          ));
+                        }}
+                      >
+                        {isSelected ? 'Remove' : 'Add'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8, position: 'sticky', top: 8 }}>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>Selected ({selectedPlaylists.length})</div>
+                {selectedPlaylists.length === 0 && (
+                  <div style={{ color: '#b3b3b3', fontStyle: 'italic' }}>None selected</div>
+                )}
+                {selectedPlaylists.map((sp) => (
+                  <div key={sp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: '1px dashed rgba(255,255,255,0.08)' }}>
+                    <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stripGoTPrefix ? (sp.name || '').replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim() : sp.name}</div>
+                    <button className="btn-secondary" onClick={() => setSelectedPlaylists(prev => prev.filter(x => x.id !== sp.id))}>Remove</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
 
-           {/* Song List (Finalized 5x15 order if present) */}
-           {(finalizedOrder?.length || songList.length) > 0 && (
-             <motion.div 
-               className="song-list-section"
-               initial={{ opacity: 0 }}
-               animate={{ opacity: 1 }}
-               transition={{ delay: 0.4 }}
-             >
-               <h2>🎵 {finalizedOrder ? 'Finalized Order' : 'Song List'} ({(finalizedOrder?.length || songList.length)} songs)</h2>
-               <div className="song-list-controls">
-                 <button
-                   onClick={() => setShowSongList(!showSongList)}
-                   className="btn-secondary"
-                 >
-                   {showSongList ? '📋 Hide Song List' : '📋 Show Song List'}
-                 </button>
-                 {!finalizedOrder && (
-                   <button
-                     onClick={generateSongList}
-                     className="btn-secondary"
-                   >
-                     🔀 Reshuffle Songs
-                   </button>
-                 )}
-               </div>
-               
-               {showSongList && (
-                 <motion.div
-                   className="song-list-display"
-                   initial={{ opacity: 0, height: 0 }}
-                   animate={{ opacity: 1, height: 'auto' }}
-                   transition={{ duration: 0.3 }}
-                 >
-                   <div className="song-list">
-                     {(finalizedOrder || songList).map((song, index) => (
-                       <div
-                         key={`${song.id}-${index}`}
-                         className="song-list-item"
-                       >
-                         <span className="song-number">{index + 1}</span>
-                         <div className="song-info">
-                           <span className="song-name">{song.name}</span>
-                           <span className="song-artist">{song.artist}</span>
-                         </div>
-                       </div>
-                     ))}
-                   </div>
-                 </motion.div>
-               )}
-             </motion.div>
-           )}
-
-           {/* Device Selection */}
-           {isSpotifyConnected && (
-             <motion.div 
-               className="device-section"
-               initial={{ opacity: 0 }}
-               animate={{ opacity: 1 }}
-               transition={{ delay: 0.35 }}
-             >
-               <h2>📱 Playback Device</h2>
-               <div className="device-controls">
-                 <select
-                   value={selectedDevice?.id || ''}
-                   onChange={(e) => {
-                     const device = devices.find(d => d.id === e.target.value);
-                     setSelectedDevice(device || null);
-                   }}
-                   className="device-select"
-                 >
-                   <option value="">Select a device...</option>
-                   {devices.map((device) => (
-                     <option key={device.id} value={device.id}>
-                       {device.name} ({device.type}) {device.is_active ? '🟢 Active' : '⚪ Inactive'}
-                     </option>
-                   ))}
-                 </select>
-                 <button
-                   onClick={saveSelectedDevice}
-                   disabled={!selectedDevice}
-                   className="btn-secondary"
-                 >
-                   💾 Save Device
-                 </button>
-                  <button
-                    onClick={transferToSelectedDevice}
-                    disabled={!selectedDevice}
-                    className="btn-secondary"
-                  >
-                    🔀 Transfer Playback
-                  </button>
-                 <button
-                   onClick={forceDeviceDetection}
-                   disabled={isLoadingDevices}
-                   className="btn-secondary"
-                 >
-                   🔧 Force Detection
-                 </button>
-                 <button
-                   onClick={refreshSpotifyConnection}
-                   disabled={isLoadingDevices}
-                   className="btn-secondary"
-                 >
-                   🔄 Refresh Connection
-                 </button>
-               </div>
-              {/* Removed Shuffle/Repeat controls to simplify UI; server enforces Off */}
-            </motion.div>
-          )}
-
-          {/* Game Settings */}
+          {/* Game Controls */}
           <motion.div 
-            className="settings-section"
+            className="controls-section"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
+            transition={{ delay: 0.5 }}
           >
-            <h2>⚙️ Game Settings</h2>
-            <div className="setting-item">
-              <label>Snippet Length (seconds):</label>
-              <input
-                type="range"
-                min="5"
-                max="60"
-                value={snippetLength}
-                onChange={(e) => setSnippetLength(Number(e.target.value))}
-              />
-              <span>{snippetLength}s</span>
-            </div>
-            <div className="setting-item">
-              <label>Pattern:</label>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <button
-                  className="btn-secondary"
-                  style={{
-                    padding: '10px 16px',
-                    fontSize: '1rem',
-                    fontWeight: 800,
-                    background: pattern==='line' ? 'rgba(0,255,136,0.18)' : undefined,
-                    borderColor: pattern==='line' ? 'rgba(0,255,136,0.5)' : undefined,
-                    color: pattern==='line' ? '#00ff88' : undefined
-                  }}
-                  onClick={() => updatePattern('line')}
-                >Line</button>
-                <button
-                  className="btn-secondary"
-                  style={{
-                    padding: '10px 16px',
-                    fontSize: '1rem',
-                    fontWeight: 800,
-                    background: pattern==='four_corners' ? 'rgba(0,255,136,0.18)' : undefined,
-                    borderColor: pattern==='four_corners' ? 'rgba(0,255,136,0.5)' : undefined,
-                    color: pattern==='four_corners' ? '#00ff88' : undefined
-                  }}
-                  onClick={() => updatePattern('four_corners')}
-                >Four Corners</button>
-                <button
-                  className="btn-secondary"
-                  style={{
-                    padding: '10px 16px',
-                    fontSize: '1rem',
-                    fontWeight: 800,
-                    background: pattern==='x' ? 'rgba(0,255,136,0.18)' : undefined,
-                    borderColor: pattern==='x' ? 'rgba(0,255,136,0.5)' : undefined,
-                    color: pattern==='x' ? '#00ff88' : undefined
-                  }}
-                  onClick={() => updatePattern('x')}
-                >X</button>
-                <button
-                  className="btn-secondary"
-                  style={{
-                    padding: '10px 16px',
-                    fontSize: '1rem',
-                    fontWeight: 800,
-                    background: pattern==='full_card' ? 'rgba(0,255,136,0.18)' : undefined,
-                    borderColor: pattern==='full_card' ? 'rgba(0,255,136,0.5)' : undefined,
-                    color: pattern==='full_card' ? '#00ff88' : undefined
-                  }}
-                  onClick={() => updatePattern('full_card')}
-                >Full Card</button>
-              </div>
-            </div>
-
-            <div className="setting-item">
-              <label>Clip Start:</label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={randomStarts}
-                  onChange={(e) => setRandomStarts(!!e.target.checked)}
-                />
-                <span>Randomize start within track (enough time left)</span>
-              </label>
-            </div>
-
-            {/* Playlists - Virtualized + Paged */}
-            <div className="setting-item">
-              <label>Playlists:</label>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
-                <input
-                  type="text"
-                  placeholder="Search playlists..."
-                  value={playlistQuery}
-                  onChange={(e) => setPlaylistQuery(e.target.value)}
-                  className="input"
-                  style={{ flex: 1, minWidth: 240 }}
-                />
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input type="checkbox" checked={stripGoTPrefix} onChange={(e) => setStripGoTPrefix(!!e.target.checked)} />
-                  <span>Strip "GoT" preview</span>
-                </label>
-                <button className="btn-secondary" onClick={() => { setPlaylistQuery(''); }}>Clear</button>
-                <button
-                  className="btn-secondary"
-                  onClick={() => {
-                    const toAdd = filteredPlaylists.slice(0, 5).filter(fp => !selectedPlaylists.some(sp => sp.id === fp.id));
-                    setSelectedPlaylists(prev => [...prev, ...toAdd]);
-                  }}
-                >Add first 5 visible</button>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 12 }}>
-                <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8 }}>
-                  {filteredPlaylists.length === 0 && (
-                    <div style={{ color: '#b3b3b3', fontStyle: 'italic' }}>No playlists</div>
-                  )}
-                  {filteredPlaylists.map((p) => {
-                    const isSelected = !!selectedPlaylists.find(sp => sp.id === p.id);
-                    const previewName = stripGoTPrefix ? (p.name || '').replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim() : p.name;
-                    return (
-                      <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{previewName}</div>
-                          <div style={{ fontSize: 12, color: '#b3b3b3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.owner} • {p.tracks} tracks</div>
-                        </div>
-                        <button
-                          className={isSelected ? 'btn-secondary active' : 'btn-secondary'}
-                          onClick={() => {
-                            setSelectedPlaylists(prev => (
-                              isSelected ? prev.filter(sp => sp.id !== p.id) : [...prev, p]
-                            ));
-                          }}
-                        >
-                          {isSelected ? 'Remove' : 'Add'}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8, position: 'sticky', top: 8 }}>
-                  <div style={{ fontWeight: 800, marginBottom: 6 }}>Selected ({selectedPlaylists.length})</div>
-                  {selectedPlaylists.length === 0 && (
-                    <div style={{ color: '#b3b3b3', fontStyle: 'italic' }}>None selected</div>
-                  )}
-                  {selectedPlaylists.map((sp) => (
-                    <div key={sp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: '1px dashed rgba(255,255,255,0.08)' }}>
-                      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stripGoTPrefix ? (sp.name || '').replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim() : sp.name}</div>
-                      <button className="btn-secondary" onClick={() => setSelectedPlaylists(prev => prev.filter(x => x.id !== sp.id))}>Remove</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </motion.div>
-
-                     {/* Game Controls */}
-           <motion.div 
-             className="controls-section"
-             initial={{ opacity: 0 }}
-             animate={{ opacity: 1 }}
-             transition={{ delay: 0.5 }}
-           >
-             <h2>🎮 Game Controls</h2>
-             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+            <h2>🎮 Game Controls</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input
                   type="checkbox"
@@ -1684,6 +1486,57 @@ const HostView: React.FC = () => {
                )}
              </div>
            </motion.div>
+
+          {/* Song List (moved below to avoid shifting playlist picker) */}
+          {(finalizedOrder?.length || songList.length) > 0 && (
+            <motion.div 
+              className="song-list-section"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+            >
+              <h2>🎵 {finalizedOrder ? 'Finalized Order' : 'Song List'} ({(finalizedOrder?.length || songList.length)} songs)</h2>
+              <div className="song-list-controls">
+                <button
+                  onClick={() => setShowSongList(!showSongList)}
+                  className="btn-secondary"
+                >
+                  {showSongList ? '📋 Hide Song List' : '📋 Show Song List'}
+                </button>
+                {!finalizedOrder && (
+                  <button
+                    onClick={generateSongList}
+                    className="btn-secondary"
+                  >
+                    🔀 Reshuffle Songs
+                  </button>
+                )}
+              </div>
+              {showSongList && (
+                <motion.div
+                  className="song-list-display"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <div className="song-list">
+                    {(finalizedOrder || songList).map((song, index) => (
+                      <div
+                        key={`${song.id}-${index}`}
+                        className="song-list-item"
+                      >
+                        <span className="song-number">{index + 1}</span>
+                        <div className="song-info">
+                          <span className="song-name">{song.name}</span>
+                          <span className="song-artist">{song.artist}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </motion.div>
+          )}
 
           {/* Logs */}
           {logs.length > 0 && (
