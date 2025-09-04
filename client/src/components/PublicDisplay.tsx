@@ -1141,11 +1141,11 @@ const PublicDisplay: React.FC = () => {
                   const rimInner = ['rgba(0,255,170,0.28)','rgba(0,215,255,0.28)','rgba(158,123,255,0.28)','rgba(255,110,199,0.28)','rgba(255,209,102,0.28)'][i];
                   const rimOuter = ['rgba(0,255,170,0.18)','rgba(0,215,255,0.18)','rgba(158,123,255,0.18)','rgba(255,110,199,0.18)','rgba(255,209,102,0.18)'][i];
                   const tintGradients = [
-                    'radial-gradient(circle at 35% 30%, #ffffff, #f2fffb 38%, #dbfff1 62%, #c9fbe7 100%)', // mint
-                    'radial-gradient(circle at 35% 30%, #ffffff, #eef9ff 38%, #d8f1ff 62%, #c5e8ff 100%)', // aqua
-                    'radial-gradient(circle at 35% 30%, #ffffff, #f3f0ff 38%, #e5ddff 62%, #d5ccff 100%)', // lavender
-                    'radial-gradient(circle at 35% 30%, #ffffff, #fff0f7 38%, #ffd9ea 62%, #ffc4df 100%)', // pink
-                    'radial-gradient(circle at 35% 30%, #ffffff, #fff8e6 38%, #ffefc7 62%, #ffe6a6 100%)'  // gold
+                    'radial-gradient(circle at 35% 30%, #f6fffb 10%, #b7f4df 55%, #6ee7c1 100%)', // mint (darker)
+                    'radial-gradient(circle at 35% 30%, #f3faff 10%, #a6dcff 55%, #5ec7ff 100%)', // aqua (darker)
+                    'radial-gradient(circle at 35% 30%, #f8f5ff 10%, #c5b6ff 55%, #957dff 100%)', // lavender (darker)
+                    'radial-gradient(circle at 35% 30%, #fff4fa 10%, #ffb1cf 55%, #ff82b8 100%)', // pink (darker)
+                    'radial-gradient(circle at 35% 30%, #fff3d2 10%, #ffcf6e 55%, #ffb020 100%)'  // gold (darker)
                   ];
                   return (
                     <motion.div
