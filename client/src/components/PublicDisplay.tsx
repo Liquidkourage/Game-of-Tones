@@ -1262,7 +1262,7 @@ const PublicDisplay: React.FC = () => {
               {/* Music Bingo subtitle and byline under hero TEMPO */}
               <div style={{
                 marginTop: 18,
-                fontSize: 'clamp(3rem, 8vw, 6rem)',
+                fontSize: 'clamp(3.6rem, 9vw, 7rem)',
                 fontWeight: 1000,
                 letterSpacing: '0.02em',
                 backgroundImage: 'linear-gradient(90deg,#7bffd9 0%, #ffffff 50%, #7bffd9 100%)',
@@ -1271,7 +1271,7 @@ const PublicDisplay: React.FC = () => {
                 WebkitTextFillColor: 'transparent',
                 textShadow: '0 6px 22px rgba(123,255,217,0.45), 0 0 16px rgba(255,255,255,0.18)'
               }}>Music Bingo</div>
-              <div style={{ fontSize: 'clamp(1.8rem, 4.5vw, 3rem)', opacity: 0.96, marginTop: 12 }}>The game is on, the volume is up, the win is yours.</div>
+              <div style={{ fontSize: 'clamp(2.2rem, 5vw, 3.6rem)', opacity: 0.96, marginTop: 12 }}>The game is on, the volume is up, the win is yours.</div>
               <motion.div
                 initial={{ x: '-40%' }}
                 animate={{ x: ['-40%', '140%'] }}
@@ -1298,18 +1298,18 @@ const PublicDisplay: React.FC = () => {
                 </div>
               )}
               <div style={{ minWidth: 260, textAlign: 'center' }}>
-                <div style={{ fontSize: 'clamp(1.3rem, 2.6vw, 1.8rem)', opacity: 0.98 }}>Room</div>
-                <div style={{ fontSize: 'clamp(3.8rem, 7vw, 5.6rem)', fontWeight: 1000, color: '#00ffb0', textShadow: '0 7px 32px rgba(0,255,170,0.65)' }}>{roomInfo?.id || roomId || '—'}</div>
-                <div style={{ fontSize: 'clamp(1.3rem, 2.6vw, 1.8rem)', opacity: 0.98, marginTop: 20 }}>Go to</div>
-                <div style={{ fontSize: 'clamp(2rem, 3.8vw, 2.7rem)', fontWeight: 1000 }}>{typeof window !== 'undefined' ? window.location.origin : ''}/player/{roomId}</div>
+                <div style={{ fontSize: 'clamp(1.8rem, 3.6vw, 2.6rem)', opacity: 0.98 }}>Room</div>
+                <div style={{ fontSize: 'clamp(5rem, 9vw, 7.2rem)', fontWeight: 1000, color: '#00ffb0', textShadow: '0 9px 36px rgba(0,255,170,0.7)' }}>{roomInfo?.id || roomId || '—'}</div>
+                <div style={{ fontSize: 'clamp(1.8rem, 3.6vw, 2.6rem)', opacity: 0.98, marginTop: 24 }}>Go to</div>
+                <div style={{ fontSize: 'clamp(2.6rem, 6vw, 4rem)', fontWeight: 1000, textShadow: '0 6px 24px rgba(0,0,0,0.35)' }}>{typeof window !== 'undefined' ? window.location.origin : ''}/player/{roomId}</div>
                 {/* Removed equalizer bars to reduce motion */}
                 {/* Ticker marquee */}
-                <div style={{ position: 'relative', marginTop: 22, width: 'min(76vw, 880px)', height: 40, overflow: 'hidden', borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', background: 'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))', boxShadow: 'inset 0 0 18px rgba(0,0,0,0.35)' }}>
+                <div style={{ position: 'relative', marginTop: 26, width: 'min(82vw, 1040px)', height: 50, overflow: 'hidden', borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)', background: 'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))', boxShadow: 'inset 0 0 18px rgba(0,0,0,0.35)' }}>
                   <motion.div
                     initial={{ x: '0%' }}
                     animate={{ x: ['0%', '-100%'] }}
                     transition={{ duration: 28, repeat: Infinity, ease: 'linear' }}
-                    style={{ position: 'absolute', whiteSpace: 'nowrap', top: 6, left: 16, fontWeight: 900, letterSpacing: '0.04em', opacity: 0.85 }}
+                    style={{ position: 'absolute', whiteSpace: 'nowrap', top: 8, left: 20, fontWeight: 900, letterSpacing: '0.04em', opacity: 0.85, fontSize: 'clamp(1.1rem, 2vw, 1.5rem)' }}
                   >
                     Scan the QR to join • Room {roomInfo?.id || roomId} • Build your card • Get ready for music bingo •
                     <span style={{ marginLeft: 40 }}>Scan the QR to join • Room {roomInfo?.id || roomId} • Build your card • Get ready for music bingo •</span>
