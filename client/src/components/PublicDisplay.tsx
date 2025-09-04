@@ -931,7 +931,7 @@ const PublicDisplay: React.FC = () => {
                             exit={{ opacity: 0, y: -6, scale: 0.98 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-name"
-                            style={{ fontWeight: 900, lineHeight: 1.12, fontSize: (() => { const rh = rowHeightPx || 0; const px = Math.round(rh * 0.34); return Math.min(34, Math.max(16, px)); })() + 'px', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            style={{ fontWeight: 900, lineHeight: 1.12, fontSize: (() => { const rh = rowHeightPx || 0; const px = Math.round(rh * 0.51); return Math.min(51, Math.max(24, px)); })() + 'px', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                           >
                             {title}
                           </motion.div>
@@ -942,7 +942,7 @@ const PublicDisplay: React.FC = () => {
                             exit={{ opacity: 0, y: -4 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-artist"
-                            style={{ fontSize: (() => { const rh = rowHeightPx || 0; const px = Math.round(rh * 0.28); return Math.min(28, Math.max(12, px)); })() + 'px', color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            style={{ fontSize: (() => { const rh = rowHeightPx || 0; const px = Math.round(rh * 0.42); return Math.min(42, Math.max(18, px)); })() + 'px', color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                           >
                             {artist}
                           </motion.div>
