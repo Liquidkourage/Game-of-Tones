@@ -1457,10 +1457,54 @@ const HostView: React.FC = () => {
             <div className="setting-item">
               <label>Pattern:</label>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <button className={`btn-secondary ${pattern==='line'?'active':''}`} style={{ padding: '10px 16px', fontSize: '1rem', fontWeight: 800 }} onClick={() => updatePattern('line')}>Line</button>
-                <button className={`btn-secondary ${pattern==='four_corners'?'active':''}`} style={{ padding: '10px 16px', fontSize: '1rem', fontWeight: 800 }} onClick={() => updatePattern('four_corners')}>Four Corners</button>
-                <button className={`btn-secondary ${pattern==='x'?'active':''}`} style={{ padding: '10px 16px', fontSize: '1rem', fontWeight: 800 }} onClick={() => updatePattern('x')}>X</button>
-                <button className={`btn-secondary ${pattern==='full_card'?'active':''}`} style={{ padding: '10px 16px', fontSize: '1rem', fontWeight: 800 }} onClick={() => updatePattern('full_card')}>Full Card</button>
+                <button
+                  className="btn-secondary"
+                  style={{
+                    padding: '10px 16px',
+                    fontSize: '1rem',
+                    fontWeight: 800,
+                    background: pattern==='line' ? 'rgba(0,255,136,0.18)' : undefined,
+                    borderColor: pattern==='line' ? 'rgba(0,255,136,0.5)' : undefined,
+                    color: pattern==='line' ? '#00ff88' : undefined
+                  }}
+                  onClick={() => updatePattern('line')}
+                >Line</button>
+                <button
+                  className="btn-secondary"
+                  style={{
+                    padding: '10px 16px',
+                    fontSize: '1rem',
+                    fontWeight: 800,
+                    background: pattern==='four_corners' ? 'rgba(0,255,136,0.18)' : undefined,
+                    borderColor: pattern==='four_corners' ? 'rgba(0,255,136,0.5)' : undefined,
+                    color: pattern==='four_corners' ? '#00ff88' : undefined
+                  }}
+                  onClick={() => updatePattern('four_corners')}
+                >Four Corners</button>
+                <button
+                  className="btn-secondary"
+                  style={{
+                    padding: '10px 16px',
+                    fontSize: '1rem',
+                    fontWeight: 800,
+                    background: pattern==='x' ? 'rgba(0,255,136,0.18)' : undefined,
+                    borderColor: pattern==='x' ? 'rgba(0,255,136,0.5)' : undefined,
+                    color: pattern==='x' ? '#00ff88' : undefined
+                  }}
+                  onClick={() => updatePattern('x')}
+                >X</button>
+                <button
+                  className="btn-secondary"
+                  style={{
+                    padding: '10px 16px',
+                    fontSize: '1rem',
+                    fontWeight: 800,
+                    background: pattern==='full_card' ? 'rgba(0,255,136,0.18)' : undefined,
+                    borderColor: pattern==='full_card' ? 'rgba(0,255,136,0.5)' : undefined,
+                    color: pattern==='full_card' ? '#00ff88' : undefined
+                  }}
+                  onClick={() => updatePattern('full_card')}
+                >Full Card</button>
               </div>
             </div>
 
