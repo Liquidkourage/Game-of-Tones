@@ -1117,10 +1117,23 @@ const PublicDisplay: React.FC = () => {
               padding: 40
             }}
           >
+            {/* Decorative beams */}
+            <motion.div
+              initial={{ opacity: 0.25 }}
+              animate={{ opacity: [0.25, 0.55, 0.25] }}
+              transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
+              style={{ position: 'absolute', inset: 0, background: 'linear-gradient(115deg, transparent 35%, rgba(0,255,170,0.14) 50%, transparent 65%)' }}
+            />
+            <motion.div
+              initial={{ opacity: 0.15 }}
+              animate={{ opacity: [0.15, 0.4, 0.15] }}
+              transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut', delay: 0.8 }}
+              style={{ position: 'absolute', inset: 0, background: 'linear-gradient(65deg, transparent 35%, rgba(0,140,255,0.12) 50%, transparent 65%)' }}
+            />
             <div style={{ textAlign: 'center', marginBottom: 44 }}>
               <div
                 style={{
-                  fontSize: 'clamp(3.2rem, 8vw, 6.2rem)',
+                  fontSize: 'clamp(4rem, 9vw, 7.2rem)',
                   fontWeight: 1000,
                   letterSpacing: '0.05em',
                   backgroundImage: 'linear-gradient(90deg,#00ffa3 0%, #7bffd9 35%, #ffffff 50%, #7bffd9 65%, #00ffa3 100%)',
@@ -1132,39 +1145,53 @@ const PublicDisplay: React.FC = () => {
               >
                 Game of Tones
               </div>
-              <div style={{ fontSize: 'clamp(1.2rem, 2.6vw, 1.8rem)', opacity: 0.95, marginTop: 12 }}>Join the music bingo party</div>
+              <div style={{ fontSize: 'clamp(1.4rem, 3vw, 2.1rem)', opacity: 0.97, marginTop: 14 }}>Join the music bingo party</div>
+              <motion.div
+                initial={{ x: '-40%' }}
+                animate={{ x: ['-40%', '140%'] }}
+                transition={{ duration: 2.6, repeat: Infinity, ease: 'linear' }}
+                style={{ height: 4, width: '60%', margin: '12px auto 0', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.75), transparent)', borderRadius: 2 }}
+              />
             </div>
-            <div style={{ display: 'flex', gap: 48, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 56, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
               {roomId && (
                 <div style={{
                   background: 'rgba(255,255,255,0.08)',
                   border: '1px solid rgba(255,255,255,0.22)',
                   borderRadius: 18,
-                  padding: 22,
-                  width: 460,
+                  padding: 26,
+                  width: 'clamp(360px, 44vw, 560px)',
                   textAlign: 'center'
                 }}>
-                  <img
-                    alt="Join QR"
-                    style={{ width: '100%', aspectRatio: '1/1', objectFit: 'contain', borderRadius: 14, border: '1px solid rgba(255,255,255,0.22)', boxShadow: '0 16px 40px rgba(0,0,0,0.45), 0 0 36px rgba(0,255,170,0.35)' }}
-                    src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <motion.div
+                      initial={{ rotate: 0 }}
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 12, repeat: Infinity, ease: 'linear' }}
+                      style={{ position: 'absolute', inset: -14, borderRadius: '50%', border: '3px solid rgba(0,255,170,0.55)', boxShadow: '0 0 24px rgba(0,255,170,0.45), inset 0 0 12px rgba(0,255,170,0.25)' }}
+                    />
+                    <img
+                      alt="Join QR"
+                      style={{ width: '100%', aspectRatio: '1/1', objectFit: 'contain', borderRadius: 14, border: '1px solid rgba(255,255,255,0.22)', boxShadow: '0 16px 40px rgba(0,0,0,0.45), 0 0 36px rgba(0,255,170,0.35)' }}
+                      src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
+                    />
+                  </div>
                   <div style={{ fontSize: 'clamp(1.2rem, 2.2vw, 1.6rem)', fontWeight: 1000, marginTop: 16, opacity: 1 }}>Scan to Join</div>
                 </div>
               )}
               <div style={{ minWidth: 260, textAlign: 'center' }}>
-                <div style={{ fontSize: 'clamp(1.1rem, 2.2vw, 1.5rem)', opacity: 0.95 }}>Room</div>
-                <div style={{ fontSize: 'clamp(2.4rem, 5vw, 3.8rem)', fontWeight: 1000, color: '#00ffb0', textShadow: '0 4px 22px rgba(0,255,170,0.45)' }}>{roomInfo?.id || roomId || '—'}</div>
-                <div style={{ fontSize: 'clamp(1.1rem, 2.2vw, 1.6rem)', opacity: 0.95, marginTop: 18 }}>Go to</div>
-                <div style={{ fontSize: 'clamp(1.3rem, 2.6vw, 1.8rem)', fontWeight: 1000 }}>{typeof window !== 'undefined' ? window.location.origin : ''}/player/{roomId}</div>
-                <div style={{ marginTop: 26, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'flex-end' }}>
-                  {[12,18,28,18,12,16,22,30].map((h, i) => (
+                <div style={{ fontSize: 'clamp(1.2rem, 2.4vw, 1.7rem)', opacity: 0.98 }}>Room</div>
+                <div style={{ fontSize: 'clamp(3rem, 6vw, 4.6rem)', fontWeight: 1000, color: '#00ffb0', textShadow: '0 5px 26px rgba(0,255,170,0.55)' }}>{roomInfo?.id || roomId || '—'}</div>
+                <div style={{ fontSize: 'clamp(1.2rem, 2.4vw, 1.7rem)', opacity: 0.98, marginTop: 20 }}>Go to</div>
+                <div style={{ fontSize: 'clamp(1.6rem, 3vw, 2.1rem)', fontWeight: 1000 }}>{typeof window !== 'undefined' ? window.location.origin : ''}/player/{roomId}</div>
+                <div style={{ marginTop: 28, display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'flex-end' }}>
+                  {[14,22,32,22,14,18,26,34].map((h, i) => (
                     <motion.div
                       key={i}
                       initial={{ height: h }}
-                      animate={{ height: [h, h*2.0, h*0.65, h] }}
-                      transition={{ duration: 1.2 + i*0.07, repeat: Infinity, ease: 'easeInOut' }}
-                      style={{ width: 10, background: 'rgba(0,255,170,0.95)', boxShadow: '0 8px 24px rgba(0,255,170,0.45)', borderRadius: 5 }}
+                      animate={{ height: [h, h*2.2, h*0.6, h] }}
+                      transition={{ duration: 1 + i*0.06, repeat: Infinity, ease: 'easeInOut' }}
+                      style={{ width: 12, background: 'rgba(0,255,170,0.98)', boxShadow: '0 10px 28px rgba(0,255,170,0.55)', borderRadius: 6 }}
                     />
                   ))}
                 </div>
