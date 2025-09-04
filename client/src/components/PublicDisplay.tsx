@@ -1120,33 +1120,60 @@ const PublicDisplay: React.FC = () => {
             <div style={{ textAlign: 'center', marginBottom: 44 }}>
               <div
                 style={{
-                  fontSize: 'clamp(4.5rem, 10vw, 8.2rem)',
+                  fontSize: 'clamp(5rem, 11vw, 9rem)',
                   fontWeight: 1000,
                   letterSpacing: '0.05em',
                   backgroundImage: 'linear-gradient(90deg,#00ffa3 0%, #7bffd9 35%, #ffffff 50%, #7bffd9 65%, #00ffa3 100%)',
                   WebkitBackgroundClip: 'text',
                   backgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
-                  textShadow: '0 8px 32px rgba(0,255,170,0.5), 0 0 26px rgba(0,255,170,0.28)'
+                  textShadow: '0 10px 36px rgba(0,255,170,0.55), 0 0 28px rgba(0,255,170,0.3)'
                 }}
               >
                 Game of Tones
               </div>
-              <div style={{ fontSize: 'clamp(1.6rem, 3.4vw, 2.3rem)', opacity: 0.98, marginTop: 16 }}>Music Bingo with a Twist</div>
-              {/* Bingo balls row */}
-              <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginTop: 14 }}>
+              <div style={{ fontSize: 'clamp(1.8rem, 3.8vw, 2.6rem)', opacity: 0.98, marginTop: 18 }}>Music Bingo with a Twist</div>
+              {/* Bingo balls row with 3D floating animation */}
+              <div style={{ display: 'flex', gap: 18, justifyContent: 'center', marginTop: 18, perspective: '800px' }}>
                 {['B','I','N','G','O'].map((ch, i) => (
-                  <div
+                  <motion.div
                     key={i}
-                    style={{
-                      width: 56, height: 56, borderRadius: '50%',
-                      background: 'radial-gradient(circle at 35% 30%, #ffffff, #e9eef6 45%, #d7e1ec 70%, #b7c7d8 100%)',
-                      boxShadow: '0 6px 18px rgba(0,0,0,0.35), inset 0 -4px 8px rgba(0,0,0,0.15)',
-                      border: '1px solid rgba(0,0,0,0.08)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: '#142737', fontWeight: 1000, fontSize: '1.6rem'
+                    initial={{ y: 0, rotateZ: 0, rotateX: 0, rotateY: 0, scale: 1 }}
+                    animate={{
+                      y: [0, -12, 0],
+                      rotateZ: [0, 2.5, 0],
+                      rotateX: [0, 6, 0],
+                      rotateY: [0, -6, 0],
+                      scale: [1, 1.02, 1]
                     }}
-                  >{ch}</div>
+                    transition={{ duration: 3.4 + i * 0.25, repeat: Infinity, ease: 'easeInOut' }}
+                    style={{
+                      width: 78, height: 78, borderRadius: '50%', position: 'relative', transformStyle: 'preserve-3d',
+                      background: 'radial-gradient(circle at 35% 30%, #ffffff, #eef4fb 42%, #d2deea 68%, #b0c4d8 100%)',
+                      boxShadow: '0 10px 26px rgba(0,0,0,0.35), inset 0 -8px 10px rgba(0,0,0,0.18), inset 0 10px 14px rgba(255,255,255,0.55)',
+                      border: '1px solid rgba(0,0,0,0.06)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#102436', fontWeight: 1000, fontSize: '1.9rem'
+                    }}
+                  >
+                    {/* specular highlight */}
+                    <motion.div
+                      initial={{ x: '-20%', y: '0%', opacity: 0.8 }}
+                      animate={{ x: ['-20%', '80%', '-20%'], y: ['0%', '-10%', '0%'], opacity: [0.8, 0.4, 0.8] }}
+                      transition={{ duration: 7 + i * 0.4, repeat: Infinity, ease: 'easeInOut' }}
+                      style={{ position: 'absolute', width: '38%', height: '38%', borderRadius: '50%', top: '10%', left: 0, background: 'radial-gradient(circle, rgba(255,255,255,0.95), rgba(255,255,255,0.1) 60%, transparent 70%)', filter: 'blur(1px)', mixBlendMode: 'screen', pointerEvents: 'none' }}
+                    />
+                    {/* rim light */}
+                    <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', boxShadow: 'inset 0 0 16px rgba(255,255,255,0.45)' }} />
+                    {/* floating shadow */}
+                    <motion.div
+                      initial={{ scale: 1, opacity: 0.5 }}
+                      animate={{ scale: [1, 0.92, 1], opacity: [0.5, 0.35, 0.5] }}
+                      transition={{ duration: 3.4 + i * 0.25, repeat: Infinity, ease: 'easeInOut' }}
+                      style={{ position: 'absolute', bottom: -12, left: 12, right: 12, height: 12, borderRadius: 12, background: 'rgba(0,0,0,0.55)', filter: 'blur(6px)', zIndex: -1 }}
+                    />
+                    {ch}
+                  </motion.div>
                 ))}
               </div>
               <motion.div
@@ -1163,7 +1190,7 @@ const PublicDisplay: React.FC = () => {
                   border: '1px solid rgba(255,255,255,0.22)',
                   borderRadius: 18,
                   padding: 26,
-                  width: 'clamp(380px, 50vw, 640px)',
+                  width: 'clamp(410px, 56vw, 720px)',
                   textAlign: 'center'
                 }}>
                   <img
@@ -1176,9 +1203,9 @@ const PublicDisplay: React.FC = () => {
               )}
               <div style={{ minWidth: 260, textAlign: 'center' }}>
                 <div style={{ fontSize: 'clamp(1.3rem, 2.6vw, 1.8rem)', opacity: 0.98 }}>Room</div>
-                <div style={{ fontSize: 'clamp(3.4rem, 6.4vw, 5rem)', fontWeight: 1000, color: '#00ffb0', textShadow: '0 6px 30px rgba(0,255,170,0.6)' }}>{roomInfo?.id || roomId || '—'}</div>
+                <div style={{ fontSize: 'clamp(3.8rem, 7vw, 5.6rem)', fontWeight: 1000, color: '#00ffb0', textShadow: '0 7px 32px rgba(0,255,170,0.65)' }}>{roomInfo?.id || roomId || '—'}</div>
                 <div style={{ fontSize: 'clamp(1.3rem, 2.6vw, 1.8rem)', opacity: 0.98, marginTop: 20 }}>Go to</div>
-                <div style={{ fontSize: 'clamp(1.8rem, 3.4vw, 2.4rem)', fontWeight: 1000 }}>{typeof window !== 'undefined' ? window.location.origin : ''}/player/{roomId}</div>
+                <div style={{ fontSize: 'clamp(2rem, 3.8vw, 2.7rem)', fontWeight: 1000 }}>{typeof window !== 'undefined' ? window.location.origin : ''}/player/{roomId}</div>
                 {/* Removed equalizer bars to reduce motion */}
                 {/* Ticker marquee */}
                 <div style={{ position: 'relative', marginTop: 22, width: 'min(76vw, 880px)', height: 40, overflow: 'hidden', borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', background: 'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))', boxShadow: 'inset 0 0 18px rgba(0,0,0,0.35)' }}>
