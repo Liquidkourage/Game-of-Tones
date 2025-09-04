@@ -845,7 +845,7 @@ const PublicDisplay: React.FC = () => {
                       const isHighlight = !!highlightChar && u === highlightChar;
                       return <span key={`c-${ti}-${ci}`} style={isHighlight ? { color: '#f5d061', textShadow: '0 0 6px rgba(245,208,97,0.6)' } : undefined}>{ch}</span>;
                     }
-                    return <span key={`c-${ti}-${ci}`} style={{ display: 'inline-block', width: '0.64em', height: '0.85em', border: '0.09em solid rgba(255,255,255,0.8)', borderRadius: '0.12em', verticalAlign: '-0.1em', margin: '0 0.06em', boxSizing: 'border-box', background: 'rgba(255,255,255,0.12)' }} />;
+                    return <span key={`c-${ti}-${ci}`} style={{ display: 'inline-block', width: '0.58em', height: '0.78em', border: '0.08em solid rgba(255,255,255,0.8)', borderRadius: '0.11em', verticalAlign: '-0.08em', margin: '0 0.05em', boxSizing: 'border-box', background: 'rgba(255,255,255,0.12)' }} />;
                   }
                   return <span key={`c-${ti}-${ci}`}>{ch}</span>;
                 })}
@@ -931,7 +931,7 @@ const PublicDisplay: React.FC = () => {
                             exit={{ opacity: 0, y: -6, scale: 0.98 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-name"
-                            style={{ fontWeight: 900, lineHeight: 1.15, fontSize: Math.max(18, Math.round((rowHeightPx || 0) * 0.38)) + 'px', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            style={{ fontWeight: 900, lineHeight: 1.12, fontSize: (() => { const rh = rowHeightPx || 0; const px = Math.round(rh * 0.34); return Math.min(34, Math.max(16, px)); })() + 'px', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                           >
                             {title}
                           </motion.div>
@@ -942,7 +942,7 @@ const PublicDisplay: React.FC = () => {
                             exit={{ opacity: 0, y: -4 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-artist"
-                            style={{ fontSize: Math.max(14, Math.round((rowHeightPx || 0) * 0.34)) + 'px', color: '#e0e0e0', lineHeight: 1.16, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            style={{ fontSize: (() => { const rh = rowHeightPx || 0; const px = Math.round(rh * 0.28); return Math.min(28, Math.max(12, px)); })() + 'px', color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                           >
                             {artist}
                           </motion.div>
