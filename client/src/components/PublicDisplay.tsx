@@ -1127,12 +1127,13 @@ const PublicDisplay: React.FC = () => {
                   WebkitBackgroundClip: 'text',
                   backgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
-                  textShadow: '0 10px 36px rgba(0,255,170,0.55), 0 0 28px rgba(0,255,170,0.3)'
+                  textShadow: '0 10px 36px rgba(0,255,170,0.55), 0 0 28px rgba(0,255,170,0.3)',
+                  display: 'none'
                 }}
               >
                 Tempo - Music Bingo
               </div>
-              <div style={{ fontSize: 'clamp(1.8rem, 3.8vw, 2.6rem)', opacity: 0.98, marginTop: 18 }}>The game is on, the volume is up, the win is yours.</div>
+              <div style={{ fontSize: 'clamp(1.8rem, 3.8vw, 2.6rem)', opacity: 0.98, marginTop: 18, display: 'none' }}>The game is on, the volume is up, the win is yours.</div>
               {/* TEMPO balls row with enhanced 3D floating animation */}
               <div style={{ display: 'flex', gap: 22, justifyContent: 'center', marginTop: 22, perspective: '900px', position: 'relative' }}>
                 {['T','E','M','P','O'].map((ch, i) => (
@@ -1185,6 +1186,19 @@ const PublicDisplay: React.FC = () => {
                   </motion.div>
                 ))}
               </div>
+              {/* Music Bingo subtitle and byline under hero TEMPO */}
+              <div style={{
+                marginTop: 14,
+                fontSize: 'clamp(2.2rem, 6vw, 4.4rem)',
+                fontWeight: 1000,
+                letterSpacing: '0.02em',
+                backgroundImage: 'linear-gradient(90deg,#7bffd9 0%, #ffffff 50%, #7bffd9 100%)',
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                textShadow: '0 6px 22px rgba(123,255,217,0.45), 0 0 16px rgba(255,255,255,0.18)'
+              }}>Music Bingo</div>
+              <div style={{ fontSize: 'clamp(1.4rem, 3.2vw, 2.2rem)', opacity: 0.95, marginTop: 10 }}>The game is on, the volume is up, the win is yours.</div>
               <motion.div
                 initial={{ x: '-40%' }}
                 animate={{ x: ['-40%', '140%'] }}
