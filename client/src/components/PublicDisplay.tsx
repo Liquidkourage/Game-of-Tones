@@ -243,6 +243,13 @@ const PublicDisplay: React.FC = () => {
       setGameState(prev => ({ ...prev, bingoCard: { squares, size: 5 } }));
     });
 
+    socket.on('pattern-updated', (data: any) => {
+      try {
+        const p = data?.pattern;
+        if (p) setPattern(p);
+      } catch {}
+    });
+
     socket.on('song-playing', (data: any) => {
       const song = { id: data.songId, name: data.songName, artist: data.artistName };
       // cache metadata for reveal lookups

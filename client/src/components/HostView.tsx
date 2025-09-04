@@ -1569,7 +1569,57 @@ const HostView: React.FC = () => {
                 <button className="btn-secondary" style={{ padding: '8px 14px', fontSize: '0.95rem', fontWeight: 800, background: pattern==='four_corners' ? 'rgba(0,255,136,0.18)' : undefined, borderColor: pattern==='four_corners' ? 'rgba(0,255,136,0.5)' : undefined, color: pattern==='four_corners' ? '#00ff88' : undefined }} onClick={() => updatePattern('four_corners')}>Four Corners</button>
                 <button className="btn-secondary" style={{ padding: '8px 14px', fontSize: '0.95rem', fontWeight: 800, background: pattern==='x' ? 'rgba(0,255,136,0.18)' : undefined, borderColor: pattern==='x' ? 'rgba(0,255,136,0.5)' : undefined, color: pattern==='x' ? '#00ff88' : undefined }} onClick={() => updatePattern('x')}>X</button>
                 <button className="btn-secondary" style={{ padding: '8px 14px', fontSize: '0.95rem', fontWeight: 800, background: pattern==='full_card' ? 'rgba(0,255,136,0.18)' : undefined, borderColor: pattern==='full_card' ? 'rgba(0,255,136,0.5)' : undefined, color: pattern==='full_card' ? '#00ff88' : undefined }} onClick={() => updatePattern('full_card')}>Full Card</button>
+                <button className="btn-secondary" style={{ padding: '8px 14px', fontSize: '0.95rem', fontWeight: 800, background: pattern==='custom' ? 'rgba(0,255,136,0.18)' : undefined, borderColor: pattern==='custom' ? 'rgba(0,255,136,0.5)' : undefined, color: pattern==='custom' ? '#00ff88' : undefined }} onClick={() => updatePattern('custom')}>Custom…</button>
               </div>
+              {pattern === 'custom' && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 36px)', gap: 6 }}>
+                    {Array.from({ length: 5 }).map((_, r) => (
+                      Array.from({ length: 5 }).map((__, c) => {
+                        const key = `${r}-${c}`;
+                        const on = customMask.includes(key);
+                        return (
+                          <button
+                            key={key}
+                            onClick={() => {
+                              setCustomMask(prev => {
+                                const has = prev.includes(key);
+                                const next = has ? prev.filter(p => p !== key) : [...prev, key];
+                                if (socket && roomId) {
+                                  socket.emit('set-pattern', { roomId, pattern: 'custom', customMask: next });
+                                  addLog(`Custom pattern updated (${next.length} cells)`, 'info');
+                                }
+                                return next;
+                              });
+                            }}
+                            style={{
+                              width: 36, height: 36, borderRadius: 6,
+                              border: '1px solid rgba(255,255,255,0.25)',
+                              background: on ? 'rgba(0,255,136,0.28)' : 'rgba(255,255,255,0.05)',
+                              color: on ? '#00ff88' : '#e6e6e6',
+                              fontWeight: 800
+                            }}
+                          >
+                            {r+1},{c+1}
+                          </button>
+                        );
+                      })
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                    <button className="btn-secondary" onClick={() => {
+                      setCustomMask([]);
+                      if (socket && roomId) socket.emit('set-pattern', { roomId, pattern: 'custom', customMask: [] });
+                    }}>Clear</button>
+                    <button className="btn-secondary" onClick={() => {
+                      const all = [] as string[];
+                      for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) all.push(`${r}-${c}`);
+                      setCustomMask(all);
+                      if (socket && roomId) socket.emit('set-pattern', { roomId, pattern: 'custom', customMask: all });
+                    }}>Fill All</button>
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
 
