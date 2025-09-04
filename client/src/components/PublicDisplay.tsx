@@ -1130,9 +1130,9 @@ const PublicDisplay: React.FC = () => {
                   textShadow: '0 10px 36px rgba(0,255,170,0.55), 0 0 28px rgba(0,255,170,0.3)'
                 }}
               >
-                Game of Tones
+                Tempo - Music Bingo
               </div>
-              <div style={{ fontSize: 'clamp(1.8rem, 3.8vw, 2.6rem)', opacity: 0.98, marginTop: 18 }}>Music Bingo with a Twist</div>
+              <div style={{ fontSize: 'clamp(1.8rem, 3.8vw, 2.6rem)', opacity: 0.98, marginTop: 18 }}>The game is on, the volume is up, the win is yours.</div>
               {/* Bingo balls row with 3D floating animation */}
               <div style={{ display: 'flex', gap: 18, justifyContent: 'center', marginTop: 18, perspective: '800px' }}>
                 {['B','I','N','G','O'].map((ch, i) => (
