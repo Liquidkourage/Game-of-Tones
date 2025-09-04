@@ -1152,11 +1152,11 @@ const PublicDisplay: React.FC = () => {
                       key={i}
                       initial={{ y: 0, rotateZ: 0, rotateX: 0, rotateY: 0, scale: 1 }}
                       animate={{
-                        y: [0, -16, 0],
-                        rotateZ: [-3, 3, -3],
-                        rotateX: [-6, 6, -6],
-                        rotateY: [-7, 7, -7],
-                        scale: [1, 1.02, 1]
+                        x: [-6, 6, -6],
+                        y: [0, -12, 0],
+                        rotateZ: [-2, 2, -2],
+                        rotateX: [-4, 4, -4],
+                        rotateY: [-5, 5, -5]
                       }}
                       transition={{ duration: 3.8 + i * 0.3, repeat: Infinity, ease: 'easeInOut' }}
                       style={{
@@ -1194,8 +1194,8 @@ const PublicDisplay: React.FC = () => {
                       />
                       {/* floating shadow */}
                       <motion.div
-                        initial={{ scale: 1, opacity: 0.5 }}
-                        animate={{ scale: [1, 0.9, 1], opacity: [0.5, 0.35, 0.5] }}
+                        initial={{ opacity: 0.5 }}
+                        animate={{ opacity: [0.5, 0.35, 0.5] }}
                         transition={{ duration: 3.8 + i * 0.3, repeat: Infinity, ease: 'easeInOut' }}
                         style={{ position: 'absolute', bottom: -28, left: 28, right: 28, height: 28, borderRadius: 28, background: 'rgba(0,0,0,0.55)', filter: 'blur(12px)', zIndex: -1 }}
                       />
