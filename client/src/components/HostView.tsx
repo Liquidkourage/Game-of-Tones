@@ -1399,6 +1399,27 @@ const HostView: React.FC = () => {
             transition={{ delay: 0.5 }}
           >
             <h2>🎮 Game Controls</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '6px 0 10px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ opacity: 0.85 }}>Snippet</span>
+                <input
+                  type="range"
+                  min="5"
+                  max="60"
+                  value={snippetLength}
+                  onChange={(e) => setSnippetLength(Number(e.target.value))}
+                />
+                <span style={{ width: 32, textAlign: 'right' }}>{snippetLength}s</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={randomStarts}
+                  onChange={(e) => setRandomStarts(!!e.target.checked)}
+                />
+                <span>Random start</span>
+              </label>
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input
