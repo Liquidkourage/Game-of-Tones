@@ -1112,11 +1112,18 @@ const PublicDisplay: React.FC = () => {
             transition={{ duration: 0.35 }}
             style={{
               position: 'fixed', inset: 0, zIndex: 2000,
-              background: 'radial-gradient(1200px 650px at 50% -180px, rgba(0,255,170,0.35), rgba(0,0,0,0) 60%), radial-gradient(900px 700px at -20% 120%, rgba(0,140,255,0.18), rgba(0,0,0,0) 55%), linear-gradient(180deg, #0f2333 0%, #0b1824 100%)',
+              background: 'radial-gradient(1400px 750px at 50% -220px, rgba(0,255,170,0.35), rgba(0,0,0,0) 60%), radial-gradient(1000px 800px at -20% 120%, rgba(0,140,255,0.18), rgba(0,0,0,0) 55%), linear-gradient(180deg, #0f2333 0%, #0b1824 100%)',
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               padding: 40
             }}
           >
+            {/* Soft dotted grid */}
+            <motion.div
+              initial={{ opacity: 0.08 }}
+              animate={{ opacity: [0.08, 0.16, 0.08] }}
+              transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+              style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(rgba(255,255,255,0.08) 1px, transparent 1px)', backgroundSize: '26px 26px', pointerEvents: 'none' }}
+            />
             {/* Decorative beams */}
             <motion.div
               initial={{ opacity: 0.25 }}
@@ -1130,22 +1137,35 @@ const PublicDisplay: React.FC = () => {
               transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut', delay: 0.8 }}
               style={{ position: 'absolute', inset: 0, background: 'linear-gradient(65deg, transparent 35%, rgba(0,140,255,0.12) 50%, transparent 65%)' }}
             />
+            {/* Floating gradient blobs */}
+            <motion.div
+              initial={{ x: -220, y: -120, scale: 1 }}
+              animate={{ x: [-220, -160, -220], y: [-120, -80, -120], scale: [1, 1.08, 1] }}
+              transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
+              style={{ position: 'absolute', width: 520, height: 520, borderRadius: '50%', filter: 'blur(80px)', background: 'radial-gradient(circle at 30% 30%, rgba(0,255,170,0.22), transparent 60%)' }}
+            />
+            <motion.div
+              initial={{ x: 280, y: 240, scale: 1 }}
+              animate={{ x: [280, 340, 280], y: [240, 280, 240], scale: [1, 1.05, 1] }}
+              transition={{ duration: 14, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+              style={{ position: 'absolute', width: 600, height: 600, borderRadius: '50%', filter: 'blur(90px)', background: 'radial-gradient(circle at 70% 70%, rgba(0,140,255,0.2), transparent 60%)' }}
+            />
             <div style={{ textAlign: 'center', marginBottom: 44 }}>
               <div
                 style={{
-                  fontSize: 'clamp(4rem, 9vw, 7.2rem)',
+                  fontSize: 'clamp(4.5rem, 10vw, 8.2rem)',
                   fontWeight: 1000,
                   letterSpacing: '0.05em',
                   backgroundImage: 'linear-gradient(90deg,#00ffa3 0%, #7bffd9 35%, #ffffff 50%, #7bffd9 65%, #00ffa3 100%)',
                   WebkitBackgroundClip: 'text',
                   backgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
-                  textShadow: '0 6px 28px rgba(0,255,170,0.45), 0 0 22px rgba(0,255,170,0.25)'
+                  textShadow: '0 8px 32px rgba(0,255,170,0.5), 0 0 26px rgba(0,255,170,0.28)'
                 }}
               >
                 Game of Tones
               </div>
-              <div style={{ fontSize: 'clamp(1.4rem, 3vw, 2.1rem)', opacity: 0.97, marginTop: 14 }}>Join the music bingo party</div>
+              <div style={{ fontSize: 'clamp(1.6rem, 3.4vw, 2.3rem)', opacity: 0.98, marginTop: 16 }}>Join the music bingo party</div>
               <motion.div
                 initial={{ x: '-40%' }}
                 animate={{ x: ['-40%', '140%'] }}
@@ -1160,7 +1180,7 @@ const PublicDisplay: React.FC = () => {
                   border: '1px solid rgba(255,255,255,0.22)',
                   borderRadius: 18,
                   padding: 26,
-                  width: 'clamp(360px, 44vw, 560px)',
+                  width: 'clamp(380px, 50vw, 640px)',
                   textAlign: 'center'
                 }}>
                   <div style={{ position: 'relative' }}>
@@ -1170,6 +1190,13 @@ const PublicDisplay: React.FC = () => {
                       transition={{ duration: 12, repeat: Infinity, ease: 'linear' }}
                       style={{ position: 'absolute', inset: -14, borderRadius: '50%', border: '3px solid rgba(0,255,170,0.55)', boxShadow: '0 0 24px rgba(0,255,170,0.45), inset 0 0 12px rgba(0,255,170,0.25)' }}
                     />
+                    {/* Neon corner brackets */}
+                    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+                      <div style={{ position: 'absolute', top: -6, left: -6, width: 36, height: 36, borderTop: '4px solid #00ffb0', borderLeft: '4px solid #00ffb0', borderRadius: 8, boxShadow: '0 0 14px rgba(0,255,170,0.8)' }} />
+                      <div style={{ position: 'absolute', top: -6, right: -6, width: 36, height: 36, borderTop: '4px solid #00ffb0', borderRight: '4px solid #00ffb0', borderRadius: 8, boxShadow: '0 0 14px rgba(0,255,170,0.8)' }} />
+                      <div style={{ position: 'absolute', bottom: -6, left: -6, width: 36, height: 36, borderBottom: '4px solid #00ffb0', borderLeft: '4px solid #00ffb0', borderRadius: 8, boxShadow: '0 0 14px rgba(0,255,170,0.8)' }} />
+                      <div style={{ position: 'absolute', bottom: -6, right: -6, width: 36, height: 36, borderBottom: '4px solid #00ffb0', borderRight: '4px solid #00ffb0', borderRadius: 8, boxShadow: '0 0 14px rgba(0,255,170,0.8)' }} />
+                    </div>
                     <img
                       alt="Join QR"
                       style={{ width: '100%', aspectRatio: '1/1', objectFit: 'contain', borderRadius: 14, border: '1px solid rgba(255,255,255,0.22)', boxShadow: '0 16px 40px rgba(0,0,0,0.45), 0 0 36px rgba(0,255,170,0.35)' }}
@@ -1177,13 +1204,22 @@ const PublicDisplay: React.FC = () => {
                     />
                   </div>
                   <div style={{ fontSize: 'clamp(1.2rem, 2.2vw, 1.6rem)', fontWeight: 1000, marginTop: 16, opacity: 1 }}>Scan to Join</div>
+                  {/* Join Now pill */}
+                  <motion.div
+                    initial={{ opacity: 0.85, scale: 0.98 }}
+                    animate={{ opacity: [0.85, 1, 0.85], scale: [0.98, 1.02, 0.98] }}
+                    transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+                    style={{ margin: '14px auto 0', padding: '10px 18px', width: 'fit-content', borderRadius: 999, background: 'linear-gradient(90deg, #00ffa3, #00d7ff)', color: '#06201a', fontWeight: 1000, boxShadow: '0 8px 28px rgba(0,255,170,0.45), 0 0 22px rgba(0,215,255,0.35)' }}
+                  >
+                    Join Now
+                  </motion.div>
                 </div>
               )}
               <div style={{ minWidth: 260, textAlign: 'center' }}>
-                <div style={{ fontSize: 'clamp(1.2rem, 2.4vw, 1.7rem)', opacity: 0.98 }}>Room</div>
-                <div style={{ fontSize: 'clamp(3rem, 6vw, 4.6rem)', fontWeight: 1000, color: '#00ffb0', textShadow: '0 5px 26px rgba(0,255,170,0.55)' }}>{roomInfo?.id || roomId || '—'}</div>
-                <div style={{ fontSize: 'clamp(1.2rem, 2.4vw, 1.7rem)', opacity: 0.98, marginTop: 20 }}>Go to</div>
-                <div style={{ fontSize: 'clamp(1.6rem, 3vw, 2.1rem)', fontWeight: 1000 }}>{typeof window !== 'undefined' ? window.location.origin : ''}/player/{roomId}</div>
+                <div style={{ fontSize: 'clamp(1.3rem, 2.6vw, 1.8rem)', opacity: 0.98 }}>Room</div>
+                <div style={{ fontSize: 'clamp(3.4rem, 6.4vw, 5rem)', fontWeight: 1000, color: '#00ffb0', textShadow: '0 6px 30px rgba(0,255,170,0.6)' }}>{roomInfo?.id || roomId || '—'}</div>
+                <div style={{ fontSize: 'clamp(1.3rem, 2.6vw, 1.8rem)', opacity: 0.98, marginTop: 20 }}>Go to</div>
+                <div style={{ fontSize: 'clamp(1.8rem, 3.4vw, 2.4rem)', fontWeight: 1000 }}>{typeof window !== 'undefined' ? window.location.origin : ''}/player/{roomId}</div>
                 <div style={{ marginTop: 28, display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'flex-end' }}>
                   {[14,22,32,22,14,18,26,34].map((h, i) => (
                     <motion.div
@@ -1194,6 +1230,19 @@ const PublicDisplay: React.FC = () => {
                       style={{ width: 12, background: 'rgba(0,255,170,0.98)', boxShadow: '0 10px 28px rgba(0,255,170,0.55)', borderRadius: 6 }}
                     />
                   ))}
+                </div>
+                {/* Ticker marquee */}
+                <div style={{ position: 'relative', marginTop: 22, width: 'min(76vw, 880px)', height: 40, overflow: 'hidden', borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', background: 'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))', boxShadow: 'inset 0 0 18px rgba(0,0,0,0.35)' }}>
+                  <motion.div
+                    initial={{ x: '0%' }}
+                    animate={{ x: ['0%', '-100%'] }}
+                    transition={{ duration: 18, repeat: Infinity, ease: 'linear' }}
+                    style={{ position: 'absolute', whiteSpace: 'nowrap', top: 6, left: 16, fontWeight: 900, letterSpacing: '0.04em', opacity: 0.95 }}
+                  >
+                    Scan the QR to join • Room {roomInfo?.id || roomId} • Build your card • Get ready for music bingo •
+                    <span style={{ marginLeft: 40 }}>Scan the QR to join • Room {roomInfo?.id || roomId} • Build your card • Get ready for music bingo •</span>
+                  </motion.div>
+                  <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, #0b1824, transparent 8%, transparent 92%, #0b1824)', pointerEvents: 'none' }} />
                 </div>
               </div>
             </div>
