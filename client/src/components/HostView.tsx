@@ -1495,14 +1495,33 @@ const HostView: React.FC = () => {
                        <p className="status-text">✅ Mix finalized - Cards generated for players</p>
                      </div>
                    )}
-                   <button 
-                     className="start-btn"
-                     onClick={startGame}
-                     disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
-                   >
-                     <Play className="btn-icon" />
-                     {isSpotifyConnecting ? 'Connecting Spotify...' : 'Start Game'}
-                   </button>
+                  <button
+                    onClick={startGame}
+                    disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '14px 22px',
+                      fontSize: '1.05rem',
+                      fontWeight: 900,
+                      letterSpacing: '0.02em',
+                      borderRadius: 12,
+                      border: (selectedPlaylists.length === 0 || isSpotifyConnecting) ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(0,255,136,0.6)',
+                      color: (selectedPlaylists.length === 0 || isSpotifyConnecting) ? '#c8c8c8' : '#0b0e12',
+                      background: (selectedPlaylists.length === 0 || isSpotifyConnecting)
+                        ? 'rgba(255,255,255,0.08)'
+                        : 'linear-gradient(180deg, #00ff88 0%, #00cc6d 100%)',
+                      boxShadow: (selectedPlaylists.length === 0 || isSpotifyConnecting)
+                        ? 'none'
+                        : '0 10px 30px rgba(0,255,136,0.25), inset 0 1px 0 rgba(255,255,255,0.4)',
+                      cursor: (selectedPlaylists.length === 0 || isSpotifyConnecting) ? 'not-allowed' : 'pointer',
+                      opacity: (isSpotifyConnecting) ? 0.8 : 1
+                    }}
+                  >
+                    <Play className="btn-icon" />
+                    {isSpotifyConnecting ? 'Connecting Spotify...' : 'Start Game'}
+                  </button>
                  </>
                ) : (
                  <div className="game-status">
