@@ -1431,24 +1431,9 @@ const HostView: React.FC = () => {
                    🔄 Refresh Connection
                  </button>
                </div>
-                <div className="device-controls" style={{ marginTop: '8px' }}>
-                  <button
-                    onClick={toggleShuffle}
-                    disabled={!selectedDevice}
-                    className="btn-secondary"
-                  >
-                    {shuffleEnabled ? '🔀 Shuffle: On' : '🔀 Shuffle: Off'}
-                  </button>
-                  <button
-                    onClick={cycleRepeat}
-                    disabled={!selectedDevice}
-                    className="btn-secondary"
-                  >
-                    🔁 Repeat: {repeatState}
-                  </button>
-                </div>
-             </motion.div>
-           )}
+              {/* Removed Shuffle/Repeat controls to simplify UI; server enforces Off */}
+            </motion.div>
+          )}
 
           {/* Game Settings */}
           <motion.div 
