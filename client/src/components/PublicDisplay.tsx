@@ -967,17 +967,6 @@ const PublicDisplay: React.FC = () => {
                           >
                             {artist}
                           </motion.div>
-                          <motion.div
-                            key={(meta?.artist || '') + '-' + ri}
-                            initial={{ opacity: 0, y: 4 }}
-                            animate={{ opacity: 0.85, y: 0 }}
-                            exit={{ opacity: 0, y: -4 }}
-                            transition={{ duration: 0.25 }}
-                            className="call-song-artist"
-                            style={{ fontSize: (() => { const rh = rowHeightPx || 0; const px = Math.round(rh * 0.38); return Math.min(38, Math.max(16, px)); })() + 'px', color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
-                          >
-                            {artist}
-                          </motion.div>
                           </AnimatePresence>
                         </div>
                       </div>
