@@ -506,14 +506,20 @@ io.on('connection', (socket) => {
   // Set game pattern
   socket.on('set-pattern', (data = {}) => {
     try {
-      const { roomId, pattern } = data;
+      const { roomId, pattern, customMask } = data;
       const room = rooms.get(roomId);
       if (!room) return;
       const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
       if (!isCurrentHost) return;
-      const allowed = new Set(['line', 'four_corners', 'x', 'full_card']);
+      const allowed = new Set(['line', 'four_corners', 'x', 'full_card', 'custom']);
       room.pattern = allowed.has(pattern) ? pattern : 'line';
-      io.to(roomId).emit('pattern-updated', { pattern: room.pattern });
+      if (room.pattern === 'custom') {
+        const mask = Array.isArray(customMask) ? customMask.filter(p => /^(0|1|2|3|4)-(0|1|2|3|4)$/.test(p)) : [];
+        room.customPattern = new Set(mask);
+      } else {
+        room.customPattern = undefined;
+      }
+      io.to(roomId).emit('pattern-updated', { pattern: room.pattern, customMask: Array.from(room.customPattern || []) });
       console.log(`🎯 Pattern set to ${room.pattern} for room ${roomId}`);
     } catch (e) {
       console.error('❌ Error setting pattern:', e?.message || e);
@@ -2101,6 +2107,14 @@ function checkBingo(card) {
 
 function validateBingoForPattern(card, room) {
   const pattern = room?.pattern || 'full_card';
+  if (pattern === 'custom' && room?.customPattern && room.customPattern.size > 0) {
+    // All positions in customPattern must be marked
+    for (const pos of room.customPattern) {
+      const sq = card.squares.find(s => s.position === pos);
+      if (!sq || !sq.marked) return false;
+    }
+    return true;
+  }
   if (pattern === 'full_card') {
     // All squares must be marked
     for (let row = 0; row < 5; row++) {

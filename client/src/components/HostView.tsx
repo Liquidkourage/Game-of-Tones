@@ -80,7 +80,7 @@ const HostView: React.FC = () => {
   const [playedSoFar, setPlayedSoFar] = useState<Array<{ id: string; name: string; artist: string }>>([]);
   const [logs, setLogs] = useState<Array<{ level: 'info' | 'warn' | 'error'; message: string; ts: number }>>([]);
   const [revealMode, setRevealMode] = useState<'off' | 'artist' | 'title' | 'full'>('off');
-  const [pattern, setPattern] = useState<'line' | 'four_corners' | 'x' | 'full_card'>('line');
+  const [pattern, setPattern] = useState<'line' | 'four_corners' | 'x' | 'full_card' | 'custom'>('line');
   const [showSetup, setShowSetup] = useState<boolean>(false);
   const [lockJoins, setLockJoins] = useState<boolean>(false);
   const [preQueueEnabled, setPreQueueEnabled] = useState<boolean>(false);
@@ -88,6 +88,13 @@ const HostView: React.FC = () => {
   const [stripGoTPrefix, setStripGoTPrefix] = useState<boolean>(true);
   const [showPlaylists, setShowPlaylists] = useState<boolean>(true);
   const [showLogs, setShowLogs] = useState<boolean>(true);
+  const [customMask, setCustomMask] = useState<string[]>([]);
+  const [showSongList, setShowSongList] = useState(false);
+  const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]);
+  
+  // Pause position tracking
+  const [pausePosition, setPausePosition] = useState<number>(0);
+  const [isPausedByInterface, setIsPausedByInterface] = useState(false);
 
   const addLog = (message: string, level: 'info' | 'warn' | 'error' = 'info') => {
     setLogs(prev => [{ level, message, ts: Date.now() }, ...prev].slice(0, 50));
@@ -621,7 +628,8 @@ const HostView: React.FC = () => {
         deviceId: selectedDevice.id, // Require the selected device ID
         songList: songList, // Send the shuffled song list to ensure server uses same order
         randomStarts,
-        pattern // ensure display gets the intended pattern on game start
+        pattern,
+        customMask
       });
       // Safety timeout in case no response comes back
       setTimeout(() => setIsStartingGame(false), 8000);
@@ -655,10 +663,10 @@ const HostView: React.FC = () => {
     addLog('Force refresh broadcast', 'warn');
   };
 
-  const updatePattern = (next: 'line' | 'four_corners' | 'x' | 'full_card') => {
+  const updatePattern = (next: 'line' | 'four_corners' | 'x' | 'full_card' | 'custom') => {
     setPattern(next);
     if (socket && roomId) {
-      socket.emit('set-pattern', { roomId, pattern: next });
+      socket.emit('set-pattern', { roomId, pattern: next, customMask });
       addLog(`Pattern set to ${next}`, 'info');
     }
   };
