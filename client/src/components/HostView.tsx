@@ -86,6 +86,8 @@ const HostView: React.FC = () => {
   const [preQueueEnabled, setPreQueueEnabled] = useState<boolean>(false);
   const [preQueueWindow, setPreQueueWindow] = useState<number>(5);
   const [stripGoTPrefix, setStripGoTPrefix] = useState<boolean>(true);
+  const [showPlaylists, setShowPlaylists] = useState<boolean>(true);
+  const [showLogs, setShowLogs] = useState<boolean>(true);
 
   const addLog = (message: string, level: 'info' | 'warn' | 'error' = 'info') => {
     setLogs(prev => [{ level, message, ts: Date.now() }, ...prev].slice(0, 50));
@@ -308,6 +310,8 @@ const HostView: React.FC = () => {
       addLog('Game started', 'info');
       // Auto-collapse lists during gameplay
       setShowSongList(false);
+      setShowPlaylists(false);
+      setShowLogs(false);
     });
 
     // Receive the finalized shuffled order for 5x15
@@ -430,7 +434,9 @@ const HostView: React.FC = () => {
     newSocket.on('game-ended', () => {
       setGameState('ended');
       console.log('🛑 Game ended');
-      // Keep played list, but you can re-open lists now
+      // Allow reopening
+      setShowPlaylists(true);
+      setShowLogs(true);
     });
 
     newSocket.on('game-reset', () => {
@@ -1333,75 +1339,77 @@ const HostView: React.FC = () => {
           </motion.div>
 
           {/* Playlists - Virtualized + Paged */}
-          <div className="setting-item">
-            <label>Playlists:</label>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
-              <input
-                type="text"
-                placeholder="Search playlists..."
-                value={playlistQuery}
-                onChange={(e) => setPlaylistQuery(e.target.value)}
-                className="input"
-                style={{ flex: 1, minWidth: 240 }}
-              />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <input type="checkbox" checked={stripGoTPrefix} onChange={(e) => setStripGoTPrefix(!!e.target.checked)} />
-                <span>Strip "GoT" preview</span>
-              </label>
-              <button className="btn-secondary" onClick={() => { setPlaylistQuery(''); }}>Clear</button>
-              <button
-                className="btn-secondary"
-                onClick={() => {
-                  const toAdd = filteredPlaylists.slice(0, 5).filter(fp => !selectedPlaylists.some(sp => sp.id === fp.id));
-                  setSelectedPlaylists(prev => [...prev, ...toAdd]);
-                }}
-              >Add first 5 visible</button>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 12 }}>
-              <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8 }}>
-                {filteredPlaylists.length === 0 && (
-                  <div style={{ color: '#b3b3b3', fontStyle: 'italic' }}>No playlists</div>
-                )}
-                {filteredPlaylists.map((p) => {
-                  const isSelected = !!selectedPlaylists.find(sp => sp.id === p.id);
-                  const previewName = stripGoTPrefix ? (p.name || '').replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim() : p.name;
-                  return (
-                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{previewName}</div>
-                        <div style={{ fontSize: 12, color: '#b3b3b3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.owner} • {p.tracks} tracks</div>
+          {showPlaylists && (
+            <div className="setting-item">
+              <label>Playlists:</label>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  placeholder="Search playlists..."
+                  value={playlistQuery}
+                  onChange={(e) => setPlaylistQuery(e.target.value)}
+                  className="input"
+                  style={{ flex: 1, minWidth: 240 }}
+                />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input type="checkbox" checked={stripGoTPrefix} onChange={(e) => setStripGoTPrefix(!!e.target.checked)} />
+                  <span>Strip "GoT" preview</span>
+                </label>
+                <button className="btn-secondary" onClick={() => { setPlaylistQuery(''); }}>Clear</button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => {
+                    const toAdd = filteredPlaylists.slice(0, 5).filter(fp => !selectedPlaylists.some(sp => sp.id === fp.id));
+                    setSelectedPlaylists(prev => [...prev, ...toAdd]);
+                  }}
+                >Add first 5 visible</button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 12 }}>
+                <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8 }}>
+                  {filteredPlaylists.length === 0 && (
+                    <div style={{ color: '#b3b3b3', fontStyle: 'italic' }}>No playlists</div>
+                  )}
+                  {filteredPlaylists.map((p) => {
+                    const isSelected = !!selectedPlaylists.find(sp => sp.id === p.id);
+                    const previewName = stripGoTPrefix ? (p.name || '').replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim() : p.name;
+                    return (
+                      <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{previewName}</div>
+                          <div style={{ fontSize: 12, color: '#b3b3b3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.owner} • {p.tracks} tracks</div>
+                        </div>
+                        <button
+                          className={isSelected ? 'btn-secondary active' : 'btn-secondary'}
+                          onClick={() => {
+                            setSelectedPlaylists(prev => (
+                              isSelected ? prev.filter(sp => sp.id !== p.id) : [...prev, p]
+                            ));
+                          }}
+                        >
+                          {isSelected ? 'Remove' : 'Add'}
+                        </button>
                       </div>
-                      <button
-                        className={isSelected ? 'btn-secondary active' : 'btn-secondary'}
-                        onClick={() => {
-                          setSelectedPlaylists(prev => (
-                            isSelected ? prev.filter(sp => sp.id !== p.id) : [...prev, p]
-                          ));
-                        }}
-                      >
-                        {isSelected ? 'Remove' : 'Add'}
-                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8, position: 'sticky', top: 8 }}>
+                  <div style={{ fontWeight: 800, marginBottom: 6 }}>Selected ({selectedPlaylists.length})</div>
+                  {selectedPlaylists.length === 0 && (
+                    <div style={{ color: '#b3b3b3', fontStyle: 'italic' }}>None selected</div>
+                  )}
+                  {selectedPlaylists.map((sp) => (
+                    <div key={sp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: '1px dashed rgba(255,255,255,0.08)' }}>
+                      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stripGoTPrefix ? (sp.name || '').replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim() : sp.name}</div>
+                      <button className="btn-secondary" onClick={() => setSelectedPlaylists(prev => prev.filter(x => x.id !== sp.id))}>Remove</button>
                     </div>
-                  );
-                })}
-              </div>
-              <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8, position: 'sticky', top: 8 }}>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>Selected ({selectedPlaylists.length})</div>
-                {selectedPlaylists.length === 0 && (
-                  <div style={{ color: '#b3b3b3', fontStyle: 'italic' }}>None selected</div>
-                )}
-                {selectedPlaylists.map((sp) => (
-                  <div key={sp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: '1px dashed rgba(255,255,255,0.08)' }}>
-                    <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stripGoTPrefix ? (sp.name || '').replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim() : sp.name}</div>
-                    <button className="btn-secondary" onClick={() => setSelectedPlaylists(prev => prev.filter(x => x.id !== sp.id))}>Remove</button>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Game Controls */}
-          {gameState !== 'playing' && (
+          {gameState !== 'playing' && showPlaylists && (
           <motion.div 
             className="controls-section"
             initial={{ opacity: 0 }}
@@ -1595,7 +1603,7 @@ const HostView: React.FC = () => {
           )}
 
           {/* Logs */}
-          {logs.length > 0 && (
+          {logs.length > 0 && showLogs && (
             <motion.div 
               className="logs-section"
               initial={{ opacity: 0 }}
