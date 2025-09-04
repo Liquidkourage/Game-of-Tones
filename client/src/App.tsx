@@ -29,7 +29,7 @@ function AppHeader() {
       <div className="header-content">
         <div className="logo">
           <Sparkles className="logo-icon" />
-          <h1>Game of Tones</h1>
+          <h1>TEMPO - Music Bingo</h1>
           <span style={{ marginLeft: 12, fontSize: '1.05rem', fontStyle: 'italic', fontWeight: 700, color: '#b3b3b3', letterSpacing: '0.02em' }}>by Liquid Kourage Entertainment</span>
         </div>
         <DisplayHeaderInfo />

@@ -58,7 +58,7 @@ const Home: React.FC = () => {
             transition={{ duration: 0.6, delay: 0.2 }}
           >
             <Sparkles className="hero-icon" />
-            <h1>Game of Tones</h1>
+            <h1>TEMPO - Music Bingo</h1>
             <p className="hero-subtitle">Where Music Meets Bingo</p>
           </motion.div>
 

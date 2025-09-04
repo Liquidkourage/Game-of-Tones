@@ -2132,7 +2132,7 @@ function validateBingoForPattern(card, room) {
 
 // API Routes
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Game of Tones Server Running' });
+  res.json({ status: 'ok', message: 'TEMPO - Music Bingo Server Running' });
 });
 
 app.get('/api/rooms/:roomId', (req, res) => {
@@ -2747,7 +2747,7 @@ function startDeviceKeepAlive() {
 // Start the server
 const PORT = process.env.PORT || 7093;
 server.listen(PORT, async () => {
-  console.log(`🎵 Game of Tones server running on port ${PORT}`);
+  console.log(`🎵 TEMPO - Music Bingo server running on port ${PORT}`);
   console.log('🎮 Ready for some musical bingo action!');
   
   // Auto-connect to Spotify
