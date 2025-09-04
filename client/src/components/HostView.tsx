@@ -80,6 +80,7 @@ const HostView: React.FC = () => {
   const [logs, setLogs] = useState<Array<{ level: 'info' | 'warn' | 'error'; message: string; ts: number }>>([]);
   const [revealMode, setRevealMode] = useState<'off' | 'artist' | 'title' | 'full'>('off');
   const [pattern, setPattern] = useState<'line' | 'four_corners' | 'x' | 'full_card'>('line');
+  const [showSetup, setShowSetup] = useState<boolean>(false);
   const [lockJoins, setLockJoins] = useState<boolean>(false);
   const [preQueueEnabled, setPreQueueEnabled] = useState<boolean>(false);
   const [preQueueWindow, setPreQueueWindow] = useState<number>(5);
@@ -1392,6 +1393,7 @@ const HostView: React.FC = () => {
           </div>
 
           {/* Game Controls */}
+          {gameState !== 'playing' && (
           <motion.div 
             className="controls-section"
             initial={{ opacity: 0 }}
@@ -1507,9 +1509,10 @@ const HostView: React.FC = () => {
                )}
              </div>
            </motion.div>
+          )}
 
           {/* Song List (moved below to avoid shifting playlist picker) */}
-          {(finalizedOrder?.length || songList.length) > 0 && (
+          {(finalizedOrder?.length || songList.length) > 0 && gameState !== 'playing' && (
             <motion.div 
               className="song-list-section"
               initial={{ opacity: 0 }}
