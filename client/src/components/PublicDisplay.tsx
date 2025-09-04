@@ -1140,6 +1140,13 @@ const PublicDisplay: React.FC = () => {
                   const glow = ['rgba(0,255,163,0.45)','rgba(0,215,255,0.45)','rgba(158,123,255,0.45)','rgba(255,110,199,0.45)','rgba(255,209,102,0.45)'][i];
                   const rimInner = ['rgba(0,255,170,0.28)','rgba(0,215,255,0.28)','rgba(158,123,255,0.28)','rgba(255,110,199,0.28)','rgba(255,209,102,0.28)'][i];
                   const rimOuter = ['rgba(0,255,170,0.18)','rgba(0,215,255,0.18)','rgba(158,123,255,0.18)','rgba(255,110,199,0.18)','rgba(255,209,102,0.18)'][i];
+                  const tintGradients = [
+                    'radial-gradient(circle at 35% 30%, #ffffff, #f2fffb 38%, #dbfff1 62%, #c9fbe7 100%)', // mint
+                    'radial-gradient(circle at 35% 30%, #ffffff, #eef9ff 38%, #d8f1ff 62%, #c5e8ff 100%)', // aqua
+                    'radial-gradient(circle at 35% 30%, #ffffff, #f3f0ff 38%, #e5ddff 62%, #d5ccff 100%)', // lavender
+                    'radial-gradient(circle at 35% 30%, #ffffff, #fff0f7 38%, #ffd9ea 62%, #ffc4df 100%)', // pink
+                    'radial-gradient(circle at 35% 30%, #ffffff, #fff8e6 38%, #ffefc7 62%, #ffe6a6 100%)'  // gold
+                  ];
                   return (
                     <motion.div
                       key={i}
@@ -1154,7 +1161,7 @@ const PublicDisplay: React.FC = () => {
                       transition={{ duration: 3.8 + i * 0.3, repeat: Infinity, ease: 'easeInOut' }}
                       style={{
                         width: 112, height: 112, borderRadius: '50%', position: 'relative', transformStyle: 'preserve-3d',
-                        background: 'radial-gradient(circle at 35% 30%, #ffffff, #eef4fb 38%, #d2deea 62%, #b0c4d8 100%)',
+                        background: tintGradients[i] || 'radial-gradient(circle at 35% 30%, #ffffff, #eef4fb 38%, #d2deea 62%, #b0c4d8 100%)',
                         boxShadow: `0 18px 34px rgba(0,0,0,0.35), inset 0 -12px 14px rgba(0,0,0,0.18), inset 0 14px 18px rgba(255,255,255,0.55), 0 0 36px ${glow}`,
                         border: '1px solid rgba(0,0,0,0.06)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1186,48 +1193,7 @@ const PublicDisplay: React.FC = () => {
                         transition={{ duration: 3.8 + i * 0.3, repeat: Infinity, ease: 'easeInOut' }}
                         style={{ position: 'absolute', bottom: -14, left: 14, right: 14, height: 14, borderRadius: 14, background: 'rgba(0,0,0,0.55)', filter: 'blur(7px)', zIndex: -1 }}
                       />
-                      {(() => {
-                        const letterStyles: React.CSSProperties[] = [
-                          {
-                            // T: neon teal glow
-                            color: '#0d2433',
-                            textShadow: '0 0 2px rgba(13,36,51,0.5), 0 2px 2px rgba(0,0,0,0.25), 0 0 18px rgba(0,255,170,0.65)',
-                            letterSpacing: '0.04em',
-                          },
-                          {
-                            // E: metallic silver gradient
-                            backgroundImage: 'linear-gradient(180deg,#ffffff 0%, #e8eef6 30%, #cfd9e5 60%, #b6c6d8 100%)',
-                            WebkitBackgroundClip: 'text',
-                            backgroundClip: 'text',
-                            WebkitTextFillColor: 'transparent',
-                            textShadow: '0 1px 0 rgba(255,255,255,0.6), 0 3px 8px rgba(0,0,0,0.25)'
-                          },
-                          {
-                            // M: bold outlined letter
-                            color: 'transparent',
-                            WebkitTextStroke: '3px #0e2232',
-                            textShadow: '0 0 16px rgba(0,215,255,0.45)'
-                          },
-                          {
-                            // P: candy gradient with slight italic
-                            backgroundImage: 'linear-gradient(180deg,#ff9ad6 0%, #b68cff 60%, #8a6dff 100%)',
-                            WebkitBackgroundClip: 'text',
-                            backgroundClip: 'text',
-                            WebkitTextFillColor: 'transparent',
-                            textShadow: '0 2px 10px rgba(182,140,255,0.55)',
-                            transform: 'skewX(-5deg)'
-                          },
-                          {
-                            // O: golden retro
-                            backgroundImage: 'linear-gradient(180deg,#fff3c2 0%, #ffd166 45%, #ffb703 100%)',
-                            WebkitBackgroundClip: 'text',
-                            backgroundClip: 'text',
-                            WebkitTextFillColor: 'transparent',
-                            textShadow: '0 1px 0 rgba(255,255,255,0.6), 0 3px 10px rgba(255,193,79,0.6), 0 0 14px rgba(255,193,79,0.35)'
-                          }
-                        ];
-                        return <span style={letterStyles[i] || {}}>{ch}</span>;
-                      })()}
+                      {ch}
                     </motion.div>
                   );
                 })}
