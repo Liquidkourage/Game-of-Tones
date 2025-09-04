@@ -1135,7 +1135,7 @@ const PublicDisplay: React.FC = () => {
               </div>
               <div style={{ fontSize: 'clamp(1.8rem, 3.8vw, 2.6rem)', opacity: 0.98, marginTop: 18, display: 'none' }}>The game is on, the volume is up, the win is yours.</div>
               {/* TEMPO balls row with enhanced 3D floating animation (colored, angular motion) */}
-              <div style={{ display: 'flex', gap: 36, justifyContent: 'center', marginTop: 18, perspective: '1000px', position: 'relative' }}>
+              <div style={{ display: 'flex', gap: 32, justifyContent: 'center', marginTop: 16, perspective: '1200px', position: 'relative' }}>
                 {['T','E','M','P','O'].map((ch, i) => {
                   const glow = ['rgba(0,255,163,0.45)','rgba(0,215,255,0.45)','rgba(158,123,255,0.45)','rgba(255,110,199,0.45)','rgba(255,209,102,0.45)'][i];
                   const rimInner = ['rgba(0,255,170,0.28)','rgba(0,215,255,0.28)','rgba(158,123,255,0.28)','rgba(255,110,199,0.28)','rgba(255,209,102,0.28)'][i];
@@ -1152,20 +1152,26 @@ const PublicDisplay: React.FC = () => {
                       key={i}
                       initial={{ y: 0, rotateZ: 0, rotateX: 0, rotateY: 0, scale: 1 }}
                       animate={{
-                        y: [0, -28, 0],
-                        rotateZ: [-6, 6, -6],
-                        rotateX: [-8, 8, -8],
-                        rotateY: [-10, 10, -10],
-                        scale: [1, 1.03, 1]
+                        y: [0, -16, 0],
+                        rotateZ: [-3, 3, -3],
+                        rotateX: [-6, 6, -6],
+                        rotateY: [-7, 7, -7],
+                        scale: [1, 1.02, 1]
                       }}
                       transition={{ duration: 3.8 + i * 0.3, repeat: Infinity, ease: 'easeInOut' }}
                       style={{
-                        width: 320, height: 320, borderRadius: '50%', position: 'relative', transformStyle: 'preserve-3d',
-                        background: tintGradients[i] || 'radial-gradient(circle at 35% 30%, #ffffff, #eef4fb 38%, #d2deea 62%, #b0c4d8 100%)',
-                        boxShadow: `0 40px 60px rgba(0,0,0,0.35), inset 0 -24px 26px rgba(0,0,0,0.18), inset 0 26px 30px rgba(255,255,255,0.55), 0 0 56px ${glow}`,
+                        width: 256, height: 256, borderRadius: '50%', position: 'relative', transformStyle: 'preserve-3d',
+                        background: (() => {
+                          const base = tintGradients[i] || 'radial-gradient(circle at 35% 30%, #ffffff, #eef4fb 38%, #d2deea 62%, #b0c4d8 100%)';
+                          const highlight = 'radial-gradient(120% 120% at 30% 28%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.55) 18%, rgba(255,255,255,0.08) 40%, rgba(0,0,0,0) 42%)';
+                          const shadow = 'radial-gradient(140% 140% at 72% 78%, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.6) 35%, rgba(0,0,0,0.0) 60%)';
+                          const vignette = 'radial-gradient(100% 100% at 50% 50%, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.06) 55%, rgba(0,0,0,0) 62%)';
+                          return `${highlight}, ${shadow}, ${vignette}, ${base}`;
+                        })(),
+                        boxShadow: `0 28px 44px rgba(0,0,0,0.35), inset 0 -18px 24px rgba(0,0,0,0.22), inset 0 20px 26px rgba(255,255,255,0.55), 0 0 44px ${glow}`,
                         border: '1px solid rgba(0,0,0,0.06)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: '#102436', fontWeight: 1000, fontSize: '7.6rem'
+                        color: '#102436', fontWeight: 1000, fontSize: '6rem'
                       }}
                     >
                       {/* colored glow rim */}
@@ -1173,9 +1179,9 @@ const PublicDisplay: React.FC = () => {
                       {/* specular highlight */}
                       <motion.div
                         initial={{ x: '-20%', y: '0%', opacity: 0.8 }}
-                        animate={{ x: ['-20%', '80%', '-20%'], y: ['0%', '-10%', '0%'], opacity: [0.8, 0.4, 0.8] }}
+                        animate={{ x: ['-10%', '55%', '-10%'], y: ['2%', '-6%', '2%'], opacity: [0.85, 0.5, 0.85] }}
                         transition={{ duration: 7 + i * 0.4, repeat: Infinity, ease: 'easeInOut' }}
-                        style={{ position: 'absolute', width: '34%', height: '34%', borderRadius: '50%', top: '10%', left: 0, background: 'radial-gradient(circle, rgba(255,255,255,0.95), rgba(255,255,255,0.1) 60%, transparent 70%)', filter: 'blur(1px)', mixBlendMode: 'screen', pointerEvents: 'none' }}
+                        style={{ position: 'absolute', width: '30%', height: '30%', borderRadius: '50%', top: '12%', left: 0, background: 'radial-gradient(circle, rgba(255,255,255,0.95), rgba(255,255,255,0.1) 60%, transparent 70%)', filter: 'blur(1px)', mixBlendMode: 'screen', pointerEvents: 'none' }}
                       />
                       {/* rim light */}
                       <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', boxShadow: 'inset 0 0 16px rgba(255,255,255,0.45)' }} />
@@ -1184,14 +1190,14 @@ const PublicDisplay: React.FC = () => {
                         initial={{ opacity: 0.0, scale: 0.6 }}
                         animate={{ opacity: [0.0, 0.9, 0.0], scale: [0.6, 1.2, 0.6] }}
                         transition={{ duration: 2.8 + i * 0.3, repeat: Infinity, ease: 'easeInOut', delay: i * 0.15 }}
-                        style={{ position: 'absolute', top: '18%', right: '16%', width: 28, height: 28, borderRadius: '50%', background: 'radial-gradient(circle, #ffffff, rgba(255,255,255,0.1) 60%, transparent 70%)', filter: 'blur(0.5px)', pointerEvents: 'none' }}
+                        style={{ position: 'absolute', top: '18%', right: '16%', width: 20, height: 20, borderRadius: '50%', background: 'radial-gradient(circle, #ffffff, rgba(255,255,255,0.1) 60%, transparent 70%)', filter: 'blur(0.5px)', pointerEvents: 'none' }}
                       />
                       {/* floating shadow */}
                       <motion.div
                         initial={{ scale: 1, opacity: 0.5 }}
-                        animate={{ scale: [1, 0.88, 1], opacity: [0.5, 0.35, 0.5] }}
+                        animate={{ scale: [1, 0.9, 1], opacity: [0.5, 0.35, 0.5] }}
                         transition={{ duration: 3.8 + i * 0.3, repeat: Infinity, ease: 'easeInOut' }}
-                        style={{ position: 'absolute', bottom: -40, left: 40, right: 40, height: 40, borderRadius: 40, background: 'rgba(0,0,0,0.55)', filter: 'blur(14px)', zIndex: -1 }}
+                        style={{ position: 'absolute', bottom: -28, left: 28, right: 28, height: 28, borderRadius: 28, background: 'rgba(0,0,0,0.55)', filter: 'blur(12px)', zIndex: -1 }}
                       />
                       {ch}
                     </motion.div>
