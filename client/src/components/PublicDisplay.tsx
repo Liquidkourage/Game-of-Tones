@@ -58,6 +58,9 @@ const PublicDisplay: React.FC = () => {
   const debugMode = (searchParams.get('debug') === '1') || (searchParams.get('dbg') === '1');
   const displayRef = useRef<HTMLDivElement | null>(null);
   const [roomInfo, setRoomInfo] = useState<{ id: string; playerCount: number } | null>(null);
+  // Splash/intro overlay (can disable with ?splash=0)
+  const splashEnabled = (searchParams.get('splash') !== '0');
+  const [showSplash, setShowSplash] = useState<boolean>(splashEnabled);
   const [currentWinningLine, setCurrentWinningLine] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const [gameState, setGameState] = useState<GameState>({
@@ -313,6 +316,8 @@ const PublicDisplay: React.FC = () => {
 
     socket.on('game-started', (data: any) => {
       setGameState(prev => ({ ...prev, isPlaying: true }));
+      // Hide splash when a game starts
+      setShowSplash(false);
       if (data?.pattern) {
         setPattern(data.pattern);
         // Emit pattern to header
@@ -1097,6 +1102,55 @@ const PublicDisplay: React.FC = () => {
 
   return (
     <div ref={displayRef} className="public-display">
+      <AnimatePresence>
+        {showSplash && (
+          <motion.div
+            key="splash"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35 }}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 2000,
+              background: 'radial-gradient(1200px 600px at 50% -200px, rgba(0,255,136,0.15), rgba(0,0,0,0.92))',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              padding: 24
+            }}
+            onClick={() => setShowSplash(false)}
+          >
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+              <div style={{ fontSize: '3.0rem', fontWeight: 900, letterSpacing: '0.04em' }}>Game of Tones</div>
+              <div style={{ fontSize: '1.3rem', opacity: 0.85, marginTop: 6 }}>Music Bingo</div>
+            </div>
+            <div style={{ display: 'flex', gap: 24, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+              {roomId && (
+                <div style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 12,
+                  padding: 14,
+                  width: 260,
+                  textAlign: 'center'
+                }}>
+                  <img
+                    alt="Join QR"
+                    style={{ width: '100%', aspectRatio: '1/1', objectFit: 'contain', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }}
+                    src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
+                  />
+                  <div style={{ fontSize: '1.0rem', fontWeight: 800, marginTop: 8, opacity: 0.9 }}>Scan to Join</div>
+                </div>
+              )}
+              <div style={{ minWidth: 260, textAlign: 'center' }}>
+                <div style={{ fontSize: '1.2rem', opacity: 0.85 }}>Room</div>
+                <div style={{ fontSize: '2.2rem', fontWeight: 900, color: '#00ff88' }}>{roomInfo?.id || roomId || '—'}</div>
+                <div style={{ fontSize: '1.0rem', opacity: 0.8, marginTop: 10 }}>Open your phone to</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{typeof window !== 'undefined' ? window.location.origin : ''}/player/{roomId}</div>
+                <div style={{ fontSize: '0.95rem', opacity: 0.75, marginTop: 10 }}>(Tap anywhere to continue)</div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Main Content - 16:10 Layout */}
       <div className="display-content">
         <AnimatePresence>
