@@ -1303,19 +1303,7 @@ const PublicDisplay: React.FC = () => {
                 <div style={{ fontSize: 'clamp(1.8rem, 3.6vw, 2.6rem)', opacity: 0.98, marginTop: 24 }}>Go to</div>
                 <div style={{ fontSize: 'clamp(2.6rem, 6vw, 4rem)', fontWeight: 1000, textShadow: '0 6px 24px rgba(0,0,0,0.35)' }}>tempo.liquidkourage.com</div>
                 {/* Removed equalizer bars to reduce motion */}
-                {/* Ticker marquee */}
-                <div style={{ position: 'relative', marginTop: 26, width: 'min(82vw, 1040px)', height: 50, overflow: 'hidden', borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)', background: 'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))', boxShadow: 'inset 0 0 18px rgba(0,0,0,0.35)' }}>
-                  <motion.div
-                    initial={{ x: '0%' }}
-                    animate={{ x: ['0%', '-100%'] }}
-                    transition={{ duration: 28, repeat: Infinity, ease: 'linear' }}
-                    style={{ position: 'absolute', whiteSpace: 'nowrap', top: 8, left: 20, fontWeight: 900, letterSpacing: '0.04em', opacity: 0.85, fontSize: 'clamp(1.1rem, 2vw, 1.5rem)' }}
-                  >
-                    Scan the QR to join • Room {roomInfo?.id || roomId} • Build your card • Get ready for music bingo •
-                    <span style={{ marginLeft: 40 }}>Scan the QR to join • Room {roomInfo?.id || roomId} • Build your card • Get ready for music bingo •</span>
-                  </motion.div>
-                  <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, #0b1824, transparent 8%, transparent 92%, #0b1824)', pointerEvents: 'none' }} />
-                </div>
+                {/* Ticker removed per request */}
               </div>
             </div>
           </motion.div>
