@@ -716,6 +716,17 @@ const PublicDisplay: React.FC = () => {
     if (pattern === 'custom' && customMask && customMask.size > 0) {
       return customMask.has(`${row}-${col}`);
     }
+    if (pattern === 'four_corners') {
+      return (
+        (row === 0 && col === 0) ||
+        (row === 0 && col === 4) ||
+        (row === 4 && col === 0) ||
+        (row === 4 && col === 4)
+      );
+    }
+    if (pattern === 'x') {
+      return row === col || (row + col === 4);
+    }
     
     // 12 possible winning lines: 5 horizontal, 5 vertical, 2 diagonal
     const winningLines = [
@@ -739,7 +750,7 @@ const PublicDisplay: React.FC = () => {
     return winningLines[currentWinningLine](row, col);
   };
 
-  // Cycle through winning lines every 0.2 seconds - start immediately
+  // Cycle through winning lines every 0.2 seconds for 'line' only
   useEffect(() => {
     console.log('Setting up interval for winning lines');
     
@@ -748,8 +759,9 @@ const PublicDisplay: React.FC = () => {
       clearInterval(intervalRef.current);
     }
     
-    // For full card pattern, no need to cycle through lines since all squares are winning
-    if (pattern === 'full_card') {
+    // Only animate when pattern is 'line'
+    if (pattern !== 'line') {
+      setCurrentWinningLine(0);
       return;
     }
     
