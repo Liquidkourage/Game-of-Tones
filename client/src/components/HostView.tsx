@@ -1527,8 +1527,8 @@ const HostView: React.FC = () => {
            </motion.div>
           )}
 
-          {/* Pattern selector (quick access during game) */}
-          {gameState === 'playing' && (
+          {/* Pattern selector (setup only; hidden during game) */}
+          {gameState !== 'playing' && (
             <motion.div
               className="pattern-quick-section"
               initial={{ opacity: 0 }}
