@@ -111,6 +111,7 @@ const PublicDisplay: React.FC = () => {
   const [rowHeightPx, setRowHeightPx] = useState<number>(0);
   // Toast for revealed letter
   const [revealToast, setRevealToast] = useState<string | null>(null);
+  const [customMask, setCustomMask] = useState<Set<string>>(new Set());
   const revealToastTimerRef = useRef<NodeJS.Timeout | null>(null);
   // Global scroll phase to keep columns aligned + freeze control
   const [phasePx, setPhasePx] = useState<number>(0);
@@ -354,6 +355,11 @@ const PublicDisplay: React.FC = () => {
       setShowSplash(false);
       if (data?.pattern) {
         setPattern(data.pattern);
+        if (Array.isArray(data?.customMask)) {
+          try { setCustomMask(new Set<string>(data.customMask as string[])); } catch {}
+        } else {
+          setCustomMask(new Set());
+        }
         // Emit pattern to header
         window.dispatchEvent(new CustomEvent('display-pattern', { detail: { pattern: data.pattern } }));
       }
@@ -364,6 +370,13 @@ const PublicDisplay: React.FC = () => {
       playedSeqRef.current = {} as any;
       playedSeqCounterRef.current = 0;
       ensureGrid();
+    });
+
+    socket.on('pattern-updated', (data: any) => {
+      try {
+        if (data?.pattern) setPattern(data.pattern);
+        if (Array.isArray(data?.customMask)) setCustomMask(new Set<string>(data.customMask as string[]));
+      } catch {}
     });
 
     socket.on('bingo-called', (data: any) => {
@@ -686,6 +699,8 @@ const PublicDisplay: React.FC = () => {
         return 'Pattern: Four Corners';
       case 'x':
         return 'Pattern: X';
+      case 'custom':
+        return 'Pattern: Custom';
       case 'line':
       default:
     return 'Pattern: Single Line (any direction)';
@@ -697,6 +712,9 @@ const PublicDisplay: React.FC = () => {
     if (pattern === 'full_card') {
       // For full card, all squares are winning squares
       return true;
+    }
+    if (pattern === 'custom' && customMask && customMask.size > 0) {
+      return customMask.has(`${row}-${col}`);
     }
     
     // 12 possible winning lines: 5 horizontal, 5 vertical, 2 diagonal
