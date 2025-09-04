@@ -1147,18 +1147,31 @@ const PublicDisplay: React.FC = () => {
                     'radial-gradient(circle at 35% 30%, #fff4fa 10%, #ffb1cf 55%, #ff82b8 100%)', // pink (darker)
                     'radial-gradient(circle at 35% 30%, #fff3d2 10%, #ffcf6e 55%, #ffb020 100%)'  // gold (darker)
                   ];
+                  // Per-ball motion parameters to desynchronize and avoid uncanny sync
+                  const ampX = 6 + (i * 2);
+                  const ampY = 10 + ((i % 3) * 2);
+                  const rotX = 3 + i; // degrees
+                  const rotY = 4 + ((i % 2) * 2);
+                  const rotZ = 1 + (i % 2);
+                  const dur = 3.6 + i * 0.45;
+                  const delay = i * 0.18;
+                  const shadeDur = 5.5 + i * 0.5;
+                  const highlightDur = 6.4 + i * 0.4;
+                  const highlightDelay = 0.1 + i * 0.22;
+                  const sparkleDelay = 0.15 + i * 0.17;
+                  const shadowAmp = Math.round(ampX * 0.6);
                   return (
                     <motion.div
                       key={i}
                       initial={{ y: 0, rotateZ: 0, rotateX: 0, rotateY: 0, scale: 1 }}
                       animate={{
-                        x: [-8, 8, -8],
-                        y: [0, -12, 0],
-                        rotateZ: [-2, 2, -2],
-                        rotateX: [-3, 3, -3],
-                        rotateY: [-4, 4, -4]
+                        x: [-ampX, ampX, -ampX],
+                        y: [0, -ampY, 0],
+                        rotateZ: [-rotZ, rotZ, -rotZ],
+                        rotateX: [-rotX, rotX, -rotX],
+                        rotateY: [-rotY, rotY, -rotY]
                       }}
-                      transition={{ duration: 3.8 + i * 0.3, repeat: Infinity, ease: 'easeInOut' }}
+                      transition={{ duration: dur, delay, repeat: Infinity, ease: 'easeInOut' }}
                       style={{
                         width: 256, height: 256, borderRadius: '50%', position: 'relative', transformStyle: 'preserve-3d',
                         background: (() => {
@@ -1180,37 +1193,37 @@ const PublicDisplay: React.FC = () => {
                       <motion.div
                         initial={{ rotate: -8, opacity: 0.32 }}
                         animate={{ rotate: [-8, 8, -8], opacity: [0.32, 0.26, 0.32] }}
-                        transition={{ duration: 6 + i * 0.4, repeat: Infinity, ease: 'easeInOut' }}
+                        transition={{ duration: shadeDur, delay, repeat: Infinity, ease: 'easeInOut' }}
                         style={{ position: 'absolute', inset: 0, borderRadius: '50%', mixBlendMode: 'multiply', background: 'conic-gradient(from 0deg, rgba(0,0,0,0.10) 0deg, rgba(255,255,255,0.06) 90deg, rgba(0,0,0,0.18) 200deg, rgba(0,0,0,0.10) 360deg)' }}
                       />
                       {/* specular highlight */}
                       <motion.div
                         initial={{ x: '-20%', y: '0%', opacity: 0.8 }}
                         animate={{ x: ['-10%', '55%', '-10%'], y: ['2%', '-6%', '2%'], opacity: [0.85, 0.5, 0.85] }}
-                        transition={{ duration: 7 + i * 0.4, repeat: Infinity, ease: 'easeInOut' }}
+                        transition={{ duration: highlightDur, delay: highlightDelay, repeat: Infinity, ease: 'easeInOut' }}
                         style={{ position: 'absolute', width: '30%', height: '30%', borderRadius: '50%', top: '12%', left: 0, background: 'radial-gradient(circle, rgba(255,255,255,0.95), rgba(255,255,255,0.1) 60%, transparent 70%)', filter: 'blur(1px)', mixBlendMode: 'screen', pointerEvents: 'none' }}
                       />
                       {/* secondary moving highlight for parallax */}
                       <motion.div
                         initial={{ x: '60%', y: '62%', opacity: 0.3 }}
                         animate={{ x: ['60%','40%','60%'], y: ['62%','58%','62%'], opacity: [0.3,0.22,0.3] }}
-                        transition={{ duration: 5.2 + i * 0.35, repeat: Infinity, ease: 'easeInOut' }}
+                        transition={{ duration: 5.2 + i * 0.35, delay: delay * 0.8, repeat: Infinity, ease: 'easeInOut' }}
                         style={{ position: 'absolute', width: '18%', height: '18%', borderRadius: '50%', bottom: '12%', right: '12%', background: 'radial-gradient(circle, rgba(255,255,255,0.6), rgba(255,255,255,0.05) 60%, transparent 70%)', filter: 'blur(0.6px)', mixBlendMode: 'screen', pointerEvents: 'none' }}
                       />
                       {/* rim light */}
                       <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', boxShadow: 'inset 0 0 16px rgba(255,255,255,0.45)' }} />
                       {/* sparkle */}
                       <motion.div
-                        initial={{ opacity: 0.0, scale: 0.6 }}
-                        animate={{ opacity: [0.0, 0.9, 0.0], scale: [0.6, 1.2, 0.6] }}
-                        transition={{ duration: 2.8 + i * 0.3, repeat: Infinity, ease: 'easeInOut', delay: i * 0.15 }}
+                        initial={{ opacity: 0.0 }}
+                        animate={{ opacity: [0.0, 0.9, 0.0], x: [0, 4, 0], y: [0, -3, 0] }}
+                        transition={{ duration: 2.8 + i * 0.3, delay: sparkleDelay, repeat: Infinity, ease: 'easeInOut' }}
                         style={{ position: 'absolute', top: '18%', right: '16%', width: 20, height: 20, borderRadius: '50%', background: 'radial-gradient(circle, #ffffff, rgba(255,255,255,0.1) 60%, transparent 70%)', filter: 'blur(0.5px)', pointerEvents: 'none' }}
                       />
                       {/* floating shadow */}
                       <motion.div
                         initial={{ opacity: 0.5, x: 0 }}
-                        animate={{ opacity: [0.5, 0.35, 0.5], x: [-4, 4, -4] }}
-                        transition={{ duration: 3.8 + i * 0.3, repeat: Infinity, ease: 'easeInOut' }}
+                        animate={{ opacity: [0.5, 0.35, 0.5], x: [-shadowAmp, shadowAmp, -shadowAmp] }}
+                        transition={{ duration: dur, delay, repeat: Infinity, ease: 'easeInOut' }}
                         style={{ position: 'absolute', bottom: -28, left: 28, right: 28, height: 28, borderRadius: 28, background: 'rgba(0,0,0,0.55)', filter: 'blur(12px)', zIndex: -1 }}
                       />
                       {ch}
