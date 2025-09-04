@@ -1301,7 +1301,7 @@ const PublicDisplay: React.FC = () => {
                 <div style={{ fontSize: 'clamp(1.8rem, 3.6vw, 2.6rem)', opacity: 0.98 }}>Room</div>
                 <div style={{ fontSize: 'clamp(5rem, 9vw, 7.2rem)', fontWeight: 1000, color: '#00ffb0', textShadow: '0 9px 36px rgba(0,255,170,0.7)' }}>{roomInfo?.id || roomId || '—'}</div>
                 <div style={{ fontSize: 'clamp(1.8rem, 3.6vw, 2.6rem)', opacity: 0.98, marginTop: 24 }}>Go to</div>
-                <div style={{ fontSize: 'clamp(2.6rem, 6vw, 4rem)', fontWeight: 1000, textShadow: '0 6px 24px rgba(0,0,0,0.35)' }}>{typeof window !== 'undefined' ? window.location.origin : ''}/player/{roomId}</div>
+                <div style={{ fontSize: 'clamp(2.6rem, 6vw, 4rem)', fontWeight: 1000, textShadow: '0 6px 24px rgba(0,0,0,0.35)' }}>tempo.liquidkourage.com/player/{roomId}</div>
                 {/* Removed equalizer bars to reduce motion */}
                 {/* Ticker marquee */}
                 <div style={{ position: 'relative', marginTop: 26, width: 'min(82vw, 1040px)', height: 50, overflow: 'hidden', borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)', background: 'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))', boxShadow: 'inset 0 0 18px rgba(0,0,0,0.35)' }}>
