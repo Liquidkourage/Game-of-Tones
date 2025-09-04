@@ -1718,21 +1718,7 @@ const HostView: React.FC = () => {
                   </div>
                </div>
 
-               {/* Played so far */}
-               {playedInOrder.length > 0 && (
-                 <div style={{ marginTop: 12 }}>
-                   <div style={{ fontWeight: 800, opacity: 0.9, marginBottom: 6 }}>Songs Played (order)</div>
-                   <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: 8 }}>
-                     {playedInOrder.map((s, i) => (
-                       <div key={s.id + '-' + i} style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '2px 0' }}>
-                         <span style={{ width: 28, textAlign: 'right', opacity: 0.8 }}>{i + 1}.</span>
-                         <span style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
-                         <span style={{ opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>— {s.artist}</span>
-                       </div>
-                     ))}
-                   </div>
-                 </div>
-               )}
+               {/* Played so far list shown above in the compact section */}
              </motion.div>
            )}
 
