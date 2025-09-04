@@ -78,16 +78,11 @@ const SpotifyCallback: React.FC = () => {
              }
            }
            
-                       console.log('Spotify connected successfully, returning to:', returnUrl);
-            console.log('Available localStorage keys:', Object.keys(localStorage));
-            console.log('Retrieved return URL from localStorage:', returnUrl);
-            console.log('All localStorage items:', Object.entries(localStorage));
-            console.log('spotify_return_url from localStorage:', localStorage.getItem('spotify_return_url'));
-            console.log('spotify_room_id from localStorage:', localStorage.getItem('spotify_room_id'));
-           // REMOVED AUTOMATIC REDIRECT - Let user see the success screen
-           // setTimeout(() => {
-           //   navigate(returnUrl);
-           // }, 2000);
+           console.log('Spotify connected successfully, returning to:', returnUrl);
+           // Auto redirect after brief success state
+           setTimeout(() => {
+             navigate(returnUrl);
+           }, 1000);
          } else {
            setStatus('error');
            setMessage('Failed to connect to Spotify. Please try again.');
@@ -97,10 +92,10 @@ const SpotifyCallback: React.FC = () => {
            localStorage.removeItem('spotify_return_url'); // Clean up
            
            console.log('Spotify connection failed, returning to:', returnUrl);
-           // REMOVED AUTOMATIC REDIRECT - Let user see the error screen
-           // setTimeout(() => {
-           //   navigate(returnUrl);
-           // }, 3000);
+           // Auto redirect back after showing the error briefly
+           setTimeout(() => {
+             navigate(returnUrl);
+           }, 2000);
          }
              } catch (error) {
          console.error('Error handling Spotify callback:', error);
@@ -112,10 +107,9 @@ const SpotifyCallback: React.FC = () => {
          localStorage.removeItem('spotify_return_url'); // Clean up
          
          console.log('Spotify callback error, returning to:', returnUrl);
-         // REMOVED AUTOMATIC REDIRECT - Let user see the error screen
-         // setTimeout(() => {
-         //   navigate(returnUrl);
-         // }, 3000);
+         setTimeout(() => {
+           navigate(returnUrl);
+         }, 2000);
        }
     };
 
