@@ -1112,23 +1112,22 @@ const PublicDisplay: React.FC = () => {
             transition={{ duration: 0.35 }}
             style={{
               position: 'fixed', inset: 0, zIndex: 2000,
-              background: 'radial-gradient(1200px 600px at 50% -200px, rgba(0,255,136,0.15), rgba(0,0,0,0.92))',
+              background: 'linear-gradient(180deg,#0b0e12 0%, #0b0e12 50%, #0b0e12 100%)',
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               padding: 24
             }}
-            onClick={() => setShowSplash(false)}
           >
-            <div style={{ textAlign: 'center', marginBottom: 24 }}>
-              <div style={{ fontSize: '3.0rem', fontWeight: 900, letterSpacing: '0.04em' }}>Game of Tones</div>
-              <div style={{ fontSize: '1.3rem', opacity: 0.85, marginTop: 6 }}>Music Bingo</div>
+            <div style={{ textAlign: 'center', marginBottom: 28 }}>
+              <div style={{ fontSize: '3.4rem', fontWeight: 900, letterSpacing: '0.04em' }}>Game of Tones</div>
+              <div style={{ fontSize: '1.25rem', opacity: 0.88, marginTop: 8 }}>Join the music bingo party</div>
             </div>
-            <div style={{ display: 'flex', gap: 24, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 28, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
               {roomId && (
                 <div style={{
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.12)',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.14)',
                   borderRadius: 12,
-                  padding: 14,
+                  padding: 16,
                   width: 260,
                   textAlign: 'center'
                 }}>
@@ -1137,15 +1136,25 @@ const PublicDisplay: React.FC = () => {
                     style={{ width: '100%', aspectRatio: '1/1', objectFit: 'contain', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)' }}
                     src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
                   />
-                  <div style={{ fontSize: '1.0rem', fontWeight: 800, marginTop: 8, opacity: 0.9 }}>Scan to Join</div>
+                  <div style={{ fontSize: '1.0rem', fontWeight: 800, marginTop: 10, opacity: 0.95 }}>Scan to Join</div>
                 </div>
               )}
               <div style={{ minWidth: 260, textAlign: 'center' }}>
-                <div style={{ fontSize: '1.2rem', opacity: 0.85 }}>Room</div>
-                <div style={{ fontSize: '2.2rem', fontWeight: 900, color: '#00ff88' }}>{roomInfo?.id || roomId || '—'}</div>
-                <div style={{ fontSize: '1.0rem', opacity: 0.8, marginTop: 10 }}>Open your phone to</div>
-                <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{typeof window !== 'undefined' ? window.location.origin : ''}/player/{roomId}</div>
-                <div style={{ fontSize: '0.95rem', opacity: 0.75, marginTop: 10 }}>(Tap anywhere to continue)</div>
+                <div style={{ fontSize: '1.1rem', opacity: 0.9 }}>Room</div>
+                <div style={{ fontSize: '2.4rem', fontWeight: 900, color: '#00ff88' }}>{roomInfo?.id || roomId || '—'}</div>
+                <div style={{ fontSize: '1.0rem', opacity: 0.85, marginTop: 12 }}>Go to</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 900 }}>{typeof window !== 'undefined' ? window.location.origin : ''}/player/{roomId}</div>
+                <div style={{ marginTop: 18, display: 'flex', gap: 4, justifyContent: 'center', alignItems: 'flex-end' }}>
+                  {[8,12,18,12,8].map((h, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ height: h }}
+                      animate={{ height: [h, h*1.6, h*0.8, h] }}
+                      transition={{ duration: 1.6 + i*0.1, repeat: Infinity, ease: 'easeInOut' }}
+                      style={{ width: 6, background: 'rgba(0,255,136,0.65)', borderRadius: 3 }}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           </motion.div>
