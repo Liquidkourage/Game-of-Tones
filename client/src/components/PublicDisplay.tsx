@@ -829,37 +829,28 @@ const PublicDisplay: React.FC = () => {
     // Helper: Wheel-of-Fortune style masking using per-song baseline
     const renderMaskedText = (text: string, set: Set<string>, highlightChar: string | null) => {
       if (!text) return null;
-      const chars = Array.from(text);
+      const tokens = text.split(/(\s+)/);
       return (
         <span>
-          {chars.map((ch, idx) => {
-            const u = ch.toUpperCase();
-            if (/^[A-Z0-9]$/.test(u)) {
-              const revealed = set.has(u);
-              if (revealed) {
-                const isHighlight = !!highlightChar && u === highlightChar;
-                return (
-                  <span key={idx} style={isHighlight ? { color: '#f5d061', textShadow: '0 0 6px rgba(245,208,97,0.6)' } : undefined}>{ch}</span>
-                );
-              }
-              return (
-                <span
-                  key={idx}
-                  style={{
-                    display: 'inline-block',
-                    width: '0.75em',
-                    height: '1.0em',
-                    border: '0.1em solid rgba(255,255,255,0.8)',
-                    borderRadius: '0.14em',
-                    verticalAlign: '-0.12em',
-                    margin: '0 0.08em',
-                    boxSizing: 'border-box',
-                    background: 'rgba(255,255,255,0.12)'
-                  }}
-                />
-              );
-            }
-            return <span key={idx}>{ch}</span>;
+          {tokens.map((token, ti) => {
+            if (/^\s+$/.test(token)) return <span key={`wsp-${ti}`}>{token}</span>;
+            const chars = Array.from(token);
+            return (
+              <span key={`word-${ti}`} style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'baseline' }}>
+                {chars.map((ch, ci) => {
+                  const u = ch.toUpperCase();
+                  if (/^[A-Z0-9]$/.test(u)) {
+                    const revealed = set.has(u);
+                    if (revealed) {
+                      const isHighlight = !!highlightChar && u === highlightChar;
+                      return <span key={`c-${ti}-${ci}`} style={isHighlight ? { color: '#f5d061', textShadow: '0 0 6px rgba(245,208,97,0.6)' } : undefined}>{ch}</span>;
+                    }
+                    return <span key={`c-${ti}-${ci}`} style={{ display: 'inline-block', width: '0.75em', height: '1.0em', border: '0.1em solid rgba(255,255,255,0.8)', borderRadius: '0.14em', verticalAlign: '-0.12em', margin: '0 0.08em', boxSizing: 'border-box', background: 'rgba(255,255,255,0.12)' }} />;
+                  }
+                  return <span key={`c-${ti}-${ci}`}>{ch}</span>;
+                })}
+              </span>
+            );
           })}
         </span>
       );

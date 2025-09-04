@@ -130,10 +130,10 @@ function clearRoomTimer(roomId) {
     const room = rooms.get(roomId);
     const currentTime = Date.now();
     if (VERBOSE) {
-      console.log(`🔍 TIMER CLEARED - Room: ${roomId}, Time: ${currentTime}`);
-      console.log(`🔍 Reason: Manual interruption (skip/pause/previous)`);
-      console.log(`🔍 Current Song: ${room?.currentSong?.name} by ${room?.currentSong?.artist}`);
-      console.log(`🔍 Stack trace:`, new Error().stack?.split('\n').slice(1, 4).join('\n'));
+    console.log(`🔍 TIMER CLEARED - Room: ${roomId}, Time: ${currentTime}`);
+    console.log(`🔍 Reason: Manual interruption (skip/pause/previous)`);
+    console.log(`🔍 Current Song: ${room?.currentSong?.name} by ${room?.currentSong?.artist}`);
+    console.log(`🔍 Stack trace:`, new Error().stack?.split('\n').slice(1, 4).join('\n'));
     }
     
     clearTimeout(roomTimers.get(roomId));
@@ -154,10 +154,10 @@ function setRoomTimer(roomId, callback, delay) {
     const room = rooms.get(roomId);
     const currentTime = Date.now();
     if (VERBOSE) {
-      console.log(`🔍 TIMER FIRED - Room: ${roomId}, Time: ${currentTime}, Expected Duration: ${delay}ms, Actual Duration: ${bufferedDelay}ms`);
-      console.log(`🔍 Room State - GameState: ${room?.gameState}, CurrentSongIndex: ${room?.currentSongIndex}, TotalSongs: ${room?.playlistSongs?.length}`);
-      console.log(`🔍 Current Song - ${room?.currentSong?.name} by ${room?.currentSong?.artist}`);
-      console.log(`🔍 Room exists: ${!!room}, Room ID: ${room?.id}`);
+    console.log(`🔍 TIMER FIRED - Room: ${roomId}, Time: ${currentTime}, Expected Duration: ${delay}ms, Actual Duration: ${bufferedDelay}ms`);
+    console.log(`🔍 Room State - GameState: ${room?.gameState}, CurrentSongIndex: ${room?.currentSongIndex}, TotalSongs: ${room?.playlistSongs?.length}`);
+    console.log(`🔍 Current Song - ${room?.currentSong?.name} by ${room?.currentSong?.artist}`);
+    console.log(`🔍 Room exists: ${!!room}, Room ID: ${room?.id}`);
     }
     
     roomTimers.delete(roomId);
@@ -195,7 +195,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     if (!targetDeviceId) {
       console.error('❌ Strict mode: no locked device available for playback');
       io.to(roomId).emit('playback-error', { message: 'Locked device not available. Open Spotify on your chosen device or reselect in Host.' });
-      return;
+          return;
     }
 
     try {
@@ -241,7 +241,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       // In strict mode, do not fallback silently
       console.error('❌ Playback error in strict mode:', playbackError?.body?.error?.message || playbackError?.message || playbackError);
       io.to(roomId).emit('playback-error', { message: 'Playback failed on locked device. Ensure it is online and try again.' });
-      return;
+            return;
     }
 
     room.currentSong = {
@@ -613,9 +613,9 @@ io.on('connection', (socket) => {
     if (room && isCurrentHost) {
       try {
         console.log('✅ Starting game for room:', roomId);
-        room.gameState = 'playing';
-        room.snippetLength = snippetLength;
-        room.playlists = playlists;
+      room.gameState = 'playing';
+      room.snippetLength = snippetLength;
+      room.playlists = playlists;
         room.selectedDeviceId = deviceId; // Store the selected device ID
         room.randomStarts = !!randomStarts;
         // Initialize call history and round
@@ -631,7 +631,7 @@ io.on('connection', (socket) => {
           deviceId,
           pattern: room.pattern
         });
-
+      
         console.log('🎵 Generating bingo cards...');
         // If mix is already finalized and cards exist, do NOT regenerate to avoid reshuffle
         if (!room.mixFinalized || !room.bingoCards || room.bingoCards.size === 0) {
@@ -651,7 +651,7 @@ io.on('connection', (socket) => {
           });
           io.to(roomId).emit('fiveby15-map', { idToColumn: idToCol });
         }
-
+      
         console.log('🎵 Starting automatic playback...');
         // Start automatic playback with the client's shuffled song list
         await startAutomaticPlayback(roomId, playlists, deviceId, songList);
@@ -692,11 +692,11 @@ io.on('connection', (socket) => {
             newRoom.snippetLength = snippetLength;
             newRoom.playlists = playlists;
             newRoom.selectedDeviceId = deviceId;
-
+            
             // Emit immediately so UI updates even if playback has issues
-            io.to(roomId).emit('game-started', {
+      io.to(roomId).emit('game-started', {
               roomId,
-              snippetLength,
+        snippetLength,
               deviceId,
               pattern: room.pattern
             });
@@ -833,8 +833,8 @@ io.on('connection', (socket) => {
           const isPlaying = !!state?.is_playing;
           if (!isPlaying) {
             console.log('⏸️ Already paused according to playback state — treating as success');
-            room.gameState = 'paused';
-            io.to(roomId).emit('playback-paused');
+          room.gameState = 'paused';
+          io.to(roomId).emit('playback-paused');
             return;
           }
         } catch (_) {}
@@ -857,9 +857,9 @@ io.on('connection', (socket) => {
               // Last-resort mute so show continues silently
               try { await spotifyService.setVolume(0, deviceId); } catch {}
             }
-          } else {
+        } else {
             throw pauseErr;
-          }
+        }
         }
         room.gameState = 'paused';
         io.to(roomId).emit('playback-paused');
@@ -889,33 +889,33 @@ io.on('connection', (socket) => {
         // Ensure playback is locked to the device before resuming
         try {
           await spotifyService.transferPlayback(deviceId, true);
-        } catch (e) {
-          console.warn('⚠️ Transfer playback failed before resume:', e?.message || e);
-        }
+          } catch (e) {
+            console.warn('⚠️ Transfer playback failed before resume:', e?.message || e);
+          }
 
-        if (resumePosition !== undefined) {
-          console.log(`🎯 Resuming from position: ${resumePosition}ms`);
+          if (resumePosition !== undefined) {
+            console.log(`🎯 Resuming from position: ${resumePosition}ms`);
           await spotifyService.resumePlayback(deviceId);
           await spotifyService.seekToPosition(resumePosition, deviceId);
-          console.log(`✅ Resumed and seeked to position: ${resumePosition}ms`);
-        } else {
-          await spotifyService.resumePlayback(deviceId);
-          console.log('✅ Playback resumed successfully');
-        }
-
-        room.gameState = 'playing';
-        io.to(roomId).emit('playback-resumed');
-
-        // Calculate remaining time and set timer
-        if (room.snippetLength) {
-          const remainingTime = room.snippetLength * 1000 - (resumePosition || 0);
-          if (remainingTime > 0) {
-            setRoomTimer(roomId, () => {
-              playNextSong(roomId, room.selectedDeviceId);
-            }, remainingTime);
+            console.log(`✅ Resumed and seeked to position: ${resumePosition}ms`);
           } else {
-            playNextSong(roomId, room.selectedDeviceId);
+          await spotifyService.resumePlayback(deviceId);
+            console.log('✅ Playback resumed successfully');
           }
+          
+          room.gameState = 'playing';
+          io.to(roomId).emit('playback-resumed');
+          
+          // Calculate remaining time and set timer
+          if (room.snippetLength) {
+            const remainingTime = room.snippetLength * 1000 - (resumePosition || 0);
+            if (remainingTime > 0) {
+              setRoomTimer(roomId, () => {
+                playNextSong(roomId, room.selectedDeviceId);
+              }, remainingTime);
+            } else {
+              playNextSong(roomId, room.selectedDeviceId);
+            }
         }
       } catch (error) {
         const msg = error?.body?.error?.message || error?.message || 'Failed to resume song';
@@ -1283,7 +1283,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
     const ensureEnough = (available) => {
       if (available < songsNeededPerCard) {
         const message = `Need at least ${songsNeededPerCard} unique songs to generate a card. Only ${available} available.`;
-        console.error(`❌ ${message}`);
+    console.error(`❌ ${message}`);
         io.to(roomId).emit('bingo-card-error', { message, required: songsNeededPerCard, available });
         return false;
       }
@@ -1304,13 +1304,13 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
         roomRef.oneBySeventyFivePool = base.map(s => ({ id: s.id }));
         io.to(roomId).emit('oneby75-pool', { ids: base.map(s => s.id) });
       }
-    }
+  }
 
-    const cards = new Map();
+  const cards = new Map();
     if (!room.clientCards) room.clientCards = new Map();
-    console.log(`👥 Generating cards for ${room.players.size} players`);
+  console.log(`👥 Generating cards for ${room.players.size} players`);
 
-    for (const [playerId, player] of room.players) {
+  for (const [playerId, player] of room.players) {
       let chosen25 = [];
       if (mode === '1x75') {
         // Use the same base computed above to ensure consistency
@@ -1353,35 +1353,35 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
 
       // Build card
       const card = { id: playerId, squares: [] };
-      let idx = 0;
-      for (let row = 0; row < 5; row++) {
-        for (let col = 0; col < 5; col++) {
+    let idx = 0;
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 5; col++) {
           const s = chosen25[idx++];
-          card.squares.push({
-            position: `${row}-${col}`,
-            songId: s.id,
-            songName: s.name,
-            artistName: s.artist,
-            marked: false
-          });
-        }
+        card.squares.push({
+          position: `${row}-${col}`,
+          songId: s.id,
+          songName: s.name,
+          artistName: s.artist,
+          marked: false
+        });
       }
+    }
 
-      const uniqueOnCard = new Set(card.squares.map(q => q.songId));
+    const uniqueOnCard = new Set(card.squares.map(q => q.songId));
       console.log(`✅ Generated card for ${player.name} with ${uniqueOnCard.size} unique songs (mode=${mode})`);
 
       if (!room.bingoCards) room.bingoCards = new Map();
-      player.bingoCard = card;
-      cards.set(playerId, card);
+    player.bingoCard = card;
+    cards.set(playerId, card);
       // Persist by clientId if available to survive refreshes
       if (player.clientId) {
         room.clientCards.set(player.clientId, card);
       }
-      io.to(playerId).emit('bingo-card', card);
-    }
+    io.to(playerId).emit('bingo-card', card);
+  }
 
-    room.bingoCards = cards;
-    console.log(`✅ Generated bingo cards for room ${roomId}`);
+  room.bingoCards = cards;
+  console.log(`✅ Generated bingo cards for room ${roomId}`);
   } catch (error) {
     console.error('❌ Error generating bingo cards:', error);
   }
@@ -1540,9 +1540,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         const mapped = room.finalizedSongOrder.map(id => idToSong.get(id)).filter(Boolean);
         allSongs = mapped.length > 0 ? mapped : songList;
       } else {
-        // Use the song list provided by the client (already shuffled)
-        console.log(`📋 Using client-provided song list with ${songList.length} songs`);
-        allSongs = songList;
+      // Use the song list provided by the client (already shuffled)
+      console.log(`📋 Using client-provided song list with ${songList.length} songs`);
+      allSongs = songList;
       }
     } else {
       // Fallback: fetch songs from playlists (for backward compatibility)
@@ -1869,7 +1869,7 @@ async function playNextSong(roomId, deviceId) {
     if (!targetDeviceId) {
       console.error('❌ Strict mode: no locked device available for playback');
       io.to(roomId).emit('playback-error', { message: 'Locked device not available. Open Spotify on your chosen device or reselect in Host.' });
-      return;
+          return;
     }
 
     // Assert playback on the locked/saved device to prevent hijacking
@@ -1944,7 +1944,7 @@ async function playNextSong(roomId, deviceId) {
       // In strict mode, do not fallback silently
       console.error('❌ Playback error in strict mode:', playbackError?.body?.error?.message || playbackError?.message || playbackError);
       io.to(roomId).emit('playback-error', { message: 'Playback failed on locked device. Ensure it is online and try again.' });
-      return;
+            return;
     }
 
     // Track called song
@@ -2668,7 +2668,7 @@ app.get('/api/spotify/current-playback', async (req, res) => {
     if (!spotifyTokens || !spotifyTokens.accessToken) {
       return res.status(401).json({ success: false, error: 'Spotify not connected' });
     }
-
+    
     await spotifyService.ensureValidToken();
     const playback = await spotifyService.getCurrentPlaybackState();
     res.json({ success: true, playbackState: playback || null });
