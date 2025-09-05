@@ -375,7 +375,11 @@ const PublicDisplay: React.FC = () => {
     socket.on('pattern-updated', (data: any) => {
       try {
         if (data?.pattern) setPattern(data.pattern);
-        if (Array.isArray(data?.customMask)) setCustomMask(new Set<string>(data.customMask as string[]));
+        if (Array.isArray(data?.customMask)) {
+          setCustomMask(new Set<string>(data.customMask as string[]));
+        } else {
+          setCustomMask(new Set());
+        }
       } catch {}
     });
 

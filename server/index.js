@@ -641,7 +641,8 @@ io.on('connection', (socket) => {
           roomId,
           snippetLength,
           deviceId,
-          pattern: room.pattern
+          pattern: room.pattern,
+          customMask: Array.from(room.customPattern || [])
         });
       
         console.log('🎵 Generating bingo cards...');
