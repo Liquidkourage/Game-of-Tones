@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useParams, useSearchParams } from 'react-router-dom';
 import io from 'socket.io-client';
@@ -44,15 +44,19 @@ interface Song {
 const PlayerView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [searchParams] = useSearchParams();
-  const playerName = searchParams.get('name') || 'Player';
+  const [playerName, setPlayerName] = useState<string>(() => {
+    const fromStorage = (() => { try { return localStorage.getItem('player_name') || ''; } catch { return ''; } })();
+    const fromQuery = searchParams.get('name') || '';
+    return fromStorage || fromQuery || '';
+  });
   const [clientId] = useState<string>(() => {
     try {
       const existing = localStorage.getItem('client_id');
-      if (existing && existing.length > 0) return existing;
-      const generated = (typeof crypto !== 'undefined' && (crypto as any).randomUUID) ? (crypto as any).randomUUID() : Math.random().toString(36).slice(2);
-      localStorage.setItem('client_id', generated);
-      return generated;
-    } catch (_e) {
+      if (existing) return existing;
+      const next = Math.random().toString(36).slice(2);
+      localStorage.setItem('client_id', next);
+      return next;
+    } catch {
       return Math.random().toString(36).slice(2);
     }
   });
@@ -101,14 +105,11 @@ const PlayerView: React.FC = () => {
       console.log('Connected to server');
       setConnectionStatus('connected');
       setReconnectAttempts(0);
-      // Join the room
-      newSocket.emit('join-room', { 
-        roomId, 
-        playerName, 
-        isHost: false,
-        clientId
-      });
-      // Request current state in case we joined before start
+      // Join only if we have a name; otherwise wait for user input
+      if (playerName && playerName.trim()) {
+        newSocket.emit('join-room', { roomId, playerName, isHost: false, clientId });
+      }
+      // Ask server for state in case game already started
       newSocket.emit('sync-state', { roomId });
     });
 
@@ -234,6 +235,13 @@ const PlayerView: React.FC = () => {
       newSocket.close();
     };
   }, [roomId, playerName]);
+
+  // If name becomes available after initial connect, join the room
+  useEffect(() => {
+    if (socket && socket.connected && playerName && playerName.trim()) {
+      try { socket.emit('join-room', { roomId, playerName, isHost: false, clientId }); } catch {}
+    }
+  }, [socket, playerName, roomId, clientId]);
 
   const handleResync = () => {
     if (!socket) return;
@@ -445,6 +453,46 @@ const PlayerView: React.FC = () => {
 
   return (
     <div className={`player-container ${bingoCard ? 'has-card' : ''} ${focusCard ? 'focus' : ''} density-${density}`} style={{ minHeight: 0 }}>
+      {/* Name prompt overlay if no name provided */}
+      {!playerName || !playerName.trim() ? (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ width: 'min(90vw, 520px)', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 14, padding: 18 }}>
+            <h3 style={{ margin: 0, marginBottom: 12, fontSize: '1.4rem' }}>Enter your name to join</h3>
+            <input
+              type="text"
+              placeholder="Your name"
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+              onBlur={(e) => {
+                const name = e.target.value.trim();
+                if (!name) return;
+                try { localStorage.setItem('player_name', name); } catch {}
+                setPlayerName(name);
+                try {
+                  const url = new URL(window.location.href);
+                  url.searchParams.set('name', name);
+                  window.history.replaceState({}, '', url.toString());
+                } catch {}
+                if (socket && socket.connected) {
+                  try { socket.emit('join-room', { roomId, playerName: name, isHost: false, clientId }); } catch {}
+                }
+              }}
+              autoFocus
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(0,0,0,0.3)', color: '#fff' }}
+            />
+            <div style={{ marginTop: 10, display: 'flex', gap: 10 }}>
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  const el = document.querySelector<HTMLInputElement>('input[placeholder=\"Your name\"]');
+                  if (el) el.focus();
+                }}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {/* Header */}
       {!focusCard ? (
         <motion.div 
