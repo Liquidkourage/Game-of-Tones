@@ -541,6 +541,26 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Client requests a state sync (useful if they joined before start or missed events)
+  socket.on('sync-state', (data = {}) => {
+    try {
+      const { roomId } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const payload = {
+        isPlaying: room.gameState === 'playing',
+        pattern: room.pattern || 'line',
+        customMask: Array.from(room.customPattern || []),
+        currentSong: room.currentSong || null,
+        snippetLength: room.snippetLength || 30,
+        playerCount: getNonHostPlayerCount(room)
+      };
+      io.to(socket.id).emit('room-state', payload);
+    } catch (e) {
+      // ignore
+    }
+  });
+
   // New Round (preserve device and snippet)
   socket.on('new-round', (data = {}) => {
     const { roomId } = data;

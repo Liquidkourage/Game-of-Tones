@@ -108,6 +108,8 @@ const PlayerView: React.FC = () => {
         isHost: false,
         clientId
       });
+      // Request current state in case we joined before start
+      newSocket.emit('sync-state', { roomId });
     });
 
     newSocket.on('reconnect_attempt', (attempt: number) => {
@@ -143,6 +145,22 @@ const PlayerView: React.FC = () => {
         isPlaying: true,
         pattern: data?.pattern || 'full_card'
       }));
+    });
+
+    newSocket.on('room-state', (payload: any) => {
+      try {
+        if (payload?.isPlaying) {
+          setGameState(prev => ({
+            ...prev,
+            isPlaying: true,
+            pattern: payload?.pattern || prev.pattern,
+            playerCount: typeof payload?.playerCount === 'number' ? payload.playerCount : prev.playerCount,
+            currentSong: payload?.currentSong || prev.currentSong
+          }));
+        } else if (typeof payload?.playerCount === 'number') {
+          setGameState(prev => ({ ...prev, playerCount: payload.playerCount }));
+        }
+      } catch {}
     });
 
     newSocket.on('song-playing', (data: any) => {
