@@ -71,7 +71,12 @@ const PlayerView: React.FC = () => {
   const [tooltipSquare, setTooltipSquare] = useState<string | null>(null);
   const [tooltipText, setTooltipText] = useState<string>('');
   const [density, setDensity] = useState<'s' | 'm' | 'l'>(() => (localStorage.getItem('text_density') as 's' | 'm' | 'l') || 'm');
-  const [focusCard, setFocusCard] = useState<boolean>(() => localStorage.getItem('focus_card') === '1');
+  const [focusCard, setFocusCard] = useState<boolean>(() => {
+    const stored = localStorage.getItem('focus_card');
+    if (stored === '1') return true;
+    if (stored === '0') return false;
+    try { return (typeof window !== 'undefined') && window.innerWidth < 640; } catch { return false; }
+  });
   const [bingoHolding, setBingoHolding] = useState<boolean>(false);
   const bingoHoldTimer = useRef<number | null>(null);
   const [gameState, setGameState] = useState<GameState>({
@@ -427,23 +432,34 @@ const PlayerView: React.FC = () => {
               onPointerLeave={clearLongPress}
               onContextMenu={(e) => { e.preventDefault(); return false; }}
               draggable={false}
+              style={{
+                aspectRatio: '1 / 1',
+                width: 'clamp(56px, 22vw, 92px)',
+                minWidth: 56,
+                minHeight: 56,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center',
+                padding: 6,
+                lineHeight: 1.1,
+                fontWeight: 700,
+                fontSize: 'clamp(12px, 3.4vw, 18px)',
+                userSelect: 'none'
+              }}
             >
-              <div className={`primary-line density-${density}`}>
-                {displayMode === 'title' ? square.songName : square.artistName}
+              <div className="square-content">
+                {square.isPlayed && (
+                  <motion.div 
+                    className="played-indicator"
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <Music className="played-icon" />
+                  </motion.div>
+                )}
               </div>
-              {tooltipSquare === square.position && (
-                <div className="hover-tooltip">{tooltipText}</div>
-              )}
-              {square.marked && (
-                <motion.div
-                  className="mark-indicator"
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                >
-                  <CheckCircle className="mark-icon" />
-                </motion.div>
-              )}
             </motion.div>
           ))}
         </div>
@@ -452,7 +468,7 @@ const PlayerView: React.FC = () => {
   };
 
   return (
-    <div className={`player-container ${bingoCard ? 'has-card' : ''} ${focusCard ? 'focus' : ''} density-${density}`} style={{ minHeight: 0 }}>
+    <div className={`player-container ${bingoCard ? 'has-card' : ''} ${focusCard ? 'focus' : ''} density-${density}`} style={{ minHeight: '100svh', overscrollBehavior: 'contain', paddingBottom: 'calc(120px + env(safe-area-inset-bottom))' }}>
       {/* Name prompt overlay if no name provided */}
       {!playerName || !playerName.trim() ? (
         <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
