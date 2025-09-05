@@ -550,9 +550,23 @@ const PlayerView: React.FC = () => {
           onPointerDown={startBingoHold}
           onPointerUp={cancelBingoHold}
           onPointerCancel={cancelBingoHold}
-          onPointerLeave={cancelBingoHold}
+          title="Hold to call BINGO"
+          style={{
+            position: 'fixed',
+            bottom: 18,
+            right: 18,
+            zIndex: 1000,
+            width: 72,
+            height: 72,
+            borderRadius: '50%',
+            fontWeight: 900,
+            fontSize: '0.95rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
         >
-          Hold to Bingo
+          {bingoHolding ? 'Holding…' : 'BINGO'}
         </button>
       </div>
     </div>
