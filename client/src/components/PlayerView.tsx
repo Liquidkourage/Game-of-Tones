@@ -556,14 +556,18 @@ const PlayerView: React.FC = () => {
             bottom: 18,
             right: 18,
             zIndex: 1000,
-            width: 72,
-            height: 72,
+            width: 'clamp(90px, 22vw, 140px)',
+            height: 'clamp(90px, 22vw, 140px)',
             borderRadius: '50%',
-            fontWeight: 900,
-            fontSize: '0.95rem',
+            fontWeight: 1000,
+            fontSize: 'clamp(18px, 5.4vw, 28px)',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            background: 'linear-gradient(180deg, #00ff88 0%, #00cc6d 100%)',
+            color: '#061a12',
+            border: '2px solid rgba(0,255,136,0.6)',
+            boxShadow: '0 12px 26px rgba(0,0,0,0.35), 0 0 24px rgba(0,255,136,0.35)'
           }}
         >
           {bingoHolding ? 'Holding…' : 'BINGO'}
