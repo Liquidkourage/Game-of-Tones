@@ -14,7 +14,7 @@ import DisplayHeaderInfo from './components/DisplayHeaderInfo';
 
 function AppHeader() {
   const location = useLocation();
-  const isDisplay = /^\/display\//.test(location.pathname);
+  const isDisplay = /^\/display(\/.+|$)/.test(location.pathname);
   const headerStyle = isDisplay
     ? { position: 'absolute' as const, left: 12, top: 8, width: 'auto', background: 'transparent', borderBottom: 'none', padding: '0.4rem 0.8rem', zIndex: 200, pointerEvents: 'none' as const }
     : {};
@@ -40,7 +40,7 @@ function AppHeader() {
 
 function App() {
   const location = useLocation();
-  const isDisplay = /^\/display\//.test(location.pathname);
+  const isDisplay = /^\/display(\/.+|$)/.test(location.pathname);
   return (
     <div className="App">
       <div className="app-container">
@@ -51,6 +51,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/host/:roomId" element={<HostView />} />
             <Route path="/player/:roomId" element={<PlayerView />} />
+            <Route path="/display" element={<PublicDisplay />} />
             <Route path="/display/:roomId" element={<PublicDisplay />} />
             <Route path="/callback" element={<SpotifyCallback />} />
           </Routes>
