@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
 import { SOCKET_URL } from '../config';
 import { 
@@ -53,6 +53,8 @@ interface BingoSquare {
 
 const PublicDisplay: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
+  const navigate = useNavigate();
+  const [connectCode, setConnectCode] = useState<string>('');
   const [searchParams] = useSearchParams();
   const showNowPlaying = (searchParams.get('np') === '1') || (searchParams.get('nowPlaying') === '1');
   const debugMode = (searchParams.get('debug') === '1') || (searchParams.get('dbg') === '1');
@@ -1141,6 +1143,50 @@ const PublicDisplay: React.FC = () => {
       </div>
     );
   };
+
+  // If no room code is present, render a landing form to connect
+  if (!roomId) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'linear-gradient(135deg, #1d1b3a 0%, #10283a 60%, #0b1e2d 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div style={{ width: 'min(92vw, 680px)', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 16, padding: 24, textAlign: 'center' }}>
+          <div style={{ fontWeight: 1000, fontSize: 'clamp(2.2rem, 6vw, 3.2rem)', marginBottom: 8, letterSpacing: '0.04em' }}>TEMPO – Public Display</div>
+          <div style={{ opacity: 0.9, marginBottom: 18 }}>Enter a room code to connect the display</div>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <input
+              value={connectCode}
+              onChange={(e) => setConnectCode(e.target.value.toUpperCase())}
+              placeholder="Room code"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const code = connectCode.trim();
+                  if (code) navigate(`/display/${code}`);
+                }
+              }}
+              style={{
+                width: 'min(72vw, 360px)',
+                padding: '12px 14px',
+                borderRadius: 10,
+                background: 'rgba(0,0,0,0.35)',
+                color: '#fff',
+                border: '1px solid rgba(255,255,255,0.25)',
+                fontWeight: 900,
+                letterSpacing: '0.04em',
+                textAlign: 'center'
+              }}
+            />
+            <button
+              className="btn-secondary"
+              onClick={() => { const code = connectCode.trim(); if (code) navigate(`/display/${code}`); }}
+              style={{ padding: '12px 16px', fontWeight: 900 }}
+            >
+              Connect
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={displayRef} className="public-display">
