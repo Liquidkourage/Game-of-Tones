@@ -797,11 +797,11 @@ const HostView: React.FC = () => {
       const resp = await fetch(`${API_BASE || ''}/api/spotify/current-playback`);
       if (!resp.ok) return;
       const data = await resp.json();
-      if (data.success && data.playbackState) {
+        if (data.success && data.playbackState) {
         const spotifyVolume = (data.playbackState.device?.volume_percent ?? 50) as number;
-        setPlaybackState(prev => ({ ...prev, volume: spotifyVolume }));
-        console.log(`🔊 Synced volume from Spotify: ${spotifyVolume}%`);
-      }
+          setPlaybackState(prev => ({ ...prev, volume: spotifyVolume }));
+          console.log(`🔊 Synced volume from Spotify: ${spotifyVolume}%`);
+        }
     } catch {
       // ignore
     }
@@ -1128,9 +1128,9 @@ const HostView: React.FC = () => {
           return;
         }
         const data = await resp.json();
-        if (data.success && data.playbackState) {
+          if (data.success && data.playbackState) {
           const spotifyIsPlaying = !!data.playbackState.is_playing;
-          const spotifyPosition = data.playbackState.progress_ms || 0;
+            const spotifyPosition = data.playbackState.progress_ms || 0;
           setShuffleEnabled(!!data.playbackState.shuffle_state);
           const rep = (data.playbackState.repeat_state || 'off') as 'off' | 'track' | 'context';
           setRepeatState(rep);
@@ -1140,17 +1140,17 @@ const HostView: React.FC = () => {
             if (now < ignorePollingUntilRef.current) return;
             if (now - lastSongEventAtRef.current < 15000) return;
           }
-          if (spotifyIsPlaying !== isPlaying) {
-            console.log(`🔄 Spotify playback state changed: ${spotifyIsPlaying}, updating interface`);
-            setIsPlaying(spotifyIsPlaying);
+            if (spotifyIsPlaying !== isPlaying) {
+              console.log(`🔄 Spotify playback state changed: ${spotifyIsPlaying}, updating interface`);
+              setIsPlaying(spotifyIsPlaying);
             setPlaybackState(prev => ({ ...prev, isPlaying: spotifyIsPlaying, currentTime: spotifyPosition }));
-            if (spotifyIsPlaying && isPausedByInterface) {
-              console.log('🔄 Spotify resumed externally, clearing pause tracking');
-              setIsPausedByInterface(false);
-              setPausePosition(0);
+              if (spotifyIsPlaying && isPausedByInterface) {
+                console.log('🔄 Spotify resumed externally, clearing pause tracking');
+                setIsPausedByInterface(false);
+                setPausePosition(0);
+              }
             }
           }
-        }
       } catch {
         // ignore
       }
@@ -1556,7 +1556,7 @@ const HostView: React.FC = () => {
 
           {/* Pattern selector (setup only; hidden during game) */}
           {gameState !== 'playing' && (
-            <motion.div
+                <motion.div
               className="pattern-quick-section"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1619,7 +1619,7 @@ const HostView: React.FC = () => {
                   </div>
                 </div>
               )}
-            </motion.div>
+                </motion.div>
           )}
 
           {/* Compact Played List (always visible during game) */}
@@ -1641,68 +1641,68 @@ const HostView: React.FC = () => {
                       <span style={{ opacity: 0.8 }}> — {s.artist}</span>
                     </div>
                   </div>
-                ))}
-              </div>
-            </motion.div>
+              ))}
+            </div>
+                     </motion.div>
           )}
 
           {/* Song List (moved below to avoid shifting playlist picker) */}
           {(finalizedOrder?.length || songList.length) > 0 && gameState !== 'playing' && (
-            <motion.div 
-              className="song-list-section"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-            >
+             <motion.div 
+               className="song-list-section"
+               initial={{ opacity: 0 }}
+               animate={{ opacity: 1 }}
+               transition={{ delay: 0.4 }}
+             >
               <h2>🎵 {finalizedOrder ? 'Finalized Order' : 'Song List'} ({(finalizedOrder?.length || songList.length)} songs)</h2>
-              <div className="song-list-controls">
-                <button
-                  onClick={() => setShowSongList(!showSongList)}
-                  className="btn-secondary"
-                >
-                  {showSongList ? '📋 Hide Song List' : '📋 Show Song List'}
-                </button>
+               <div className="song-list-controls">
+                 <button
+                   onClick={() => setShowSongList(!showSongList)}
+                   className="btn-secondary"
+                 >
+                   {showSongList ? '📋 Hide Song List' : '📋 Show Song List'}
+                 </button>
                 {!finalizedOrder && (
-                  <button
-                    onClick={generateSongList}
-                    className="btn-secondary"
-                  >
-                    🔀 Reshuffle Songs
-                  </button>
+                 <button
+                   onClick={generateSongList}
+                   className="btn-secondary"
+                 >
+                   🔀 Reshuffle Songs
+                 </button>
                 )}
-              </div>
-              {showSongList && (
-                <motion.div
-                  className="song-list-display"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <div className="song-list">
+               </div>
+               {showSongList && (
+                 <motion.div
+                   className="song-list-display"
+                   initial={{ opacity: 0, height: 0 }}
+                   animate={{ opacity: 1, height: 'auto' }}
+                   transition={{ duration: 0.3 }}
+                 >
+                   <div className="song-list">
                     {(finalizedOrder || songList).map((song, index) => (
-                      <div
-                        key={`${song.id}-${index}`}
-                        className="song-list-item"
-                      >
-                        <span className="song-number">{index + 1}</span>
-                        <div className="song-info">
-                          <span className="song-name">{song.name}</span>
-                          <span className="song-artist">{song.artist}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </motion.div>
-          )}
+                       <div
+                         key={`${song.id}-${index}`}
+                         className="song-list-item"
+                       >
+                         <span className="song-number">{index + 1}</span>
+                         <div className="song-info">
+                           <span className="song-name">{song.name}</span>
+                           <span className="song-artist">{song.artist}</span>
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                 </motion.div>
+               )}
+             </motion.div>
+           )}
 
           {/* Logs */}
           {logs.length > 0 && showLogs && (
-            <motion.div 
+             <motion.div 
               className="logs-section"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+               initial={{ opacity: 0 }}
+               animate={{ opacity: 1 }}
               transition={{ delay: 0.55 }}
             >
               <h2>📝 Host Logs</h2>
@@ -1718,9 +1718,9 @@ const HostView: React.FC = () => {
                     <span>{entry.message}</span>
                   </div>
                 ))}
-              </div>
-            </motion.div>
-          )}
+               </div>
+             </motion.div>
+           )}
 
                        {/* Now Playing Interface - Integrated into main content */}
             {currentSong && (

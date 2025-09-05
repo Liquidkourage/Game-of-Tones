@@ -716,17 +716,6 @@ const PublicDisplay: React.FC = () => {
     if (pattern === 'custom' && customMask && customMask.size > 0) {
       return customMask.has(`${row}-${col}`);
     }
-    if (pattern === 'four_corners') {
-      return (
-        (row === 0 && col === 0) ||
-        (row === 0 && col === 4) ||
-        (row === 4 && col === 0) ||
-        (row === 4 && col === 4)
-      );
-    }
-    if (pattern === 'x') {
-      return row === col || (row + col === 4);
-    }
     
     // 12 possible winning lines: 5 horizontal, 5 vertical, 2 diagonal
     const winningLines = [
@@ -750,32 +739,17 @@ const PublicDisplay: React.FC = () => {
     return winningLines[currentWinningLine](row, col);
   };
 
-  // Cycle through winning lines every 0.2 seconds for 'line' only
+  // Cycle winning line only for single-line pattern
   useEffect(() => {
-    console.log('Setting up interval for winning lines');
-    
-    // Clear any existing interval
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
-    
-    // Only animate when pattern is 'line'
-    if (pattern !== 'line') {
-      setCurrentWinningLine(0);
-      return;
-    }
-    
+    if (pattern !== 'line') return;
     intervalRef.current = setInterval(() => {
-      console.log('Current winning line:', currentWinningLine);
-      setCurrentWinningLine((prev) => {
-        const next = (prev + 1) % 12;
-        console.log('Changing from', prev, 'to', next);
-        return next;
-      });
+      setCurrentWinningLine((prev) => ((prev + 1) % 12));
     }, 800);
-    
     return () => {
-      console.log('Clearing interval');
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
