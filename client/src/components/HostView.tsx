@@ -1416,6 +1416,49 @@ const HostView: React.FC = () => {
             </div>
           )}
 
+          {/* Playback Device (always visible) */}
+          <motion.div 
+            className="device-section"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.15 }}
+            style={{ marginTop: 12 }}
+          >
+            <h2>🎚️ Playback Device</h2>
+            {!isSpotifyConnected ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ opacity: 0.9 }}>Not connected to Spotify.</span>
+                <button className="btn-secondary" onClick={connectSpotify} disabled={isSpotifyConnecting}>
+                  {isSpotifyConnecting ? 'Connecting…' : 'Connect Spotify'}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <select
+                  value={selectedDevice?.id || ''}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const dev = devices.find((d) => d.id === id) || null;
+                    setSelectedDevice(dev);
+                  }}
+                  style={{ minWidth: 260, padding: '6px 10px', background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6 }}
+                >
+                  <option value="" disabled>
+                    {isLoadingDevices ? 'Loading devices…' : devices.length === 0 ? 'No devices found' : 'Select a device'}
+                  </option>
+                  {devices.map((dev) => (
+                    <option key={dev.id} value={dev.id}>
+                      {dev.name} {dev.is_active ? '🟢' : '⚪'}
+                    </option>
+                  ))}
+                </select>
+                <button className="btn-secondary" onClick={loadDevices} disabled={isLoadingDevices}>↻ Refresh</button>
+                <button className="btn-secondary" onClick={transferToSelectedDevice} disabled={!selectedDevice}>Transfer Playback</button>
+                <button className="btn-secondary" onClick={saveSelectedDevice} disabled={!selectedDevice}>Save Device</button>
+              </div>
+            )}
+          </motion.div>
+
           {/* Game Controls */}
           {gameState !== 'playing' && showPlaylists && (
           <motion.div 
