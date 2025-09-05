@@ -2170,6 +2170,25 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'TEMPO - Music Bingo Server Running' });
 });
 
+app.get('/api/rooms', (req, res) => {
+  try {
+    const list = Array.from(rooms.values()).map((room) => ({
+      id: room.id,
+      playerCount: getNonHostPlayerCount(room),
+      gameState: room.gameState,
+      pattern: room.pattern || 'line',
+      started: room.gameState === 'playing',
+      mixFinalized: !!room.mixFinalized,
+      currentSong: room.currentSong
+        ? { id: room.currentSong.id, name: room.currentSong.name, artist: room.currentSong.artist }
+        : null
+    }));
+    res.json({ rooms: list });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to list rooms' });
+  }
+});
+
 app.get('/api/rooms/:roomId', (req, res) => {
   const room = rooms.get(req.params.roomId);
   if (room) {
