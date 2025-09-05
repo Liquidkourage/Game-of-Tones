@@ -449,7 +449,7 @@ const PlayerView: React.FC = () => {
               }}
             >
               <div className="square-content">
-                {square.isPlayed && (
+                {square.marked && (
                   <motion.div 
                     className="played-indicator"
                     initial={{ scale: 0 }}
