@@ -211,7 +211,16 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       // Enforce deterministic playback mode for direct index plays
       try { await spotifyService.setShuffleState(false, targetDeviceId); } catch (_) {}
       try { await spotifyService.setRepeatState('off', targetDeviceId); } catch (_) {}
-      await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${song.id}`], 0);
+      // Determine randomized start when enabled and safe
+      let startMs = 0;
+      if (room.randomStarts && Number.isFinite(song.duration)) {
+        const durationMs = Math.max(0, Number(song.duration));
+        const safeWindow = Math.max(0, durationMs - (room.snippetLength * 1000) - 1500);
+        if (safeWindow > 3000) {
+          startMs = Math.floor(Math.random() * safeWindow);
+        }
+      }
+      await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${song.id}`], startMs);
       const endTime = Date.now();
       console.log(`✅ Successfully started playback on device: ${targetDeviceId} (took ${endTime - startTime}ms)`);
       
@@ -249,6 +258,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       name: song.name,
       artist: song.artist
     };
+    try { const r = rooms.get(roomId); if (r) r.songStartAtMs = Date.now() - (startMs || 0); } catch {}
 
     io.to(roomId).emit('song-playing', {
       songId: song.id,
@@ -360,8 +370,6 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
             if (r) {
               // Mark a storm window (e.g., 2 minutes) where we tighten cadence
               r.stormUntilMs = Date.now() + 120000;
-              // Clear Spotify's queue to prevent future context conflicts
-              await spotifyService.clearQueue(deviceId);
             }
           } catch {}
         } catch (e) {
@@ -398,10 +406,29 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
       if (attempts === 1) {
         try { await spotifyService.resumePlayback(deviceId); } catch {}
       } else if (attempts >= 2) {
-        io.to(roomId).emit('playback-warning', { message: 'Playback stalled; advancing to next track.' });
-        clearPlaybackWatcher(roomId);
-        clearRoomTimer(roomId);
-        await playNextSong(roomId, deviceId);
+        io.to(roomId).emit('playback-warning', { message: 'Playback stalled; restarting current track.' });
+        // Try to restart the intended current track at expected progress 0
+        try {
+          const r = rooms.get(roomId);
+          const currentExpectedId = r?.currentSong?.id || expectedId;
+          if (currentExpectedId) {
+            try { await spotifyService.transferPlayback(deviceId, false); } catch {}
+            try { await spotifyService.pausePlayback(deviceId); } catch {}
+            await spotifyService.startPlayback(deviceId, [`spotify:track:${currentExpectedId}`], 0);
+            try { await new Promise(res => setTimeout(res, 150)); await spotifyService.seekToPosition(0, deviceId); } catch {}
+            attempts = 0; // reset attempts after restart
+          } else {
+            // Fallback if no track id known: advance
+            clearPlaybackWatcher(roomId);
+            clearRoomTimer(roomId);
+            await playNextSong(roomId, deviceId);
+          }
+        } catch (_) {
+          // As a last resort, advance
+          clearPlaybackWatcher(roomId);
+          clearRoomTimer(roomId);
+          await playNextSong(roomId, deviceId);
+        }
       }
       // Overrun guard: if snippet time essentially elapsed on same track, force advance
       const lastCorrection = room?.lastCorrectionAtMs || 0;
@@ -1009,7 +1036,7 @@ io.on('connection', (socket) => {
 
         // Ensure playback is locked to the device before resuming
         try {
-          await spotifyService.transferPlayback(deviceId, true);
+          await spotifyService.transferPlayback(deviceId, false);
           } catch (e) {
             console.warn('⚠️ Transfer playback failed before resume:', e?.message || e);
           }
@@ -1789,8 +1816,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       }
 
       await spotifyService.transferPlayback(targetDeviceId, false);
-      // Clear queue first to prevent context conflicts
-      try { await spotifyService.clearQueue(targetDeviceId); } catch {}
+      // Skip-based queue clearing removed to avoid context hijacks
       // Enforce deterministic playback mode to avoid context/radio fallbacks
       try { await spotifyService.withRetries('setShuffle(false)', () => spotifyService.setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
       try { await spotifyService.withRetries('setRepeat(off)', () => spotifyService.setRepeatState('off', targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
@@ -1830,9 +1856,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
             console.log('⚠️ Locked device still missing after refresh; attempting activation...');
             await spotifyService.activateDevice(targetDeviceId);
           }
-          await spotifyService.withRetries('transferPlayback(after-refresh)', () => spotifyService.transferPlayback(targetDeviceId, true), { attempts: 3, backoffMs: 300 });
-          // Clear queue after refresh to prevent context conflicts
-          try { await spotifyService.clearQueue(targetDeviceId); } catch {}
+          await spotifyService.withRetries('transferPlayback(after-refresh)', () => spotifyService.transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
+          // Skip-based queue clearing removed to avoid context hijacks
           await spotifyService.withRetries('startPlayback(after-refresh)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
           console.log(`✅ Successfully started playback after token refresh`);
           try { const r = rooms.get(roomId); if (r) r.songStartAtMs = Date.now() - (startMs || 0); } catch {}
@@ -1898,8 +1923,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         }
       }
       if (!playing || !correctTrack) {
-        // Attempt to correct to the intended track once
-        try { await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], 0); } catch {}
+        // Attempt to correct to the intended track once using the same randomized offset
+        try { await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs); } catch {}
       }
       if (!playing) {
         io.to(roomId).emit('playback-warning', { message: 'Playback did not start reliably on the locked device. Please check Spotify is active and not muted.' });
@@ -2993,7 +3018,7 @@ async function activatePreferredDevice() {
         try { await spotifyService.setShuffleState(false, targetDevice.id); } catch (_) {}
         try { await spotifyService.setRepeatState('off', targetDevice.id); } catch (_) {}
         console.log(`✅ Asserted control on device without playback: ${targetDevice.name}`);
-      } catch (error) {
+          } catch (error) {
         console.log(`⚠️ Could not assert control on ${targetDevice.name}, but device is available`);
       }
     }
