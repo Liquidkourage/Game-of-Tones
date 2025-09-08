@@ -334,6 +334,13 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
             if (r?.songStartAtMs) expectedProgress = Math.max(0, Date.now() - r.songStartAtMs);
           } catch {}
           await spotifyService.startPlayback(deviceId, [`spotify:track:${expectedId}`], expectedProgress);
+          // Double-seek to clamp exact resume position and avoid restart sputter
+          try {
+            await new Promise(r => setTimeout(r, 150));
+            await spotifyService.seekToPosition(expectedProgress, deviceId);
+            await new Promise(r => setTimeout(r, 120));
+            await spotifyService.seekToPosition(expectedProgress, deviceId);
+          } catch {}
           // Verify and seek precisely if needed
           try {
             const verify = await spotifyService.getCurrentPlaybackState();
