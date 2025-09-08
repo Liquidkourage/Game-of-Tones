@@ -8,11 +8,46 @@ const compression = require('compression');
 const SpotifyService = require('./spotify');
 const fs = require('fs');
 const path = require('path');
+
+// Simple logging rate limiter to prevent Railway log spam
+class Logger {
+  constructor() {
+    this.logCounts = new Map();
+    this.resetInterval = setInterval(() => {
+      this.logCounts.clear();
+    }, 60000); // Reset counts every minute
+  }
+
+  throttle(key, maxPerMinute = 10) {
+    const count = this.logCounts.get(key) || 0;
+    if (count >= maxPerMinute) return false;
+    this.logCounts.set(key, count + 1);
+    return true;
+  }
+
+  log(message, throttleKey = null, maxPerMinute = 30) {
+    if (throttleKey && !this.throttle(throttleKey, maxPerMinute)) return;
+    console.log(message);
+  }
+
+  warn(message, throttleKey = null, maxPerMinute = 10) {
+    if (throttleKey && !this.throttle(throttleKey, maxPerMinute)) return;
+    console.warn(message);
+  }
+
+  error(message, throttleKey = null, maxPerMinute = 10) {
+    if (throttleKey && !this.throttle(throttleKey, maxPerMinute)) return;
+    console.error(message);
+  }
+}
+
+const logger = new Logger();
 require('dotenv').config();
 
 const app = express();
 // Logging verbosity
 const VERBOSE = process.env.VERBOSE_LOGS === '1' || process.env.DEBUG === '1';
+const QUIET_MODE = process.env.QUIET_MODE === '1'; // Reduce logging for production
 const server = http.createServer(app);
 const clientBuildPath = path.join(__dirname, '..', 'client', 'build');
 const hasClientBuild = fs.existsSync(clientBuildPath);
@@ -443,7 +478,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
+  logger.log('User connected:', 'user-connect', 20);
 
   // Join room
   socket.on('join-room', (data) => {
@@ -1948,7 +1983,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         playing = !!state?.is_playing;
         const currentId = state?.item?.id;
         correctTrack = currentId === firstSong.id;
-        console.log(`🔎 Playback verify attempt ${i + 1}: is_playing=${playing} correct_track=${correctTrack} progress=${state?.progress_ms}ms`);
+        if (!QUIET_MODE) logger.log(`🔎 Playback verify attempt ${i + 1}: is_playing=${playing} correct_track=${correctTrack} progress=${state?.progress_ms}ms`, 'playback-verify', 5);
         if (playing && correctTrack) break; // Only break if BOTH conditions are met
         
         // Only try resume if not playing AND we have the right track (avoid restriction errors)
@@ -1957,7 +1992,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
             await spotifyService.resumePlayback(targetDeviceId); 
           } catch (e) {
             if (!e?.message?.includes('Restriction violated')) {
-              console.warn('⚠️ Resume during verify failed:', e?.message || e);
+              logger.warn('⚠️ Resume during verify failed:', 'resume-verify-error', 5);
             }
           }
         }
@@ -2163,7 +2198,7 @@ async function playNextSong(roomId, deviceId) {
         playing = !!state?.is_playing;
         const currentId = state?.item?.id;
         correctTrack = currentId === nextSong.id;
-        console.log(`🔎 Playback verify (next) attempt ${i + 1}: is_playing=${playing} correct_track=${correctTrack}`);
+        if (!QUIET_MODE) logger.log(`🔎 Playback verify (next) attempt ${i + 1}: is_playing=${playing} correct_track=${correctTrack}`, 'next-verify', 5);
         if (playing) break;
         try { await spotifyService.withRetries('resumePlayback(verify-next)', () => spotifyService.resumePlayback(targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch {}
       }
