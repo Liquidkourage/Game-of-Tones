@@ -530,6 +530,15 @@ const HostView: React.FC = () => {
       } catch {}
     });
 
+    newSocket.on('playback-diagnostic', (diag: any) => {
+      try {
+        const payload = JSON.stringify(diag, null, 2);
+        addLog(`Playback diagnostic: ${payload}`, 'warn');
+        // Also print to console for devs
+        console.log('🔎 Playback diagnostic', diag);
+      } catch {}
+    });
+
     // Acknowledge reveal events
     newSocket.on('call-revealed', (data: any) => {
       addLog(`Call revealed: ${data.hint || 'full'} ${data.songName ? '— ' + data.songName : ''} ${data.artistName ? '— ' + data.artistName : ''}`, 'info');

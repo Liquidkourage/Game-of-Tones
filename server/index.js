@@ -347,9 +347,23 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
         // Surface a warning with context info to host
         try {
           const ctx = await spotifyService.getCurrentPlaybackState();
+          const devices = await spotifyService.getUserDevices();
           const ctxUri = ctx?.context?.uri || '(none)';
           const ctxName = ctx?.item?.name || '(unknown track)';
-          io.to(roomId).emit('playback-warning', { message: `Context hijack corrected. Was: ${ctxName} in ${ctxUri}` });
+          const ctxArtist = ctx?.item?.artists?.map?.((a) => a?.name).filter(Boolean).join(', ') || '';
+          const diag = {
+            message: `Context hijack corrected. Was: ${ctxName}${ctxArtist ? ' — ' + ctxArtist : ''} in ${ctxUri}`,
+            contextUri: ctxUri,
+            track: { id: ctx?.item?.id, name: ctxName, artist: ctxArtist },
+            isPlaying: !!ctx?.is_playing,
+            progressMs: Number(ctx?.progress_ms || 0),
+            device: { id: ctx?.device?.id, name: ctx?.device?.name, isActive: !!ctx?.device?.is_active },
+            shuffle: !!ctx?.shuffle_state,
+            repeat: ctx?.repeat_state || 'off',
+            devices: (devices || []).map(d => ({ id: d.id, name: d.name, is_active: d.is_active }))
+          };
+          io.to(roomId).emit('playback-warning', { message: diag.message });
+          io.to(roomId).emit('playback-diagnostic', diag);
         } catch {}
         // Do not early-return; still run stall logic below
       }
