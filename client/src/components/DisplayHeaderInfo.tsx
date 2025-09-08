@@ -59,6 +59,7 @@ const DisplayHeaderInfo: React.FC = () => {
     const gap = 5;
     const baseWidth = rect ? (rect.width - gap * 4) / 5 : 40;
     const cardWidth = Math.max(0, Math.floor(baseWidth * 1.1) - 12); // shrink each by additional 11px total
+    const prettyPattern = pattern === 'line' ? 'Single Line' : pattern === 'four_corners' ? 'Four Corners' : pattern === 'x' ? 'X' : pattern === 'full_card' ? 'Full Card' : 'Custom';
     const containerStyle: React.CSSProperties = rect
       ? {
           position: 'fixed',
@@ -77,54 +78,68 @@ const DisplayHeaderInfo: React.FC = () => {
     // For full card pattern, show game stats instead of BINGO headers
     if (pattern === 'full_card') {
       return (
-        <div className="full-card-header" style={containerStyle}>
-          <div
-            style={{
-              width: '100%',
-              height: rect ? Math.max(0, ((document.querySelector('.app-header') as HTMLElement)?.getBoundingClientRect().bottom || 40) - 5) : undefined,
-              textAlign: 'center',
-              fontWeight: 800,
-              background: 'rgba(255,255,255,0.08)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              borderRadius: 8,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '1.2rem',
-              color: '#00ff88'
-            }}
-          >
-            FULL CARD • {playerCount} PLAYERS
+        <>
+          <div className="full-card-header" style={containerStyle}>
+            <div
+              style={{
+                width: '100%',
+                height: rect ? Math.max(0, ((document.querySelector('.app-header') as HTMLElement)?.getBoundingClientRect().bottom || 40) - 5) : undefined,
+                textAlign: 'center',
+                fontWeight: 800,
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '1.2rem',
+                color: '#00ff88'
+              }}
+            >
+              FULL CARD • {playerCount} PLAYERS
+            </div>
           </div>
-        </div>
+          <div style={{ position: 'fixed', top: 8, right: 12, zIndex: 260, pointerEvents: 'none' }}>
+            <div style={{ padding: '6px 10px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', fontWeight: 800, letterSpacing: '0.03em' }}>
+              {prettyPattern}
+            </div>
+          </div>
+        </>
       );
     }
     
     // For other patterns, show BINGO headers
     return (
-      <div className="bingo-header" style={containerStyle}>
-        {['B', 'I', 'N', 'G', 'O'].map((c) => (
-          <div
-            key={c}
-            style={{
-              width: cardWidth,
-              height: rect ? Math.max(0, ((document.querySelector('.app-header') as HTMLElement)?.getBoundingClientRect().bottom || 40) - 5) : undefined,
-              textAlign: 'center',
-              fontWeight: 900,
-              letterSpacing: '0.08em',
-              background: 'rgba(255,255,255,0.08)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              borderRadius: 8,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '1.6rem'
-            }}
-          >
-            {c}
+      <>
+        <div className="bingo-header" style={containerStyle}>
+          {['B', 'I', 'N', 'G', 'O'].map((c) => (
+            <div
+              key={c}
+              style={{
+                width: cardWidth,
+                height: rect ? Math.max(0, ((document.querySelector('.app-header') as HTMLElement)?.getBoundingClientRect().bottom || 40) - 5) : undefined,
+                textAlign: 'center',
+                fontWeight: 900,
+                letterSpacing: '0.08em',
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '1.6rem'
+              }}
+            >
+              {c}
+            </div>
+          ))}
+        </div>
+        <div style={{ position: 'fixed', top: 8, right: 12, zIndex: 260, pointerEvents: 'none' }}>
+          <div style={{ padding: '6px 10px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', fontWeight: 800, letterSpacing: '0.03em' }}>
+            {prettyPattern}
           </div>
-        ))}
-      </div>
+        </div>
+      </>
     );
   }
   return null;

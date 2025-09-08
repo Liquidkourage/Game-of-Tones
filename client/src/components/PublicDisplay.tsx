@@ -1407,6 +1407,38 @@ const PublicDisplay: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Subtle confetti when winner banner shows */}
+      <AnimatePresence>
+        {showWinnerBanner && (
+          <motion.div
+            key="confetti"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.8 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 2100 }}
+          >
+            {Array.from({ length: 60 }).map((_, i) => (
+              <motion.div
+                key={i}
+                initial={{ x: Math.random() * window.innerWidth, y: -20, rotate: 0, opacity: 0.9 }}
+                animate={{ y: window.innerHeight + 40, rotate: 360 * (Math.random() > 0.5 ? 1 : -1) }}
+                transition={{ duration: 1.2 + Math.random() * 0.6, ease: 'easeIn' }}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: 6,
+                  height: 10,
+                  borderRadius: 2,
+                  background: ['#00ff88', '#7bffd9', '#fff', '#ffd166', '#ff6b6b'][i % 5],
+                  transform: `translateX(${Math.random() * 100}px)`
+                }}
+              />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Main Content - 16:10 Layout */}
       <div className="display-content">
         <AnimatePresence>
