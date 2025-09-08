@@ -514,7 +514,19 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
         }
       }
       
-      // Ensure repeat mode stays set to 'track' for playlist playback
+      // Aggressive auto-advance prevention: pause playback if it exceeds snippet length
+      const snippetLimitMs = snippetMs * 0.95; // Allow 5% buffer for timing variations
+      if (room.temporaryPlaylistId && isPlaying && progress > snippetLimitMs) {
+        try {
+          console.log(`⏸️ AGGRESSIVE PAUSE: Progress ${progress}ms exceeds snippet limit ${snippetLimitMs}ms. Pausing to prevent auto-advance.`);
+          await spotifyService.pausePlayback(deviceId);
+          // Let timer handle the next song transition
+        } catch (e) {
+          console.warn('⚠️ Failed to pause at snippet limit:', e?.message);
+        }
+      }
+      
+      // Also enforce repeat mode but it's secondary to the pause strategy
       if (room.temporaryPlaylistId && state?.repeat_state !== 'track') {
         try {
           console.log(`🔄 Enforcing repeat 'track' mode (was: ${state?.repeat_state})`);
