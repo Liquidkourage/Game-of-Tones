@@ -1349,11 +1349,11 @@ const HostView: React.FC = () => {
         {/* Header */}
         <div className="host-header">
           <h1>🎵 Game Host</h1>
-          <div className="room-info">
+          <div className="room-info" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
             <span className="room-code">Room: {roomId}</span>
             <span className="player-count">{players.length} Players</span>
           </div>
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <input type="checkbox" checked={showAllControls} onChange={(e) => setShowAllControls(!!e.target.checked)} />
               <span>Show All Controls</span>
