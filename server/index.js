@@ -513,6 +513,17 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           await playNextSong(roomId, deviceId);
         }
       }
+      
+      // Ensure repeat mode stays set to 'track' for playlist playback
+      if (room.temporaryPlaylistId && state?.repeat_state !== 'track') {
+        try {
+          console.log(`🔄 Enforcing repeat 'track' mode (was: ${state?.repeat_state})`);
+          await spotifyService.setRepeatState('track', deviceId);
+        } catch (e) {
+          console.warn('⚠️ Failed to enforce repeat mode:', e?.message);
+        }
+      }
+      
       // Overrun guard: if snippet time essentially elapsed on same track, force advance
       const lastCorrection = room?.lastCorrectionAtMs || 0;
       const recentlyCorrected = (now - lastCorrection) < 2500;

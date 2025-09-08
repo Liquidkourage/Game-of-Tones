@@ -613,10 +613,24 @@ class SpotifyService {
         position_ms: positionMs
       });
       
-      // Step 2: Immediately set repeat to 'track' to prevent auto-advance
+      // Step 2: Aggressively set repeat to 'track' to prevent auto-advance
       // This keeps us locked to the current track within the playlist context
-      await new Promise(resolve => setTimeout(resolve, 300)); // Brief delay for context to establish
+      await new Promise(resolve => setTimeout(resolve, 500)); // Longer delay for context to establish
       await this.setRepeatState('track', deviceId);
+      
+      // Step 3: Verify repeat mode was set correctly
+      await new Promise(resolve => setTimeout(resolve, 300));
+      try {
+        const verifyState = await this.getCurrentPlaybackState();
+        if (verifyState?.repeat_state !== 'track') {
+          console.warn(`⚠️ Repeat mode verification failed. Expected 'track', got '${verifyState?.repeat_state}'. Retrying...`);
+          await this.setRepeatState('track', deviceId);
+        } else {
+          console.log(`✅ Verified repeat mode set to 'track'`);
+        }
+      } catch (e) {
+        console.warn('⚠️ Could not verify repeat mode:', e?.message);
+      }
       
       console.log(`✅ Started controlled playback from playlist ${playlistId} at track ${trackIndex}, position ${positionMs}ms (repeat: track)`);
     } catch (error) {
