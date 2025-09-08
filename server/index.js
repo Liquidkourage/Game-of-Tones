@@ -355,7 +355,13 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
       const now = Date.now();
 
       // Hard guard: wrong track correction with ping-pong prevention
-      if (expectedId && currentId && currentId !== expectedId) {
+      // Check for track mismatch OR wrong playlist context
+      const expectedContext = room.temporaryPlaylistId ? `spotify:playlist:${room.temporaryPlaylistId}` : null;
+      const currentContext = state?.context?.uri || null;
+      const wrongTrack = expectedId && currentId && currentId !== expectedId;
+      const wrongContext = expectedContext && currentContext && currentContext !== expectedContext;
+      
+      if (wrongTrack || wrongContext) {
         const room = rooms.get(roomId);
         // Check for ping-pong correction (same wrong track corrected recently)
         const lastWrongTrack = room?.lastCorrectedFromTrack;
@@ -370,7 +376,11 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           return;
         }
         
-        console.warn(`⚠️ Watchdog detected mismatched track. Expected ${expectedId}, got ${currentId}. Correcting…`);
+        if (wrongTrack) {
+          console.warn(`⚠️ Watchdog detected mismatched track. Expected ${expectedId}, got ${currentId}. Correcting…`);
+        } else {
+          console.warn(`⚠️ Watchdog detected wrong playlist context. Expected ${expectedContext}, got ${currentContext}. Correcting…`);
+        }
         try {
           // Store correction info for ping-pong detection
           if (room) {
@@ -436,9 +446,11 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           const ctxUri = ctx?.context?.uri || '(none)';
           const ctxName = ctx?.item?.name || '(unknown track)';
           const ctxArtist = ctx?.item?.artists?.map?.((a) => a?.name).filter(Boolean).join(', ') || '';
+          const expectedCtx = room.temporaryPlaylistId ? `spotify:playlist:${room.temporaryPlaylistId}` : '(none)';
           const diag = {
-            message: `Context hijack corrected. Was: ${ctxName}${ctxArtist ? ' — ' + ctxArtist : ''} in ${ctxUri}`,
+            message: `Context hijack corrected. Was: ${ctxName}${ctxArtist ? ' — ' + ctxArtist : ''} in ${ctxUri} (expected: ${expectedCtx})`,
             contextUri: ctxUri,
+            expectedContext: expectedCtx,
             track: { id: ctx?.item?.id, name: ctxName, artist: ctxArtist },
             isPlaying: !!ctx?.is_playing,
             progressMs: Number(ctx?.progress_ms || 0),
