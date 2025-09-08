@@ -318,13 +318,35 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           // Ensure control on target device without autoplaying a random context
           try { await spotifyService.transferPlayback(deviceId, false); } catch {}
           // Restart intended track (position 0 to avoid drift); timers already handle overrun
-          await spotifyService.startPlayback(deviceId, [`spotify:track:${expectedId}`], 0);
+          // Try to calculate expected progress from when song started
+          let expectedProgress = 0;
+          try {
+            const r = rooms.get(roomId);
+            if (r?.songStartAtMs) expectedProgress = Math.max(0, Date.now() - r.songStartAtMs);
+          } catch {}
+          await spotifyService.startPlayback(deviceId, [`spotify:track:${expectedId}`], expectedProgress);
+          // Verify and seek precisely if needed
+          try {
+            const verify = await spotifyService.getCurrentPlaybackState();
+            const vid = verify?.item?.id;
+            const vprog = Number(verify?.progress_ms || 0);
+            if (vid === expectedId && Math.abs(vprog - expectedProgress) > 1200) {
+              try { await spotifyService.seekToPosition(expectedProgress, deviceId); } catch {}
+            }
+          } catch {}
           // Enforce deterministic playback settings after correction
           try { await spotifyService.setShuffleState(false, deviceId); } catch {}
           try { await spotifyService.setRepeatState('off', deviceId); } catch {}
         } catch (e) {
           console.warn('⚠️ Correction attempt failed:', e?.message || e);
         }
+        // Surface a warning with context info to host
+        try {
+          const ctx = await spotifyService.getCurrentPlaybackState();
+          const ctxUri = ctx?.context?.uri || '(none)';
+          const ctxName = ctx?.item?.name || '(unknown track)';
+          io.to(roomId).emit('playback-warning', { message: `Context hijack corrected. Was: ${ctxName} in ${ctxUri}` });
+        } catch {}
         // Do not early-return; still run stall logic below
       }
 
@@ -1735,6 +1757,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       }
       await spotifyService.withRetries('startPlayback(initial)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
       console.log(`✅ Successfully started playback on device: ${targetDeviceId}`);
+      try { const r = rooms.get(roomId); if (r) r.songStartAtMs = Date.now() - (startMs || 0); } catch {}
       
       // Set initial volume to 50% (or room's saved volume)
       try {
@@ -1761,6 +1784,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           await spotifyService.withRetries('transferPlayback(after-refresh)', () => spotifyService.transferPlayback(targetDeviceId, true), { attempts: 3, backoffMs: 300 });
           await spotifyService.withRetries('startPlayback(after-refresh)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
           console.log(`✅ Successfully started playback after token refresh`);
+          try { const r = rooms.get(roomId); if (r) r.songStartAtMs = Date.now() - (startMs || 0); } catch {}
           
           // Set initial volume to 50% (or room's saved volume)
           try {
