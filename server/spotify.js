@@ -601,11 +601,11 @@ class SpotifyService {
     }
   }
 
-  // Start playback from playlist at specific track and position with auto-advance prevention
+  // Simplified playlist playback - let timer handle timing, not Spotify
   async startPlaybackFromPlaylist(deviceId, playlistId, trackIndex = 0, positionMs = 0) {
     await this.ensureValidToken();
     try {
-      // Step 1: Start playlist context at the specified track
+      // Simple playlist playback - no complex verification or repeat manipulation
       await this.spotifyApi.play({
         device_id: deviceId,
         context_uri: `spotify:playlist:${playlistId}`,
@@ -613,16 +613,7 @@ class SpotifyService {
         position_ms: positionMs
       });
       
-      // Step 2: Set repeat to 'track' but also implement pause-based prevention
-      // Since repeat mode isn't reliable, we'll use aggressive watchdog monitoring
-      await new Promise(resolve => setTimeout(resolve, 500));
-      await this.setRepeatState('track', deviceId);
-      
-      console.log(`✅ Started playlist playback with auto-advance prevention (watchdog will enforce strict timing)`);
-      
-      // Note: Watchdog will now pause playback when snippet time is reached to prevent auto-advance
-      
-      console.log(`✅ Started controlled playback from playlist ${playlistId} at track ${trackIndex}, position ${positionMs}ms (repeat: track)`);
+      console.log(`✅ Started playlist playback: track ${trackIndex} at ${positionMs}ms`);
     } catch (error) {
       console.error('Error starting playback from playlist:', error);
       throw error;

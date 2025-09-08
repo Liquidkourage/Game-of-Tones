@@ -338,6 +338,158 @@ function clearPlaybackWatcher(roomId) {
   }
 }
 
+// NEW: Simplified context monitor - only watches for context hijacks
+function startSimpleContextMonitor(roomId, deviceId) {
+  clearPlaybackWatcher(roomId);
+  
+  const intervalId = setInterval(async () => {
+    try {
+      const room = rooms.get(roomId);
+      if (!room || room.gameState !== 'playing') { 
+        clearPlaybackWatcher(roomId); 
+        return; 
+      }
+      
+      const state = await spotifyService.getCurrentPlaybackState();
+      const expectedContext = room.temporaryPlaylistId ? `spotify:playlist:${room.temporaryPlaylistId}` : null;
+      const currentContext = state?.context?.uri || null;
+      
+      // Only correct if context is completely wrong (different playlist or no context)
+      if (expectedContext && currentContext && currentContext !== expectedContext) {
+        console.warn(`🔄 Context lost. Expected: ${expectedContext}, Got: ${currentContext}. Restoring...`);
+        
+        try {
+          // Simple restore - just restart from current position in our playlist
+          if (room.currentSongIndex !== undefined) {
+            await spotifyService.startPlaybackFromPlaylist(deviceId, room.temporaryPlaylistId, room.currentSongIndex, 0);
+          }
+        } catch (e) {
+          console.warn('⚠️ Context restore failed:', e?.message);
+        }
+      }
+    } catch (_e) {
+      // Ignore monitor errors to prevent spam
+    }
+  }, 5000); // Check every 5 seconds - much less aggressive
+  
+  roomPlaybackWatchers.set(roomId, intervalId);
+}
+
+// NEW: Simple timer-based song progression - let timer control everything
+function startSimpleProgression(roomId, deviceId, snippetLengthSeconds) {
+  const room = rooms.get(roomId);
+  if (!room) return;
+  
+  console.log(`⏰ Starting simple progression: ${snippetLengthSeconds}s per song`);
+  
+  // Clear any existing timer
+  clearRoomTimer(roomId);
+  
+  // Start context monitor for hijack detection only
+  startSimpleContextMonitor(roomId, deviceId);
+  
+  // Set timer for exact snippet duration
+  setRoomTimer(roomId, async () => {
+    console.log(`⏰ Timer fired - advancing to next song`);
+    
+    // Pause current playback to prevent auto-advance
+    try {
+      await spotifyService.pausePlayback(deviceId);
+    } catch (e) {
+      console.warn('⚠️ Pause failed during transition:', e?.message);
+    }
+    
+    // Advance to next song
+    await playNextSongSimple(roomId, deviceId);
+  }, snippetLengthSeconds * 1000);
+}
+
+// NEW: Simplified song progression without complex verification
+async function playNextSongSimple(roomId, deviceId) {
+  console.log('🎵 Simple next song for room:', roomId);
+  const room = rooms.get(roomId);
+  
+  if (!room || room.gameState !== 'playing' || !room.playlistSongs) {
+    console.log('❌ Cannot advance: invalid room state');
+    return;
+  }
+
+  // Check if we're at the end
+  if (room.currentSongIndex + 1 >= room.playlistSongs.length) {
+    console.log('🏁 Playlist complete. Ending game.');
+    room.gameState = 'ended';
+    clearRoomTimer(roomId);
+    clearPlaybackWatcher(roomId);
+    
+    // Clean up temporary playlist
+    if (room.temporaryPlaylistId) {
+      spotifyService.deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
+        console.warn('⚠️ Failed to delete temporary playlist:', err)
+      );
+      room.temporaryPlaylistId = null;
+    }
+    
+    io.to(roomId).emit('game-ended', { roomId, reason: 'playlist-complete' });
+    return;
+  }
+
+  // Move to next song
+  room.currentSongIndex++;
+  const nextSong = room.playlistSongs[room.currentSongIndex];
+  
+  if (!nextSong) {
+    console.log('❌ No next song found');
+    return;
+  }
+
+  // Update current song
+  room.currentSong = {
+    id: nextSong.id,
+    name: nextSong.name,
+    artist: nextSong.artist
+  };
+
+  // Calculate start position if random starts enabled
+  let startMs = 0;
+  if (room.randomStarts && Number.isFinite(nextSong.duration)) {
+    const dur = Math.max(0, Number(nextSong.duration));
+    const safeWindow = Math.max(0, dur - (room.snippetLength * 1000) - 1500);
+    if (safeWindow > 3000) {
+      startMs = Math.floor(Math.random() * safeWindow);
+    }
+  }
+
+  try {
+    // Simple playlist playback
+    if (room.temporaryPlaylistId) {
+      await spotifyService.startPlaybackFromPlaylist(deviceId, room.temporaryPlaylistId, room.currentSongIndex, startMs);
+    } else {
+      await spotifyService.startPlayback(deviceId, [`spotify:track:${nextSong.id}`], startMs);
+    }
+
+    // Emit song update
+    io.to(roomId).emit('song-playing', {
+      songId: nextSong.id,
+      songName: nextSong.name,
+      artistName: nextSong.artist,
+      snippetLength: room.snippetLength,
+      currentIndex: room.currentSongIndex,
+      totalSongs: room.playlistSongs.length,
+      previewUrl: nextSong.previewUrl || null
+    });
+
+    console.log(`✅ Simple advance: ${nextSong.name} by ${nextSong.artist}`);
+
+    // Start simple progression for next song
+    startSimpleProgression(roomId, deviceId, room.snippetLength);
+
+  } catch (error) {
+    console.error('❌ Error in simple song advance:', error);
+    // Try to continue with next song after delay
+    setTimeout(() => playNextSongSimple(roomId, deviceId), 3000);
+  }
+}
+
 function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
   clearPlaybackWatcher(roomId);
   let attempts = 0;
@@ -2106,21 +2258,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       io.to(roomId).emit('playback-warning', { message: `Playback verification error: ${e?.message || 'Unknown error'}` });
     }
 
-    // Skip-based queue clearing removed to avoid context hijacks
-
-    // Start watchdog to recover from stalls, and set timer for next song
-    // Account for transition time: use 90% of snippet length for actual playback
-    const playbackDuration = Math.max(5000, Math.floor(room.snippetLength * 1000 * 0.9));
-    const songStartTime = Date.now();
-      console.log(`⏰ Setting timer for room ${roomId}: ${playbackDuration}ms (${room.snippetLength}s snippet with transition buffer)`);
-    startPlaybackWatchdog(roomId, targetDeviceId, playbackDuration);
-    setRoomTimer(roomId, async () => {
-      const songEndTime = Date.now();
-      const actualDuration = songEndTime - songStartTime;
-      console.log(`⏰ TIMER CALLBACK EXECUTING for room ${roomId} - calling playNextSong (actual song duration: ${actualDuration}ms)`);
-      // Transition time is now built into the snippet timing
-      await playNextSong(roomId, targetDeviceId);
-    }, room.snippetLength * 1000);
+    // NEW: Use simplified timer-based progression
+    console.log(`🚀 Starting simplified playback control for room ${roomId}`);
+    startSimpleProgression(roomId, targetDeviceId, room.snippetLength);
 
   } catch (error) {
     console.error('❌ Error starting automatic playback:', error);
