@@ -865,11 +865,15 @@ const HostView: React.FC = () => {
       const response = await fetch(`${API_BASE || ''}/api/spotify/transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceId: selectedDevice.id, play: true })
+        body: JSON.stringify({ deviceId: selectedDevice.id, play: false })
       });
       if (response.ok) {
         console.log('✅ Transferred playback to selected device');
         await fetchPlaybackState();
+        // Nudge resume to ensure correct track/context
+        if (socket && roomId) {
+          socket.emit('resume-song', { roomId });
+        }
       } else {
         let msg = 'Failed to transfer playback';
         try {
@@ -894,7 +898,7 @@ const HostView: React.FC = () => {
       await fetch(`${API_BASE || ''}/api/spotify/transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceId: selectedDevice.id, play: true })
+        body: JSON.stringify({ deviceId: selectedDevice.id, play: false })
       });
     } catch {}
     try {
