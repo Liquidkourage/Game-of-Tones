@@ -298,17 +298,12 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
 
     console.log(`✅ Playing song in room ${roomId}: ${song.name} by ${song.artist} on device ${targetDeviceId}`);
 
-    // Schedule next song using timer management and ensure watchdog running
-    setRoomTimer(roomId, () => {
-      playNextSong(roomId, targetDeviceId);
-    }, room.snippetLength * 1000);
-    startPlaybackWatchdog(roomId, targetDeviceId, room.snippetLength * 1000);
+    // Use simplified progression system
+    startSimpleProgression(roomId, targetDeviceId, room.snippetLength);
   } catch (error) {
     console.error('❌ Error playing song at index:', error);
-    // Try to continue with next song after a delay using timer management
-    setRoomTimer(roomId, () => {
-      playNextSong(roomId, deviceId);
-    }, 5000);
+    // Try to continue with next song after a delay using simple system
+    setTimeout(() => playNextSongSimple(roomId, deviceId), 3000);
   }
 }
 
