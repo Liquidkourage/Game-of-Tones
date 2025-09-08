@@ -224,6 +224,9 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       const endTime = Date.now();
       console.log(`✅ Successfully started playback on device: ${targetDeviceId} (took ${endTime - startTime}ms)`);
       
+      // Stabilization delay to prevent context hijacks from volume changes
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
       // Set initial volume to 50% (or room's saved volume) with retry
       let volumeSet = false;
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -1834,6 +1837,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       console.log(`✅ Successfully started playback on device: ${targetDeviceId}`);
       try { const r = rooms.get(roomId); if (r) r.songStartAtMs = Date.now() - (startMs || 0); } catch {}
       
+      // Stabilization delay to prevent context hijacks from volume changes
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
       // Set initial volume to 50% (or room's saved volume)
       try {
         const initialVolume = room.volume || 50;
@@ -1861,6 +1867,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           await spotifyService.withRetries('startPlayback(after-refresh)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
           console.log(`✅ Successfully started playback after token refresh`);
           try { const r = rooms.get(roomId); if (r) r.songStartAtMs = Date.now() - (startMs || 0); } catch {}
+          
+          // Stabilization delay to prevent context hijacks from volume changes
+          await new Promise(resolve => setTimeout(resolve, 800));
           
           // Set initial volume to 50% (or room's saved volume)
           try {
@@ -2062,6 +2071,9 @@ async function playNextSong(roomId, deviceId) {
       await spotifyService.withRetries('startPlayback(next)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
       const playbackEndTime = Date.now();
       if (VERBOSE) console.log(`✅ Successfully started playback on device: ${targetDeviceId} (took ${playbackEndTime - playbackStartTime}ms)`);
+      
+      // Stabilization delay to prevent context hijacks from volume changes
+      await new Promise(resolve => setTimeout(resolve, 800));
       
       // Set initial volume to 50% (or room's saved volume) with retry
       let volumeSet = false;
