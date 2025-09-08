@@ -426,7 +426,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           } catch {}
           // Enforce deterministic playback settings after correction
           try { await spotifyService.setShuffleState(false, deviceId); } catch {}
-          try { await spotifyService.setRepeatState('off', deviceId); } catch {}
+          // Note: Do NOT set repeat to 'off' here - we want 'track' mode to prevent auto-advance
           try { const r = rooms.get(roomId); if (r) { r.songStartAtMs = now - expectedProgress; } } catch {}
           // Clear any queued items that might cause future hijacks
           try {
@@ -1914,7 +1914,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       // Enforce deterministic playback mode to avoid context/radio fallbacks with delays
       try { await spotifyService.withRetries('setShuffle(false)', () => spotifyService.setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
       await new Promise(resolve => setTimeout(resolve, 200));
-      try { await spotifyService.withRetries('setRepeat(off)', () => spotifyService.setRepeatState('off', targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
+      // Note: Skip setting repeat to 'off' - startPlaybackFromPlaylist will set it to 'track' to prevent auto-advance
       await new Promise(resolve => setTimeout(resolve, 200));
       // Use explicit device_id and uris as fallback in case transfer isn't picked up
       // Randomized start position within track when enabled and safe
