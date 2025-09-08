@@ -309,7 +309,26 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
       const isPlaying = !!state?.is_playing;
       const currentId = state?.item?.id;
       const progress = Number(state?.progress_ms || 0);
-      if (isPlaying) { attempts = 0; return; }
+      const expectedId = room?.currentSong?.id || null;
+
+      // Hard guard: wrong track correction
+      if (expectedId && currentId && currentId !== expectedId) {
+        console.warn(`⚠️ Watchdog detected mismatched track. Expected ${expectedId}, got ${currentId}. Correcting…`);
+        try {
+          // Ensure control on target device without autoplaying a random context
+          try { await spotifyService.transferPlayback(deviceId, false); } catch {}
+          // Restart intended track (position 0 to avoid drift); timers already handle overrun
+          await spotifyService.startPlayback(deviceId, [`spotify:track:${expectedId}`], 0);
+          // Enforce deterministic playback settings after correction
+          try { await spotifyService.setShuffleState(false, deviceId); } catch {}
+          try { await spotifyService.setRepeatState('off', deviceId); } catch {}
+        } catch (e) {
+          console.warn('⚠️ Correction attempt failed:', e?.message || e);
+        }
+        // Do not early-return; still run stall logic below
+      }
+
+      if (isPlaying && (!expectedId || currentId === expectedId)) { attempts = 0; return; }
       attempts += 1;
       if (attempts === 1) {
         try { await spotifyService.resumePlayback(deviceId); } catch {}
