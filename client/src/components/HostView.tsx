@@ -848,6 +848,28 @@ const HostView: React.FC = () => {
     }
   }, [selectedDevice, fetchPlaybackState]);
 
+  const recoverPlayback = useCallback(async () => {
+    try {
+      if (!selectedDevice?.id) {
+        alert('Select a Spotify device first');
+        return;
+      }
+      // Try to regain control and auto-play on selected device
+      await fetch(`${API_BASE || ''}/api/spotify/transfer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId: selectedDevice.id, play: true })
+      });
+    } catch {}
+    try {
+      await fetchPlaybackState();
+      if (socket && roomId) {
+        // Nudge resume if host believes a song is active
+        socket.emit('resume-song', { roomId });
+      }
+    } catch {}
+  }, [selectedDevice?.id, fetchPlaybackState, socket, roomId]);
+
   const toggleShuffle = useCallback(async () => {
     if (!selectedDevice) {
       alert('Please select a device first');
@@ -1453,6 +1475,9 @@ const HostView: React.FC = () => {
               </div>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ padding: '4px 8px', borderRadius: 6, background: selectedDevice ? 'rgba(0,255,136,0.12)' : 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', color: selectedDevice ? '#00ff88' : '#e6e6e6' }}>
+                  {selectedDevice ? `Device: ${selectedDevice.name}` : 'No device selected'}
+                </span>
                 <select
                   value={selectedDevice?.id || ''}
                   onChange={(e) => {
@@ -1474,6 +1499,7 @@ const HostView: React.FC = () => {
                 <button className="btn-secondary" onClick={loadDevices} disabled={isLoadingDevices}>↻ Refresh</button>
                 <button className="btn-secondary" onClick={transferToSelectedDevice} disabled={!selectedDevice}>Transfer Playback</button>
                 <button className="btn-secondary" onClick={saveSelectedDevice} disabled={!selectedDevice}>Save Device</button>
+                <button className="btn-secondary" onClick={recoverPlayback} disabled={!selectedDevice}>Recover Playback</button>
               </div>
             )}
           </motion.div>
