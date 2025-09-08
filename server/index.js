@@ -349,17 +349,34 @@ function startSimpleContextMonitor(roomId, deviceId) {
       const expectedContext = room.temporaryPlaylistId ? `spotify:playlist:${room.temporaryPlaylistId}` : null;
       const currentContext = state?.context?.uri || null;
       
-      // Only correct if context is completely wrong (different playlist or no context)
+      // Handle context issues and track restart corrections
+      const currentTrackId = state?.item?.id;
+      const expectedTrackId = room?.currentSong?.id;
+      const progress = Number(state?.progress_ms || 0);
+      
+      // Case 1: Wrong playlist context
       if (expectedContext && currentContext && currentContext !== expectedContext) {
         console.warn(`🔄 Context lost. Expected: ${expectedContext}, Got: ${currentContext}. Restoring...`);
         
         try {
-          // Simple restore - just restart from current position in our playlist
+          // Restore playlist context with original start position
+          const originalStartMs = room.currentSongStartMs || 0;
           if (room.currentSongIndex !== undefined) {
-            await spotifyService.startPlaybackFromPlaylist(deviceId, room.temporaryPlaylistId, room.currentSongIndex, 0);
+            await spotifyService.startPlaybackFromPlaylist(deviceId, room.temporaryPlaylistId, room.currentSongIndex, originalStartMs);
           }
         } catch (e) {
           console.warn('⚠️ Context restore failed:', e?.message);
+        }
+      }
+      // Case 2: Same track restarted from beginning (back button pressed)
+      else if (currentTrackId === expectedTrackId && progress < 3000 && room.currentSongStartMs > 0) {
+        console.log(`🔄 Track restart detected. Restoring original start position: ${room.currentSongStartMs}ms`);
+        
+        try {
+          // Restore original start position for this track
+          await spotifyService.seekToPosition(room.currentSongStartMs, deviceId);
+        } catch (e) {
+          console.warn('⚠️ Failed to restore original start position:', e?.message);
         }
       }
     } catch (_e) {
@@ -437,13 +454,6 @@ async function playNextSongSimple(roomId, deviceId) {
     return;
   }
 
-  // Update current song
-  room.currentSong = {
-    id: nextSong.id,
-    name: nextSong.name,
-    artist: nextSong.artist
-  };
-
   // Calculate start position if random starts enabled
   let startMs = 0;
   if (room.randomStarts && Number.isFinite(nextSong.duration)) {
@@ -453,6 +463,14 @@ async function playNextSongSimple(roomId, deviceId) {
       startMs = Math.floor(Math.random() * safeWindow);
     }
   }
+
+  // Update current song and store original start position
+  room.currentSong = {
+    id: nextSong.id,
+    name: nextSong.name,
+    artist: nextSong.artist
+  };
+  room.currentSongStartMs = startMs; // Store for restart correction
 
   try {
     // Simple playlist playback
@@ -2130,7 +2148,13 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         await spotifyService.withRetries('startPlayback(initial)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
       }
       console.log(`✅ Successfully started playback on device: ${targetDeviceId}`);
-      try { const r = rooms.get(roomId); if (r) r.songStartAtMs = Date.now() - (startMs || 0); } catch {}
+      try { 
+        const r = rooms.get(roomId); 
+        if (r) {
+          r.songStartAtMs = Date.now() - (startMs || 0);
+          r.currentSongStartMs = startMs; // Store for restart correction
+        }
+      } catch {}
       
       // Stabilization delay to prevent context hijacks from volume changes
       await new Promise(resolve => setTimeout(resolve, 800));
