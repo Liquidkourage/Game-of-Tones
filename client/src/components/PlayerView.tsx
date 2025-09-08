@@ -649,8 +649,7 @@ const PlayerView: React.FC = () => {
             background: 'linear-gradient(180deg, #00ff88 0%, #00cc6d 100%)',
             color: '#061a12',
             border: '2px solid rgba(0,255,136,0.6)',
-            boxShadow: '0 12px 26px rgba(0,0,0,0.35), 0 0 24px rgba(0,255,136,0.35)',
-            positionRelative: 'relative' as any
+            boxShadow: '0 12px 26px rgba(0,0,0,0.35), 0 0 24px rgba(0,255,136,0.35)'
           }}
         >
           <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '6px solid rgba(255,255,255,0.15)' }} />
