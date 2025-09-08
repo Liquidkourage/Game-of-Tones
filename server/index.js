@@ -181,15 +181,15 @@ function setRoomTimer(roomId, callback, delay) {
   // Clear any existing timer for this room
   clearRoomTimer(roomId);
   
-  // Add a small buffer to prevent premature song changes
-  const bufferedDelay = Math.max(delay - 500, delay * 0.95); // 500ms buffer or 95% of original time
+  // Use exact delay - no buffer manipulation
+  const actualDelay = delay;
   
   // Set new timer
   const timerId = setTimeout(() => {
     const room = rooms.get(roomId);
     const currentTime = Date.now();
     if (VERBOSE) {
-    console.log(`🔍 TIMER FIRED - Room: ${roomId}, Time: ${currentTime}, Expected Duration: ${delay}ms, Actual Duration: ${bufferedDelay}ms`);
+    console.log(`🔍 TIMER FIRED - Room: ${roomId}, Time: ${currentTime}, Expected Duration: ${delay}ms, Actual Duration: ${actualDelay}ms`);
     console.log(`🔍 Room State - GameState: ${room?.gameState}, CurrentSongIndex: ${room?.currentSongIndex}, TotalSongs: ${room?.playlistSongs?.length}`);
     console.log(`🔍 Current Song - ${room?.currentSong?.name} by ${room?.currentSong?.artist}`);
     console.log(`🔍 Room exists: ${!!room}, Room ID: ${room?.id}`);
@@ -199,10 +199,10 @@ function setRoomTimer(roomId, callback, delay) {
     if (VERBOSE) console.log(`🔍 About to execute callback for room ${roomId}`);
     callback();
     if (VERBOSE) console.log(`🔍 Callback executed for room ${roomId}`);
-  }, bufferedDelay);
+  }, actualDelay);
   
   roomTimers.set(roomId, timerId);
-  if (VERBOSE) console.log(`⏰ Set timer for room ${roomId}: ${bufferedDelay}ms (original: ${delay}ms) at ${Date.now()}`);
+  console.log(`⏰ Set timer for room ${roomId}: ${actualDelay}ms (${actualDelay/1000}s)`);
 }
 
 // Play song at specific index without changing the index
@@ -2236,7 +2236,7 @@ async function playNextSong(roomId, deviceId) {
 
     // Early-fail check: if progress is still near zero after a few seconds, advance using our controlled flow
     try {
-      await new Promise(r => setTimeout(r, 5000)); // Increased from 3.5s to 5s
+      await new Promise(r => setTimeout(r, 2000)); // Reduced to 2s to minimize transition delay
       const state = await spotifyService.getCurrentPlaybackState();
       const progress = Number(state?.progress_ms || 0);
       const isPlaying = !!state?.is_playing;
