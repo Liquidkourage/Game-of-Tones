@@ -58,7 +58,7 @@ app.use(express.static('public'));
 // Game state management
 const games = new Map();
 const rooms = new Map();
-const PREQUEUE_WINDOW_DEFAULT = 5;
+const PREQUEUE_WINDOW_DEFAULT = 10;
 // Utility: count non-host players in a room
 function getNonHostPlayerCount(room) {
   if (!room) return 0;
