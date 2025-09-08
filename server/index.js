@@ -407,7 +407,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
     } catch (_e) {
       // ignore
     }
-  }, (room && room.superStrictLock && room.stormUntilMs && Date.now() < room.stormUntilMs) ? 1500 : (strict ? 2000 : Math.max(2500, Math.min(5000, snippetMs / 6)))));
+  }, ((room && room.superStrictLock && room.stormUntilMs && Date.now() < room.stormUntilMs) ? 1500 : (strict ? 2000 : Math.max(2500, Math.min(5000, snippetMs / 6)))));
   roomPlaybackWatchers.set(roomId, intervalId);
 }
 
