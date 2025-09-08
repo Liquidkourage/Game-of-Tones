@@ -310,6 +310,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
       const currentId = state?.item?.id;
       const progress = Number(state?.progress_ms || 0);
       const expectedId = room?.currentSong?.id || null;
+      const now = Date.now();
 
       // Hard guard: wrong track correction
       if (expectedId && currentId && currentId !== expectedId) {
@@ -337,9 +338,12 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           // Enforce deterministic playback settings after correction
           try { await spotifyService.setShuffleState(false, deviceId); } catch {}
           try { await spotifyService.setRepeatState('off', deviceId); } catch {}
+          try { const r = rooms.get(roomId); if (r) { r.lastCorrectionAtMs = now; r.songStartAtMs = now - expectedProgress; } } catch {}
         } catch (e) {
           console.warn('⚠️ Correction attempt failed:', e?.message || e);
         }
+        // Reset attempts to avoid immediate stall escalation
+        attempts = 0;
         // Surface a warning with context info to host
         try {
           const ctx = await spotifyService.getCurrentPlaybackState();
@@ -361,7 +365,9 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
         await playNextSong(roomId, deviceId);
       }
       // Overrun guard: if snippet time essentially elapsed on same track, force advance
-      if (room?.currentSong?.id && currentId === room.currentSong.id && progress >= Math.max(0, snippetMs - 300)) {
+      const lastCorrection = room?.lastCorrectionAtMs || 0;
+      const recentlyCorrected = (now - lastCorrection) < 2500;
+      if (!recentlyCorrected && room?.currentSong?.id && currentId === room.currentSong.id && progress >= Math.max(0, snippetMs - 300)) {
         clearPlaybackWatcher(roomId);
         clearRoomTimer(roomId);
         await playNextSong(roomId, deviceId);
