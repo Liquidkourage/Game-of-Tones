@@ -361,7 +361,12 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
       const wrongTrack = expectedId && currentId && currentId !== expectedId;
       const wrongContext = expectedContext && currentContext && currentContext !== expectedContext;
       
-      if (wrongTrack || wrongContext) {
+      // More tolerant validation: Only correct if we have BOTH wrong track AND wrong context
+      // OR if progress is excessively beyond snippet length (indicating auto-advance)
+      const excessiveProgress = progress > (snippetMs * 2); // More than 2x snippet length
+      const needsCorrection = (wrongTrack && wrongContext) || excessiveProgress;
+      
+      if (needsCorrection) {
         const room = rooms.get(roomId);
         // Check for ping-pong correction (same wrong track corrected recently)
         const lastWrongTrack = room?.lastCorrectedFromTrack;
@@ -376,12 +381,14 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           return;
         }
         
-        if (wrongTrack && wrongContext) {
+        if (excessiveProgress) {
+          console.warn(`⚠️ Watchdog detected excessive progress (${progress}ms > ${snippetMs*2}ms limit). Auto-advance likely occurred. Correcting…`);
+        } else if (wrongTrack && wrongContext) {
           console.warn(`⚠️ Watchdog detected track AND context mismatch. Expected ${expectedId} in ${expectedContext}, got ${currentId} in ${currentContext}. Correcting…`);
-        } else if (wrongTrack) {
-          console.warn(`⚠️ Watchdog detected wrong track in correct playlist. Expected ${expectedId}, got ${currentId} at index ${room.currentSongIndex}. Correcting…`);
-        } else {
+        } else if (wrongContext) {
           console.warn(`⚠️ Watchdog detected wrong playlist context. Expected ${expectedContext}, got ${currentContext}. Correcting…`);
+        } else {
+          console.warn(`⚠️ Watchdog detected track mismatch. Expected ${expectedId}, got ${currentId}. Correcting…`);
         }
         try {
           // Store correction info for ping-pong detection
@@ -449,7 +456,9 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           const ctxName = ctx?.item?.name || '(unknown track)';
           const ctxArtist = ctx?.item?.artists?.map?.((a) => a?.name).filter(Boolean).join(', ') || '';
           const expectedCtx = room.temporaryPlaylistId ? `spotify:playlist:${room.temporaryPlaylistId}` : '(none)';
-          const correctionType = wrongTrack && !wrongContext ? 'wrong track in correct playlist' : wrongContext ? 'wrong context' : 'track/context mismatch';
+          const correctionType = excessiveProgress ? 'excessive progress (auto-advance)' : 
+                                 wrongTrack && wrongContext ? 'track and context mismatch' : 
+                                 wrongContext ? 'wrong context' : 'track mismatch';
           const diag = {
             message: `Context hijack corrected (${correctionType}). Was: ${ctxName}${ctxArtist ? ' — ' + ctxArtist : ''} in ${ctxUri} (expected: ${room?.currentSong?.name || 'unknown'} in ${expectedCtx} at index ${room.currentSongIndex})`,
             contextUri: ctxUri,
