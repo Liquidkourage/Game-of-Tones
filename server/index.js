@@ -1942,22 +1942,36 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     try {
       let playing = false;
       let correctTrack = false;
-      for (let i = 0; i < 5; i++) {
-        await new Promise(r => setTimeout(r, 300));
+      for (let i = 0; i < 3; i++) { // Reduced from 5 to 3 attempts
+        await new Promise(r => setTimeout(r, 500)); // Increased delay from 300ms to 500ms
         const state = await spotifyService.getCurrentPlaybackState();
         playing = !!state?.is_playing;
         const currentId = state?.item?.id;
         correctTrack = currentId === firstSong.id;
         console.log(`🔎 Playback verify attempt ${i + 1}: is_playing=${playing} correct_track=${correctTrack} progress=${state?.progress_ms}ms`);
-        if (playing) break;
-        try { await spotifyService.resumePlayback(targetDeviceId); } catch (e) {
-          console.warn('⚠️ Resume during verify failed:', e?.message || e);
+        if (playing && correctTrack) break; // Only break if BOTH conditions are met
+        
+        // Only try resume if not playing AND we have the right track (avoid restriction errors)
+        if (!playing && correctTrack) {
+          try { 
+            await spotifyService.resumePlayback(targetDeviceId); 
+          } catch (e) {
+            if (!e?.message?.includes('Restriction violated')) {
+              console.warn('⚠️ Resume during verify failed:', e?.message || e);
+            }
+          }
         }
       }
       if (!playing || !correctTrack) {
         // Attempt to correct to the intended track once using the same randomized offset
-        console.log(`🔧 Verification failed, correcting with startMs=${startMs}ms`);
-        try { await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs); } catch {}
+        console.log(`🔧 Verification failed (playing=${playing}, correctTrack=${correctTrack}), correcting with startMs=${startMs}ms`);
+        try { 
+          if (room.temporaryPlaylistId) {
+            await spotifyService.startPlaybackFromPlaylist(targetDeviceId, room.temporaryPlaylistId, 0, startMs);
+          } else {
+            await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs); 
+          }
+        } catch {}
       }
       if (!playing) {
         io.to(roomId).emit('playback-warning', { message: 'Playback did not start reliably on the locked device. Please check Spotify is active and not muted.' });
@@ -1973,7 +1987,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     // Account for transition time: use 90% of snippet length for actual playback
     const playbackDuration = Math.max(5000, Math.floor(room.snippetLength * 1000 * 0.9));
     const songStartTime = Date.now();
-    if (VERBOSE) console.log(`⏰ Setting timer for room ${roomId}: ${playbackDuration}ms (${room.snippetLength}s snippet with transition buffer) at ${songStartTime}`);
+      console.log(`⏰ Setting timer for room ${roomId}: ${playbackDuration}ms (${room.snippetLength}s snippet with transition buffer)`);
     startPlaybackWatchdog(roomId, targetDeviceId, playbackDuration);
     setRoomTimer(roomId, async () => {
       const songEndTime = Date.now();
@@ -2073,7 +2087,7 @@ async function playNextSong(roomId, deviceId) {
       }
 
       const playbackStartTime = Date.now();
-      if (VERBOSE) console.log(`🎵 Starting Spotify playback at ${playbackStartTime} for: ${nextSong.name}`);
+      console.log(`🎵 Starting Spotify playback for: ${nextSong.name}`);
       // Enforce deterministic playback mode on each advance with delays
       try { await spotifyService.withRetries('setShuffle(false,next)', () => spotifyService.setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
       await new Promise(resolve => setTimeout(resolve, 200));
@@ -2096,7 +2110,7 @@ async function playNextSong(roomId, deviceId) {
         await spotifyService.withRetries('startPlayback(next)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
       }
       const playbackEndTime = Date.now();
-      if (VERBOSE) console.log(`✅ Successfully started playback on device: ${targetDeviceId} (took ${playbackEndTime - playbackStartTime}ms)`);
+      console.log(`✅ Successfully started playback on device: ${targetDeviceId}`);
       
       // Stabilization delay to prevent context hijacks from volume changes
       await new Promise(resolve => setTimeout(resolve, 800));
