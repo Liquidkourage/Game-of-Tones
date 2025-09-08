@@ -376,8 +376,10 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           return;
         }
         
-        if (wrongTrack) {
-          console.warn(`⚠️ Watchdog detected mismatched track. Expected ${expectedId}, got ${currentId}. Correcting…`);
+        if (wrongTrack && wrongContext) {
+          console.warn(`⚠️ Watchdog detected track AND context mismatch. Expected ${expectedId} in ${expectedContext}, got ${currentId} in ${currentContext}. Correcting…`);
+        } else if (wrongTrack) {
+          console.warn(`⚠️ Watchdog detected wrong track in correct playlist. Expected ${expectedId}, got ${currentId} at index ${room.currentSongIndex}. Correcting…`);
         } else {
           console.warn(`⚠️ Watchdog detected wrong playlist context. Expected ${expectedContext}, got ${currentContext}. Correcting…`);
         }
@@ -447,10 +449,13 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           const ctxName = ctx?.item?.name || '(unknown track)';
           const ctxArtist = ctx?.item?.artists?.map?.((a) => a?.name).filter(Boolean).join(', ') || '';
           const expectedCtx = room.temporaryPlaylistId ? `spotify:playlist:${room.temporaryPlaylistId}` : '(none)';
+          const correctionType = wrongTrack && !wrongContext ? 'wrong track in correct playlist' : wrongContext ? 'wrong context' : 'track/context mismatch';
           const diag = {
-            message: `Context hijack corrected. Was: ${ctxName}${ctxArtist ? ' — ' + ctxArtist : ''} in ${ctxUri} (expected: ${expectedCtx})`,
+            message: `Context hijack corrected (${correctionType}). Was: ${ctxName}${ctxArtist ? ' — ' + ctxArtist : ''} in ${ctxUri} (expected: ${room?.currentSong?.name || 'unknown'} in ${expectedCtx} at index ${room.currentSongIndex})`,
             contextUri: ctxUri,
             expectedContext: expectedCtx,
+            expectedTrackIndex: room.currentSongIndex,
+            correctionType: correctionType,
             track: { id: ctx?.item?.id, name: ctxName, artist: ctxArtist },
             isPlaying: !!ctx?.is_playing,
             progressMs: Number(ctx?.progress_ms || 0),
