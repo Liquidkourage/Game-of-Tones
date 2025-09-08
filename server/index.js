@@ -410,15 +410,20 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
         try { await spotifyService.resumePlayback(deviceId); } catch {}
       } else if (attempts >= 2) {
         io.to(roomId).emit('playback-warning', { message: 'Playback stalled; restarting current track.' });
-        // Try to restart the intended current track at expected progress 0
+        // Try to restart the intended current track at expected progress
         try {
           const r = rooms.get(roomId);
           const currentExpectedId = r?.currentSong?.id || expectedId;
           if (currentExpectedId) {
+            // Calculate expected progress from when song started, or use 0 if unknown
+            let expectedProgress = 0;
+            try {
+              if (r?.songStartAtMs) expectedProgress = Math.max(0, Date.now() - r.songStartAtMs);
+            } catch {}
             try { await spotifyService.transferPlayback(deviceId, false); } catch {}
             try { await spotifyService.pausePlayback(deviceId); } catch {}
-            await spotifyService.startPlayback(deviceId, [`spotify:track:${currentExpectedId}`], 0);
-            try { await new Promise(res => setTimeout(res, 150)); await spotifyService.seekToPosition(0, deviceId); } catch {}
+            await spotifyService.startPlayback(deviceId, [`spotify:track:${currentExpectedId}`], expectedProgress);
+            try { await new Promise(res => setTimeout(res, 150)); await spotifyService.seekToPosition(expectedProgress, deviceId); } catch {}
             attempts = 0; // reset attempts after restart
           } else {
             // Fallback if no track id known: advance
