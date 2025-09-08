@@ -1825,9 +1825,11 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
 
       await spotifyService.transferPlayback(targetDeviceId, false);
       // Skip-based queue clearing removed to avoid context hijacks
-      // Enforce deterministic playback mode to avoid context/radio fallbacks
+      // Enforce deterministic playback mode to avoid context/radio fallbacks with delays
       try { await spotifyService.withRetries('setShuffle(false)', () => spotifyService.setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
+      await new Promise(resolve => setTimeout(resolve, 200));
       try { await spotifyService.withRetries('setRepeat(off)', () => spotifyService.setRepeatState('off', targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
+      await new Promise(resolve => setTimeout(resolve, 200));
       // Use explicit device_id and uris as fallback in case transfer isn't picked up
       // Randomized start position within track when enabled and safe
       let startMs = 0;
@@ -2057,9 +2059,11 @@ async function playNextSong(roomId, deviceId) {
 
       const playbackStartTime = Date.now();
       if (VERBOSE) console.log(`🎵 Starting Spotify playback at ${playbackStartTime} for: ${nextSong.name}`);
-      // Enforce deterministic playback mode on each advance
+      // Enforce deterministic playback mode on each advance with delays
       try { await spotifyService.withRetries('setShuffle(false,next)', () => spotifyService.setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
+      await new Promise(resolve => setTimeout(resolve, 200));
       try { await spotifyService.withRetries('setRepeat(off,next)', () => spotifyService.setRepeatState('off', targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
+      await new Promise(resolve => setTimeout(resolve, 200));
       // Randomized start position within track when enabled and safe
       let startMs = 0;
       if (room.randomStarts && Number.isFinite(nextSong.duration)) {
