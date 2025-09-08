@@ -1950,12 +1950,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       io.to(roomId).emit('playback-warning', { message: `Playback verification error: ${e?.message || 'Unknown error'}` });
     }
 
-    // Clear any existing queue to ensure clean deterministic playback
-    try {
-      await spotifyService.clearQueue(targetDeviceId);
-    } catch (e) {
-      console.warn('⚠️ Queue clearing failed (non-fatal):', e?.message || e);
-    }
+    // Skip-based queue clearing removed to avoid context hijacks
 
     // Start watchdog to recover from stalls, and set timer for next song
     // Account for transition time: use 90% of snippet length for actual playback
@@ -2044,8 +2039,7 @@ async function playNextSong(roomId, deviceId) {
       } catch (_) {}
       if (needTransfer) {
         await spotifyService.withRetries('transferPlayback(next)', () => spotifyService.transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
-        // Clear queue after transfer to prevent context conflicts
-        try { await spotifyService.clearQueue(targetDeviceId); } catch {}
+        // Skip-based queue clearing removed to avoid context hijacks
       }
     } catch (e) {
       console.warn('⚠️ Transfer playback failed (will still try play):', e?.message || e);
@@ -2183,8 +2177,7 @@ async function playNextSong(roomId, deviceId) {
       if (VERBOSE) console.log(`🔄 TRANSITION STARTING - Room: ${roomId}, Time: ${transitionTime}`);
       if (VERBOSE) console.log(`🔄 Song ending: ${nextSong.name} by ${nextSong.artist}`);
       
-      // Clear queue before transition to prevent hijacks
-      try { await spotifyService.clearQueue(targetDeviceId); } catch {}
+      // Skip-based queue clearing removed to avoid context hijacks
       clearRoomTimer(roomId);
       playNextSong(roomId, targetDeviceId);
     }, playbackDuration);
