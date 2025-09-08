@@ -160,8 +160,7 @@ const HostView: React.FC = () => {
     if (!p) return;
     setSnippetLength(p.snippet);
     setRandomStarts(p.random);
-    setPreQueueWindow(p.window);
-    if (socket && roomId && preQueueEnabled) socket.emit('set-prequeue', { roomId, enabled: true, window: p.window });
+    // Pre-queue removed, only snippet and random settings apply
   };
   const deleteProfile = (name: string) => {
     const next = profiles.filter(p => p.name !== name);
@@ -1652,31 +1651,7 @@ const HostView: React.FC = () => {
                 <span>Lock new joins</span>
               </label>
               <span style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.2)' }} />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={preQueueEnabled}
-                  onChange={(e) => {
-                    const val = e.target.checked;
-                    setPreQueueEnabled(val);
-                    if (socket && roomId) socket.emit('set-prequeue', { roomId, enabled: val, window: preQueueWindow });
-                  }}
-                />
-                <span>Pre-queue next</span>
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={20}
-                value={preQueueWindow}
-                onChange={(e) => {
-                  const val = Math.max(1, Math.min(20, Number(e.target.value) || 1));
-                  setPreQueueWindow(val);
-                  if (socket && roomId && preQueueEnabled) socket.emit('set-prequeue', { roomId, enabled: true, window: val });
-                }}
-                style={{ width: 56, padding: '2px 6px', background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6 }}
-              />
-              <span>tracks</span>
+              <span style={{ opacity: 0.8, fontSize: 14 }}>Pre-queue removed for robust playback</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1693,7 +1668,7 @@ const HostView: React.FC = () => {
               </label>
               <span style={{ opacity: 0.8, fontSize: 12 }}>(faster checks, stricter corrections)</span>
             </div>
-            {/* Pre-queue profiles */}
+            {/* Game profiles (snippet + random only) */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
               <select
                 onChange={(e) => { if (e.target.value) applyProfile(e.target.value); e.currentTarget.selectedIndex = 0; }}
@@ -1701,10 +1676,16 @@ const HostView: React.FC = () => {
               >
                 <option value="">Apply Profile…</option>
                 {profiles.map(p => (
-                  <option key={p.name} value={p.name}>{p.name} — {p.snippet}s • {p.random ? 'Random' : 'Fixed'} • {p.window}</option>
+                  <option key={p.name} value={p.name}>{p.name} — {p.snippet}s • {p.random ? 'Random' : 'Fixed'}</option>
                 ))}
               </select>
-              <button className="btn-secondary" onClick={saveCurrentAsProfile}>Save Current as Profile</button>
+              <button className="btn-secondary" onClick={() => {
+                const name = prompt('Save profile as:');
+                if (!name) return;
+                const next = profiles.filter(p => p.name.toLowerCase() !== name.toLowerCase());
+                next.push({ name, snippet: snippetLength, random: randomStarts, window: 0 });
+                persistProfiles(next);
+              }}>Save Current as Profile</button>
               {profiles.length > 0 && (
                 <button className="btn-secondary" onClick={() => {
                   const name = prompt('Delete which profile? Enter exact name:');

@@ -547,7 +547,36 @@ class SpotifyService {
     }
   }
 
-  // Add to queue
+  // Clear queue by skipping all queued items (Spotify has no direct clear API)
+  async clearQueue(deviceId) {
+    await this.ensureValidToken();
+    try {
+      // Get current state to see if there's a queue
+      const state = await this.getCurrentPlaybackState();
+      if (!state?.device || !state.is_playing) return;
+      
+      // Skip through queued items until we're back to the current context
+      // This is a best-effort approach since Spotify doesn't provide queue listing
+      for (let i = 0; i < 50; i++) { // Safety limit
+        try {
+          await this.nextTrack(deviceId);
+          await new Promise(r => setTimeout(r, 100));
+          const newState = await this.getCurrentPlaybackState();
+          // If we hit the end or context changes, we've likely cleared the queue
+          if (!newState?.is_playing || newState?.context?.uri !== state?.context?.uri) {
+            break;
+          }
+        } catch {
+          break;
+        }
+      }
+      console.log(`🧹 Queue clearing attempted on device ${deviceId}`);
+    } catch (error) {
+      console.warn('⚠️ Queue clearing failed (non-fatal):', error?.message || error);
+    }
+  }
+
+  // Add to queue (deprecated - will be removed)
   async addToQueue(uri, deviceId) {
     await this.ensureValidToken();
     try {

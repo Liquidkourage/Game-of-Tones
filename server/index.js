@@ -347,23 +347,14 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           try { await spotifyService.setShuffleState(false, deviceId); } catch {}
           try { await spotifyService.setRepeatState('off', deviceId); } catch {}
           try { const r = rooms.get(roomId); if (r) { r.lastCorrectionAtMs = now; r.songStartAtMs = now - expectedProgress; } } catch {}
-          // Rebuild pre-queue window strictly from current index to avoid drift
+          // Clear any queued items that might cause future hijacks
           try {
             const r = rooms.get(roomId);
             if (r) {
-              r.queuedIndices = new Set();
-              if (r.preQueueEnabled && Array.isArray(r.playlistSongs) && r.playlistSongs.length > 0) {
-                const w = r.preQueueWindow || PREQUEUE_WINDOW_DEFAULT;
-                for (let i = 1; i <= w; i++) {
-                  const idx = (r.currentSongIndex + i) % r.playlistSongs.length;
-                  try {
-                    await spotifyService.withRetries('addToQueue(strict-rebuild)', () => spotifyService.addToQueue(`spotify:track:${r.playlistSongs[idx].id}`, deviceId), { attempts: 2, backoffMs: 150 });
-                    r.queuedIndices.add(idx);
-                  } catch (qe) {
-                    console.warn('⚠️ Strict pre-queue rebuild failed:', qe?.message || qe);
-                  }
-                }
-              }
+              // Mark a storm window (e.g., 2 minutes) where we tighten cadence
+              r.stormUntilMs = Date.now() + 120000;
+              // Clear Spotify's queue to prevent future context conflicts
+              await spotifyService.clearQueue(deviceId);
             }
           } catch {}
         } catch (e) {
@@ -443,9 +434,7 @@ io.on('connection', (socket) => {
         volume: 50,
         playlistSongs: [],
         currentSongIndex: 0,
-        preQueueEnabled: false,
-        preQueueWindow: PREQUEUE_WINDOW_DEFAULT,
-        queuedIndices: new Set(),
+        // Pre-queue system removed for deterministic playback
         superStrictLock: false
       };
       rooms.set(roomId, newRoom);
@@ -665,7 +654,7 @@ io.on('connection', (socket) => {
       room.clientCards = new Map();
       room.currentSong = null;
       room.currentSongIndex = 0;
-      room.queuedIndices = new Set();
+      // Queue cleared by removing pre-queue system
       room.round = (room.round || 0) + 1;
       io.to(roomId).emit('round-reset', { round: room.round });
       console.log(`🔄 New round started for room ${roomId} (round ${room.round})`);
@@ -690,24 +679,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Host can enable/disable pre-queue and adjust window
-  socket.on('set-prequeue', (data = {}) => {
-    try {
-      const { roomId, enabled, window = PREQUEUE_WINDOW_DEFAULT } = data;
-      const room = rooms.get(roomId);
-      if (!room) return;
-      const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
-      if (!isCurrentHost) return;
-      room.preQueueEnabled = !!enabled;
-      const w = Number(window);
-      room.preQueueWindow = Number.isFinite(w) && w > 0 && w <= 20 ? w : PREQUEUE_WINDOW_DEFAULT;
-      if (!room.preQueueEnabled) room.queuedIndices = new Set();
-      io.to(roomId).emit('prequeue-updated', { enabled: room.preQueueEnabled, window: room.preQueueWindow });
-      console.log(`🎚️ Pre-queue set to ${room.preQueueEnabled} (window=${room.preQueueWindow}) for room ${roomId}`);
-    } catch (e) {
-      console.error('❌ Error setting pre-queue:', e?.message || e);
-    }
-  });
+  // Pre-queue system removed - deterministic playback only
 
   // Toggle super-strict lock mode from Host
   socket.on('set-super-strict', (data = {}) => {
@@ -1810,6 +1782,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       }
 
       await spotifyService.transferPlayback(targetDeviceId, true);
+      // Clear queue first to prevent context conflicts
+      try { await spotifyService.clearQueue(targetDeviceId); } catch {}
       // Enforce deterministic playback mode to avoid context/radio fallbacks
       try { await spotifyService.withRetries('setShuffle(false)', () => spotifyService.setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
       try { await spotifyService.withRetries('setRepeat(off)', () => spotifyService.setRepeatState('off', targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
@@ -1850,6 +1824,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
             await spotifyService.activateDevice(targetDeviceId);
           }
           await spotifyService.withRetries('transferPlayback(after-refresh)', () => spotifyService.transferPlayback(targetDeviceId, true), { attempts: 3, backoffMs: 300 });
+          // Clear queue after refresh to prevent context conflicts
+          try { await spotifyService.clearQueue(targetDeviceId); } catch {}
           await spotifyService.withRetries('startPlayback(after-refresh)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
           console.log(`✅ Successfully started playback after token refresh`);
           try { const r = rooms.get(roomId); if (r) r.songStartAtMs = Date.now() - (startMs || 0); } catch {}
@@ -1926,33 +1902,24 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       io.to(roomId).emit('playback-warning', { message: `Playback verification error: ${e?.message || 'Unknown error'}` });
     }
 
-    // Optionally pre-queue next window of songs
-    room.queuedIndices = room.queuedIndices instanceof Set ? room.queuedIndices : new Set();
-    if (room.preQueueEnabled) {
-      try {
-        const w = room.preQueueWindow || PREQUEUE_WINDOW_DEFAULT;
-        for (let i = 1; i <= w; i++) {
-          const idx = (room.currentSongIndex + i) % allSongs.length;
-          if (!room.queuedIndices.has(idx)) {
-            await spotifyService.withRetries('addToQueue(initial)', () => spotifyService.addToQueue(`spotify:track:${allSongs[idx].id}`, targetDeviceId), { attempts: 2, backoffMs: 150 });
-            room.queuedIndices.add(idx);
-          }
-        }
-      } catch (e) {
-        console.warn('⚠️ Pre-queue (initial) failed:', e?.message || e);
-      }
+    // Clear any existing queue to ensure clean deterministic playback
+    try {
+      await spotifyService.clearQueue(targetDeviceId);
+    } catch (e) {
+      console.warn('⚠️ Queue clearing failed (non-fatal):', e?.message || e);
     }
 
     // Start watchdog to recover from stalls, and set timer for next song
+    // Account for transition time: use 90% of snippet length for actual playback
+    const playbackDuration = Math.max(5000, Math.floor(room.snippetLength * 1000 * 0.9));
     const songStartTime = Date.now();
-    if (VERBOSE) console.log(`⏰ Setting timer for room ${roomId}: ${room.snippetLength} seconds (${room.snippetLength * 1000}ms) at ${songStartTime}`);
-    startPlaybackWatchdog(roomId, targetDeviceId, room.snippetLength * 1000);
+    if (VERBOSE) console.log(`⏰ Setting timer for room ${roomId}: ${playbackDuration}ms (${room.snippetLength}s snippet with transition buffer) at ${songStartTime}`);
+    startPlaybackWatchdog(roomId, targetDeviceId, playbackDuration);
     setRoomTimer(roomId, async () => {
       const songEndTime = Date.now();
       const actualDuration = songEndTime - songStartTime;
       console.log(`⏰ TIMER CALLBACK EXECUTING for room ${roomId} - calling playNextSong (actual song duration: ${actualDuration}ms)`);
-      // Add a small delay to ensure smooth transition
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Transition time is now built into the snippet timing
       await playNextSong(roomId, targetDeviceId);
     }, room.snippetLength * 1000);
 
@@ -2029,6 +1996,8 @@ async function playNextSong(roomId, deviceId) {
       } catch (_) {}
       if (needTransfer) {
         await spotifyService.withRetries('transferPlayback(next)', () => spotifyService.transferPlayback(targetDeviceId, true), { attempts: 3, backoffMs: 300 });
+        // Clear queue after transfer to prevent context conflicts
+        try { await spotifyService.clearQueue(targetDeviceId); } catch {}
       }
     } catch (e) {
       console.warn('⚠️ Transfer playback failed (will still try play):', e?.message || e);
@@ -2153,39 +2122,21 @@ async function playNextSong(roomId, deviceId) {
       console.warn('⚠️ Early-fail check error:', e?.message || e);
     }
 
-    // Optionally maintain pre-queue window by topping up
-    if (room.preQueueEnabled) {
-      try {
-        const w = room.preQueueWindow || PREQUEUE_WINDOW_DEFAULT;
-        for (let i = 1; i <= w; i++) {
-          const idx = (room.currentSongIndex + i) % room.playlistSongs.length;
-          if (!room.queuedIndices.has(idx)) {
-            await spotifyService.withRetries('addToQueue(top-up)', () => spotifyService.addToQueue(`spotify:track:${room.playlistSongs[idx].id}`, targetDeviceId), { attempts: 2, backoffMs: 150 });
-            room.queuedIndices.add(idx);
-          }
-        }
-        // clear indices that are behind current index to keep set small
-        room.queuedIndices.forEach((idx) => {
-          const distance = (idx - room.currentSongIndex + room.playlistSongs.length) % room.playlistSongs.length;
-          if (distance === 0 || distance > w) room.queuedIndices.delete(idx);
-        });
-      } catch (e) {
-        console.warn('⚠️ Pre-queue (top-up) failed:', e?.message || e);
-      }
-    }
+    // No pre-queue - deterministic playback only
 
     // Start watchdog to recover from stalls, and schedule next song
+    // Account for transition time: use 90% of snippet length for actual playback
+    const playbackDuration = Math.max(5000, Math.floor(room.snippetLength * 1000 * 0.9));
     setRoomTimer(roomId, async () => {
       const transitionTime = Date.now();
       if (VERBOSE) console.log(`🔄 TRANSITION STARTING - Room: ${roomId}, Time: ${transitionTime}`);
       if (VERBOSE) console.log(`🔄 Song ending: ${nextSong.name} by ${nextSong.artist}`);
       
-      // Add a small delay to ensure smooth transition
-      await new Promise(resolve => setTimeout(resolve, 100));
-      if (VERBOSE) console.log(`🔄 Transition delay complete, calling playNextSong`);
+      // Clear queue before transition to prevent hijacks
+      try { await spotifyService.clearQueue(targetDeviceId); } catch {}
       clearRoomTimer(roomId);
       playNextSong(roomId, targetDeviceId);
-    }, room.snippetLength * 1000);
+    }, playbackDuration);
 
   } catch (error) {
     console.error('❌ Error playing next song:', error);
