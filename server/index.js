@@ -291,6 +291,10 @@ const roomTimers = new Map();
 // Playback watchdogs per room to recover from mid-snippet stalls
 const roomPlaybackWatchers = new Map();
 
+function isStormActive(room) {
+  return !!(room && room.superStrictLock && room.stormUntilMs && Date.now() < room.stormUntilMs);
+}
+
 function clearPlaybackWatcher(roomId) {
   if (roomPlaybackWatchers.has(roomId)) {
     clearInterval(roomPlaybackWatchers.get(roomId));
@@ -412,7 +416,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
     } catch (_e) {
       // ignore
     }
-  }, strict ? 2000 : Math.max(2500, Math.min(5000, snippetMs / 6)));
+  }, (room && room.superStrictLock && room.stormUntilMs && Date.now() < room.stormUntilMs) ? 1500 : (strict ? 2000 : Math.max(2500, Math.min(5000, snippetMs / 6)))));
   roomPlaybackWatchers.set(roomId, intervalId);
 }
 
