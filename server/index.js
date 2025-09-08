@@ -199,7 +199,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     }
 
     try {
-      await spotifyService.withRetries('transferPlayback(initial)', () => spotifyService.transferPlayback(targetDeviceId, true), { attempts: 3, backoffMs: 300 });
+      await spotifyService.withRetries('transferPlayback(initial)', () => spotifyService.transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
     } catch (e) {
       console.warn('⚠️ Transfer playback failed (will still try play):', e?.message || e);
     }
@@ -1788,7 +1788,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         await spotifyService.activateDevice(targetDeviceId);
       }
 
-      await spotifyService.transferPlayback(targetDeviceId, true);
+      await spotifyService.transferPlayback(targetDeviceId, false);
       // Clear queue first to prevent context conflicts
       try { await spotifyService.clearQueue(targetDeviceId); } catch {}
       // Enforce deterministic playback mode to avoid context/radio fallbacks
@@ -2002,7 +2002,7 @@ async function playNextSong(roomId, deviceId) {
         }
       } catch (_) {}
       if (needTransfer) {
-        await spotifyService.withRetries('transferPlayback(next)', () => spotifyService.transferPlayback(targetDeviceId, true), { attempts: 3, backoffMs: 300 });
+        await spotifyService.withRetries('transferPlayback(next)', () => spotifyService.transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
         // Clear queue after transfer to prevent context conflicts
         try { await spotifyService.clearQueue(targetDeviceId); } catch {}
       }
