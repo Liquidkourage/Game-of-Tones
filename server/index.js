@@ -1838,6 +1838,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           startMs = Math.floor(Math.random() * safeWindow);
         }
       }
+      console.log(`🎯 Starting first song with randomized offset: ${startMs}ms (${Math.floor(startMs/1000)}s)`);
       await spotifyService.withRetries('startPlayback(initial)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
       console.log(`✅ Successfully started playback on device: ${targetDeviceId}`);
       try { const r = rooms.get(roomId); if (r) r.songStartAtMs = Date.now() - (startMs || 0); } catch {}
@@ -1930,7 +1931,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         playing = !!state?.is_playing;
         const currentId = state?.item?.id;
         correctTrack = currentId === firstSong.id;
-        console.log(`🔎 Playback verify attempt ${i + 1}: is_playing=${playing} correct_track=${correctTrack}`);
+        console.log(`🔎 Playback verify attempt ${i + 1}: is_playing=${playing} correct_track=${correctTrack} progress=${state?.progress_ms}ms`);
         if (playing) break;
         try { await spotifyService.resumePlayback(targetDeviceId); } catch (e) {
           console.warn('⚠️ Resume during verify failed:', e?.message || e);
@@ -1938,6 +1939,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       }
       if (!playing || !correctTrack) {
         // Attempt to correct to the intended track once using the same randomized offset
+        console.log(`🔧 Verification failed, correcting with startMs=${startMs}ms`);
         try { await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs); } catch {}
       }
       if (!playing) {
