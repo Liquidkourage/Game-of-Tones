@@ -354,10 +354,30 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
       const expectedId = room?.currentSong?.id || null;
       const now = Date.now();
 
-      // Hard guard: wrong track correction
+      // Hard guard: wrong track correction with ping-pong prevention
       if (expectedId && currentId && currentId !== expectedId) {
+        const room = rooms.get(roomId);
+        // Check for ping-pong correction (same wrong track corrected recently)
+        const lastWrongTrack = room?.lastCorrectedFromTrack;
+        const lastCorrectionTime = room?.lastCorrectionAtMs || 0;
+        const timeSinceLastCorrection = now - lastCorrectionTime;
+        
+        if (lastWrongTrack === currentId && timeSinceLastCorrection < 10000) {
+          console.warn(`⚠️ Ping-pong detected: ${currentId} corrected ${Math.floor(timeSinceLastCorrection/1000)}s ago. Advancing to next song instead.`);
+          clearPlaybackWatcher(roomId);
+          clearRoomTimer(roomId);
+          await playNextSong(roomId, deviceId);
+          return;
+        }
+        
         console.warn(`⚠️ Watchdog detected mismatched track. Expected ${expectedId}, got ${currentId}. Correcting…`);
         try {
+          // Store correction info for ping-pong detection
+          if (room) {
+            room.lastCorrectedFromTrack = currentId;
+            room.lastCorrectionAtMs = now;
+          }
+          
           // Ensure control on target device without autoplaying a random context
           try { await spotifyService.transferPlayback(deviceId, false); } catch {}
           // Hard pause to stop any stray context audio before restart
@@ -389,7 +409,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           // Enforce deterministic playback settings after correction
           try { await spotifyService.setShuffleState(false, deviceId); } catch {}
           try { await spotifyService.setRepeatState('off', deviceId); } catch {}
-          try { const r = rooms.get(roomId); if (r) { r.lastCorrectionAtMs = now; r.songStartAtMs = now - expectedProgress; } } catch {}
+          try { const r = rooms.get(roomId); if (r) { r.songStartAtMs = now - expectedProgress; } } catch {}
           // Clear any queued items that might cause future hijacks
           try {
             const r = rooms.get(roomId);
