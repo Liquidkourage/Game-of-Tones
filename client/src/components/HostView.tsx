@@ -515,6 +515,7 @@ const HostView: React.FC = () => {
     newSocket.on('playback-warning', (data: any) => {
       const msg = data?.message || 'Playback warning occurred';
       console.warn('Playback warning:', msg);
+      setShowLogs(true);
       addLog(`Playback warning: ${msg}`, 'warn');
       // Non-blocking toast instead of alert to avoid desync
       try {
@@ -532,6 +533,7 @@ const HostView: React.FC = () => {
 
     newSocket.on('playback-diagnostic', (diag: any) => {
       try {
+        setShowLogs(true);
         const payload = JSON.stringify(diag, null, 2);
         addLog(`Playback diagnostic: ${payload}`, 'warn');
         // Also print to console for devs
@@ -1382,6 +1384,7 @@ const HostView: React.FC = () => {
               <input type="checkbox" checked={showAllControls} onChange={(e) => setShowAllControls(!!e.target.checked)} />
               <span>Show All Controls</span>
             </label>
+            <button className="btn-secondary" onClick={() => setShowLogs(v => !v)}>{showLogs ? 'Hide Logs' : 'Show Logs'}</button>
           </div>
         </div>
 
