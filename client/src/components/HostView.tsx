@@ -131,6 +131,42 @@ const HostView: React.FC = () => {
   // const [pausePosition, setPausePosition] = useState<number>(0);
   // const [isPausedByInterface, setIsPausedByInterface] = useState(false);
 
+  // Pre-queue profiles (persisted locally)
+  const [profiles, setProfiles] = useState<Array<{ name: string; snippet: number; random: boolean; window: number }>>(() => {
+    try {
+      const raw = localStorage.getItem('prequeue_profiles_v1');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.filter(p => p && typeof p.name === 'string');
+      return [];
+    } catch {
+      return [];
+    }
+  });
+  const persistProfiles = (list: Array<{ name: string; snippet: number; random: boolean; window: number }>) => {
+    setProfiles(list);
+    try { localStorage.setItem('prequeue_profiles_v1', JSON.stringify(list)); } catch {}
+  };
+  const saveCurrentAsProfile = () => {
+    const name = prompt('Save profile as:');
+    if (!name) return;
+    const next = profiles.filter(p => p.name.toLowerCase() !== name.toLowerCase());
+    next.push({ name, snippet: snippetLength, random: randomStarts, window: preQueueWindow });
+    persistProfiles(next);
+  };
+  const applyProfile = (name: string) => {
+    const p = profiles.find(x => x.name === name);
+    if (!p) return;
+    setSnippetLength(p.snippet);
+    setRandomStarts(p.random);
+    setPreQueueWindow(p.window);
+    if (socket && roomId && preQueueEnabled) socket.emit('set-prequeue', { roomId, enabled: true, window: p.window });
+  };
+  const deleteProfile = (name: string) => {
+    const next = profiles.filter(p => p.name !== name);
+    persistProfiles(next);
+  };
+
   const loadPlaylists = useCallback(async () => {
     try {
       console.log('Loading playlists...');
@@ -1608,6 +1644,26 @@ const HostView: React.FC = () => {
                 style={{ width: 56, padding: '2px 6px', background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6 }}
               />
               <span>tracks</span>
+            </div>
+            {/* Pre-queue profiles */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+              <select
+                onChange={(e) => { if (e.target.value) applyProfile(e.target.value); e.currentTarget.selectedIndex = 0; }}
+                style={{ minWidth: 220, padding: '6px 10px', background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6 }}
+              >
+                <option value="">Apply Profile…</option>
+                {profiles.map(p => (
+                  <option key={p.name} value={p.name}>{p.name} — {p.snippet}s • {p.random ? 'Random' : 'Fixed'} • {p.window}</option>
+                ))}
+              </select>
+              <button className="btn-secondary" onClick={saveCurrentAsProfile}>Save Current as Profile</button>
+              {profiles.length > 0 && (
+                <button className="btn-secondary" onClick={() => {
+                  const name = prompt('Delete which profile? Enter exact name:');
+                  if (!name) return;
+                  deleteProfile(name);
+                }}>Delete Profile…</button>
+              )}
             </div>
              <div className="control-buttons">
                {gameState === 'waiting' ? (
