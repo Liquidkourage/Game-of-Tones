@@ -389,7 +389,13 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
             const r = rooms.get(roomId);
             if (r?.songStartAtMs) expectedProgress = Math.max(0, Date.now() - r.songStartAtMs);
           } catch {}
-          await spotifyService.startPlayback(deviceId, [`spotify:track:${expectedId}`], expectedProgress);
+          // Use playlist context for correction if available
+          if (room.temporaryPlaylistId && room.currentSongIndex !== undefined) {
+            console.log(`🎼 Watchdog correcting via playlist context at index ${room.currentSongIndex}`);
+            await spotifyService.startPlaybackFromPlaylist(deviceId, room.temporaryPlaylistId, room.currentSongIndex, expectedProgress);
+          } else {
+            await spotifyService.startPlayback(deviceId, [`spotify:track:${expectedId}`], expectedProgress);
+          }
           // Double-seek to clamp exact resume position and avoid restart sputter
           try {
             await new Promise(r => setTimeout(r, 150));
@@ -2087,6 +2093,15 @@ async function playNextSong(roomId, deviceId) {
           const deviceToPause = deviceId || room.selectedDeviceId || loadSavedDevice()?.id;
           if (deviceToPause) { await spotifyService.pausePlayback(deviceToPause); }
         } catch (_) {}
+        
+        // Clean up temporary playlist
+        if (room.temporaryPlaylistId) {
+          spotifyService.deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
+            console.warn('⚠️ Failed to delete temporary playlist:', err)
+          );
+          room.temporaryPlaylistId = null;
+        }
+        
         io.to(roomId).emit('game-ended', { roomId, reason: 'playlist-complete' });
         return;
       }
@@ -2413,6 +2428,15 @@ app.post('/api/rooms/:roomId/end', async (req, res) => {
         }
       } catch {}
       room.gameState = 'ended';
+      
+      // Clean up temporary playlist
+      if (room.temporaryPlaylistId) {
+        spotifyService.deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
+          console.warn('⚠️ Failed to delete temporary playlist:', err)
+        );
+        room.temporaryPlaylistId = null;
+      }
+      
       io.to(roomId).emit('game-ended', { roomId });
       return res.json({ success: true });
     } catch (e) {
