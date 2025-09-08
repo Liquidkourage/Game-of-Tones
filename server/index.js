@@ -227,25 +227,13 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       // Stabilization delay to prevent context hijacks from volume changes
       await new Promise(resolve => setTimeout(resolve, 800));
       
-      // Set initial volume to 50% (or room's saved volume) with retry
-      let volumeSet = false;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          const initialVolume = room.volume || 50;
-          await spotifyService.setVolume(initialVolume, targetDeviceId);
-          console.log(`🔊 Set initial volume to ${initialVolume}% (attempt ${attempt + 1})`);
-          volumeSet = true;
-          break;
-        } catch (volumeError) {
-          console.error(`❌ Error setting initial volume (attempt ${attempt + 1}):`, volumeError);
-          if (attempt < 2) {
-            await new Promise(resolve => setTimeout(resolve, 200)); // Wait 200ms before retry
-          }
-        }
-      }
-      
-      if (!volumeSet) {
-        console.warn('⚠️ Failed to set volume after 3 attempts, continuing anyway');
+      // Set initial volume to 50% (or room's saved volume) with single retry
+      try {
+        const initialVolume = room.volume || 50;
+        await spotifyService.withRetries('setVolume(index)', () => spotifyService.setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
+        console.log(`🔊 Set initial volume to ${initialVolume}%`);
+      } catch (volumeError) {
+        console.warn('⚠️ Volume setting failed, continuing anyway:', volumeError?.message || volumeError);
       }
     } catch (playbackError) {
       console.error('❌ Error starting playback:', playbackError);
@@ -1851,7 +1839,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       // Set initial volume to 50% (or room's saved volume)
       try {
         const initialVolume = room.volume || 50;
-        await spotifyService.withRetries('setVolume(initial)', () => spotifyService.setVolume(initialVolume, targetDeviceId), { attempts: 3, backoffMs: 200 });
+        await spotifyService.withRetries('setVolume(initial)', () => spotifyService.setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
         console.log(`🔊 Set initial volume to ${initialVolume}%`);
       } catch (volumeError) {
         console.error('❌ Error setting initial volume:', volumeError);
@@ -1882,7 +1870,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           // Set initial volume to 50% (or room's saved volume)
           try {
             const initialVolume = room.volume || 50;
-            await spotifyService.withRetries('setVolume(after-refresh)', () => spotifyService.setVolume(initialVolume, targetDeviceId), { attempts: 3, backoffMs: 200 });
+            await spotifyService.withRetries('setVolume(after-refresh)', () => spotifyService.setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
             console.log(`🔊 Set initial volume to ${initialVolume}% after token refresh`);
           } catch (volumeError) {
             console.error('❌ Error setting initial volume after token refresh:', volumeError);
@@ -2080,25 +2068,13 @@ async function playNextSong(roomId, deviceId) {
       // Stabilization delay to prevent context hijacks from volume changes
       await new Promise(resolve => setTimeout(resolve, 800));
       
-      // Set initial volume to 50% (or room's saved volume) with retry
-      let volumeSet = false;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          const initialVolume = room.volume || 50;
-          await spotifyService.withRetries('setVolume(next)', () => spotifyService.setVolume(initialVolume, targetDeviceId), { attempts: 3, backoffMs: 200 });
-          console.log(`🔊 Set initial volume to ${initialVolume}% (attempt ${attempt + 1})`);
-          volumeSet = true;
-          break;
-        } catch (volumeError) {
-          console.error(`❌ Error setting initial volume (attempt ${attempt + 1}):`, volumeError);
-          if (attempt < 2) {
-            await new Promise(resolve => setTimeout(resolve, 200)); // Wait 200ms before retry
-          }
-        }
-      }
-      
-      if (!volumeSet) {
-        console.warn('⚠️ Failed to set volume after 3 attempts, continuing anyway');
+      // Set initial volume to 50% (or room's saved volume) with single retry
+      try {
+        const initialVolume = room.volume || 50;
+        await spotifyService.withRetries('setVolume(next)', () => spotifyService.setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
+        console.log(`🔊 Set initial volume to ${initialVolume}%`);
+      } catch (volumeError) {
+        console.warn('⚠️ Volume setting failed, continuing anyway:', volumeError?.message || volumeError);
       }
     } catch (playbackError) {
       console.error('❌ Error starting playback:', playbackError);
