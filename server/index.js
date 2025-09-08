@@ -2216,14 +2216,15 @@ async function playNextSong(roomId, deviceId) {
 
     // Early-fail check: if progress is still near zero after a few seconds, advance using our controlled flow
     try {
-      await new Promise(r => setTimeout(r, 3500));
+      await new Promise(r => setTimeout(r, 5000)); // Increased from 3.5s to 5s
       const state = await spotifyService.getCurrentPlaybackState();
       const progress = Number(state?.progress_ms || 0);
       const isPlaying = !!state?.is_playing;
-      if (!isPlaying || progress < 1000) {
-        console.warn('⚠️ Early-fail detected; advancing via playNextSong');
+      if (!isPlaying || progress < 2000) { // Increased threshold from 1s to 2s
+        console.warn(`⚠️ Early-fail detected (playing=${isPlaying}, progress=${progress}ms); advancing via playNextSong`);
         clearRoomTimer(roomId);
         await playNextSong(roomId, targetDeviceId);
+        return; // Prevent duplicate timer setting below
       }
     } catch (e) {
       console.warn('⚠️ Early-fail check error:', e?.message || e);
@@ -2232,8 +2233,9 @@ async function playNextSong(roomId, deviceId) {
     // No pre-queue - deterministic playback only
 
     // Start watchdog to recover from stalls, and schedule next song
-    // Account for transition time: use 90% of snippet length for actual playback
-    const playbackDuration = Math.max(5000, Math.floor(room.snippetLength * 1000 * 0.9));
+    // Use full snippet duration for consistency with initial song timer
+    const playbackDuration = room.snippetLength * 1000;
+    console.log(`⏰ Setting next song timer for room ${roomId}: ${playbackDuration}ms (${room.snippetLength}s full duration)`);
     setRoomTimer(roomId, async () => {
       const transitionTime = Date.now();
       if (VERBOSE) console.log(`🔄 TRANSITION STARTING - Room: ${roomId}, Time: ${transitionTime}`);
