@@ -2987,27 +2987,14 @@ async function activatePreferredDevice() {
     }
     
     if (targetDevice) {
-      // Try to activate the device by starting a silent track
+      // Assert control on the device without starting playback
       try {
-        await spotifyService.startPlayback(
-          targetDevice.id, 
-          ['spotify:track:4iV5W9uYEdYUVa79Axb7Rh'], // Silent test track
-          0
-        );
-        console.log(`✅ Successfully activated device: ${targetDevice.name}`);
-        
-        // Pause immediately to not disturb the user
-        setTimeout(async () => {
-          try {
-            await spotifyService.pausePlayback(targetDevice.id);
-            console.log(`⏸️ Paused playback on ${targetDevice.name}`);
-          } catch (error) {
-            console.log('⚠️ Could not pause playback (this is normal)');
-          }
-        }, 1000);
-        
+        await spotifyService.transferPlayback(targetDevice.id, false);
+        try { await spotifyService.setShuffleState(false, targetDevice.id); } catch (_) {}
+        try { await spotifyService.setRepeatState('off', targetDevice.id); } catch (_) {}
+        console.log(`✅ Asserted control on device without playback: ${targetDevice.name}`);
       } catch (error) {
-        console.log(`⚠️ Could not activate ${targetDevice.name}, but device is available`);
+        console.log(`⚠️ Could not assert control on ${targetDevice.name}, but device is available`);
       }
     }
   } catch (error) {

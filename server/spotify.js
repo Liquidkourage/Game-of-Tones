@@ -366,60 +366,40 @@ class SpotifyService {
     }
   }
 
-  // Force device activation by attempting to start playback
+  // Force device activation without starting playback
   async forceDeviceActivation() {
     await this.ensureValidToken();
-    
     try {
-      // First, try to get any available devices
       const devices = await this.getUserDevices();
-      
       if (devices.length === 0) {
         console.log('No devices available for activation');
         return { success: false, message: 'No devices available' };
       }
-
-      // Try to start playback on the first available device
       const deviceId = devices[0].id;
-      console.log(`Attempting to activate device: ${devices[0].name}`);
-      
-      // Use a short, quiet track or just try to start playback
+      const deviceName = devices[0].name;
       try {
-        await this.spotifyApi.play({
-          device_id: deviceId,
-          uris: ['spotify:track:4iV5W9uYEdYUVa79Axb7Rh'] // A short test track
-        });
-        console.log(`Successfully activated device: ${devices[0].name}`);
-        return { success: true, device: devices[0] };
-      } catch (playError) {
-        console.log(`Could not start playback on ${devices[0].name}, but device is available`);
-        return { success: true, device: devices[0] };
+        await this.transferPlayback(deviceId, false);
+        try { await this.setShuffleState(false, deviceId); } catch (_) {}
+        try { await this.setRepeatState('off', deviceId); } catch (_) {}
+        console.log(`Successfully asserted control on device without playback: ${deviceName}`);
+      } catch (_) {
+        console.log(`Could not assert control on ${deviceName}, but device is available`);
       }
+      return { success: true, device: devices[0] };
     } catch (error) {
       console.error('Error forcing device activation:', error);
       throw error;
     }
   }
 
-  // Activate a specific device by transferring and briefly starting a test track
+  // Activate a specific device by transferring control without playback
   async activateDevice(deviceId, pauseAfterMs = 0) {
     await this.ensureValidToken();
     try {
-      await this.transferPlayback(deviceId, true);
-      try {
-        await this.spotifyApi.play({
-          device_id: deviceId,
-          uris: ['spotify:track:4iV5W9uYEdYUVa79Axb7Rh']
-        });
-      } catch (_) {
-        // If play fails, it's fine; device may still become active
-      }
-      // Optionally pause shortly after to avoid audible blip
-      if (pauseAfterMs > 0) {
-        setTimeout(async () => {
-          try { await this.pausePlayback(deviceId); } catch (_) {}
-        }, pauseAfterMs);
-      }
+      await this.transferPlayback(deviceId, false);
+      try { await this.setShuffleState(false, deviceId); } catch (_) {}
+      try { await this.setRepeatState('off', deviceId); } catch (_) {}
+      // pauseAfterMs retained for signature compatibility, but no autoplay occurs
       return true;
     } catch (error) {
       console.error('Error activating device:', error);
