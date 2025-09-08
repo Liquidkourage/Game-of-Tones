@@ -64,6 +64,8 @@ class SpotifyService {
       'user-read-email',
       'playlist-read-private',
       'playlist-read-collaborative',
+      'playlist-modify-private',
+      'playlist-modify-public',
       'user-read-playback-state',
       'user-modify-playback-state',
       'user-read-currently-playing'
