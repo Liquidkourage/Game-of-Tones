@@ -601,17 +601,24 @@ class SpotifyService {
     }
   }
 
-  // Start playback from playlist at specific track and position
+  // Start playback from playlist at specific track and position with auto-advance prevention
   async startPlaybackFromPlaylist(deviceId, playlistId, trackIndex = 0, positionMs = 0) {
     await this.ensureValidToken();
     try {
+      // Step 1: Start playlist context at the specified track
       await this.spotifyApi.play({
         device_id: deviceId,
         context_uri: `spotify:playlist:${playlistId}`,
         offset: { position: trackIndex },
         position_ms: positionMs
       });
-      console.log(`✅ Started playback from playlist ${playlistId} at track ${trackIndex}, position ${positionMs}ms`);
+      
+      // Step 2: Immediately set repeat to 'track' to prevent auto-advance
+      // This keeps us locked to the current track within the playlist context
+      await new Promise(resolve => setTimeout(resolve, 300)); // Brief delay for context to establish
+      await this.setRepeatState('track', deviceId);
+      
+      console.log(`✅ Started controlled playback from playlist ${playlistId} at track ${trackIndex}, position ${positionMs}ms (repeat: track)`);
     } catch (error) {
       console.error('Error starting playback from playlist:', error);
       throw error;

@@ -2178,6 +2178,7 @@ async function playNextSong(roomId, deviceId) {
       // Enforce deterministic playback mode on each advance with delays
       try { await spotifyService.withRetries('setShuffle(false,next)', () => spotifyService.setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
       await new Promise(resolve => setTimeout(resolve, 200));
+      // Reset repeat to 'off' before advancing (clears any previous 'track' repeat)
       try { await spotifyService.withRetries('setRepeat(off,next)', () => spotifyService.setRepeatState('off', targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
       await new Promise(resolve => setTimeout(resolve, 200));
       // Randomized start position within track when enabled and safe
