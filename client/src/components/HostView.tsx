@@ -91,6 +91,9 @@ const HostView: React.FC = () => {
   const [customMask, setCustomMask] = useState<string[]>([]);
   const [showSongList, setShowSongList] = useState(false);
   const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]);
+  const [showAllControls, setShowAllControls] = useState<boolean>(false);
+  const [showRooms, setShowRooms] = useState<boolean>(false);
+  const [rooms, setRooms] = useState<Array<any>>([]);
   
   // Pause position tracking
   const [pausePosition, setPausePosition] = useState<number>(0);
@@ -177,6 +180,16 @@ const HostView: React.FC = () => {
       (p.description || '').toLowerCase().includes(q)
     );
   }) : visiblePlaylists);
+
+  const refreshRooms = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE || ''}/api/rooms`);
+      const data = await res.json();
+      setRooms(Array.isArray(data?.rooms) ? data.rooms : []);
+    } catch {
+      setRooms([]);
+    }
+  }, []);
 
   const loadDevices = useCallback(async () => {
     try {
@@ -1282,6 +1295,12 @@ const HostView: React.FC = () => {
             <span className="room-code">Room: {roomId}</span>
             <span className="player-count">{players.length} Players</span>
           </div>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="checkbox" checked={showAllControls} onChange={(e) => setShowAllControls(!!e.target.checked)} />
+              <span>Show All Controls</span>
+            </label>
+          </div>
         </div>
 
         {/* Main Content */}
@@ -1347,7 +1366,7 @@ const HostView: React.FC = () => {
           </motion.div>
 
           {/* Playlists - Virtualized + Paged */}
-          {showPlaylists && (
+          {(showPlaylists || showAllControls) && (
             <div className="setting-item">
               <label>Playlists:</label>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
@@ -1459,8 +1478,38 @@ const HostView: React.FC = () => {
             )}
           </motion.div>
 
+          {/* Active Rooms (admin) */}
+          <div style={{ marginTop: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <button className="btn-secondary" onClick={() => { const next = !showRooms; setShowRooms(next); if (next) refreshRooms(); }}>
+                {showRooms ? 'Hide Active Rooms' : 'Show Active Rooms'}
+              </button>
+              {showRooms && (
+                <button className="btn-secondary" onClick={refreshRooms}>↻ Refresh</button>
+              )}
+            </div>
+            {showRooms && (
+              <div style={{ border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8 }}>
+                {rooms.length === 0 ? (
+                  <div style={{ opacity: 0.8 }}>No active rooms.</div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 8 }}>
+                    {rooms.map((r: any) => (
+                      <div key={r.id} style={{ display: 'contents' }}>
+                        <div><strong>{r.id}</strong></div>
+                        <div style={{ opacity: 0.9 }}>{r.playerCount} players</div>
+                        <div style={{ opacity: 0.9 }}>{r.gameState}</div>
+                        <div style={{ opacity: 0.9 }}>{r.pattern}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Game Controls */}
-          {gameState !== 'playing' && showPlaylists && (
+          {(gameState !== 'playing' || showAllControls) && showPlaylists && (
           <motion.div 
             className="controls-section"
             initial={{ opacity: 0 }}
@@ -1597,8 +1646,8 @@ const HostView: React.FC = () => {
            </motion.div>
           )}
 
-          {/* Pattern selector (setup only; hidden during game) */}
-          {gameState !== 'playing' && (
+          {/* Pattern selector (setup only; hidden during game unless Show All Controls) */}
+          {(gameState !== 'playing' || showAllControls) && (
                 <motion.div
               className="pattern-quick-section"
               initial={{ opacity: 0 }}
