@@ -115,6 +115,8 @@ const PublicDisplay: React.FC = () => {
   const [revealToast, setRevealToast] = useState<string | null>(null);
   const [customMask, setCustomMask] = useState<Set<string>>(new Set());
   const revealToastTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [showWinnerBanner, setShowWinnerBanner] = useState<boolean>(false);
+  const [winnerName, setWinnerName] = useState<string>('');
   // Global scroll phase to keep columns aligned + freeze control
   const [phasePx, setPhasePx] = useState<number>(0);
   const rafRef = useRef<number | null>(null);
@@ -387,6 +389,14 @@ const PublicDisplay: React.FC = () => {
 
     socket.on('bingo-called', (data: any) => {
       setGameState(prev => ({ ...prev, winners: data.winners || prev.winners }));
+      try {
+        const latest = (data?.winners && data.winners.length) ? data.winners[data.winners.length - 1] : null;
+        if (latest?.playerName) {
+          setWinnerName(latest.playerName);
+          setShowWinnerBanner(true);
+          setTimeout(() => setShowWinnerBanner(false), 4000);
+        }
+      } catch {}
     });
 
     socket.on('mix-finalized', (payload: any) => {
@@ -1190,6 +1200,33 @@ const PublicDisplay: React.FC = () => {
 
   return (
     <div ref={displayRef} className="public-display">
+      <AnimatePresence>
+        {showWinnerBanner && (
+          <motion.div
+            key="winner-banner"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            style={{
+              position: 'fixed',
+              top: 80,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'linear-gradient(180deg, rgba(0,255,136,0.25), rgba(0,255,136,0.1))',
+              border: '1px solid rgba(0,255,136,0.5)',
+              color: '#eafff5',
+              padding: '12px 18px',
+              borderRadius: 12,
+              fontWeight: 900,
+              letterSpacing: '0.03em',
+              zIndex: 2200
+            }}
+          >
+            🏆 Winner: {winnerName}
+          </motion.div>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {showSplash && (
           <motion.div

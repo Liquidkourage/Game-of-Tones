@@ -79,6 +79,9 @@ const PlayerView: React.FC = () => {
   });
   const [bingoHolding, setBingoHolding] = useState<boolean>(false);
   const bingoHoldTimer = useRef<number | null>(null);
+  const [holdProgress, setHoldProgress] = useState<number>(0); // 0..1
+  const holdStartRef = useRef<number | null>(null);
+  const holdRafRef = useRef<number | null>(null);
   const [gameState, setGameState] = useState<GameState>({
     isPlaying: false,
     currentSong: null,
@@ -344,21 +347,36 @@ const PlayerView: React.FC = () => {
 
   const startBingoHold = () => {
     if (bingoHoldTimer.current) window.clearTimeout(bingoHoldTimer.current);
+    if (holdRafRef.current) cancelAnimationFrame(holdRafRef.current as any);
+    holdStartRef.current = performance.now();
+    setHoldProgress(0);
     setBingoHolding(true);
-    bingoHoldTimer.current = window.setTimeout(() => {
-      if (socket) {
-        socket.emit('player-bingo', { roomId });
+    const tick = (now: number) => {
+      if (!holdStartRef.current) return;
+      const elapsed = now - holdStartRef.current;
+      const p = Math.min(1, elapsed / 1000);
+      setHoldProgress(p);
+      if (p >= 1) {
+        // Completed hold
+        if (socket) {
+          socket.emit('player-bingo', { roomId });
+        }
+        vibrate([10, 50, 20]);
+        setBingoHolding(false);
+        holdStartRef.current = null;
+        holdRafRef.current = null;
+        return;
       }
-      vibrate([10, 50, 20]);
-      setBingoHolding(false);
-    }, 1000);
+      holdRafRef.current = requestAnimationFrame(tick) as any;
+    };
+    holdRafRef.current = requestAnimationFrame(tick) as any;
   };
 
   const cancelBingoHold = () => {
-    if (bingoHoldTimer.current) {
-      window.clearTimeout(bingoHoldTimer.current);
-      bingoHoldTimer.current = null;
-    }
+    if (bingoHoldTimer.current) { window.clearTimeout(bingoHoldTimer.current); bingoHoldTimer.current = null; }
+    if (holdRafRef.current) { cancelAnimationFrame(holdRafRef.current as any); holdRafRef.current = null; }
+    holdStartRef.current = null;
+    setHoldProgress(0);
     setBingoHolding(false);
   };
 
@@ -631,10 +649,16 @@ const PlayerView: React.FC = () => {
             background: 'linear-gradient(180deg, #00ff88 0%, #00cc6d 100%)',
             color: '#061a12',
             border: '2px solid rgba(0,255,136,0.6)',
-            boxShadow: '0 12px 26px rgba(0,0,0,0.35), 0 0 24px rgba(0,255,136,0.35)'
+            boxShadow: '0 12px 26px rgba(0,0,0,0.35), 0 0 24px rgba(0,255,136,0.35)',
+            positionRelative: 'relative' as any
           }}
         >
-          {bingoHolding ? 'Holding…' : 'BINGO'}
+          <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '6px solid rgba(255,255,255,0.15)' }} />
+          <svg width="100%" height="100%" viewBox="0 0 100 100" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
+            <circle cx="50" cy="50" r="44" stroke="rgba(255,255,255,0.18)" strokeWidth="8" fill="none" />
+            <circle cx="50" cy="50" r="44" stroke="#0b3" strokeWidth="8" fill="none" strokeLinecap="round" strokeDasharray={`${Math.max(0.01, holdProgress) * 276} 276`} />
+          </svg>
+          <span style={{ position: 'relative', zIndex: 1 }}>{bingoHolding ? 'Holding…' : 'Hold to BINGO'}</span>
         </button>
       </div>
     </div>
