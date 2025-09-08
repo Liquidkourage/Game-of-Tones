@@ -2183,7 +2183,9 @@ app.get('/api/rooms', (req, res) => {
         ? { id: room.currentSong.id, name: room.currentSong.name, artist: room.currentSong.artist }
         : null
     }));
-    res.json({ rooms: list });
+    // Filter archived rooms from the response
+    const active = list.filter(r => !rooms.get(r.id)?.archived);
+    res.json({ rooms: active });
   } catch (e) {
     res.status(500).json({ error: 'Failed to list rooms' });
   }
@@ -2203,6 +2205,44 @@ app.get('/api/rooms/:roomId', (req, res) => {
     });
   } else {
     res.status(404).json({ error: 'Room not found' });
+  }
+});
+
+app.post('/api/rooms/:roomId/end', async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const room = rooms.get(roomId);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    try {
+      clearRoomTimer(roomId);
+      try {
+        const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+        if (deviceId) {
+          try { await spotifyService.transferPlayback(deviceId, false); } catch {}
+          await spotifyService.pausePlayback(deviceId);
+        }
+      } catch {}
+      room.gameState = 'ended';
+      io.to(roomId).emit('game-ended', { roomId });
+      return res.json({ success: true });
+    } catch (e) {
+      return res.status(500).json({ error: 'Failed to end game' });
+    }
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to process request' });
+  }
+});
+
+app.post('/api/rooms/:roomId/archive', (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const room = rooms.get(roomId);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    room.archived = true;
+    room.archivedAt = Date.now();
+    return res.json({ success: true });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to archive room' });
   }
 });
 

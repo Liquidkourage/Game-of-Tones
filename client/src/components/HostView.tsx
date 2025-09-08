@@ -1493,13 +1493,18 @@ const HostView: React.FC = () => {
                 {rooms.length === 0 ? (
                   <div style={{ opacity: 0.8 }}>No active rooms.</div>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 8 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto auto auto', gap: 8, alignItems: 'center' }}>
                     {rooms.map((r: any) => (
                       <div key={r.id} style={{ display: 'contents' }}>
                         <div><strong>{r.id}</strong></div>
                         <div style={{ opacity: 0.9 }}>{r.playerCount} players</div>
                         <div style={{ opacity: 0.9 }}>{r.gameState}</div>
                         <div style={{ opacity: 0.9 }}>{r.pattern}</div>
+                        <button className="btn-secondary" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/display/${r.id}`); }}>Copy Link</button>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button className="btn-secondary" onClick={async () => { try { await fetch(`${API_BASE || ''}/api/rooms/${r.id}/end`, { method: 'POST' }); refreshRooms(); } catch {} }}>End</button>
+                          <button className="btn-secondary" onClick={async () => { try { await fetch(`${API_BASE || ''}/api/rooms/${r.id}/archive`, { method: 'POST' }); refreshRooms(); } catch {} }}>Archive</button>
+                        </div>
                       </div>
                     ))}
                   </div>
