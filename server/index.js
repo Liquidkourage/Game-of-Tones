@@ -318,6 +318,8 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
         try {
           // Ensure control on target device without autoplaying a random context
           try { await spotifyService.transferPlayback(deviceId, false); } catch {}
+          // Hard pause to stop any stray context audio before restart
+          try { await spotifyService.pausePlayback(deviceId); } catch {}
           // Restart intended track (position 0 to avoid drift); timers already handle overrun
           // Try to calculate expected progress from when song started
           let expectedProgress = 0;
@@ -339,6 +341,25 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           try { await spotifyService.setShuffleState(false, deviceId); } catch {}
           try { await spotifyService.setRepeatState('off', deviceId); } catch {}
           try { const r = rooms.get(roomId); if (r) { r.lastCorrectionAtMs = now; r.songStartAtMs = now - expectedProgress; } } catch {}
+          // Rebuild pre-queue window strictly from current index to avoid drift
+          try {
+            const r = rooms.get(roomId);
+            if (r) {
+              r.queuedIndices = new Set();
+              if (r.preQueueEnabled && Array.isArray(r.playlistSongs) && r.playlistSongs.length > 0) {
+                const w = r.preQueueWindow || PREQUEUE_WINDOW_DEFAULT;
+                for (let i = 1; i <= w; i++) {
+                  const idx = (r.currentSongIndex + i) % r.playlistSongs.length;
+                  try {
+                    await spotifyService.withRetries('addToQueue(strict-rebuild)', () => spotifyService.addToQueue(`spotify:track:${r.playlistSongs[idx].id}`, deviceId), { attempts: 2, backoffMs: 150 });
+                    r.queuedIndices.add(idx);
+                  } catch (qe) {
+                    console.warn('⚠️ Strict pre-queue rebuild failed:', qe?.message || qe);
+                  }
+                }
+              }
+            }
+          } catch {}
         } catch (e) {
           console.warn('⚠️ Correction attempt failed:', e?.message || e);
         }
