@@ -91,6 +91,7 @@ const HostView: React.FC = () => {
   const [customMask, setCustomMask] = useState<string[]>([]);
   const [showSongList, setShowSongList] = useState(false);
   const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]);
+  const [superStrict, setSuperStrict] = useState<boolean>(false);
   const [showAllControls, setShowAllControls] = useState<boolean>(false);
   const [showRooms, setShowRooms] = useState<boolean>(false);
   const [rooms, setRooms] = useState<Array<any>>([]);
@@ -426,6 +427,11 @@ const HostView: React.FC = () => {
 
     newSocket.on('player-left', (data: any) => {
       console.log('Player left:', data);
+    });
+
+    newSocket.on('super-strict-updated', (data: any) => {
+      setSuperStrict(!!data?.enabled);
+      addLog(`Super-Strict Lock ${data?.enabled ? 'enabled' : 'disabled'}`, 'warn');
     });
 
     newSocket.on('playback-update', (data: any) => {
@@ -1671,6 +1677,21 @@ const HostView: React.FC = () => {
                 style={{ width: 56, padding: '2px 6px', background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6 }}
               />
               <span>tracks</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={superStrict}
+                  onChange={(e) => {
+                    const val = !!e.target.checked;
+                    setSuperStrict(val);
+                    if (socket && roomId) socket.emit('set-super-strict', { roomId, enabled: val });
+                  }}
+                />
+                <span>Super-Strict Lock</span>
+              </label>
+              <span style={{ opacity: 0.8, fontSize: 12 }}>(faster checks, stricter corrections)</span>
             </div>
             {/* Pre-queue profiles */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>

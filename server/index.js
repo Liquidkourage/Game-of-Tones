@@ -301,6 +301,8 @@ function clearPlaybackWatcher(roomId) {
 function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
   clearPlaybackWatcher(roomId);
   let attempts = 0;
+  const room = rooms.get(roomId);
+  const strict = !!room?.superStrictLock;
   const intervalId = setInterval(async () => {
     try {
       const room = rooms.get(roomId);
@@ -410,7 +412,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
     } catch (_e) {
       // ignore
     }
-  }, Math.max(2500, Math.min(5000, snippetMs / 6)));
+  }, strict ? 2000 : Math.max(2500, Math.min(5000, snippetMs / 6)));
   roomPlaybackWatchers.set(roomId, intervalId);
 }
 
@@ -439,7 +441,8 @@ io.on('connection', (socket) => {
         currentSongIndex: 0,
         preQueueEnabled: false,
         preQueueWindow: PREQUEUE_WINDOW_DEFAULT,
-        queuedIndices: new Set()
+        queuedIndices: new Set(),
+        superStrictLock: false
       };
       rooms.set(roomId, newRoom);
     }
@@ -699,6 +702,26 @@ io.on('connection', (socket) => {
       console.log(`🎚️ Pre-queue set to ${room.preQueueEnabled} (window=${room.preQueueWindow}) for room ${roomId}`);
     } catch (e) {
       console.error('❌ Error setting pre-queue:', e?.message || e);
+    }
+  });
+
+  // Toggle super-strict lock mode from Host
+  socket.on('set-super-strict', (data = {}) => {
+    try {
+      const { roomId, enabled } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
+      if (!isCurrentHost) return;
+      room.superStrictLock = !!enabled;
+      io.to(roomId).emit('super-strict-updated', { enabled: room.superStrictLock });
+      console.log(`🔒 Super-Strict Lock set to ${room.superStrictLock} for room ${roomId}`);
+      // Restart watchdog with new cadence
+      if (room.gameState === 'playing') {
+        startPlaybackWatchdog(roomId, room.selectedDeviceId, room.snippetLength * 1000);
+      }
+    } catch (e) {
+      console.error('❌ Error setting super-strict lock:', e?.message || e);
     }
   });
 
