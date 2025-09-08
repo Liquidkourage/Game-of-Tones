@@ -681,11 +681,26 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Check if this socket is the host
-    const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
+    // Enhanced host validation with detailed logging
+    const player = room.players.get(socket.id);
+    const roomHostId = room.host;
+    const currentSocketId = socket.id;
+    const playerIsHost = player && player.isHost;
+    const socketIsRoomHost = roomHostId === currentSocketId;
+    const isCurrentHost = socketIsRoomHost || playerIsHost;
+    
+    console.log(`🔍 Host validation - Room: ${roomId}, Socket: ${currentSocketId}, Room Host: ${roomHostId}, Player Found: ${!!player}, Player isHost: ${!!playerIsHost}, Valid: ${isCurrentHost}`);
     
     if (!isCurrentHost) {
       console.log('❌ Only host can finalize mix');
+      socket.emit('error', { message: 'Only the host can finalize the mix' });
+      return;
+    }
+
+    // Prevent duplicate finalization
+    if (room.mixFinalized) {
+      console.log('⚠️ Mix already finalized for room:', roomId);
+      socket.emit('mix-finalized', { playlists: room.finalizedPlaylists });
       return;
     }
 
