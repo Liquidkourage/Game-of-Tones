@@ -556,6 +556,66 @@ class SpotifyService {
     }
   }
 
+  // Create a temporary playlist for context-based playback
+  async createTemporaryPlaylist(name, trackUris) {
+    await this.ensureValidToken();
+    try {
+      // Get current user
+      const userResponse = await this.spotifyApi.getMe();
+      const userId = userResponse.body.id;
+      
+      // Create playlist
+      const playlistResponse = await this.spotifyApi.createPlaylist(userId, {
+        name: name,
+        description: 'Temporary playlist for TEMPO Music Bingo',
+        public: false
+      });
+      
+      const playlistId = playlistResponse.body.id;
+      
+      // Add tracks to playlist in chunks (Spotify limit is 100 per request)
+      const chunkSize = 100;
+      for (let i = 0; i < trackUris.length; i += chunkSize) {
+        const chunk = trackUris.slice(i, i + chunkSize);
+        await this.spotifyApi.addTracksToPlaylist(playlistId, chunk);
+      }
+      
+      console.log(`✅ Created temporary playlist: ${name} with ${trackUris.length} tracks`);
+      return playlistId;
+    } catch (error) {
+      console.error('Error creating temporary playlist:', error);
+      throw error;
+    }
+  }
+
+  // Delete a temporary playlist
+  async deleteTemporaryPlaylist(playlistId) {
+    await this.ensureValidToken();
+    try {
+      await this.spotifyApi.unfollowPlaylist(playlistId);
+      console.log(`✅ Deleted temporary playlist: ${playlistId}`);
+    } catch (error) {
+      console.warn('⚠️ Error deleting temporary playlist (non-fatal):', error);
+    }
+  }
+
+  // Start playback from playlist at specific track and position
+  async startPlaybackFromPlaylist(deviceId, playlistId, trackIndex = 0, positionMs = 0) {
+    await this.ensureValidToken();
+    try {
+      await this.spotifyApi.play({
+        device_id: deviceId,
+        context_uri: `spotify:playlist:${playlistId}`,
+        offset: { position: trackIndex },
+        position_ms: positionMs
+      });
+      console.log(`✅ Started playback from playlist ${playlistId} at track ${trackIndex}, position ${positionMs}ms`);
+    } catch (error) {
+      console.error('Error starting playback from playlist:', error);
+      throw error;
+    }
+  }
+
   // Add to queue (deprecated - will be removed)
   async addToQueue(uri, deviceId) {
     await this.ensureValidToken();

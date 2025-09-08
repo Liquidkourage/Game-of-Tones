@@ -884,6 +884,15 @@ io.on('connection', (socket) => {
         }
       }
       room.gameState = 'ended';
+      
+      // Clean up temporary playlist
+      if (room.temporaryPlaylistId) {
+        spotifyService.deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
+          console.warn('⚠️ Failed to delete temporary playlist:', err)
+        );
+        room.temporaryPlaylistId = null;
+      }
+      
       io.to(roomId).emit('game-ended', { roomId });
       console.log(`🛑 Game ended gracefully for room ${roomId}`);
     } catch (e) {
@@ -1780,6 +1789,17 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     room.gameState = 'playing';
     console.log(`📝 Stored ${allSongs.length} songs in room ${roomId} for ordered playback`);
     
+    // Create temporary playlist for context-based playback to prevent hijacks
+    try {
+      const trackUris = allSongs.map(song => `spotify:track:${song.id}`);
+      const playlistName = `TEMPO Bingo Room ${roomId} - ${new Date().toISOString().slice(0,16)}`;
+      room.temporaryPlaylistId = await spotifyService.createTemporaryPlaylist(playlistName, trackUris);
+      console.log(`🎼 Created temporary playlist for context: ${room.temporaryPlaylistId}`);
+    } catch (error) {
+      console.warn('⚠️ Failed to create temporary playlist, falling back to individual track playback:', error);
+      room.temporaryPlaylistId = null;
+    }
+    
     // Play the first song from the list
     const firstSong = allSongs[0];
     console.log(`🎵 Playing song 1/${allSongs.length}: ${firstSong.name} by ${firstSong.artist}`);
@@ -1829,7 +1849,14 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         }
       }
       console.log(`🎯 Starting first song with randomized offset: ${startMs}ms (${Math.floor(startMs/1000)}s)`);
-      await spotifyService.withRetries('startPlayback(initial)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
+      
+      // Use playlist context if available, otherwise fall back to individual track
+      if (room.temporaryPlaylistId) {
+        console.log(`🎼 Playing from temporary playlist context: ${room.temporaryPlaylistId}`);
+        await spotifyService.withRetries('startPlaybackFromPlaylist(initial)', () => spotifyService.startPlaybackFromPlaylist(targetDeviceId, room.temporaryPlaylistId, 0, startMs), { attempts: 3, backoffMs: 400 });
+      } else {
+        await spotifyService.withRetries('startPlayback(initial)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
+      }
       console.log(`✅ Successfully started playback on device: ${targetDeviceId}`);
       try { const r = rooms.get(roomId); if (r) r.songStartAtMs = Date.now() - (startMs || 0); } catch {}
       
@@ -2061,7 +2088,13 @@ async function playNextSong(roomId, deviceId) {
           startMs = Math.floor(Math.random() * safeWindow);
         }
       }
-      await spotifyService.withRetries('startPlayback(next)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
+      // Use playlist context if available, otherwise fall back to individual track
+      if (room.temporaryPlaylistId) {
+        console.log(`🎼 Playing next song from playlist context at index ${room.currentSongIndex}`);
+        await spotifyService.withRetries('startPlaybackFromPlaylist(next)', () => spotifyService.startPlaybackFromPlaylist(targetDeviceId, room.temporaryPlaylistId, room.currentSongIndex, startMs), { attempts: 3, backoffMs: 400 });
+      } else {
+        await spotifyService.withRetries('startPlayback(next)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
+      }
       const playbackEndTime = Date.now();
       if (VERBOSE) console.log(`✅ Successfully started playback on device: ${targetDeviceId} (took ${playbackEndTime - playbackStartTime}ms)`);
       
