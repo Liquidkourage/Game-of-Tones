@@ -515,8 +515,19 @@ const HostView: React.FC = () => {
     newSocket.on('playback-warning', (data: any) => {
       const msg = data?.message || 'Playback warning occurred';
       console.warn('Playback warning:', msg);
-      alert('⚠️ ' + msg);
       addLog(`Playback warning: ${msg}`, 'warn');
+      // Non-blocking toast instead of alert to avoid desync
+      try {
+        const toast = document.createElement('div');
+        toast.textContent = '⚠️ ' + msg;
+        Object.assign(toast.style, {
+          position: 'fixed', bottom: '14px', left: '14px', maxWidth: '70vw',
+          background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)',
+          padding: '10px 12px', borderRadius: '10px', zIndex: 9999, fontWeight: 700
+        } as unknown as CSSStyleDeclaration);
+        document.body.appendChild(toast);
+        setTimeout(() => { try { document.body.removeChild(toast); } catch {} }, 3000);
+      } catch {}
     });
 
     // Acknowledge reveal events
