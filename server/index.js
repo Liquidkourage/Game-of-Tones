@@ -1117,6 +1117,15 @@ io.on('connection', (socket) => {
       // APPROVED: Confirm the win and resume/end game
       console.log(`✅ Host approved bingo for ${player.name}`);
       
+      // Mark current song as "actually played" since players heard it during winning bingo
+      if (room.currentSong && room.currentSong.id) {
+        room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
+        if (!room.calledSongIds.includes(room.currentSong.id)) {
+          room.calledSongIds.push(room.currentSong.id);
+          console.log(`📝 Marked current song as played after bingo approval: ${room.currentSong.name}`);
+        }
+      }
+      
       // Notify the winner
       io.to(playerId).emit('bingo-result', {
         success: true,
@@ -1174,6 +1183,15 @@ io.on('connection', (socket) => {
         playerName: player.name,
         reason: reason 
       });
+      
+      // CRITICAL FIX: Mark current song as "actually played" since players heard it during bingo call
+      if (room.currentSong && room.currentSong.id) {
+        room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
+        if (!room.calledSongIds.includes(room.currentSong.id)) {
+          room.calledSongIds.push(room.currentSong.id);
+          console.log(`📝 Marked current song as played after bingo rejection: ${room.currentSong.name}`);
+        }
+      }
       
       // Auto-resume the game
       if (room.gameState === 'paused_for_verification') {
