@@ -798,9 +798,9 @@ const PlayerView: React.FC = () => {
           onPointerDown={startBingoHold}
           onPointerUp={cancelBingoHold}
           onPointerCancel={cancelBingoHold}
-          onTouchStart={(e) => { e.preventDefault(); startBingoHold(e); }}
-          onTouchEnd={(e) => { e.preventDefault(); cancelBingoHold(e); }}
-          onTouchCancel={(e) => { e.preventDefault(); cancelBingoHold(e); }}
+          onTouchStart={(e) => { e.preventDefault(); startBingoHold(); }}
+          onTouchEnd={(e) => { e.preventDefault(); cancelBingoHold(); }}
+          onTouchCancel={(e) => { e.preventDefault(); cancelBingoHold(); }}
           onContextMenu={(e) => { e.preventDefault(); return false; }}
           onSelectStart={(e) => { e.preventDefault(); return false; }}
           onMouseDown={(e) => { e.preventDefault(); }}
