@@ -88,6 +88,8 @@ const HostView: React.FC = () => {
   const [preQueueEnabled, setPreQueueEnabled] = useState<boolean>(false);
   const [preQueueWindow, setPreQueueWindow] = useState<number>(5);
   const [isProcessingVerification, setIsProcessingVerification] = useState<boolean>(false);
+  const [roundComplete, setRoundComplete] = useState<any>(null);
+  const [roundWinners, setRoundWinners] = useState<Array<any>>([]);
   const [stripGoTPrefix, setStripGoTPrefix] = useState<boolean>(true);
   const [showPlaylists, setShowPlaylists] = useState<boolean>(true);
   const [showLogs, setShowLogs] = useState<boolean>(true);
@@ -464,8 +466,13 @@ const HostView: React.FC = () => {
       setIsProcessingVerification(false);
       
       if (data.approved) {
-        if (data.gameEnded) {
-          // Game automatically ended with verified bingo
+        if (data.roundComplete) {
+          // NEW: Round complete - show multi-round options
+          setRoundComplete(data);
+          addLog(`Round ${data.roundNumber} complete - ${data.playerName} wins!`, 'info');
+          console.log('Round complete, showing options to host');
+        } else if (data.gameEnded) {
+          // OLD: Game automatically ended with verified bingo
           addLog(`Game ended - ${data.playerName} wins!`, 'info');
           setGameState('ended');
           setIsPlaying(false);
@@ -486,11 +493,39 @@ const HostView: React.FC = () => {
       console.log('Game restarted:', data);
       // Reset host state
       setWinners([]);
+      setRoundWinners([]);
+      setRoundComplete(null);
       setIsPlaying(false);
       setGamePaused(false);
       setPendingVerification(null);
       setCurrentSong(null);
       addLog('Game restarted by host', 'info');
+    });
+
+    // NEW: Handle next round started
+    newSocket.on('next-round-started', (data: any) => {
+      console.log('Next round started:', data);
+      setRoundComplete(null);
+      setWinners([]);
+      setGamePaused(false);
+      setIsPlaying(false);
+      setCurrentSong(null);
+      if (data.roundWinners) {
+        setRoundWinners(data.roundWinners);
+      }
+      addLog(`Round ${data.roundNumber} started!`, 'info');
+    });
+
+    // NEW: Handle game session ended
+    newSocket.on('game-session-ended', (data: any) => {
+      console.log('Game session ended:', data);
+      setRoundComplete(null);
+      setGameState('ended');
+      setIsPlaying(false);
+      if (data.roundWinners) {
+        setRoundWinners(data.roundWinners);
+      }
+      addLog(`Game session ended after ${data.totalRounds} rounds`, 'info');
     });
 
     newSocket.on('sync-state-response', (data: any) => {
@@ -1010,6 +1045,36 @@ const HostView: React.FC = () => {
     if (confirmed) {
       socket.emit('restart-game', { roomId });
       addLog('Restarting game...', 'info');
+    }
+  };
+
+  // NEW: Multi-round system handlers
+  const handleStartNextRound = (options: any = {}) => {
+    if (!socket) return;
+    
+    console.log('Starting next round with options:', options);
+    socket.emit('start-next-round', {
+      roomId,
+      keepSamePlaylists: options.keepSamePlaylists ?? true,
+      keepSamePattern: options.keepSamePattern ?? true,
+      newPattern: options.newPattern,
+      newPlaylists: options.newPlaylists
+    });
+    addLog(`Starting next round`, 'info');
+  };
+
+  const handleEndGameSession = () => {
+    if (!socket) return;
+    
+    const confirmed = window.confirm(
+      'Are you sure you want to end the entire game session?\n\n' +
+      'This will permanently end the game for all players.'
+    );
+    
+    if (confirmed) {
+      console.log('Ending game session...');
+      socket.emit('end-game-session', { roomId });
+      addLog('Ending game session', 'info');
     }
   };
 
@@ -2646,6 +2711,155 @@ const HostView: React.FC = () => {
                 }}>
                   Game is paused until you make a decision<br/>
                   <strong style={{ color: '#ffc107' }}>Approving will end the game and declare the winner!</strong>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {/* NEW: Round Complete Modal */}
+          {roundComplete && (
+            <motion.div
+              className="verification-overlay"
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.8)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 2000
+              }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+            >
+              <motion.div
+                style={{
+                  background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
+                  padding: '2rem',
+                  borderRadius: '20px',
+                  minWidth: '500px',
+                  maxWidth: '600px',
+                  border: '2px solid #00ff88',
+                  boxShadow: '0 20px 40px rgba(0,255,136,0.2)'
+                }}
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+              >
+                <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                  <h2 style={{ 
+                    color: '#00ff88', 
+                    margin: '0 0 1rem 0',
+                    fontSize: '1.8rem',
+                    fontWeight: 700
+                  }}>
+                    🏆 Round {roundComplete.roundNumber} Complete!
+                  </h2>
+                  <p style={{ 
+                    color: '#fff', 
+                    fontSize: '1.2rem',
+                    margin: '0 0 1rem 0'
+                  }}>
+                    <strong>{roundComplete.playerName}</strong> wins this round!
+                  </p>
+                  
+                  {/* Round Winners History */}
+                  {roundWinners.length > 0 && (
+                    <div style={{
+                      background: 'rgba(0,255,136,0.1)',
+                      padding: '1rem',
+                      borderRadius: '10px',
+                      marginBottom: '1.5rem',
+                      border: '1px solid rgba(0,255,136,0.3)'
+                    }}>
+                      <h4 style={{ color: '#00ff88', margin: '0 0 0.5rem 0' }}>Previous Winners:</h4>
+                      {roundWinners.map((winner, index) => (
+                        <div key={index} style={{ color: '#ccc', fontSize: '0.9rem' }}>
+                          Round {winner.roundNumber}: {winner.playerName}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ 
+                  display: 'flex', 
+                  gap: '1rem', 
+                  justifyContent: 'center',
+                  flexWrap: 'wrap',
+                  marginBottom: '1.5rem'
+                }}>
+                  <button
+                    onClick={() => handleStartNextRound()}
+                    style={{
+                      background: 'linear-gradient(135deg, #00ff88, #00cc6d)',
+                      color: '#001a0d',
+                      border: 'none',
+                      borderRadius: '12px',
+                      padding: '12px 24px',
+                      fontSize: '1.1rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 15px rgba(0,255,136,0.4)'
+                    }}
+                  >
+                    ▶️ NEXT ROUND (Same Setup)
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      // TODO: Add modal for changing pattern/playlists
+                      const newPattern = prompt('Enter new pattern (line, x, four_corners, full_card):');
+                      if (newPattern) {
+                        handleStartNextRound({ 
+                          keepSamePattern: false, 
+                          newPattern 
+                        });
+                      }
+                    }}
+                    style={{
+                      background: 'linear-gradient(135deg, #ffc107, #ff8800)',
+                      color: '#1a1a2e',
+                      border: 'none',
+                      borderRadius: '12px',
+                      padding: '12px 24px',
+                      fontSize: '1.1rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 15px rgba(255,193,7,0.4)'
+                    }}
+                  >
+                    🎯 NEXT ROUND (New Pattern)
+                  </button>
+                  
+                  <button
+                    onClick={handleEndGameSession}
+                    style={{
+                      background: 'linear-gradient(135deg, #ff4444, #cc3333)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '12px',
+                      padding: '12px 24px',
+                      fontSize: '1.1rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 15px rgba(255,68,68,0.4)'
+                    }}
+                  >
+                    🏁 END GAME SESSION
+                  </button>
+                </div>
+
+                <div style={{ 
+                  marginTop: '1rem', 
+                  textAlign: 'center', 
+                  fontSize: '0.9rem', 
+                  color: '#aaa' 
+                }}>
+                  Choose your next action:<br/>
+                  <strong style={{ color: '#ffc107' }}>Next Round continues with same players, End Session finishes completely</strong>
                 </div>
               </motion.div>
             </motion.div>
