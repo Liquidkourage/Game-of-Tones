@@ -451,18 +451,14 @@ const PlayerView: React.FC = () => {
               onContextMenu={(e) => { e.preventDefault(); return false; }}
               draggable={false}
               style={{
-                aspectRatio: '1 / 1',
-                width: 'clamp(56px, 22vw, 92px)',
-                minWidth: 56,
-                minHeight: 56,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 textAlign: 'center',
-                padding: 6,
+                padding: 4,
                 lineHeight: 1.1,
                 fontWeight: 700,
-                fontSize: 'clamp(12px, 3.4vw, 18px)',
+                fontSize: 'clamp(9px, 2.5vw, 14px)',
                 userSelect: 'none'
               }}
             >
