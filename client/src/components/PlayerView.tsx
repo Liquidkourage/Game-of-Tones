@@ -467,6 +467,10 @@ const PlayerView: React.FC = () => {
               }}
             >
               <div className="square-content">
+                {/* Display song title or artist based on display mode */}
+                <div className="square-text">
+                  {displayMode === 'title' ? square.songName : square.artistName}
+                </div>
                 {square.marked && (
                   <motion.div 
                     className="played-indicator"
