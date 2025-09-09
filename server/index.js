@@ -970,8 +970,10 @@ io.on('connection', (socket) => {
           try {
             const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
             if (deviceId) {
-              await spotifyApi.pause();
+              await spotifyService.pausePlayback(deviceId);
               console.log(`⏸️ Spotify paused for bingo verification by ${player.name}`);
+            } else {
+              console.log(`⚠️ No device ID available for pausing during bingo verification`);
             }
           } catch (error) {
             console.log(`⚠️ Failed to pause Spotify during bingo verification: ${error.message}`);
