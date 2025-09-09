@@ -802,7 +802,6 @@ const PlayerView: React.FC = () => {
           onTouchEnd={(e) => { e.preventDefault(); cancelBingoHold(); }}
           onTouchCancel={(e) => { e.preventDefault(); cancelBingoHold(); }}
           onContextMenu={(e) => { e.preventDefault(); return false; }}
-          onSelectStart={(e) => { e.preventDefault(); return false; }}
           onMouseDown={(e) => { e.preventDefault(); }}
           title="Hold to call BINGO"
           style={{
