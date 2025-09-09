@@ -472,6 +472,20 @@ const HostView: React.FC = () => {
       addLog('Game restarted by host', 'info');
     });
 
+    newSocket.on('sync-state-response', (data: any) => {
+      console.log('Sync state response:', data);
+      if (data.gameState) {
+        setGameState(data.gameState);
+        addLog(`Synced game state to: ${data.gameState}`, 'info');
+      }
+      if (data.currentSong) {
+        setCurrentSong(data.currentSong);
+      }
+      if (data.isPlaying !== undefined) {
+        setIsPlaying(data.isPlaying);
+      }
+    });
+
     newSocket.on('player-left', (data: any) => {
       console.log('Player left:', data);
     });
@@ -961,6 +975,18 @@ const HostView: React.FC = () => {
       socket.emit('restart-game', { roomId });
       addLog('Restarting game...', 'info');
     }
+  };
+
+  const forceSyncGameState = () => {
+    if (!socket) return;
+    
+    addLog('Syncing game state...', 'info');
+    socket.emit('sync-state', { roomId });
+  };
+
+  const forceSetPlaying = () => {
+    setGameState('playing');
+    addLog('Manually set game state to playing', 'info');
   };
 
   const selectPlaylist = (playlist: Playlist) => {
@@ -1970,6 +1996,15 @@ const HostView: React.FC = () => {
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                     <button className="btn-secondary" onClick={forceRefreshAll}>🧹 Force Refresh Clients</button>
                   </div>
+                  
+                  {/* Emergency sync controls - only show if game state seems wrong */}
+                  {gameState === 'waiting' && currentSong && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8, padding: '8px', background: 'rgba(255,193,7,0.1)', borderRadius: '4px' }}>
+                      <span style={{ color: '#ffc107', fontSize: '0.9rem' }}>⚠️ State desync detected:</span>
+                      <button className="btn-secondary" onClick={forceSyncGameState} style={{ fontSize: '0.8rem' }}>🔄 Sync State</button>
+                      <button className="btn-secondary" onClick={forceSetPlaying} style={{ fontSize: '0.8rem' }}>▶️ Force Playing</button>
+                    </div>
+                  )}
                  </div>
                )}
              </div>
