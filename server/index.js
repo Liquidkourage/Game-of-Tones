@@ -466,15 +466,21 @@ async function playNextSongSimple(roomId, deviceId) {
   room.currentSongStartMs = startMs; // Store for restart correction
 
   try {
+    console.log(`🎵 Starting playback for: ${nextSong.name} by ${nextSong.artist} at ${startMs}ms`);
+    
     // Brief delay to ensure smooth transition without dead air
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    // Simple playlist playback
+    // Simple playlist playback with enhanced logging
     if (room.temporaryPlaylistId) {
+      console.log(`🎼 Using playlist context: ${room.temporaryPlaylistId}, track ${room.currentSongIndex}`);
       await spotifyService.startPlaybackFromPlaylist(deviceId, room.temporaryPlaylistId, room.currentSongIndex, startMs);
     } else {
+      console.log(`🎵 Using individual track: ${nextSong.id}`);
       await spotifyService.startPlayback(deviceId, [`spotify:track:${nextSong.id}`], startMs);
     }
+
+    console.log(`✅ Playback started successfully for: ${nextSong.name}`);
 
     // Emit song update
     io.to(roomId).emit('song-playing', {
@@ -494,7 +500,19 @@ async function playNextSongSimple(roomId, deviceId) {
 
   } catch (error) {
     console.error('❌ Error in simple song advance:', error);
+    console.error('❌ Error details:', error?.message, error?.body?.error);
+    
+    // Try to resume playback if it got stuck in paused state
+    try {
+      console.log('🔄 Attempting to resume playback after song advance failure...');
+      await spotifyService.resumePlayback(deviceId);
+      console.log('✅ Resume attempt completed');
+    } catch (resumeError) {
+      console.warn('⚠️ Failed to resume playback:', resumeError?.message);
+    }
+    
     // Try to continue with next song after delay
+    console.log('🔄 Retrying song advance in 3 seconds...');
     setTimeout(() => playNextSongSimple(roomId, deviceId), 3000);
   }
 }
@@ -1039,9 +1057,9 @@ io.on('connection', (socket) => {
       room.superStrictLock = !!enabled;
       io.to(roomId).emit('super-strict-updated', { enabled: room.superStrictLock });
       console.log(`🔒 Super-Strict Lock set to ${room.superStrictLock} for room ${roomId}`);
-      // Restart watchdog with new cadence
+      // Restart simple context monitor (no aggressive pausing)
       if (room.gameState === 'playing') {
-        startPlaybackWatchdog(roomId, room.selectedDeviceId, room.snippetLength * 1000);
+        startSimpleContextMonitor(roomId, room.selectedDeviceId);
       }
     } catch (e) {
       console.error('❌ Error setting super-strict lock:', e?.message || e);
