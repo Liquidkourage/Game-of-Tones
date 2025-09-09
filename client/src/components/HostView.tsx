@@ -2035,7 +2035,7 @@ const HostView: React.FC = () => {
           )}
 
           {/* Emergency controls - always show when needed */}
-          {(gameState === 'waiting' && currentSong) || showAllControls ? (
+          {((gameState === 'waiting' && currentSong) || showAllControls) && (
             <motion.div style={{ margin: '16px 0' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px', background: 'rgba(255,193,7,0.1)', borderRadius: '8px', border: '1px solid rgba(255,193,7,0.3)' }}>
                 <span style={{ color: '#ffc107', fontSize: '0.9rem', fontWeight: 600 }}>
