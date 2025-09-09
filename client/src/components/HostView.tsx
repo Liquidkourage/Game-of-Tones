@@ -469,7 +469,7 @@ const HostView: React.FC = () => {
       setGamePaused(false);
       setPendingVerification(null);
       setCurrentSong(null);
-      addLog('Game restarted by host', 'success');
+      addLog('Game restarted by host', 'info');
     });
 
     newSocket.on('player-left', (data: any) => {
