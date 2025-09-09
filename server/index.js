@@ -3316,7 +3316,14 @@ function startDeviceKeepAlive() {
     try {
       if (spotifyTokens && spotifyTokens.accessToken) {
         await spotifyService.ensureValidToken();
-        await activatePreferredDevice();
+        
+        // Only activate device if no active games are playing (to avoid interrupting songs)
+        const hasActiveGames = Array.from(rooms.values()).some(room => room.gameState === 'playing');
+        if (!hasActiveGames) {
+          await activatePreferredDevice();
+        } else {
+          console.log('🎵 Skipping device activation - games are actively playing');
+        }
       }
     } catch (error) {
       console.log('⚠️ Device keep-alive failed (this is normal if no active session)');
