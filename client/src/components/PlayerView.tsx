@@ -217,6 +217,8 @@ const PlayerView: React.FC = () => {
         setBingoMessage(data.reason || 'Invalid bingo pattern');
         // Play error sound
         playErrorSound();
+        // Single vibration for failed bingo
+        vibrate([200]);
         // Clear status after showing error
         setTimeout(() => {
           setBingoStatus('idle');
@@ -530,7 +532,7 @@ const PlayerView: React.FC = () => {
           setBingoMessage('Checking your bingo...');
           socket.emit('player-bingo', { roomId });
         }
-        vibrate([10, 50, 20]);
+        // Removed premature haptic - only vibrate on actual bingo success/failure
         setBingoHolding(false);
         holdStartRef.current = null;
         holdRafRef.current = null;
