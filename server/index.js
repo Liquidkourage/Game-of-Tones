@@ -959,6 +959,37 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Host requests to view all player cards
+  socket.on('request-player-cards', (data = {}) => {
+    try {
+      const { roomId } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      
+      // Verify this is the host
+      const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+      if (!isHost) return;
+      
+      const playerCardsData = {};
+      if (room.bingoCards) {
+        room.bingoCards.forEach((card, playerId) => {
+          const player = room.players.get(playerId);
+          if (player && card) {
+            playerCardsData[playerId] = {
+              playerName: player.name,
+              card: card
+            };
+          }
+        });
+      }
+      
+      socket.emit('player-cards-update', playerCardsData);
+      console.log(`📋 Sent ${Object.keys(playerCardsData).length} player cards to host in room ${roomId}`);
+    } catch (e) {
+      console.error('❌ Error sending player cards:', e?.message || e);
+    }
+  });
+
   // New Round (preserve device and snippet)
   socket.on('new-round', (data = {}) => {
     const { roomId } = data;

@@ -95,6 +95,8 @@ const HostView: React.FC = () => {
   const [showAllControls, setShowAllControls] = useState<boolean>(false);
   const [showRooms, setShowRooms] = useState<boolean>(false);
   const [rooms, setRooms] = useState<Array<any>>([]);
+  const [showPlayerCards, setShowPlayerCards] = useState<boolean>(false);
+  const [playerCards, setPlayerCards] = useState<Map<string, any>>(new Map());
   
   // Pause position tracking
   const [pausePosition, setPausePosition] = useState<number>(0);
@@ -431,6 +433,26 @@ const HostView: React.FC = () => {
     newSocket.on('super-strict-updated', (data: any) => {
       setSuperStrict(!!data?.enabled);
       addLog(`Super-Strict Lock ${data?.enabled ? 'enabled' : 'disabled'}`, 'warn');
+    });
+
+    // Listen for player card updates
+    newSocket.on('player-cards-update', (data: any) => {
+      try {
+        if (data && typeof data === 'object') {
+          const newPlayerCards = new Map();
+          Object.entries(data).forEach(([playerId, cardData]: [string, any]) => {
+            if (cardData && cardData.card) {
+              newPlayerCards.set(playerId, {
+                playerName: cardData.playerName || 'Unknown',
+                card: cardData.card
+              });
+            }
+          });
+          setPlayerCards(newPlayerCards);
+        }
+      } catch (e) {
+        console.warn('Failed to parse player cards:', e);
+      }
     });
 
     newSocket.on('playback-update', (data: any) => {
@@ -812,6 +834,13 @@ const HostView: React.FC = () => {
       }
     } catch (error) {
       console.error('Error skipping song:', error);
+    }
+  };
+
+  const requestPlayerCards = () => {
+    if (socket) {
+      socket.emit('request-player-cards', { roomId });
+      addLog('Requested player cards', 'info');
     }
   };
 
@@ -1598,6 +1627,64 @@ const HostView: React.FC = () => {
                         <div style={{ display: 'flex', gap: 6 }}>
                           <button className="btn-secondary" onClick={async () => { try { await fetch(`${API_BASE || ''}/api/rooms/${r.id}/end`, { method: 'POST' }); refreshRooms(); } catch {} }}>End</button>
                           <button className="btn-secondary" onClick={async () => { try { await fetch(`${API_BASE || ''}/api/rooms/${r.id}/archive`, { method: 'POST' }); refreshRooms(); } catch {} }}>Archive</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Player Cards Viewer */}
+          <div style={{ marginTop: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <button className="btn-secondary" onClick={() => { const next = !showPlayerCards; setShowPlayerCards(next); if (next) requestPlayerCards(); }}>
+                {showPlayerCards ? 'Hide Player Cards' : 'View Player Cards'}
+              </button>
+              {showPlayerCards && (
+                <button className="btn-secondary" onClick={requestPlayerCards}>↻ Refresh</button>
+              )}
+              {showPlayerCards && playerCards.size > 0 && (
+                <span style={{ opacity: 0.8, fontSize: '0.9rem' }}>({playerCards.size} players)</span>
+              )}
+            </div>
+            {showPlayerCards && (
+              <div style={{ border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8, maxHeight: 400, overflowY: 'auto' }}>
+                {playerCards.size === 0 ? (
+                  <div style={{ opacity: 0.8 }}>No player cards available. Cards are generated after finalizing mix.</div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 16 }}>
+                    {Array.from(playerCards.entries()).map(([playerId, playerData]) => (
+                      <div key={playerId} style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: 8 }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: 8, color: '#00ff88' }}>
+                          {playerData.playerName}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 2, fontSize: '0.7rem' }}>
+                          {playerData.card.squares.map((square: any) => (
+                            <div 
+                              key={square.position}
+                              style={{ 
+                                border: '1px solid rgba(255,255,255,0.2)', 
+                                borderRadius: 3, 
+                                padding: 2, 
+                                textAlign: 'center',
+                                background: square.marked ? 'rgba(0,255,136,0.2)' : 'rgba(255,255,255,0.05)',
+                                minHeight: 30,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '0.65rem',
+                                lineHeight: 1
+                              }}
+                              title={`${square.songName} — ${square.artistName}`}
+                            >
+                              {square.marked && <span style={{ marginRight: 2 }}>✓</span>}
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {square.songName.length > 12 ? square.songName.substring(0, 12) + '...' : square.songName}
+                              </span>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     ))}
