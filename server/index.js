@@ -1061,11 +1061,24 @@ io.on('connection', (socket) => {
         verified: true
       });
       
-      // Host can choose to continue or end
+      // AUTOMATICALLY END GAME on first verified bingo
+      room.gameState = 'ended';
+      clearRoomTimer(roomId);
+      console.log(`🏁 Game automatically ended - ${player.name} wins!`);
+      
+      // Notify host of automatic end
       socket.emit('bingo-verified', { 
         approved: true, 
         playerName: player.name,
-        canContinue: true 
+        gameEnded: true,
+        message: `Game ended - ${player.name} wins!`
+      });
+      
+      // Notify all clients that game has ended
+      io.to(roomId).emit('game-ended', { 
+        reason: `${player.name} wins BINGO!`, 
+        winners: room.winners,
+        winnerName: player.name
       });
       
     } else {

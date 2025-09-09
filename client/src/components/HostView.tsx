@@ -453,8 +453,15 @@ const HostView: React.FC = () => {
     newSocket.on('bingo-verified', (data: any) => {
       console.log('Bingo verified:', data);
       setPendingVerification(null);
-      if (data.approved && !data.canContinue) {
-        setGamePaused(false);
+      setGamePaused(false);
+      
+      if (data.approved) {
+        if (data.gameEnded) {
+          // Game automatically ended with verified bingo
+          addLog(`Game ended - ${data.playerName} wins!`, 'info');
+          setGameState('ended');
+          setIsPlaying(false);
+        }
       }
     });
 
@@ -951,18 +958,7 @@ const HostView: React.FC = () => {
     });
   };
 
-  const handleContinueOrEnd = (action: 'continue' | 'end') => {
-    if (!socket) return;
-    
-    socket.emit('continue-or-end', {
-      roomId,
-      action
-    });
-    
-    if (action === 'continue') {
-      setGamePaused(false);
-    }
-  };
+  // Removed handleContinueOrEnd - games now end automatically on first verified bingo
 
   const handleRestartGame = () => {
     if (!socket) return;
@@ -2474,7 +2470,8 @@ const HostView: React.FC = () => {
                   fontSize: '0.9rem', 
                   color: '#aaa' 
                 }}>
-                  Game is paused until you make a decision
+                  Game is paused until you make a decision<br/>
+                  <strong style={{ color: '#ffc107' }}>Approving will end the game and declare the winner!</strong>
                 </div>
               </motion.div>
             </motion.div>
