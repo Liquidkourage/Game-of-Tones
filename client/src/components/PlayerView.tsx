@@ -632,6 +632,12 @@ const PlayerView: React.FC = () => {
           onPointerDown={startBingoHold}
           onPointerUp={cancelBingoHold}
           onPointerCancel={cancelBingoHold}
+          onTouchStart={(e) => { e.preventDefault(); startBingoHold(e); }}
+          onTouchEnd={(e) => { e.preventDefault(); cancelBingoHold(e); }}
+          onTouchCancel={(e) => { e.preventDefault(); cancelBingoHold(e); }}
+          onContextMenu={(e) => { e.preventDefault(); return false; }}
+          onSelectStart={(e) => { e.preventDefault(); return false; }}
+          onMouseDown={(e) => { e.preventDefault(); }}
           title="Hold to call BINGO"
           style={{
             position: 'fixed',
@@ -649,7 +655,14 @@ const PlayerView: React.FC = () => {
             background: 'linear-gradient(180deg, #00ff88 0%, #00cc6d 100%)',
             color: '#061a12',
             border: '2px solid rgba(0,255,136,0.6)',
-            boxShadow: '0 12px 26px rgba(0,0,0,0.35), 0 0 24px rgba(0,255,136,0.35)'
+            boxShadow: '0 12px 26px rgba(0,0,0,0.35), 0 0 24px rgba(0,255,136,0.35)',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+            MozUserSelect: 'none',
+            msUserSelect: 'none',
+            WebkitTouchCallout: 'none',
+            WebkitTapHighlightColor: 'transparent',
+            touchAction: 'none'
           }}
         >
           <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '6px solid rgba(255,255,255,0.15)' }} />
@@ -657,7 +670,15 @@ const PlayerView: React.FC = () => {
             <circle cx="50" cy="50" r="44" stroke="rgba(255,255,255,0.18)" strokeWidth="8" fill="none" />
             <circle cx="50" cy="50" r="44" stroke="#0b3" strokeWidth="8" fill="none" strokeLinecap="round" strokeDasharray={`${Math.max(0.01, holdProgress) * 276} 276`} />
           </svg>
-          <span style={{ position: 'relative', zIndex: 1 }}>{bingoHolding ? 'Holding…' : 'Hold to BINGO'}</span>
+          <span style={{ 
+            position: 'relative', 
+            zIndex: 1, 
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+            MozUserSelect: 'none',
+            msUserSelect: 'none',
+            pointerEvents: 'none'
+          }}>{bingoHolding ? 'Holding…' : 'Hold to BINGO'}</span>
         </button>
       </div>
     </div>
