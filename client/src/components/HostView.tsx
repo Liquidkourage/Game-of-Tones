@@ -186,11 +186,16 @@ const HostView: React.FC = () => {
       const data = await response.json();
       
       if (data.success) {
-        setPlaylists(data.playlists);
+        // Filter out temporary TEMPO playlists
+        const filteredPlaylists = data.playlists.filter((playlist: Playlist) => 
+          !playlist.name.startsWith('TEMPO')
+        );
+        
+        setPlaylists(filteredPlaylists);
         // initialize first page (50)
         setPlaylistPage(1);
-        setVisiblePlaylists(data.playlists.slice(0, 50));
-        console.log('Playlists loaded:', data.playlists.length, 'playlists');
+        setVisiblePlaylists(filteredPlaylists.slice(0, 50));
+        console.log('Playlists loaded:', filteredPlaylists.length, 'playlists (filtered out', data.playlists.length - filteredPlaylists.length, 'TEMPO playlists)');
       } else {
         console.error('Failed to load playlists:', data.error);
       }
