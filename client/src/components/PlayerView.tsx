@@ -458,9 +458,9 @@ const PlayerView: React.FC = () => {
                 padding: 3,
                 lineHeight: 1.0,
                 fontWeight: 700,
-                fontSize: 'clamp(8px, 2.2vw, 13px)',
                 userSelect: 'none'
               }}
+              data-density={density}
             >
               <div className="square-content">
                 {/* Display song title or artist based on display mode */}
@@ -635,7 +635,7 @@ const PlayerView: React.FC = () => {
           title="Hold to call BINGO"
           style={{
             position: 'fixed',
-            bottom: 18,
+            bottom: 'calc(80px + env(safe-area-inset-bottom))',
             right: 18,
             zIndex: 1000,
             width: 'clamp(90px, 22vw, 140px)',
