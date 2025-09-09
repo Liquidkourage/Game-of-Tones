@@ -960,6 +960,13 @@ io.on('connection', (socket) => {
     const validationResult = validateBingoForPattern(player.bingoCard, room);
     
     if (validationResult.valid) {
+      // AUTO-PAUSE the game for host verification
+      if (room.gameState === 'playing') {
+        room.gameState = 'paused_for_verification';
+        clearRoomTimer(roomId);
+        console.log(`🛑 Game auto-paused for bingo verification by ${player.name}`);
+      }
+      
       player.hasBingo = true;
       const winnerData = { playerId: socket.id, playerName: player.name, timestamp: Date.now() };
       room.winners.push(winnerData);
@@ -967,18 +974,35 @@ io.on('connection', (socket) => {
       // Send success to the caller
       socket.emit('bingo-result', { 
         success: true, 
-        message: 'BINGO! Congratulations!',
+        message: 'BINGO! Waiting for host verification...',
         isWinner: true,
-        totalWinners: room.winners.length
+        totalWinners: room.winners.length,
+        awaitingVerification: true
       });
       
-      // Notify everyone else
+      // Send detailed verification data to HOST ONLY
+      const hostSocket = io.sockets.sockets.get(room.host);
+      if (hostSocket) {
+        hostSocket.emit('bingo-verification-needed', {
+          playerId: socket.id,
+          playerName: player.name,
+          playerCard: player.bingoCard,
+          markedSquares: player.bingoCard.squares.filter(s => s.marked),
+          requiredPattern: room.pattern,
+          customMask: room.pattern === 'custom' ? Array.from(room.customPattern || []) : null,
+          timestamp: Date.now(),
+          validationReason: validationResult.reason
+        });
+      }
+      
+      // Notify all players about the bingo call (but not confirmed yet)
       io.to(roomId).emit('bingo-called', { 
         playerId: socket.id, 
         playerName: player.name, 
         winners: room.winners,
         totalWinners: room.winners.length,
-        isFirstWinner: room.winners.length === 1
+        isFirstWinner: room.winners.length === 1,
+        awaitingVerification: true
       });
     } else {
       // Send detailed failure reason
@@ -988,6 +1012,106 @@ io.on('connection', (socket) => {
         requiredPattern: room.pattern,
         customMask: room.pattern === 'custom' ? Array.from(room.customPattern || []) : null
       });
+    }
+  });
+
+  // Host approves or rejects bingo verification
+  socket.on('verify-bingo', (data) => {
+    const { roomId, playerId, approved, reason } = data || {};
+    const room = rooms.get(roomId);
+    if (!room) return;
+    
+    // Verify this is the host
+    const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+    if (!isHost) return;
+    
+    const player = room.players.get(playerId);
+    if (!player) return;
+    
+    if (approved) {
+      // APPROVED: Confirm the win and resume/end game
+      console.log(`✅ Host approved bingo for ${player.name}`);
+      
+      // Notify the winner
+      io.to(playerId).emit('bingo-result', {
+        success: true,
+        message: 'BINGO CONFIRMED! You win!',
+        isWinner: true,
+        verified: true
+      });
+      
+      // Notify all players of confirmed win
+      io.to(roomId).emit('bingo-confirmed', {
+        playerId: playerId,
+        playerName: player.name,
+        verified: true
+      });
+      
+      // Host can choose to continue or end
+      socket.emit('bingo-verified', { 
+        approved: true, 
+        playerName: player.name,
+        canContinue: true 
+      });
+      
+    } else {
+      // REJECTED: Remove from winners, notify player, resume game
+      console.log(`❌ Host rejected bingo for ${player.name}: ${reason}`);
+      
+      // Remove from winners list
+      room.winners = room.winners.filter(w => w.playerId !== playerId);
+      player.hasBingo = false;
+      
+      // Notify the player
+      io.to(playerId).emit('bingo-result', {
+        success: false,
+        message: `Bingo rejected: ${reason || 'Invalid pattern'}`,
+        rejected: true
+      });
+      
+      // Notify host
+      socket.emit('bingo-verified', { 
+        approved: false, 
+        playerName: player.name,
+        reason: reason 
+      });
+      
+      // Auto-resume the game
+      if (room.gameState === 'paused_for_verification') {
+        room.gameState = 'playing';
+        // Resume from where we left off
+        startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
+        console.log(`▶️ Game resumed after rejecting ${player.name}'s bingo`);
+      }
+    }
+  });
+
+  // Host chooses to continue or end after approving bingo
+  socket.on('continue-or-end', (data) => {
+    const { roomId, action } = data || {}; // action: 'continue' or 'end'
+    const room = rooms.get(roomId);
+    if (!room) return;
+    
+    // Verify this is the host
+    const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+    if (!isHost) return;
+    
+    if (action === 'continue') {
+      // Resume the game
+      if (room.gameState === 'paused_for_verification') {
+        room.gameState = 'playing';
+        startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
+        console.log(`▶️ Host chose to continue game after bingo verification`);
+        
+        io.to(roomId).emit('game-resumed', { reason: 'Host continued after bingo' });
+      }
+    } else if (action === 'end') {
+      // End the current round
+      room.gameState = 'ended';
+      clearRoomTimer(roomId);
+      console.log(`🏁 Host ended game after bingo verification`);
+      
+      io.to(roomId).emit('game-ended', { reason: 'Host ended after bingo', winners: room.winners });
     }
   });
 

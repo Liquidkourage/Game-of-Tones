@@ -67,6 +67,8 @@ const HostView: React.FC = () => {
   const [winners, setWinners] = useState<Player[]>([]);
   const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
   const [isSpotifyConnecting, setIsSpotifyConnecting] = useState(false);
+  const [pendingVerification, setPendingVerification] = useState<any>(null);
+  const [gamePaused, setGamePaused] = useState(false);
   const [mixFinalized, setMixFinalized] = useState(false);
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -424,6 +426,39 @@ const HostView: React.FC = () => {
     newSocket.on('bingo-called', (data: any) => {
       setWinners(prev => [...prev, data]);
       console.log('Bingo called by:', data.playerName);
+      
+      if (data.awaitingVerification) {
+        setGamePaused(true);
+        // Play alert sound for host
+        playHostAlertSound();
+      }
+    });
+
+    // Host verification needed
+    newSocket.on('bingo-verification-needed', (data: any) => {
+      console.log('Bingo verification needed:', data);
+      setPendingVerification(data);
+      setGamePaused(true);
+      // Play urgent alert sound
+      playHostAlertSound();
+    });
+
+    // Verification completed
+    newSocket.on('bingo-verified', (data: any) => {
+      console.log('Bingo verified:', data);
+      setPendingVerification(null);
+      if (data.approved && !data.canContinue) {
+        setGamePaused(false);
+      }
+    });
+
+    newSocket.on('game-resumed', () => {
+      setGamePaused(false);
+    });
+
+    newSocket.on('game-ended', () => {
+      setGamePaused(false);
+      setIsPlaying(false);
     });
 
     newSocket.on('player-left', (data: any) => {
@@ -841,6 +876,60 @@ const HostView: React.FC = () => {
     if (socket) {
       socket.emit('request-player-cards', { roomId });
       addLog('Requested player cards', 'info');
+    }
+  };
+
+  // Host alert sound for bingo calls
+  const playHostAlertSound = () => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      // Urgent attention-getting sound
+      const playNote = (freq: number, startTime: number, duration: number) => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        
+        osc.frequency.setValueAtTime(freq, startTime);
+        gain.gain.setValueAtTime(0.4, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+        
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+      };
+      
+      const now = audioContext.currentTime;
+      // Attention-getting pattern
+      playNote(800, now, 0.15);
+      playNote(1000, now + 0.2, 0.15);
+      playNote(800, now + 0.4, 0.15);
+    } catch (error) {
+      console.log('Audio not supported');
+    }
+  };
+
+  const handleVerifyBingo = (approved: boolean, reason?: string) => {
+    if (!pendingVerification || !socket) return;
+    
+    socket.emit('verify-bingo', {
+      roomId,
+      playerId: pendingVerification.playerId,
+      approved,
+      reason
+    });
+  };
+
+  const handleContinueOrEnd = (action: 'continue' | 'end') => {
+    if (!socket) return;
+    
+    socket.emit('continue-or-end', {
+      roomId,
+      action
+    });
+    
+    if (action === 'continue') {
+      setGamePaused(false);
     }
   };
 
@@ -2113,6 +2202,161 @@ const HostView: React.FC = () => {
            )}
 
 
+
+          {/* Bingo Verification Modal */}
+          {pendingVerification && (
+            <motion.div
+              className="verification-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              style={{
+                position: 'fixed',
+                top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(0,0,0,0.8)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 9999
+              }}
+            >
+              <motion.div
+                className="verification-panel"
+                initial={{ scale: 0.8, y: 50 }}
+                animate={{ scale: 1, y: 0 }}
+                style={{
+                  background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
+                  border: '2px solid #00ff88',
+                  borderRadius: '20px',
+                  padding: '2rem',
+                  maxWidth: '90vw',
+                  maxHeight: '90vh',
+                  overflowY: 'auto',
+                  color: 'white'
+                }}
+              >
+                <h2 style={{ color: '#00ff88', marginBottom: '1rem', textAlign: 'center' }}>
+                  🎯 BINGO VERIFICATION REQUIRED
+                </h2>
+                
+                <div style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
+                  <h3 style={{ color: '#ffaa00', fontSize: '1.5rem' }}>
+                    {pendingVerification.playerName} called BINGO!
+                  </h3>
+                  <p style={{ color: '#ccc', marginTop: '0.5rem' }}>
+                    Pattern: {pendingVerification.requiredPattern} | 
+                    Marked: {pendingVerification.markedSquares?.length || 0} squares
+                  </p>
+                </div>
+
+                {/* Visual Bingo Card */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(5, 1fr)',
+                  gap: '4px',
+                  maxWidth: '400px',
+                  margin: '0 auto 2rem',
+                  aspectRatio: '1/1'
+                }}>
+                  {pendingVerification.playerCard?.squares?.map((square: any) => (
+                    <div
+                      key={square.position}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: square.marked 
+                          ? 'linear-gradient(135deg, #00ff88, #00cc6d)' 
+                          : 'rgba(255,255,255,0.1)',
+                        border: square.marked 
+                          ? '2px solid #00ff88' 
+                          : '1px solid rgba(255,255,255,0.3)',
+                        borderRadius: '8px',
+                        padding: '4px',
+                        fontSize: '0.7rem',
+                        fontWeight: square.marked ? 700 : 400,
+                        color: square.marked ? '#001a0d' : '#ffffff',
+                        textAlign: 'center',
+                        lineHeight: 1.1,
+                        overflow: 'hidden'
+                      }}
+                    >
+                      {square.songName || 'Song'}
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ 
+                  display: 'flex', 
+                  gap: '1rem', 
+                  justifyContent: 'center',
+                  flexWrap: 'wrap'
+                }}>
+                  <button
+                    onClick={() => handleVerifyBingo(true)}
+                    style={{
+                      background: 'linear-gradient(135deg, #00ff88, #00cc6d)',
+                      color: '#001a0d',
+                      border: 'none',
+                      borderRadius: '12px',
+                      padding: '12px 24px',
+                      fontSize: '1.1rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 15px rgba(0,255,136,0.4)'
+                    }}
+                  >
+                    ✅ APPROVE BINGO
+                  </button>
+                  
+                  <button
+                    onClick={() => handleVerifyBingo(false, 'Pattern incomplete')}
+                    style={{
+                      background: 'linear-gradient(135deg, #ff4444, #cc3333)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '12px',
+                      padding: '12px 24px',
+                      fontSize: '1.1rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 15px rgba(255,68,68,0.4)'
+                    }}
+                  >
+                    ❌ REJECT BINGO
+                  </button>
+                </div>
+
+                <div style={{ 
+                  marginTop: '1rem', 
+                  textAlign: 'center', 
+                  fontSize: '0.9rem', 
+                  color: '#aaa' 
+                }}>
+                  Game is paused until you make a decision
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {/* Game Paused Indicator */}
+          {gamePaused && !pendingVerification && (
+            <motion.div
+              className="pause-indicator"
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{
+                background: 'linear-gradient(135deg, #ffaa00, #ff8800)',
+                color: 'white',
+                padding: '1rem',
+                borderRadius: '12px',
+                textAlign: 'center',
+                marginBottom: '1rem',
+                fontWeight: 700
+              }}
+            >
+              ⏸️ Game Paused - Bingo Verification in Progress
+            </motion.div>
+          )}
 
           {/* Winners */}
           {winners.length > 0 && (
