@@ -1006,6 +1006,8 @@ io.on('connection', (socket) => {
           markedSquares: player.bingoCard.squares.filter(s => s.marked),
           requiredPattern: room.pattern,
           customMask: room.pattern === 'custom' ? Array.from(room.customPattern || []) : null,
+          playedSongs: room.playedSongs || [],
+          currentSongIndex: room.currentSongIndex || 0,
           timestamp: Date.now(),
           validationReason: validationResult.reason
         });

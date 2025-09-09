@@ -2448,6 +2448,109 @@ const HostView: React.FC = () => {
                   ))}
                 </div>
 
+                {/* Verification Details */}
+                <div style={{ 
+                  background: 'rgba(255,193,7,0.1)', 
+                  border: '1px solid rgba(255,193,7,0.3)',
+                  borderRadius: '12px',
+                  padding: '1rem',
+                  margin: '1rem 0',
+                  fontSize: '0.9rem'
+                }}>
+                  <h4 style={{ color: '#ffc107', marginBottom: '0.75rem', textAlign: 'center' }}>
+                    🔍 VERIFICATION ANALYSIS
+                  </h4>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    {/* Marked Songs */}
+                    <div>
+                      <h5 style={{ color: '#00ff88', marginBottom: '0.5rem' }}>
+                        ✓ Player Marked ({pendingVerification.markedSquares?.length || 0}):
+                      </h5>
+                      <div style={{ maxHeight: '120px', overflowY: 'auto', fontSize: '0.8rem' }}>
+                        {pendingVerification.markedSquares?.map((square: any, index: number) => (
+                          <div 
+                            key={index} 
+                            style={{ 
+                              padding: '2px 0',
+                              color: '#ffffff',
+                              opacity: 0.9
+                            }}
+                          >
+                            • {square.songName} — {square.artistName}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Played Songs */}
+                    <div>
+                      <h5 style={{ color: '#ff6b6b', marginBottom: '0.5rem' }}>
+                        🎵 Actually Played ({pendingVerification.playedSongs?.length || 0}):
+                      </h5>
+                      <div style={{ maxHeight: '120px', overflowY: 'auto', fontSize: '0.8rem' }}>
+                        {pendingVerification.playedSongs?.map((song: any, index: number) => {
+                          const wasMarked = pendingVerification.markedSquares?.some((marked: any) => 
+                            marked.songId === song.id
+                          );
+                          return (
+                            <div 
+                              key={index} 
+                              style={{ 
+                                padding: '2px 0',
+                                color: wasMarked ? '#00ff88' : '#ffffff',
+                                opacity: wasMarked ? 1 : 0.6,
+                                fontWeight: wasMarked ? 'bold' : 'normal'
+                              }}
+                            >
+                              {wasMarked ? '✓' : '○'} {song.name} — {song.artist}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quick Analysis */}
+                  <div style={{ 
+                    marginTop: '0.75rem', 
+                    padding: '0.5rem',
+                    background: 'rgba(255,255,255,0.05)',
+                    borderRadius: '6px',
+                    textAlign: 'center',
+                    fontSize: '0.85rem'
+                  }}>
+                    {(() => {
+                      const markedCount = pendingVerification.markedSquares?.length || 0;
+                      const playedCount = pendingVerification.playedSongs?.length || 0;
+                      const validMarked = pendingVerification.markedSquares?.filter((marked: any) =>
+                        pendingVerification.playedSongs?.some((played: any) => played.id === marked.songId)
+                      )?.length || 0;
+                      const invalidMarked = markedCount - validMarked;
+                      
+                      if (invalidMarked > 0) {
+                        return (
+                          <span style={{ color: '#ff6b6b' }}>
+                            ⚠️ {invalidMarked} marked song{invalidMarked > 1 ? 's' : ''} NOT yet played!
+                          </span>
+                        );
+                      } else if (validMarked === markedCount && markedCount > 0) {
+                        return (
+                          <span style={{ color: '#00ff88' }}>
+                            ✅ All marked songs have been played
+                          </span>
+                        );
+                      } else {
+                        return (
+                          <span style={{ color: '#ffc107' }}>
+                            📋 {validMarked}/{markedCount} marked songs are valid
+                          </span>
+                        );
+                      }
+                    })()}
+                  </div>
+                </div>
+
                 <div style={{ 
                   display: 'flex', 
                   gap: '1rem', 
