@@ -2002,11 +2002,13 @@ const HostView: React.FC = () => {
            </motion.div>
           )}
 
-          {/* Emergency sync controls - only show if game state seems wrong */}
-          {gameState === 'waiting' && currentSong && (
+          {/* Emergency sync controls - always show in waiting state for debugging */}
+          {gameState === 'waiting' && (
             <motion.div style={{ margin: '16px 0' }}>
               <div style={{ display: 'flex', gap: 8, padding: '12px', background: 'rgba(255,193,7,0.1)', borderRadius: '8px', border: '1px solid rgba(255,193,7,0.3)' }}>
-                <span style={{ color: '#ffc107', fontSize: '0.9rem', fontWeight: 600 }}>⚠️ State desync detected - Game is playing but controls are missing:</span>
+                <span style={{ color: '#ffc107', fontSize: '0.9rem', fontWeight: 600 }}>
+                  🔧 Debug: gameState={gameState}, currentSong={currentSong ? 'YES' : 'NO'}, isPlaying={isPlaying ? 'YES' : 'NO'}
+                </span>
                 <button className="btn-secondary" onClick={forceSyncGameState} style={{ fontSize: '0.8rem' }}>🔄 Sync State</button>
                 <button className="btn-secondary" onClick={forceSetPlaying} style={{ fontSize: '0.8rem' }}>▶️ Force Playing</button>
               </div>
