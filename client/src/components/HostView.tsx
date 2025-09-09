@@ -429,14 +429,20 @@ const HostView: React.FC = () => {
       }, 500);
     });
 
+    // Handle bingo verification pending
+    newSocket.on('bingo-verification-pending', (data: any) => {
+      console.log('Bingo verification pending:', data.playerName);
+      setGamePaused(true);
+      // Play alert sound for host
+      playHostAlertSound();
+    });
+
+    // Handle confirmed bingo wins (for winner tracking)
     newSocket.on('bingo-called', (data: any) => {
-      setWinners(prev => [...prev, data]);
-      console.log('Bingo called by:', data.playerName);
-      
-      if (data.awaitingVerification) {
-        setGamePaused(true);
-        // Play alert sound for host
-        playHostAlertSound();
+      // Only update winners list if this is a verified bingo
+      if (data.verified && !data.awaitingVerification) {
+        setWinners(prev => [...prev, data]);
+        console.log('Bingo confirmed for:', data.playerName);
       }
     });
 

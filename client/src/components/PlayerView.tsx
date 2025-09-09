@@ -225,15 +225,32 @@ const PlayerView: React.FC = () => {
       }
     });
 
-    newSocket.on('bingo-called', (data: any) => {
-      console.log('Bingo called:', data);
-      // Check if this is someone else's bingo
+    // Handle bingo verification pending
+    newSocket.on('bingo-verification-pending', (data: any) => {
+      console.log('Bingo verification pending:', data);
+      // Check if this is someone else's bingo call
       if (data.playerId !== newSocket.id) {
         // Play notification sound for other players
         playNotificationSound();
-        // Show celebration message
-        setBingoMessage(`🏆 ${data.playerName} got BINGO!`);
-        setTimeout(() => setBingoMessage(''), 3000);
+        // Show verification message (not celebration yet)
+        setBingoMessage(`🤔 ${data.playerName} called BINGO - awaiting verification...`);
+        setTimeout(() => setBingoMessage(''), 5000);
+      }
+    });
+
+    // Handle confirmed bingo wins
+    newSocket.on('bingo-called', (data: any) => {
+      console.log('Bingo confirmed:', data);
+      // Only celebrate if this is a verified/confirmed bingo
+      if (data.verified && !data.awaitingVerification) {
+        // Check if this is someone else's verified bingo
+        if (data.playerId !== newSocket.id) {
+          // Play celebration sound for other players
+          playNotificationSound();
+          // Show celebration message
+          setBingoMessage(`🏆 ${data.playerName} WINS BINGO!`);
+          setTimeout(() => setBingoMessage(''), 3000);
+        }
       }
     });
 

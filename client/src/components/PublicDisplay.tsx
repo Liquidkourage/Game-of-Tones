@@ -81,6 +81,7 @@ const PublicDisplay: React.FC = () => {
   const [countdownMs, setCountdownMs] = useState<number>(0);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   const [totalPlayedCount, setTotalPlayedCount] = useState<number>(0);
+  const [isVerificationPending, setIsVerificationPending] = useState<boolean>(false);
   // Visible carousel columns (default 3; can be overridden via ?cols=5)
   const visibleCols = (() => {
     const p = Number.parseInt(searchParams.get('cols') || '', 10);
@@ -420,31 +421,42 @@ const PublicDisplay: React.FC = () => {
       } catch {}
     });
 
+    // Handle bingo verification pending (someone called bingo, awaiting host verification)
+    socket.on('bingo-verification-pending', (data: any) => {
+      // Don't show winner banner yet, just acknowledge the call
+      setIsVerificationPending(true);
+      console.log(`${data.playerName} called BINGO - awaiting verification`);
+    });
+
+    // Handle confirmed bingo wins (after host verification)
     socket.on('bingo-called', (data: any) => {
-      setGameState(prev => ({ ...prev, winners: data.winners || prev.winners }));
-      try {
-        const latest = (data?.winners && data.winners.length) ? data.winners[data.winners.length - 1] : null;
-        if (latest?.playerName) {
-          // Enhanced winner announcement
-          const isFirstWinner = data.isFirstWinner;
-          const totalWinners = data.totalWinners || 1;
-          
-          if (isFirstWinner) {
-            setWinnerName(`🏆 BINGO! ${latest.playerName} WINS!`);
-          } else {
-            setWinnerName(`🎉 Another BINGO! ${latest.playerName} also wins! (${totalWinners} total)`);
+      // Only show winner if this is a verified/confirmed bingo
+      if (data.verified && !data.awaitingVerification) {
+        setIsVerificationPending(false); // Clear verification pending state
+        setGameState(prev => ({ ...prev, winners: data.winners || prev.winners }));
+        try {
+          if (data.playerName) {
+            // Enhanced winner announcement
+            const isFirstWinner = data.isFirstWinner;
+            const totalWinners = data.totalWinners || 1;
+            
+            if (isFirstWinner) {
+              setWinnerName(`🏆 BINGO! ${data.playerName} WINS!`);
+            } else {
+              setWinnerName(`🎉 Another BINGO! ${data.playerName} also wins! (${totalWinners} total)`);
+            }
+            
+            setShowWinnerBanner(true);
+            
+            // Play celebration sound
+            playPublicCelebrationSound();
+            
+            // Longer celebration for first winner, shorter for additional winners
+            const celebrationTime = isFirstWinner ? 6000 : 4000;
+            setTimeout(() => setShowWinnerBanner(false), celebrationTime);
           }
-          
-          setShowWinnerBanner(true);
-          
-          // Play celebration sound
-          playPublicCelebrationSound();
-          
-          // Longer celebration for first winner, shorter for additional winners
-          const celebrationTime = isFirstWinner ? 6000 : 4000;
-          setTimeout(() => setShowWinnerBanner(false), celebrationTime);
-        }
-      } catch {}
+        } catch {}
+      }
     });
 
     socket.on('mix-finalized', (payload: any) => {
@@ -457,7 +469,13 @@ const PublicDisplay: React.FC = () => {
 
     socket.on('game-ended', () => {
       setGameState(prev => ({ ...prev, isPlaying: false }));
+      setIsVerificationPending(false);
       console.log('🛑 Game ended (display)');
+    });
+
+    socket.on('game-resumed', () => {
+      setIsVerificationPending(false);
+      console.log('▶️ Game resumed (display)');
     });
 
     socket.on('game-restarted', (data: any) => {
@@ -526,7 +544,7 @@ const PublicDisplay: React.FC = () => {
 
   // Time-based letter reveal every 10 seconds (weighted by unrevealed frequency across played songs)
   useEffect(() => {
-    if (!gameState.isPlaying) return;
+    if (!gameState.isPlaying || isVerificationPending) return;
     const interval = setInterval(() => {
       try {
         const ids = playedOrderRef.current;
@@ -567,7 +585,7 @@ const PublicDisplay: React.FC = () => {
       } catch {}
     }, 15000);
     return () => clearInterval(interval);
-  }, [gameState.isPlaying]);
+  }, [gameState.isPlaying, isVerificationPending]);
 
   // Auto-advance the 15x5 grouped columns carousel
   useEffect(() => {

@@ -1050,6 +1050,15 @@ io.on('connection', (socket) => {
         console.log(`🛑 Game auto-paused for bingo verification by ${player.name}`);
       }
       
+      // CRITICAL: Mark current song as played BEFORE verification modal so it shows in verification
+      if (room.currentSong && room.currentSong.id) {
+        room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
+        if (!room.calledSongIds.includes(room.currentSong.id)) {
+          room.calledSongIds.push(room.currentSong.id);
+          console.log(`📝 Marked current song as played for verification: ${room.currentSong.name}`);
+        }
+      }
+      
       player.hasBingo = true;
       const winnerData = { playerId: socket.id, playerName: player.name, timestamp: Date.now() };
       room.winners.push(winnerData);
@@ -1074,6 +1083,7 @@ io.on('connection', (socket) => {
           requiredPattern: room.pattern,
           customMask: room.pattern === 'custom' ? Array.from(room.customPattern || []) : null,
           playedSongs: room.playedSongs || [],
+          calledSongIds: room.calledSongIds || [],
           currentSongIndex: room.currentSongIndex || 0,
           timestamp: Date.now(),
           validationReason: validationResult.reason
@@ -1081,12 +1091,9 @@ io.on('connection', (socket) => {
       }
       
       // Notify all players about the bingo call (but not confirmed yet)
-      io.to(roomId).emit('bingo-called', { 
+      io.to(roomId).emit('bingo-verification-pending', { 
         playerId: socket.id, 
         playerName: player.name, 
-        winners: room.winners,
-        totalWinners: room.winners.length,
-        isFirstWinner: room.winners.length === 1,
         awaitingVerification: true
       });
     } else {
@@ -1117,14 +1124,7 @@ io.on('connection', (socket) => {
       // APPROVED: Confirm the win and resume/end game
       console.log(`✅ Host approved bingo for ${player.name}`);
       
-      // Mark current song as "actually played" since players heard it during winning bingo
-      if (room.currentSong && room.currentSong.id) {
-        room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
-        if (!room.calledSongIds.includes(room.currentSong.id)) {
-          room.calledSongIds.push(room.currentSong.id);
-          console.log(`📝 Marked current song as played after bingo approval: ${room.currentSong.name}`);
-        }
-      }
+      // Current song already marked as played during bingo call
       
       // Notify the winner
       io.to(playerId).emit('bingo-result', {
@@ -1138,6 +1138,17 @@ io.on('connection', (socket) => {
       io.to(roomId).emit('bingo-confirmed', {
         playerId: playerId,
         playerName: player.name,
+        verified: true
+      });
+      
+      // NOW emit the actual winner event for public display
+      io.to(roomId).emit('bingo-called', { 
+        playerId: playerId, 
+        playerName: player.name, 
+        winners: room.winners,
+        totalWinners: room.winners.length,
+        isFirstWinner: room.winners.length === 1,
+        awaitingVerification: false,
         verified: true
       });
       
@@ -1184,14 +1195,7 @@ io.on('connection', (socket) => {
         reason: reason 
       });
       
-      // CRITICAL FIX: Mark current song as "actually played" since players heard it during bingo call
-      if (room.currentSong && room.currentSong.id) {
-        room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
-        if (!room.calledSongIds.includes(room.currentSong.id)) {
-          room.calledSongIds.push(room.currentSong.id);
-          console.log(`📝 Marked current song as played after bingo rejection: ${room.currentSong.name}`);
-        }
-      }
+      // Current song already marked as played during bingo call
       
       // Auto-resume the game
       if (room.gameState === 'paused_for_verification') {
@@ -1215,6 +1219,9 @@ io.on('connection', (socket) => {
           }
         })();
         console.log(`▶️ Game resumed after rejecting ${player.name}'s bingo`);
+        
+        // Notify all clients that game has resumed
+        io.to(roomId).emit('game-resumed', { reason: 'Bingo rejected, game continues' });
       }
     }
   });
