@@ -502,18 +502,26 @@ const HostView: React.FC = () => {
       addLog('Game restarted by host', 'info');
     });
 
-    // NEW: Handle next round started
-    newSocket.on('next-round-started', (data: any) => {
-      console.log('Next round started:', data);
+    // NEW: Handle next round reset (back to setup)
+    newSocket.on('next-round-reset', (data: any) => {
+      console.log('Next round reset to setup:', data);
       setRoundComplete(null);
       setWinners([]);
       setGamePaused(false);
       setIsPlaying(false);
       setCurrentSong(null);
+      setMixFinalized(false);
+      setPlaylists([]);
+      setSelectedPlaylists([]);
+      setPattern('line');
+      setSnippetLength(30);
+      setRandomStarts(false);
+      setRevealMode('off');
+      setPlayedSoFar([]);
       if (data.roundWinners) {
         setRoundWinners(data.roundWinners);
       }
-      addLog(`Round ${data.roundNumber} started!`, 'info');
+      addLog(`Round ${data.roundNumber} - Fresh setup ready!`, 'info');
     });
 
     // NEW: Handle game session ended
@@ -1049,18 +1057,23 @@ const HostView: React.FC = () => {
   };
 
   // NEW: Multi-round system handlers
-  const handleStartNextRound = (options: any = {}) => {
+  const handleStartNextRound = () => {
     if (!socket) return;
     
-    console.log('Starting next round with options:', options);
-    socket.emit('start-next-round', {
-      roomId,
-      keepSamePlaylists: options.keepSamePlaylists ?? true,
-      keepSamePattern: options.keepSamePattern ?? true,
-      newPattern: options.newPattern,
-      newPlaylists: options.newPlaylists
-    });
-    addLog(`Starting next round`, 'info');
+    const confirmed = window.confirm(
+      'Start next round with fresh setup?\n\n' +
+      'This will:\n' +
+      '• Keep all players connected\n' +
+      '• Keep Spotify connection\n' +
+      '• Reset to setup screen for new playlists/pattern\n' +
+      '• Clear all bingo cards'
+    );
+    
+    if (confirmed) {
+      console.log('Starting next round with full reset');
+      socket.emit('start-next-round', { roomId });
+      addLog(`Starting fresh round setup`, 'info');
+    }
   };
 
   const handleEndGameSession = () => {
@@ -2786,7 +2799,7 @@ const HostView: React.FC = () => {
 
                 <div style={{ 
                   display: 'flex', 
-                  gap: '1rem', 
+                  gap: '1.5rem', 
                   justifyContent: 'center',
                   flexWrap: 'wrap',
                   marginBottom: '1.5rem'
@@ -2798,40 +2811,15 @@ const HostView: React.FC = () => {
                       color: '#001a0d',
                       border: 'none',
                       borderRadius: '12px',
-                      padding: '12px 24px',
-                      fontSize: '1.1rem',
+                      padding: '16px 32px',
+                      fontSize: '1.2rem',
                       fontWeight: 700,
                       cursor: 'pointer',
-                      boxShadow: '0 4px 15px rgba(0,255,136,0.4)'
+                      boxShadow: '0 4px 15px rgba(0,255,136,0.4)',
+                      minWidth: '200px'
                     }}
                   >
-                    ▶️ NEXT ROUND (Same Setup)
-                  </button>
-                  
-                  <button
-                    onClick={() => {
-                      // TODO: Add modal for changing pattern/playlists
-                      const newPattern = prompt('Enter new pattern (line, x, four_corners, full_card):');
-                      if (newPattern) {
-                        handleStartNextRound({ 
-                          keepSamePattern: false, 
-                          newPattern 
-                        });
-                      }
-                    }}
-                    style={{
-                      background: 'linear-gradient(135deg, #ffc107, #ff8800)',
-                      color: '#1a1a2e',
-                      border: 'none',
-                      borderRadius: '12px',
-                      padding: '12px 24px',
-                      fontSize: '1.1rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 15px rgba(255,193,7,0.4)'
-                    }}
-                  >
-                    🎯 NEXT ROUND (New Pattern)
+                    🔄 START NEXT ROUND
                   </button>
                   
                   <button
@@ -2841,11 +2829,12 @@ const HostView: React.FC = () => {
                       color: 'white',
                       border: 'none',
                       borderRadius: '12px',
-                      padding: '12px 24px',
-                      fontSize: '1.1rem',
+                      padding: '16px 32px',
+                      fontSize: '1.2rem',
                       fontWeight: 700,
                       cursor: 'pointer',
-                      boxShadow: '0 4px 15px rgba(255,68,68,0.4)'
+                      boxShadow: '0 4px 15px rgba(255,68,68,0.4)',
+                      minWidth: '200px'
                     }}
                   >
                     🏁 END GAME SESSION
@@ -2858,8 +2847,9 @@ const HostView: React.FC = () => {
                   fontSize: '0.9rem', 
                   color: '#aaa' 
                 }}>
-                  Choose your next action:<br/>
-                  <strong style={{ color: '#ffc107' }}>Next Round continues with same players, End Session finishes completely</strong>
+                  <strong style={{ color: '#00ff88' }}>🔄 Next Round:</strong> Complete fresh setup - select new playlists, pattern, settings<br/>
+                  <strong style={{ color: '#ff4444' }}>🏁 End Session:</strong> Finish the entire game completely<br/>
+                  <em style={{ color: '#ffc107' }}>Players and Spotify stay connected for next round</em>
                 </div>
               </motion.div>
             </motion.div>

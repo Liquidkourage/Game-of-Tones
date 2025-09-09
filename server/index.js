@@ -1389,9 +1389,9 @@ io.on('connection', (socket) => {
     console.log(`✅ Game restarted successfully for room ${roomId}`);
   });
 
-  // NEW: Host starts next round after a bingo win
+  // NEW: Host starts next round after a bingo win (FULL RESET to setup)
   socket.on('start-next-round', (data) => {
-    const { roomId, keepSamePlaylists = true, keepSamePattern = true, newPattern, newPlaylists } = data || {};
+    const { roomId, fullReset = true } = data || {};
     const room = rooms.get(roomId);
     if (!room) return;
     
@@ -1404,78 +1404,84 @@ io.on('connection', (socket) => {
       return;
     }
     
-    console.log(`🎯 Host starting round ${(room.roundWinners?.length || 0) + 1} for room ${roomId}`);
+    console.log(`🔄 Host starting FRESH round ${(room.roundWinners?.length || 0) + 1} for room ${roomId}`);
     
-    // Reset game state for new round
+    // FULL RESET - back to point 0 of game setup (but keep players & Spotify)
+    const playersToKeep = room.players; // Preserve players
+    const hostToKeep = room.host; // Preserve host
+    const roundWinnersToKeep = room.roundWinners || []; // Preserve round history
+    const deviceToKeep = room.selectedDeviceId; // Preserve Spotify device
+    
+    // Reset EVERYTHING else back to initial setup state
     room.gameState = 'waiting';
     room.currentSong = null;
     room.currentSongIndex = 0;
     room.currentSongStartMs = 0;
-    room.winners = []; // Reset current round winners
+    room.winners = [];
     room.playedSongs = [];
-    room.calledSongIds = []; // Reset called songs
+    room.calledSongIds = [];
     
-    // Update pattern if requested
-    if (!keepSamePattern && newPattern) {
-      room.pattern = newPattern;
-      console.log(`🎯 Updated pattern to: ${newPattern}`);
-    }
+    // Reset playlist and mix state - host needs to select playlists again
+    room.playlists = [];
+    room.selectedPlaylists = [];
+    room.finalizedPlaylists = [];
+    room.playlistSongs = [];
+    room.mixFinalized = false;
+    room.temporaryPlaylistId = null;
+    room.finalizedSongOrder = [];
     
-    // Reset all player bingo status but keep their cards (unless new playlists)
+    // Reset pattern to default
+    room.pattern = 'line';
+    room.customPattern = new Set();
+    
+    // Reset settings to defaults  
+    room.snippetLength = 30;
+    room.randomStarts = false;
+    room.revealMode = 'off';
+    
+    // Clear all bingo cards - they'll be regenerated when new playlists are selected
+    room.bingoCards = new Map();
+    room.clientCards = new Map();
+    room.oneBySeventyFivePool = [];
+    room.fiveByFifteenColumnsIds = [];
+    room.fiveByFifteenPlaylistNames = [];
+    room.fiveByFifteenMeta = {};
+    
+    // Reset all player states but keep them in the room
     room.players.forEach((player) => {
       player.hasBingo = false;
       player.patternComplete = false;
-      // Reset card marked state
-      if (player.bingoCard && player.bingoCard.squares) {
-        player.bingoCard.squares.forEach(square => {
-          square.marked = false;
-        });
-      }
+      player.bingoCard = null; // Will be regenerated with new playlists
     });
     
-    // Reset bingo cards marked state
-    if (room.bingoCards) {
-      room.bingoCards.forEach((card) => {
-        if (card && card.squares) {
-          card.squares.forEach(square => {
-            square.marked = false;
-          });
-        }
-      });
-    }
+    // Preserve what we want to keep
+    room.players = playersToKeep;
+    room.host = hostToKeep;
+    room.roundWinners = roundWinnersToKeep;
+    room.selectedDeviceId = deviceToKeep;
     
-    // If new playlists requested, clear existing cards (they'll be regenerated)
-    if (!keepSamePlaylists && newPlaylists && Array.isArray(newPlaylists)) {
-      console.log(`📋 Updating playlists for new round`);
-      room.playlists = newPlaylists;
-      room.finalizedPlaylists = newPlaylists;
-      room.bingoCards = new Map();
-      room.clientCards = new Map();
-      
-      // Clear player cards (will be regenerated on next finalize-mix)
-      room.players.forEach((player) => {
-        player.bingoCard = null;
-      });
-    }
+    console.log(`🔄 Room ${roomId} reset to setup state, keeping ${room.players.size} players and Spotify connection`);
     
-    // Notify all clients of the new round
-    io.to(roomId).emit('next-round-started', {
-      message: `Round ${(room.roundWinners?.length || 0) + 1} starting!`,
-      roundNumber: (room.roundWinners?.length || 0) + 1,
-      totalRounds: room.roundWinners?.length || 0,
-      roundWinners: room.roundWinners || [],
-      newPattern: !keepSamePattern ? room.pattern : null,
-      newPlaylists: !keepSamePlaylists,
+    // Notify all clients that we're starting fresh
+    io.to(roomId).emit('next-round-reset', {
+      message: `Round ${roundWinnersToKeep.length + 1} - Fresh Setup!`,
+      roundNumber: roundWinnersToKeep.length + 1,
+      totalRounds: roundWinnersToKeep.length,
+      roundWinners: roundWinnersToKeep,
+      resetToSetup: true,
       roomState: {
-        gameState: room.gameState,
-        pattern: room.pattern,
+        gameState: 'waiting',
+        pattern: 'line',
         currentSong: null,
         winners: [],
-        playedSongs: []
+        playedSongs: [],
+        mixFinalized: false,
+        playlists: [],
+        snippetLength: 30
       }
     });
     
-    console.log(`✅ Round ${(room.roundWinners?.length || 0) + 1} prepared for room ${roomId}`);
+    console.log(`✅ Fresh round ${roundWinnersToKeep.length + 1} setup ready for room ${roomId}`);
   });
 
   // NEW: Host ends the entire multi-round game session
