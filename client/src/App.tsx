@@ -41,7 +41,6 @@ function AppHeader() {
 function App() {
   const location = useLocation();
   const isDisplay = /^\/display(\/.+|$)/.test(location.pathname);
-  const isPlayer = /^\/player(\/.+|$)/.test(location.pathname);
   return (
     <div className="App">
       <div className="app-container">
@@ -57,24 +56,6 @@ function App() {
             <Route path="/callback" element={<SpotifyCallback />} />
           </Routes>
         </main>
-        {!isPlayer && (
-          <motion.footer
-            className="app-footer"
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.8, delay: 0.2, ease: 'easeOut' }}
-          >
-            <div className="footer-content">
-              <p>🎵 Where Music Meets Bingo 🎵</p>
-              <div className="footer-links">
-                <a href="#" className="footer-link">About</a>
-                <a href="#" className="footer-link">Help</a>
-                <a href="#" className="footer-link">Contact</a>
-              </div>
-              <div style={{ marginLeft: 'auto', color: '#777', fontSize: '0.8rem' }}>Build: {process.env.REACT_APP_BUILD_ID || 'dev'}</div>
-            </div>
-          </motion.footer>
-        )}
       </div>
     </div>
   );
