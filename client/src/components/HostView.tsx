@@ -1834,26 +1834,51 @@ const HostView: React.FC = () => {
                 ) : (
                   <div style={{ display: 'grid', gap: 16 }}>
                     {Array.from(playerCards.entries()).map(([playerId, playerData]) => (
-                      <div key={playerId} style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: 8 }}>
-                        <div style={{ fontWeight: 'bold', marginBottom: 8, color: '#00ff88' }}>
+                      <div key={playerId} style={{ 
+                        background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
+                        border: '1px solid rgba(0,255,136,0.3)', 
+                        borderRadius: '12px', 
+                        padding: '16px',
+                        boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
+                      }}>
+                        <div style={{ 
+                          fontWeight: 'bold', 
+                          marginBottom: '12px', 
+                          color: '#00ff88',
+                          fontSize: '1rem',
+                          textAlign: 'center'
+                        }}>
                           {playerData.playerName}
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 2, fontSize: '0.7rem' }}>
+                        <div style={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: 'repeat(5, 1fr)', 
+                          gap: '4px', 
+                          maxWidth: '300px',
+                          aspectRatio: '1/1',
+                          margin: '0 auto'
+                        }}>
                           {playerData.card.squares.map((square: any) => (
                             <div 
                               key={square.position}
                               style={{ 
-                                border: '1px solid rgba(255,255,255,0.2)', 
-                                borderRadius: 3, 
-                                padding: 2, 
-                                textAlign: 'center',
-                                background: square.marked ? 'rgba(0,255,136,0.2)' : 'rgba(255,255,255,0.05)',
-                                minHeight: 30,
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                fontSize: '0.65rem',
-                                lineHeight: 1
+                                background: square.marked 
+                                  ? 'linear-gradient(135deg, #00ff88, #00cc6d)' 
+                                  : 'rgba(255,255,255,0.1)',
+                                border: square.marked 
+                                  ? '2px solid #00ff88' 
+                                  : '1px solid rgba(255,255,255,0.3)',
+                                borderRadius: '8px',
+                                padding: '4px',
+                                fontSize: '0.7rem',
+                                fontWeight: square.marked ? 700 : 400,
+                                color: square.marked ? '#001a0d' : '#ffffff',
+                                textAlign: 'center',
+                                lineHeight: 1.1,
+                                overflow: 'hidden'
                               }}
                               title={`${square.songName} — ${square.artistName}`}
                             >
