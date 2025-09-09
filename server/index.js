@@ -964,6 +964,20 @@ io.on('connection', (socket) => {
       if (room.gameState === 'playing') {
         room.gameState = 'paused_for_verification';
         clearRoomTimer(roomId);
+        
+        // Pause Spotify playback during verification
+        (async () => {
+          try {
+            const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+            if (deviceId) {
+              await spotifyApi.pause();
+              console.log(`⏸️ Spotify paused for bingo verification by ${player.name}`);
+            }
+          } catch (error) {
+            console.log(`⚠️ Failed to pause Spotify during bingo verification: ${error.message}`);
+          }
+        })();
+        
         console.log(`🛑 Game auto-paused for bingo verification by ${player.name}`);
       }
       
