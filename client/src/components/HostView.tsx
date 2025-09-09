@@ -363,10 +363,11 @@ const HostView: React.FC = () => {
     });
 
     newSocket.on('game-started', (data: any) => {
+      console.log('🎮 GAME-STARTED EVENT RECEIVED:', data);
       setGameState('playing');
-      console.log('Game started:', data);
+      console.log('🎮 SET GAME STATE TO PLAYING');
       setIsStartingGame(false);
-      addLog('Game started', 'info');
+      addLog('Game started - state set to playing', 'info');
       // Auto-collapse lists during gameplay
       setShowSongList(false);
       setShowPlaylists(false);
@@ -2005,12 +2006,26 @@ const HostView: React.FC = () => {
           {/* Emergency sync controls - always show in waiting state for debugging */}
           {gameState === 'waiting' && (
             <motion.div style={{ margin: '16px 0' }}>
-              <div style={{ display: 'flex', gap: 8, padding: '12px', background: 'rgba(255,193,7,0.1)', borderRadius: '8px', border: '1px solid rgba(255,193,7,0.3)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px', background: 'rgba(255,193,7,0.1)', borderRadius: '8px', border: '1px solid rgba(255,193,7,0.3)' }}>
                 <span style={{ color: '#ffc107', fontSize: '0.9rem', fontWeight: 600 }}>
-                  🔧 Debug: gameState={gameState}, currentSong={currentSong ? 'YES' : 'NO'}, isPlaying={isPlaying ? 'YES' : 'NO'}
+                  🚨 MISSING GAME CONTROLS: gameState={gameState}, currentSong={currentSong ? 'YES' : 'NO'}, isPlaying={isPlaying ? 'YES' : 'NO'}
                 </span>
-                <button className="btn-secondary" onClick={forceSyncGameState} style={{ fontSize: '0.8rem' }}>🔄 Sync State</button>
-                <button className="btn-secondary" onClick={forceSetPlaying} style={{ fontSize: '0.8rem' }}>▶️ Force Playing</button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button 
+                    className="btn-danger" 
+                    onClick={forceSetPlaying} 
+                    style={{ 
+                      background: '#dc3545', 
+                      color: 'white', 
+                      fontWeight: 'bold',
+                      fontSize: '0.9rem',
+                      padding: '8px 16px'
+                    }}
+                  >
+                    🔧 FIX: Set to Playing State
+                  </button>
+                  <button className="btn-secondary" onClick={forceSyncGameState} style={{ fontSize: '0.8rem' }}>🔄 Sync State</button>
+                </div>
               </div>
             </motion.div>
           )}
