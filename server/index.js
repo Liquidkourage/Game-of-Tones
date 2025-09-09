@@ -942,14 +942,52 @@ io.on('connection', (socket) => {
   socket.on('player-bingo', (data) => {
     const { roomId } = data || {};
     const room = rooms.get(roomId);
-    if (!room) return;
+    if (!room) {
+      socket.emit('bingo-result', { success: false, reason: 'Room not found' });
+      return;
+    }
     const player = room.players.get(socket.id);
-    if (!player || !player.bingoCard) return;
-    const valid = validateBingoForPattern(player.bingoCard, room);
-    if (valid && !player.hasBingo) {
+    if (!player || !player.bingoCard) {
+      socket.emit('bingo-result', { success: false, reason: 'Player or card not found' });
+      return;
+    }
+    
+    if (player.hasBingo) {
+      socket.emit('bingo-result', { success: false, reason: 'You have already called bingo!' });
+      return;
+    }
+    
+    const validationResult = validateBingoForPattern(player.bingoCard, room);
+    
+    if (validationResult.valid) {
       player.hasBingo = true;
-      room.winners.push({ playerId: socket.id, playerName: player.name, timestamp: Date.now() });
-      io.to(roomId).emit('bingo-called', { playerId: socket.id, playerName: player.name, winners: room.winners });
+      const winnerData = { playerId: socket.id, playerName: player.name, timestamp: Date.now() };
+      room.winners.push(winnerData);
+      
+      // Send success to the caller
+      socket.emit('bingo-result', { 
+        success: true, 
+        message: 'BINGO! Congratulations!',
+        isWinner: true,
+        totalWinners: room.winners.length
+      });
+      
+      // Notify everyone else
+      io.to(roomId).emit('bingo-called', { 
+        playerId: socket.id, 
+        playerName: player.name, 
+        winners: room.winners,
+        totalWinners: room.winners.length,
+        isFirstWinner: room.winners.length === 1
+      });
+    } else {
+      // Send detailed failure reason
+      socket.emit('bingo-result', { 
+        success: false, 
+        reason: validationResult.reason || 'Invalid bingo pattern',
+        requiredPattern: room.pattern,
+        customMask: room.pattern === 'custom' ? Array.from(room.customPattern || []) : null
+      });
     }
   });
 
@@ -2632,41 +2670,87 @@ function checkBingo(card) {
 
 function validateBingoForPattern(card, room) {
   const pattern = room?.pattern || 'full_card';
+  
   if (pattern === 'custom' && room?.customPattern && room.customPattern.size > 0) {
     // All positions in customPattern must be marked
+    const unmarkedPositions = [];
     for (const pos of room.customPattern) {
       const sq = card.squares.find(s => s.position === pos);
-      if (!sq || !sq.marked) return false;
+      if (!sq || !sq.marked) {
+        unmarkedPositions.push(pos);
+      }
     }
-    return true;
+    if (unmarkedPositions.length > 0) {
+      return { 
+        valid: false, 
+        reason: `Custom pattern incomplete. Need ${unmarkedPositions.length} more squares marked.`
+      };
+    }
+    return { valid: true, reason: 'Custom pattern complete!' };
   }
+  
   if (pattern === 'full_card') {
     // All squares must be marked
+    let unmarkedCount = 0;
     for (let row = 0; row < 5; row++) {
       for (let col = 0; col < 5; col++) {
         const square = card.squares.find(s => s.position === `${row}-${col}`);
-        if (!square || !square.marked) return false;
+        if (!square || !square.marked) {
+          unmarkedCount++;
+        }
       }
     }
-    return true;
+    if (unmarkedCount > 0) {
+      return { 
+        valid: false, 
+        reason: `Full card incomplete. Need ${unmarkedCount} more squares marked.`
+      };
+    }
+    return { valid: true, reason: 'Full card complete!' };
   }
+  
   if (pattern === 'four_corners') {
     const required = ['0-0', '0-4', '4-0', '4-4'];
-    return required.every(pos => {
+    const unmarked = required.filter(pos => {
       const sq = card.squares.find(s => s.position === pos);
-      return !!sq && !!sq.marked;
+      return !sq || !sq.marked;
     });
+    if (unmarked.length > 0) {
+      return { 
+        valid: false, 
+        reason: `Four corners incomplete. Need ${unmarked.length} more corners marked.`
+      };
+    }
+    return { valid: true, reason: 'Four corners complete!' };
   }
+  
   if (pattern === 'x') {
+    const unmarked = [];
     for (let i = 0; i < 5; i++) {
       const a = card.squares.find(s => s.position === `${i}-${i}`);
       const b = card.squares.find(s => s.position === `${i}-${4 - i}`);
-      if (!a || !a.marked || !b || !b.marked) return false;
+      if (!a || !a.marked) unmarked.push(`${i}-${i}`);
+      if (!b || !b.marked) unmarked.push(`${i}-${4 - i}`);
     }
-    return true;
+    if (unmarked.length > 0) {
+      return { 
+        valid: false, 
+        reason: `X pattern incomplete. Need ${unmarked.length} more diagonal squares marked.`
+      };
+    }
+    return { valid: true, reason: 'X pattern complete!' };
   }
+  
   // default: any single line using existing checker
-  return checkBingo(card);
+  const lineResult = checkBingo(card);
+  if (lineResult) {
+    return { valid: true, reason: 'Line bingo complete!' };
+  } else {
+    return { 
+      valid: false, 
+      reason: 'No complete lines found. Need a full row, column, or diagonal.'
+    };
+  }
 }
 
 // API Routes

@@ -82,6 +82,8 @@ const PlayerView: React.FC = () => {
   const [holdProgress, setHoldProgress] = useState<number>(0); // 0..1
   const holdStartRef = useRef<number | null>(null);
   const holdRafRef = useRef<number | null>(null);
+  const [bingoStatus, setBingoStatus] = useState<'idle' | 'checking' | 'success' | 'failed'>('idle');
+  const [bingoMessage, setBingoMessage] = useState<string>('');
   const [gameState, setGameState] = useState<GameState>({
     isPlaying: false,
     currentSong: null,
@@ -194,14 +196,44 @@ const PlayerView: React.FC = () => {
       // Cards are now available but game hasn't started yet
     });
 
+    // Handle bingo validation result (for the caller)
+    newSocket.on('bingo-result', (data: any) => {
+      console.log('Bingo result:', data);
+      if (data.success) {
+        setBingoStatus('success');
+        setBingoMessage(data.message || 'BINGO! You win!');
+        setGameState(prev => ({ ...prev, hasBingo: true }));
+        // Play success sound
+        playSuccessSound();
+        // Vibrate celebration
+        vibrate([100, 50, 100, 50, 100]);
+        // Clear status after celebration
+        setTimeout(() => {
+          setBingoStatus('idle');
+          setBingoMessage('');
+        }, 5000);
+      } else {
+        setBingoStatus('failed');
+        setBingoMessage(data.reason || 'Invalid bingo pattern');
+        // Play error sound
+        playErrorSound();
+        // Clear status after showing error
+        setTimeout(() => {
+          setBingoStatus('idle');
+          setBingoMessage('');
+        }, 3000);
+      }
+    });
+
     newSocket.on('bingo-called', (data: any) => {
       console.log('Bingo called:', data);
-      // Check if this player called bingo
-      if (data.playerId === newSocket.id) {
-        setGameState(prev => ({
-          ...prev,
-          hasBingo: true
-        }));
+      // Check if this is someone else's bingo
+      if (data.playerId !== newSocket.id) {
+        // Play notification sound for other players
+        playNotificationSound();
+        // Show celebration message
+        setBingoMessage(`🏆 ${data.playerName} got BINGO!`);
+        setTimeout(() => setBingoMessage(''), 3000);
       }
     });
 
@@ -328,6 +360,89 @@ const PlayerView: React.FC = () => {
     if (navigator.vibrate) navigator.vibrate(pattern);
   };
 
+  // Audio feedback functions
+  const playSuccessSound = () => {
+    try {
+      // Create success sound using Web Audio API
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      // Happy celebration chord progression
+      const playNote = (freq: number, startTime: number, duration: number) => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        
+        osc.frequency.setValueAtTime(freq, startTime);
+        gain.gain.setValueAtTime(0.2, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+        
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+      };
+      
+      const now = audioContext.currentTime;
+      // Play celebratory chord progression
+      playNote(523.25, now, 0.3);     // C5
+      playNote(659.25, now + 0.1, 0.3); // E5
+      playNote(783.99, now + 0.2, 0.4); // G5
+      playNote(1046.5, now + 0.3, 0.5); // C6
+    } catch (error) {
+      console.log('Audio not supported');
+    }
+  };
+
+  const playErrorSound = () => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      // Error sound - descending tone
+      const now = audioContext.currentTime;
+      oscillator.frequency.setValueAtTime(400, now);
+      oscillator.frequency.exponentialRampToValueAtTime(200, now + 0.3);
+      
+      gainNode.gain.setValueAtTime(0.3, now);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+      
+      oscillator.start(now);
+      oscillator.stop(now + 0.3);
+    } catch (error) {
+      console.log('Audio not supported');
+    }
+  };
+
+  const playNotificationSound = () => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      // Gentle notification - two soft tones
+      const playNote = (freq: number, startTime: number, duration: number) => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        
+        osc.frequency.setValueAtTime(freq, startTime);
+        gain.gain.setValueAtTime(0.15, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+        
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+      };
+      
+      const now = audioContext.currentTime;
+      playNote(659.25, now, 0.2);       // E5
+      playNote(783.99, now + 0.15, 0.2); // G5
+    } catch (error) {
+      console.log('Audio not supported');
+    }
+  };
+
   const handleDensityChange = (value: 's' | 'm' | 'l') => {
     setDensity(value);
     localStorage.setItem('text_density', value);
@@ -359,6 +474,8 @@ const PlayerView: React.FC = () => {
       if (p >= 1) {
         // Completed hold
         if (socket) {
+          setBingoStatus('checking');
+          setBingoMessage('Checking your bingo...');
           socket.emit('player-bingo', { roomId });
         }
         vibrate([10, 50, 20]);
@@ -626,6 +743,55 @@ const PlayerView: React.FC = () => {
 
         {/* Game Status and Instructions removed per request */}
 
+        {/* Bingo Status Feedback */}
+        {(bingoStatus !== 'idle' || bingoMessage) && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            style={{
+              position: 'fixed',
+              bottom: 'calc(140px + env(safe-area-inset-bottom))',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              padding: '12px 20px',
+              borderRadius: '25px',
+              fontWeight: 700,
+              fontSize: '1rem',
+              zIndex: 999,
+              textAlign: 'center',
+              minWidth: '200px',
+              maxWidth: '90vw',
+              background: 
+                bingoStatus === 'success' ? 'linear-gradient(135deg, #00ff88, #00cc6d)' :
+                bingoStatus === 'failed' ? 'linear-gradient(135deg, #ff4444, #cc3333)' :
+                bingoStatus === 'checking' ? 'linear-gradient(135deg, #ffaa00, #ff8800)' :
+                'rgba(255,255,255,0.1)',
+              color: 
+                bingoStatus === 'success' ? '#001a0d' :
+                bingoStatus === 'failed' ? '#ffffff' :
+                bingoStatus === 'checking' ? '#ffffff' :
+                '#ffffff',
+              border: '2px solid rgba(255,255,255,0.2)',
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
+            }}
+          >
+            {bingoStatus === 'checking' && (
+              <motion.span
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                style={{ display: 'inline-block', marginRight: '8px' }}
+              >
+                ⏳
+              </motion.span>
+            )}
+            {bingoStatus === 'success' && '🏆 '}
+            {bingoStatus === 'failed' && '❌ '}
+            {bingoMessage}
+          </motion.div>
+        )}
+
         {/* bottom sheet removed per request */}
         <button
           className={`bingo-fab ${bingoHolding ? 'holding' : ''}`}
@@ -678,7 +844,12 @@ const PlayerView: React.FC = () => {
             MozUserSelect: 'none',
             msUserSelect: 'none',
             pointerEvents: 'none'
-          }}>{bingoHolding ? 'Holding…' : 'Hold to BINGO'}</span>
+          }}>
+            {bingoHolding ? 'Holding…' : 
+             bingoStatus === 'checking' ? 'Checking...' :
+             bingoStatus === 'success' ? 'WINNER!' :
+             gameState.hasBingo ? 'BINGO!' : 'Hold to BINGO'}
+          </span>
         </button>
       </div>
     </div>

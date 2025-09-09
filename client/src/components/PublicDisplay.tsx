@@ -151,6 +151,39 @@ const PublicDisplay: React.FC = () => {
     }
   }
 
+  // Audio feedback for public celebrations
+  const playPublicCelebrationSound = () => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      // Grand celebration fanfare
+      const playNote = (freq: number, startTime: number, duration: number, volume: number = 0.3) => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        
+        osc.frequency.setValueAtTime(freq, startTime);
+        gain.gain.setValueAtTime(volume, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+        
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+      };
+      
+      const now = audioContext.currentTime;
+      
+      // Victory fanfare progression
+      playNote(523.25, now, 0.4, 0.25);        // C5
+      playNote(659.25, now + 0.1, 0.4, 0.25);  // E5
+      playNote(783.99, now + 0.2, 0.4, 0.25);  // G5
+      playNote(1046.5, now + 0.3, 0.6, 0.3);   // C6
+      playNote(1318.5, now + 0.5, 0.8, 0.35);  // E6 - big finish
+    } catch (error) {
+      console.log('Audio not supported');
+    }
+  };
+
   useEffect(() => {
     const socket = io(SOCKET_URL || undefined);
     socket.on('connect', () => {
@@ -392,9 +425,24 @@ const PublicDisplay: React.FC = () => {
       try {
         const latest = (data?.winners && data.winners.length) ? data.winners[data.winners.length - 1] : null;
         if (latest?.playerName) {
-          setWinnerName(latest.playerName);
+          // Enhanced winner announcement
+          const isFirstWinner = data.isFirstWinner;
+          const totalWinners = data.totalWinners || 1;
+          
+          if (isFirstWinner) {
+            setWinnerName(`🏆 BINGO! ${latest.playerName} WINS!`);
+          } else {
+            setWinnerName(`🎉 Another BINGO! ${latest.playerName} also wins! (${totalWinners} total)`);
+          }
+          
           setShowWinnerBanner(true);
-          setTimeout(() => setShowWinnerBanner(false), 4000);
+          
+          // Play celebration sound
+          playPublicCelebrationSound();
+          
+          // Longer celebration for first winner, shorter for additional winners
+          const celebrationTime = isFirstWinner ? 6000 : 4000;
+          setTimeout(() => setShowWinnerBanner(false), celebrationTime);
         }
       } catch {}
     });
