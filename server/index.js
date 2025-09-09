@@ -2235,11 +2235,16 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
   console.log(`👥 Generating cards for ${room.players.size} players`);
 
   for (const [playerId, player] of room.players) {
+    try {
+      console.log(`🎲 Generating card for player: ${player.name} (${playerId})`);
       let chosen25 = [];
       if (mode === '1x75') {
         // Use the same base computed above to ensure consistency
         const base = (rooms.get(roomId)?.oneBySeventyFivePool || []).map(x => perListUnique[0].songs.find(s => s.id === x.id)).filter(Boolean);
-        if (!ensureEnough(base.length)) return;
+        if (!ensureEnough(base.length)) {
+          console.error(`❌ Not enough songs for 1x75 mode for player ${player.name}: need ${songsNeededPerCard}, have ${base.length}`);
+          continue; // Skip this player but continue with others
+        }
         chosen25 = [...base].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
       } else if (mode === '5x15') {
         // For each of 5 playlists, sample 5 unique tracks, ensuring cross-column uniqueness
@@ -2257,9 +2262,12 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           columns.push(colPicks);
         }
         if (!ok) {
-          console.warn('⚠️ 5x15 mode fell short; falling back to global pool');
+          console.warn(`⚠️ 5x15 mode fell short for player ${player.name}; falling back to global pool`);
           const global = buildGlobalPool();
-          if (!ensureEnough(global.length)) return;
+          if (!ensureEnough(global.length)) {
+            console.error(`❌ Not enough songs in global pool for player ${player.name}: need ${songsNeededPerCard}, have ${global.length}`);
+            continue; // Skip this player but continue with others
+          }
           chosen25 = [...global].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
         } else {
           // Flatten column-major into row-major 5x5
@@ -2271,41 +2279,59 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
         }
       } else {
         const pool = buildGlobalPool();
-        if (!ensureEnough(pool.length)) return;
+        if (!ensureEnough(pool.length)) {
+          console.error(`❌ Not enough songs in global pool for player ${player.name}: need ${songsNeededPerCard}, have ${pool.length}`);
+          continue; // Skip this player but continue with others
+        }
         chosen25 = [...pool].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
       }
 
       // Build card
       const card = { id: playerId, squares: [] };
-    let idx = 0;
-    for (let row = 0; row < 5; row++) {
-      for (let col = 0; col < 5; col++) {
+      let idx = 0;
+      for (let row = 0; row < 5; row++) {
+        for (let col = 0; col < 5; col++) {
           const s = chosen25[idx++];
-        card.squares.push({
-          position: `${row}-${col}`,
-          songId: s.id,
-          songName: s.name,
-          artistName: s.artist,
-          marked: false
-        });
+          if (!s || !s.id) {
+            console.error(`❌ Invalid song at position ${row}-${col} for player ${player.name}`);
+            continue;
+          }
+          card.squares.push({
+            position: `${row}-${col}`,
+            songId: s.id,
+            songName: s.name,
+            artistName: s.artist,
+            marked: false
+          });
+        }
       }
-    }
 
-    const uniqueOnCard = new Set(card.squares.map(q => q.songId));
+      if (card.squares.length < 25) {
+        console.error(`❌ Card incomplete for player ${player.name}: only ${card.squares.length}/25 squares`);
+        continue; // Skip this player
+      }
+
+      const uniqueOnCard = new Set(card.squares.map(q => q.songId));
       console.log(`✅ Generated card for ${player.name} with ${uniqueOnCard.size} unique songs (mode=${mode})`);
 
       if (!room.bingoCards) room.bingoCards = new Map();
-    player.bingoCard = card;
-    cards.set(playerId, card);
+      player.bingoCard = card;
+      cards.set(playerId, card);
       // Persist by clientId if available to survive refreshes
       if (player.clientId) {
         room.clientCards.set(player.clientId, card);
       }
-    io.to(playerId).emit('bingo-card', card);
+      io.to(playerId).emit('bingo-card', card);
+    } catch (e) {
+      console.error(`❌ Error generating card for player ${player.name} (${playerId}):`, e?.message || e);
+      // Continue with other players
+    }
   }
 
   room.bingoCards = cards;
-  console.log(`✅ Generated bingo cards for room ${roomId}`);
+  console.log(`✅ Generated ${cards.size} bingo cards for room ${roomId}`);
+  console.log(`📋 Players with cards: ${Array.from(cards.keys()).map(id => room.players.get(id)?.name || id).join(', ')}`);
+  console.log(`⚠️ Players without cards: ${Array.from(room.players.keys()).filter(id => !cards.has(id)).map(id => room.players.get(id)?.name || id).join(', ') || 'None'}`);
   } catch (error) {
     console.error('❌ Error generating bingo cards:', error);
   }
