@@ -989,10 +989,13 @@ io.on('connection', (socket) => {
         room.bingoCards.forEach((card, playerId) => {
           const player = room.players.get(playerId);
           if (player && card) {
-            playerCardsData[playerId] = {
-              playerName: player.name,
-              card: card
-            };
+            // Only include actual players (not hosts or public display)
+            if (!player.isHost && player.name !== 'Display') {
+              playerCardsData[playerId] = {
+                playerName: player.name,
+                card: card
+              };
+            }
           }
         });
       }
