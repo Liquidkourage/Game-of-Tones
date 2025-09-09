@@ -1903,12 +1903,17 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
 // Generate a single bingo card for one player (if they join mid-game)
 async function generateBingoCardForPlayer(roomId, playerId) {
   const room = rooms.get(roomId);
-  if (!room || !Array.isArray(room.playlists)) return;
+  if (!room) return;
+  
+  // Use finalized playlists if available, otherwise fall back to regular playlists
+  const playlists = room.finalizedPlaylists || room.playlists;
+  if (!Array.isArray(playlists)) return;
+  
   // Build a single card using the same 1x75 / 5x15 logic used for all players
   try {
     // Fetch per-playlist songs and de-duplicate per list
     const playlistsWithSongs = [];
-    for (const playlist of room.playlists) {
+    for (const playlist of playlists) {
       try {
         const songs = await spotifyService.getPlaylistTracks(playlist.id);
         playlistsWithSongs.push({ ...playlist, songs });
