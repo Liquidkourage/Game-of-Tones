@@ -1174,24 +1174,43 @@ io.on('connection', (socket) => {
         verified: true
       });
       
-      // AUTOMATICALLY END GAME on first verified bingo
-      room.gameState = 'ended';
+      // PAUSE GAME for host to decide: next round or end completely
+      room.gameState = 'round_complete';
       clearRoomTimer(roomId);
-      console.log(`🏁 Game automatically ended - ${player.name} wins!`);
+      console.log(`🏁 Round complete - ${player.name} wins! Waiting for host decision...`);
       
-      // Notify host of automatic end
+      // Store round winner
+      if (!room.roundWinners) room.roundWinners = [];
+      room.roundWinners.push({
+        roundNumber: (room.roundWinners.length || 0) + 1,
+        playerName: player.name,
+        playerId: playerId,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Notify host with next round options
       socket.emit('bingo-verified', { 
         approved: true, 
         playerName: player.name,
-        gameEnded: true,
-        message: `Game ended - ${player.name} wins!`
+        gameEnded: false,
+        roundComplete: true,
+        roundNumber: room.roundWinners.length,
+        message: `Round ${room.roundWinners.length} complete - ${player.name} wins!`,
+        options: {
+          nextRound: true,
+          endGame: true,
+          changePattern: true,
+          changePlaylists: true
+        }
       });
       
-      // Notify all clients that game has ended
-      io.to(roomId).emit('game-ended', { 
-        reason: `${player.name} wins BINGO!`, 
-        winners: room.winners,
-        winnerName: player.name
+      // Notify all clients that round is complete (not game ended)
+      io.to(roomId).emit('round-complete', { 
+        roomId, 
+        winner: player.name,
+        roundNumber: room.roundWinners.length,
+        roundWinners: room.roundWinners,
+        message: `Round ${room.roundWinners.length} complete! Waiting for next round...`
       });
       
     } else {
@@ -1330,6 +1349,7 @@ io.on('connection', (socket) => {
     room.currentSongStartMs = 0;
     room.winners = [];
     room.playedSongs = [];
+    room.roundWinners = []; // Reset round winners
     
     // Reset all player bingo status but keep their cards
     room.players.forEach((player) => {
@@ -1361,11 +1381,146 @@ io.on('connection', (socket) => {
         gameState: room.gameState,
         currentSong: null,
         winners: [],
-        playedSongs: []
+        playedSongs: [],
+        roundWinners: []
       }
     });
     
     console.log(`✅ Game restarted successfully for room ${roomId}`);
+  });
+
+  // NEW: Host starts next round after a bingo win
+  socket.on('start-next-round', (data) => {
+    const { roomId, keepSamePlaylists = true, keepSamePattern = true, newPattern, newPlaylists } = data || {};
+    const room = rooms.get(roomId);
+    if (!room) return;
+    
+    // Verify this is the host
+    const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+    if (!isHost) return;
+    
+    if (room.gameState !== 'round_complete') {
+      console.warn(`⚠️ Cannot start next round: game state is ${room.gameState}, expected 'round_complete'`);
+      return;
+    }
+    
+    console.log(`🎯 Host starting round ${(room.roundWinners?.length || 0) + 1} for room ${roomId}`);
+    
+    // Reset game state for new round
+    room.gameState = 'waiting';
+    room.currentSong = null;
+    room.currentSongIndex = 0;
+    room.currentSongStartMs = 0;
+    room.winners = []; // Reset current round winners
+    room.playedSongs = [];
+    room.calledSongIds = []; // Reset called songs
+    
+    // Update pattern if requested
+    if (!keepSamePattern && newPattern) {
+      room.pattern = newPattern;
+      console.log(`🎯 Updated pattern to: ${newPattern}`);
+    }
+    
+    // Reset all player bingo status but keep their cards (unless new playlists)
+    room.players.forEach((player) => {
+      player.hasBingo = false;
+      player.patternComplete = false;
+      // Reset card marked state
+      if (player.bingoCard && player.bingoCard.squares) {
+        player.bingoCard.squares.forEach(square => {
+          square.marked = false;
+        });
+      }
+    });
+    
+    // Reset bingo cards marked state
+    if (room.bingoCards) {
+      room.bingoCards.forEach((card) => {
+        if (card && card.squares) {
+          card.squares.forEach(square => {
+            square.marked = false;
+          });
+        }
+      });
+    }
+    
+    // If new playlists requested, clear existing cards (they'll be regenerated)
+    if (!keepSamePlaylists && newPlaylists && Array.isArray(newPlaylists)) {
+      console.log(`📋 Updating playlists for new round`);
+      room.playlists = newPlaylists;
+      room.finalizedPlaylists = newPlaylists;
+      room.bingoCards = new Map();
+      room.clientCards = new Map();
+      
+      // Clear player cards (will be regenerated on next finalize-mix)
+      room.players.forEach((player) => {
+        player.bingoCard = null;
+      });
+    }
+    
+    // Notify all clients of the new round
+    io.to(roomId).emit('next-round-started', {
+      message: `Round ${(room.roundWinners?.length || 0) + 1} starting!`,
+      roundNumber: (room.roundWinners?.length || 0) + 1,
+      totalRounds: room.roundWinners?.length || 0,
+      roundWinners: room.roundWinners || [],
+      newPattern: !keepSamePattern ? room.pattern : null,
+      newPlaylists: !keepSamePlaylists,
+      roomState: {
+        gameState: room.gameState,
+        pattern: room.pattern,
+        currentSong: null,
+        winners: [],
+        playedSongs: []
+      }
+    });
+    
+    console.log(`✅ Round ${(room.roundWinners?.length || 0) + 1} prepared for room ${roomId}`);
+  });
+
+  // NEW: Host ends the entire multi-round game session
+  socket.on('end-game-session', (data) => {
+    const { roomId } = data || {};
+    const room = rooms.get(roomId);
+    if (!room) return;
+    
+    // Verify this is the host
+    const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+    if (!isHost) return;
+    
+    console.log(`🏁 Host ending game session for room ${roomId}`);
+    
+    // Stop any current playback and clean up
+    clearRoomTimer(roomId);
+    clearPlaybackWatcher(roomId);
+    
+    try {
+      const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+      if (deviceId) {
+        spotifyService.pausePlayback(deviceId).catch(() => {});
+      }
+    } catch (e) {}
+    
+    // Clean up temporary playlist
+    if (room.temporaryPlaylistId) {
+      spotifyService.deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
+        console.warn('⚠️ Failed to delete temporary playlist:', err)
+      );
+      room.temporaryPlaylistId = null;
+    }
+    
+    // Set final game state
+    room.gameState = 'ended';
+    
+    // Notify all clients that the entire game session has ended
+    io.to(roomId).emit('game-session-ended', { 
+      roomId,
+      totalRounds: room.roundWinners?.length || 0,
+      roundWinners: room.roundWinners || [],
+      finalMessage: `Game session complete! ${room.roundWinners?.length || 0} rounds played.`
+    });
+    
+    console.log(`✅ Game session ended for room ${roomId} after ${room.roundWinners?.length || 0} rounds`);
   });
 
   // Client requests a state sync (useful if they joined before start or missed events)
