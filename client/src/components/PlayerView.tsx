@@ -242,6 +242,34 @@ const PlayerView: React.FC = () => {
       console.log('🛑 Game ended');
     });
 
+    newSocket.on('game-restarted', (data: any) => {
+      console.log('Game restarted:', data);
+      // Reset player state
+      setGameState(prev => ({
+        ...prev,
+        isPlaying: false,
+        hasBingo: false
+      }));
+      setBingoStatus('idle');
+      setBingoMessage('');
+      
+      // Reset bingo card marked state
+      if (bingoCard && bingoCard.squares) {
+        const resetCard = {
+          ...bingoCard,
+          squares: bingoCard.squares.map(square => ({
+            ...square,
+            marked: false
+          }))
+        };
+        setBingoCard(resetCard);
+      }
+      
+      // Show restart notification
+      setBingoMessage('🔄 Game restarted by host');
+      setTimeout(() => setBingoMessage(''), 3000);
+    });
+
     newSocket.on('game-reset', () => {
       setGameState({ isPlaying: false, currentSong: null, playerCount: 0, hasBingo: false, pattern: 'full_card' });
       setBingoCard(null);

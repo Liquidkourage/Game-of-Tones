@@ -461,6 +461,17 @@ const HostView: React.FC = () => {
       setIsPlaying(false);
     });
 
+    newSocket.on('game-restarted', (data: any) => {
+      console.log('Game restarted:', data);
+      // Reset host state
+      setWinners([]);
+      setIsPlaying(false);
+      setGamePaused(false);
+      setPendingVerification(null);
+      setCurrentSong(null);
+      addLog('Game restarted by host', 'success');
+    });
+
     newSocket.on('player-left', (data: any) => {
       console.log('Player left:', data);
     });
@@ -930,6 +941,25 @@ const HostView: React.FC = () => {
     
     if (action === 'continue') {
       setGamePaused(false);
+    }
+  };
+
+  const handleRestartGame = () => {
+    if (!socket) return;
+    
+    const confirmed = window.confirm(
+      'Are you sure you want to restart the game?\n\n' +
+      'This will:\n' +
+      '• Stop current playback\n' +
+      '• Reset all marked squares\n' +
+      '• Clear all winners\n' +
+      '• Reset to waiting state\n' +
+      '• Keep existing bingo cards'
+    );
+    
+    if (confirmed) {
+      socket.emit('restart-game', { roomId });
+      addLog('Restarting game...', 'info');
     }
   };
 
@@ -1918,10 +1948,18 @@ const HostView: React.FC = () => {
                ) : (
                  <div className="game-status">
                    <p className="status-text">🎵 Game is running - Use the Now Playing controls below</p>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                     <button className="btn-secondary" onClick={endGame}>🛑 End Game</button>
                     <button className="btn-secondary" onClick={confirmAndResetGame}>🔁 Reset</button>
                     <button className="btn-secondary" onClick={confirmAndNewRound}>🆕 New Round</button>
+                    <button 
+                      className="btn-danger" 
+                      onClick={handleRestartGame}
+                      style={{ background: '#ff6b6b', borderColor: '#ff4757' }}
+                      title="Complete restart: reset all progress, keep cards"
+                    >
+                      🔄 Restart
+                    </button>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
                     <span style={{ opacity: 0.9 }}>Call Reveal:</span>

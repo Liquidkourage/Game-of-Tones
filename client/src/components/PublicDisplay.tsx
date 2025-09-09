@@ -460,6 +460,30 @@ const PublicDisplay: React.FC = () => {
       console.log('🛑 Game ended (display)');
     });
 
+    socket.on('game-restarted', (data: any) => {
+      console.log('Game restarted:', data);
+      // Reset display state
+      setGameState({
+        isPlaying: false,
+        currentSong: null,
+        playerCount: 0,
+        winners: [],
+        snippetLength: 30,
+        playedSongs: [],
+        bingoCard: { squares: [], size: 5 }
+      });
+      setShowWinnerBanner(false);
+      setWinnerName('');
+      
+      // Show restart notification briefly
+      setWinnerName('🔄 Game Restarted');
+      setShowWinnerBanner(true);
+      setTimeout(() => {
+        setShowWinnerBanner(false);
+        setWinnerName('');
+      }, 3000);
+    });
+
     socket.on('game-reset', () => {
       setGameState({
         isPlaying: false,

@@ -1115,6 +1115,65 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Host restarts the game completely
+  socket.on('restart-game', (data) => {
+    const { roomId } = data || {};
+    const room = rooms.get(roomId);
+    if (!room) return;
+    
+    // Verify this is the host
+    const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+    if (!isHost) return;
+    
+    console.log(`🔄 Host restarting game for room ${roomId}`);
+    
+    // Stop any current playback
+    clearRoomTimer(roomId);
+    
+    // Reset game state
+    room.gameState = 'waiting';
+    room.currentSong = null;
+    room.currentSongIndex = 0;
+    room.currentSongStartMs = 0;
+    room.winners = [];
+    room.playedSongs = [];
+    
+    // Reset all player bingo status but keep their cards
+    room.players.forEach((player) => {
+      player.hasBingo = false;
+      // Reset card marked state
+      if (player.bingoCard && player.bingoCard.squares) {
+        player.bingoCard.squares.forEach(square => {
+          square.marked = false;
+        });
+      }
+    });
+    
+    // Reset bingo cards marked state
+    if (room.bingoCards) {
+      room.bingoCards.forEach((card) => {
+        if (card && card.squares) {
+          card.squares.forEach(square => {
+            square.marked = false;
+          });
+        }
+      });
+    }
+    
+    // Notify all clients of the restart
+    io.to(roomId).emit('game-restarted', {
+      message: 'Game has been restarted by the host',
+      roomState: {
+        gameState: room.gameState,
+        currentSong: null,
+        winners: [],
+        playedSongs: []
+      }
+    });
+    
+    console.log(`✅ Game restarted successfully for room ${roomId}`);
+  });
+
   // Client requests a state sync (useful if they joined before start or missed events)
   socket.on('sync-state', (data = {}) => {
     try {
