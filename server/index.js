@@ -1075,6 +1075,21 @@ io.on('connection', (socket) => {
       // Send detailed verification data to HOST ONLY
       const hostSocket = io.sockets.sockets.get(room.host);
       if (hostSocket) {
+        // Build actual played songs from calledSongIds
+        const actuallyPlayedSongs = [];
+        const calledIds = room.calledSongIds || [];
+        for (const songId of calledIds) {
+          // Find the song in the playlist
+          const foundSong = room.playlistSongs?.find(s => s.id === songId);
+          if (foundSong) {
+            actuallyPlayedSongs.push({
+              id: foundSong.id,
+              name: foundSong.name,
+              artist: foundSong.artist
+            });
+          }
+        }
+        
         hostSocket.emit('bingo-verification-needed', {
           playerId: socket.id,
           playerName: player.name,
@@ -1082,7 +1097,7 @@ io.on('connection', (socket) => {
           markedSquares: player.bingoCard.squares.filter(s => s.marked),
           requiredPattern: room.pattern,
           customMask: room.pattern === 'custom' ? Array.from(room.customPattern || []) : null,
-          playedSongs: room.playedSongs || [],
+          playedSongs: actuallyPlayedSongs, // Use the proper actually played songs
           calledSongIds: room.calledSongIds || [],
           currentSongIndex: room.currentSongIndex || 0,
           timestamp: Date.now(),
