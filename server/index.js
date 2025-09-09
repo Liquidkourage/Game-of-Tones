@@ -1880,20 +1880,16 @@ io.on('connection', (socket) => {
           // Toggle mark state to support unmarking
           square.marked = !square.marked;
           
-          // Check for bingo
+          // Check for bingo pattern completion (but don't auto-announce)
           const hasBingo = checkBingo(card);
           if (hasBingo && !player.hasBingo) {
             player.hasBingo = true;
-            room.winners.push({
-              playerId: socket.id,
-              playerName: player.name,
-              timestamp: Date.now()
-            });
+            console.log(`🎯 Player ${player.name} completed bingo pattern but hasn't called it yet`);
             
-            io.to(roomId).emit('bingo-called', {
-              playerId: socket.id,
-              playerName: player.name,
-              winners: room.winners
+            // Optional: Send a subtle notification to the player only
+            socket.emit('pattern-complete', {
+              message: 'You have a bingo pattern! Hold the BINGO button to call it.',
+              hasPattern: true
             });
           }
         }
