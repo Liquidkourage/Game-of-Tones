@@ -404,14 +404,7 @@ function startSimpleProgression(roomId, deviceId, snippetLengthSeconds) {
   setRoomTimer(roomId, async () => {
     console.log(`⏰ Timer fired - advancing to next song`);
     
-    // Pause current playback to prevent auto-advance
-    try {
-      await spotifyService.pausePlayback(deviceId);
-    } catch (e) {
-      console.warn('⚠️ Pause failed during transition:', e?.message);
-    }
-    
-    // Advance to next song
+    // Immediately advance to next song (don't pause first to avoid dead air)
     await playNextSongSimple(roomId, deviceId);
   }, snippetLengthSeconds * 1000);
 }
@@ -473,6 +466,9 @@ async function playNextSongSimple(roomId, deviceId) {
   room.currentSongStartMs = startMs; // Store for restart correction
 
   try {
+    // Brief delay to ensure smooth transition without dead air
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     // Simple playlist playback
     if (room.temporaryPlaylistId) {
       await spotifyService.startPlaybackFromPlaylist(deviceId, room.temporaryPlaylistId, room.currentSongIndex, startMs);
