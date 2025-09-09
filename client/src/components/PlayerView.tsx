@@ -455,10 +455,10 @@ const PlayerView: React.FC = () => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 textAlign: 'center',
-                padding: 4,
-                lineHeight: 1.1,
+                padding: 3,
+                lineHeight: 1.0,
                 fontWeight: 700,
-                fontSize: 'clamp(9px, 2.5vw, 14px)',
+                fontSize: 'clamp(8px, 2.2vw, 13px)',
                 userSelect: 'none'
               }}
             >
