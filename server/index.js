@@ -1115,6 +1115,37 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Emergency stop - immediate halt of all playback
+  socket.on('emergency-stop', (data) => {
+    const { roomId } = data || {};
+    const room = rooms.get(roomId);
+    if (!room) return;
+    
+    // Verify this is the host
+    const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+    if (!isHost) return;
+    
+    console.log(`🚨 EMERGENCY STOP requested for room ${roomId}`);
+    
+    // Immediate stop
+    clearRoomTimer(roomId);
+    
+    // Try to pause Spotify immediately
+    (async () => {
+      try {
+        if (room.selectedDeviceId) {
+          await spotifyApi.pause();
+          console.log('🛑 Emergency stop: Spotify paused');
+        }
+      } catch (error) {
+        console.log('Emergency stop: Spotify pause failed (continuing anyway)');
+      }
+    })();
+    
+    // Notify all clients
+    io.to(roomId).emit('emergency-stopped', { message: 'Emergency stop activated by host' });
+  });
+
   // Host restarts the game completely
   socket.on('restart-game', (data) => {
     const { roomId } = data || {};

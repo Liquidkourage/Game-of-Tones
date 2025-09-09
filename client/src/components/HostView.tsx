@@ -990,6 +990,37 @@ const HostView: React.FC = () => {
     addLog('Manually set game state to playing', 'info');
   };
 
+  const emergencyStopSpotify = async () => {
+    if (!socket) return;
+    
+    try {
+      socket.emit('emergency-stop', { roomId });
+      setIsPlaying(false);
+      addLog('Emergency stop requested', 'warn');
+    } catch (error) {
+      console.error('Emergency stop failed:', error);
+    }
+  };
+
+  const emergencyResetAll = () => {
+    const confirmed = window.confirm(
+      'EMERGENCY RESET: This will:\n' +
+      '• Stop all playback\n' +
+      '• Reset all game state\n' +
+      '• Force sync all clients\n' +
+      'Continue?'
+    );
+    
+    if (confirmed) {
+      setGameState('waiting');
+      setCurrentSong(null);
+      setIsPlaying(false);
+      emergencyStopSpotify();
+      forceRefreshAll();
+      addLog('Emergency reset executed', 'warn');
+    }
+  };
+
   const selectPlaylist = (playlist: Playlist) => {
     setSelectedPlaylists(prev => {
       const isSelected = prev.find(p => p.id === playlist.id);
@@ -1928,7 +1959,7 @@ const HostView: React.FC = () => {
               )}
             </div>
              <div className="control-buttons">
-               {gameState === 'waiting' ? (
+               {gameState === 'waiting' && !currentSong ? (
                  <>
                    {!mixFinalized && (
                      <button 
@@ -2003,8 +2034,8 @@ const HostView: React.FC = () => {
            </motion.div>
           )}
 
-          {/* Emergency sync controls - always show in waiting state for debugging */}
-          {gameState === 'waiting' && (
+          {/* Emergency controls - always show when needed */}
+          {(gameState === 'waiting' && currentSong) || showAllControls ? (
             <motion.div style={{ margin: '16px 0' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px', background: 'rgba(255,193,7,0.1)', borderRadius: '8px', border: '1px solid rgba(255,193,7,0.3)' }}>
                 <span style={{ color: '#ffc107', fontSize: '0.9rem', fontWeight: 600 }}>
@@ -2025,6 +2056,20 @@ const HostView: React.FC = () => {
                     🔧 FIX: Set to Playing State
                   </button>
                   <button className="btn-secondary" onClick={forceSyncGameState} style={{ fontSize: '0.8rem' }}>🔄 Sync State</button>
+                  <button 
+                    className="btn-danger" 
+                    onClick={emergencyStopSpotify} 
+                    style={{ background: '#dc3545', color: 'white', fontSize: '0.8rem' }}
+                  >
+                    🛑 Emergency Stop
+                  </button>
+                  <button 
+                    className="btn-danger" 
+                    onClick={emergencyResetAll} 
+                    style={{ background: '#6f1d1d', color: 'white', fontSize: '0.8rem' }}
+                  >
+                    💥 Nuclear Reset
+                  </button>
                 </div>
               </div>
             </motion.div>
