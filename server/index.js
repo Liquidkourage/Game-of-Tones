@@ -1013,11 +1013,14 @@ io.on('connection', (socket) => {
         });
       }
       
-      // Notify all players about the bingo call (verification pending - no celebration yet)
-      io.to(roomId).emit('bingo-verification-pending', { 
+      // Notify all players about the bingo call (but not confirmed yet)
+      io.to(roomId).emit('bingo-called', { 
         playerId: socket.id, 
-        playerName: player.name,
-        message: `${player.name} called BINGO! Verifying now...`
+        playerName: player.name, 
+        winners: room.winners,
+        totalWinners: room.winners.length,
+        isFirstWinner: room.winners.length === 1,
+        awaitingVerification: true
       });
     } else {
       // Send detailed failure reason
@@ -1052,16 +1055,6 @@ io.on('connection', (socket) => {
         success: true,
         message: 'BINGO CONFIRMED! You win!',
         isWinner: true,
-        verified: true
-      });
-      
-      // NOW emit the celebration - bingo is verified!
-      io.to(roomId).emit('bingo-called', {
-        playerId: playerId,
-        playerName: player.name,
-        winners: room.winners,
-        totalWinners: room.winners.length,
-        isFirstWinner: room.winners.length === 1,
         verified: true
       });
       
@@ -1108,13 +1101,6 @@ io.on('connection', (socket) => {
         rejected: true
       });
       
-      // Notify all clients that bingo was rejected (clear verification message)
-      io.to(roomId).emit('bingo-rejected', {
-        playerId: playerId,
-        playerName: player.name,
-        reason: reason
-      });
-      
       // Notify host
       socket.emit('bingo-verified', { 
         approved: false, 
@@ -1125,8 +1111,24 @@ io.on('connection', (socket) => {
       // Auto-resume the game
       if (room.gameState === 'paused_for_verification') {
         room.gameState = 'playing';
-        // Resume from where we left off
-        startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
+        // Resume from where we left off - first resume Spotify playback, then start progression timer
+        (async () => {
+          try {
+            const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+            if (deviceId) {
+              await spotifyService.resumePlayback(deviceId);
+              console.log(`▶️ Spotify resumed after rejecting ${player.name}'s bingo`);
+            } else {
+              console.log(`⚠️ No device ID available for resuming after bingo rejection`);
+            }
+            // Now start the progression timer for the remainder of the current song
+            startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
+          } catch (error) {
+            console.log(`⚠️ Failed to resume Spotify after bingo rejection: ${error.message}`);
+            // Still start progression timer as fallback
+            startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
+          }
+        })();
         console.log(`▶️ Game resumed after rejecting ${player.name}'s bingo`);
       }
     }
