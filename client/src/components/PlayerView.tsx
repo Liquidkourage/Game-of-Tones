@@ -635,7 +635,7 @@ const PlayerView: React.FC = () => {
           title="Hold to call BINGO"
           style={{
             position: 'fixed',
-            bottom: 'calc(80px + env(safe-area-inset-bottom))',
+            bottom: 'calc(24px + env(safe-area-inset-bottom))',
             right: 18,
             zIndex: 1000,
             width: 'clamp(90px, 22vw, 140px)',
