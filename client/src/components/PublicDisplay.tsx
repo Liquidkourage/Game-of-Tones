@@ -420,29 +420,42 @@ const PublicDisplay: React.FC = () => {
       } catch {}
     });
 
+    // Handle verification pending (no confetti yet)
+    socket.on('bingo-verification-pending', (data: any) => {
+      try {
+        setWinnerName(`🔍 ${data.playerName} called BINGO! Verifying now...`);
+        setShowWinnerBanner(true);
+        // No confetti, no celebration sound - just verification message
+      } catch {}
+    });
+
+    // Handle verified bingo (NOW with confetti!)
     socket.on('bingo-called', (data: any) => {
       setGameState(prev => ({ ...prev, winners: data.winners || prev.winners }));
       try {
-        const latest = (data?.winners && data.winners.length) ? data.winners[data.winners.length - 1] : null;
-        if (latest?.playerName) {
-          // Enhanced winner announcement
-          const isFirstWinner = data.isFirstWinner;
-          const totalWinners = data.totalWinners || 1;
-          
-          if (isFirstWinner) {
-            setWinnerName(`🏆 BINGO! ${latest.playerName} WINS!`);
-          } else {
-            setWinnerName(`🎉 Another BINGO! ${latest.playerName} also wins! (${totalWinners} total)`);
+        // Only celebrate if this is a verified bingo
+        if (data.verified) {
+          const latest = (data?.winners && data.winners.length) ? data.winners[data.winners.length - 1] : null;
+          if (latest?.playerName) {
+            // Enhanced winner announcement
+            const isFirstWinner = data.isFirstWinner;
+            const totalWinners = data.totalWinners || 1;
+            
+            if (isFirstWinner) {
+              setWinnerName(`🏆 BINGO! ${latest.playerName} WINS!`);
+            } else {
+              setWinnerName(`🎉 Another BINGO! ${latest.playerName} also wins! (${totalWinners} total)`);
+            }
+            
+            setShowWinnerBanner(true);
+            
+            // Play celebration sound
+            playPublicCelebrationSound();
+            
+            // Longer celebration for first winner, shorter for additional winners
+            const celebrationTime = isFirstWinner ? 6000 : 4000;
+            setTimeout(() => setShowWinnerBanner(false), celebrationTime);
           }
-          
-          setShowWinnerBanner(true);
-          
-          // Play celebration sound
-          playPublicCelebrationSound();
-          
-          // Longer celebration for first winner, shorter for additional winners
-          const celebrationTime = isFirstWinner ? 6000 : 4000;
-          setTimeout(() => setShowWinnerBanner(false), celebrationTime);
         }
       } catch {}
     });
@@ -458,6 +471,15 @@ const PublicDisplay: React.FC = () => {
     socket.on('game-ended', () => {
       setGameState(prev => ({ ...prev, isPlaying: false }));
       console.log('🛑 Game ended (display)');
+    });
+
+    // Handle bingo rejection - clear verification message
+    socket.on('bingo-rejected', (data: any) => {
+      try {
+        setShowWinnerBanner(false);
+        setWinnerName('');
+        console.log('Bingo rejected, verification message cleared');
+      } catch {}
     });
 
     socket.on('game-restarted', (data: any) => {

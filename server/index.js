@@ -263,11 +263,11 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       await new Promise(resolve => setTimeout(resolve, 800));
       
       // Set initial volume to 50% (or room's saved volume) with single retry
-      try {
-        const initialVolume = room.volume || 50;
+        try {
+          const initialVolume = room.volume || 50;
         await spotifyService.withRetries('setVolume(index)', () => spotifyService.setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
         console.log(`🔊 Set initial volume to ${initialVolume}%`);
-      } catch (volumeError) {
+        } catch (volumeError) {
         console.warn('⚠️ Volume setting failed, continuing anyway:', volumeError?.message || volumeError);
       }
     } catch (playbackError) {
@@ -1013,14 +1013,11 @@ io.on('connection', (socket) => {
         });
       }
       
-      // Notify all players about the bingo call (but not confirmed yet)
-      io.to(roomId).emit('bingo-called', { 
+      // Notify all players about the bingo call (verification pending - no celebration yet)
+      io.to(roomId).emit('bingo-verification-pending', { 
         playerId: socket.id, 
-        playerName: player.name, 
-        winners: room.winners,
-        totalWinners: room.winners.length,
-        isFirstWinner: room.winners.length === 1,
-        awaitingVerification: true
+        playerName: player.name,
+        message: `${player.name} called BINGO! Verifying now...`
       });
     } else {
       // Send detailed failure reason
@@ -1055,6 +1052,16 @@ io.on('connection', (socket) => {
         success: true,
         message: 'BINGO CONFIRMED! You win!',
         isWinner: true,
+        verified: true
+      });
+      
+      // NOW emit the celebration - bingo is verified!
+      io.to(roomId).emit('bingo-called', {
+        playerId: playerId,
+        playerName: player.name,
+        winners: room.winners,
+        totalWinners: room.winners.length,
+        isFirstWinner: room.winners.length === 1,
         verified: true
       });
       
@@ -1099,6 +1106,13 @@ io.on('connection', (socket) => {
         success: false,
         message: `Bingo rejected: ${reason || 'Invalid pattern'}`,
         rejected: true
+      });
+      
+      // Notify all clients that bingo was rejected (clear verification message)
+      io.to(roomId).emit('bingo-rejected', {
+        playerId: playerId,
+        playerName: player.name,
+        reason: reason
       });
       
       // Notify host
@@ -2766,11 +2780,11 @@ async function playNextSong(roomId, deviceId) {
       await new Promise(resolve => setTimeout(resolve, 800));
       
       // Set initial volume to 50% (or room's saved volume) with single retry
-      try {
-        const initialVolume = room.volume || 50;
+            try {
+              const initialVolume = room.volume || 50;
         await spotifyService.withRetries('setVolume(next)', () => spotifyService.setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
         console.log(`🔊 Set initial volume to ${initialVolume}%`);
-      } catch (volumeError) {
+            } catch (volumeError) {
         console.warn('⚠️ Volume setting failed, continuing anyway:', volumeError?.message || volumeError);
       }
     } catch (playbackError) {
@@ -3674,7 +3688,7 @@ function startDeviceKeepAlive() {
         // Only activate device if no active games are playing (to avoid interrupting songs)
         const hasActiveGames = Array.from(rooms.values()).some(room => room.gameState === 'playing');
         if (!hasActiveGames) {
-          await activatePreferredDevice();
+        await activatePreferredDevice();
         } else {
           console.log('🎵 Skipping device activation - games are actively playing');
         }
