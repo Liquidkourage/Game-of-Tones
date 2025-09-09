@@ -1996,19 +1996,21 @@ const HostView: React.FC = () => {
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                     <button className="btn-secondary" onClick={forceRefreshAll}>🧹 Force Refresh Clients</button>
                   </div>
-                  
-                  {/* Emergency sync controls - only show if game state seems wrong */}
-                  {gameState === 'waiting' && currentSong && (
-                    <div style={{ display: 'flex', gap: 8, marginTop: 8, padding: '8px', background: 'rgba(255,193,7,0.1)', borderRadius: '4px' }}>
-                      <span style={{ color: '#ffc107', fontSize: '0.9rem' }}>⚠️ State desync detected:</span>
-                      <button className="btn-secondary" onClick={forceSyncGameState} style={{ fontSize: '0.8rem' }}>🔄 Sync State</button>
-                      <button className="btn-secondary" onClick={forceSetPlaying} style={{ fontSize: '0.8rem' }}>▶️ Force Playing</button>
-                    </div>
-                  )}
                  </div>
                )}
              </div>
            </motion.div>
+          )}
+
+          {/* Emergency sync controls - only show if game state seems wrong */}
+          {gameState === 'waiting' && currentSong && (
+            <motion.div style={{ margin: '16px 0' }}>
+              <div style={{ display: 'flex', gap: 8, padding: '12px', background: 'rgba(255,193,7,0.1)', borderRadius: '8px', border: '1px solid rgba(255,193,7,0.3)' }}>
+                <span style={{ color: '#ffc107', fontSize: '0.9rem', fontWeight: 600 }}>⚠️ State desync detected - Game is playing but controls are missing:</span>
+                <button className="btn-secondary" onClick={forceSyncGameState} style={{ fontSize: '0.8rem' }}>🔄 Sync State</button>
+                <button className="btn-secondary" onClick={forceSetPlaying} style={{ fontSize: '0.8rem' }}>▶️ Force Playing</button>
+              </div>
+            </motion.div>
           )}
 
           {/* Pattern selector (setup only; hidden during game unless Show All Controls) */}
