@@ -888,38 +888,37 @@ io.on('connection', (socket) => {
     // If a game is already in progress or mix is finalized, provide the joining player with state
     (async () => {
       try {
-        if (!isHost) {
-          // Emit current song to the joining player to sync display timing
-          if (room.currentSong && room.snippetLength) {
-            socket.emit('song-playing', {
-              songId: room.currentSong.id,
-              songName: room.currentSong.name,
-              artistName: room.currentSong.artist,
-              snippetLength: room.snippetLength,
-              currentIndex: room.currentSongIndex || 0,
-              totalSongs: room.playlistSongs?.length || 0,
-              previewUrl: (room.playlistSongs?.[room.currentSongIndex || 0]?.previewUrl) || null
-            });
-          }
+        // Emit current song to the joining player to sync display timing (non-hosts only)
+        if (!isHost && room.currentSong && room.snippetLength) {
+          socket.emit('song-playing', {
+            songId: room.currentSong.id,
+            songName: room.currentSong.name,
+            artistName: room.currentSong.artist,
+            snippetLength: room.snippetLength,
+            currentIndex: room.currentSongIndex || 0,
+            totalSongs: room.playlistSongs?.length || 0,
+            previewUrl: (room.playlistSongs?.[room.currentSongIndex || 0]?.previewUrl) || null
+          });
+        }
 
-          // Ensure bingo card exists for this player, reusing clientId mapping if provided
-          if (!room.bingoCards) room.bingoCards = new Map();
-          const bySocket = room.bingoCards.get(socket.id);
-          if (bySocket) {
-            io.to(socket.id).emit('bingo-card', bySocket);
-          } else if (clientId && room.clientCards && room.clientCards.has(clientId)) {
-            const existingCard = room.clientCards.get(clientId);
-            room.bingoCards.set(socket.id, existingCard);
-            const p = room.players.get(socket.id);
-            if (p) p.bingoCard = existingCard;
-            io.to(socket.id).emit('bingo-card', existingCard);
-          } else if (room.playlistSongs?.length || room.playlists?.length || room.finalizedPlaylists?.length) {
-            // generate and store mapping by clientId if present
-            const card = await generateBingoCardForPlayer(roomId, socket.id);
-            if (clientId) {
-              if (!room.clientCards) room.clientCards = new Map();
-              room.clientCards.set(clientId, card);
-            }
+        // Ensure bingo card exists for ALL players (including hosts) if cards are available
+        if (!room.bingoCards) room.bingoCards = new Map();
+        const bySocket = room.bingoCards.get(socket.id);
+        if (bySocket) {
+          player.bingoCard = bySocket; // Ensure it's also on the player object
+          io.to(socket.id).emit('bingo-card', bySocket);
+        } else if (clientId && room.clientCards && room.clientCards.has(clientId)) {
+          const existingCard = room.clientCards.get(clientId);
+          room.bingoCards.set(socket.id, existingCard);
+          player.bingoCard = existingCard; // Set on player object
+          io.to(socket.id).emit('bingo-card', existingCard);
+        } else if (room.playlistSongs?.length || room.playlists?.length || room.finalizedPlaylists?.length) {
+          // Generate card for any player (host or not) if playlists exist
+          console.log(`🎲 Generating bingo card for ${isHost ? 'host' : 'player'} ${playerName}`);
+          const card = await generateBingoCardForPlayer(roomId, socket.id);
+          if (card && clientId) {
+            if (!room.clientCards) room.clientCards = new Map();
+            room.clientCards.set(clientId, card);
           }
         }
       } catch (e) {
@@ -1014,8 +1013,16 @@ io.on('connection', (socket) => {
       return;
     }
     const player = room.players.get(socket.id);
-    if (!player || !player.bingoCard) {
-      socket.emit('bingo-result', { success: false, reason: 'Player or card not found' });
+    if (!player) {
+      console.error(`❌ Player not found for socket ${socket.id} in room ${roomId}`);
+      console.log(`Room has players:`, Array.from(room.players.keys()));
+      socket.emit('bingo-result', { success: false, reason: 'Player not found in room' });
+      return;
+    }
+    if (!player.bingoCard) {
+      console.error(`❌ Player ${player.name} (${socket.id}) has no bingo card`);
+      console.log(`Room bingo cards:`, Array.from(room.bingoCards?.keys() || []));
+      socket.emit('bingo-result', { success: false, reason: 'No bingo card assigned. Please refresh and rejoin.' });
       return;
     }
     
