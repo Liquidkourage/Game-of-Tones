@@ -87,6 +87,7 @@ const HostView: React.FC = () => {
   const [lockJoins, setLockJoins] = useState<boolean>(false);
   const [preQueueEnabled, setPreQueueEnabled] = useState<boolean>(false);
   const [preQueueWindow, setPreQueueWindow] = useState<number>(5);
+  const [isProcessingVerification, setIsProcessingVerification] = useState<boolean>(false);
   const [stripGoTPrefix, setStripGoTPrefix] = useState<boolean>(true);
   const [showPlaylists, setShowPlaylists] = useState<boolean>(true);
   const [showLogs, setShowLogs] = useState<boolean>(true);
@@ -460,6 +461,7 @@ const HostView: React.FC = () => {
       console.log('Bingo verified:', data);
       setPendingVerification(null);
       setGamePaused(false);
+      setIsProcessingVerification(false);
       
       if (data.approved) {
         if (data.gameEnded) {
@@ -954,14 +956,40 @@ const HostView: React.FC = () => {
   };
 
   const handleVerifyBingo = (approved: boolean, reason?: string) => {
-    if (!pendingVerification || !socket) return;
+    if (!pendingVerification) {
+      console.error('No pending verification to process');
+      addLog('Error: No bingo verification pending', 'error');
+      return;
+    }
+    
+    if (!socket) {
+      console.error('Socket not connected');
+      addLog('Error: Connection lost - please refresh page', 'error');
+      return;
+    }
+    
+    console.log(`Sending verification: ${approved ? 'APPROVED' : 'REJECTED'} for ${pendingVerification.playerName}`);
+    addLog(`${approved ? 'Approving' : 'Rejecting'} ${pendingVerification.playerName}'s bingo`, 'info');
+    
+    setIsProcessingVerification(true);
     
     socket.emit('verify-bingo', {
       roomId,
       playerId: pendingVerification.playerId,
       approved,
-      reason
+      reason: reason || (approved ? 'Valid pattern' : 'Invalid pattern')
     });
+    
+    // Add timeout fallback to prevent eternal freeze
+    setTimeout(() => {
+      if (isProcessingVerification) {
+        console.warn('Verification response timeout - clearing modal');
+        addLog('Verification response timeout - modal cleared', 'warn');
+        setPendingVerification(null);
+        setGamePaused(false);
+        setIsProcessingVerification(false);
+      }
+    }, 10000); // 10 second timeout
   };
 
   // Removed handleContinueOrEnd - games now end automatically on first verified bingo
@@ -2565,36 +2593,48 @@ const HostView: React.FC = () => {
                 }}>
                   <button
                     onClick={() => handleVerifyBingo(true)}
+                    disabled={isProcessingVerification}
                     style={{
-                      background: 'linear-gradient(135deg, #00ff88, #00cc6d)',
-                      color: '#001a0d',
+                      background: isProcessingVerification 
+                        ? 'linear-gradient(135deg, #666, #444)' 
+                        : 'linear-gradient(135deg, #00ff88, #00cc6d)',
+                      color: isProcessingVerification ? '#ccc' : '#001a0d',
                       border: 'none',
                       borderRadius: '12px',
                       padding: '12px 24px',
                       fontSize: '1.1rem',
                       fontWeight: 700,
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 15px rgba(0,255,136,0.4)'
+                      cursor: isProcessingVerification ? 'not-allowed' : 'pointer',
+                      boxShadow: isProcessingVerification 
+                        ? '0 4px 15px rgba(100,100,100,0.2)' 
+                        : '0 4px 15px rgba(0,255,136,0.4)',
+                      opacity: isProcessingVerification ? 0.6 : 1
                     }}
                   >
-                    ✅ APPROVE BINGO
+                    {isProcessingVerification ? '⏳ Processing...' : '✅ APPROVE BINGO'}
                   </button>
                   
                   <button
                     onClick={() => handleVerifyBingo(false, 'Pattern incomplete')}
+                    disabled={isProcessingVerification}
                     style={{
-                      background: 'linear-gradient(135deg, #ff4444, #cc3333)',
-                      color: 'white',
+                      background: isProcessingVerification 
+                        ? 'linear-gradient(135deg, #666, #444)' 
+                        : 'linear-gradient(135deg, #ff4444, #cc3333)',
+                      color: isProcessingVerification ? '#ccc' : 'white',
                       border: 'none',
                       borderRadius: '12px',
                       padding: '12px 24px',
                       fontSize: '1.1rem',
                       fontWeight: 700,
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 15px rgba(255,68,68,0.4)'
+                      cursor: isProcessingVerification ? 'not-allowed' : 'pointer',
+                      boxShadow: isProcessingVerification 
+                        ? '0 4px 15px rgba(100,100,100,0.2)' 
+                        : '0 4px 15px rgba(255,68,68,0.4)',
+                      opacity: isProcessingVerification ? 0.6 : 1
                     }}
                   >
-                    ❌ REJECT BINGO
+                    {isProcessingVerification ? '⏳ Processing...' : '❌ REJECT BINGO'}
                   </button>
                 </div>
 
