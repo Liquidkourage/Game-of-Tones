@@ -9,10 +9,12 @@ const SpotifyService = require('./spotify');
 const fs = require('fs');
 const path = require('path');
 
-// Simple logging rate limiter to prevent Railway log spam
+// Enhanced logging with production optimization
 class Logger {
   constructor() {
     this.logCounts = new Map();
+    this.isProduction = process.env.NODE_ENV === 'production';
+    this.quietMode = process.env.QUIET_MODE === '1';
     this.resetInterval = setInterval(() => {
       this.logCounts.clear();
     }, 60000); // Reset counts every minute
@@ -25,8 +27,24 @@ class Logger {
     return true;
   }
 
+  // Production-safe logging methods
   log(message, throttleKey = null, maxPerMinute = 30) {
+    if (this.quietMode) return;
     if (throttleKey && !this.throttle(throttleKey, maxPerMinute)) return;
+    console.log(message);
+  }
+
+  // Debug logs are suppressed in production unless explicitly enabled
+  debug(message, throttleKey = null, maxPerMinute = 5) {
+    if (this.isProduction && !process.env.DEBUG) return;
+    if (throttleKey && !this.throttle(throttleKey, maxPerMinute)) return;
+    console.log(`[DEBUG] ${message}`);
+  }
+
+  // Info logs are throttled more aggressively in production
+  info(message, throttleKey = null, maxPerMinute = 10) {
+    const limit = this.isProduction ? Math.min(maxPerMinute, 5) : maxPerMinute;
+    if (throttleKey && !this.throttle(throttleKey, limit)) return;
     console.log(message);
   }
 
@@ -44,6 +62,43 @@ class Logger {
 const logger = new Logger();
 require('dotenv').config();
 
+// Environment validation for critical variables
+function validateEnvironment() {
+  const requiredVars = {
+    'SPOTIFY_CLIENT_ID': 'Spotify API client ID',
+    'SPOTIFY_CLIENT_SECRET': 'Spotify API client secret',
+    'SPOTIFY_REDIRECT_URI': 'Spotify OAuth redirect URI'
+  };
+
+  const missing = [];
+  for (const [key, description] of Object.entries(requiredVars)) {
+    if (!process.env[key]) {
+      missing.push(`${key} (${description})`);
+    }
+  }
+
+  if (missing.length > 0) {
+    console.error('❌ CRITICAL: Missing required environment variables:');
+    missing.forEach(var_ => console.error(`   - ${var_}`));
+    console.error('\n📋 Set these in Railway dashboard or your .env file');
+    console.error('🚫 Server cannot start without Spotify credentials');
+    process.exit(1);
+  }
+
+  // Validate production-specific settings
+  if (process.env.NODE_ENV === 'production') {
+    if (!process.env.CORS_ORIGINS) {
+      console.warn('⚠️  WARNING: CORS_ORIGINS not set in production - this allows ALL origins');
+      console.warn('   Set CORS_ORIGINS to your production domain for security');
+    }
+  }
+
+  console.log('✅ Environment validation passed');
+}
+
+// Validate environment before starting
+validateEnvironment();
+
 const app = express();
 // Logging verbosity
 const VERBOSE = process.env.VERBOSE_LOGS === '1' || process.env.DEBUG === '1';
@@ -56,10 +111,22 @@ console.log('NODE_ENV:', process.env.NODE_ENV, 'Client build exists:', hasClient
 // CORS configuration
 const isProduction = process.env.NODE_ENV === 'production';
 const allowedOriginsEnv = process.env.CORS_ORIGINS || '';
-const allowAllCors = allowedOriginsEnv === '*' || (!allowedOriginsEnv && isProduction);
-const allowedOrigins = allowedOriginsEnv
+
+// Security fix: Only allow all CORS if explicitly set to '*'
+const allowAllCors = allowedOriginsEnv === '*';
+
+const allowedOrigins = allowedOriginsEnv && allowedOriginsEnv !== '*'
   ? allowedOriginsEnv.split(',').map(s => s.trim()).filter(Boolean)
   : ["http://127.0.0.1:7094", "http://localhost:7094", "http://127.0.0.1:3002", "http://localhost:3002"];
+
+// Log CORS configuration for debugging
+if (isProduction) {
+  if (allowAllCors) {
+    console.log('🔓 CORS: Allowing ALL origins (*)');
+  } else {
+    console.log('🔒 CORS: Restricting to origins:', allowedOrigins);
+  }
+}
 
 const io = socketIo(server, {
   cors: {
@@ -129,7 +196,7 @@ function loadTokens() {
 function saveTokens(tokens) {
   try {
     fs.writeFileSync(TOKEN_FILE, JSON.stringify(tokens, null, 2), 'utf8');
-    console.log('💾 Saved Spotify tokens to file');
+    logger.debug('💾 Saved Spotify tokens to file', 'save-tokens');
   } catch (error) {
     console.error('❌ Error saving tokens to file:', error);
   }
@@ -140,7 +207,7 @@ function loadSavedDevice() {
   try {
     if (fs.existsSync(DEVICE_FILE)) {
       const deviceData = JSON.parse(fs.readFileSync(DEVICE_FILE, 'utf8'));
-      console.log('📁 Loaded saved device:', deviceData.name);
+      logger.debug('📁 Loaded saved device:', deviceData.name, 'load-device');
       return deviceData;
     }
   } catch (error) {
@@ -737,11 +804,11 @@ io.on('connection', (socket) => {
   // Join room
   socket.on('join-room', (data) => {
     const { roomId, playerName, isHost = false, clientId } = data;
-    console.log(`Player ${playerName} (${isHost ? 'host' : 'player'}) joining room: ${roomId}`);
+    logger.info(`Player ${playerName} (${isHost ? 'host' : 'player'}) joining room: ${roomId}`, 'player-join');
     
     // Create room if it doesn't exist
     if (!rooms.has(roomId)) {
-      console.log(`Creating new room: ${roomId}`);
+      logger.info(`Creating new room: ${roomId}`, 'room-create');
       const newRoom = {
         id: roomId,
         host: isHost ? socket.id : null,

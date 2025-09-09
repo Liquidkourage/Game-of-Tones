@@ -11,6 +11,7 @@ import PlayerView from './components/PlayerView';
 import PublicDisplay from './components/PublicDisplay';
 import SpotifyCallback from './components/SpotifyCallback';
 import DisplayHeaderInfo from './components/DisplayHeaderInfo';
+import ErrorBoundary from './components/ErrorBoundary';
 
 function AppHeader() {
   const location = useLocation();
@@ -47,14 +48,34 @@ function App() {
         <AppHeader />
         {isDisplay && <div style={{ height: 73 }} />}
         <main className="app-main">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/host/:roomId" element={<HostView />} />
-            <Route path="/player/:roomId" element={<PlayerView />} />
-            <Route path="/display" element={<PublicDisplay />} />
-            <Route path="/display/:roomId" element={<PublicDisplay />} />
-            <Route path="/callback" element={<SpotifyCallback />} />
-          </Routes>
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/host/:roomId" element={
+                <ErrorBoundary fallback={
+                  <div style={{ padding: '20px', textAlign: 'center', color: '#ff4444' }}>
+                    <h2>Host View Error</h2>
+                    <p>Unable to load host controls. Please refresh the page.</p>
+                  </div>
+                }>
+                  <HostView />
+                </ErrorBoundary>
+              } />
+              <Route path="/player/:roomId" element={
+                <ErrorBoundary fallback={
+                  <div style={{ padding: '20px', textAlign: 'center', color: '#ff4444' }}>
+                    <h2>Player View Error</h2>
+                    <p>Unable to load player view. Please refresh the page.</p>
+                  </div>
+                }>
+                  <PlayerView />
+                </ErrorBoundary>
+              } />
+              <Route path="/display" element={<PublicDisplay />} />
+              <Route path="/display/:roomId" element={<PublicDisplay />} />
+              <Route path="/callback" element={<SpotifyCallback />} />
+            </Routes>
+          </ErrorBoundary>
         </main>
       </div>
     </div>
