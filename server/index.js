@@ -1121,6 +1121,28 @@ io.on('connection', (socket) => {
           await generateBingoCards(roomId, playlists, room.finalizedSongOrder || null);
         } else {
           console.log('🛑 Skipping card regeneration (mix finalized and cards already exist)');
+          
+          // BUT check for any players who don't have cards (joined after finalization)
+          const playersWithoutCards = [];
+          room.players.forEach((player, playerId) => {
+            if (!player.isHost && player.name !== 'Display' && !room.bingoCards.has(playerId)) {
+              playersWithoutCards.push({ playerId, playerName: player.name });
+            }
+          });
+          
+          if (playersWithoutCards.length > 0) {
+            console.log(`🎲 Generating cards for ${playersWithoutCards.length} late-joining players:`, playersWithoutCards.map(p => p.playerName));
+            for (const { playerId, playerName } of playersWithoutCards) {
+              try {
+                const card = await generateBingoCardForPlayer(roomId, playerId);
+                if (card) {
+                  console.log(`✅ Generated bingo card for late-joiner: ${playerName}`);
+                }
+              } catch (error) {
+                console.error(`❌ Failed to generate card for ${playerName}:`, error);
+              }
+            }
+          }
         }
 
         // Emit fiveby15 columns if computed during card generation
