@@ -1061,6 +1061,7 @@ io.on('connection', (socket) => {
       // Remove from winners list
       room.winners = room.winners.filter(w => w.playerId !== playerId);
       player.hasBingo = false;
+      player.patternComplete = false; // Allow them to call again
       
       // Notify the player
       io.to(playerId).emit('bingo-result', {
@@ -1172,6 +1173,7 @@ io.on('connection', (socket) => {
     // Reset all player bingo status but keep their cards
     room.players.forEach((player) => {
       player.hasBingo = false;
+      player.patternComplete = false; // Reset pattern completion flag
       // Reset card marked state
       if (player.bingoCard && player.bingoCard.squares) {
         player.bingoCard.squares.forEach(square => {
@@ -1882,11 +1884,11 @@ io.on('connection', (socket) => {
           
           // Check for bingo pattern completion (but don't auto-announce)
           const hasBingo = checkBingo(card);
-          if (hasBingo && !player.hasBingo) {
-            player.hasBingo = true;
+          if (hasBingo && !player.patternComplete) {
+            player.patternComplete = true; // Use separate flag for pattern completion
             console.log(`🎯 Player ${player.name} completed bingo pattern but hasn't called it yet`);
             
-            // Optional: Send a subtle notification to the player only
+            // Send notification to player that they can call bingo
             socket.emit('pattern-complete', {
               message: 'You have a bingo pattern! Hold the BINGO button to call it.',
               hasPattern: true
