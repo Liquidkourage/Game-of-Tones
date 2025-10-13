@@ -2379,14 +2379,19 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
     if (mode === '1x75') {
       let base = [];
       if (Array.isArray(songOrder) && songOrder.length > 0) {
+        // CRITICAL: Use the host-provided order for PERFECT alignment with playback
+        console.log('🎯 1x75: Using client songList order for perfect playback/card alignment');
         const allowed = new Set(perListUnique[0].songs.map(s => s.id));
         base = dedup(songOrder.filter(s => allowed.has(s.id))).slice(0, 75);
       } else {
+        // Fallback: server-side shuffle (should rarely happen)
+        console.log('🎯 1x75: Using server-side shuffle (no client songList provided)');
         base = [...perListUnique[0].songs].sort(() => Math.random() - 0.5).slice(0, 75);
       }
       const roomRef = rooms.get(roomId);
       if (roomRef) {
         roomRef.oneBySeventyFivePool = base.map(s => ({ id: s.id }));
+        console.log(`✅ 1x75: Stored ${base.length} songs in oneBySeventyFivePool for card/playback alignment`);
         io.to(roomId).emit('oneby75-pool', { ids: base.map(s => s.id) });
       }
   }
@@ -2659,6 +2664,12 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         console.log('📋 5x15 detected: overriding client-provided songList with finalized global shuffle');
         const idToSong = new Map(songList.map(s => [s.id, s]));
         const mapped = room.finalizedSongOrder.map(id => idToSong.get(id)).filter(Boolean);
+        allSongs = mapped.length > 0 ? mapped : songList;
+      } else if (Array.isArray(room.oneBySeventyFivePool) && room.oneBySeventyFivePool.length > 0) {
+        // CRITICAL FIX: For 1x75 mode, use the EXACT same 75-song pool as bingo cards
+        console.log('📋 1x75 detected: using server-side 75-song pool to match bingo cards EXACTLY');
+        const idToSong = new Map(songList.map(s => [s.id, s]));
+        const mapped = room.oneBySeventyFivePool.map(poolItem => idToSong.get(poolItem.id)).filter(Boolean);
         allSongs = mapped.length > 0 ? mapped : songList;
       } else {
       // Use the song list provided by the client (already shuffled)
