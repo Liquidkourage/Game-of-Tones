@@ -995,24 +995,20 @@ body {
   font-size: clamp(0.6rem, 2.5vw, 1.2rem) !important;
   line-height: 1.1 !important;
   margin-bottom: 0.2rem !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  display: -webkit-box !important;
-  -webkit-line-clamp: 3 !important;
-  -webkit-box-orient: vertical !important;
+  /* REMOVED: text truncation - allow natural wrapping like screenshot */
+  overflow-wrap: break-word !important;
   word-break: break-word !important;
+  hyphens: auto !important;
   white-space: normal !important;
 }
 
 .bingo-square .artist-name {
   font-size: clamp(0.5rem, 2vw, 1rem) !important;
   line-height: 1.1 !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  display: -webkit-box !important;
-  -webkit-line-clamp: 2 !important;
-  -webkit-box-orient: vertical !important;
+  /* REMOVED: text truncation - allow natural wrapping like screenshot */
+  overflow-wrap: break-word !important;
   word-break: break-word !important;
+  hyphens: auto !important;
   white-space: normal !important;
 }
 
@@ -1026,12 +1022,12 @@ body {
   
   .bingo-square .song-name {
     font-size: clamp(0.5rem, 2.2vw, 1rem) !important;
-    -webkit-line-clamp: 2 !important;
+    /* REMOVED: line clamp - allow natural wrapping */
   }
   
   .bingo-square .artist-name {
     font-size: clamp(0.4rem, 1.8vw, 0.8rem) !important;
-    -webkit-line-clamp: 1 !important;
+    /* REMOVED: line clamp - allow natural wrapping */
   }
 }
 
@@ -1053,12 +1049,12 @@ body {
   
   .bingo-square .song-name {
     font-size: clamp(0.52rem, 2.9vw, 0.95rem) !important;
-    -webkit-line-clamp: 2 !important;
+    /* REMOVED: line clamp - allow natural wrapping */
   }
   
   .bingo-square .artist-name {
     font-size: clamp(0.48rem, 2.5vw, 0.9rem) !important;
-    -webkit-line-clamp: 1 !important;
+    /* REMOVED: line clamp - allow natural wrapping */
   }
 }
 
@@ -1239,11 +1235,10 @@ body {
   word-break: break-word;
   hyphens: auto;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 4; /* allow up to 4 lines */
-  -webkit-box-orient: vertical;
+  /* REMOVED: text truncation - allow natural wrapping like screenshot */
+  overflow-wrap: break-word;
+  word-break: break-word;
+  hyphens: auto;
   white-space: normal;
 }
 
@@ -1972,11 +1967,8 @@ body {
     word-wrap: break-word;
     overflow-wrap: break-word;
     word-break: break-word;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
+    /* REMOVED: text truncation - allow natural wrapping */
+    hyphens: auto;
     white-space: normal;
   }
 
@@ -1986,11 +1978,8 @@ body {
     word-wrap: break-word;
     overflow-wrap: break-word;
     word-break: break-word;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
+    /* REMOVED: text truncation - allow natural wrapping */
+    hyphens: auto;
     white-space: normal;
   }
 }
@@ -2010,20 +1999,18 @@ body {
   .bingo-square .song-name {
     font-size: clamp(0.55rem, 1.8vw, 0.75rem);
     margin-bottom: 0.1rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
+    /* REMOVED: text truncation - allow natural wrapping */
+    overflow-wrap: break-word;
+    word-break: break-word;
+    hyphens: auto;
   }
 
   .bingo-square .artist-name {
     font-size: clamp(0.45rem, 1.4vw, 0.65rem);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
+    /* REMOVED: text truncation - allow natural wrapping */
+    overflow-wrap: break-word;
+    word-break: break-word;
+    hyphens: auto;
   }
 
   .song-display-card {
