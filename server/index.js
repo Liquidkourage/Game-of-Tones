@@ -2352,11 +2352,11 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       }
     }
 
-    // Build fallback global pool when needed (prefer host-provided order if available)
+    // Build fallback global pool when needed (INDEPENDENT from playback order)
     const buildGlobalPool = () => {
-      if (Array.isArray(songOrder) && songOrder.length > 0) {
-        return dedup(songOrder);
-      }
+      // CRITICAL FIX: Never use host-provided songOrder for bingo cards in fallback mode
+      // This was causing massive bias - cards were limited to songs that would play early
+      console.log('🎲 Building INDEPENDENT global pool for bingo cards (ignoring playback order)');
       const map = new Map();
       for (const pl of perListUnique) {
         for (const s of pl.songs) { if (!map.has(s.id)) map.set(s.id, s); }
@@ -2444,7 +2444,10 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           console.error(`❌ Not enough songs in global pool for player ${player.name}: need ${songsNeededPerCard}, have ${pool.length}`);
           continue; // Skip this player but continue with others
         }
+        // CRITICAL: Use completely independent shuffle for bingo cards
+        // This ensures fair randomness separate from playback order
         chosen25 = [...pool].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
+        console.log(`🎲 Generated FAIR blackout card for ${player.name} from ${pool.length} song pool`);
       }
 
       // Build card
@@ -2541,9 +2544,9 @@ async function generateBingoCardForPlayer(roomId, playerId) {
     console.log(`🎯 Late-join card mode: ${mode}`);
 
     const buildGlobalPool = () => {
-      if (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) {
-        return dedup(room.finalizedSongOrder);
-      }
+      // CRITICAL FIX: Never use finalizedSongOrder for bingo cards in fallback mode
+      // This was causing massive bias - cards were limited to songs that would play early
+      console.log('🎲 Late-join: Building INDEPENDENT global pool for bingo card (ignoring playback order)');
       const map = new Map();
       for (const pl of perListUnique) { for (const s of pl.songs) { if (!map.has(s.id)) map.set(s.id, s); } }
       return Array.from(map.values());
@@ -2598,7 +2601,9 @@ async function generateBingoCardForPlayer(roomId, playerId) {
     } else {
       const pool = buildGlobalPool();
       if (!ensureEnough(pool.length)) return;
+      // CRITICAL: Use completely independent shuffle for late-join bingo cards
       chosen25 = [...pool].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
+      console.log(`🎲 Generated FAIR late-join card from ${pool.length} song pool`);
     }
 
     const card = { id: playerId, squares: [] };
