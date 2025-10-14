@@ -460,16 +460,30 @@ const PlayerView: React.FC = () => {
     let maxFontSize = Math.min(availableHeight * 0.6, 28); // More conservative max
     let bestFontSize = minFontSize;
     
+    // Set width constraint to force proper text wrapping
+    textElement.style.setProperty('width', availableWidth + 'px', 'important');
+    textElement.style.setProperty('max-width', availableWidth + 'px', 'important');
+    
     // Simple iterative approach instead of binary search
     for (let fontSize = maxFontSize; fontSize >= minFontSize; fontSize -= 0.5) {
       textElement.style.setProperty('font-size', fontSize + 'px', 'important');
       textElement.style.setProperty('line-height', '1.1', 'important');
+      textElement.style.setProperty('word-wrap', 'break-word', 'important');
+      textElement.style.setProperty('overflow-wrap', 'break-word', 'important');
       
       // Force layout recalculation
       void textElement.offsetHeight;
       
-      // Check if text fits within available space
-      if (textElement.scrollWidth <= availableWidth && textElement.scrollHeight <= availableHeight) {
+      const currentScrollWidth = textElement.scrollWidth;
+      const currentScrollHeight = textElement.scrollHeight;
+      
+      // Debug logging for multi-word titles
+      if (text.includes(' ') && fontSize === maxFontSize) {
+        console.log(`🔍 Multi-word "${text}": fontSize=${fontSize}px, scroll=${currentScrollWidth}×${currentScrollHeight}, available=${availableWidth}×${availableHeight}`);
+      }
+      
+      // Since width is constrained, only check height
+      if (currentScrollHeight <= availableHeight) {
         bestFontSize = fontSize;
         break;
       }
@@ -479,7 +493,9 @@ const PlayerView: React.FC = () => {
     textElement.style.setProperty('font-size', bestFontSize + 'px', 'important');
     
     // Debug log to verify it's working
-    console.log(`🎯 FITTED: "${text.substring(0, 15)}..." → ${bestFontSize}px (space: ${availableWidth}×${availableHeight})`);
+    const finalScrollHeight = textElement.scrollHeight;
+    const wordCount = text.split(' ').length;
+    console.log(`🎯 FITTED: "${text.substring(0, 15)}..." (${wordCount} words) → ${bestFontSize}px (final height: ${finalScrollHeight}/${availableHeight})`);
   };
 
   const markSquare = (position: string) => {
