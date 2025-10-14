@@ -464,30 +464,52 @@ const PlayerView: React.FC = () => {
     textElement.style.setProperty('width', availableWidth + 'px', 'important');
     textElement.style.setProperty('max-width', availableWidth + 'px', 'important');
     
-    // Simple iterative approach instead of binary search
+    // First pass: Try normal word wrapping (no mid-word breaks)
+    let foundFit = false;
     for (let fontSize = maxFontSize; fontSize >= minFontSize; fontSize -= 0.5) {
       textElement.style.setProperty('font-size', fontSize + 'px', 'important');
-      textElement.style.setProperty('line-height', '1.2', 'important'); // Slightly more line spacing
+      textElement.style.setProperty('line-height', '1.2', 'important');
       textElement.style.setProperty('word-wrap', 'normal', 'important'); // Prevent mid-word breaks
-      textElement.style.setProperty('overflow-wrap', 'normal', 'important'); // Prevent mid-word breaks
-      textElement.style.setProperty('word-break', 'normal', 'important'); // Prevent mid-word breaks
-      textElement.style.setProperty('hyphens', 'none', 'important'); // No hyphenation
+      textElement.style.setProperty('overflow-wrap', 'normal', 'important');
+      textElement.style.setProperty('word-break', 'normal', 'important');
+      textElement.style.setProperty('hyphens', 'none', 'important');
       
       // Force layout recalculation
       void textElement.offsetHeight;
       
-      const currentScrollWidth = textElement.scrollWidth;
       const currentScrollHeight = textElement.scrollHeight;
       
-      // Debug logging for multi-word titles
-      if (text.includes(' ') && fontSize === maxFontSize) {
-        console.log(`🔍 Multi-word "${text}": fontSize=${fontSize}px, scroll=${currentScrollWidth}×${currentScrollHeight}, available=${availableWidth}×${availableHeight}`);
-      }
-      
-      // Since width is constrained, only check height with buffer for comfortable reading
-      if (currentScrollHeight <= (availableHeight * 0.9)) { // 10% buffer for comfortable spacing
+      // Check if text fits with comfortable spacing
+      if (currentScrollHeight <= (availableHeight * 0.9)) {
         bestFontSize = fontSize;
+        foundFit = true;
         break;
+      }
+    }
+    
+    // Second pass: If no fit found, allow word breaking as fallback
+    if (!foundFit) {
+      console.log(`⚠️ Long text overflow detected for "${text.substring(0, 20)}...", trying word-break fallback`);
+      
+      for (let fontSize = Math.min(maxFontSize, 14); fontSize >= 6; fontSize -= 0.5) { // Lower range for overflow cases
+        textElement.style.setProperty('font-size', fontSize + 'px', 'important');
+        textElement.style.setProperty('line-height', '1.1', 'important'); // Tighter line height
+        textElement.style.setProperty('word-wrap', 'break-word', 'important'); // Allow word breaking
+        textElement.style.setProperty('overflow-wrap', 'break-word', 'important');
+        textElement.style.setProperty('word-break', 'break-word', 'important');
+        textElement.style.setProperty('hyphens', 'auto', 'important'); // Allow hyphenation
+        
+        // Force layout recalculation
+        void textElement.offsetHeight;
+        
+        const currentScrollHeight = textElement.scrollHeight;
+        
+        // More lenient check for overflow cases
+        if (currentScrollHeight <= availableHeight) {
+          bestFontSize = fontSize;
+          foundFit = true;
+          break;
+        }
       }
     }
     
@@ -497,7 +519,8 @@ const PlayerView: React.FC = () => {
     // Debug log to verify it's working
     const finalScrollHeight = textElement.scrollHeight;
     const wordCount = text.split(' ').length;
-    console.log(`🎯 FITTED: "${text.substring(0, 15)}..." (${wordCount} words) → ${bestFontSize}px (final height: ${finalScrollHeight}/${availableHeight})`);
+    const method = foundFit ? (bestFontSize >= minFontSize ? 'normal' : 'word-break') : 'failed';
+    console.log(`🎯 FITTED: "${text.substring(0, 15)}..." (${wordCount} words) → ${bestFontSize}px [${method}] (height: ${finalScrollHeight}/${availableHeight})`);
   };
 
   const markSquare = (position: string) => {
