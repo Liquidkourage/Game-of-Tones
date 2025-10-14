@@ -477,10 +477,11 @@ const PlayerView: React.FC = () => {
       // Force layout recalculation
       void textElement.offsetHeight;
       
+      const currentScrollWidth = textElement.scrollWidth;
       const currentScrollHeight = textElement.scrollHeight;
       
-      // Check if text fits with comfortable spacing
-      if (currentScrollHeight <= (availableHeight * 0.9)) {
+      // Check if text fits BOTH width and height with comfortable spacing
+      if (currentScrollWidth <= availableWidth && currentScrollHeight <= (availableHeight * 0.9)) {
         bestFontSize = fontSize;
         foundFit = true;
         break;
@@ -502,10 +503,11 @@ const PlayerView: React.FC = () => {
         // Force layout recalculation
         void textElement.offsetHeight;
         
+        const currentScrollWidth = textElement.scrollWidth;
         const currentScrollHeight = textElement.scrollHeight;
         
-        // More lenient check for overflow cases
-        if (currentScrollHeight <= availableHeight) {
+        // More lenient check for overflow cases - check both dimensions
+        if (currentScrollWidth <= availableWidth && currentScrollHeight <= availableHeight) {
           bestFontSize = fontSize;
           foundFit = true;
           break;
@@ -517,10 +519,13 @@ const PlayerView: React.FC = () => {
     textElement.style.setProperty('font-size', bestFontSize + 'px', 'important');
     
     // Debug log to verify it's working
+    const finalScrollWidth = textElement.scrollWidth;
     const finalScrollHeight = textElement.scrollHeight;
     const wordCount = text.split(' ').length;
     const method = foundFit ? (bestFontSize >= minFontSize ? 'normal' : 'word-break') : 'failed';
-    console.log(`🎯 FITTED: "${text.substring(0, 15)}..." (${wordCount} words) → ${bestFontSize}px [${method}] (height: ${finalScrollHeight}/${availableHeight})`);
+    const widthFit = finalScrollWidth <= availableWidth ? '✓' : '✗';
+    const heightFit = finalScrollHeight <= availableHeight ? '✓' : '✗';
+    console.log(`🎯 FITTED: "${text.substring(0, 15)}..." (${wordCount} words) → ${bestFontSize}px [${method}] (${widthFit}w:${finalScrollWidth}/${availableWidth} ${heightFit}h:${finalScrollHeight}/${availableHeight})`);
   };
 
   const markSquare = (position: string) => {
