@@ -461,7 +461,7 @@ const PlayerView: React.FC = () => {
       element.style.setProperty('font-size', fontSize + 'px', 'important');
       
       // Force layout recalculation
-      element.offsetHeight;
+      void element.offsetHeight;
       
       const textWidth = element.scrollWidth;
       const textHeight = element.scrollHeight;
