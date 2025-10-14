@@ -369,6 +369,105 @@ const PlayerView: React.FC = () => {
     };
   }, []);
 
+  // DYNAMIC FONT SIZING: Apply to all cells when bingo card changes
+  useEffect(() => {
+    if (!bingoCard) return;
+    
+    // Small delay to ensure DOM is rendered
+    const timer = setTimeout(() => {
+      bingoCard.squares.forEach((square) => {
+        const squareElement = document.querySelector(`[data-position="${square.position}"]`);
+        if (squareElement) {
+          const songNameElement = squareElement.querySelector('.primary-line, .song-name') as HTMLElement;
+          const artistNameElement = squareElement.querySelector('.artist-name') as HTMLElement;
+          
+          if (songNameElement) {
+            const text = displayMode === 'title' ? square.songName : square.artistName;
+            fitTextToCell(songNameElement, text, false);
+          }
+          
+          if (artistNameElement && displayMode === 'title') {
+            fitTextToCell(artistNameElement, square.artistName, true);
+          }
+        }
+      });
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [bingoCard, displayMode]);
+
+  // DYNAMIC FONT SIZING: Re-calculate on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (!bingoCard) return;
+      
+      // Debounce resize events
+      setTimeout(() => {
+        bingoCard.squares.forEach((square) => {
+          const squareElement = document.querySelector(`[data-position="${square.position}"]`);
+          if (squareElement) {
+            const songNameElement = squareElement.querySelector('.primary-line, .song-name') as HTMLElement;
+            const artistNameElement = squareElement.querySelector('.artist-name') as HTMLElement;
+            
+            if (songNameElement) {
+              const text = displayMode === 'title' ? square.songName : square.artistName;
+              fitTextToCell(songNameElement, text, false);
+            }
+            
+            if (artistNameElement && displayMode === 'title') {
+              fitTextToCell(artistNameElement, square.artistName, true);
+            }
+          }
+        });
+      }, 150);
+    };
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
+  }, [bingoCard, displayMode]);
+
+  // DYNAMIC FONT SIZING: Fit text to cell based on content length
+  const fitTextToCell = (element: HTMLElement, text: string, isArtist: boolean = false) => {
+    if (!element || !text) return;
+    
+    const maxWidth = element.offsetWidth - 8; // Account for padding
+    const maxHeight = element.offsetHeight - 8;
+    
+    // Base font sizes
+    const baseFontSize = isArtist ? 14 : 16;
+    const minFontSize = isArtist ? 8 : 10;
+    
+    // Calculate optimal font size based on text length and available space
+    let fontSize = baseFontSize;
+    
+    // Quick estimation: longer text = smaller font
+    const textLength = text.length;
+    if (textLength > 25) fontSize = Math.max(minFontSize, baseFontSize * 0.7);
+    else if (textLength > 20) fontSize = Math.max(minFontSize, baseFontSize * 0.8);
+    else if (textLength > 15) fontSize = Math.max(minFontSize, baseFontSize * 0.9);
+    
+    // Fine-tune by measuring actual text
+    element.style.fontSize = fontSize + 'px';
+    
+    // Reduce font size if text still overflows
+    let iterations = 0;
+    while (iterations < 10 && fontSize > minFontSize) {
+      const textHeight = element.scrollHeight;
+      const textWidth = element.scrollWidth;
+      
+      if (textHeight <= maxHeight && textWidth <= maxWidth) break;
+      
+      fontSize -= 0.5;
+      element.style.fontSize = fontSize + 'px';
+      iterations++;
+    }
+  };
+
   const markSquare = (position: string) => {
     if (!bingoCard || !socket) return;
 
@@ -614,6 +713,7 @@ const PlayerView: React.FC = () => {
             <motion.div
               key={square.position}
               className={`bingo-square ${square.marked ? 'marked' : ''}`}
+              data-position={square.position}
               onClick={() => markSquare(square.position)}
               onPointerDown={(e) => handlePointerDown(square, e)}
               onPointerUp={clearLongPress}

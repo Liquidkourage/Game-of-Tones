@@ -992,7 +992,8 @@ body {
 }
 
 .bingo-square .song-name {
-  font-size: clamp(0.6rem, 2.5vw, 1.2rem) !important;
+  /* DYNAMIC SIZING: Font size controlled by JavaScript */
+  font-size: 14px; /* Fallback only */
   line-height: 1.1 !important;
   margin-bottom: 0.2rem !important;
   /* REMOVED: text truncation - allow natural wrapping like screenshot */
@@ -1003,7 +1004,8 @@ body {
 }
 
 .bingo-square .artist-name {
-  font-size: clamp(0.5rem, 2vw, 1rem) !important;
+  /* DYNAMIC SIZING: Font size controlled by JavaScript */
+  font-size: 12px; /* Fallback only */
   line-height: 1.1 !important;
   /* REMOVED: text truncation - allow natural wrapping like screenshot */
   overflow-wrap: break-word !important;
@@ -1233,7 +1235,8 @@ body {
 .bingo-square .primary-line, .bingo-square .song-name, .bingo-square .artist-name {
   font-weight: 600;
   color: white;
-  font-size: clamp(0.58rem, 2.6vw, 1.05rem);
+  /* DYNAMIC SIZING: Font size controlled by JavaScript */
+  font-size: 14px; /* Fallback only */
   margin-bottom: 0.2rem;
   line-height: 1.1;
   word-wrap: break-word;
@@ -1242,9 +1245,6 @@ body {
   hyphens: auto;
   max-width: 100%;
   /* REMOVED: text truncation - allow natural wrapping like screenshot */
-  overflow-wrap: break-word;
-  word-break: break-word;
-  hyphens: auto;
   white-space: normal;
 }
 
