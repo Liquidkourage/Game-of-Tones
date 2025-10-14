@@ -921,47 +921,74 @@ const PlayerView: React.FC = () => {
           </div>
         </motion.div>
       ) : (
-        <div className="focus-topbar" onClick={toggleFocusCard}>
-          <span className="focus-room">Room: {roomId}</span>
-          <span className="focus-name">{playerName}</span>
+        <div className="focus-topbar">
+          <div onClick={toggleFocusCard} style={{ cursor: 'pointer' }}>
+            <span className="focus-room">Room: {roomId}</span>
+            <span className="focus-name">{playerName}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <label className="toggle-switch" style={{ transform: 'scale(0.8)' }}>
+              <input
+                type="checkbox"
+                checked={displayMode === 'artist'}
+                onChange={(e) => handleDisplayModeToggle(e.target.checked)}
+              />
+              <span className="slider" />
+            </label>
+            <div className="density-toggle" style={{ transform: 'scale(0.8)' }}>
+              <button className={`density-btn ${density === 's' ? 'active' : ''}`} onClick={() => handleDensityChange('s')}>S</button>
+              <button className={`density-btn ${density === 'm' ? 'active' : ''}`} onClick={() => handleDensityChange('m')}>M</button>
+              <button className={`density-btn ${density === 'l' ? 'active' : ''}`} onClick={() => handleDensityChange('l')}>L</button>
+            </div>
+            <button className="focus-card-btn" onClick={toggleFocusCard} style={{ fontSize: '0.7rem', padding: '4px 8px' }}>Show Chrome</button>
+          </div>
         </div>
+      )}
+
+      {/* Player Controls - positioned below header */}
+      {!focusCard && (
+        <motion.div 
+          className="player-controls"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>Display</span>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={displayMode === 'artist'}
+                onChange={(e) => handleDisplayModeToggle(e.target.checked)}
+              />
+              <span className="slider" />
+            </label>
+            <span style={{ fontSize: '0.85rem', color: '#b3b3b3', minWidth: 60, textAlign: 'right' }}>
+              {displayMode === 'title' ? 'Title' : 'Artist'}
+            </span>
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>Text</span>
+            <div className="density-toggle">
+              <button className={`density-btn ${density === 's' ? 'active' : ''}`} onClick={() => handleDensityChange('s')}>S</button>
+              <button className={`density-btn ${density === 'm' ? 'active' : ''}`} onClick={() => handleDensityChange('m')}>M</button>
+              <button className={`density-btn ${density === 'l' ? 'active' : ''}`} onClick={() => handleDensityChange('l')}>L</button>
+            </div>
+            <button className="focus-card-btn" onClick={toggleFocusCard}>Focus Card</button>
+          </div>
+        </motion.div>
       )}
 
       {/* Main Content */}
       <div className="player-content">
-        {/* Current song display removed on player per request */}
-
-        {/* Bingo Card */}
+        {/* Bingo Card - centered in remaining space */}
         <motion.div 
           className="bingo-section"
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.6, delay: 0.2 }}
         >
-          <div className="section-header" style={{ alignItems: 'center', justifyContent: 'flex-end' }}>
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>Display</span>
-              <label className="toggle-switch">
-                <input
-                  type="checkbox"
-                  checked={displayMode === 'artist'}
-                  onChange={(e) => handleDisplayModeToggle(e.target.checked)}
-                />
-                <span className="slider" />
-              </label>
-              <span style={{ fontSize: '0.85rem', color: '#b3b3b3', minWidth: 60, textAlign: 'right' }}>
-                {displayMode === 'title' ? 'Title' : 'Artist'}
-              </span>
-              <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>| Text</span>
-              <div className="density-toggle">
-                <button className={`density-btn ${density === 's' ? 'active' : ''}`} onClick={() => handleDensityChange('s')}>S</button>
-                <button className={`density-btn ${density === 'm' ? 'active' : ''}`} onClick={() => handleDensityChange('m')}>M</button>
-                <button className={`density-btn ${density === 'l' ? 'active' : ''}`} onClick={() => handleDensityChange('l')}>L</button>
-              </div>
-              <button className="focus-card-btn" onClick={toggleFocusCard}>{focusCard ? 'Show Chrome' : 'Focus Card'}</button>
-            </div>
-          </div>
-          
           {renderBingoCard()}
         </motion.div>
 

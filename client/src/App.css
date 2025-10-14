@@ -964,6 +964,8 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
+  justify-content: center; /* Center the bingo card */
+  align-items: center; /* Center horizontally too */
   min-height: 0;
 }
 
@@ -1081,8 +1083,7 @@ body {
   min-height: 100vh;
   height: 100vh; /* ZERO SCROLL: Force exact viewport height */
   padding: 0; /* ZERO SCROLL: Remove all padding */
-  /* padding-top: 60px; - DISABLED for better mobile */
-  /* padding-bottom: 80px; - DISABLED for better mobile */
+  padding-top: 60px; /* Account for sticky header */
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -1116,11 +1117,28 @@ body {
   font-weight: 700;
 }
 
+/* Player controls section - positioned below header */
+.player-controls {
+  flex-shrink: 0;
+  padding: 0.5rem;
+  background: rgba(42, 42, 42, 0.8);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 255, 136, 0.2);
+  border-radius: 8px;
+  margin: 0.5rem;
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .player-content {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem; /* ZERO SCROLL: Reduce gap */
+  justify-content: center; /* Center the bingo card vertically */
   max-width: 100%;
   margin: 0 auto;
   min-height: 0;
@@ -1266,7 +1284,22 @@ body {
   display: none !important;
 }
 
-.focus-topbar { position: sticky; top: 0; z-index: 50; display: flex; justify-content: space-between; gap: 0.5rem; padding: 6px 10px; margin-bottom: 6px; background: rgba(20,20,20,0.9); border: 1px solid rgba(0,255,136,0.25); border-radius: 10px; color: #b3b3b3; font-size: 0.85rem; }
+.focus-topbar { 
+  position: sticky; 
+  top: 0; 
+  z-index: 50; 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center;
+  gap: 0.5rem; 
+  padding: 6px 10px; 
+  margin-bottom: 6px; 
+  background: rgba(20,20,20,0.9); 
+  border: 1px solid rgba(0,255,136,0.25); 
+  border-radius: 10px; 
+  color: #b3b3b3; 
+  font-size: 0.85rem; 
+}
 .focus-topbar .focus-room { color: #00ff88; font-weight: 700; }
 .focus-topbar .focus-name { color: #b3b3b3; }
 
@@ -1921,9 +1954,15 @@ body {
   /* ZERO SCROLL: Mobile container optimization */
   .player-container {
     height: 100vh; /* Force exact viewport height */
-    /* padding-top: 60px; - DISABLED for better mobile */
-    /* padding-bottom: 70px; - DISABLED for better mobile */
+    padding-top: 60px; /* Account for header */
     overflow: hidden; /* Prevent scrolling */
+  }
+  
+  .player-controls {
+    margin: 0.25rem;
+    padding: 0.4rem;
+    flex-wrap: wrap;
+    gap: 0.25rem;
   }
   
   .app-main {
@@ -2173,6 +2212,12 @@ body {
     padding-left: 0.5rem; /* Add horizontal padding */
     padding-right: 0.5rem;
     overflow: hidden;
+  }
+  
+  .player-controls {
+    margin: 0.25rem 0;
+    padding: 0.3rem 0.5rem;
+    gap: 0.25rem;
   }
   
   /* Landscape-optimized bingo card */
