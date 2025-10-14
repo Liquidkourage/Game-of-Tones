@@ -1984,7 +1984,7 @@ body {
   .bingo-card-grid {
     gap: 0.15rem 0.3rem;
     max-width: 98vw;
-    height: calc(100vh - 180px);
+    /* height removed - let aspect ratio control dimensions */
   }
 
   .bingo-square {
@@ -2020,7 +2020,7 @@ body {
   .bingo-card-grid {
     gap: 0.1rem 0.2rem;
     max-width: 99vw;
-    height: calc(100vh - 160px);
+    /* height removed - let aspect ratio control dimensions */
   }
 
   .bingo-square {
@@ -2208,7 +2208,7 @@ body {
   /* Adjust bingo card grid for landscape */
   .bingo-card-grid {
     gap: 0.1rem !important; /* Tighter gaps */
-    height: calc(100vh - 120px) !important; /* Account for compact layout */
+    /* height removed - let aspect ratio control dimensions */
   }
   
   /* Adjust font sizing for landscape aspect ratio - JavaScript will override */
