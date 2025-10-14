@@ -1904,6 +1904,11 @@ body {
     white-space: nowrap; /* Prevent text wrapping */
   }
   
+  /* Make subtitle smaller on mobile to fit "by Liquid Kourage" */
+  .logo span {
+    font-size: 0.75rem !important; /* Smaller on mobile */
+  }
+  
   /* Ensure header icons don't cause overflow */
   .header-icons {
     flex-shrink: 0; /* Don't shrink icons */
