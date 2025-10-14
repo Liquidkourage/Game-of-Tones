@@ -445,8 +445,8 @@ const PlayerView: React.FC = () => {
     
     // Get the actual available space from the bingo square
     const squareRect = squareElement.getBoundingClientRect();
-    const availableWidth = squareRect.width - 20; // Account for padding/margins
-    const availableHeight = squareRect.height - 20;
+    const availableWidth = squareRect.width - 30; // More padding for comfortable reading
+    const availableHeight = squareRect.height - 30; // More padding for comfortable reading
     
     if (availableWidth <= 0 || availableHeight <= 0) {
       console.log('🚫 fitTextToCell: Invalid available space', { availableWidth, availableHeight });
@@ -455,9 +455,9 @@ const PlayerView: React.FC = () => {
     
     console.log(`🔍 Measuring cell: available space ${availableWidth}×${availableHeight}px for "${text.substring(0, 20)}..."`);
     
-    // Start with a reasonable range
+    // Start with a more conservative range to prevent mid-word breaks
     let minFontSize = 8;
-    let maxFontSize = Math.min(availableHeight * 0.6, 28); // More conservative max
+    let maxFontSize = Math.min(availableHeight * 0.4, 20); // Much more conservative max
     let bestFontSize = minFontSize;
     
     // Set width constraint to force proper text wrapping
@@ -467,9 +467,11 @@ const PlayerView: React.FC = () => {
     // Simple iterative approach instead of binary search
     for (let fontSize = maxFontSize; fontSize >= minFontSize; fontSize -= 0.5) {
       textElement.style.setProperty('font-size', fontSize + 'px', 'important');
-      textElement.style.setProperty('line-height', '1.1', 'important');
-      textElement.style.setProperty('word-wrap', 'break-word', 'important');
-      textElement.style.setProperty('overflow-wrap', 'break-word', 'important');
+      textElement.style.setProperty('line-height', '1.2', 'important'); // Slightly more line spacing
+      textElement.style.setProperty('word-wrap', 'normal', 'important'); // Prevent mid-word breaks
+      textElement.style.setProperty('overflow-wrap', 'normal', 'important'); // Prevent mid-word breaks
+      textElement.style.setProperty('word-break', 'normal', 'important'); // Prevent mid-word breaks
+      textElement.style.setProperty('hyphens', 'none', 'important'); // No hyphenation
       
       // Force layout recalculation
       void textElement.offsetHeight;
@@ -482,8 +484,8 @@ const PlayerView: React.FC = () => {
         console.log(`🔍 Multi-word "${text}": fontSize=${fontSize}px, scroll=${currentScrollWidth}×${currentScrollHeight}, available=${availableWidth}×${availableHeight}`);
       }
       
-      // Since width is constrained, only check height
-      if (currentScrollHeight <= availableHeight) {
+      // Since width is constrained, only check height with buffer for comfortable reading
+      if (currentScrollHeight <= (availableHeight * 0.9)) { // 10% buffer for comfortable spacing
         bestFontSize = fontSize;
         break;
       }
