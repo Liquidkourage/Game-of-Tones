@@ -3475,21 +3475,45 @@ app.get('/api/spotify/status', (req, res) => {
 
 // Force clear Spotify tokens (for testing)
 app.post('/api/spotify/clear', (req, res) => {
-  spotifyTokens = null;
-  spotifyService.setTokens(null, null);
-  
-  // Remove saved tokens file
   try {
-    if (fs.existsSync(TOKEN_FILE)) {
-      fs.unlinkSync(TOKEN_FILE);
-      console.log('🗑️  Removed saved Spotify tokens file');
+    console.log('🗑️  Starting Spotify tokens clear...');
+    
+    // Clear in-memory tokens
+    spotifyTokens = null;
+    console.log('✅ Cleared in-memory tokens');
+    
+    // Clear service tokens
+    if (spotifyService && typeof spotifyService.setTokens === 'function') {
+      spotifyService.setTokens(null, null);
+      console.log('✅ Cleared service tokens');
+    } else {
+      console.warn('⚠️ spotifyService.setTokens not available');
     }
+    
+    // Remove saved tokens file
+    try {
+      if (fs.existsSync(TOKEN_FILE)) {
+        fs.unlinkSync(TOKEN_FILE);
+        console.log('✅ Removed saved Spotify tokens file');
+      } else {
+        console.log('ℹ️ No tokens file to remove');
+      }
+    } catch (fileError) {
+      console.error('❌ Error removing tokens file:', fileError);
+      // Don't fail the whole request for file errors
+    }
+    
+    console.log('✅ Successfully cleared Spotify tokens');
+    res.json({ success: true, message: 'Spotify tokens cleared' });
+    
   } catch (error) {
-    console.error('❌ Error removing tokens file:', error);
+    console.error('❌ Error in /api/spotify/clear:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to clear tokens',
+      details: error.message 
+    });
   }
-  
-  console.log('Forced clear of Spotify tokens');
-  res.json({ success: true, message: 'Spotify tokens cleared' });
 });
 
 app.get('/api/spotify/callback', async (req, res) => {
