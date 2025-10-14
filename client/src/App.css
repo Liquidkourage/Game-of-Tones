@@ -1088,7 +1088,7 @@ body {
   padding: 1rem 0;
   padding-bottom: calc(120px + env(safe-area-inset-bottom));
   /* CRITICAL FIX: Add top padding to prevent header overlap */
-  padding-top: calc(80px + 1rem); /* Header height + margin */
+  padding-top: calc(60px + 0.5rem); /* Compact header height + small margin */
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -1922,7 +1922,7 @@ body {
   
   /* CRITICAL FIX: Adjust player container padding for mobile header */
   .player-container {
-    padding-top: calc(80px + 1rem); /* Same as desktop now - single line header */
+    padding-top: calc(60px + 0.5rem); /* Same as desktop - compact single line header */
   }
   
   .app-main {
