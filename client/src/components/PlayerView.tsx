@@ -374,6 +374,7 @@ const PlayerView: React.FC = () => {
     if (!bingoCard) return;
     
     console.log('🎯 DYNAMIC FONT SIZING: Starting font sizing for', bingoCard.squares.length, 'squares');
+    console.log('🔍 Display mode:', displayMode);
     
     // Longer delay to ensure DOM is fully rendered and cells have final dimensions
     const timer = setTimeout(() => {
@@ -385,7 +386,10 @@ const PlayerView: React.FC = () => {
           if (textElement) {
             const text = displayMode === 'title' ? square.songName : square.artistName;
             const isArtist = displayMode === 'artist';
+            console.log(`🔍 Processing cell ${square.position}: "${text}" (${text.length} chars)`);
             fitTextToCell(textElement, text, isArtist);
+          } else {
+            console.log(`🚫 No .square-text element found for position ${square.position}`);
           }
         }
       });
@@ -454,7 +458,7 @@ const PlayerView: React.FC = () => {
     // Use binary search to find the largest font that fits
     while (low <= high) {
       fontSize = Math.floor((low + high) / 2);
-      element.style.fontSize = fontSize + 'px';
+      element.style.setProperty('font-size', fontSize + 'px', 'important');
       
       // Force layout recalculation
       element.offsetHeight;
@@ -472,11 +476,11 @@ const PlayerView: React.FC = () => {
       }
     }
     
-    // Apply the best fitting font size
-    element.style.fontSize = bestFit + 'px';
+    // Apply the best fitting font size with !important to override any CSS
+    element.style.setProperty('font-size', bestFit + 'px', 'important');
     
     // Debug log to verify it's working
-    console.log(`🎯 Cell-fitted: "${text.substring(0, 15)}..." → ${bestFit}px (cell: ${cellWidth}×${cellHeight})`);
+    console.log(`🎯 Cell-fitted: "${text.substring(0, 15)}..." → ${bestFit}px (cell: ${cellWidth}×${cellHeight})`, element);
   };
 
   const markSquare = (position: string) => {
