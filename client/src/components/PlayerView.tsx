@@ -373,21 +373,19 @@ const PlayerView: React.FC = () => {
   useEffect(() => {
     if (!bingoCard) return;
     
+    console.log('🎯 DYNAMIC FONT SIZING: Starting font sizing for', bingoCard.squares.length, 'squares');
+    
     // Small delay to ensure DOM is rendered
     const timer = setTimeout(() => {
       bingoCard.squares.forEach((square) => {
         const squareElement = document.querySelector(`[data-position="${square.position}"]`);
         if (squareElement) {
-          const songNameElement = squareElement.querySelector('.primary-line, .song-name') as HTMLElement;
-          const artistNameElement = squareElement.querySelector('.artist-name') as HTMLElement;
+          const textElement = squareElement.querySelector('.square-text') as HTMLElement;
           
-          if (songNameElement) {
+          if (textElement) {
             const text = displayMode === 'title' ? square.songName : square.artistName;
-            fitTextToCell(songNameElement, text, false);
-          }
-          
-          if (artistNameElement && displayMode === 'title') {
-            fitTextToCell(artistNameElement, square.artistName, true);
+            const isArtist = displayMode === 'artist';
+            fitTextToCell(textElement, text, isArtist);
           }
         }
       });
@@ -406,7 +404,7 @@ const PlayerView: React.FC = () => {
         bingoCard.squares.forEach((square) => {
           const squareElement = document.querySelector(`[data-position="${square.position}"]`);
           if (squareElement) {
-            const songNameElement = squareElement.querySelector('.primary-line, .song-name') as HTMLElement;
+            const songNameElement = squareElement.querySelector('.square-text') as HTMLElement;
             const artistNameElement = squareElement.querySelector('.artist-name') as HTMLElement;
             
             if (songNameElement) {
@@ -433,7 +431,10 @@ const PlayerView: React.FC = () => {
 
   // DYNAMIC FONT SIZING: Fit text to cell based on content length
   const fitTextToCell = (element: HTMLElement, text: string, isArtist: boolean = false) => {
-    if (!element || !text) return;
+    if (!element || !text) {
+      console.log('🚫 fitTextToCell: Missing element or text', { element: !!element, text });
+      return;
+    }
     
     const maxWidth = element.offsetWidth - 8; // Account for padding
     const maxHeight = element.offsetHeight - 8;
@@ -466,6 +467,9 @@ const PlayerView: React.FC = () => {
       element.style.fontSize = fontSize + 'px';
       iterations++;
     }
+    
+    // Debug log to verify it's working
+    console.log(`🎯 Font sized: "${text.substring(0, 20)}..." (${textLength} chars) → ${fontSize}px`);
   };
 
   const markSquare = (position: string) => {
