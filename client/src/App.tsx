@@ -31,7 +31,17 @@ function AppHeader() {
         <div className="logo">
           <Sparkles className="logo-icon" />
           <h1>TEMPO - Music Bingo</h1>
-          <span style={{ marginLeft: 12, fontSize: '0.9rem', fontStyle: 'italic', fontWeight: 700, color: '#b3b3b3', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>by Liquid Kourage</span>
+          <span style={{ 
+            marginLeft: 12, 
+            fontSize: '0.9rem', 
+            fontStyle: 'italic', 
+            fontWeight: 700, 
+            color: '#b3b3b3', 
+            letterSpacing: '0.02em',
+            lineHeight: '1.1',
+            display: 'inline-block',
+            maxWidth: '120px' /* Force wrapping on mobile */
+          }}>by Liquid Kourage</span>
         </div>
         <DisplayHeaderInfo />
       </div>

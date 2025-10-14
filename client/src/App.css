@@ -1089,8 +1089,8 @@ body {
   min-height: 100vh;
   height: 100vh; /* ZERO SCROLL: Force exact viewport height */
   padding: 0; /* ZERO SCROLL: Remove all padding */
-  padding-top: 60px; /* ZERO SCROLL: Minimal header clearance */
-  padding-bottom: 80px; /* ZERO SCROLL: Minimal bottom clearance for bingo button */
+  /* padding-top: 60px; - DISABLED for better mobile */
+  /* padding-bottom: 80px; - DISABLED for better mobile */
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -1908,9 +1908,11 @@ body {
     white-space: nowrap; /* Prevent text wrapping */
   }
   
-  /* Make subtitle smaller on mobile to fit "by Liquid Kourage" */
+  /* Make subtitle wrap to 2 lines on mobile */
   .logo span {
     font-size: 0.75rem !important; /* Smaller on mobile */
+    max-width: 100px !important; /* Force wrapping to 2 lines */
+    white-space: normal !important; /* Allow wrapping */
   }
   
   /* Ensure header icons don't cause overflow */
@@ -1927,8 +1929,8 @@ body {
   /* ZERO SCROLL: Mobile container optimization */
   .player-container {
     height: 100vh; /* Force exact viewport height */
-    padding-top: 60px; /* Minimal header clearance */
-    padding-bottom: 70px; /* Minimal bottom clearance */
+    /* padding-top: 60px; - DISABLED for better mobile */
+    /* padding-bottom: 70px; - DISABLED for better mobile */
     overflow: hidden; /* Prevent scrolling */
   }
   
