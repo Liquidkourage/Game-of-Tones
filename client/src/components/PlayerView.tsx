@@ -492,7 +492,10 @@ const PlayerView: React.FC = () => {
 
   // Long-press to reveal a readable bottom sheet on mobile
   const handlePointerDown = (square: BingoSquare, e: React.PointerEvent) => {
-    e.preventDefault();
+    // Only prevent default for actual pointer events, not touch scrolling
+    if (e.pointerType === 'mouse' || e.pointerType === 'pen') {
+      e.preventDefault();
+    }
     if (longPressTimer.current) window.clearTimeout(longPressTimer.current);
     const text = displayMode === 'title' ? square.artistName : square.songName;
     longPressTimer.current = window.setTimeout(() => {
@@ -507,6 +510,7 @@ const PlayerView: React.FC = () => {
       longPressTimer.current = null;
     }
     setTooltipSquare(null);
+    setTooltipText('');
   };
 
   const vibrate = (pattern: number | number[]) => {
@@ -719,7 +723,13 @@ const PlayerView: React.FC = () => {
               onPointerUp={clearLongPress}
               onPointerCancel={clearLongPress}
               onPointerLeave={clearLongPress}
-              onContextMenu={(e) => { e.preventDefault(); return false; }}
+              onContextMenu={(e) => { 
+                // Only prevent context menu on long press, allow normal scrolling
+                if (longPressTimer.current) {
+                  e.preventDefault(); 
+                  return false; 
+                }
+              }}
               draggable={false}
               style={{
                 display: 'flex',

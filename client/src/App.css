@@ -1194,7 +1194,7 @@ body {
   overflow: visible;
   /* slightly wider than tall */
   aspect-ratio: 1.06 / 1;
-  touch-action: none; /* suppress gesture handling (e.g., Galaxy Fold) */
+  touch-action: manipulation; /* Allow scrolling but prevent double-tap zoom */
   -webkit-user-select: none;
   user-select: none;
 }
