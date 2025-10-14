@@ -2140,3 +2140,97 @@ body {
   font-weight: 600;
   font-family: 'Courier New', monospace;
 }
+
+/* 📱🔄 LANDSCAPE MOBILE OPTIMIZATION */
+@media (max-width: 768px) and (orientation: landscape) {
+  /* Compact header for landscape */
+  .header {
+    height: 45px; /* Even more compact in landscape */
+    padding: 0.25rem 1rem;
+  }
+  
+  .header-content {
+    gap: 0.25rem; /* Tighter spacing */
+  }
+  
+  .logo h1 {
+    font-size: 1.1rem; /* Smaller for landscape */
+    white-space: nowrap;
+  }
+  
+  .logo span {
+    font-size: 0.6rem !important; /* Even smaller subtitle */
+    max-width: 70px !important; /* Tighter wrapping */
+    line-height: 1;
+  }
+  
+  .header-icons {
+    gap: 0.25rem; /* Tighter icon spacing */
+  }
+  
+  .header-icon {
+    width: 1rem; /* Smaller icons */
+    height: 1rem;
+  }
+  
+  /* Optimize player container for landscape */
+  .player-container {
+    height: 100vh;
+    padding: 0;
+    padding-top: 45px; /* Account for compact header */
+    padding-left: 0.5rem; /* Add horizontal padding */
+    padding-right: 0.5rem;
+    overflow: hidden;
+  }
+  
+  /* Landscape-optimized bingo card */
+  .bingo-card {
+    width: min(calc(100vh - 80px), calc(100vw - 1rem)); /* Account for horizontal padding */
+    height: min(calc(100vh - 80px), calc(100vw - 1rem));
+    margin: 0 auto; /* Center the card */
+  }
+  
+  /* Optimize current song section for landscape */
+  .current-song-section {
+    margin: 0.25rem 0; /* Reduce vertical margins */
+    padding: 0.4rem 0.5rem; /* Compact padding */
+  }
+  
+  .current-song-section h3 {
+    font-size: 0.9rem; /* Smaller heading */
+    margin-bottom: 0.2rem;
+  }
+  
+  .current-song-section p {
+    font-size: 0.8rem; /* Smaller text */
+    margin: 0.1rem 0;
+  }
+  
+  /* Optimize bingo button for landscape */
+  .bingo-button {
+    height: 45px; /* Shorter button */
+    font-size: 1rem; /* Slightly smaller text */
+    margin-top: 0.5rem; /* Less margin */
+  }
+  
+  /* Adjust bingo card grid for landscape */
+  .bingo-card-grid {
+    gap: 0.1rem !important; /* Tighter gaps */
+    height: calc(100vh - 120px) !important; /* Account for compact layout */
+  }
+  
+  /* Adjust font sizing for landscape aspect ratio */
+  .bingo-square .song-name {
+    font-size: 12px; /* Slightly smaller base font for landscape */
+  }
+  
+  .bingo-square .artist-name {
+    font-size: 10px; /* Slightly smaller base font for landscape */
+  }
+  
+  /* Optimize bingo squares for landscape */
+  .bingo-square {
+    padding: 0.25rem !important; /* Tighter padding */
+    aspect-ratio: 1.1 / 1 !important; /* Slightly taller rectangles work better in landscape */
+  }
+}
