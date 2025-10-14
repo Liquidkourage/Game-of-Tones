@@ -375,7 +375,7 @@ const PlayerView: React.FC = () => {
     
     console.log('🎯 DYNAMIC FONT SIZING: Starting font sizing for', bingoCard.squares.length, 'squares');
     
-    // Small delay to ensure DOM is rendered
+    // Longer delay to ensure DOM is fully rendered and cells have final dimensions
     const timer = setTimeout(() => {
       bingoCard.squares.forEach((square) => {
         const squareElement = document.querySelector(`[data-position="${square.position}"]`);
@@ -389,7 +389,7 @@ const PlayerView: React.FC = () => {
           }
         }
       });
-    }, 100);
+    }, 300); // Increased delay for proper cell dimension calculation
     
     return () => clearTimeout(timer);
   }, [bingoCard, displayMode]);
@@ -399,25 +399,21 @@ const PlayerView: React.FC = () => {
     const handleResize = () => {
       if (!bingoCard) return;
       
-      // Debounce resize events
+      // Debounce resize events and allow time for layout recalculation
       setTimeout(() => {
         bingoCard.squares.forEach((square) => {
           const squareElement = document.querySelector(`[data-position="${square.position}"]`);
           if (squareElement) {
-            const songNameElement = squareElement.querySelector('.square-text') as HTMLElement;
-            const artistNameElement = squareElement.querySelector('.artist-name') as HTMLElement;
+            const textElement = squareElement.querySelector('.square-text') as HTMLElement;
             
-            if (songNameElement) {
+            if (textElement) {
               const text = displayMode === 'title' ? square.songName : square.artistName;
-              fitTextToCell(songNameElement, text, false);
-            }
-            
-            if (artistNameElement && displayMode === 'title') {
-              fitTextToCell(artistNameElement, square.artistName, true);
+              const isArtist = displayMode === 'artist';
+              fitTextToCell(textElement, text, isArtist);
             }
           }
         });
-      }, 150);
+      }, 300); // Increased delay for proper cell dimension calculation
     };
 
     window.addEventListener('resize', handleResize);
@@ -429,47 +425,58 @@ const PlayerView: React.FC = () => {
     };
   }, [bingoCard, displayMode]);
 
-  // DYNAMIC FONT SIZING: Fit text to cell based on content length
+  // DYNAMIC FONT SIZING: Fit text to fill cell as much as possible without overflow
   const fitTextToCell = (element: HTMLElement, text: string, isArtist: boolean = false) => {
     if (!element || !text) {
       console.log('🚫 fitTextToCell: Missing element or text', { element: !!element, text });
       return;
     }
     
-    const maxWidth = element.offsetWidth - 8; // Account for padding
-    const maxHeight = element.offsetHeight - 8;
+    // Get actual cell dimensions (accounting for padding)
+    const cellWidth = element.offsetWidth - 16; // Account for padding
+    const cellHeight = element.offsetHeight - 16;
     
-    // Base font sizes
-    const baseFontSize = isArtist ? 14 : 16;
-    const minFontSize = isArtist ? 8 : 10;
-    
-    // Calculate optimal font size based on text length and available space
-    let fontSize = baseFontSize;
-    
-    // Quick estimation: longer text = smaller font
-    const textLength = text.length;
-    if (textLength > 25) fontSize = Math.max(minFontSize, baseFontSize * 0.7);
-    else if (textLength > 20) fontSize = Math.max(minFontSize, baseFontSize * 0.8);
-    else if (textLength > 15) fontSize = Math.max(minFontSize, baseFontSize * 0.9);
-    
-    // Fine-tune by measuring actual text
-    element.style.fontSize = fontSize + 'px';
-    
-    // Reduce font size if text still overflows
-    let iterations = 0;
-    while (iterations < 10 && fontSize > minFontSize) {
-      const textHeight = element.scrollHeight;
-      const textWidth = element.scrollWidth;
-      
-      if (textHeight <= maxHeight && textWidth <= maxWidth) break;
-      
-      fontSize -= 0.5;
-      element.style.fontSize = fontSize + 'px';
-      iterations++;
+    if (cellWidth <= 0 || cellHeight <= 0) {
+      console.log('🚫 fitTextToCell: Invalid cell dimensions', { cellWidth, cellHeight });
+      return;
     }
     
+    // Start with a large font size and work down to find the maximum that fits
+    const maxFontSize = Math.min(cellHeight * 0.8, 24); // Cap at reasonable max
+    const minFontSize = 8;
+    let fontSize = maxFontSize;
+    
+    // Binary search for optimal font size
+    let low = minFontSize;
+    let high = maxFontSize;
+    let bestFit = minFontSize;
+    
+    // Use binary search to find the largest font that fits
+    while (low <= high) {
+      fontSize = Math.floor((low + high) / 2);
+      element.style.fontSize = fontSize + 'px';
+      
+      // Force layout recalculation
+      element.offsetHeight;
+      
+      const textWidth = element.scrollWidth;
+      const textHeight = element.scrollHeight;
+      
+      if (textWidth <= cellWidth && textHeight <= cellHeight) {
+        // This size fits, try larger
+        bestFit = fontSize;
+        low = fontSize + 1;
+      } else {
+        // This size is too big, try smaller
+        high = fontSize - 1;
+      }
+    }
+    
+    // Apply the best fitting font size
+    element.style.fontSize = bestFit + 'px';
+    
     // Debug log to verify it's working
-    console.log(`🎯 Font sized: "${text.substring(0, 20)}..." (${textLength} chars) → ${fontSize}px`);
+    console.log(`🎯 Cell-fitted: "${text.substring(0, 15)}..." → ${bestFit}px (cell: ${cellWidth}×${cellHeight})`);
   };
 
   const markSquare = (position: string) => {
