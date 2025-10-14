@@ -954,9 +954,9 @@ body {
   background: rgba(42, 42, 42, 0.8);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(0, 255, 136, 0.2);
-  border-radius: 12px;
-  padding: 0.75rem;
-  margin-bottom: 0.5rem;
+  border-radius: 8px; /* ZERO SCROLL: Smaller radius */
+  padding: 0.5rem; /* ZERO SCROLL: Reduce padding */
+  margin-bottom: 0.25rem; /* ZERO SCROLL: Reduce margin */
   flex-shrink: 0;
 }
 
@@ -1085,23 +1085,24 @@ body {
 }
 .player-container {
   min-height: 100vh;
-  padding: 1rem 0;
-  padding-bottom: calc(120px + env(safe-area-inset-bottom));
-  /* CRITICAL FIX: Add top padding to prevent header overlap */
-  padding-top: calc(60px + 0.5rem); /* Compact header height + small margin */
+  height: 100vh; /* ZERO SCROLL: Force exact viewport height */
+  padding: 0; /* ZERO SCROLL: Remove all padding */
+  padding-top: 60px; /* ZERO SCROLL: Minimal header clearance */
+  padding-bottom: 80px; /* ZERO SCROLL: Minimal bottom clearance for bingo button */
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  overflow: hidden; /* ZERO SCROLL: Prevent any overflow */
 }
 
 .player-header {
   display: block;
-  margin-bottom: 0.5rem;
-  padding: 0.35rem 0.6rem;
+  margin-bottom: 0.25rem; /* ZERO SCROLL: Reduce margin */
+  padding: 0.25rem 0.5rem; /* ZERO SCROLL: Reduce padding */
   background: rgba(42, 42, 42, 0.8);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(0, 255, 136, 0.2);
-  border-radius: 12px;
+  border-radius: 8px; /* ZERO SCROLL: Smaller radius */
   flex-shrink: 0;
 }
 
@@ -1125,27 +1126,30 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.25rem; /* ZERO SCROLL: Reduce gap */
   max-width: 100%;
   margin: 0 auto;
   min-height: 0;
   box-sizing: border-box;
+  padding: 0 0.5rem; /* ZERO SCROLL: Add minimal side padding */
 }
 
 .bingo-card {
   background: rgba(42, 42, 42, 0.8);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(0, 255, 136, 0.2);
-  border-radius: 16px;
-  padding: 0.25rem; /* minimal padding so grid outline centers precisely */
+  border-radius: 12px; /* ZERO SCROLL: Smaller radius */
+  padding: 0.125rem; /* ZERO SCROLL: Minimal padding */
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
   box-sizing: border-box;
-  width: min(92vmin, 100%);
-  height: auto;
+  /* ZERO SCROLL: Use available height efficiently */
+  width: min(calc(100vh - 200px), calc(100vw - 1rem));
+  height: min(calc(100vh - 200px), calc(100vw - 1rem));
   aspect-ratio: 1 / 1;
+  flex: 1;
 }
 
 /* removed bingo-card-header and title for player view */
@@ -1920,9 +1924,12 @@ body {
     height: 1.25rem;
   }
   
-  /* CRITICAL FIX: Adjust player container padding for mobile header */
+  /* ZERO SCROLL: Mobile container optimization */
   .player-container {
-    padding-top: calc(60px + 0.5rem); /* Same as desktop - compact single line header */
+    height: 100vh; /* Force exact viewport height */
+    padding-top: 60px; /* Minimal header clearance */
+    padding-bottom: 70px; /* Minimal bottom clearance */
+    overflow: hidden; /* Prevent scrolling */
   }
   
   .app-main {
