@@ -974,12 +974,12 @@ body {
 
 /* Responsive bingo card sizing - force perfect square */
 .bingo-card {
-  width: min(88vmin, 92vw) !important;
-  height: min(88vmin, 92vw) !important;
+  width: min(84vmin, 88vw) !important;
+  height: min(84vmin, 88vw) !important;
   aspect-ratio: 1 / 1 !important;
   margin: 0 auto !important;
-  max-width: 92vw !important;
-  max-height: 92vw !important;
+  max-width: 88vw !important;
+  max-height: 88vw !important;
 }
 
 .bingo-card-grid {
@@ -1018,7 +1018,7 @@ body {
 
 /* Responsive breakpoints for different screen sizes */
 @media (max-width: 768px) {
-  .bingo-card { width: 92vw !important; height: 92vw !important; aspect-ratio: 1 / 1 !important; max-width: 92vw !important; max-height: 92vw !important; }
+  .bingo-card { width: 88vw !important; height: 88vw !important; aspect-ratio: 1 / 1 !important; max-width: 88vw !important; max-height: 88vw !important; }
   
   .bingo-card-grid { gap: 0 !important; }
   
@@ -1036,7 +1036,7 @@ body {
 }
 
 @media (max-width: 480px) {
-  .bingo-card { width: 90vw !important; height: 90vw !important; aspect-ratio: 1 / 1 !important; max-width: 90vw !important; max-height: 90vw !important; }
+  .bingo-card { width: 86vw !important; height: 86vw !important; aspect-ratio: 1 / 1 !important; max-width: 86vw !important; max-height: 86vw !important; }
   
   .bingo-card-grid { 
     gap: 0 !important; 
@@ -1140,8 +1140,8 @@ body {
   min-height: 0;
   box-sizing: border-box;
   /* ZERO SCROLL: Force perfect square */
-  width: min(calc(100vh - 200px), calc(100vw - 2rem), 92vw);
-  height: min(calc(100vh - 200px), calc(100vw - 2rem), 92vw);
+  width: min(calc(100vh - 200px), calc(100vw - 3rem), 88vw);
+  height: min(calc(100vh - 200px), calc(100vw - 3rem), 88vw);
   aspect-ratio: 1 / 1 !important;
   flex: 1;
 }
