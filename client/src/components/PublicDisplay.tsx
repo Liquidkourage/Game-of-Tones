@@ -118,6 +118,11 @@ const PublicDisplay: React.FC = () => {
   const revealToastTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [showWinnerBanner, setShowWinnerBanner] = useState<boolean>(false);
   const [winnerName, setWinnerName] = useState<string>('');
+  // Connection status and sync management
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
+  const [reconnectAttempts, setReconnectAttempts] = useState<number>(0);
+  const [lastSyncTime, setLastSyncTime] = useState<number>(0);
+  const [socket, setSocket] = useState<any>(null);
   // Global scroll phase to keep columns aligned + freeze control
   const [phasePx, setPhasePx] = useState<number>(0);
   const rafRef = useRef<number | null>(null);
@@ -185,20 +190,137 @@ const PublicDisplay: React.FC = () => {
     }
   };
 
+  // Manual refresh function for host control
+  const handleManualRefresh = () => {
+    console.log('🔄 Manual refresh requested');
+    if (socket) {
+      socket.emit('sync-state', { roomId });
+      setLastSyncTime(Date.now());
+    }
+  };
+
   useEffect(() => {
-    const socket = io(SOCKET_URL || undefined);
-    socket.on('connect', () => {
-      socket.emit('join-room', { roomId, playerName: 'Display', isHost: false });
+    console.log('🖥️ PublicDisplay: Initializing socket connection');
+    
+    // Initialize socket with robust reconnection
+    const newSocket = io(SOCKET_URL || undefined, {
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
+    });
+    setSocket(newSocket);
+
+    // Connection event handlers
+    newSocket.on('connect', () => {
+      console.log('🖥️ PublicDisplay: Connected to server');
+      setConnectionStatus('connected');
+      setReconnectAttempts(0);
+      
+      // Join room as display
+      newSocket.emit('join-room', { roomId, playerName: 'Display', isHost: false });
+      
+      // Request current state sync
+      newSocket.emit('sync-state', { roomId });
+      setLastSyncTime(Date.now());
+      
       ensureGrid();
     });
 
-    socket.on('player-joined', (data: any) => {
+    newSocket.on('reconnect_attempt', (attempt: number) => {
+      console.log(`🖥️ PublicDisplay: Reconnection attempt ${attempt}`);
+      setConnectionStatus('reconnecting');
+      setReconnectAttempts(attempt || 1);
+    });
+
+    newSocket.on('reconnect', () => {
+      console.log('🖥️ PublicDisplay: Reconnected successfully');
+      setConnectionStatus('connected');
+      setReconnectAttempts(0);
+      
+      // Re-sync state after reconnection
+      newSocket.emit('sync-state', { roomId });
+      setLastSyncTime(Date.now());
+    });
+
+    newSocket.on('disconnect', (reason: string) => {
+      console.log('🖥️ PublicDisplay: Disconnected:', reason);
+      setConnectionStatus('disconnected');
+    });
+
+    newSocket.on('connect_error', (error: any) => {
+      console.warn('🖥️ PublicDisplay: Connection error:', error?.message || error);
+      setConnectionStatus('reconnecting');
+    });
+
+    newSocket.on('reconnect_error', (error: any) => {
+      console.warn('🖥️ PublicDisplay: Reconnection error:', error?.message || error);
+      setConnectionStatus('reconnecting');
+    });
+
+    // State sync handler
+    newSocket.on('room-state', (payload: any) => {
+      console.log('🖥️ PublicDisplay: Received room state sync:', payload);
+      try {
+        if (payload) {
+          setGameState(prev => ({
+            ...prev,
+            isPlaying: !!payload.isPlaying,
+            currentSong: payload.currentSong || null,
+            playerCount: payload.playerCount || 0,
+            snippetLength: payload.snippetLength || 30,
+            winners: payload.winners || prev.winners,
+            playedSongs: payload.playedSongs || prev.playedSongs
+          }));
+          
+          if (payload.pattern) {
+            setPattern(payload.pattern);
+          }
+          
+          if (Array.isArray(payload.customMask)) {
+            setCustomMask(new Set(payload.customMask));
+          }
+          
+          // Update total played count for display sync
+          if (typeof payload.totalPlayedCount === 'number') {
+            setTotalPlayedCount(payload.totalPlayedCount);
+          }
+          
+          // Sync played songs to internal tracking
+          if (Array.isArray(payload.playedSongs)) {
+            const playedIds = payload.playedSongs.map((song: any) => song.id);
+            playedOrderRef.current = playedIds;
+            
+            // Update metadata cache
+            payload.playedSongs.forEach((song: any) => {
+              if (song.id && song.name) {
+                idMetaRef.current[song.id] = {
+                  name: song.name,
+                  artist: song.artist || ''
+                };
+              }
+            });
+          }
+          
+          // Use server timestamp if available, otherwise current time
+          setLastSyncTime(payload.syncTimestamp || Date.now());
+          
+          console.log(`🖥️ PublicDisplay: Synced ${payload.totalPlayedCount || 0} played songs, ${payload.playerCount || 0} players`);
+        }
+      } catch (error) {
+        console.error('🖥️ PublicDisplay: Error processing room state:', error);
+      }
+    });
+
+    newSocket.on('player-joined', (data: any) => {
       const count = Math.max(0, Number(data.playerCount || 0));
       setGameState(prev => ({ ...prev, playerCount: count }));
       window.dispatchEvent(new CustomEvent('display-player-count', { detail: { playerCount: count } }));
       setRoomInfo(prev => (prev ? { ...prev, playerCount: count } : prev));
     });
-    socket.on('player-left', (data: any) => {
+    newSocket.on('player-left', (data: any) => {
       const count = Math.max(0, Number(data.playerCount || 0));
       setGameState(prev => ({ ...prev, playerCount: count }));
       window.dispatchEvent(new CustomEvent('display-player-count', { detail: { playerCount: count } }));
@@ -206,7 +328,7 @@ const PublicDisplay: React.FC = () => {
     });
 
     // Receive 1x75 pool ordering (ids only)
-    socket.on('oneby75-pool', (data: any) => {
+    newSocket.on('oneby75-pool', (data: any) => {
       if (Array.isArray(data?.ids) && data.ids.length === 75) {
         setOneBy75Ids(data.ids);
         oneBy75IdsRef.current = data.ids;
@@ -220,7 +342,7 @@ const PublicDisplay: React.FC = () => {
     });
 
     // Receive 5x15 pool as 5 columns of 15 ids
-    socket.on('fiveby15-pool', (data: any) => {
+    newSocket.on('fiveby15-pool', (data: any) => {
       if (Array.isArray(data?.columns) && data.columns.length === 5 && data.columns.every((c: any) => Array.isArray(c))) {
         try {
           const cols = data.columns.map((col: any) => col.slice(0, 15));
@@ -259,7 +381,7 @@ const PublicDisplay: React.FC = () => {
     });
 
     // Receive explicit id->column map (authoritative placement)
-    socket.on('fiveby15-map', (data: any) => {
+    newSocket.on('fiveby15-map', (data: any) => {
       if (data && data.idToColumn && typeof data.idToColumn === 'object') {
         idToColumnRef.current = data.idToColumn;
         // Reconcile pending after receiving authoritative map
@@ -273,7 +395,7 @@ const PublicDisplay: React.FC = () => {
       }
     });
 
-    socket.on('bingo-card', (card: any) => {
+    newSocket.on('bingo-card', (card: any) => {
       const squares = (card.squares || []).map((s: any) => ({
         song: { id: s.songId, name: s.songName, artist: s.artistName },
         isPlayed: false,
@@ -282,14 +404,14 @@ const PublicDisplay: React.FC = () => {
       setGameState(prev => ({ ...prev, bingoCard: { squares, size: 5 } }));
     });
 
-    socket.on('pattern-updated', (data: any) => {
+    newSocket.on('pattern-updated', (data: any) => {
       try {
         const p = data?.pattern;
         if (p) setPattern(p);
       } catch {}
     });
 
-    socket.on('song-playing', (data: any) => {
+    newSocket.on('song-playing', (data: any) => {
       const song = { id: data.songId, name: data.songName, artist: data.artistName };
       // cache metadata for reveal lookups
       idMetaRef.current[song.id] = { name: song.name, artist: song.artist };
@@ -387,7 +509,7 @@ const PublicDisplay: React.FC = () => {
       }, 100);
     });
 
-    socket.on('game-started', (data: any) => {
+    newSocket.on('game-started', (data: any) => {
       setGameState(prev => ({ ...prev, isPlaying: true }));
       // Hide splash when a game starts
       setShowSplash(false);
@@ -410,7 +532,7 @@ const PublicDisplay: React.FC = () => {
       ensureGrid();
     });
 
-    socket.on('pattern-updated', (data: any) => {
+    newSocket.on('pattern-updated', (data: any) => {
       try {
         if (data?.pattern) setPattern(data.pattern);
         if (Array.isArray(data?.customMask)) {
@@ -422,14 +544,14 @@ const PublicDisplay: React.FC = () => {
     });
 
     // Handle bingo verification pending (someone called bingo, awaiting host verification)
-    socket.on('bingo-verification-pending', (data: any) => {
+    newSocket.on('bingo-verification-pending', (data: any) => {
       // Don't show winner banner yet, just acknowledge the call
       setIsVerificationPending(true);
       console.log(`${data.playerName} called BINGO - awaiting verification`);
     });
 
     // Handle confirmed bingo wins (after host verification)
-    socket.on('bingo-called', (data: any) => {
+    newSocket.on('bingo-called', (data: any) => {
       // Only show winner if this is a verified/confirmed bingo
       if (data.verified && !data.awaitingVerification) {
         setIsVerificationPending(false); // Clear verification pending state
@@ -459,7 +581,7 @@ const PublicDisplay: React.FC = () => {
       }
     });
 
-    socket.on('mix-finalized', (payload: any) => {
+    newSocket.on('mix-finalized', (payload: any) => {
       try {
         const names = Array.isArray(payload?.playlists) ? payload.playlists.map((p: any) => String(p?.name || '')) : [];
         setPlaylistNames(names);
@@ -467,18 +589,18 @@ const PublicDisplay: React.FC = () => {
       ensureGrid();
     });
 
-    socket.on('game-ended', () => {
+    newSocket.on('game-ended', () => {
       setGameState(prev => ({ ...prev, isPlaying: false }));
       setIsVerificationPending(false);
       console.log('🛑 Game ended (display)');
     });
 
-    socket.on('game-resumed', () => {
+    newSocket.on('game-resumed', () => {
       setIsVerificationPending(false);
       console.log('▶️ Game resumed (display)');
     });
 
-    socket.on('game-restarted', (data: any) => {
+    newSocket.on('game-restarted', (data: any) => {
       console.log('Game restarted:', data);
       // Reset display state
       setGameState({
@@ -502,7 +624,7 @@ const PublicDisplay: React.FC = () => {
       }, 3000);
     });
 
-    socket.on('game-reset', () => {
+    newSocket.on('game-reset', () => {
       setGameState({
         isPlaying: false,
         currentSong: null,
@@ -519,7 +641,7 @@ const PublicDisplay: React.FC = () => {
     });
 
     // Staged reveal event: show name/artist hints without changing the bingo grid
-    socket.on('call-revealed', (payload: any) => {
+    newSocket.on('call-revealed', (payload: any) => {
       if (payload?.revealToDisplay) {
         // For now, just update the header Now Playing banner content without marking grid
         setGameState(prev => ({
@@ -534,11 +656,12 @@ const PublicDisplay: React.FC = () => {
     });
 
     return () => {
+      console.log('🖥️ PublicDisplay: Cleaning up socket connection');
       if (countdownRef.current) {
         clearInterval(countdownRef.current);
         countdownRef.current = null;
       }
-      socket.close();
+      newSocket.close();
     };
   }, [roomId]);
 
@@ -1290,6 +1413,100 @@ const PublicDisplay: React.FC = () => {
 
   return (
     <div ref={displayRef} className="public-display">
+      {/* Connection Status & Refresh Controls */}
+      <div style={{
+        position: 'fixed',
+        top: 10,
+        right: 10,
+        zIndex: 3000,
+        display: 'flex',
+        gap: 8,
+        alignItems: 'center'
+      }}>
+        {/* Connection Status Indicator */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          background: connectionStatus === 'connected' 
+            ? 'rgba(0, 255, 136, 0.15)' 
+            : connectionStatus === 'reconnecting' 
+            ? 'rgba(255, 165, 0, 0.15)' 
+            : 'rgba(255, 107, 107, 0.15)',
+          border: `1px solid ${connectionStatus === 'connected' 
+            ? 'rgba(0, 255, 136, 0.4)' 
+            : connectionStatus === 'reconnecting' 
+            ? 'rgba(255, 165, 0, 0.4)' 
+            : 'rgba(255, 107, 107, 0.4)'}`,
+          borderRadius: 8,
+          padding: '6px 10px',
+          fontSize: '0.8rem',
+          fontWeight: 600
+        }}>
+          <div style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            background: connectionStatus === 'connected' 
+              ? '#00ff88' 
+              : connectionStatus === 'reconnecting' 
+              ? '#ffa500' 
+              : '#ff6b6b',
+            animation: connectionStatus === 'reconnecting' ? 'pulse 1.5s infinite' : undefined
+          }} />
+          <span style={{
+            color: connectionStatus === 'connected' 
+              ? '#00ff88' 
+              : connectionStatus === 'reconnecting' 
+              ? '#ffa500' 
+              : '#ff6b6b'
+          }}>
+            {connectionStatus === 'connected' && 'Connected'}
+            {connectionStatus === 'reconnecting' && `Reconnecting... (${reconnectAttempts})`}
+            {connectionStatus === 'disconnected' && 'Disconnected'}
+          </span>
+        </div>
+
+        {/* Manual Refresh Button */}
+        <button
+          onClick={handleManualRefresh}
+          disabled={connectionStatus === 'disconnected'}
+          style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: 8,
+            padding: '6px 10px',
+            color: '#ffffff',
+            fontSize: '0.8rem',
+            fontWeight: 600,
+            cursor: connectionStatus === 'disconnected' ? 'not-allowed' : 'pointer',
+            opacity: connectionStatus === 'disconnected' ? 0.5 : 1,
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            if (connectionStatus !== 'disconnected') {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+          }}
+        >
+          🔄 Refresh
+        </button>
+
+        {/* Last Sync Time (if available) */}
+        {lastSyncTime > 0 && (
+          <div style={{
+            fontSize: '0.7rem',
+            color: 'rgba(255, 255, 255, 0.6)',
+            fontWeight: 500
+          }}>
+            Synced: {new Date(lastSyncTime).toLocaleTimeString()}
+          </div>
+        )}
+      </div>
+
       <AnimatePresence>
         {showWinnerBanner && (
           <motion.div

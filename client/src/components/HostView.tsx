@@ -2523,41 +2523,136 @@ const HostView: React.FC = () => {
                   </p>
                 </div>
 
-                {/* Visual Bingo Card */}
+                {/* Enhanced Visual Bingo Card */}
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(5, 1fr)',
                   gap: '4px',
                   maxWidth: '400px',
-                  margin: '0 auto 2rem',
+                  margin: '0 auto 1rem',
                   aspectRatio: '1/1'
                 }}>
-                  {pendingVerification.playerCard?.squares?.map((square: any) => (
-                    <div
-                      key={square.position}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: square.marked 
-                          ? 'linear-gradient(135deg, #00ff88, #00cc6d)' 
-                          : 'rgba(255,255,255,0.1)',
-                        border: square.marked 
-                          ? '2px solid #00ff88' 
-                          : '1px solid rgba(255,255,255,0.3)',
-                        borderRadius: '8px',
-                        padding: '4px',
-                        fontSize: '0.7rem',
-                        fontWeight: square.marked ? 700 : 400,
-                        color: square.marked ? '#001a0d' : '#ffffff',
-                        textAlign: 'center',
-                        lineHeight: 1.1,
-                        overflow: 'hidden'
-                      }}
-                    >
-                      {square.songName || 'Song'}
-                    </div>
-                  ))}
+                  {pendingVerification.playerCard?.squares?.map((square: any) => {
+                    const wasPlayed = pendingVerification.playedSongs?.some((played: any) => 
+                      played.id === square.songId
+                    );
+                    const isMarked = square.marked;
+                    
+                    // Determine cell appearance based on status
+                    let background, border, textColor, statusIcon;
+                    
+                    if (isMarked && wasPlayed) {
+                      // VALID: Marked and played
+                      background = 'linear-gradient(135deg, #00ff88, #00cc6d)';
+                      border = '3px solid #00ff88';
+                      textColor = '#001a0d';
+                      statusIcon = '✅';
+                    } else if (isMarked && !wasPlayed) {
+                      // INVALID: Marked but not played
+                      background = 'linear-gradient(135deg, #ff6b6b, #ff4757)';
+                      border = '3px solid #ff6b6b';
+                      textColor = '#ffffff';
+                      statusIcon = '❌';
+                    } else if (!isMarked && wasPlayed) {
+                      // MISSED: Played but not marked
+                      background = 'linear-gradient(135deg, #ffa500, #ff8c00)';
+                      border = '2px solid #ffa500';
+                      textColor = '#001a0d';
+                      statusIcon = '🎵';
+                    } else {
+                      // NEUTRAL: Not marked and not played
+                      background = 'rgba(255,255,255,0.1)';
+                      border = '1px solid rgba(255,255,255,0.3)';
+                      textColor = '#ffffff';
+                      statusIcon = '';
+                    }
+                    
+                    return (
+                      <div
+                        key={square.position}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background,
+                          border,
+                          borderRadius: '8px',
+                          padding: '4px',
+                          fontSize: '0.7rem',
+                          fontWeight: (isMarked || wasPlayed) ? 700 : 400,
+                          color: textColor,
+                          textAlign: 'center',
+                          lineHeight: 1.1,
+                          overflow: 'hidden',
+                          position: 'relative'
+                        }}
+                      >
+                        {statusIcon && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '2px',
+                            right: '2px',
+                            fontSize: '0.8rem',
+                            lineHeight: 1
+                          }}>
+                            {statusIcon}
+                          </div>
+                        )}
+                        {square.songName || 'Song'}
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                {/* Status Legend */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  gap: '1rem',
+                  marginBottom: '1.5rem',
+                  fontSize: '0.75rem',
+                  flexWrap: 'wrap'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <div style={{ 
+                      width: '12px', 
+                      height: '12px', 
+                      background: 'linear-gradient(135deg, #00ff88, #00cc6d)',
+                      borderRadius: '2px',
+                      border: '1px solid #00ff88'
+                    }}></div>
+                    <span style={{ color: '#00ff88' }}>✅ Valid</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <div style={{ 
+                      width: '12px', 
+                      height: '12px', 
+                      background: 'linear-gradient(135deg, #ff6b6b, #ff4757)',
+                      borderRadius: '2px',
+                      border: '1px solid #ff6b6b'
+                    }}></div>
+                    <span style={{ color: '#ff6b6b' }}>❌ Invalid</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <div style={{ 
+                      width: '12px', 
+                      height: '12px', 
+                      background: 'linear-gradient(135deg, #ffa500, #ff8c00)',
+                      borderRadius: '2px',
+                      border: '1px solid #ffa500'
+                    }}></div>
+                    <span style={{ color: '#ffa500' }}>🎵 Played</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <div style={{ 
+                      width: '12px', 
+                      height: '12px', 
+                      background: 'rgba(255,255,255,0.1)',
+                      borderRadius: '2px',
+                      border: '1px solid rgba(255,255,255,0.3)'
+                    }}></div>
+                    <span style={{ color: '#ccc' }}>⚪ Not Played</span>
+                  </div>
                 </div>
 
                 {/* Verification Details */}
@@ -2623,14 +2718,14 @@ const HostView: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Quick Analysis */}
+                  {/* Enhanced Decision Summary */}
                   <div style={{ 
                     marginTop: '0.75rem', 
-                    padding: '0.5rem',
+                    padding: '1rem',
                     background: 'rgba(255,255,255,0.05)',
-                    borderRadius: '6px',
+                    borderRadius: '8px',
                     textAlign: 'center',
-                    fontSize: '0.85rem'
+                    fontSize: '0.9rem'
                   }}>
                     {(() => {
                       const markedCount = pendingVerification.markedSquares?.length || 0;
@@ -2639,24 +2734,56 @@ const HostView: React.FC = () => {
                         pendingVerification.playedSongs?.some((played: any) => played.id === marked.songId)
                       )?.length || 0;
                       const invalidMarked = markedCount - validMarked;
+                      const playedButNotMarked = pendingVerification.playedSongs?.filter((played: any) =>
+                        !pendingVerification.markedSquares?.some((marked: any) => marked.songId === played.id)
+                      )?.length || 0;
                       
                       if (invalidMarked > 0) {
                         return (
-                          <span style={{ color: '#ff6b6b' }}>
-                            ⚠️ {invalidMarked} marked song{invalidMarked > 1 ? 's' : ''} NOT yet played!
-                          </span>
+                          <div>
+                            <div style={{ color: '#ff6b6b', fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                              ❌ INVALID BINGO
+                            </div>
+                            <div style={{ color: '#ff6b6b' }}>
+                              {invalidMarked} marked song{invalidMarked > 1 ? 's' : ''} NOT yet played
+                            </div>
+                            <div style={{ color: '#ccc', fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                              Recommend: REJECT
+                            </div>
+                          </div>
                         );
                       } else if (validMarked === markedCount && markedCount > 0) {
                         return (
-                          <span style={{ color: '#00ff88' }}>
-                            ✅ All marked songs have been played
-                          </span>
+                          <div>
+                            <div style={{ color: '#00ff88', fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                              ✅ VALID BINGO
+                            </div>
+                            <div style={{ color: '#00ff88' }}>
+                              All {markedCount} marked songs have been played
+                            </div>
+                            {playedButNotMarked > 0 && (
+                              <div style={{ color: '#ffa500', fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                                ({playedButNotMarked} played songs were missed by player)
+                              </div>
+                            )}
+                            <div style={{ color: '#ccc', fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                              Recommend: APPROVE
+                            </div>
+                          </div>
                         );
                       } else {
                         return (
-                          <span style={{ color: '#ffc107' }}>
-                            📋 {validMarked}/{markedCount} marked songs are valid
-                          </span>
+                          <div>
+                            <div style={{ color: '#ffc107', fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                              ⚠️ PARTIAL MATCH
+                            </div>
+                            <div style={{ color: '#ffc107' }}>
+                              {validMarked}/{markedCount} marked songs played
+                            </div>
+                            <div style={{ color: '#ccc', fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                              Review carefully
+                            </div>
+                          </div>
                         );
                       }
                     })()}

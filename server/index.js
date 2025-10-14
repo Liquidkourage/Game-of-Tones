@@ -1062,8 +1062,13 @@ io.on('connection', (socket) => {
         room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
         if (!room.calledSongIds.includes(room.currentSong.id)) {
           room.calledSongIds.push(room.currentSong.id);
-          console.log(`📝 Marked current song as played for verification: ${room.currentSong.name}`);
+          console.log(`📝 BINGO CALL: Marked current song as played for verification: ${room.currentSong.name} (${room.currentSong.id})`);
+        } else {
+          console.log(`✅ BINGO CALL: Current song already in played list: ${room.currentSong.name} (${room.currentSong.id})`);
         }
+        console.log(`📋 BINGO CALL: Total played songs now: ${room.calledSongIds.length}`);
+      } else {
+        console.warn(`⚠️ BINGO CALL: No current song to mark as played! This could cause verification issues.`);
       }
       
       player.hasBingo = true;
@@ -1082,9 +1087,14 @@ io.on('connection', (socket) => {
       // Send detailed verification data to HOST ONLY
       const hostSocket = io.sockets.sockets.get(room.host);
       if (hostSocket) {
-        // Build actual played songs from calledSongIds
+        // Build actual played songs from calledSongIds with enhanced validation
         const actuallyPlayedSongs = [];
         const calledIds = room.calledSongIds || [];
+        const missingFromPlaylist = [];
+        
+        console.log(`🔍 BINGO VERIFICATION: Building played songs list from ${calledIds.length} called IDs`);
+        console.log(`🔍 Called song IDs: [${calledIds.join(', ')}]`);
+        
         for (const songId of calledIds) {
           // Find the song in the playlist
           const foundSong = room.playlistSongs?.find(s => s.id === songId);
@@ -1094,21 +1104,45 @@ io.on('connection', (socket) => {
               name: foundSong.name,
               artist: foundSong.artist
             });
+            console.log(`✅ Found played song: ${foundSong.name} by ${foundSong.artist}`);
+          } else {
+            missingFromPlaylist.push(songId);
+            console.warn(`⚠️ Song ID ${songId} in calledSongIds but NOT found in room.playlistSongs`);
           }
         }
+        
+        console.log(`📊 VERIFICATION SUMMARY: ${actuallyPlayedSongs.length} played songs found, ${missingFromPlaylist.length} missing from playlist`);
+        if (missingFromPlaylist.length > 0) {
+          console.warn(`🚨 MISSING SONGS: [${missingFromPlaylist.join(', ')}] - This could indicate a data integrity issue`);
+        }
+        
+        // Validate marked squares data
+        const markedSquares = player.bingoCard.squares.filter(s => s.marked);
+        console.log(`🔍 MARKED SQUARES: Player has ${markedSquares.length} marked squares`);
+        markedSquares.forEach((square, index) => {
+          const wasPlayed = actuallyPlayedSongs.some(played => played.id === square.songId);
+          console.log(`${index + 1}. ${square.songName} by ${square.artistName} (${square.songId}) - ${wasPlayed ? '✅ PLAYED' : '❌ NOT PLAYED'}`);
+        });
         
         hostSocket.emit('bingo-verification-needed', {
           playerId: socket.id,
           playerName: player.name,
           playerCard: player.bingoCard,
-          markedSquares: player.bingoCard.squares.filter(s => s.marked),
+          markedSquares: markedSquares,
           requiredPattern: room.pattern,
           customMask: room.pattern === 'custom' ? Array.from(room.customPattern || []) : null,
           playedSongs: actuallyPlayedSongs, // Use the proper actually played songs
           calledSongIds: room.calledSongIds || [],
           currentSongIndex: room.currentSongIndex || 0,
           timestamp: Date.now(),
-          validationReason: validationResult.reason
+          validationReason: validationResult.reason,
+          // Add debug info for troubleshooting
+          debugInfo: {
+            totalCalledIds: calledIds.length,
+            totalPlayedSongs: actuallyPlayedSongs.length,
+            totalMarkedSquares: markedSquares.length,
+            missingFromPlaylist: missingFromPlaylist.length
+          }
         });
       }
       
@@ -1534,18 +1568,44 @@ io.on('connection', (socket) => {
     try {
       const { roomId } = data;
       const room = rooms.get(roomId);
-      if (!room) return;
+      if (!room) {
+        console.log(`🔄 SYNC-STATE: Room ${roomId} not found`);
+        return;
+      }
+      
+      console.log(`🔄 SYNC-STATE: Sending state to ${socket.id} for room ${roomId}`);
+      
+      // Enhanced payload with more comprehensive state data
       const payload = {
         isPlaying: room.gameState === 'playing',
         pattern: room.pattern || 'line',
         customMask: Array.from(room.customPattern || []),
         currentSong: room.currentSong || null,
         snippetLength: room.snippetLength || 30,
-        playerCount: getNonHostPlayerCount(room)
+        playerCount: getNonHostPlayerCount(room),
+        gameState: room.gameState,
+        winners: room.winners || [],
+        roundWinners: room.roundWinners || [],
+        // Include played songs for PublicDisplay sync
+        playedSongs: (room.calledSongIds || []).map(songId => {
+          const foundSong = room.playlistSongs?.find(s => s.id === songId);
+          return foundSong ? {
+            id: foundSong.id,
+            name: foundSong.name,
+            artist: foundSong.artist
+          } : null;
+        }).filter(Boolean),
+        totalPlayedCount: (room.calledSongIds || []).length,
+        currentSongIndex: room.currentSongIndex || 0,
+        totalSongs: room.playlistSongs?.length || 0,
+        // Sync timestamp for client reference
+        syncTimestamp: Date.now()
       };
+      
       io.to(socket.id).emit('room-state', payload);
+      console.log(`✅ SYNC-STATE: Sent comprehensive state (${payload.totalPlayedCount} played songs, ${payload.playerCount} players)`);
     } catch (e) {
-      // ignore
+      console.error('❌ SYNC-STATE error:', e?.message || e);
     }
   });
 
@@ -4136,3 +4196,4 @@ async function activatePreferredDevice() {
     console.error('❌ Error activating preferred device:', error);
   }
 } 
+
