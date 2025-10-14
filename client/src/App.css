@@ -986,10 +986,10 @@ body {
   gap: 0.3rem !important;
 }
 
-/* Dynamic font sizing for bingo squares */
+/* Dynamic font sizing for bingo squares - REMOVED conflicting padding */
 .bingo-square {
   box-sizing: border-box !important;
-  padding: 0.4rem !important;
+  /* padding removed - let individual media queries handle it */
 }
 
 .bingo-square .song-name {
@@ -1074,18 +1074,8 @@ body {
   }
 }
 
-/* Density-responsive font sizes - REMOVED !important to allow JavaScript control */
-.bingo-square[data-density="s"] {
-  font-size: 11px; /* Base fallback - JavaScript will override */
-}
-
-.bingo-square[data-density="m"] {
-  font-size: 13px; /* Base fallback - JavaScript will override */
-}
-
-.bingo-square[data-density="l"] {
-  font-size: 16px; /* Base fallback - JavaScript will override */
-}
+/* Density-responsive font sizes - REMOVED to prevent interference with JavaScript */
+/* .bingo-square[data-density] font sizes removed - JavaScript handles all sizing */
 .player-container {
   min-height: 100vh;
   height: 100vh; /* ZERO SCROLL: Force exact viewport height */

@@ -393,7 +393,7 @@ const PlayerView: React.FC = () => {
           }
         }
       });
-    }, 300); // Increased delay for proper cell dimension calculation
+    }, 500); // Longer delay to ensure DOM is fully rendered and styled
     
     return () => clearTimeout(timer);
   }, [bingoCard, displayMode]);
@@ -417,7 +417,7 @@ const PlayerView: React.FC = () => {
             }
           }
         });
-      }, 300); // Increased delay for proper cell dimension calculation
+      }, 500); // Longer delay to ensure DOM is fully rendered and styled
     };
 
     window.addEventListener('resize', handleResize);
@@ -430,57 +430,56 @@ const PlayerView: React.FC = () => {
   }, [bingoCard, displayMode]);
 
   // DYNAMIC FONT SIZING: Fit text to fill cell as much as possible without overflow
-  const fitTextToCell = (element: HTMLElement, text: string, isArtist: boolean = false) => {
-    if (!element || !text) {
-      console.log('🚫 fitTextToCell: Missing element or text', { element: !!element, text });
+  const fitTextToCell = (textElement: HTMLElement, text: string, isArtist: boolean = false) => {
+    if (!textElement || !text) {
+      console.log('🚫 fitTextToCell: Missing element or text', { element: !!textElement, text });
       return;
     }
     
-    // Get actual cell dimensions (accounting for padding)
-    const cellWidth = element.offsetWidth - 16; // Account for padding
-    const cellHeight = element.offsetHeight - 16;
-    
-    if (cellWidth <= 0 || cellHeight <= 0) {
-      console.log('🚫 fitTextToCell: Invalid cell dimensions', { cellWidth, cellHeight });
+    // Find the actual constraining container (.bingo-square)
+    const squareElement = textElement.closest('.bingo-square') as HTMLElement;
+    if (!squareElement) {
+      console.log('🚫 fitTextToCell: Could not find .bingo-square container');
       return;
     }
     
-    // Start with a large font size and work down to find the maximum that fits
-    const maxFontSize = Math.min(cellHeight * 0.8, 24); // Cap at reasonable max
-    const minFontSize = 8;
-    let fontSize = maxFontSize;
+    // Get the actual available space from the bingo square
+    const squareRect = squareElement.getBoundingClientRect();
+    const availableWidth = squareRect.width - 20; // Account for padding/margins
+    const availableHeight = squareRect.height - 20;
     
-    // Binary search for optimal font size
-    let low = minFontSize;
-    let high = maxFontSize;
-    let bestFit = minFontSize;
+    if (availableWidth <= 0 || availableHeight <= 0) {
+      console.log('🚫 fitTextToCell: Invalid available space', { availableWidth, availableHeight });
+      return;
+    }
     
-    // Use binary search to find the largest font that fits
-    while (low <= high) {
-      fontSize = Math.floor((low + high) / 2);
-      element.style.setProperty('font-size', fontSize + 'px', 'important');
+    console.log(`🔍 Measuring cell: available space ${availableWidth}×${availableHeight}px for "${text.substring(0, 20)}..."`);
+    
+    // Start with a reasonable range
+    let minFontSize = 8;
+    let maxFontSize = Math.min(availableHeight * 0.6, 28); // More conservative max
+    let bestFontSize = minFontSize;
+    
+    // Simple iterative approach instead of binary search
+    for (let fontSize = maxFontSize; fontSize >= minFontSize; fontSize -= 0.5) {
+      textElement.style.setProperty('font-size', fontSize + 'px', 'important');
+      textElement.style.setProperty('line-height', '1.1', 'important');
       
       // Force layout recalculation
-      void element.offsetHeight;
+      void textElement.offsetHeight;
       
-      const textWidth = element.scrollWidth;
-      const textHeight = element.scrollHeight;
-      
-      if (textWidth <= cellWidth && textHeight <= cellHeight) {
-        // This size fits, try larger
-        bestFit = fontSize;
-        low = fontSize + 1;
-      } else {
-        // This size is too big, try smaller
-        high = fontSize - 1;
+      // Check if text fits within available space
+      if (textElement.scrollWidth <= availableWidth && textElement.scrollHeight <= availableHeight) {
+        bestFontSize = fontSize;
+        break;
       }
     }
     
-    // Apply the best fitting font size with !important to override any CSS
-    element.style.setProperty('font-size', bestFit + 'px', 'important');
+    // Apply the best fitting font size
+    textElement.style.setProperty('font-size', bestFontSize + 'px', 'important');
     
     // Debug log to verify it's working
-    console.log(`🎯 Cell-fitted: "${text.substring(0, 15)}..." → ${bestFit}px (cell: ${cellWidth}×${cellHeight})`, element);
+    console.log(`🎯 FITTED: "${text.substring(0, 15)}..." → ${bestFontSize}px (space: ${availableWidth}×${availableHeight})`);
   };
 
   const markSquare = (position: string) => {
