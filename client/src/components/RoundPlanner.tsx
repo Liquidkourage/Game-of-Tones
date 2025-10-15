@@ -216,7 +216,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
           </div>
 
           {/* Round Buckets */}
-          <div className="grid grid-cols-6 gap-3">
+          <div className="flex gap-3 w-full">
             {rounds.slice(0, 6).map((round, index) => {
               const isActive = index === currentRound && gameState === 'playing';
               const minRequired = round.songCount >= 60 ? 75 : 15;
@@ -229,7 +229,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                   onDragOver={(e) => handleBucketDragOver(e, index)}
                   onDragLeave={handleBucketDragLeave}
                   onDrop={(e) => handleBucketDrop(e, index)}
-                  className={`relative p-4 rounded-xl border-3 transition-all duration-200 min-h-[200px] ${
+                  className={`relative p-4 rounded-xl border-3 transition-all duration-200 min-h-[200px] flex-1 ${
                     isActive
                       ? 'border-[#00ff88] bg-gradient-to-br from-rgba(0, 255, 136, 0.15) to-rgba(0, 255, 136, 0.05) shadow-lg shadow-[#00ff88]/20'
                       : isDragOver
@@ -345,16 +345,16 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
               );
             })}
             
-            {/* Add Round Button */}
-            {rounds.length < 6 && (
-              <button
-                onClick={addRound}
-                className="p-4 border-2 border-dashed border-rgba(255, 255, 255, 0.2) rounded-xl text-gray-400 hover:text-white hover:border-rgba(255, 255, 255, 0.4) transition-colors min-h-[200px] flex flex-col items-center justify-center gap-2"
-              >
-                <Plus className="w-8 h-8" />
-                <span>Add Round</span>
-              </button>
-            )}
+                  {/* Add Round Button */}
+                  {rounds.length < 6 && (
+                    <button
+                      onClick={addRound}
+                      className="p-4 border-2 border-dashed border-rgba(255, 255, 255, 0.2) rounded-xl text-gray-400 hover:text-white hover:border-rgba(255, 255, 255, 0.4) transition-colors min-h-[200px] flex-1 flex flex-col items-center justify-center gap-2"
+                    >
+                      <Plus className="w-8 h-8" />
+                      <span>Add Round</span>
+                    </button>
+                  )}
           </div>
         </div>
       )}
