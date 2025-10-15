@@ -396,24 +396,104 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                           const playlist = playlists.find(p => p.id === playlistId);
                           if (!playlist) return null;
                           
+                          // Clean playlist name - remove GoT prefix and trim
+                          const cleanName = playlist.name.replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
+                          
                           return (
-                            <div key={playlistId} className="flex items-center gap-2 bg-white/15 backdrop-blur-sm rounded-lg px-3 py-2 border border-white/20 shadow-sm hover:bg-white/20 transition-all">
-                              <Music className="w-4 h-4 text-[#00ff88] flex-shrink-0" />
-                              <span className="text-sm text-white flex-1 truncate font-medium">
-                                {playlist.name}
-                              </span>
-                              <span className="text-xs text-gray-400">
-                                {playlist.tracks}
-                              </span>
-                              {!isActive && round.status !== 'completed' && (
-                                <button
-                                  onClick={() => removePlaylistFromRound(index, playlistId)}
-                                  className="text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded p-1 transition-colors"
-                                  title="Remove playlist"
+                            <div 
+                              key={playlistId} 
+                              className="group relative"
+                              style={{
+                                background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.15) 0%, rgba(0, 255, 136, 0.08) 50%, rgba(0, 255, 136, 0.03) 100%)',
+                                border: '2px solid rgba(0, 255, 136, 0.3)',
+                                borderRadius: '12px',
+                                padding: '12px 16px',
+                                backdropFilter: 'blur(10px)',
+                                boxShadow: '0 4px 12px rgba(0, 255, 136, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                position: 'relative',
+                                overflow: 'hidden'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
+                                e.currentTarget.style.boxShadow = '0 8px 20px rgba(0, 255, 136, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)';
+                                e.currentTarget.style.borderColor = 'rgba(0, 255, 136, 0.5)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 255, 136, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)';
+                                e.currentTarget.style.borderColor = 'rgba(0, 255, 136, 0.3)';
+                              }}
+                            >
+                              {/* Subtle shimmer effect */}
+                              <div 
+                                style={{
+                                  position: 'absolute',
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  background: 'linear-gradient(45deg, transparent 40%, rgba(255, 255, 255, 0.1) 50%, transparent 60%)',
+                                  animation: 'shimmer 3s ease-in-out infinite',
+                                  pointerEvents: 'none'
+                                }}
+                              />
+                              
+                              <div className="flex items-center gap-3 relative z-10">
+                                <div 
+                                  className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                                  style={{
+                                    background: 'linear-gradient(135deg, #00ff88 0%, #00cc6a 100%)',
+                                    boxShadow: '0 2px 8px rgba(0, 255, 136, 0.4)'
+                                  }}
                                 >
-                                  ×
-                                </button>
-                              )}
+                                  <Music className="w-4 h-4 text-black font-bold" />
+                                </div>
+                                
+                                <span 
+                                  className="flex-1 font-semibold text-white truncate"
+                                  style={{ 
+                                    fontSize: '0.9rem',
+                                    textShadow: '0 1px 2px rgba(0, 0, 0, 0.5)'
+                                  }}
+                                >
+                                  {cleanName}
+                                </span>
+                                
+                                {!isActive && round.status !== 'completed' && (
+                                  <button
+                                    onClick={() => removePlaylistFromRound(index, playlistId)}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                                    style={{
+                                      width: '24px',
+                                      height: '24px',
+                                      borderRadius: '50%',
+                                      background: 'linear-gradient(135deg, #ff4757 0%, #ff3742 100%)',
+                                      border: 'none',
+                                      color: 'white',
+                                      fontSize: '14px',
+                                      fontWeight: 'bold',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      cursor: 'pointer',
+                                      boxShadow: '0 2px 6px rgba(255, 71, 87, 0.4)',
+                                      transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.transform = 'scale(1.1)';
+                                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(255, 71, 87, 0.6)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.transform = 'scale(1)';
+                                      e.currentTarget.style.boxShadow = '0 2px 6px rgba(255, 71, 87, 0.4)';
+                                    }}
+                                    title="Remove playlist"
+                                  >
+                                    ×
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           );
                         })}
