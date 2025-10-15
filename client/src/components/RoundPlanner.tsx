@@ -439,19 +439,9 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                                 }}
                               />
                               
-                              <div className="flex items-center gap-3 relative z-10">
-                                <div 
-                                  className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                                  style={{
-                                    background: 'linear-gradient(135deg, #00ff88 0%, #00cc6a 100%)',
-                                    boxShadow: '0 2px 8px rgba(0, 255, 136, 0.4)'
-                                  }}
-                                >
-                                  <Music className="w-4 h-4 text-black font-bold" />
-                                </div>
-                                
+                              <div className="flex items-center justify-between relative z-10">
                                 <span 
-                                  className="flex-1 font-semibold text-white truncate"
+                                  className="font-semibold text-white truncate"
                                   style={{ 
                                     fontSize: '0.9rem',
                                     textShadow: '0 1px 2px rgba(0, 0, 0, 0.5)'
@@ -463,7 +453,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                                 {!isActive && round.status !== 'completed' && (
                                   <button
                                     onClick={() => removePlaylistFromRound(index, playlistId)}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 ml-3 flex-shrink-0"
                                     style={{
                                       width: '24px',
                                       height: '24px',
