@@ -250,9 +250,10 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                   onDragOver={(e) => handleBucketDragOver(e, index)}
                   onDragLeave={handleBucketDragLeave}
                   onDrop={(e) => handleBucketDrop(e, index)}
-                  className={`relative flex-1 transition-all duration-200 ${
+                  className={`relative transition-all duration-200 ${
                     isDragOver ? 'scale-105' : ''
                   }`}
+                  style={{ flex: '2 1 0%', minWidth: '300px' }}
                 >
                   {/* Bucket Container */}
                   <div 
@@ -422,7 +423,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
             
                   {/* Add Round Button */}
                   {rounds.length < 6 && (
-                    <div className="flex-1">
+                    <div style={{ flex: '2 1 0%', minWidth: '300px' }}>
                       <button
                         onClick={addRound}
                         className="w-full h-full min-h-[200px] p-4 rounded-2xl border-2 border-dashed 
