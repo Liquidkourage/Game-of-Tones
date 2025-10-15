@@ -58,7 +58,7 @@ body {
 
 .header-content {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   margin: 0 auto;
 }
@@ -70,14 +70,14 @@ body {
 }
 
 .logo-icon {
-  width: 2rem;
-  height: 2rem;
+  width: 4rem;
+  height: 4rem;
   color: var(--accent-color);
   filter: drop-shadow(0 0 10px rgba(0, 255, 136, 0.5));
 }
 
 .logo h1 {
-  font-size: 1.8rem;
+  font-size: 3.6rem;
   font-weight: 700;
   background: var(--gradient-primary);
   -webkit-background-clip: text;

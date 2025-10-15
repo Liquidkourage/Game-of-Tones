@@ -33,14 +33,14 @@ function AppHeader() {
           <h1>TEMPO - Music Bingo</h1>
           <span style={{ 
             marginLeft: 12, 
-            fontSize: '0.9rem', 
+            fontSize: '1.8rem', 
             fontStyle: 'italic', 
             fontWeight: 700, 
             color: '#b3b3b3', 
             letterSpacing: '0.02em',
             lineHeight: '1.1',
             display: 'inline-block',
-            maxWidth: '120px' /* Force wrapping on mobile */
+            maxWidth: '240px' /* Increase max width for larger text */
           }}>by Liquid Kourage</span>
         </div>
         <DisplayHeaderInfo />
