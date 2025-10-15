@@ -216,7 +216,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
           </div>
 
           {/* Round Buckets */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-6 gap-3">
             {rounds.slice(0, 6).map((round, index) => {
               const isActive = index === currentRound && gameState === 'playing';
               const minRequired = round.songCount >= 60 ? 75 : 15;
@@ -229,7 +229,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                   onDragOver={(e) => handleBucketDragOver(e, index)}
                   onDragLeave={handleBucketDragLeave}
                   onDrop={(e) => handleBucketDrop(e, index)}
-                  className={`relative p-6 rounded-2xl border-3 transition-all duration-200 min-h-[240px] ${
+                  className={`relative p-4 rounded-xl border-3 transition-all duration-200 min-h-[200px] ${
                     isActive
                       ? 'border-[#00ff88] bg-gradient-to-br from-rgba(0, 255, 136, 0.15) to-rgba(0, 255, 136, 0.05) shadow-lg shadow-[#00ff88]/20'
                       : isDragOver
@@ -253,19 +253,19 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                   </div>
 
                   {/* Drop Zone */}
-                  <div className="space-y-2 mb-4 min-h-[120px] flex flex-col">
+                  <div className="space-y-1 mb-3 min-h-[100px] flex flex-col">
                     {(round.playlistIds || []).length === 0 ? (
                       <div className={`flex-1 flex flex-col items-center justify-center rounded-xl border-2 border-dashed transition-all ${
                         isDragOver 
                           ? 'border-[#00ff88] bg-rgba(0, 255, 136, 0.1) text-[#00ff88]' 
                           : 'border-rgba(255, 255, 255, 0.2) text-gray-400'
                       }`}>
-                        <FolderOpen className={`w-8 h-8 mb-2 ${isDragOver ? 'text-[#00ff88]' : 'text-gray-500'}`} />
-                        <span className="text-sm font-medium">
-                          {isDragOver ? 'Drop playlist here!' : 'Drop playlists here'}
+                        <FolderOpen className={`w-6 h-6 mb-1 ${isDragOver ? 'text-[#00ff88]' : 'text-gray-500'}`} />
+                        <span className="text-xs font-medium">
+                          {isDragOver ? 'Drop here!' : 'Drop playlists'}
                         </span>
-                        <span className="text-xs opacity-75 mt-1">
-                          {isDragOver ? '' : 'Drag from playlist area above'}
+                        <span className="text-xs opacity-75">
+                          {isDragOver ? '' : 'Drag from above'}
                         </span>
                       </div>
                     ) : (
