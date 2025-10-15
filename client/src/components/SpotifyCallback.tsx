@@ -62,23 +62,32 @@ const SpotifyCallback: React.FC = () => {
              localStorage.setItem('spotify_tokens', JSON.stringify(data.tokens));
            }
            
-           // Get the return URL or default to home
-           let returnUrl = localStorage.getItem('spotify_return_url') || '/';
-           localStorage.removeItem('spotify_return_url'); // Clean up
-           
-           // If the return URL is just '/', try to detect if we should go to a host view
-           if (returnUrl === '/') {
-             // Check if there's a room ID in the URL or localStorage
-             const urlParams = new URLSearchParams(window.location.search);
-             const roomId = urlParams.get('roomId') || localStorage.getItem('spotify_room_id');
-             if (roomId) {
-               returnUrl = `/host/${roomId}`;
-               localStorage.removeItem('spotify_room_id');
-               console.log('Detected room ID, redirecting to host view:', returnUrl);
-             }
-           }
-           
-           console.log('Spotify connected successfully, returning to:', returnUrl);
+          // Get the return URL or default to home
+          let returnUrl = localStorage.getItem('spotify_return_url') || '/';
+          console.log('🔍 Retrieved return URL from localStorage:', returnUrl);
+          localStorage.removeItem('spotify_return_url'); // Clean up
+          
+          // If the return URL is just '/', try to detect if we should go to a host view
+          if (returnUrl === '/') {
+            console.log('🔍 Return URL is home, checking for room ID...');
+            // Check if there's a room ID in the URL or localStorage
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomIdFromUrl = urlParams.get('roomId');
+            const roomIdFromStorage = localStorage.getItem('spotify_room_id');
+            console.log('🔍 Room ID from URL:', roomIdFromUrl);
+            console.log('🔍 Room ID from storage:', roomIdFromStorage);
+            
+            const roomId = roomIdFromUrl || roomIdFromStorage;
+            if (roomId) {
+              returnUrl = `/host/${roomId}`;
+              localStorage.removeItem('spotify_room_id');
+              console.log('✅ Detected room ID, redirecting to host view:', returnUrl);
+            } else {
+              console.log('❌ No room ID found, staying on home page');
+            }
+          }
+          
+          console.log('🚀 Spotify connected successfully, returning to:', returnUrl);
            // Auto redirect after brief success state
            setTimeout(() => {
              navigate(returnUrl);

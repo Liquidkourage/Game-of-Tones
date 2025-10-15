@@ -834,8 +834,10 @@ const HostView: React.FC = () => {
         
         // Store the current URL to return to after Spotify auth
         const returnUrl = `/host/${roomId}`;
+        console.log('🔍 Storing return URL in localStorage:', returnUrl);
         localStorage.setItem('spotify_return_url', returnUrl);
         if (roomId) {
+          console.log('🔍 Storing room ID in localStorage:', roomId);
           localStorage.setItem('spotify_room_id', roomId);
         }
         
