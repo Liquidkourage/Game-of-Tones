@@ -4511,9 +4511,17 @@ function analyzeExistingSongs(songs) {
     .slice(0, 10)
     .map(([word]) => word);
   
+  // Detect strong patterns - words that appear in most songs (like "Sun" in "Sun songs")
+  const strongPatterns = Object.entries(words)
+    .filter(([,count]) => count >= Math.max(2, Math.ceil(songs.length * 0.4))) // At least 40% of songs or 2 minimum
+    .sort(([,a], [,b]) => b - a)
+    .slice(0, 3)
+    .map(([word]) => word);
+
   return {
     artists: topArtists,
     commonWords: commonWords,
+    strongPatterns: strongPatterns, // NEW: Words that appear in most songs
     songCount: songs.length
   };
 }
@@ -4521,6 +4529,26 @@ function analyzeExistingSongs(songs) {
 // Generate search queries based on analysis
 function generateSearchQueries(analysis, existingAnalysis) {
   const queries = [];
+  
+  // PRIORITY: Strong pattern-based searches (like "Sun" in "Sun songs")
+  if (existingAnalysis.strongPatterns && existingAnalysis.strongPatterns.length > 0) {
+    existingAnalysis.strongPatterns.forEach(pattern => {
+      queries.push({
+        query: `"${pattern}"`,
+        strategy: 'Pattern Match',
+        confidence: 0.95,
+        reasoning: `Songs with "${pattern}" (detected pattern from existing tracks)`
+      });
+      
+      // Also search in artist names
+      queries.push({
+        query: `artist:"${pattern}"`,
+        strategy: 'Artist Pattern',
+        confidence: 0.9,
+        reasoning: `Artists with "${pattern}" in their name`
+      });
+    });
+  }
   
   // Genre-based searches
   analysis.genres.forEach(genre => {
