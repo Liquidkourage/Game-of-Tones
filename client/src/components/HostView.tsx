@@ -112,8 +112,8 @@ const HostView: React.FC = () => {
   interface EventRound {
     id: string;
     name: string;
-    playlistId: string | null;
-    playlistName: string | null;
+    playlistIds: string[];
+    playlistNames: string[];
     songCount: number;
     status: 'completed' | 'active' | 'planned' | 'unplanned';
     startedAt?: number;
@@ -124,8 +124,8 @@ const HostView: React.FC = () => {
     {
       id: 'round-1',
       name: 'Round 1',
-      playlistId: null,
-      playlistName: null,
+      playlistIds: [],
+      playlistNames: [],
       songCount: 0,
       status: 'unplanned'
     }
@@ -1911,8 +1911,8 @@ const HostView: React.FC = () => {
 
   const handleStartRound = useCallback((roundIndex: number) => {
     const round = eventRounds[roundIndex];
-    if (!round || !round.playlistId) {
-      alert('Please select a playlist for this round first.');
+    if (!round || round.playlistIds.length === 0) {
+      alert('Please select at least one playlist for this round first.');
       return;
     }
 
@@ -1938,10 +1938,11 @@ const HostView: React.FC = () => {
     setCurrentRoundIndex(roundIndex);
 
     // Update selected playlists to match the round
-    const playlist = playlists.find(p => p.id === round.playlistId);
-    if (playlist) {
-      setSelectedPlaylists([playlist]);
-      addLog(`Started ${round.name}: ${round.playlistName}`, 'info');
+    const roundPlaylists = playlists.filter(p => round.playlistIds.includes(p.id));
+    if (roundPlaylists.length > 0) {
+      setSelectedPlaylists(roundPlaylists);
+      const playlistNames = round.playlistNames.join(', ');
+      addLog(`Started ${round.name}: ${playlistNames}`, 'info');
     }
 
     // Store updated rounds

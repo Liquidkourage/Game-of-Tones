@@ -21,8 +21,8 @@ interface Playlist {
 interface EventRound {
   id: string;
   name: string;
-  playlistId: string | null;
-  playlistName: string | null;
+  playlistIds: string[];
+  playlistNames: string[];
   songCount: number;
   status: 'completed' | 'active' | 'planned' | 'unplanned';
   startedAt?: number;
@@ -53,8 +53,8 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
     const newRound: EventRound = {
       id: `round-${Date.now()}`,
       name: `Round ${rounds.length + 1}`,
-      playlistId: null,
-      playlistName: null,
+      playlistIds: [],
+      playlistNames: [],
       songCount: 0,
       status: 'unplanned'
     };
@@ -68,17 +68,43 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
     }
   };
 
-  const updateRoundPlaylist = (index: number, playlistId: string) => {
+  const addPlaylistToRound = (roundIndex: number, playlistId: string) => {
     const playlist = playlists.find(p => p.id === playlistId);
     if (!playlist) return;
 
     const newRounds = [...rounds];
-    newRounds[index] = {
-      ...newRounds[index],
-      playlistId: playlist.id,
-      playlistName: playlist.name,
-      songCount: playlist.tracks,
-      status: newRounds[index].status === 'unplanned' ? 'planned' : newRounds[index].status
+    const round = newRounds[roundIndex];
+    
+    // Don't add if already exists
+    if (round.playlistIds.includes(playlistId)) return;
+    
+    // Add playlist to the round
+    newRounds[roundIndex] = {
+      ...round,
+      playlistIds: [...round.playlistIds, playlist.id],
+      playlistNames: [...round.playlistNames, playlist.name],
+      songCount: round.songCount + playlist.tracks,
+      status: round.status === 'unplanned' ? 'planned' : round.status
+    };
+    onUpdateRounds(newRounds);
+  };
+
+  const removePlaylistFromRound = (roundIndex: number, playlistId: string) => {
+    const newRounds = [...rounds];
+    const round = newRounds[roundIndex];
+    const playlistIndex = round.playlistIds.indexOf(playlistId);
+    
+    if (playlistIndex === -1) return;
+    
+    const playlist = playlists.find(p => p.id === playlistId);
+    const playlistTracks = playlist?.tracks || 0;
+    
+    newRounds[roundIndex] = {
+      ...round,
+      playlistIds: round.playlistIds.filter(id => id !== playlistId),
+      playlistNames: round.playlistNames.filter((_, i) => i !== playlistIndex),
+      songCount: Math.max(0, round.songCount - playlistTracks),
+      status: round.playlistIds.length === 1 ? 'unplanned' : round.status
     };
     onUpdateRounds(newRounds);
   };
@@ -128,6 +154,10 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
   const canStartNextRound = () => {
     const nextIndex = getNextRoundIndex();
     return nextIndex !== -1 && gameState !== 'playing';
+  };
+
+  const canStartRound = (round: EventRound) => {
+    return round.playlistIds.length > 0 && round.status !== 'completed';
   };
 
   return (
@@ -199,17 +229,49 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                     )}
                   </div>
                   
-                  <div className="flex items-center gap-4 mt-1">
-                    {round.playlistId ? (
+                  {/* Selected Playlists */}
+                  {round.playlistIds.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {round.playlistIds.map((playlistId, playlistIndex) => {
+                        const playlist = playlists.find(p => p.id === playlistId);
+                        if (!playlist) return null;
+                        
+                        return (
+                          <div key={playlistId} className="flex items-center gap-2 bg-rgba(255, 255, 255, 0.05) rounded-lg px-2 py-1">
+                            <span className="text-xs text-white flex-1">
+                              {playlist.name} ({playlist.tracks} songs)
+                            </span>
+                            {!isActive && round.status !== 'completed' && (
+                              <button
+                                onClick={() => removePlaylistFromRound(index, playlistId)}
+                                className="text-red-400 hover:text-red-300 text-xs p-1"
+                                title="Remove playlist"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  
+                  {/* Add Playlist Dropdown */}
+                  {!isActive && round.status !== 'completed' && (
+                    <div className="mt-2">
                       <select
-                        value={round.playlistId}
-                        onChange={(e) => updateRoundPlaylist(index, e.target.value)}
-                        className="bg-rgba(255, 255, 255, 0.1) border border-rgba(255, 255, 255, 0.2) rounded-lg px-3 py-1 text-white text-sm"
-                        disabled={round.status === 'completed' || isActive}
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            addPlaylistToRound(index, e.target.value);
+                            e.target.value = ''; // Reset selection
+                          }
+                        }}
+                        className="bg-rgba(255, 255, 255, 0.1) border border-rgba(255, 255, 255, 0.2) rounded-lg px-3 py-1 text-white text-sm w-full"
                       >
-                        <option value={round.playlistId}>{round.playlistName}</option>
+                        <option value="">+ Add Playlist...</option>
                         {playlists
-                          .filter(p => p.id !== round.playlistId)
+                          .filter(playlist => !round.playlistIds.includes(playlist.id))
                           .map(playlist => {
                             const minRequired = playlist.tracks >= 60 ? 75 : 15;
                             const isInsufficient = playlist.tracks < minRequired;
@@ -221,30 +283,15 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                             );
                           })}
                       </select>
-                    ) : (
-                      <select
-                        value=""
-                        onChange={(e) => updateRoundPlaylist(index, e.target.value)}
-                        className="bg-rgba(255, 255, 255, 0.1) border border-rgba(255, 255, 255, 0.2) rounded-lg px-3 py-1 text-white text-sm"
-                      >
-                        <option value="">Select Playlist...</option>
-                        {playlists.map(playlist => {
-                          const minRequired = playlist.tracks >= 60 ? 75 : 15;
-                          const isInsufficient = playlist.tracks < minRequired;
-                          const modeText = minRequired === 75 ? '1x75' : '5x15';
-                          return (
-                            <option key={playlist.id} value={playlist.id}>
-                              {playlist.name} ({playlist.tracks} songs) {isInsufficient ? `⚠️ needs ${minRequired - playlist.tracks} more for ${modeText}` : `✓ ${modeText} ready`}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    )}
-                    
+                    </div>
+                  )}
+                  
+                  {/* Round Summary */}
+                  <div className="mt-2 flex items-center gap-4">
                     {round.songCount > 0 && (
                       <>
                         <span className="text-sm text-gray-400">
-                          {round.songCount} songs
+                          {round.playlistIds.length} playlist{round.playlistIds.length !== 1 ? 's' : ''} • {round.songCount} songs total
                         </span>
                         {(() => {
                           const minRequired = round.songCount >= 60 ? 75 : 15;
@@ -271,7 +318,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                 </div>
                 
                 <div className="flex items-center gap-2">
-                  {!isActive && round.status !== 'completed' && round.playlistId && (
+                  {!isActive && round.status !== 'completed' && canStartRound(round) && (
                     <button
                       onClick={() => onStartRound(index)}
                       className="p-2 bg-[#00ff88] text-black rounded-lg hover:bg-[#00cc6a] transition-colors"
