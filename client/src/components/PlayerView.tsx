@@ -70,7 +70,10 @@ const PlayerView: React.FC = () => {
   const [displayMode, setDisplayMode] = useState<'title' | 'artist'>(() => (localStorage.getItem('display_mode') as 'title' | 'artist') || 'title');
   const [tooltipSquare, setTooltipSquare] = useState<string | null>(null);
   const [tooltipText, setTooltipText] = useState<string>('');
-  const [density, setDensity] = useState<'s' | 'm' | 'l'>(() => (localStorage.getItem('text_density') as 's' | 'm' | 'l') || 'm');
+  const [fontSize, setFontSize] = useState<number>(() => {
+    const stored = localStorage.getItem('font_size_percent');
+    return stored ? parseInt(stored, 10) : 100;
+  });
   const [focusCard, setFocusCard] = useState<boolean>(() => {
     const stored = localStorage.getItem('focus_card');
     if (stored === '1') return true;
@@ -660,9 +663,16 @@ const PlayerView: React.FC = () => {
     }
   };
 
-  const handleDensityChange = (value: 's' | 'm' | 'l') => {
-    setDensity(value);
-    localStorage.setItem('text_density', value);
+  const increaseFontSize = () => {
+    const newSize = Math.min(fontSize + 10, 200); // Max 200%
+    setFontSize(newSize);
+    localStorage.setItem('font_size_percent', newSize.toString());
+  };
+
+  const decreaseFontSize = () => {
+    const newSize = Math.max(fontSize - 10, 50); // Min 50%
+    setFontSize(newSize);
+    localStorage.setItem('font_size_percent', newSize.toString());
   };
 
   const handleDisplayModeToggle = (checked: boolean) => {
@@ -715,50 +725,103 @@ const PlayerView: React.FC = () => {
   };
 
   const checkBingo = (card: BingoCard): boolean => {
-    // For full card pattern, check if ALL squares are marked
-    if (gameState.pattern === 'full_card') {
+    const pattern = gameState.pattern;
+    
+    // Full card pattern - all squares must be marked
+    if (pattern === 'full_card') {
       return card.squares.every(square => square.marked);
     }
     
-    // For other patterns, check rows, columns, and diagonals
-    // Check rows
-    for (let row = 0; row < 5; row++) {
-      let rowComplete = true;
-      for (let col = 0; col < 5; col++) {
-        const square = card.squares.find(s => s.position === `${row}-${col}`);
-        if (!square || !square.marked) {
-          rowComplete = false;
-          break;
-        }
-      }
-      if (rowComplete) return true;
+    // Four corners pattern - all 4 corners must be marked
+    if (pattern === 'four_corners') {
+      const corners = ['0-0', '0-4', '4-0', '4-4'];
+      return corners.every(pos => {
+        const square = card.squares.find(s => s.position === pos);
+        return square && square.marked;
+      });
     }
-
-    // Check columns
-    for (let col = 0; col < 5; col++) {
-      let colComplete = true;
+    
+    // X pattern - both diagonals must be marked
+    if (pattern === 'x') {
+      let diag1Complete = true;
+      let diag2Complete = true;
+      for (let i = 0; i < 5; i++) {
+        const square1 = card.squares.find(s => s.position === `${i}-${i}`);
+        const square2 = card.squares.find(s => s.position === `${i}-${4-i}`);
+        
+        if (!square1 || !square1.marked) diag1Complete = false;
+        if (!square2 || !square2.marked) diag2Complete = false;
+      }
+      return diag1Complete && diag2Complete;
+    }
+    
+    // Line pattern - any row, column, or diagonal
+    if (pattern === 'line') {
+      // Check rows
       for (let row = 0; row < 5; row++) {
-        const square = card.squares.find(s => s.position === `${row}-${col}`);
-        if (!square || !square.marked) {
-          colComplete = false;
-          break;
+        let rowComplete = true;
+        for (let col = 0; col < 5; col++) {
+          const square = card.squares.find(s => s.position === `${row}-${col}`);
+          if (!square || !square.marked) {
+            rowComplete = false;
+            break;
+          }
         }
+        if (rowComplete) return true;
       }
-      if (colComplete) return true;
-    }
 
-    // Check diagonals
-    let diag1Complete = true;
-    let diag2Complete = true;
-    for (let i = 0; i < 5; i++) {
-      const square1 = card.squares.find(s => s.position === `${i}-${i}`);
-      const square2 = card.squares.find(s => s.position === `${i}-${4-i}`);
-      
-      if (!square1 || !square1.marked) diag1Complete = false;
-      if (!square2 || !square2.marked) diag2Complete = false;
-    }
+      // Check columns
+      for (let col = 0; col < 5; col++) {
+        let colComplete = true;
+        for (let row = 0; row < 5; row++) {
+          const square = card.squares.find(s => s.position === `${row}-${col}`);
+          if (!square || !square.marked) {
+            colComplete = false;
+            break;
+          }
+        }
+        if (colComplete) return true;
+      }
 
-    return diag1Complete || diag2Complete;
+      // Check diagonals
+      let diag1Complete = true;
+      let diag2Complete = true;
+      for (let i = 0; i < 5; i++) {
+        const square1 = card.squares.find(s => s.position === `${i}-${i}`);
+        const square2 = card.squares.find(s => s.position === `${i}-${4-i}`);
+        
+        if (!square1 || !square1.marked) diag1Complete = false;
+        if (!square2 || !square2.marked) diag2Complete = false;
+      }
+      return diag1Complete || diag2Complete;
+    }
+    
+    // Custom pattern - fallback to line logic for now
+    return false;
+  };
+
+  // Helper function to determine if a square should be highlighted based on pattern
+  const isPatternSquare = (position: string): boolean => {
+    const pattern = gameState.pattern;
+    
+    if (pattern === 'line') {
+      return false; // No highlighting for line pattern
+    }
+    
+    if (pattern === 'full_card') {
+      return true; // All squares are part of the pattern
+    }
+    
+    if (pattern === 'four_corners') {
+      return ['0-0', '0-4', '4-0', '4-4'].includes(position);
+    }
+    
+    if (pattern === 'x') {
+      const [row, col] = position.split('-').map(Number);
+      return row === col || row + col === 4; // Diagonal positions
+    }
+    
+    return false;
   };
 
   const renderBingoCard = () => {
@@ -772,11 +835,11 @@ const PlayerView: React.FC = () => {
 
     return (
       <div className="bingo-card">
-        <div className={`bingo-card-grid density-${density}`}>
+        <div className="bingo-card-grid">
           {bingoCard.squares.map((square) => (
             <motion.div
               key={square.position}
-              className={`bingo-square ${square.marked ? 'marked' : ''}`}
+              className={`bingo-square ${square.marked ? 'marked' : ''} ${isPatternSquare(square.position) ? 'pattern-highlight' : ''}`}
               data-position={square.position}
               onClick={() => markSquare(square.position)}
               onPointerDown={(e) => handlePointerDown(square, e)}
@@ -801,7 +864,6 @@ const PlayerView: React.FC = () => {
                 fontWeight: 700,
                 userSelect: 'none'
               }}
-              data-density={density}
             >
               <div className="square-content">
                 {/* Display song title or artist based on display mode */}
@@ -827,7 +889,7 @@ const PlayerView: React.FC = () => {
   };
 
   return (
-    <div className={`player-container ${bingoCard ? 'has-card' : ''} ${focusCard ? 'focus' : ''} density-${density}`} style={{ minHeight: '100svh', overscrollBehavior: 'contain', paddingBottom: 'calc(120px + env(safe-area-inset-bottom))' }}>
+    <div className={`player-container ${bingoCard ? 'has-card' : ''} ${focusCard ? 'focus' : ''}`} style={{ minHeight: '100svh', overscrollBehavior: 'contain', paddingBottom: 'calc(120px + env(safe-area-inset-bottom))', fontSize: `${fontSize}%` }}>
       {/* Name prompt overlay if no name provided */}
       {!playerName || !playerName.trim() ? (
         <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
@@ -935,10 +997,10 @@ const PlayerView: React.FC = () => {
               />
               <span className="slider" />
             </label>
-            <div className="density-toggle" style={{ transform: 'scale(0.8)' }}>
-              <button className={`density-btn ${density === 's' ? 'active' : ''}`} onClick={() => handleDensityChange('s')}>S</button>
-              <button className={`density-btn ${density === 'm' ? 'active' : ''}`} onClick={() => handleDensityChange('m')}>M</button>
-              <button className={`density-btn ${density === 'l' ? 'active' : ''}`} onClick={() => handleDensityChange('l')}>L</button>
+            <div className="font-size-controls" style={{ display: 'flex', alignItems: 'center', gap: '4px', transform: 'scale(0.8)' }}>
+              <button className="font-btn" onClick={decreaseFontSize} disabled={fontSize <= 50}>−</button>
+              <span style={{ fontSize: '0.7rem', minWidth: '32px', textAlign: 'center', color: '#b3b3b3' }}>{fontSize}%</span>
+              <button className="font-btn" onClick={increaseFontSize} disabled={fontSize >= 200}>+</button>
             </div>
             <button className="focus-card-btn" onClick={toggleFocusCard} style={{ fontSize: '0.7rem', padding: '4px 8px' }}>Show Chrome</button>
           </div>
@@ -970,10 +1032,10 @@ const PlayerView: React.FC = () => {
           
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>Text</span>
-            <div className="density-toggle">
-              <button className={`density-btn ${density === 's' ? 'active' : ''}`} onClick={() => handleDensityChange('s')}>S</button>
-              <button className={`density-btn ${density === 'm' ? 'active' : ''}`} onClick={() => handleDensityChange('m')}>M</button>
-              <button className={`density-btn ${density === 'l' ? 'active' : ''}`} onClick={() => handleDensityChange('l')}>L</button>
+            <div className="font-size-controls" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button className="font-btn" onClick={decreaseFontSize} disabled={fontSize <= 50}>−</button>
+              <span style={{ fontSize: '0.8rem', minWidth: '36px', textAlign: 'center', color: '#b3b3b3' }}>{fontSize}%</span>
+              <button className="font-btn" onClick={increaseFontSize} disabled={fontSize >= 200}>+</button>
             </div>
             <button className="focus-card-btn" onClick={toggleFocusCard}>Focus Card</button>
           </div>

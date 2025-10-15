@@ -116,7 +116,7 @@ const HostView: React.FC = () => {
     isPlaying: false,
     currentTime: 0,
     duration: 0,
-    volume: 50,
+    volume: 100,
     playbackRate: 1,
     currentSong: null,
     queue: [],
@@ -125,7 +125,7 @@ const HostView: React.FC = () => {
    
   const [isSeeking, setIsSeeking] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [previousVolume, setPreviousVolume] = useState(50);
+  const [previousVolume, setPreviousVolume] = useState(100);
   const [songList, setSongList] = useState<Song[]>([]);
   const [finalizedOrder, setFinalizedOrder] = useState<Song[] | null>(null);
   // Playlists paging/virtualization state
@@ -426,10 +426,10 @@ const HostView: React.FC = () => {
       console.log('Song playing:', data);
       addLog(`Now playing: ${data.songName} — ${data.artistName}`, 'info');
       
-      // Sync volume when song starts playing
-      setTimeout(() => {
-        fetchCurrentVolume();
-      }, 500);
+      // Don't sync volume when song starts playing - preserve user's volume setting
+      // setTimeout(() => {
+      //   fetchCurrentVolume();
+      // }, 500);
     });
 
     // Handle bingo verification pending
@@ -1193,7 +1193,7 @@ const HostView: React.FC = () => {
       if (!resp.ok) return;
       const data = await resp.json();
         if (data.success && data.playbackState) {
-        const spotifyVolume = (data.playbackState.device?.volume_percent ?? 50) as number;
+        const spotifyVolume = (data.playbackState.device?.volume_percent ?? 100) as number;
           setPlaybackState(prev => ({ ...prev, volume: spotifyVolume }));
           console.log(`🔊 Synced volume from Spotify: ${spotifyVolume}%`);
         }
