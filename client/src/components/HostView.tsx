@@ -1827,6 +1827,57 @@ const HostView: React.FC = () => {
                       </div>
                     );
                   })}
+                  
+                  {/* Load More / Show All Controls */}
+                  {playlists && playlists.length > visiblePlaylists.length && (
+                    <div style={{ padding: '12px 8px', borderTop: '1px solid rgba(255,255,255,0.15)', display: 'flex', gap: 8, justifyContent: 'center' }}>
+                      <button 
+                        className="btn-secondary" 
+                        onClick={loadMorePlaylists}
+                        disabled={isLoadingMorePlaylists}
+                        style={{ fontSize: 12 }}
+                      >
+                        {isLoadingMorePlaylists ? 'Loading...' : `Load More (${playlists.length - visiblePlaylists.length} remaining)`}
+                      </button>
+                      <button 
+                        className="btn-primary" 
+                        onClick={() => {
+                          setVisiblePlaylists(playlists);
+                          setPlaylistPage(Math.ceil(playlists.length / 50));
+                        }}
+                        style={{ fontSize: 12 }}
+                      >
+                        Show All ({playlists.length})
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* GOT Playlists Quick Filter */}
+                  {playlists && playlists.length > 0 && (
+                    <div style={{ padding: '8px', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', gap: 8, justifyContent: 'center' }}>
+                      <button 
+                        className="btn-accent" 
+                        onClick={() => {
+                          const gotPlaylists = playlists.filter(p => (p.name || '').toLowerCase().includes('got'));
+                          setVisiblePlaylists(gotPlaylists);
+                          setPlaylistPage(Math.ceil(gotPlaylists.length / 50));
+                        }}
+                        style={{ fontSize: 11, padding: '4px 8px' }}
+                      >
+                        🎯 Show Only GOT Playlists ({playlists.filter(p => (p.name || '').toLowerCase().includes('got')).length})
+                      </button>
+                      <button 
+                        className="btn-secondary" 
+                        onClick={() => {
+                          setVisiblePlaylists(playlists.slice(0, 50));
+                          setPlaylistPage(1);
+                        }}
+                        style={{ fontSize: 11, padding: '4px 8px' }}
+                      >
+                        Reset View
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8, position: 'sticky', top: 8 }}>
                   <div style={{ fontWeight: 800, marginBottom: 6 }}>Selected ({selectedPlaylists.length})</div>
