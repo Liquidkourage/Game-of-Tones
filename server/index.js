@@ -4179,9 +4179,22 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
 app.post('/api/spotify/suggest-songs', async (req, res) => {
   try {
     console.log('🤖 AI suggestion request received');
-    console.log('🤖 Request body:', req.body);
+    console.log('🤖 Request body keys:', Object.keys(req.body || {}));
+    try {
+      console.log('🤖 Request body:', JSON.stringify(req.body, null, 2));
+    } catch (jsonError) {
+      console.log('🤖 Request body (stringify failed):', req.body);
+      console.log('🤖 JSON stringify error:', jsonError.message);
+    }
     
-    const { playlistId, playlistName, existingSongs, targetCount } = req.body;
+    const { playlistId, playlistName, existingSongs, targetCount } = req.body || {};
+    
+    console.log('🤖 Extracted values:', { 
+      playlistId, 
+      playlistName, 
+      existingSongsCount: existingSongs?.length || 0, 
+      targetCount 
+    });
     
     console.log('🤖 Spotify tokens status:', { 
       hasTokens: !!spotifyTokens, 
