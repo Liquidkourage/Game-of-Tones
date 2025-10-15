@@ -44,7 +44,9 @@ function AppHeader() {
             alignSelf: 'flex-end' /* Align to bottom of the logo */
           }}>by Liquid Kourage</span>
         </div>
-        <DisplayHeaderInfo />
+        <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center' }}>
+          <DisplayHeaderInfo />
+        </div>
       </div>
     </motion.header>
   );
