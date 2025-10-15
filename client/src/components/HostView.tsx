@@ -195,8 +195,8 @@ const HostView: React.FC = () => {
       const response = await fetch(`${API_BASE || ''}/api/spotify/playlists`);
       if (response.status === 401) {
         console.warn('Spotify not connected (401) while loading playlists');
-        setIsSpotifyConnected(false);
-        setIsSpotifyConnecting(false);
+        // Don't override isSpotifyConnected here - let status endpoint be authoritative
+        console.log('🔍 loadPlaylists got 401, but not overriding connection state');
         setSpotifyError('Spotify is not connected. Click Connect Spotify.');
         setPlaylists([]);
         return;
