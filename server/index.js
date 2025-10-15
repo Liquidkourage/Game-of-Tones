@@ -3644,11 +3644,41 @@ app.get('/api/spotify/auth', (req, res) => {
   }
 });
 
-app.get('/api/spotify/status', (req, res) => {
-  res.json({ 
-    connected: !!spotifyTokens,
-    hasTokens: !!spotifyTokens?.accessToken
-  });
+app.get('/api/spotify/status', async (req, res) => {
+  try {
+    // Check if we have tokens
+    if (!spotifyTokens || !spotifyTokens.accessToken) {
+      return res.json({ 
+        connected: false,
+        hasTokens: false
+      });
+    }
+
+    // Validate tokens by trying to ensure they're valid
+    try {
+      await spotifyService.ensureValidToken();
+      // If we get here, tokens are valid
+      return res.json({ 
+        connected: true,
+        hasTokens: true
+      });
+    } catch (error) {
+      // Tokens are invalid, clear them
+      console.log('🔄 Clearing invalid Spotify tokens');
+      spotifyTokens = null;
+      spotifyService.setTokens(null, null);
+      return res.json({ 
+        connected: false,
+        hasTokens: false
+      });
+    }
+  } catch (error) {
+    console.error('Error checking Spotify status:', error);
+    res.json({ 
+      connected: false,
+      hasTokens: false
+    });
+  }
 });
 
 // Force clear Spotify tokens (for testing)
