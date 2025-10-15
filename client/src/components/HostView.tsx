@@ -2224,17 +2224,28 @@ const HostView: React.FC = () => {
                     const shortage = isInsufficient ? minRequired - p.tracks : 0;
                     
                     return (
-                      <div key={p.id} style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: 10, 
-                        padding: '6px 8px', 
-                        borderBottom: '1px solid rgba(255,255,255,0.08)',
-                        backgroundColor: isInsufficient ? 'rgba(255, 193, 7, 0.1)' : 'transparent',
-                        border: isInsufficient ? '1px solid rgba(255, 193, 7, 0.3)' : 'none',
-                        borderRadius: isInsufficient ? '4px' : '0',
-                        margin: isInsufficient ? '2px 0' : '0'
-                      }}>
+                      <div 
+                        key={p.id} 
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', p.id);
+                          e.dataTransfer.effectAllowed = 'copy';
+                        }}
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: 10, 
+                          padding: '6px 8px', 
+                          borderBottom: '1px solid rgba(255,255,255,0.08)',
+                          backgroundColor: isInsufficient ? 'rgba(255, 193, 7, 0.1)' : 'transparent',
+                          border: isInsufficient ? '1px solid rgba(255, 193, 7, 0.3)' : 'none',
+                          borderRadius: isInsufficient ? '4px' : '0',
+                          margin: isInsufficient ? '2px 0' : '0',
+                          cursor: 'grab'
+                        }}
+                        onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
+                        onMouseUp={(e) => e.currentTarget.style.cursor = 'grab'}
+                      >
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ 
                             fontWeight: 700, 

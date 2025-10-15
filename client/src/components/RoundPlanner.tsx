@@ -209,55 +209,10 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
       </div>
 
       {!isCollapsed && (
-        <div className="space-y-6">
-          {/* Playlist Source Area */}
-          <div className="bg-rgba(255, 255, 255, 0.05) border border-rgba(255, 255, 255, 0.1) rounded-xl p-4">
-            <h4 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-              <Music className="w-5 h-5" />
-              Available Playlists
-            </h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-48 overflow-y-auto">
-              {playlists.map(playlist => {
-                const minRequired = playlist.tracks >= 60 ? 75 : 15;
-                const isInsufficient = playlist.tracks < minRequired;
-                const modeText = minRequired === 75 ? '1x75' : '5x15';
-                const isUsed = rounds.some(round => (round.playlistIds || []).includes(playlist.id));
-                
-                return (
-                  <div
-                    key={playlist.id}
-                    draggable
-                    onDragStart={(e) => handlePlaylistDragStart(e, playlist)}
-                    onDragEnd={handlePlaylistDragEnd}
-                    className={`p-3 rounded-lg border cursor-grab transition-all ${
-                      draggedPlaylist?.id === playlist.id
-                        ? 'opacity-50 scale-95'
-                        : isUsed
-                        ? 'bg-rgba(0, 255, 136, 0.1) border-rgba(0, 255, 136, 0.3) opacity-60'
-                        : isInsufficient
-                        ? 'bg-rgba(255, 193, 7, 0.1) border-rgba(255, 193, 7, 0.3) hover:bg-rgba(255, 193, 7, 0.15)'
-                        : 'bg-rgba(255, 255, 255, 0.05) border-rgba(255, 255, 255, 0.2) hover:bg-rgba(255, 255, 255, 0.1)'
-                    }`}
-                  >
-                    <div className="text-sm font-semibold text-white truncate">
-                      {playlist.name}
-                    </div>
-                    <div className="text-xs text-gray-400 mt-1">
-                      {playlist.tracks} songs
-                    </div>
-                    <div className="text-xs mt-1">
-                      {isUsed ? (
-                        <span className="text-green-400">✓ In use</span>
-                      ) : isInsufficient ? (
-                        <span className="text-yellow-400">⚠️ {modeText}</span>
-                      ) : (
-                        <span className="text-green-400">✓ {modeText} ready</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+        <div className="space-y-4">
+          {/* Instructions */}
+          <div className="text-center text-gray-400 text-sm bg-rgba(255, 255, 255, 0.05) rounded-lg p-3">
+            💡 Drag playlists from the main playlist area above into the round buckets below
           </div>
 
           {/* Round Buckets */}
@@ -274,14 +229,14 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                   onDragOver={(e) => handleBucketDragOver(e, index)}
                   onDragLeave={handleBucketDragLeave}
                   onDrop={(e) => handleBucketDrop(e, index)}
-                  className={`p-4 rounded-xl border-2 border-dashed transition-all min-h-[200px] ${
+                  className={`relative p-6 rounded-2xl border-3 transition-all duration-200 min-h-[240px] ${
                     isActive
-                      ? 'border-[#00ff88] bg-rgba(0, 255, 136, 0.1)'
+                      ? 'border-[#00ff88] bg-gradient-to-br from-rgba(0, 255, 136, 0.15) to-rgba(0, 255, 136, 0.05) shadow-lg shadow-[#00ff88]/20'
                       : isDragOver
-                      ? 'border-[#00ff88] bg-rgba(0, 255, 136, 0.05) scale-105'
+                      ? 'border-[#00ff88] bg-gradient-to-br from-rgba(0, 255, 136, 0.1) to-rgba(0, 255, 136, 0.02) scale-105 shadow-xl shadow-[#00ff88]/30'
                       : isInsufficient
-                      ? 'border-rgba(255, 193, 7, 0.5) bg-rgba(255, 193, 7, 0.05)'
-                      : 'border-rgba(255, 255, 255, 0.2) bg-rgba(255, 255, 255, 0.02) hover:border-rgba(255, 255, 255, 0.4)'
+                      ? 'border-dashed border-rgba(255, 193, 7, 0.6) bg-gradient-to-br from-rgba(255, 193, 7, 0.1) to-rgba(255, 193, 7, 0.02)'
+                      : 'border-dashed border-rgba(255, 255, 255, 0.3) bg-gradient-to-br from-rgba(255, 255, 255, 0.05) to-rgba(255, 255, 255, 0.01) hover:border-rgba(255, 255, 255, 0.5) hover:shadow-lg'
                   }`}
                 >
                   {/* Bucket Header */}
@@ -298,37 +253,54 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                   </div>
 
                   {/* Drop Zone */}
-                  <div className="space-y-2 mb-3 min-h-[100px]">
+                  <div className="space-y-2 mb-4 min-h-[120px] flex flex-col">
                     {(round.playlistIds || []).length === 0 ? (
-                      <div className="flex items-center justify-center h-24 text-gray-400 text-sm">
-                        {isDragOver ? (
-                          <span className="text-[#00ff88]">Drop playlist here</span>
-                        ) : (
-                          <span>Drag playlists here</span>
-                        )}
+                      <div className={`flex-1 flex flex-col items-center justify-center rounded-xl border-2 border-dashed transition-all ${
+                        isDragOver 
+                          ? 'border-[#00ff88] bg-rgba(0, 255, 136, 0.1) text-[#00ff88]' 
+                          : 'border-rgba(255, 255, 255, 0.2) text-gray-400'
+                      }`}>
+                        <FolderOpen className={`w-8 h-8 mb-2 ${isDragOver ? 'text-[#00ff88]' : 'text-gray-500'}`} />
+                        <span className="text-sm font-medium">
+                          {isDragOver ? 'Drop playlist here!' : 'Drop playlists here'}
+                        </span>
+                        <span className="text-xs opacity-75 mt-1">
+                          {isDragOver ? '' : 'Drag from playlist area above'}
+                        </span>
                       </div>
                     ) : (
-                      (round.playlistIds || []).map((playlistId) => {
-                        const playlist = playlists.find(p => p.id === playlistId);
-                        if (!playlist) return null;
-                        
-                        return (
-                          <div key={playlistId} className="flex items-center gap-2 bg-rgba(255, 255, 255, 0.1) rounded-lg px-2 py-1">
-                            <span className="text-xs text-white flex-1 truncate">
-                              {playlist.name} ({playlist.tracks})
-                            </span>
-                            {!isActive && round.status !== 'completed' && (
-                              <button
-                                onClick={() => removePlaylistFromRound(index, playlistId)}
-                                className="text-red-400 hover:text-red-300 text-xs p-1"
-                                title="Remove playlist"
-                              >
-                                ×
-                              </button>
-                            )}
+                      <div className="space-y-2 flex-1">
+                        {(round.playlistIds || []).map((playlistId) => {
+                          const playlist = playlists.find(p => p.id === playlistId);
+                          if (!playlist) return null;
+                          
+                          return (
+                            <div key={playlistId} className="flex items-center gap-2 bg-rgba(255, 255, 255, 0.15) rounded-lg px-3 py-2 border border-rgba(255, 255, 255, 0.1)">
+                              <Music className="w-4 h-4 text-[#00ff88] flex-shrink-0" />
+                              <span className="text-sm text-white flex-1 truncate font-medium">
+                                {playlist.name}
+                              </span>
+                              <span className="text-xs text-gray-400">
+                                {playlist.tracks}
+                              </span>
+                              {!isActive && round.status !== 'completed' && (
+                                <button
+                                  onClick={() => removePlaylistFromRound(index, playlistId)}
+                                  className="text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded p-1 transition-colors"
+                                  title="Remove playlist"
+                                >
+                                  ×
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {isDragOver && (
+                          <div className="flex items-center justify-center h-12 border-2 border-dashed border-[#00ff88] bg-rgba(0, 255, 136, 0.1) rounded-lg text-[#00ff88] text-sm font-medium">
+                            Drop to add another playlist
                           </div>
-                        );
-                      })
+                        )}
+                      </div>
                     )}
                   </div>
 
