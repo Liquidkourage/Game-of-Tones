@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL } from '../config';
+import RoundPlanner from './RoundPlanner';
 
 interface Playlist {
   id: string;
@@ -106,6 +107,30 @@ const HostView: React.FC = () => {
   // Pause position tracking
   const [pausePosition, setPausePosition] = useState<number>(0);
   const [isPausedByInterface, setIsPausedByInterface] = useState(false);
+
+  // Round management state
+  interface EventRound {
+    id: string;
+    name: string;
+    playlistId: string | null;
+    playlistName: string | null;
+    songCount: number;
+    status: 'completed' | 'active' | 'planned' | 'unplanned';
+    startedAt?: number;
+    completedAt?: number;
+  }
+
+  const [eventRounds, setEventRounds] = useState<EventRound[]>([
+    {
+      id: 'round-1',
+      name: 'Round 1',
+      playlistId: null,
+      playlistName: null,
+      songCount: 0,
+      status: 'unplanned'
+    }
+  ]);
+  const [currentRoundIndex, setCurrentRoundIndex] = useState<number>(0);
 
   const addLog = (message: string, level: 'info' | 'warn' | 'error' = 'info') => {
     setLogs(prev => [{ level, message, ts: Date.now() }, ...prev].slice(0, 50));
@@ -1850,10 +1875,104 @@ const HostView: React.FC = () => {
   const confirmAndNewRound = () => {
     if (!roomId || !socket) return;
     if (window.confirm('Start a new round? This keeps playlists but resets progress.')) {
+      // Mark current round as completed
+      if (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length) {
+        const updatedRounds = [...eventRounds];
+        updatedRounds[currentRoundIndex] = {
+          ...updatedRounds[currentRoundIndex],
+          status: 'completed',
+          completedAt: Date.now()
+        };
+        setEventRounds(updatedRounds);
+        
+        // Store updated rounds
+        try {
+          localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(updatedRounds));
+        } catch (error) {
+          console.warn('Failed to save rounds to localStorage:', error);
+        }
+      }
+      
       socket.emit('new-round', { roomId });
       addLog('New Round requested', 'info');
     }
   };
+
+  // Round management functions
+  const handleUpdateRounds = useCallback((newRounds: EventRound[]) => {
+    setEventRounds(newRounds);
+    // Store in localStorage for persistence
+    try {
+      localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(newRounds));
+    } catch (error) {
+      console.warn('Failed to save rounds to localStorage:', error);
+    }
+  }, [roomId]);
+
+  const handleStartRound = useCallback((roundIndex: number) => {
+    const round = eventRounds[roundIndex];
+    if (!round || !round.playlistId) {
+      alert('Please select a playlist for this round first.');
+      return;
+    }
+
+    // Mark current round as completed if it exists
+    if (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length) {
+      const updatedRounds = [...eventRounds];
+      updatedRounds[currentRoundIndex] = {
+        ...updatedRounds[currentRoundIndex],
+        status: 'completed',
+        completedAt: Date.now()
+      };
+      setEventRounds(updatedRounds);
+    }
+
+    // Set new round as active
+    const updatedRounds = [...eventRounds];
+    updatedRounds[roundIndex] = {
+      ...updatedRounds[roundIndex],
+      status: 'active',
+      startedAt: Date.now()
+    };
+    setEventRounds(updatedRounds);
+    setCurrentRoundIndex(roundIndex);
+
+    // Update selected playlists to match the round
+    const playlist = playlists.find(p => p.id === round.playlistId);
+    if (playlist) {
+      setSelectedPlaylists([playlist]);
+      addLog(`Started ${round.name}: ${round.playlistName}`, 'info');
+    }
+
+    // Store updated rounds
+    try {
+      localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(updatedRounds));
+    } catch (error) {
+      console.warn('Failed to save rounds to localStorage:', error);
+    }
+  }, [eventRounds, currentRoundIndex, playlists, roomId]);
+
+  // Load rounds from localStorage on component mount
+  useEffect(() => {
+    if (!roomId) return;
+    
+    try {
+      const savedRounds = localStorage.getItem(`event-rounds-${roomId}`);
+      if (savedRounds) {
+        const rounds = JSON.parse(savedRounds);
+        if (Array.isArray(rounds) && rounds.length > 0) {
+          setEventRounds(rounds);
+          // Find the active round
+          const activeIndex = rounds.findIndex((r: EventRound) => r.status === 'active');
+          if (activeIndex >= 0) {
+            setCurrentRoundIndex(activeIndex);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load rounds from localStorage:', error);
+    }
+  }, [roomId]);
 
   // Calculate win progress for a player's bingo card
   const calculateWinProgress = (card: any, currentPattern: string) => {
@@ -2025,6 +2144,18 @@ const HostView: React.FC = () => {
                </div>
              )}
           </motion.div>
+
+          {/* Round Planner */}
+          {isSpotifyConnected && (
+            <RoundPlanner
+              rounds={eventRounds}
+              onUpdateRounds={handleUpdateRounds}
+              playlists={playlists}
+              currentRound={currentRoundIndex}
+              onStartRound={handleStartRound}
+              gameState={gameState}
+            />
+          )}
 
           {/* Playlists - Virtualized + Paged */}
           {(showPlaylists || showAllControls) && (

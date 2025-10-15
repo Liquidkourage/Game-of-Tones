@@ -27,6 +27,11 @@ interface GameState {
   snippetLength: number;
   playedSongs: Song[];
   bingoCard: BingoCard;
+  currentRound?: {
+    name: string;
+    number: number;
+    playlistName?: string;
+  };
 }
 
 interface Song {
@@ -1742,6 +1747,17 @@ const PublicDisplay: React.FC = () => {
                       <div style={{ fontSize: '1.8rem', color: '#b3b3b3' }}>Songs</div>
                 </div>
                       </div>
+                      
+                  {/* Round Info */}
+                  {gameState.currentRound && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Crown className="stat-icon" />
+                      <div>
+                        <div style={{ fontSize: '2.8rem', fontWeight: 900 }}>{gameState.currentRound.number}</div>
+                        <div style={{ fontSize: '1.8rem', color: '#b3b3b3' }}>Round</div>
+                      </div>
+                    </div>
+                  )}
                       </div>
                 {/* QR code below stats - fills remaining space */}
                 {roomId && (
