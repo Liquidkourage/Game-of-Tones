@@ -70,14 +70,14 @@ body {
 }
 
 .logo-icon {
-  width: 4rem;
-  height: 4rem;
+  width: 3rem;
+  height: 3rem;
   color: var(--accent-color);
   filter: drop-shadow(0 0 10px rgba(0, 255, 136, 0.5));
 }
 
 .logo h1 {
-  font-size: 3.6rem;
+  font-size: 2.7rem;
   font-weight: 700;
   background: var(--gradient-primary);
   -webkit-background-clip: text;
