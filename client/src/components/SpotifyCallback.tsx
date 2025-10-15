@@ -15,9 +15,11 @@ const SpotifyCallback: React.FC = () => {
            console.log('Current URL:', window.location.href);
            console.log('Search params:', Object.fromEntries(searchParams.entries()));
            
-           const handleCallback = async () => {
-             const code = searchParams.get('code');
-             const error = searchParams.get('error');
+          const handleCallback = async () => {
+            const code = searchParams.get('code');
+            const error = searchParams.get('error');
+            const state = searchParams.get('state'); // Room ID from Spotify OAuth state
+            console.log('🔍 Spotify callback state parameter (room ID):', state);
 
              if (error) {
          setStatus('error');
@@ -70,14 +72,16 @@ const SpotifyCallback: React.FC = () => {
           // If the return URL is just '/', try to detect if we should go to a host view
           if (returnUrl === '/') {
             console.log('🔍 Return URL is home, checking for room ID...');
-            // Check if there's a room ID in the URL or localStorage
+            // Check if there's a room ID in the state parameter, URL, or localStorage
             const urlParams = new URLSearchParams(window.location.search);
+            const roomIdFromState = urlParams.get('state'); // From Spotify OAuth state
             const roomIdFromUrl = urlParams.get('roomId');
             const roomIdFromStorage = localStorage.getItem('spotify_room_id');
+            console.log('🔍 Room ID from state:', roomIdFromState);
             console.log('🔍 Room ID from URL:', roomIdFromUrl);
             console.log('🔍 Room ID from storage:', roomIdFromStorage);
             
-            const roomId = roomIdFromUrl || roomIdFromStorage;
+            const roomId = roomIdFromState || roomIdFromUrl || roomIdFromStorage;
             if (roomId) {
               returnUrl = `/host/${roomId}`;
               localStorage.removeItem('spotify_room_id');

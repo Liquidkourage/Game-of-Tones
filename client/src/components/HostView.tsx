@@ -841,8 +841,12 @@ const HostView: React.FC = () => {
           localStorage.setItem('spotify_room_id', roomId);
         }
         
+        // Add room ID to the auth URL as a state parameter
+        const authUrlWithState = `${data.authUrl}&state=${encodeURIComponent(roomId || '')}`;
+        console.log('🔍 Redirecting to Spotify with room ID in state parameter');
+        
         // Redirect to Spotify
-        window.location.href = data.authUrl;
+        window.location.href = authUrlWithState;
       } else {
         console.error('Failed to get Spotify authorization URL');
         setSpotifyError('Failed to get Spotify authorization URL. Please try again.');
