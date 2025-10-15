@@ -1224,7 +1224,7 @@ const PublicDisplay: React.FC = () => {
                             exit={{ opacity: 0, y: -6, scale: 0.98 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-name"
-                            style={{ fontWeight: 900, lineHeight: 1.12, fontSize: (() => { const rh = rowHeightPx || 0; const px = Math.round(rh * 0.46); return Math.min(46, Math.max(22, px)); })() + 'px', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            style={{ fontWeight: 900, lineHeight: 1.12, fontSize: (() => { const rh = rowHeightPx || 0; const px = Math.round(rh * 0.65); return Math.min(64, Math.max(32, px)); })() + 'px', color: '#ffffff', textShadow: '0 2px 4px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                           >
                             {title}
                           </motion.div>
@@ -1235,7 +1235,7 @@ const PublicDisplay: React.FC = () => {
                             exit={{ opacity: 0, y: -4 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-artist"
-                            style={{ fontSize: (() => { const rh = rowHeightPx || 0; const px = Math.round(rh * 0.38); return Math.min(38, Math.max(16, px)); })() + 'px', color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            style={{ fontSize: (() => { const rh = rowHeightPx || 0; const px = Math.round(rh * 0.52); return Math.min(52, Math.max(24, px)); })() + 'px', color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 2px 4px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                           >
                             {artist}
                           </motion.div>
@@ -1338,7 +1338,7 @@ const PublicDisplay: React.FC = () => {
                               exit={{ opacity: 0, y: -6, scale: 0.98 }}
                               transition={{ duration: 0.25 }}
                               className="call-song-name"
-                              style={{ fontWeight: 900, lineHeight: 1.25, fontSize: '3.1rem', color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                              style={{ fontWeight: 900, lineHeight: 1.25, fontSize: '4.2rem', color: '#ffffff', textShadow: '0 2px 6px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                             >
                               {title}
                             </motion.div>
@@ -1349,7 +1349,7 @@ const PublicDisplay: React.FC = () => {
                               exit={{ opacity: 0, y: -4 }}
                               transition={{ duration: 0.25 }}
                               className="call-song-artist"
-                              style={{ fontSize: '1.95rem', color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 1px 2px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                              style={{ fontSize: '2.8rem', color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 2px 4px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                             >
                               {artist}
                             </motion.div>
@@ -1774,7 +1774,7 @@ const PublicDisplay: React.FC = () => {
             >
               <div className="bingo-card-header center" style={{ justifyContent: 'center' }}>
                 <Grid3X3 className="bingo-card-icon" />
-                <h2 style={{ fontSize: '2.2rem', fontWeight: 900 }}>{getPatternName()}</h2>
+                <h2 style={{ fontSize: '3.2rem', fontWeight: 900, textShadow: '0 2px 6px rgba(0,0,0,0.8)' }}>{getPatternName()}</h2>
                 {showNowPlaying && gameState.currentSong && (
                   <div className="now-playing-banner" style={{ marginTop: 6, fontSize: '0.95rem' }}>
                     Now Playing: {gameState.currentSong.name} — {gameState.currentSong.artist}
