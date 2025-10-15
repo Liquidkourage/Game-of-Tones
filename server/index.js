@@ -2369,20 +2369,88 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       return out;
     };
 
-    // Prepare per-playlist unique arrays
+    // Prepare per-playlist unique arrays (dedup within each playlist first)
     const perListUnique = playlistsWithSongs.map(pl => ({
       id: pl.id,
       name: pl.name,
       songs: dedup(Array.isArray(pl.songs) ? pl.songs : [])
     }));
 
+    // For 5x15 mode, we need to remove duplicates ACROSS playlists
+    let perListGloballyUnique = perListUnique;
+    if (perListUnique.length === 5) {
+      console.log('🔍 Checking for cross-playlist duplicates in 5x15 mode...');
+      const globalSeen = new Set();
+      const warnings = [];
+      
+      perListGloballyUnique = perListUnique.map((pl, index) => {
+        const uniqueSongs = [];
+        const duplicatesFound = [];
+        
+        for (const song of pl.songs) {
+          if (!globalSeen.has(song.id)) {
+            globalSeen.add(song.id);
+            uniqueSongs.push(song);
+          } else {
+            duplicatesFound.push(song);
+          }
+        }
+        
+        if (duplicatesFound.length > 0) {
+          console.log(`⚠️ Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
+          duplicatesFound.forEach(dup => {
+            console.log(`   - Duplicate: "${dup.name}" by ${dup.artist}`);
+          });
+        }
+        
+        if (uniqueSongs.length < 15) {
+          const shortage = 15 - uniqueSongs.length;
+          warnings.push(`Playlist "${pl.name}" only has ${uniqueSongs.length} unique songs after deduplication (needs 15, short by ${shortage})`);
+        }
+        
+        return {
+          ...pl,
+          songs: uniqueSongs,
+          originalCount: pl.songs.length,
+          duplicatesRemoved: duplicatesFound.length
+        };
+      });
+      
+      // If any playlist doesn't have enough songs after deduplication, warn and fall back
+      if (warnings.length > 0) {
+        console.warn('⚠️ Cannot use 5x15 mode due to insufficient unique songs after cross-playlist deduplication:');
+        warnings.forEach(warning => console.warn(`   ${warning}`));
+        io.to(roomId).emit('mode-warning', { 
+          type: 'insufficient-unique-songs-5x15',
+          message: 'Cannot use 5x15 mode: Some playlists have fewer than 15 unique songs after removing cross-playlist duplicates.',
+          details: warnings
+        });
+        // Fall back to using original perListUnique for other modes
+        perListGloballyUnique = perListUnique;
+      } else {
+        const totalDuplicates = perListGloballyUnique.reduce((sum, pl) => sum + pl.duplicatesRemoved, 0);
+        if (totalDuplicates > 0) {
+          console.log(`✅ Successfully removed ${totalDuplicates} cross-playlist duplicates. All playlists still have ≥15 unique songs.`);
+          io.to(roomId).emit('deduplication-success', {
+            totalDuplicatesRemoved: totalDuplicates,
+            playlistDetails: perListGloballyUnique.map(pl => ({
+              name: pl.name,
+              originalCount: pl.originalCount,
+              finalCount: pl.songs.length,
+              duplicatesRemoved: pl.duplicatesRemoved
+            }))
+          });
+        }
+      }
+    }
+
     let mode = 'fallback';
     // 1x75 mode: exactly 1 playlist with at least 75 unique songs
-    if (perListUnique.length === 1 && perListUnique[0].songs.length >= 75) {
+    if (perListGloballyUnique.length === 1 && perListGloballyUnique[0].songs.length >= 75) {
       mode = '1x75';
     }
-    // 5x15 mode: exactly 5 playlists each with at least 15 unique songs
-    if (perListUnique.length === 5 && perListUnique.every(pl => pl.songs.length >= 15)) {
+    // 5x15 mode: exactly 5 playlists each with at least 15 unique songs (after global deduplication)
+    if (perListGloballyUnique.length === 5 && perListGloballyUnique.every(pl => pl.songs.length >= 15)) {
       mode = '5x15';
     }
 
@@ -2395,9 +2463,10 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
         const colNames = [];
         const metaMap = {};
         for (let col = 0; col < 5; col++) {
-          const src = properShuffle(perListUnique[col].songs).slice(0, 15);
+          // Use the globally deduplicated song pools
+          const src = properShuffle(perListGloballyUnique[col].songs).slice(0, 15);
           fiveCols.push(src);
-          colNames.push(perListUnique[col].name || `Column ${col+1}`);
+          colNames.push(perListGloballyUnique[col].name || `Column ${col+1}`);
           src.forEach(s => { if (s && s.id) metaMap[s.id] = { name: s.name, artist: s.artist }; });
         }
         const roomRef = rooms.get(roomId);
@@ -2426,7 +2495,8 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       // This was causing massive bias - cards were limited to songs that would play early
       console.log('🎲 Building INDEPENDENT global pool for bingo cards (ignoring playback order)');
       const map = new Map();
-      for (const pl of perListUnique) {
+      // Use globally deduplicated pools to ensure no cross-playlist duplicates
+      for (const pl of perListGloballyUnique) {
         for (const s of pl.songs) { if (!map.has(s.id)) map.set(s.id, s); }
       }
       return Array.from(map.values());
@@ -2474,19 +2544,20 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       let chosen25 = [];
       if (mode === '1x75') {
         // Use the same base computed above to ensure consistency
-        const base = (rooms.get(roomId)?.oneBySeventyFivePool || []).map(x => perListUnique[0].songs.find(s => s.id === x.id)).filter(Boolean);
+        const base = (rooms.get(roomId)?.oneBySeventyFivePool || []).map(x => perListGloballyUnique[0].songs.find(s => s.id === x.id)).filter(Boolean);
         if (!ensureEnough(base.length)) {
           console.error(`❌ Not enough songs for 1x75 mode for player ${player.name}: need ${songsNeededPerCard}, have ${base.length}`);
           continue; // Skip this player but continue with others
         }
         chosen25 = properShuffle(base).slice(0, songsNeededPerCard);
       } else if (mode === '5x15') {
-        // For each of 5 playlists, sample 5 unique tracks, ensuring cross-column uniqueness
+        // For each of 5 playlists, sample 5 unique tracks from globally deduplicated pools
+        // Note: Cross-playlist duplicates are already removed, so we only need cross-column uniqueness within this card
         const used = new Set();
         const columns = [];
         let ok = true;
         for (let col = 0; col < 5; col++) {
-          const pool = properShuffle(perListUnique[col].songs);
+          const pool = properShuffle(perListGloballyUnique[col].songs);
           const colPicks = [];
           for (const s of pool) {
             if (!used.has(s.id)) { colPicks.push(s); used.add(s.id); }
@@ -2611,9 +2682,32 @@ async function generateBingoCardForPlayer(roomId, playerId) {
       songs: dedup(Array.isArray(pl.songs) ? pl.songs : [])
     }));
 
+    // For 5x15 mode, apply global deduplication (same logic as main card generation)
+    let perListGloballyUnique = perListUnique;
+    if (perListUnique.length === 5) {
+      console.log('🔍 Late-join: Checking for cross-playlist duplicates in 5x15 mode...');
+      const globalSeen = new Set();
+      
+      perListGloballyUnique = perListUnique.map((pl, index) => {
+        const uniqueSongs = [];
+        
+        for (const song of pl.songs) {
+          if (!globalSeen.has(song.id)) {
+            globalSeen.add(song.id);
+            uniqueSongs.push(song);
+          }
+        }
+        
+        return {
+          ...pl,
+          songs: uniqueSongs
+        };
+      });
+    }
+
     let mode = 'fallback';
-    if (perListUnique.length === 1 && perListUnique[0].songs.length >= 75) mode = '1x75';
-    if (perListUnique.length === 5 && perListUnique.every(pl => pl.songs.length >= 15)) mode = '5x15';
+    if (perListGloballyUnique.length === 1 && perListGloballyUnique[0].songs.length >= 75) mode = '1x75';
+    if (perListGloballyUnique.length === 5 && perListGloballyUnique.every(pl => pl.songs.length >= 15)) mode = '5x15';
     console.log(`🎯 Late-join card mode: ${mode}`);
 
     const buildGlobalPool = () => {
@@ -2621,7 +2715,8 @@ async function generateBingoCardForPlayer(roomId, playerId) {
       // This was causing massive bias - cards were limited to songs that would play early
       console.log('🎲 Late-join: Building INDEPENDENT global pool for bingo card (ignoring playback order)');
       const map = new Map();
-      for (const pl of perListUnique) { for (const s of pl.songs) { if (!map.has(s.id)) map.set(s.id, s); } }
+      // Use globally deduplicated pools to ensure no cross-playlist duplicates
+      for (const pl of perListGloballyUnique) { for (const s of pl.songs) { if (!map.has(s.id)) map.set(s.id, s); } }
       return Array.from(map.values());
     };
     const ensureEnough = (available) => {
@@ -2638,10 +2733,10 @@ async function generateBingoCardForPlayer(roomId, playerId) {
     if (mode === '1x75') {
       let base = [];
       if (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) {
-        const allowed = new Set(perListUnique[0].songs.map(s => s.id));
+        const allowed = new Set(perListGloballyUnique[0].songs.map(s => s.id));
         base = dedup(room.finalizedSongOrder.filter(s => allowed.has(s.id))).slice(0, 75);
       } else {
-        base = properShuffle(perListUnique[0].songs).slice(0, 75);
+        base = properShuffle(perListGloballyUnique[0].songs).slice(0, 75);
       }
       if (!ensureEnough(base.length)) return;
       chosen25 = properShuffle(base).slice(0, songsNeededPerCard);
@@ -2650,7 +2745,8 @@ async function generateBingoCardForPlayer(roomId, playerId) {
       const columns = [];
       let ok = true;
       for (let col = 0; col < 5; col++) {
-            const pool = properShuffle(perListUnique[col].songs);
+        // Use globally deduplicated pools for late-join cards
+        const pool = properShuffle(perListGloballyUnique[col].songs);
         const colPicks = [];
         for (const s of pool) {
           if (!used.has(s.id)) { colPicks.push(s); used.add(s.id); }
@@ -2772,27 +2868,41 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         return out;
       };
       const perListUnique = perListFetched.map(pl => ({ id: pl.id, name: pl.name, songs: dedup(Array.isArray(pl.songs) ? pl.songs : []) }));
-      if (perListUnique.every(pl => pl.songs.length >= 15)) {
+      
+      // Apply global deduplication for 5x15 mode (same logic as card generation)
+      let perListGloballyUnique = perListUnique;
+      if (perListUnique.length === 5) {
+        console.log('🔍 Playback: Applying cross-playlist deduplication for 5x15 mode...');
+        const globalSeen = new Set();
+        
+        perListGloballyUnique = perListUnique.map((pl, index) => {
+          const uniqueSongs = [];
+          
+          for (const song of pl.songs) {
+            if (!globalSeen.has(song.id)) {
+              globalSeen.add(song.id);
+              uniqueSongs.push(song);
+            }
+          }
+          
+          return {
+            ...pl,
+            songs: uniqueSongs
+          };
+        });
+      }
+      
+      if (perListGloballyUnique.every(pl => pl.songs.length >= 15)) {
         try {
           const built = [];
           const colNames = [];
           const metaMap = {};
-          // Ensure cross-column uniqueness to avoid duplicates
-          const used = new Set();
+          // Note: Cross-playlist duplicates already removed, just need to ensure we get exactly 15 per column
           for (let col = 0; col < 5; col++) {
-            const pool = properShuffle(perListUnique[col].songs);
-            const picks = [];
-            for (const s of pool) {
-              if (!used.has(s.id)) { picks.push(s); used.add(s.id); }
-              if (picks.length === 15) break;
-            }
-            if (picks.length < 15) {
-              // Top up without uniqueness if needed (still from shuffled pool)
-              const topUp = pool.slice(0, 15 - picks.length);
-              for (const s of topUp) { picks.push(s); }
-            }
+            const pool = properShuffle(perListGloballyUnique[col].songs);
+            const picks = pool.slice(0, 15); // Take first 15 from shuffled deduplicated pool
             built.push(picks);
-            colNames.push(perListUnique[col].name || `Column ${col + 1}`);
+            colNames.push(perListGloballyUnique[col].name || `Column ${col + 1}`);
             picks.forEach(s => { if (s && s.id) metaMap[s.id] = { name: s.name, artist: s.artist }; });
           }
           fiveCols = built.map(col => col.map(s => ({ id: s.id })));

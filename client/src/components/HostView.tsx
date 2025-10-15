@@ -692,6 +692,47 @@ const HostView: React.FC = () => {
       } catch {}
     });
 
+    // Handle 5x15 deduplication warnings
+    newSocket.on('mode-warning', (data: any) => {
+      const msg = data?.message || 'Mode warning occurred';
+      console.warn('Mode warning:', msg);
+      setShowLogs(true);
+      addLog(`Mode warning: ${msg}`, 'warn');
+      if (data?.details && Array.isArray(data.details)) {
+        data.details.forEach((detail: string) => {
+          addLog(`  ${detail}`, 'warn');
+        });
+      }
+      // Show toast notification
+      try {
+        const toast = document.createElement('div');
+        toast.textContent = '⚠️ ' + msg;
+        Object.assign(toast.style, {
+          position: 'fixed', bottom: '14px', left: '14px', maxWidth: '70vw',
+          background: 'rgba(255,193,7,0.1)', color: '#fff', border: '1px solid rgba(255,193,7,0.5)',
+          padding: '10px 12px', borderRadius: '10px', zIndex: 9999, fontWeight: 700
+        } as unknown as CSSStyleDeclaration);
+        document.body.appendChild(toast);
+        setTimeout(() => { try { document.body.removeChild(toast); } catch {} }, 5000);
+      } catch {}
+    });
+
+    // Handle successful deduplication notifications
+    newSocket.on('deduplication-success', (data: any) => {
+      if (data?.totalDuplicatesRemoved > 0) {
+        const msg = `Removed ${data.totalDuplicatesRemoved} duplicate songs across playlists for 5x15 mode`;
+        console.log('Deduplication success:', msg);
+        addLog(`✅ ${msg}`, 'info');
+        if (data?.playlistDetails && Array.isArray(data.playlistDetails)) {
+          data.playlistDetails.forEach((detail: any) => {
+            if (detail.duplicatesRemoved > 0) {
+              addLog(`  ${detail.name}: ${detail.originalCount} → ${detail.finalCount} songs (${detail.duplicatesRemoved} duplicates removed)`, 'info');
+            }
+          });
+        }
+      }
+    });
+
     // Acknowledge reveal events
     newSocket.on('call-revealed', (data: any) => {
       addLog(`Call revealed: ${data.hint || 'full'} ${data.songName ? '— ' + data.songName : ''} ${data.artistName ? '— ' + data.artistName : ''}`, 'info');
