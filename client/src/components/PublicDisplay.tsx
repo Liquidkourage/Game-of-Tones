@@ -1145,9 +1145,13 @@ const PublicDisplay: React.FC = () => {
             const textLength = fullText.length;
             let fontSize = '2.4rem'; // Default size
             
-            if (textLength > 25) {
+            if (textLength > 30) {
+              fontSize = '1.0rem';
+            } else if (textLength > 25) {
+              fontSize = '1.2rem';
+            } else if (textLength > 22) {
               fontSize = '1.4rem';
-            } else if (textLength > 20) {
+            } else if (textLength > 18) {
               fontSize = '1.6rem';
             } else if (textLength > 15) {
               fontSize = '1.8rem';
