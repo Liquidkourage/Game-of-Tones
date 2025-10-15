@@ -1136,7 +1136,7 @@ const PublicDisplay: React.FC = () => {
             return (
               <div key={i} className="call-col-title" style={{ textAlign: 'center' }}>
                 {name && (
-                  <div style={{ fontSize: '1.35rem', fontWeight: 900, opacity: 0.95, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div style={{ fontSize: '2.4rem', fontWeight: 900, opacity: 0.95, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>
                     {name}
                   </div>
                 )}
@@ -1774,7 +1774,7 @@ const PublicDisplay: React.FC = () => {
             >
               <div className="bingo-card-header center" style={{ justifyContent: 'center' }}>
                 <Grid3X3 className="bingo-card-icon" />
-                <h2 style={{ fontSize: '1.4rem' }}>{getPatternName()}</h2>
+                <h2 style={{ fontSize: '2.2rem', fontWeight: 900 }}>{getPatternName()}</h2>
                 {showNowPlaying && gameState.currentSong && (
                   <div className="now-playing-banner" style={{ marginTop: 6, fontSize: '0.95rem' }}>
                     Now Playing: {gameState.currentSong.name} — {gameState.currentSong.artist}
