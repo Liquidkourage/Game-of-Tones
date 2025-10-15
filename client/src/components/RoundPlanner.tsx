@@ -167,6 +167,8 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
         <div className="space-y-3">
           {rounds.map((round, index) => {
             const isActive = index === currentRound && gameState === 'playing';
+            const minRequired = round.songCount >= 60 ? 75 : 15;
+            const isInsufficient = round.songCount > 0 && round.songCount < minRequired;
             
             return (
               <div
@@ -174,6 +176,8 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                 className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${
                   isActive 
                     ? 'bg-rgba(0, 255, 136, 0.1) border-[#00ff88]' 
+                    : isInsufficient
+                    ? 'bg-rgba(255, 193, 7, 0.1) border-rgba(255, 193, 7, 0.3) hover:bg-rgba(255, 193, 7, 0.15)'
                     : 'bg-rgba(255, 255, 255, 0.05) border-rgba(255, 255, 255, 0.1) hover:bg-rgba(255, 255, 255, 0.08)'
                 }`}
                 draggable
@@ -206,11 +210,16 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                         <option value={round.playlistId}>{round.playlistName}</option>
                         {playlists
                           .filter(p => p.id !== round.playlistId)
-                          .map(playlist => (
-                            <option key={playlist.id} value={playlist.id}>
-                              {playlist.name} ({playlist.tracks} songs)
-                            </option>
-                          ))}
+                          .map(playlist => {
+                            const minRequired = playlist.tracks >= 60 ? 75 : 15;
+                            const isInsufficient = playlist.tracks < minRequired;
+                            const modeText = minRequired === 75 ? '1x75' : '5x15';
+                            return (
+                              <option key={playlist.id} value={playlist.id}>
+                                {playlist.name} ({playlist.tracks} songs) {isInsufficient ? `⚠️ needs ${minRequired - playlist.tracks} more for ${modeText}` : `✓ ${modeText} ready`}
+                              </option>
+                            );
+                          })}
                       </select>
                     ) : (
                       <select
@@ -219,18 +228,44 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                         className="bg-rgba(255, 255, 255, 0.1) border border-rgba(255, 255, 255, 0.2) rounded-lg px-3 py-1 text-white text-sm"
                       >
                         <option value="">Select Playlist...</option>
-                        {playlists.map(playlist => (
-                          <option key={playlist.id} value={playlist.id}>
-                            {playlist.name} ({playlist.tracks} songs)
-                          </option>
-                        ))}
+                        {playlists.map(playlist => {
+                          const minRequired = playlist.tracks >= 60 ? 75 : 15;
+                          const isInsufficient = playlist.tracks < minRequired;
+                          const modeText = minRequired === 75 ? '1x75' : '5x15';
+                          return (
+                            <option key={playlist.id} value={playlist.id}>
+                              {playlist.name} ({playlist.tracks} songs) {isInsufficient ? `⚠️ needs ${minRequired - playlist.tracks} more for ${modeText}` : `✓ ${modeText} ready`}
+                            </option>
+                          );
+                        })}
                       </select>
                     )}
                     
                     {round.songCount > 0 && (
-                      <span className="text-sm text-gray-400">
-                        {round.songCount} songs
-                      </span>
+                      <>
+                        <span className="text-sm text-gray-400">
+                          {round.songCount} songs
+                        </span>
+                        {(() => {
+                          const minRequired = round.songCount >= 60 ? 75 : 15;
+                          const isInsufficient = round.songCount < minRequired;
+                          const modeText = minRequired === 75 ? '1x75' : '5x15';
+                          
+                          if (isInsufficient) {
+                            return (
+                              <span className="text-xs text-yellow-400 font-semibold">
+                                ⚠️ Need {minRequired - round.songCount} more for {modeText}
+                              </span>
+                            );
+                          } else {
+                            return (
+                              <span className="text-xs text-green-400 font-semibold">
+                                ✓ {modeText} ready
+                              </span>
+                            );
+                          }
+                        })()}
+                      </>
                     )}
                   </div>
                 </div>
