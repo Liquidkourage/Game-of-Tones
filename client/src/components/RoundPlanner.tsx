@@ -229,15 +229,23 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                   onDragOver={(e) => handleBucketDragOver(e, index)}
                   onDragLeave={handleBucketDragLeave}
                   onDrop={(e) => handleBucketDrop(e, index)}
-                  className={`relative p-4 rounded-xl border-3 transition-all duration-200 min-h-[200px] flex-1 ${
-                    isActive
-                      ? 'border-[#00ff88] bg-gradient-to-br from-rgba(0, 255, 136, 0.15) to-rgba(0, 255, 136, 0.05) shadow-lg shadow-[#00ff88]/20'
-                      : isDragOver
-                      ? 'border-[#00ff88] bg-gradient-to-br from-rgba(0, 255, 136, 0.1) to-rgba(0, 255, 136, 0.02) scale-105 shadow-xl shadow-[#00ff88]/30'
-                      : isInsufficient
-                      ? 'border-dashed border-rgba(255, 193, 7, 0.6) bg-gradient-to-br from-rgba(255, 193, 7, 0.1) to-rgba(255, 193, 7, 0.02)'
-                      : 'border-dashed border-rgba(255, 255, 255, 0.3) bg-gradient-to-br from-rgba(255, 255, 255, 0.05) to-rgba(255, 255, 255, 0.01) hover:border-rgba(255, 255, 255, 0.5) hover:shadow-lg'
+                  className={`relative flex-1 transition-all duration-200 ${
+                    isDragOver ? 'scale-105' : ''
                   }`}
+                >
+                  {/* Bucket Container */}
+                  <div className={`
+                    h-full min-h-[200px] p-4 rounded-2xl border-2 backdrop-filter backdrop-blur-lg
+                    transition-all duration-300 shadow-lg
+                    ${isActive
+                      ? 'border-[#00ff88] bg-gradient-to-br from-[#00ff88]/20 via-[#00ff88]/10 to-[#00ff88]/5 shadow-[#00ff88]/30'
+                      : isDragOver
+                      ? 'border-[#00ff88] bg-gradient-to-br from-[#00ff88]/15 via-[#00ff88]/8 to-[#00ff88]/3 shadow-[#00ff88]/25'
+                      : isInsufficient
+                      ? 'border-yellow-400/60 bg-gradient-to-br from-yellow-400/15 via-yellow-400/8 to-yellow-400/3 shadow-yellow-400/20'
+                      : 'border-white/20 bg-gradient-to-br from-white/10 via-white/5 to-white/2 hover:border-white/40 hover:shadow-white/10'
+                    }
+                  `}
                 >
                   {/* Bucket Header */}
                   <div className="flex items-center justify-between mb-3">
@@ -257,8 +265,8 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                     {(round.playlistIds || []).length === 0 ? (
                       <div className={`flex-1 flex flex-col items-center justify-center rounded-xl border-2 border-dashed transition-all ${
                         isDragOver 
-                          ? 'border-[#00ff88] bg-rgba(0, 255, 136, 0.1) text-[#00ff88]' 
-                          : 'border-rgba(255, 255, 255, 0.2) text-gray-400'
+                          ? 'border-[#00ff88]/80 bg-[#00ff88]/10 text-[#00ff88] shadow-inner' 
+                          : 'border-white/30 bg-white/5 text-gray-400'
                       }`}>
                         <FolderOpen className={`w-6 h-6 mb-1 ${isDragOver ? 'text-[#00ff88]' : 'text-gray-500'}`} />
                         <span className="text-xs font-medium">
@@ -275,7 +283,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                           if (!playlist) return null;
                           
                           return (
-                            <div key={playlistId} className="flex items-center gap-2 bg-rgba(255, 255, 255, 0.15) rounded-lg px-3 py-2 border border-rgba(255, 255, 255, 0.1)">
+                            <div key={playlistId} className="flex items-center gap-2 bg-white/15 backdrop-blur-sm rounded-lg px-3 py-2 border border-white/20 shadow-sm hover:bg-white/20 transition-all">
                               <Music className="w-4 h-4 text-[#00ff88] flex-shrink-0" />
                               <span className="text-sm text-white flex-1 truncate font-medium">
                                 {playlist.name}
@@ -296,7 +304,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                           );
                         })}
                         {isDragOver && (
-                          <div className="flex items-center justify-center h-12 border-2 border-dashed border-[#00ff88] bg-rgba(0, 255, 136, 0.1) rounded-lg text-[#00ff88] text-sm font-medium">
+                          <div className="flex items-center justify-center h-12 border-2 border-dashed border-[#00ff88]/80 bg-[#00ff88]/10 backdrop-blur-sm rounded-lg text-[#00ff88] text-sm font-medium shadow-inner">
                             Drop to add another playlist
                           </div>
                         )}
@@ -341,19 +349,25 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                       )}
                     </div>
                   </div>
+                  </div>
                 </div>
               );
             })}
             
                   {/* Add Round Button */}
                   {rounds.length < 6 && (
-                    <button
-                      onClick={addRound}
-                      className="p-4 border-2 border-dashed border-rgba(255, 255, 255, 0.2) rounded-xl text-gray-400 hover:text-white hover:border-rgba(255, 255, 255, 0.4) transition-colors min-h-[200px] flex-1 flex flex-col items-center justify-center gap-2"
-                    >
-                      <Plus className="w-8 h-8" />
-                      <span>Add Round</span>
-                    </button>
+                    <div className="flex-1">
+                      <button
+                        onClick={addRound}
+                        className="w-full h-full min-h-[200px] p-4 rounded-2xl border-2 border-dashed border-white/30 
+                                 bg-gradient-to-br from-white/5 via-white/3 to-white/1 backdrop-filter backdrop-blur-lg
+                                 text-gray-400 hover:text-white hover:border-white/50 hover:from-white/10 hover:via-white/6 hover:to-white/2
+                                 transition-all duration-300 flex flex-col items-center justify-center gap-3 shadow-lg hover:shadow-white/10"
+                      >
+                        <Plus className="w-10 h-10" />
+                        <span className="font-semibold">Add Round</span>
+                      </button>
+                    </div>
                   )}
           </div>
         </div>
