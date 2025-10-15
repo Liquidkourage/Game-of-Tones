@@ -2116,13 +2116,10 @@ io.on('connection', (socket) => {
       try {
         console.log('🔀 Shuffling playlist in room:', roomId);
         if (room.playlistSongs) {
-          // Fisher-Yates shuffle
-          for (let i = room.playlistSongs.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [room.playlistSongs[i], room.playlistSongs[j]] = [room.playlistSongs[j], room.playlistSongs[i]];
-          }
+          // Use proper Fisher-Yates shuffle function
+          room.playlistSongs = properShuffle(room.playlistSongs);
           room.currentSongIndex = 0;
-          console.log('✅ Playlist shuffled successfully');
+          console.log('✅ Playlist shuffled successfully with proper Fisher-Yates algorithm');
           io.to(roomId).emit('playlist-shuffled');
         }
       } catch (error) {
@@ -2321,6 +2318,17 @@ io.on('connection', (socket) => {
 });
 
 // Helper functions
+
+// Proper Fisher-Yates shuffle algorithm (replaces biased Math.random() - 0.5 sorts)
+function properShuffle(array) {
+  const shuffled = [...array]; // Don't mutate original
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 async function generateBingoCards(roomId, playlists, songOrder = null) {
   console.log('🎲 Generating bingo cards for room:', roomId);
   const room = rooms.get(roomId);
@@ -2387,7 +2395,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
         const colNames = [];
         const metaMap = {};
         for (let col = 0; col < 5; col++) {
-          const src = [...perListUnique[col].songs].sort(() => Math.random() - 0.5).slice(0, 15);
+          const src = properShuffle(perListUnique[col].songs).slice(0, 15);
           fiveCols.push(src);
           colNames.push(perListUnique[col].name || `Column ${col+1}`);
           src.forEach(s => { if (s && s.id) metaMap[s.id] = { name: s.name, artist: s.artist }; });
@@ -2398,7 +2406,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           roomRef.fiveByFifteenPlaylistNames = colNames;
           roomRef.fiveByFifteenMeta = metaMap;
           // Finalize a single global shuffled order of the 75 picks
-          const globalOrder = fiveCols.flat().map(s => s.id).sort(() => Math.random() - 0.5);
+          const globalOrder = properShuffle(fiveCols.flat().map(s => s.id));
           roomRef.finalizedSongOrder = globalOrder;
           io.to(roomId).emit('fiveby15-pool', { columns: roomRef.fiveByFifteenColumnsIds, names: colNames, meta: metaMap });
           // Emit finalized global order for Host UI
@@ -2446,7 +2454,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       } else {
         // Fallback: server-side shuffle (should rarely happen)
         console.log('🎯 1x75: Using server-side shuffle (no client songList provided)');
-        base = [...perListUnique[0].songs].sort(() => Math.random() - 0.5).slice(0, 75);
+        base = properShuffle(perListUnique[0].songs).slice(0, 75);
       }
       const roomRef = rooms.get(roomId);
       if (roomRef) {
@@ -2471,14 +2479,14 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           console.error(`❌ Not enough songs for 1x75 mode for player ${player.name}: need ${songsNeededPerCard}, have ${base.length}`);
           continue; // Skip this player but continue with others
         }
-        chosen25 = [...base].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
+        chosen25 = properShuffle(base).slice(0, songsNeededPerCard);
       } else if (mode === '5x15') {
         // For each of 5 playlists, sample 5 unique tracks, ensuring cross-column uniqueness
         const used = new Set();
         const columns = [];
         let ok = true;
         for (let col = 0; col < 5; col++) {
-          const pool = [...perListUnique[col].songs].sort(() => Math.random() - 0.5);
+          const pool = properShuffle(perListUnique[col].songs);
           const colPicks = [];
           for (const s of pool) {
             if (!used.has(s.id)) { colPicks.push(s); used.add(s.id); }
@@ -2494,7 +2502,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
             console.error(`❌ Not enough songs in global pool for player ${player.name}: need ${songsNeededPerCard}, have ${global.length}`);
             continue; // Skip this player but continue with others
           }
-          chosen25 = [...global].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
+          chosen25 = properShuffle(global).slice(0, songsNeededPerCard);
         } else {
           // Flatten column-major into row-major 5x5
           for (let row = 0; row < 5; row++) {
@@ -2511,8 +2519,8 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
         }
         // CRITICAL: Use completely independent shuffle for bingo cards
         // This ensures fair randomness separate from playback order
-        chosen25 = [...pool].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
-        console.log(`🎲 Generated FAIR blackout card for ${player.name} from ${pool.length} song pool`);
+        chosen25 = properShuffle(pool).slice(0, songsNeededPerCard);
+        console.log(`🎲 Generated TRULY FAIR blackout card for ${player.name} from ${pool.length} song pool`);
       }
 
       // Build card
@@ -2633,16 +2641,16 @@ async function generateBingoCardForPlayer(roomId, playerId) {
         const allowed = new Set(perListUnique[0].songs.map(s => s.id));
         base = dedup(room.finalizedSongOrder.filter(s => allowed.has(s.id))).slice(0, 75);
       } else {
-        base = [...perListUnique[0].songs].sort(() => Math.random() - 0.5).slice(0, 75);
+        base = properShuffle(perListUnique[0].songs).slice(0, 75);
       }
       if (!ensureEnough(base.length)) return;
-      chosen25 = [...base].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
+      chosen25 = properShuffle(base).slice(0, songsNeededPerCard);
     } else if (mode === '5x15') {
       const used = new Set();
       const columns = [];
       let ok = true;
       for (let col = 0; col < 5; col++) {
-        const pool = [...perListUnique[col].songs].sort(() => Math.random() - 0.5);
+            const pool = properShuffle(perListUnique[col].songs);
         const colPicks = [];
         for (const s of pool) {
           if (!used.has(s.id)) { colPicks.push(s); used.add(s.id); }
@@ -2655,7 +2663,7 @@ async function generateBingoCardForPlayer(roomId, playerId) {
         console.warn('⚠️ 5x15 late-join fell short; falling back to global pool');
         const global = buildGlobalPool();
         if (!ensureEnough(global.length)) return;
-        chosen25 = [...global].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
+        chosen25 = properShuffle(global).slice(0, songsNeededPerCard);
       } else {
         for (let row = 0; row < 5; row++) {
           for (let col = 0; col < 5; col++) {
@@ -2667,8 +2675,8 @@ async function generateBingoCardForPlayer(roomId, playerId) {
       const pool = buildGlobalPool();
       if (!ensureEnough(pool.length)) return;
       // CRITICAL: Use completely independent shuffle for late-join bingo cards
-      chosen25 = [...pool].sort(() => Math.random() - 0.5).slice(0, songsNeededPerCard);
-      console.log(`🎲 Generated FAIR late-join card from ${pool.length} song pool`);
+      chosen25 = properShuffle(pool).slice(0, songsNeededPerCard);
+      console.log(`🎲 Generated TRULY FAIR late-join card from ${pool.length} song pool`);
     }
 
     const card = { id: playerId, squares: [] };
@@ -2772,7 +2780,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           // Ensure cross-column uniqueness to avoid duplicates
           const used = new Set();
           for (let col = 0; col < 5; col++) {
-            const pool = [...perListUnique[col].songs].sort(() => Math.random() - 0.5);
+            const pool = properShuffle(perListUnique[col].songs);
             const picks = [];
             for (const s of pool) {
               if (!used.has(s.id)) { picks.push(s); used.add(s.id); }
