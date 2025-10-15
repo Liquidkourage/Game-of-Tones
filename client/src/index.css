@@ -1249,7 +1249,7 @@ code {
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(20px);
   border-radius: 10px;
-  padding: 12px;
+  padding: 8px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   display: flex;
   flex-direction: column;
@@ -1292,7 +1292,7 @@ code {
 /* Bottom Row Layout */
 .bottom-row {
   display: grid;
-  grid-template-columns: 0.6fr 1.4fr; /* make left wider to match pattern card width */
+  grid-template-columns: 0.45fr 1.55fr; /* give more space to call columns */
   gap: 15px;
   flex: 1;
   min-height: 0;
@@ -1456,7 +1456,7 @@ code {
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(20px);
   border-radius: 10px;
-  padding: 12px;
+  padding: 8px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   display: flex;
   flex-direction: column;
