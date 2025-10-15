@@ -94,6 +94,7 @@ const PlayerView: React.FC = () => {
     hasBingo: false,
     pattern: 'full_card'
   });
+  const [songsPlayed, setSongsPlayed] = useState<number>(0);
 
   const countUniqueSongs = (card: BingoCard): number => {
     if (!card || !card.squares) return 0;
@@ -159,6 +160,8 @@ const PlayerView: React.FC = () => {
         isPlaying: true,
         pattern: data?.pattern || 'full_card'
       }));
+      // Reset songs played counter when game starts
+      setSongsPlayed(0);
     });
 
     newSocket.on('room-state', (payload: any) => {
@@ -187,6 +190,8 @@ const PlayerView: React.FC = () => {
           artist: data.artistName
         }
       }));
+      // Increment songs played counter
+      setSongsPlayed(prev => prev + 1);
     });
 
     newSocket.on('bingo-card', (data: any) => {
@@ -274,6 +279,8 @@ const PlayerView: React.FC = () => {
       }));
       setBingoStatus('idle');
       setBingoMessage('');
+      // Reset songs played counter
+      setSongsPlayed(0);
       
       // Reset bingo card marked state
       if (bingoCard && bingoCard.squares) {
@@ -302,6 +309,8 @@ const PlayerView: React.FC = () => {
     newSocket.on('game-reset', () => {
       setGameState({ isPlaying: false, currentSong: null, playerCount: 0, hasBingo: false, pattern: 'full_card' });
       setBingoCard(null);
+      // Reset songs played counter
+      setSongsPlayed(0);
       console.log('🔁 Game reset');
     });
 
@@ -851,6 +860,17 @@ const PlayerView: React.FC = () => {
             <Users className="player-icon" />
             <span className="player-line">{playerName} — Room {roomId}</span>
             <span className="player-count">{gameState.playerCount} players</span>
+            {gameState.isPlaying && (
+              <span className="songs-played" style={{ 
+                fontSize: '0.8rem', 
+                color: '#b3b3b3',
+                padding: '2px 6px',
+                borderRadius: '8px',
+                background: 'rgba(255,255,255,0.1)'
+              }}>
+                {songsPlayed} played
+              </span>
+            )}
             {gameState.hasBingo && (
               <span className="player-bingo">BINGO!</span>
             )}
@@ -896,6 +916,15 @@ const PlayerView: React.FC = () => {
           <div onClick={toggleFocusCard} style={{ cursor: 'pointer' }}>
             <span className="focus-room">Room: {roomId}</span>
             <span className="focus-name">{playerName}</span>
+            {gameState.isPlaying && (
+              <span style={{ 
+                fontSize: '0.7rem', 
+                color: '#b3b3b3',
+                marginLeft: '8px'
+              }}>
+                {songsPlayed} played
+              </span>
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <label className="toggle-switch" style={{ transform: 'scale(0.8)' }}>
