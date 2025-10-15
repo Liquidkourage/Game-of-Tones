@@ -1133,11 +1133,18 @@ const PublicDisplay: React.FC = () => {
           {[0,1,2,3,4].map((i) => {
             const raw = playlistNames[i] || '';
             const name = raw.replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
+            const bingoLetter = ['B', 'I', 'N', 'G', 'O'][i];
             return (
               <div key={i} className="call-col-title" style={{ textAlign: 'center' }}>
-                {name && (
+                {name ? (
                   <div style={{ fontSize: '2.4rem', fontWeight: 900, opacity: 0.95, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>
-                    {name}
+                    <span style={{ color: '#00ff88', marginRight: '0.3em' }}>{bingoLetter}</span>
+                    <span style={{ color: '#ffffff', margin: '0 0.2em' }}>-</span>
+                    <span style={{ color: '#ffffff' }}>{name}</span>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '2.4rem', fontWeight: 900, opacity: 0.95, color: '#00ff88', textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>
+                    {bingoLetter}
                   </div>
                 )}
               </div>
