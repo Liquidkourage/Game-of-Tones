@@ -17,7 +17,7 @@ function AppHeader() {
   const location = useLocation();
   const isDisplay = /^\/display(\/.+|$)/.test(location.pathname);
   const headerStyle = isDisplay
-    ? { position: 'absolute' as const, left: 12, top: 8, width: 'auto', background: 'transparent', borderBottom: 'none', padding: '0.4rem 0.8rem', zIndex: 200, pointerEvents: 'none' as const }
+    ? { position: 'absolute' as const, left: '50%', transform: 'translateX(-50%)', top: 8, width: 'auto', background: 'transparent', borderBottom: 'none', padding: '0.4rem 0.8rem', zIndex: 200, pointerEvents: 'none' as const }
     : {};
   return (
     <motion.header
