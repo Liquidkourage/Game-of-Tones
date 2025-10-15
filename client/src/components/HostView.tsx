@@ -6,7 +6,8 @@ import {
   Pause, 
   SkipForward, 
   Music, 
-  Trophy
+  Trophy,
+  Crown
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL } from '../config';
@@ -2188,6 +2189,186 @@ const HostView: React.FC = () => {
                </div>
              )}
           </motion.div>
+
+          {/* Round Control Panel */}
+          {isSpotifyConnected && eventRounds.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="setting-item"
+              style={{
+                background: 'rgba(0, 255, 136, 0.1)',
+                border: '2px solid rgba(0, 255, 136, 0.3)',
+                borderRadius: '12px',
+                padding: '20px',
+                marginBottom: '20px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                <Crown style={{ width: '24px', height: '24px', color: '#00ff88' }} />
+                <h3 style={{ color: '#ffffff', fontSize: '1.2rem', fontWeight: '700', margin: 0 }}>
+                  Round Control Center
+                </h3>
+                <div style={{ 
+                  background: 'rgba(0, 255, 136, 0.2)', 
+                  padding: '4px 12px', 
+                  borderRadius: '20px',
+                  fontSize: '0.8rem',
+                  fontWeight: '600',
+                  color: '#00ff88'
+                }}>
+                  Round {currentRoundIndex + 1} of {eventRounds.length}
+                </div>
+              </div>
+
+              {/* Current Round Status */}
+              <div style={{ 
+                background: 'rgba(255, 255, 255, 0.05)', 
+                borderRadius: '8px', 
+                padding: '16px', 
+                marginBottom: '16px',
+                border: '1px solid rgba(255, 255, 255, 0.1)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h4 style={{ color: '#ffffff', margin: 0, fontSize: '1rem' }}>
+                    Current: {eventRounds[currentRoundIndex]?.name || 'No Round Selected'}
+                  </h4>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <div style={{
+                      padding: '4px 8px',
+                      borderRadius: '12px',
+                      fontSize: '0.75rem',
+                      fontWeight: '600',
+                      background: eventRounds[currentRoundIndex]?.status === 'active' 
+                        ? 'rgba(0, 255, 136, 0.2)' 
+                        : eventRounds[currentRoundIndex]?.status === 'completed'
+                        ? 'rgba(34, 197, 94, 0.2)'
+                        : 'rgba(156, 163, 175, 0.2)',
+                      color: eventRounds[currentRoundIndex]?.status === 'active' 
+                        ? '#00ff88' 
+                        : eventRounds[currentRoundIndex]?.status === 'completed'
+                        ? '#22c55e'
+                        : '#9ca3af'
+                    }}>
+                      {eventRounds[currentRoundIndex]?.status?.toUpperCase() || 'UNPLANNED'}
+                    </div>
+                  </div>
+                </div>
+                
+                {eventRounds[currentRoundIndex] && (
+                  <div style={{ display: 'flex', gap: '20px', fontSize: '0.9rem', color: '#b3b3b3' }}>
+                    <span>
+                      📝 {(eventRounds[currentRoundIndex].playlistIds || []).length} Playlists
+                    </span>
+                    <span>
+                      🎵 {eventRounds[currentRoundIndex].songCount || 0} Songs
+                    </span>
+                    {eventRounds[currentRoundIndex].startedAt && (
+                      <span>
+                        ⏱️ Started {new Date(eventRounds[currentRoundIndex].startedAt!).toLocaleTimeString()}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Round Navigation */}
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => {
+                    if (currentRoundIndex > 0) {
+                      handleStartRound(currentRoundIndex - 1);
+                    }
+                  }}
+                  disabled={currentRoundIndex <= 0}
+                  className="btn-secondary"
+                  style={{ 
+                    fontSize: '0.9rem',
+                    opacity: currentRoundIndex <= 0 ? 0.5 : 1,
+                    cursor: currentRoundIndex <= 0 ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  ← Previous Round
+                </button>
+                
+                <button
+                  onClick={() => {
+                    if (currentRoundIndex < eventRounds.length - 1) {
+                      handleStartRound(currentRoundIndex + 1);
+                    }
+                  }}
+                  disabled={currentRoundIndex >= eventRounds.length - 1}
+                  className="btn-secondary"
+                  style={{ 
+                    fontSize: '0.9rem',
+                    opacity: currentRoundIndex >= eventRounds.length - 1 ? 0.5 : 1,
+                    cursor: currentRoundIndex >= eventRounds.length - 1 ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  Next Round →
+                </button>
+
+                <button
+                  onClick={confirmAndNewRound}
+                  disabled={gameState !== 'waiting'}
+                  className="btn-accent"
+                  style={{ 
+                    fontSize: '0.9rem',
+                    opacity: gameState !== 'waiting' ? 0.5 : 1,
+                    cursor: gameState !== 'waiting' ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  🔄 New Round
+                </button>
+              </div>
+
+              {/* All Rounds Overview */}
+              <div style={{ marginBottom: '12px' }}>
+                <h5 style={{ color: '#ffffff', fontSize: '0.9rem', marginBottom: '8px', fontWeight: '600' }}>
+                  All Rounds Overview:
+                </h5>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {eventRounds.map((round, index) => (
+                    <button
+                      key={round.id}
+                      onClick={() => handleStartRound(index)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        border: index === currentRoundIndex ? '2px solid #00ff88' : '1px solid rgba(255, 255, 255, 0.2)',
+                        background: index === currentRoundIndex 
+                          ? 'rgba(0, 255, 136, 0.2)' 
+                          : round.status === 'completed'
+                          ? 'rgba(34, 197, 94, 0.1)'
+                          : 'rgba(255, 255, 255, 0.05)',
+                        color: index === currentRoundIndex ? '#00ff88' : '#ffffff',
+                        fontSize: '0.8rem',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (index !== currentRoundIndex) {
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (index !== currentRoundIndex) {
+                          e.currentTarget.style.background = round.status === 'completed'
+                            ? 'rgba(34, 197, 94, 0.1)'
+                            : 'rgba(255, 255, 255, 0.05)';
+                        }
+                      }}
+                    >
+                      {round.name}
+                      {round.status === 'completed' && ' ✓'}
+                      {index === currentRoundIndex && ' (Current)'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
 
           {/* Round Planner */}
           {isSpotifyConnected && (
