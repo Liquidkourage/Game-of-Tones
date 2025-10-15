@@ -1721,16 +1721,16 @@ const PublicDisplay: React.FC = () => {
                 <div style={{ display: 'flex', flexDirection: 'row', gap: 20, alignItems: 'center', justifyContent: 'space-around' }}>
                   {/* Room code */}
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <div style={{ fontWeight: 800, fontSize: '1.4rem', color: '#b3b3b3', textAlign: 'center' }}>Room Number:</div>
-                    <div style={{ fontWeight: 900, fontSize: '2.4rem', color: '#00ff88', textAlign: 'center' }}>{roomInfo?.id || roomId}</div>
+                    <div style={{ fontWeight: 800, fontSize: '1.8rem', color: '#b3b3b3', textAlign: 'center' }}>Room Number:</div>
+                    <div style={{ fontWeight: 900, fontSize: '3.2rem', color: '#00ff88', textAlign: 'center' }}>{roomInfo?.id || roomId}</div>
                 </div>
                   
                   {/* Players */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <Users className="stat-icon" />
                     <div>
-                      <div style={{ fontSize: '2.0rem', fontWeight: 900 }}>{gameState.playerCount}</div>
-                      <div style={{ fontSize: '1.4rem', color: '#b3b3b3' }}>Players</div>
+                      <div style={{ fontSize: '2.8rem', fontWeight: 900 }}>{gameState.playerCount}</div>
+                      <div style={{ fontSize: '1.8rem', color: '#b3b3b3' }}>Players</div>
                 </div>
                 </div>
                   
@@ -1738,8 +1738,8 @@ const PublicDisplay: React.FC = () => {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <List className="stat-icon" />
                     <div>
-                      <div style={{ fontSize: '2.0rem', fontWeight: 900 }}>{totalPlayedCount}</div>
-                      <div style={{ fontSize: '1.4rem', color: '#b3b3b3' }}>Songs</div>
+                      <div style={{ fontSize: '2.8rem', fontWeight: 900 }}>{totalPlayedCount}</div>
+                      <div style={{ fontSize: '1.8rem', color: '#b3b3b3' }}>Songs</div>
                 </div>
                       </div>
                       </div>
