@@ -1681,6 +1681,90 @@ const HostView: React.FC = () => {
     }
   };
 
+  // Calculate win progress for a player's bingo card
+  const calculateWinProgress = (card: any, currentPattern: string) => {
+    if (!card || !card.squares) return { needed: 25, marked: 0, progress: 0 };
+    
+    const squares = card.squares;
+    const markedCount = squares.filter((s: any) => s.marked).length;
+    
+    if (currentPattern === 'full_card') {
+      const needed = Math.max(0, 25 - markedCount);
+      return { needed, marked: markedCount, progress: Math.round((markedCount / 25) * 100) };
+    }
+    
+    if (currentPattern === 'four_corners') {
+      const corners = ['0-0', '0-4', '4-0', '4-4'];
+      const markedCorners = corners.filter(pos => 
+        squares.find((s: any) => s.position === pos && s.marked)
+      ).length;
+      const needed = Math.max(0, 4 - markedCorners);
+      return { needed, marked: markedCorners, progress: Math.round((markedCorners / 4) * 100) };
+    }
+    
+    if (currentPattern === 'x') {
+      let diag1Marked = 0, diag2Marked = 0;
+      for (let i = 0; i < 5; i++) {
+        if (squares.find((s: any) => s.position === `${i}-${i}` && s.marked)) diag1Marked++;
+        if (squares.find((s: any) => s.position === `${i}-${4-i}` && s.marked)) diag2Marked++;
+      }
+      const totalDiagSquares = 9; // 5 + 5 - 1 (center overlap)
+      const markedDiagSquares = Math.min(diag1Marked + diag2Marked, totalDiagSquares);
+      const needed = Math.max(0, totalDiagSquares - markedDiagSquares);
+      return { needed, marked: markedDiagSquares, progress: Math.round((markedDiagSquares / totalDiagSquares) * 100) };
+    }
+    
+    if (currentPattern === 'line') {
+      // For line pattern, find the closest line to completion
+      let bestLineProgress = 0;
+      let bestLineNeeded = 5;
+      
+      // Check rows
+      for (let row = 0; row < 5; row++) {
+        let rowMarked = 0;
+        for (let col = 0; col < 5; col++) {
+          if (squares.find((s: any) => s.position === `${row}-${col}` && s.marked)) rowMarked++;
+        }
+        if (rowMarked > bestLineProgress) {
+          bestLineProgress = rowMarked;
+          bestLineNeeded = 5 - rowMarked;
+        }
+      }
+      
+      // Check columns
+      for (let col = 0; col < 5; col++) {
+        let colMarked = 0;
+        for (let row = 0; row < 5; row++) {
+          if (squares.find((s: any) => s.position === `${row}-${col}` && s.marked)) colMarked++;
+        }
+        if (colMarked > bestLineProgress) {
+          bestLineProgress = colMarked;
+          bestLineNeeded = 5 - colMarked;
+        }
+      }
+      
+      // Check diagonals
+      let diag1Marked = 0, diag2Marked = 0;
+      for (let i = 0; i < 5; i++) {
+        if (squares.find((s: any) => s.position === `${i}-${i}` && s.marked)) diag1Marked++;
+        if (squares.find((s: any) => s.position === `${i}-${4-i}` && s.marked)) diag2Marked++;
+      }
+      if (diag1Marked > bestLineProgress) {
+        bestLineProgress = diag1Marked;
+        bestLineNeeded = 5 - diag1Marked;
+      }
+      if (diag2Marked > bestLineProgress) {
+        bestLineProgress = diag2Marked;
+        bestLineNeeded = 5 - diag2Marked;
+      }
+      
+      return { needed: bestLineNeeded, marked: bestLineProgress, progress: Math.round((bestLineProgress / 5) * 100) };
+    }
+    
+    // Default fallback
+    return { needed: 25, marked: markedCount, progress: Math.round((markedCount / 25) * 100) };
+  };
+
   return (
     <div className="host-view">
       <motion.div 
@@ -1968,10 +2052,11 @@ const HostView: React.FC = () => {
                   </div>
                 )}
               </div>
-            )}
-          </div>
+        )}
+      </div>
 
-          {/* Player Cards Viewer */}
+
+      {/* Player Cards Viewer */}
           <div style={{ marginTop: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               <button className="btn-secondary" onClick={() => { const next = !showPlayerCards; setShowPlayerCards(next); if (next) requestPlayerCards(); }}>
@@ -1989,7 +2074,11 @@ const HostView: React.FC = () => {
                 {playerCards.size === 0 ? (
                   <div style={{ opacity: 0.8 }}>No player cards available. Cards are generated after finalizing mix.</div>
                 ) : (
-                  <div style={{ display: 'grid', gap: 16 }}>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', 
+                    gap: 16 
+                  }}>
                     {Array.from(playerCards.entries()).map(([playerId, playerData]) => (
                       <div key={playerId} style={{ 
                         background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
@@ -2000,13 +2089,62 @@ const HostView: React.FC = () => {
                       }}>
                         <div style={{ 
                           fontWeight: 'bold', 
-                          marginBottom: '12px', 
+                          marginBottom: '8px', 
                           color: '#00ff88',
                           fontSize: '1rem',
                           textAlign: 'center'
                         }}>
                           {playerData.playerName}
                         </div>
+                        
+                        {/* Win Progress Indicator */}
+                        {(() => {
+                          const progress = calculateWinProgress(playerData.card, pattern);
+                          const progressColor = progress.needed === 0 ? '#00ff88' : 
+                                              progress.needed <= 2 ? '#ffaa00' : 
+                                              progress.progress >= 50 ? '#66ccff' : '#888';
+                          const progressText = progress.needed === 0 ? '🎉 BINGO!' : 
+                                             progress.needed === 1 ? '1 more needed!' :
+                                             `${progress.needed} more needed`;
+                          
+                          return (
+                            <div style={{ 
+                              marginBottom: '12px', 
+                              textAlign: 'center',
+                              fontSize: '0.85rem'
+                            }}>
+                              <div style={{ 
+                                color: progressColor,
+                                fontWeight: 600,
+                                marginBottom: '4px'
+                              }}>
+                                {progressText}
+                              </div>
+                              <div style={{ 
+                                background: 'rgba(255,255,255,0.1)',
+                                borderRadius: '8px',
+                                height: '6px',
+                                overflow: 'hidden',
+                                margin: '0 auto',
+                                maxWidth: '200px'
+                              }}>
+                                <div style={{
+                                  background: progressColor,
+                                  height: '100%',
+                                  width: `${progress.progress}%`,
+                                  transition: 'width 0.3s ease'
+                                }} />
+                              </div>
+                              <div style={{ 
+                                fontSize: '0.75rem',
+                                color: '#b3b3b3',
+                                marginTop: '2px'
+                              }}>
+                                {progress.marked}/{pattern === 'full_card' ? 25 : pattern === 'four_corners' ? 4 : pattern === 'x' ? 9 : 5} ({progress.progress}%)
+                              </div>
+                            </div>
+                          );
+                        })()}
                         <div style={{ 
                           display: 'grid', 
                           gridTemplateColumns: 'repeat(5, 1fr)', 
