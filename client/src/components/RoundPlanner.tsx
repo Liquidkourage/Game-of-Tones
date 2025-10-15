@@ -40,6 +40,23 @@ interface RoundPlannerProps {
   gameState: 'waiting' | 'playing' | 'ended';
 }
 
+// Add shimmer animation styles
+const shimmerStyles = `
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    50% { transform: translateX(100%); }
+    100% { transform: translateX(-100%); }
+  }
+`;
+
+// Inject styles
+if (typeof document !== 'undefined' && !document.getElementById('shimmer-styles')) {
+  const style = document.createElement('style');
+  style.id = 'shimmer-styles';
+  style.textContent = shimmerStyles;
+  document.head.appendChild(style);
+}
+
 const RoundPlanner: React.FC<RoundPlannerProps> = ({
   rounds,
   onUpdateRounds,
@@ -216,7 +233,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
           </div>
 
           {/* Round Buckets */}
-          <div className="flex gap-3 w-full">
+          <div className="flex gap-2 w-full">
             {rounds.slice(0, 6).map((round, index) => {
               const isActive = index === currentRound && gameState === 'playing';
               const minRequired = round.songCount >= 60 ? 75 : 15;
@@ -245,26 +262,48 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                         : 'border-white/30 bg-gradient-to-br from-white/10 to-white/2 hover:border-white/50 hover:shadow-white/10'
                     }`}
                     style={{
-                      backgroundColor: isActive 
-                        ? 'rgba(34, 197, 94, 0.1)' 
+                      background: isActive 
+                        ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.2) 0%, rgba(0, 255, 136, 0.1) 50%, rgba(0, 255, 136, 0.05) 100%)' 
                         : isDragOver 
-                        ? 'rgba(34, 197, 94, 0.08)' 
+                        ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.15) 0%, rgba(0, 255, 136, 0.08) 50%, rgba(0, 255, 136, 0.03) 100%)' 
                         : isInsufficient 
-                        ? 'rgba(251, 191, 36, 0.1)' 
-                        : 'rgba(255, 255, 255, 0.05)',
+                        ? 'linear-gradient(135deg, rgba(255, 193, 7, 0.15) 0%, rgba(255, 193, 7, 0.08) 50%, rgba(255, 193, 7, 0.03) 100%)' 
+                        : 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(255, 255, 255, 0.02) 100%)',
                       borderColor: isActive || isDragOver 
-                        ? '#22c55e' 
+                        ? '#00ff88' 
                         : isInsufficient 
-                        ? '#fbbf24' 
+                        ? '#ffc107' 
                         : 'rgba(255, 255, 255, 0.3)',
-                      backdropFilter: 'blur(12px)',
+                      borderWidth: '2px',
+                      borderStyle: 'solid',
+                      backdropFilter: 'blur(20px)',
                       boxShadow: isActive 
-                        ? '0 10px 25px rgba(34, 197, 94, 0.3)' 
+                        ? '0 0 30px rgba(0, 255, 136, 0.4), 0 10px 25px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)' 
                         : isDragOver 
-                        ? '0 10px 25px rgba(34, 197, 94, 0.25)' 
-                        : '0 4px 15px rgba(0, 0, 0, 0.1)'
+                        ? '0 0 25px rgba(0, 255, 136, 0.3), 0 8px 20px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1)' 
+                        : isInsufficient
+                        ? '0 0 20px rgba(255, 193, 7, 0.3), 0 6px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
+                        : '0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+                      position: 'relative',
+                      overflow: 'hidden'
                     }}
                 >
+                  {/* Animated Background Effect */}
+                  {(isActive || isDragOver) && (
+                    <div 
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        background: `linear-gradient(45deg, transparent 30%, rgba(0, 255, 136, 0.1) 50%, transparent 70%)`,
+                        animation: 'shimmer 3s ease-in-out infinite',
+                        pointerEvents: 'none'
+                      }}
+                    />
+                  )}
+                  
                   {/* Bucket Header */}
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
@@ -382,9 +421,11 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                                  flex flex-col items-center justify-center gap-3"
                         style={{
                           borderColor: 'rgba(255, 255, 255, 0.3)',
-                          backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                          backdropFilter: 'blur(12px)',
-                          boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)'
+                          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(255, 255, 255, 0.02) 100%)',
+                          backdropFilter: 'blur(20px)',
+                          boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+                          position: 'relative',
+                          overflow: 'hidden'
                         }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.5)';
