@@ -4706,6 +4706,7 @@ const PORT = process.env.PORT || 7093;
 server.listen(PORT, async () => {
   console.log(`🎵 TEMPO - Music Bingo server running on port ${PORT}`);
   console.log('🎮 Ready for some musical bingo action!');
+  console.log('🚀 Cache-busting fix deployed - version 2.0');
   
   // Auto-connect to Spotify
   await autoConnectSpotify();
