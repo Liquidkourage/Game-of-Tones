@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ChevronDown, 
   ChevronUp, 
@@ -79,6 +79,27 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
   const [draggedPlaylist, setDraggedPlaylist] = useState<Playlist | null>(null);
   const [dragOverBucket, setDragOverBucket] = useState<number | null>(null);
 
+  // Utility function to ensure consistent round numbering
+  const ensureSequentialNumbering = (roundsToNumber: EventRound[]) => {
+    return roundsToNumber.map((round, index) => ({
+      ...round,
+      name: `Round ${index + 1}`
+    }));
+  };
+
+  // Fix numbering on component mount if needed
+  useEffect(() => {
+    const hasInconsistentNumbering = rounds.some((round, index) => 
+      round.name !== `Round ${index + 1}`
+    );
+    
+    if (hasInconsistentNumbering) {
+      console.log('🔢 Fixing inconsistent round numbering');
+      const fixedRounds = ensureSequentialNumbering(rounds);
+      onUpdateRounds(fixedRounds);
+    }
+  }, [rounds, onUpdateRounds]);
+
   const addRound = () => {
     const newRound: EventRound = {
       id: `round-${Date.now()}`,
@@ -88,13 +109,16 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
       songCount: 0,
       status: 'unplanned'
     };
-    onUpdateRounds([...rounds, newRound]);
+    const updatedRounds = [...rounds, newRound];
+    const renumberedRounds = ensureSequentialNumbering(updatedRounds);
+    onUpdateRounds(renumberedRounds);
   };
 
   const removeRound = (index: number) => {
     if (rounds.length > 1) {
-      const newRounds = rounds.filter((_, i) => i !== index);
-      onUpdateRounds(newRounds);
+      const filteredRounds = rounds.filter((_, i) => i !== index);
+      const renumberedRounds = ensureSequentialNumbering(filteredRounds);
+      onUpdateRounds(renumberedRounds);
     }
   };
 
