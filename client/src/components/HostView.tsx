@@ -762,7 +762,9 @@ const HostView: React.FC = () => {
     const checkSpotifyStatus = async () => {
       try {
         console.log('Host view loaded, checking Spotify status...');
-        const response = await fetch(`${API_BASE || ''}/api/spotify/status`);
+        // Add cache-busting parameter to force fresh request
+        const cacheBuster = Date.now();
+        const response = await fetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
         const data = await response.json();
 
         if (data.connected) {
@@ -808,8 +810,9 @@ const HostView: React.FC = () => {
       setIsSpotifyConnecting(true);
       setSpotifyError(null);
       
-      // Check if Spotify is already connected
-      const statusResponse = await fetch(`${API_BASE || ''}/api/spotify/status`);
+      // Check if Spotify is already connected (with cache-busting)
+      const cacheBuster = Date.now();
+      const statusResponse = await fetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
       const statusData = await statusResponse.json();
       
       if (statusData.connected) {
