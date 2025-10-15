@@ -157,7 +157,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
   };
 
   const canStartRound = (round: EventRound) => {
-    return round.playlistIds.length > 0 && round.status !== 'completed';
+    return (round.playlistIds || []).length > 0 && round.status !== 'completed';
   };
 
   return (
@@ -230,7 +230,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                   </div>
                   
                   {/* Selected Playlists */}
-                  {round.playlistIds.length > 0 && (
+                  {round.playlistIds && round.playlistIds.length > 0 && (
                     <div className="mt-2 space-y-1">
                       {round.playlistIds.map((playlistId, playlistIndex) => {
                         const playlist = playlists.find(p => p.id === playlistId);
@@ -271,7 +271,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                       >
                         <option value="">+ Add Playlist...</option>
                         {playlists
-                          .filter(playlist => !round.playlistIds.includes(playlist.id))
+                          .filter(playlist => !(round.playlistIds || []).includes(playlist.id))
                           .map(playlist => {
                             const minRequired = playlist.tracks >= 60 ? 75 : 15;
                             const isInsufficient = playlist.tracks < minRequired;
@@ -291,7 +291,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                     {round.songCount > 0 && (
                       <>
                         <span className="text-sm text-gray-400">
-                          {round.playlistIds.length} playlist{round.playlistIds.length !== 1 ? 's' : ''} • {round.songCount} songs total
+                          {(round.playlistIds || []).length} playlist{(round.playlistIds || []).length !== 1 ? 's' : ''} • {round.songCount} songs total
                         </span>
                         {(() => {
                           const minRequired = round.songCount >= 60 ? 75 : 15;

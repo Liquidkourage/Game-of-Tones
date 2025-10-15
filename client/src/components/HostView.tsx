@@ -1962,9 +1962,34 @@ const HostView: React.FC = () => {
       if (savedRounds) {
         const rounds = JSON.parse(savedRounds);
         if (Array.isArray(rounds) && rounds.length > 0) {
-          setEventRounds(rounds);
+          // Migrate old single-playlist format to new multi-playlist format
+          const migratedRounds = rounds.map((round: any) => {
+            // Check if this is old format (has playlistId instead of playlistIds)
+            if (round.playlistId && !round.playlistIds) {
+              return {
+                ...round,
+                playlistIds: round.playlistId ? [round.playlistId] : [],
+                playlistNames: round.playlistName ? [round.playlistName] : [],
+                // Remove old properties
+                playlistId: undefined,
+                playlistName: undefined
+              };
+            }
+            // Ensure new format has required arrays
+            return {
+              ...round,
+              playlistIds: round.playlistIds || [],
+              playlistNames: round.playlistNames || []
+            };
+          });
+          
+          setEventRounds(migratedRounds);
+          
+          // Save migrated data back to localStorage
+          localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(migratedRounds));
+          
           // Find the active round
-          const activeIndex = rounds.findIndex((r: EventRound) => r.status === 'active');
+          const activeIndex = migratedRounds.findIndex((r: EventRound) => r.status === 'active');
           if (activeIndex >= 0) {
             setCurrentRoundIndex(activeIndex);
           }
