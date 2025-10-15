@@ -4388,7 +4388,7 @@ function analyzePlaylistName(name) {
     'modern': /modern|current|recent|new/i
   };
   
-  // Theme patterns
+  // Theme patterns with semantic concepts
   const themePatterns = {
     love: /love|romantic|valentine|heart|crush/i,
     party: /party|dance|club|celebration|fun/i,
@@ -4400,7 +4400,19 @@ function analyzePlaylistName(name) {
     winter: /winter|christmas|holiday|snow/i,
     duos: /duos?|pairs?|featuring|feat|collaboration/i,
     covers: /covers?|tribute|version/i,
-    instrumentals: /instrumental|no vocals|background/i
+    instrumentals: /instrumental|no vocals|background/i,
+    transportation: /transportation|transport|travel|vehicle|car|truck|bike|plane|train|boat|ship|motorcycle|bus|taxi|drive|fly|sail|ride/i,
+    animals: /animals?|pets?|dog|cat|bird|horse|lion|tiger|bear|wolf|elephant|monkey|zoo|wild/i,
+    colors: /colors?|red|blue|green|yellow|orange|purple|pink|black|white|rainbow|bright/i,
+    weather: /weather|rain|snow|sun|storm|cloud|wind|thunder|lightning|hurricane|tornado/i,
+    food: /food|eat|drink|hungry|restaurant|kitchen|cook|recipe|meal|dinner|lunch|breakfast/i,
+    emotions: /emotions?|feelings?|happy|sad|angry|excited|nervous|scared|proud|jealous|lonely/i,
+    time: /time|clock|hour|minute|second|morning|afternoon|evening|night|today|tomorrow|yesterday/i,
+    nature: /nature|forest|mountain|ocean|river|lake|tree|flower|garden|park|outdoor/i,
+    city: /city|town|urban|street|building|downtown|neighborhood|metro|skyline/i,
+    space: /space|star|moon|planet|galaxy|universe|cosmic|astronaut|rocket|satellite/i,
+    sports: /sports?|game|team|player|win|lose|championship|football|basketball|baseball|soccer/i,
+    music: /music|song|band|singer|guitar|piano|drum|concert|album|melody|rhythm/i
   };
   
   const analysis = {
@@ -4605,17 +4617,70 @@ function getYearRange(era) {
 // Helper function to get theme-specific search queries
 function getThemeQueries(theme) {
   const themeQueries = {
-    love: ['love song', 'romantic', 'valentine', 'heart'],
-    party: ['party', 'dance', 'celebration', 'fun'],
-    sad: ['sad song', 'heartbreak', 'melancholy', 'blues'],
-    workout: ['workout', 'energy', 'pump up', 'motivation'],
-    chill: ['chill', 'relax', 'mellow', 'ambient'],
-    driving: ['driving', 'road trip', 'highway', 'cruise'],
-    summer: ['summer', 'beach', 'sunshine', 'vacation'],
-    winter: ['winter', 'christmas', 'holiday', 'snow'],
-    duos: ['duet', 'featuring', 'collaboration', 'feat'],
-    covers: ['cover version', 'tribute', 'acoustic version'],
-    instrumentals: ['instrumental', 'no vocals', 'background music']
+    love: ['love song', 'romantic', 'valentine', 'heart', 'crush', 'romance'],
+    party: ['party', 'dance', 'celebration', 'fun', 'club', 'disco'],
+    sad: ['sad song', 'heartbreak', 'melancholy', 'blues', 'tears', 'lonely'],
+    workout: ['workout', 'energy', 'pump up', 'motivation', 'gym', 'running'],
+    chill: ['chill', 'relax', 'mellow', 'ambient', 'calm', 'peaceful'],
+    driving: ['driving', 'road trip', 'highway', 'cruise', 'car', 'journey'],
+    summer: ['summer', 'beach', 'sunshine', 'vacation', 'hot', 'sunny'],
+    winter: ['winter', 'christmas', 'holiday', 'snow', 'cold', 'cozy'],
+    duos: ['duet', 'featuring', 'collaboration', 'feat', 'with', 'together'],
+    covers: ['cover version', 'tribute', 'acoustic version', 'remake'],
+    instrumentals: ['instrumental', 'no vocals', 'background music', 'piano', 'guitar'],
+    transportation: [
+      'car', 'truck', 'motorcycle', 'bike', 'bicycle', 'vehicle',
+      'plane', 'airplane', 'flight', 'fly', 'pilot', 'airport',
+      'train', 'railroad', 'locomotive', 'subway', 'metro',
+      'boat', 'ship', 'sail', 'ocean', 'cruise', 'yacht',
+      'bus', 'taxi', 'ride', 'drive', 'highway', 'road',
+      'travel', 'journey', 'trip', 'transportation', 'moving'
+    ],
+    animals: [
+      'dog', 'cat', 'bird', 'horse', 'lion', 'tiger', 'bear', 'wolf',
+      'elephant', 'monkey', 'rabbit', 'fox', 'deer', 'eagle', 'snake',
+      'fish', 'shark', 'whale', 'dolphin', 'butterfly', 'bee', 'spider'
+    ],
+    colors: [
+      'red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink',
+      'black', 'white', 'brown', 'gray', 'silver', 'gold', 'rainbow'
+    ],
+    weather: [
+      'rain', 'snow', 'sun', 'storm', 'thunder', 'lightning', 'wind',
+      'cloud', 'hurricane', 'tornado', 'sunshine', 'rainbow', 'fog'
+    ],
+    food: [
+      'food', 'eat', 'drink', 'hungry', 'restaurant', 'kitchen', 'cook',
+      'pizza', 'burger', 'coffee', 'wine', 'beer', 'chocolate', 'sugar'
+    ],
+    emotions: [
+      'happy', 'sad', 'angry', 'excited', 'nervous', 'scared', 'proud',
+      'jealous', 'lonely', 'grateful', 'hopeful', 'worried', 'calm'
+    ],
+    time: [
+      'time', 'clock', 'morning', 'afternoon', 'evening', 'night',
+      'today', 'tomorrow', 'yesterday', 'midnight', 'dawn', 'sunset'
+    ],
+    nature: [
+      'nature', 'forest', 'mountain', 'ocean', 'river', 'lake', 'tree',
+      'flower', 'garden', 'park', 'outdoor', 'wilderness', 'valley'
+    ],
+    city: [
+      'city', 'town', 'urban', 'street', 'building', 'downtown',
+      'neighborhood', 'metro', 'skyline', 'lights', 'traffic'
+    ],
+    space: [
+      'space', 'star', 'moon', 'planet', 'galaxy', 'universe', 'cosmic',
+      'astronaut', 'rocket', 'satellite', 'mars', 'earth', 'sky'
+    ],
+    sports: [
+      'sports', 'game', 'team', 'player', 'win', 'lose', 'championship',
+      'football', 'basketball', 'baseball', 'soccer', 'tennis', 'golf'
+    ],
+    music: [
+      'music', 'song', 'band', 'singer', 'guitar', 'piano', 'drum',
+      'concert', 'album', 'melody', 'rhythm', 'rock', 'jazz', 'blues'
+    ]
   };
   
   return themeQueries[theme] || [theme];
