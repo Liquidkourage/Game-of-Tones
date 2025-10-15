@@ -193,7 +193,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
   };
 
   return (
-    <div className="bg-rgba(42, 42, 42, 0.8) backdrop-blur-[20px] border border-rgba(0, 255, 136, 0.2) rounded-2xl p-6 mb-6">
+    <div className="bg-rgba(42, 42, 42, 0.8) backdrop-blur-[20px] border border-rgba(0, 255, 136, 0.2) rounded-2xl p-6 mb-6 w-full max-w-none">
       <div 
         className="flex items-center justify-between cursor-pointer mb-4"
         onClick={() => setIsCollapsed(!isCollapsed)}
@@ -228,12 +228,16 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
       {!isCollapsed && (
         <div className="space-y-4">
           {/* Instructions */}
-          <div className="text-center text-gray-400 text-sm bg-rgba(255, 255, 255, 0.05) rounded-lg p-3">
-            💡 Drag playlists from the main playlist area above into the round buckets below
+          <div className="text-center text-gray-300 text-sm bg-gradient-to-r from-[#00ff88]/10 to-[#00ff88]/5 border border-[#00ff88]/20 rounded-lg p-4">
+            <div className="flex items-center justify-center gap-2 mb-1">
+              <Music className="w-4 h-4 text-[#00ff88]" />
+              <span className="font-semibold text-white">Round Organization</span>
+            </div>
+            <span>Drag playlists from above into round buckets to organize your event</span>
           </div>
 
           {/* Round Buckets */}
-          <div className="flex gap-2 w-full">
+          <div className="flex gap-2 w-full min-w-0" style={{ width: '100vw', marginLeft: 'calc(-50vw + 50%)', marginRight: 'calc(-50vw + 50%)', paddingLeft: '2rem', paddingRight: '2rem' }}>
             {rounds.slice(0, 6).map((round, index) => {
               const isActive = index === currentRound && gameState === 'playing';
               const minRequired = round.songCount >= 60 ? 75 : 15;
@@ -325,12 +329,16 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                           ? 'border-[#00ff88]/80 bg-[#00ff88]/10 text-[#00ff88] shadow-inner' 
                           : 'border-white/30 bg-white/5 text-gray-400'
                       }`}>
-                        <FolderOpen className={`w-6 h-6 mb-1 ${isDragOver ? 'text-[#00ff88]' : 'text-gray-500'}`} />
-                        <span className="text-xs font-medium">
-                          {isDragOver ? 'Drop here!' : 'Drop playlists'}
+                        <div className={`w-8 h-8 mb-2 rounded-full border-2 border-dashed flex items-center justify-center ${
+                          isDragOver ? 'border-[#00ff88] bg-[#00ff88]/10' : 'border-gray-500'
+                        }`}>
+                          <Music className={`w-4 h-4 ${isDragOver ? 'text-[#00ff88]' : 'text-gray-500'}`} />
+                        </div>
+                        <span className="text-sm font-semibold">
+                          {isDragOver ? 'Release to Add' : 'Empty Round'}
                         </span>
                         <span className="text-xs opacity-75">
-                          {isDragOver ? '' : 'Drag from above'}
+                          {isDragOver ? 'Drop playlist here' : 'Drag playlists to fill'}
                         </span>
                       </div>
                     ) : (
@@ -361,8 +369,9 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                           );
                         })}
                         {isDragOver && (
-                          <div className="flex items-center justify-center h-12 border-2 border-dashed border-[#00ff88]/80 bg-[#00ff88]/10 backdrop-blur-sm rounded-lg text-[#00ff88] text-sm font-medium shadow-inner">
-                            Drop to add another playlist
+                          <div className="flex items-center justify-center gap-2 h-12 border-2 border-dashed border-[#00ff88]/80 bg-[#00ff88]/10 backdrop-blur-sm rounded-lg text-[#00ff88] text-sm font-medium shadow-inner">
+                            <Plus className="w-4 h-4" />
+                            <span>Add Another Playlist</span>
                           </div>
                         )}
                       </div>
@@ -436,8 +445,11 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                           e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
                         }}
                       >
-                        <Plus className="w-10 h-10" />
-                        <span className="font-semibold">Add Round</span>
+                        <div className="w-12 h-12 rounded-full border-2 border-dashed border-white/40 flex items-center justify-center mb-2">
+                          <Plus className="w-6 h-6" />
+                        </div>
+                        <span className="font-semibold text-sm">Create New Round</span>
+                        <span className="text-xs opacity-75">Click to add round</span>
                       </button>
                     </div>
                   )}
