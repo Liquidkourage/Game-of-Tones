@@ -133,6 +133,19 @@ const HostView: React.FC = () => {
   const [visiblePlaylists, setVisiblePlaylists] = useState<Playlist[]>([]);
   const [playlistQuery, setPlaylistQuery] = useState('');
   const [isLoadingMorePlaylists, setIsLoadingMorePlaylists] = useState(false);
+  const [suggestionsModal, setSuggestionsModal] = useState<{
+    isOpen: boolean;
+    playlist: Playlist | null;
+    suggestions: any[];
+    loading: boolean;
+    analysis: any;
+  }>({
+    isOpen: false,
+    playlist: null,
+    suggestions: [],
+    loading: false,
+    analysis: null
+  });
   // const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]); // duplicate removed
   
   // Pause position tracking (duplicates removed below)
@@ -832,6 +845,62 @@ const HostView: React.FC = () => {
       setIsSpotifyConnecting(false);
     }
   }, [roomId]); // Remove loadPlaylists from dependencies
+
+  const handleSuggestSongs = async (playlist: Playlist) => {
+    try {
+      setSuggestionsModal(prev => ({
+        ...prev,
+        isOpen: true,
+        playlist: playlist,
+        loading: true,
+        suggestions: [],
+        analysis: null
+      }));
+
+      // Fetch existing songs from the playlist
+      const tracksResponse = await fetch(`${API_BASE || ''}/api/spotify/playlist-tracks/${playlist.id}`);
+      const tracksData = await tracksResponse.json();
+      
+      const existingSongs = tracksData.success ? tracksData.tracks : [];
+      const targetCount = playlist.tracks >= 60 ? 75 : 15;
+
+      // Get AI suggestions
+      const suggestionsResponse = await fetch(`${API_BASE || ''}/api/spotify/suggest-songs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          playlistId: playlist.id,
+          playlistName: playlist.name,
+          existingSongs: existingSongs,
+          targetCount: targetCount
+        })
+      });
+
+      const suggestionsData = await suggestionsResponse.json();
+
+      if (suggestionsData.success) {
+        setSuggestionsModal(prev => ({
+          ...prev,
+          loading: false,
+          suggestions: suggestionsData.suggestions.songs || [],
+          analysis: suggestionsData.analysis
+        }));
+      } else {
+        throw new Error(suggestionsData.error || 'Failed to get suggestions');
+      }
+    } catch (error) {
+      console.error('Error getting song suggestions:', error);
+      setSuggestionsModal(prev => ({
+        ...prev,
+        loading: false,
+        suggestions: [],
+        analysis: null
+      }));
+      alert('Failed to get song suggestions. Please try again.');
+    }
+  };
 
   const finalizeMix = async () => {
     if (!socket || selectedPlaylists.length === 0) return;
@@ -1927,22 +1996,81 @@ const HostView: React.FC = () => {
                   {filteredPlaylists.map((p) => {
                     const isSelected = !!selectedPlaylists.find(sp => sp.id === p.id);
                     const previewName = stripGoTPrefix ? (p.name || '').replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim() : p.name;
+                    
+                    // Determine minimum required songs and if playlist is insufficient
+                    const minRequired = p.tracks >= 60 ? 75 : 15;
+                    const isInsufficient = p.tracks < minRequired;
+                    const shortage = isInsufficient ? minRequired - p.tracks : 0;
+                    
                     return (
-                      <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div key={p.id} style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 10, 
+                        padding: '6px 8px', 
+                        borderBottom: '1px solid rgba(255,255,255,0.08)',
+                        backgroundColor: isInsufficient ? 'rgba(255, 193, 7, 0.1)' : 'transparent',
+                        border: isInsufficient ? '1px solid rgba(255, 193, 7, 0.3)' : 'none',
+                        borderRadius: isInsufficient ? '4px' : '0',
+                        margin: isInsufficient ? '2px 0' : '0'
+                      }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{previewName}</div>
-                          <div style={{ fontSize: 12, color: '#b3b3b3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.owner} • {p.tracks} tracks</div>
+                          <div style={{ 
+                            fontWeight: 700, 
+                            overflow: 'hidden', 
+                            textOverflow: 'ellipsis', 
+                            whiteSpace: 'nowrap',
+                            color: isInsufficient ? '#ffc107' : 'inherit'
+                          }}>
+                            {previewName}
+                            {isInsufficient && <span style={{ marginLeft: 6, fontSize: 11 }}>⚠️</span>}
+                          </div>
+                          <div style={{ 
+                            fontSize: 12, 
+                            color: isInsufficient ? '#ffcc33' : '#b3b3b3', 
+                            overflow: 'hidden', 
+                            textOverflow: 'ellipsis', 
+                            whiteSpace: 'nowrap' 
+                          }}>
+                            {p.owner} • {p.tracks} tracks
+                            {isInsufficient && (
+                              <span style={{ marginLeft: 6, fontWeight: 600 }}>
+                                (needs {shortage} more for {minRequired === 75 ? '1x75' : '5x15'} mode)
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <button
-                          className={isSelected ? 'btn-secondary active' : 'btn-secondary'}
-                          onClick={() => {
-                            setSelectedPlaylists(prev => (
-                              isSelected ? prev.filter(sp => sp.id !== p.id) : [...prev, p]
-                            ));
-                          }}
-                        >
-                          {isSelected ? 'Remove' : 'Add'}
-                        </button>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          {isInsufficient && (
+                            <button
+                              className="btn-secondary"
+                              onClick={() => handleSuggestSongs(p)}
+                              style={{
+                                fontSize: 11,
+                                padding: '4px 8px',
+                                backgroundColor: 'rgba(255, 193, 7, 0.2)',
+                                border: '1px solid rgba(255, 193, 7, 0.5)',
+                                color: '#ffc107'
+                              }}
+                              title={`Get AI suggestions to reach ${minRequired} songs`}
+                            >
+                              🤖 Suggest
+                            </button>
+                          )}
+                          <button
+                            className={isSelected ? 'btn-secondary active' : 'btn-secondary'}
+                            onClick={() => {
+                              setSelectedPlaylists(prev => (
+                                isSelected ? prev.filter(sp => sp.id !== p.id) : [...prev, p]
+                              ));
+                            }}
+                            style={{
+                              opacity: isInsufficient ? 0.7 : 1
+                            }}
+                          >
+                            {isSelected ? 'Remove' : 'Add'}
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -3248,6 +3376,181 @@ const HostView: React.FC = () => {
         </div>
       </motion.div>
 
+      {/* AI Song Suggestions Modal */}
+      {suggestionsModal.isOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: '#1a1a1a',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: '12px',
+            padding: '24px',
+            maxWidth: '800px',
+            maxHeight: '80vh',
+            overflow: 'auto',
+            width: '90%'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ color: '#fff', margin: 0 }}>
+                🤖 AI Song Suggestions for "{suggestionsModal.playlist?.name}"
+              </h2>
+              <button
+                onClick={() => setSuggestionsModal(prev => ({ ...prev, isOpen: false }))}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#fff',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  padding: '4px'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {suggestionsModal.loading ? (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#fff' }}>
+                <div style={{ marginBottom: '16px' }}>🔍 Analyzing playlist and generating suggestions...</div>
+                <div style={{ fontSize: '14px', color: '#b3b3b3' }}>
+                  This may take a moment as we search Spotify for the best matches
+                </div>
+              </div>
+            ) : (
+              <>
+                {suggestionsModal.analysis && (
+                  <div style={{
+                    backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                    border: '1px solid rgba(255, 193, 7, 0.3)',
+                    borderRadius: '8px',
+                    padding: '16px',
+                    marginBottom: '20px'
+                  }}>
+                    <h3 style={{ color: '#ffc107', margin: '0 0 8px 0', fontSize: '16px' }}>
+                      Analysis Results
+                    </h3>
+                    <div style={{ color: '#fff', fontSize: '14px' }}>
+                      <div><strong>Theme:</strong> {suggestionsModal.analysis.playlistTheme}</div>
+                      <div><strong>Confidence:</strong> {Math.round(suggestionsModal.analysis.confidence * 100)}%</div>
+                      <div><strong>Strategies:</strong> {suggestionsModal.analysis.searchStrategies?.join(', ')}</div>
+                    </div>
+                  </div>
+                )}
+
+                {suggestionsModal.suggestions.length > 0 ? (
+                  <div>
+                    <h3 style={{ color: '#fff', marginBottom: '16px' }}>
+                      Suggested Songs ({suggestionsModal.suggestions.length} found)
+                    </h3>
+                    <div style={{ maxHeight: '400px', overflow: 'auto' }}>
+                      {suggestionsModal.suggestions.map((song: any, index: number) => (
+                        <div
+                          key={song.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: '12px',
+                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            borderRadius: '8px',
+                            marginBottom: '8px'
+                          }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{
+                              color: '#fff',
+                              fontWeight: 600,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {song.name}
+                            </div>
+                            <div style={{
+                              color: '#b3b3b3',
+                              fontSize: '12px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {song.artist} • {song.album}
+                            </div>
+                            <div style={{
+                              color: '#ffc107',
+                              fontSize: '11px',
+                              marginTop: '4px'
+                            }}>
+                              {song.strategy} • Score: {Math.round((song.score || 0) * 100)}%
+                            </div>
+                          </div>
+                          <div style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}>
+                            <div style={{
+                              color: '#00ff88',
+                              fontSize: '12px',
+                              fontWeight: 600
+                            }}>
+                              {song.popularity || 0}% popular
+                            </div>
+                            {song.external_urls?.spotify && (
+                              <a
+                                href={song.external_urls.spotify}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  color: '#1db954',
+                                  fontSize: '11px',
+                                  textDecoration: 'none',
+                                  padding: '2px 6px',
+                                  backgroundColor: 'rgba(29, 185, 84, 0.2)',
+                                  borderRadius: '4px'
+                                }}
+                              >
+                                🎵 Listen
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{
+                      marginTop: '16px',
+                      padding: '12px',
+                      backgroundColor: 'rgba(0, 255, 136, 0.1)',
+                      border: '1px solid rgba(0, 255, 136, 0.3)',
+                      borderRadius: '8px',
+                      color: '#00ff88',
+                      fontSize: '14px'
+                    }}>
+                      💡 <strong>Tip:</strong> These suggestions are ranked by relevance to your playlist theme and existing songs. 
+                      Click the Spotify links to preview songs before adding them to your playlist.
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#b3b3b3' }}>
+                    No suggestions found. Try a different playlist name or add some songs first.
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
       
     </div>
   );

@@ -455,6 +455,29 @@ class SpotifyService {
     }
   }
 
+  // Search for tracks
+  async searchTracks(query, limit = 20) {
+    await this.ensureValidToken();
+    
+    try {
+      const response = await this.spotifyApi.searchTracks(query, { limit });
+      return response.body.tracks.items.map(track => ({
+        id: track.id,
+        name: track.name,
+        artist: track.artists.map(a => a.name).join(', '),
+        album: track.album.name,
+        duration_ms: track.duration_ms,
+        popularity: track.popularity,
+        preview_url: track.preview_url,
+        uri: track.uri,
+        external_urls: track.external_urls
+      }));
+    } catch (error) {
+      console.error('Error searching tracks:', error);
+      throw error;
+    }
+  }
+
   // Set volume
   async setVolume(volume, deviceId) {
     await this.ensureValidToken();

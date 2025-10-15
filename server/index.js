@@ -4175,6 +4175,403 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
   }
 });
 
+// AI-powered song suggestions for playlists
+app.post('/api/spotify/suggest-songs', async (req, res) => {
+  try {
+    const { playlistId, playlistName, existingSongs, targetCount } = req.body;
+    
+    if (!spotifyTokens || !spotifyTokens.accessToken) {
+      return res.status(401).json({ error: 'Spotify not connected' });
+    }
+    
+    await spotifyService.ensureValidToken();
+    
+    console.log(`🤖 Generating AI suggestions for playlist: "${playlistName}"`);
+    console.log(`📊 Current songs: ${existingSongs?.length || 0}, Target: ${targetCount}`);
+    
+    // Analyze playlist name for themes and keywords
+    const suggestions = await generateSmartSuggestions(playlistName, existingSongs, targetCount);
+    
+    res.json({
+      success: true,
+      suggestions: suggestions,
+      analysis: {
+        playlistTheme: suggestions.theme,
+        searchStrategies: suggestions.strategies,
+        confidence: suggestions.confidence
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error generating song suggestions:', error);
+    res.status(500).json({ error: 'Failed to generate suggestions' });
+  }
+});
+
+// Smart suggestion generation function
+async function generateSmartSuggestions(playlistName, existingSongs = [], targetCount = 15) {
+  const songsNeeded = Math.max(0, targetCount - existingSongs.length);
+  
+  if (songsNeeded <= 0) {
+    return {
+      theme: 'Playlist is already sufficient',
+      strategies: [],
+      confidence: 1.0,
+      songs: []
+    };
+  }
+  
+  // Analyze playlist name for themes, genres, eras, and patterns
+  const analysis = analyzePlaylistName(playlistName);
+  
+  // Extract common elements from existing songs
+  const existingAnalysis = analyzeExistingSongs(existingSongs);
+  
+  // Generate search queries based on analysis
+  const searchQueries = generateSearchQueries(analysis, existingAnalysis);
+  
+  console.log(`🔍 Generated ${searchQueries.length} search strategies for "${playlistName}"`);
+  
+  // Search for songs using multiple strategies
+  const allSuggestions = [];
+  const seenSongs = new Set(existingSongs.map(s => s.id));
+  
+  for (const query of searchQueries.slice(0, 5)) { // Limit to 5 strategies to avoid rate limits
+    try {
+      console.log(`🎵 Searching: "${query.query}" (${query.strategy})`);
+      const results = await spotifyService.searchTracks(query.query, 10);
+      
+      const filteredResults = results
+        .filter(song => !seenSongs.has(song.id))
+        .map(song => ({
+          ...song,
+          strategy: query.strategy,
+          confidence: query.confidence,
+          reasoning: query.reasoning
+        }));
+      
+      filteredResults.forEach(song => seenSongs.add(song.id));
+      allSuggestions.push(...filteredResults);
+      
+    } catch (error) {
+      console.warn(`⚠️ Search failed for "${query.query}":`, error.message);
+    }
+  }
+  
+  // Score and rank suggestions
+  const rankedSuggestions = rankSuggestions(allSuggestions, analysis, existingAnalysis);
+  
+  // Return top suggestions
+  const topSuggestions = rankedSuggestions.slice(0, Math.min(songsNeeded * 2, 20));
+  
+  console.log(`✅ Generated ${topSuggestions.length} ranked suggestions`);
+  
+  return {
+    theme: analysis.primaryTheme,
+    strategies: searchQueries.map(q => q.strategy),
+    confidence: analysis.confidence,
+    songs: topSuggestions,
+    songsNeeded: songsNeeded
+  };
+}
+
+// Analyze playlist name for themes, genres, eras, etc.
+function analyzePlaylistName(name) {
+  const cleanName = name.toLowerCase().replace(/^got\s*[-–:]*\s*/i, '').trim();
+  
+  // Genre patterns
+  const genrePatterns = {
+    rock: /rock|metal|punk|grunge|alternative/i,
+    pop: /pop|mainstream|hits|chart|radio/i,
+    jazz: /jazz|swing|bebop|smooth/i,
+    blues: /blues|bb king|muddy waters/i,
+    country: /country|nashville|honky|bluegrass/i,
+    hiphop: /hip.?hop|rap|urban|trap/i,
+    electronic: /electronic|edm|techno|house|synth/i,
+    classical: /classical|symphony|orchestra|baroque/i,
+    folk: /folk|acoustic|singer.songwriter/i,
+    reggae: /reggae|ska|dub/i,
+    latin: /latin|salsa|bachata|reggaeton/i
+  };
+  
+  // Era patterns
+  const eraPatterns = {
+    '60s': /60s?|sixties|1960/i,
+    '70s': /70s?|seventies|1970/i,
+    '80s': /80s?|eighties|1980/i,
+    '90s': /90s?|nineties|1990/i,
+    '2000s': /2000s?|millennium|y2k/i,
+    'oldies': /oldies|classic|vintage|retro/i,
+    'modern': /modern|current|recent|new/i
+  };
+  
+  // Theme patterns
+  const themePatterns = {
+    love: /love|romantic|valentine|heart|crush/i,
+    party: /party|dance|club|celebration|fun/i,
+    sad: /sad|melancholy|heartbreak|tears|blue/i,
+    workout: /workout|gym|fitness|running|energy/i,
+    chill: /chill|relax|mellow|calm|ambient/i,
+    driving: /driving|road|highway|cruise/i,
+    summer: /summer|beach|sun|vacation/i,
+    winter: /winter|christmas|holiday|snow/i,
+    duos: /duos?|pairs?|featuring|feat|collaboration/i,
+    covers: /covers?|tribute|version/i,
+    instrumentals: /instrumental|no vocals|background/i
+  };
+  
+  const analysis = {
+    genres: [],
+    eras: [],
+    themes: [],
+    keywords: [],
+    confidence: 0.5
+  };
+  
+  // Check for genre matches
+  for (const [genre, pattern] of Object.entries(genrePatterns)) {
+    if (pattern.test(cleanName)) {
+      analysis.genres.push(genre);
+      analysis.confidence += 0.2;
+    }
+  }
+  
+  // Check for era matches
+  for (const [era, pattern] of Object.entries(eraPatterns)) {
+    if (pattern.test(cleanName)) {
+      analysis.eras.push(era);
+      analysis.confidence += 0.15;
+    }
+  }
+  
+  // Check for theme matches
+  for (const [theme, pattern] of Object.entries(themePatterns)) {
+    if (pattern.test(cleanName)) {
+      analysis.themes.push(theme);
+      analysis.confidence += 0.1;
+    }
+  }
+  
+  // Extract potential artist names or specific keywords
+  const words = cleanName.split(/\s+/).filter(word => word.length > 2);
+  analysis.keywords = words;
+  
+  // Determine primary theme
+  if (analysis.genres.length > 0) {
+    analysis.primaryTheme = `${analysis.genres[0]} music`;
+  } else if (analysis.themes.length > 0) {
+    analysis.primaryTheme = `${analysis.themes[0]} songs`;
+  } else if (analysis.eras.length > 0) {
+    analysis.primaryTheme = `${analysis.eras[0]} music`;
+  } else {
+    analysis.primaryTheme = cleanName;
+  }
+  
+  analysis.confidence = Math.min(analysis.confidence, 1.0);
+  
+  return analysis;
+}
+
+// Analyze existing songs to find common patterns
+function analyzeExistingSongs(songs) {
+  if (!songs || songs.length === 0) {
+    return { artists: [], commonWords: [], avgYear: null };
+  }
+  
+  const artists = {};
+  const words = {};
+  
+  songs.forEach(song => {
+    // Count artists
+    if (song.artist) {
+      const artistNames = song.artist.split(/,|\s+&\s+|\s+feat\.?\s+/i);
+      artistNames.forEach(artist => {
+        const cleanArtist = artist.trim().toLowerCase();
+        artists[cleanArtist] = (artists[cleanArtist] || 0) + 1;
+      });
+    }
+    
+    // Count words in song titles
+    if (song.name) {
+      const titleWords = song.name.toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .split(/\s+/)
+        .filter(word => word.length > 2 && !['the', 'and', 'for', 'you', 'are', 'not'].includes(word));
+      
+      titleWords.forEach(word => {
+        words[word] = (words[word] || 0) + 1;
+      });
+    }
+  });
+  
+  // Get most common artists and words
+  const topArtists = Object.entries(artists)
+    .sort(([,a], [,b]) => b - a)
+    .slice(0, 5)
+    .map(([artist]) => artist);
+  
+  const commonWords = Object.entries(words)
+    .filter(([,count]) => count > 1)
+    .sort(([,a], [,b]) => b - a)
+    .slice(0, 10)
+    .map(([word]) => word);
+  
+  return {
+    artists: topArtists,
+    commonWords: commonWords,
+    songCount: songs.length
+  };
+}
+
+// Generate search queries based on analysis
+function generateSearchQueries(analysis, existingAnalysis) {
+  const queries = [];
+  
+  // Genre-based searches
+  analysis.genres.forEach(genre => {
+    queries.push({
+      query: `genre:"${genre}"`,
+      strategy: 'Genre Match',
+      confidence: 0.8,
+      reasoning: `Songs in the ${genre} genre`
+    });
+    
+    if (analysis.eras.length > 0) {
+      queries.push({
+        query: `genre:"${genre}" year:${analysis.eras[0]}`,
+        strategy: 'Genre + Era',
+        confidence: 0.9,
+        reasoning: `${genre} songs from the ${analysis.eras[0]}`
+      });
+    }
+  });
+  
+  // Era-based searches
+  analysis.eras.forEach(era => {
+    const yearRange = getYearRange(era);
+    if (yearRange) {
+      queries.push({
+        query: `year:${yearRange}`,
+        strategy: 'Era Match',
+        confidence: 0.7,
+        reasoning: `Songs from the ${era}`
+      });
+    }
+  });
+  
+  // Theme-based searches
+  analysis.themes.forEach(theme => {
+    const themeQueries = getThemeQueries(theme);
+    themeQueries.forEach(q => {
+      queries.push({
+        query: q,
+        strategy: 'Theme Match',
+        confidence: 0.6,
+        reasoning: `Songs matching the ${theme} theme`
+      });
+    });
+  });
+  
+  // Artist similarity searches (if we have existing songs)
+  existingAnalysis.artists.slice(0, 3).forEach(artist => {
+    queries.push({
+      query: `artist:"${artist}"`,
+      strategy: 'Artist Match',
+      confidence: 0.8,
+      reasoning: `More songs by ${artist}`
+    });
+  });
+  
+  // Keyword-based searches
+  analysis.keywords.slice(0, 3).forEach(keyword => {
+    queries.push({
+      query: keyword,
+      strategy: 'Keyword Match',
+      confidence: 0.4,
+      reasoning: `Songs related to "${keyword}"`
+    });
+  });
+  
+  // Fallback: general searches based on primary theme
+  if (queries.length === 0) {
+    queries.push({
+      query: analysis.primaryTheme,
+      strategy: 'Theme Search',
+      confidence: 0.3,
+      reasoning: `General search for ${analysis.primaryTheme}`
+    });
+  }
+  
+  return queries.sort((a, b) => b.confidence - a.confidence);
+}
+
+// Helper function to get year ranges for eras
+function getYearRange(era) {
+  const ranges = {
+    '60s': '1960-1969',
+    '70s': '1970-1979',
+    '80s': '1980-1989',
+    '90s': '1990-1999',
+    '2000s': '2000-2009',
+    'oldies': '1950-1979',
+    'modern': '2010-2024'
+  };
+  return ranges[era];
+}
+
+// Helper function to get theme-specific search queries
+function getThemeQueries(theme) {
+  const themeQueries = {
+    love: ['love song', 'romantic', 'valentine', 'heart'],
+    party: ['party', 'dance', 'celebration', 'fun'],
+    sad: ['sad song', 'heartbreak', 'melancholy', 'blues'],
+    workout: ['workout', 'energy', 'pump up', 'motivation'],
+    chill: ['chill', 'relax', 'mellow', 'ambient'],
+    driving: ['driving', 'road trip', 'highway', 'cruise'],
+    summer: ['summer', 'beach', 'sunshine', 'vacation'],
+    winter: ['winter', 'christmas', 'holiday', 'snow'],
+    duos: ['duet', 'featuring', 'collaboration', 'feat'],
+    covers: ['cover version', 'tribute', 'acoustic version'],
+    instrumentals: ['instrumental', 'no vocals', 'background music']
+  };
+  
+  return themeQueries[theme] || [theme];
+}
+
+// Rank suggestions based on relevance
+function rankSuggestions(suggestions, analysis, existingAnalysis) {
+  return suggestions.map(song => {
+    let score = song.confidence || 0.5;
+    
+    // Boost score for popularity
+    if (song.popularity) {
+      score += (song.popularity / 100) * 0.2;
+    }
+    
+    // Boost score if artist appears in existing songs
+    if (existingAnalysis.artists.some(artist => 
+      song.artist.toLowerCase().includes(artist) || artist.includes(song.artist.toLowerCase())
+    )) {
+      score += 0.3;
+    }
+    
+    // Boost score for common words in title
+    if (existingAnalysis.commonWords.some(word => 
+      song.name.toLowerCase().includes(word)
+    )) {
+      score += 0.2;
+    }
+    
+    // Boost score for genre matches in song name
+    analysis.genres.forEach(genre => {
+      if (song.name.toLowerCase().includes(genre) || song.artist.toLowerCase().includes(genre)) {
+        score += 0.1;
+      }
+    });
+    
+    return { ...song, score };
+  }).sort((a, b) => b.score - a.score);
+}
+
 // Resume playback endpoint
 app.post('/api/spotify/resume', async (req, res) => {
   try {
