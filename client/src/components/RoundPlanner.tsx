@@ -40,20 +40,30 @@ interface RoundPlannerProps {
   gameState: 'waiting' | 'playing' | 'ended';
 }
 
-// Add shimmer animation styles
-const shimmerStyles = `
+// Add shimmer and pulse animation styles
+const animationStyles = `
   @keyframes shimmer {
-    0% { transform: translateX(-100%); }
-    50% { transform: translateX(100%); }
-    100% { transform: translateX(-100%); }
+    0% { transform: translateX(-100%) rotate(45deg); }
+    50% { transform: translateX(100%) rotate(45deg); }
+    100% { transform: translateX(-100%) rotate(45deg); }
+  }
+  
+  @keyframes pulse {
+    0%, 100% { opacity: 0.8; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.02); }
+  }
+  
+  @keyframes glow {
+    0%, 100% { filter: brightness(1) saturate(1); }
+    50% { filter: brightness(1.2) saturate(1.3); }
   }
 `;
 
 // Inject styles
-if (typeof document !== 'undefined' && !document.getElementById('shimmer-styles')) {
+if (typeof document !== 'undefined' && !document.getElementById('animation-styles')) {
   const style = document.createElement('style');
-  style.id = 'shimmer-styles';
-  style.textContent = shimmerStyles;
+  style.id = 'animation-styles';
+  style.textContent = animationStyles;
   document.head.appendChild(style);
 }
 
@@ -284,43 +294,65 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                     }`}
                     style={{
                       background: isActive 
-                        ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.2) 0%, rgba(0, 255, 136, 0.1) 50%, rgba(0, 255, 136, 0.05) 100%)' 
+                        ? 'linear-gradient(135deg, #00ff88 0%, rgba(0, 255, 136, 0.8) 20%, rgba(0, 255, 136, 0.3) 60%, rgba(0, 255, 136, 0.1) 100%)' 
                         : isDragOver 
-                        ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.15) 0%, rgba(0, 255, 136, 0.08) 50%, rgba(0, 255, 136, 0.03) 100%)' 
+                        ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.6) 0%, rgba(0, 255, 136, 0.4) 30%, rgba(0, 255, 136, 0.2) 70%, rgba(0, 255, 136, 0.05) 100%)' 
                         : isInsufficient 
-                        ? 'linear-gradient(135deg, rgba(255, 193, 7, 0.15) 0%, rgba(255, 193, 7, 0.08) 50%, rgba(255, 193, 7, 0.03) 100%)' 
-                        : 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(255, 255, 255, 0.02) 100%)',
+                        ? 'linear-gradient(135deg, #ff6b35 0%, rgba(255, 107, 53, 0.6) 30%, rgba(255, 107, 53, 0.2) 70%, rgba(255, 107, 53, 0.05) 100%)' 
+                        : 'linear-gradient(135deg, rgba(138, 43, 226, 0.4) 0%, rgba(75, 0, 130, 0.3) 30%, rgba(25, 25, 112, 0.2) 70%, rgba(0, 0, 0, 0.1) 100%)',
                       borderColor: isActive || isDragOver 
                         ? '#00ff88' 
                         : isInsufficient 
-                        ? '#ffc107' 
-                        : 'rgba(255, 255, 255, 0.3)',
-                      borderWidth: '2px',
+                        ? '#ff6b35' 
+                        : '#8a2be2',
+                      borderWidth: '3px',
                       borderStyle: 'solid',
-                      backdropFilter: 'blur(20px)',
+                      backdropFilter: 'blur(25px)',
                       boxShadow: isActive 
-                        ? '0 0 30px rgba(0, 255, 136, 0.4), 0 10px 25px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)' 
+                        ? '0 0 50px rgba(0, 255, 136, 0.8), 0 0 100px rgba(0, 255, 136, 0.4), 0 15px 35px rgba(0, 0, 0, 0.3), inset 0 2px 0 rgba(255, 255, 255, 0.3)' 
                         : isDragOver 
-                        ? '0 0 25px rgba(0, 255, 136, 0.3), 0 8px 20px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1)' 
+                        ? '0 0 40px rgba(0, 255, 136, 0.6), 0 0 80px rgba(0, 255, 136, 0.3), 0 12px 30px rgba(0, 0, 0, 0.25), inset 0 2px 0 rgba(255, 255, 255, 0.2)' 
                         : isInsufficient
-                        ? '0 0 20px rgba(255, 193, 7, 0.3), 0 6px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
-                        : '0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+                        ? '0 0 35px rgba(255, 107, 53, 0.6), 0 0 70px rgba(255, 107, 53, 0.3), 0 10px 25px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+                        : '0 0 30px rgba(138, 43, 226, 0.4), 0 0 60px rgba(138, 43, 226, 0.2), 0 8px 20px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.15)',
                       position: 'relative',
-                      overflow: 'hidden'
+                      overflow: 'hidden',
+                      transform: isDragOver ? 'scale(1.02)' : 'scale(1)',
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
                     }}
                 >
                   {/* Animated Background Effect */}
-                  {(isActive || isDragOver) && (
+                  <div 
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      background: isActive 
+                        ? `linear-gradient(45deg, transparent 20%, rgba(0, 255, 136, 0.4) 40%, rgba(255, 255, 255, 0.2) 50%, rgba(0, 255, 136, 0.4) 60%, transparent 80%)`
+                        : isDragOver
+                        ? `linear-gradient(45deg, transparent 30%, rgba(0, 255, 136, 0.3) 50%, transparent 70%)`
+                        : `linear-gradient(45deg, transparent 40%, rgba(138, 43, 226, 0.1) 50%, transparent 60%)`,
+                      animation: isActive ? 'shimmer 2s ease-in-out infinite' : isDragOver ? 'shimmer 2.5s ease-in-out infinite' : 'shimmer 4s ease-in-out infinite',
+                      pointerEvents: 'none'
+                    }}
+                  />
+                  
+                  {/* Pulsing Border Effect */}
+                  {isActive && (
                     <div 
                       style={{
                         position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        background: `linear-gradient(45deg, transparent 30%, rgba(0, 255, 136, 0.1) 50%, transparent 70%)`,
-                        animation: 'shimmer 3s ease-in-out infinite',
-                        pointerEvents: 'none'
+                        top: '-3px',
+                        left: '-3px',
+                        right: '-3px',
+                        bottom: '-3px',
+                        borderRadius: '1rem',
+                        background: 'linear-gradient(45deg, #00ff88, #00cc6a, #00ff88, #00cc6a)',
+                        animation: 'pulse 2s ease-in-out infinite',
+                        pointerEvents: 'none',
+                        zIndex: -1
                       }}
                     />
                   )}
@@ -446,20 +478,25 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                                  text-gray-400 hover:text-white transition-all duration-300 
                                  flex flex-col items-center justify-center gap-3"
                         style={{
-                          borderColor: 'rgba(255, 255, 255, 0.3)',
-                          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(255, 255, 255, 0.02) 100%)',
-                          backdropFilter: 'blur(20px)',
-                          boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+                          borderColor: '#8a2be2',
+                          background: 'linear-gradient(135deg, rgba(138, 43, 226, 0.3) 0%, rgba(75, 0, 130, 0.2) 30%, rgba(25, 25, 112, 0.1) 70%, rgba(0, 0, 0, 0.05) 100%)',
+                          backdropFilter: 'blur(25px)',
+                          boxShadow: '0 0 25px rgba(138, 43, 226, 0.3), 0 0 50px rgba(138, 43, 226, 0.15), 0 6px 18px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.15)',
                           position: 'relative',
-                          overflow: 'hidden'
+                          overflow: 'hidden',
+                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.5)';
-                          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                          e.currentTarget.style.borderColor = '#00ff88';
+                          e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 255, 136, 0.4) 0%, rgba(138, 43, 226, 0.3) 50%, rgba(75, 0, 130, 0.2) 100%)';
+                          e.currentTarget.style.boxShadow = '0 0 35px rgba(0, 255, 136, 0.4), 0 0 70px rgba(138, 43, 226, 0.2), 0 8px 25px rgba(0, 0, 0, 0.15)';
+                          e.currentTarget.style.transform = 'scale(1.02)';
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-                          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                          e.currentTarget.style.borderColor = '#8a2be2';
+                          e.currentTarget.style.background = 'linear-gradient(135deg, rgba(138, 43, 226, 0.3) 0%, rgba(75, 0, 130, 0.2) 30%, rgba(25, 25, 112, 0.1) 70%, rgba(0, 0, 0, 0.05) 100%)';
+                          e.currentTarget.style.boxShadow = '0 0 25px rgba(138, 43, 226, 0.3), 0 0 50px rgba(138, 43, 226, 0.15), 0 6px 18px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.15)';
+                          e.currentTarget.style.transform = 'scale(1)';
                         }}
                       >
                         <div className="w-12 h-12 rounded-full border-2 border-dashed border-white/40 flex items-center justify-center mb-2">
