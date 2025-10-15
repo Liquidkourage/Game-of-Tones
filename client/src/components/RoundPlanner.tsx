@@ -234,18 +234,36 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                   }`}
                 >
                   {/* Bucket Container */}
-                  <div className={`
-                    h-full min-h-[200px] p-4 rounded-2xl border-2 backdrop-filter backdrop-blur-lg
-                    transition-all duration-300 shadow-lg
-                    ${isActive
-                      ? 'border-[#00ff88] bg-gradient-to-br from-[#00ff88]/20 via-[#00ff88]/10 to-[#00ff88]/5 shadow-[#00ff88]/30'
-                      : isDragOver
-                      ? 'border-[#00ff88] bg-gradient-to-br from-[#00ff88]/15 via-[#00ff88]/8 to-[#00ff88]/3 shadow-[#00ff88]/25'
-                      : isInsufficient
-                      ? 'border-yellow-400/60 bg-gradient-to-br from-yellow-400/15 via-yellow-400/8 to-yellow-400/3 shadow-yellow-400/20'
-                      : 'border-white/20 bg-gradient-to-br from-white/10 via-white/5 to-white/2 hover:border-white/40 hover:shadow-white/10'
-                    }
-                  `}
+                  <div 
+                    className={`h-full min-h-[200px] p-4 rounded-2xl border-2 backdrop-blur-lg transition-all duration-300 shadow-lg ${
+                      isActive
+                        ? 'border-green-400 bg-gradient-to-br from-green-400/20 to-green-400/5 shadow-green-400/30'
+                        : isDragOver
+                        ? 'border-green-400 bg-gradient-to-br from-green-400/15 to-green-400/3 shadow-green-400/25'
+                        : isInsufficient
+                        ? 'border-yellow-400 bg-gradient-to-br from-yellow-400/15 to-yellow-400/3 shadow-yellow-400/20'
+                        : 'border-white/30 bg-gradient-to-br from-white/10 to-white/2 hover:border-white/50 hover:shadow-white/10'
+                    }`}
+                    style={{
+                      backgroundColor: isActive 
+                        ? 'rgba(34, 197, 94, 0.1)' 
+                        : isDragOver 
+                        ? 'rgba(34, 197, 94, 0.08)' 
+                        : isInsufficient 
+                        ? 'rgba(251, 191, 36, 0.1)' 
+                        : 'rgba(255, 255, 255, 0.05)',
+                      borderColor: isActive || isDragOver 
+                        ? '#22c55e' 
+                        : isInsufficient 
+                        ? '#fbbf24' 
+                        : 'rgba(255, 255, 255, 0.3)',
+                      backdropFilter: 'blur(12px)',
+                      boxShadow: isActive 
+                        ? '0 10px 25px rgba(34, 197, 94, 0.3)' 
+                        : isDragOver 
+                        ? '0 10px 25px rgba(34, 197, 94, 0.25)' 
+                        : '0 4px 15px rgba(0, 0, 0, 0.1)'
+                    }}
                 >
                   {/* Bucket Header */}
                   <div className="flex items-center justify-between mb-3">
@@ -359,10 +377,23 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                     <div className="flex-1">
                       <button
                         onClick={addRound}
-                        className="w-full h-full min-h-[200px] p-4 rounded-2xl border-2 border-dashed border-white/30 
-                                 bg-gradient-to-br from-white/5 via-white/3 to-white/1 backdrop-filter backdrop-blur-lg
-                                 text-gray-400 hover:text-white hover:border-white/50 hover:from-white/10 hover:via-white/6 hover:to-white/2
-                                 transition-all duration-300 flex flex-col items-center justify-center gap-3 shadow-lg hover:shadow-white/10"
+                        className="w-full h-full min-h-[200px] p-4 rounded-2xl border-2 border-dashed 
+                                 text-gray-400 hover:text-white transition-all duration-300 
+                                 flex flex-col items-center justify-center gap-3"
+                        style={{
+                          borderColor: 'rgba(255, 255, 255, 0.3)',
+                          backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                          backdropFilter: 'blur(12px)',
+                          boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.5)';
+                          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                        }}
                       >
                         <Plus className="w-10 h-10" />
                         <span className="font-semibold">Add Round</span>
