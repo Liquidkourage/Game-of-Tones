@@ -1277,6 +1277,28 @@ body {
 .density-btn.active { background: rgba(255,255,255,0.12); color: #fff; }
 .focus-card-btn { background: rgba(0,255,136,0.15); border: 1px solid rgba(0,255,136,0.3); color: #00ff88; padding: 6px 10px; border-radius: 8px; font-weight: 600; }
 
+/* Font size controls */
+.font-size-controls { display: inline-flex; align-items: center; gap: 6px; }
+.font-btn { 
+  background: rgba(255,255,255,0.1); 
+  color: #ddd; 
+  border: 1px solid rgba(255,255,255,0.2); 
+  border-radius: 4px; 
+  padding: 4px 8px; 
+  font-weight: 600; 
+  cursor: pointer; 
+  min-width: 24px;
+  text-align: center;
+}
+.font-btn:hover:not(:disabled) { background: rgba(255,255,255,0.15); color: #fff; }
+.font-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Pattern highlighting for bingo squares */
+.bingo-square.pattern-highlight {
+  box-shadow: inset 0 0 0 2px rgba(255, 193, 7, 0.4), 0 0 8px rgba(255, 193, 7, 0.2);
+  border-color: rgba(255, 193, 7, 0.6);
+}
+
 .player-container.focus .player-header,
 .player-container.focus .current-song-section,
 .player-container.focus .game-status-section,

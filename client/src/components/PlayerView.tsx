@@ -432,103 +432,12 @@ const PlayerView: React.FC = () => {
     };
   }, [bingoCard, displayMode]);
 
-  // DYNAMIC FONT SIZING: Fit text to fill cell as much as possible without overflow
+  // DISABLED: Dynamic font sizing to allow user font size controls to work
+  // The fitTextToCell function was overriding user's font size preferences
   const fitTextToCell = (textElement: HTMLElement, text: string, isArtist: boolean = false) => {
-    if (!textElement || !text) {
-      console.log('🚫 fitTextToCell: Missing element or text', { element: !!textElement, text });
-      return;
-    }
-    
-    // Find the actual constraining container (.bingo-square)
-    const squareElement = textElement.closest('.bingo-square') as HTMLElement;
-    if (!squareElement) {
-      console.log('🚫 fitTextToCell: Could not find .bingo-square container');
-      return;
-    }
-    
-    // Get the actual available space from the bingo square
-    const squareRect = squareElement.getBoundingClientRect();
-    const availableWidth = squareRect.width - 30; // More padding for comfortable reading
-    const availableHeight = squareRect.height - 30; // More padding for comfortable reading
-    
-    if (availableWidth <= 0 || availableHeight <= 0) {
-      console.log('🚫 fitTextToCell: Invalid available space', { availableWidth, availableHeight });
-      return;
-    }
-    
-    console.log(`🔍 Measuring cell: available space ${availableWidth}×${availableHeight}px for "${text.substring(0, 20)}..."`);
-    
-    // Start with a more conservative range to prevent mid-word breaks
-    let minFontSize = 8;
-    let maxFontSize = Math.min(availableHeight * 0.4, 20); // Much more conservative max
-    let bestFontSize = minFontSize;
-    
-    // Set width constraint to force proper text wrapping
-    textElement.style.setProperty('width', availableWidth + 'px', 'important');
-    textElement.style.setProperty('max-width', availableWidth + 'px', 'important');
-    
-    // First pass: Try normal word wrapping (no mid-word breaks)
-    let foundFit = false;
-    for (let fontSize = maxFontSize; fontSize >= minFontSize; fontSize -= 0.5) {
-      textElement.style.setProperty('font-size', fontSize + 'px', 'important');
-      textElement.style.setProperty('line-height', '1.2', 'important');
-      textElement.style.setProperty('word-wrap', 'normal', 'important'); // Prevent mid-word breaks
-      textElement.style.setProperty('overflow-wrap', 'normal', 'important');
-      textElement.style.setProperty('word-break', 'normal', 'important');
-      textElement.style.setProperty('hyphens', 'none', 'important');
-      
-      // Force layout recalculation
-      void textElement.offsetHeight;
-      
-      const currentScrollWidth = textElement.scrollWidth;
-      const currentScrollHeight = textElement.scrollHeight;
-      
-      // Check if text fits BOTH width and height with comfortable spacing
-      if (currentScrollWidth <= availableWidth && currentScrollHeight <= (availableHeight * 0.9)) {
-        bestFontSize = fontSize;
-        foundFit = true;
-        break;
-      }
-    }
-    
-    // Second pass: If no fit found, allow word breaking as fallback
-    if (!foundFit) {
-      console.log(`⚠️ Long text overflow detected for "${text.substring(0, 20)}...", trying word-break fallback`);
-      
-      for (let fontSize = Math.min(maxFontSize, 14); fontSize >= 6; fontSize -= 0.5) { // Lower range for overflow cases
-        textElement.style.setProperty('font-size', fontSize + 'px', 'important');
-        textElement.style.setProperty('line-height', '1.1', 'important'); // Tighter line height
-        textElement.style.setProperty('word-wrap', 'break-word', 'important'); // Allow word breaking
-        textElement.style.setProperty('overflow-wrap', 'break-word', 'important');
-        textElement.style.setProperty('word-break', 'break-word', 'important');
-        textElement.style.setProperty('hyphens', 'auto', 'important'); // Allow hyphenation
-        
-        // Force layout recalculation
-        void textElement.offsetHeight;
-        
-        const currentScrollWidth = textElement.scrollWidth;
-        const currentScrollHeight = textElement.scrollHeight;
-        
-        // More lenient check for overflow cases - check both dimensions
-        if (currentScrollWidth <= availableWidth && currentScrollHeight <= availableHeight) {
-          bestFontSize = fontSize;
-          foundFit = true;
-          break;
-        }
-      }
-    }
-    
-    // Apply the best fitting font size
-    textElement.style.setProperty('font-size', bestFontSize + 'px', 'important');
-    
-    // Debug log to verify it's working
-    const finalScrollWidth = textElement.scrollWidth;
-    const finalScrollHeight = textElement.scrollHeight;
-    const wordCount = text.split(' ').length;
-    const method = foundFit ? (bestFontSize >= minFontSize ? 'normal' : 'word-break') : 'failed';
-    const widthFit = finalScrollWidth <= availableWidth ? '✓' : '✗';
-    const heightFit = finalScrollHeight <= availableHeight ? '✓' : '✗';
-    console.log(`🎯 FITTED: "${text.substring(0, 15)}..." (${wordCount} words) → ${bestFontSize}px [${method}] (${widthFit}w:${finalScrollWidth}/${availableWidth} ${heightFit}h:${finalScrollHeight}/${availableHeight})`);
+    // Do nothing - let user's fontSize setting control the text size
+    // The parent container already has fontSize: `${fontSize}%` applied
+    return;
   };
 
   const markSquare = (position: string) => {

@@ -716,10 +716,10 @@ const HostView: React.FC = () => {
           await loadPlaylists();
           await loadDevices(); // Load devices when connected
           
-          // Sync initial volume
-          setTimeout(() => {
-            fetchCurrentVolume();
-          }, 1000);
+          // Don't sync initial volume - keep user's 100% default
+          // setTimeout(() => {
+          //   fetchCurrentVolume();
+          // }, 1000);
         } else {
           console.log('Spotify not connected');
           setIsSpotifyConnected(false);
@@ -1326,13 +1326,11 @@ const HostView: React.FC = () => {
         });
         
         if (response.ok) {
-          // Verify the volume was set correctly by fetching current state
-          setTimeout(() => {
-            fetchCurrentVolume();
-          }, 100);
+          // Don't fetch current volume - trust our local state
+          console.log(`✅ Volume set to ${newVolume}% successfully`);
         } else {
           console.error('Failed to set volume, reverting to Spotify state');
-          fetchCurrentVolume(); // Revert to actual Spotify volume
+          fetchCurrentVolume(); // Only revert on error
         }
       } catch (error) {
         console.error('Error setting volume:', error);
@@ -1364,10 +1362,8 @@ const HostView: React.FC = () => {
         });
         
         if (response.ok) {
-          // Verify the volume was set correctly
-          setTimeout(() => {
-            fetchCurrentVolume();
-          }, 100);
+          // Don't fetch current volume - trust our local state
+          console.log(`✅ Unmuted to ${previousVolume}% successfully`);
         } else {
           console.error('Failed to unmute, reverting to Spotify state');
           fetchCurrentVolume();
@@ -1397,10 +1393,8 @@ const HostView: React.FC = () => {
         });
         
         if (response.ok) {
-          // Verify the volume was set correctly
-          setTimeout(() => {
-            fetchCurrentVolume();
-          }, 100);
+          // Don't fetch current volume - trust our local state
+          console.log(`✅ Muted successfully`);
         } else {
           console.error('Failed to mute, reverting to Spotify state');
           fetchCurrentVolume();
@@ -1528,15 +1522,15 @@ const HostView: React.FC = () => {
     return () => clearInterval(interval);
   }, [isPlaying, currentSong]);
 
-  // Periodic volume synchronization
-  useEffect(() => {
-    if (!isPlaying || !currentSong) return;
-    const volumeSyncInterval = setInterval(() => {
-      // Only sync volume every 15s to reduce noise
-      fetchCurrentVolume();
-    }, 15000);
-    return () => clearInterval(volumeSyncInterval);
-  }, [isPlaying, currentSong, fetchCurrentVolume]);
+  // DISABLED: Periodic volume synchronization to preserve user's volume setting
+  // useEffect(() => {
+  //   if (!isPlaying || !currentSong) return;
+  //   const volumeSyncInterval = setInterval(() => {
+  //     // Only sync volume every 15s to reduce noise
+  //     fetchCurrentVolume();
+  //   }, 15000);
+  //   return () => clearInterval(volumeSyncInterval);
+  // }, [isPlaying, currentSong, fetchCurrentVolume]);
 
   // Periodic playback state synchronization
   useEffect(() => {
