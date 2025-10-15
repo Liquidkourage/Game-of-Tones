@@ -4212,7 +4212,34 @@ app.post('/api/spotify/suggest-songs', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error generating song suggestions:', error);
-    res.status(500).json({ error: 'Failed to generate suggestions' });
+    
+    // Provide more specific error messages based on the error type
+    let errorMessage = 'Failed to generate suggestions';
+    let statusCode = 500;
+    
+    if (error.message) {
+      if (error.message.includes('rate limit') || error.message.includes('429')) {
+        errorMessage = 'Spotify API rate limit exceeded. Please wait a moment and try again.';
+        statusCode = 429;
+      } else if (error.message.includes('network') || error.message.includes('ENOTFOUND')) {
+        errorMessage = 'Network error connecting to Spotify. Please check your internet connection.';
+        statusCode = 503;
+      } else if (error.message.includes('token') || error.message.includes('401')) {
+        errorMessage = 'Spotify authentication expired. Please reconnect to Spotify.';
+        statusCode = 401;
+      } else if (error.message.includes('timeout')) {
+        errorMessage = 'Request timed out. Spotify may be experiencing issues. Please try again.';
+        statusCode = 504;
+      } else {
+        errorMessage = `Suggestion generation failed: ${error.message}`;
+      }
+    }
+    
+    console.error(`🤖 Returning error (${statusCode}): ${errorMessage}`);
+    res.status(statusCode).json({ 
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 

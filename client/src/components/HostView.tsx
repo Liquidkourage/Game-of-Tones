@@ -139,12 +139,14 @@ const HostView: React.FC = () => {
     suggestions: any[];
     loading: boolean;
     analysis: any;
+    error?: { message: string; details: string } | null;
   }>({
     isOpen: false,
     playlist: null,
     suggestions: [],
     loading: false,
-    analysis: null
+    analysis: null,
+    error: null
   });
   // const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]); // duplicate removed
   
@@ -854,7 +856,8 @@ const HostView: React.FC = () => {
         playlist: playlist,
         loading: true,
         suggestions: [],
-        analysis: null
+        analysis: null,
+        error: null
       }));
 
       // Fetch existing songs from the playlist
@@ -896,15 +899,45 @@ const HostView: React.FC = () => {
       } else {
         throw new Error(suggestionsData.error || 'Failed to get suggestions');
       }
-    } catch (error) {
-      console.error('Error getting song suggestions:', error);
+    } catch (error: any) {
+      console.error('❌ Error getting song suggestions:', error);
+      
+      // Determine specific error message based on the error type
+      let errorMessage = 'Failed to get song suggestions. ';
+      let errorDetails = '';
+      
+      if (error.message) {
+        if (error.message.includes('Spotify not connected')) {
+          errorMessage = '🎵 Spotify Connection Required';
+          errorDetails = 'Please connect to Spotify first using the "Connect Spotify" button, then try getting suggestions again.';
+        } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+          errorMessage = '🌐 Network Connection Error';
+          errorDetails = 'Unable to reach the server. Please check your internet connection and make sure the server is running.';
+        } else if (error.message.includes('401')) {
+          errorMessage = '🔐 Authentication Error';
+          errorDetails = 'Your Spotify session may have expired. Please reconnect to Spotify and try again.';
+        } else if (error.message.includes('500')) {
+          errorMessage = '🔧 Server Error';
+          errorDetails = 'The server encountered an error while generating suggestions. Please try again in a moment.';
+        } else {
+          errorMessage = '❌ Suggestion Generation Failed';
+          errorDetails = `Error: ${error.message}. Please check the console for more details.`;
+        }
+      } else {
+        errorMessage = '❓ Unknown Error';
+        errorDetails = 'An unexpected error occurred. Please check the browser console (F12) for more details and try again.';
+      }
+      
       setSuggestionsModal(prev => ({
         ...prev,
         loading: false,
         suggestions: [],
-        analysis: null
+        analysis: null,
+        error: { message: errorMessage, details: errorDetails }
       }));
-      alert('Failed to get song suggestions. Please try again.');
+      
+      // Also show a more informative alert
+      alert(`${errorMessage}\n\n${errorDetails}`);
     }
   };
 
@@ -3546,6 +3579,36 @@ const HostView: React.FC = () => {
                       💡 <strong>Tip:</strong> These suggestions are ranked by relevance to your playlist theme and existing songs. 
                       Click the Spotify links to preview songs before adding them to your playlist.
                     </div>
+                  </div>
+                ) : suggestionsModal.error ? (
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '40px',
+                    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                    border: '1px solid rgba(255, 107, 107, 0.3)',
+                    borderRadius: '8px',
+                    color: '#ff6b6b'
+                  }}>
+                    <h3 style={{ color: '#ff6b6b', margin: '0 0 16px 0' }}>
+                      {suggestionsModal.error.message}
+                    </h3>
+                    <p style={{ color: '#fff', margin: '0 0 20px 0', lineHeight: 1.5 }}>
+                      {suggestionsModal.error.details}
+                    </p>
+                    <button
+                      onClick={() => setSuggestionsModal(prev => ({ ...prev, error: null }))}
+                      style={{
+                        backgroundColor: 'rgba(255, 107, 107, 0.2)',
+                        border: '1px solid rgba(255, 107, 107, 0.5)',
+                        color: '#ff6b6b',
+                        padding: '8px 16px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '14px'
+                      }}
+                    >
+                      Try Again
+                    </button>
                   </div>
                 ) : (
                   <div style={{ textAlign: 'center', padding: '40px', color: '#b3b3b3' }}>
