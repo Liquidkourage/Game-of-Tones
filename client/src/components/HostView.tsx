@@ -259,15 +259,33 @@ const HostView: React.FC = () => {
     setIsLoadingMorePlaylists(false);
   }, [playlists, playlistPage, isLoadingMorePlaylists]);
 
-  // Filter playlists by query (client-side, debounced simple contains)
+  // Get all playlist IDs that are already assigned to rounds
+  const assignedPlaylistIds = new Set(
+    eventRounds.flatMap(round => round.playlistIds || [])
+  );
+
+  // Filter playlists by query and exclude already assigned playlists
   const filteredPlaylists = (playlistQuery ? visiblePlaylists.filter(p => {
     const q = playlistQuery.toLowerCase();
     return (
-      (p.name || '').toLowerCase().includes(q) ||
+      !assignedPlaylistIds.has(p.id) && // Exclude assigned playlists
+      ((p.name || '').toLowerCase().includes(q) ||
       (p.owner || '').toLowerCase().includes(q) ||
-      (p.description || '').toLowerCase().includes(q)
+      (p.description || '').toLowerCase().includes(q))
     );
-  }) : visiblePlaylists);
+  }) : visiblePlaylists.filter(p => !assignedPlaylistIds.has(p.id))); // Exclude assigned playlists even without query
+
+  // Update visible playlists when rounds change to exclude newly assigned playlists
+  useEffect(() => {
+    if (playlists && playlists.length > 0) {
+      const availablePlaylists = playlists.filter(p => !assignedPlaylistIds.has(p.id));
+      // Only update if the current visible playlists include assigned ones
+      const hasAssignedInVisible = visiblePlaylists.some(p => assignedPlaylistIds.has(p.id));
+      if (hasAssignedInVisible) {
+        setVisiblePlaylists(availablePlaylists.slice(0, Math.min(50, availablePlaylists.length)));
+      }
+    }
+  }, [eventRounds, playlists]); // Re-run when rounds or playlists change
 
   const refreshRooms = useCallback(async () => {
     try {
@@ -2321,12 +2339,13 @@ const HostView: React.FC = () => {
                       <button 
                         className="btn-primary" 
                         onClick={() => {
-                          setVisiblePlaylists(playlists);
-                          setPlaylistPage(Math.ceil(playlists.length / 50));
+                          const availablePlaylists = playlists.filter(p => !assignedPlaylistIds.has(p.id));
+                          setVisiblePlaylists(availablePlaylists);
+                          setPlaylistPage(Math.ceil(availablePlaylists.length / 50));
                         }}
                         style={{ fontSize: 12 }}
                       >
-                        Show All ({playlists.length})
+                        Show All ({playlists.filter(p => !assignedPlaylistIds.has(p.id)).length})
                       </button>
                     </div>
                   )}
@@ -2337,18 +2356,22 @@ const HostView: React.FC = () => {
                       <button 
                         className="btn-accent" 
                         onClick={() => {
-                          const gotPlaylists = playlists.filter(p => (p.name || '').toLowerCase().includes('got'));
+                          const gotPlaylists = playlists.filter(p => 
+                            (p.name || '').toLowerCase().includes('got') && 
+                            !assignedPlaylistIds.has(p.id)
+                          );
                           setVisiblePlaylists(gotPlaylists);
                           setPlaylistPage(Math.ceil(gotPlaylists.length / 50));
                         }}
                         style={{ fontSize: 11, padding: '4px 8px' }}
                       >
-                        🎯 Show Only GOT Playlists ({playlists.filter(p => (p.name || '').toLowerCase().includes('got')).length})
+                        🎯 Show Only GOT Playlists ({playlists.filter(p => (p.name || '').toLowerCase().includes('got') && !assignedPlaylistIds.has(p.id)).length})
                       </button>
                       <button 
                         className="btn-secondary" 
                         onClick={() => {
-                          setVisiblePlaylists(playlists.slice(0, 50));
+                          const availablePlaylists = playlists.filter(p => !assignedPlaylistIds.has(p.id));
+                          setVisiblePlaylists(availablePlaylists.slice(0, 50));
                           setPlaylistPage(1);
                         }}
                         style={{ fontSize: 11, padding: '4px 8px' }}
