@@ -1139,10 +1139,37 @@ const PublicDisplay: React.FC = () => {
             const raw = playlistNames[i] || '';
             const name = raw.replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
             const bingoLetter = ['B', 'I', 'N', 'G', 'O'][i];
+            
+            // Calculate dynamic font size based on text length
+            const fullText = name ? `${bingoLetter} - ${name}` : bingoLetter;
+            const textLength = fullText.length;
+            let fontSize = '2.4rem'; // Default size
+            
+            if (textLength > 25) {
+              fontSize = '1.4rem';
+            } else if (textLength > 20) {
+              fontSize = '1.6rem';
+            } else if (textLength > 15) {
+              fontSize = '1.8rem';
+            } else if (textLength > 12) {
+              fontSize = '2.0rem';
+            } else if (textLength > 8) {
+              fontSize = '2.2rem';
+            }
+            
             return (
               <div key={i} className="call-col-title" style={{ textAlign: 'center' }}>
                 {name ? (
-                  <div style={{ fontSize: '2.4rem', fontWeight: 900, opacity: 0.95, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>
+                  <div style={{ 
+                    fontSize, 
+                    fontWeight: 900, 
+                    opacity: 0.95, 
+                    whiteSpace: 'nowrap', 
+                    overflow: 'hidden', 
+                    textOverflow: 'ellipsis', 
+                    textShadow: '0 2px 4px rgba(0,0,0,0.8)',
+                    maxWidth: '100%'
+                  }}>
                     <span style={{ color: '#00ff88', marginRight: '0.3em' }}>{bingoLetter}</span>
                     <span style={{ color: '#ffffff', margin: '0 0.2em' }}>-</span>
                     <span style={{ color: '#ffffff' }}>{name}</span>
