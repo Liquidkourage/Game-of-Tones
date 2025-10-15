@@ -60,7 +60,6 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  margin: 0 auto;
   width: 100%;
   position: relative;
 }
@@ -69,6 +68,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  justify-content: center;
 }
 
 .logo-icon {
@@ -1949,6 +1949,7 @@ body {
     /* flex-direction: column; - REMOVED */
     gap: 0.5rem; /* Reduce gap for tighter mobile layout */
     flex-wrap: nowrap; /* Prevent wrapping */
+    justify-content: center; /* Ensure centering on mobile too */
   }
   
   /* Ensure logo fits on single line on mobile */
