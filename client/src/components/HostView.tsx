@@ -865,7 +865,11 @@ const HostView: React.FC = () => {
       const targetCount = playlist.tracks >= 60 ? 75 : 15;
 
       // Get AI suggestions
-      const suggestionsResponse = await fetch(`${API_BASE || ''}/api/spotify/suggest-songs`, {
+      const apiUrl = `${API_BASE || ''}/api/spotify/suggest-songs`;
+      console.log('🤖 Making AI suggestion request to:', apiUrl);
+      console.log('🤖 Request payload:', { playlistId: playlist.id, playlistName: playlist.name, existingSongs: existingSongs.length, targetCount });
+      
+      const suggestionsResponse = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -878,7 +882,9 @@ const HostView: React.FC = () => {
         })
       });
 
+      console.log('🤖 Response status:', suggestionsResponse.status);
       const suggestionsData = await suggestionsResponse.json();
+      console.log('🤖 Response data:', suggestionsData);
 
       if (suggestionsData.success) {
         setSuggestionsModal(prev => ({

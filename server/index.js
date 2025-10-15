@@ -4178,9 +4178,18 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
 // AI-powered song suggestions for playlists
 app.post('/api/spotify/suggest-songs', async (req, res) => {
   try {
+    console.log('🤖 AI suggestion request received');
+    console.log('🤖 Request body:', req.body);
+    
     const { playlistId, playlistName, existingSongs, targetCount } = req.body;
     
+    console.log('🤖 Spotify tokens status:', { 
+      hasTokens: !!spotifyTokens, 
+      hasAccessToken: !!(spotifyTokens && spotifyTokens.accessToken) 
+    });
+    
     if (!spotifyTokens || !spotifyTokens.accessToken) {
+      console.log('🤖 Returning Spotify not connected error');
       return res.status(401).json({ error: 'Spotify not connected' });
     }
     
