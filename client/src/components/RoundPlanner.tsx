@@ -145,19 +145,35 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
   const handleBucketDragOver = (e: React.DragEvent, bucketIndex: number) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
+    console.log('🎯 Drag over bucket:', bucketIndex);
     setDragOverBucket(bucketIndex);
   };
 
-  const handleBucketDragLeave = () => {
-    setDragOverBucket(null);
+  const handleBucketDragLeave = (e: React.DragEvent) => {
+    // Only clear drag over if we're actually leaving the bucket area
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setDragOverBucket(null);
+    }
   };
 
   const handleBucketDrop = (e: React.DragEvent, bucketIndex: number) => {
     e.preventDefault();
     const playlistId = e.dataTransfer.getData('text/plain');
     
-    if (draggedPlaylist && playlistId === draggedPlaylist.id) {
-      addPlaylistToRound(bucketIndex, playlistId);
+    console.log('🎯 Bucket drop:', { bucketIndex, playlistId });
+    
+    if (playlistId) {
+      // Find the playlist from the playlists prop
+      const playlist = playlists.find(p => p.id === playlistId);
+      console.log('🎵 Found playlist:', playlist?.name);
+      if (playlist) {
+        addPlaylistToRound(bucketIndex, playlistId);
+        console.log('✅ Added playlist to round');
+      }
     }
     
     setDraggedPlaylist(null);
@@ -248,7 +264,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                 <div
                   key={round.id}
                   onDragOver={(e) => handleBucketDragOver(e, index)}
-                  onDragLeave={handleBucketDragLeave}
+                  onDragLeave={(e) => handleBucketDragLeave(e)}
                   onDrop={(e) => handleBucketDrop(e, index)}
                   className={`relative transition-all duration-200 ${
                     isDragOver ? 'scale-105' : ''
