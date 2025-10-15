@@ -886,6 +886,16 @@ const HostView: React.FC = () => {
       });
 
       console.log('🤖 Response status:', suggestionsResponse.status);
+      console.log('🤖 Response headers:', Object.fromEntries(suggestionsResponse.headers.entries()));
+      
+      // Check if we got HTML instead of JSON (common when server returns error page)
+      const contentType = suggestionsResponse.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        const htmlText = await suggestionsResponse.text();
+        console.error('🤖 Received HTML instead of JSON:', htmlText.substring(0, 200) + '...');
+        throw new Error('Server returned HTML error page instead of JSON. Check if the server is running properly.');
+      }
+      
       const suggestionsData = await suggestionsResponse.json();
       console.log('🤖 Response data:', suggestionsData);
 
@@ -919,6 +929,9 @@ const HostView: React.FC = () => {
         } else if (error.message.includes('500')) {
           errorMessage = '🔧 Server Error';
           errorDetails = 'The server encountered an error while generating suggestions. Please try again in a moment.';
+        } else if (error.message.includes('HTML error page') || error.message.includes('DOCTYPE')) {
+          errorMessage = '🔄 Server Restart Required';
+          errorDetails = 'The server appears to be restarting or crashed. Please wait a moment for it to fully start up, then try again.';
         } else {
           errorMessage = '❌ Suggestion Generation Failed';
           errorDetails = `Error: ${error.message}. Please check the console for more details.`;
