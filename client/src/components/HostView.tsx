@@ -769,6 +769,7 @@ const HostView: React.FC = () => {
 
         if (data.connected) {
           console.log('Spotify already connected, loading playlists...');
+          console.log('🔍 Status API returned connected=true, setting state to true');
           setIsSpotifyConnected(true);
           setIsSpotifyConnecting(false);
           await loadPlaylists();
@@ -780,6 +781,7 @@ const HostView: React.FC = () => {
           // }, 1000);
         } else {
           console.log('Spotify not connected');
+          console.log('🔍 Status API returned connected=false, setting state to false');
           setIsSpotifyConnected(false);
           setIsSpotifyConnecting(false);
         }
@@ -1314,6 +1316,7 @@ const HostView: React.FC = () => {
   const generateSongList = useCallback(async () => {
     if (!isSpotifyConnected) {
       console.warn('Cannot generate song list: Spotify not connected');
+      console.log('🔍 isSpotifyConnected state is currently:', isSpotifyConnected);
       setSongList([]);
       return;
     }
