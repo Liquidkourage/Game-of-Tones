@@ -17,7 +17,20 @@ function AppHeader() {
   const location = useLocation();
   const isDisplay = /^\/display(\/.+|$)/.test(location.pathname);
   const headerStyle = isDisplay
-    ? { position: 'absolute' as const, left: '50%', transform: 'translateX(-50%)', top: 8, width: 'auto', background: 'transparent', borderBottom: 'none', padding: '0.4rem 0.8rem', zIndex: 200, pointerEvents: 'none' as const }
+    ? { 
+        position: 'absolute' as const, 
+        left: 0, 
+        right: 0, 
+        top: 8, 
+        width: '100%', 
+        background: 'transparent', 
+        borderBottom: 'none', 
+        padding: '0.4rem 0.8rem', 
+        zIndex: 200, 
+        pointerEvents: 'none' as const,
+        display: 'flex',
+        justifyContent: 'center'
+      }
     : {};
   return (
     <motion.header
@@ -27,7 +40,7 @@ function AppHeader() {
       transition={{ duration: 0.8, ease: 'easeOut' }}
       style={headerStyle}
     >
-      <div className="header-content">
+      <div className="header-content" style={isDisplay ? { width: 'auto' } : {}}>
         <div className="logo">
           <Sparkles className="logo-icon" />
           <h1>TEMPO - Music Bingo</h1>
@@ -45,9 +58,11 @@ function AppHeader() {
           }}>by Liquid Kourage</span>
         </div>
       </div>
-      <div style={{ position: 'absolute', right: '2rem', top: '50%', transform: 'translateY(-50%)', zIndex: 101 }}>
-        <DisplayHeaderInfo />
-      </div>
+      {!isDisplay && (
+        <div style={{ position: 'absolute', right: '2rem', top: '50%', transform: 'translateY(-50%)', zIndex: 101 }}>
+          <DisplayHeaderInfo />
+        </div>
+      )}
     </motion.header>
   );
 }
