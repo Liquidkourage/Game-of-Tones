@@ -666,19 +666,36 @@ const PublicDisplay: React.FC = () => {
           bingoCard: { squares: [], size: 5 }
         }));
         
+        // Clear playlist names (category headers)
+        setPlaylistNames([]);
+        
+        // Clear column data structures
+        setFiveBy15Columns(null);
+        setOneBy75Ids(null);
+        oneBy75IdsRef.current = null;
+        idToColumnRef.current = {};
+        
         // Clear internal tracking
         playedOrderRef.current = [];
         idMetaRef.current = {};
         revealSequenceRef.current = [];
         songBaselineRef.current = {};
+        pendingPlacementRef.current = new Set();
+        playedSeqRef.current = {};
+        playedSeqCounterRef.current = 0;
+        currentIndexRef.current = -1;
+        
+        // Reset UI state
         setTotalPlayedCount(0);
         setShowWinnerBanner(false);
         setWinnerName('');
+        setCarouselIndex(0);
+        setVertIndex(0);
         
         // Regenerate grid for new round
         ensureGrid();
         
-        console.log('✅ Display state cleared for new round');
+        console.log('✅ Display state and categories cleared for new round');
       }
     });
 
