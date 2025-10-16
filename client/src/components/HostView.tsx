@@ -2155,7 +2155,6 @@ const HostView: React.FC = () => {
           <h1>🎮 Game Host</h1>
           <div className="room-info" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
             <span className="room-code">Room: {roomId}</span>
-            <span className="player-count">{players.length} Players</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
