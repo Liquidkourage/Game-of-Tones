@@ -3980,6 +3980,8 @@ app.get('/api/spotify/status', async (req, res) => {
     const orgSpotifyService = multiTenantSpotify.getService(organizationId);
     const orgTokens = multiTenantSpotify.getTokens(organizationId);
     
+    console.log(`🔍 Status check: orgTokens for ${organizationId}:`, !!orgTokens, orgTokens ? 'has accessToken: ' + !!orgTokens.accessToken : 'no tokens');
+    
     // Check if we have tokens for this organization
     if (!orgTokens || !orgTokens.accessToken) {
       console.log(`❌ No tokens available for DEFAULT organization - returning disconnected`);
@@ -4124,6 +4126,10 @@ app.get('/api/spotify/callback', async (req, res) => {
     
     // Store tokens for this organization
     await multiTenantSpotify.setTokens(organizationId, tokens);
+    
+    // Verify tokens were stored
+    const storedTokens = multiTenantSpotify.getTokens(organizationId);
+    console.log(`🔍 Verification: Tokens stored for ${organizationId}:`, !!storedTokens, storedTokens ? 'has accessToken' : 'no tokens');
     
     // Update legacy variables for backward compatibility
     if (organizationId === 'DEFAULT') {
