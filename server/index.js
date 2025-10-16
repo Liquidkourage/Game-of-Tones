@@ -5111,32 +5111,56 @@ async function autoConnectSpotify() {
   console.log('🔄 Attempting automatic Spotify connection...');
   
   try {
-    // First try to load existing tokens
-    const tokens = loadTokens();
-    if (tokens && tokens.accessToken && tokens.refreshToken) {
-      console.log('📁 Loaded Spotify tokens from file');
-      spotifyTokens = tokens;
-      spotifyService.setTokens(tokens.accessToken, tokens.refreshToken);
-      
-      // Test the connection by refreshing if needed
+    // Try to auto-connect for all organizations that have tokens
+    let connectedAny = false;
+    
+    // Check DEFAULT organization (backward compatibility)
+    const defaultTokens = multiTenantSpotify.getTokens('DEFAULT');
+    if (defaultTokens && defaultTokens.accessToken && defaultTokens.refreshToken) {
       try {
-        await spotifyService.ensureValidToken();
-        console.log('✅ Restored Spotify connection from saved tokens');
-        
-        // Force device activation to keep your device active
-        await activatePreferredDevice();
-        
-        console.log('🎵 Ready to serve playlists and control playback');
-        return true;
+        const defaultService = multiTenantSpotify.getService('DEFAULT');
+        await defaultService.ensureValidToken();
+        console.log('✅ Restored DEFAULT Spotify connection from saved tokens');
+        connectedAny = true;
       } catch (error) {
-        console.log('❌ Saved tokens are invalid, need fresh connection');
-        spotifyTokens = null;
-        spotifyService.setTokens(null, null);
+        console.log('❌ DEFAULT tokens are invalid, clearing...');
+        multiTenantSpotify.clearOrgTokens('DEFAULT');
       }
     }
     
-    console.log('⚠️ Manual Spotify connection required');
-    return false;
+    // Check for organization-specific tokens in environment variables
+    const orgPrefixes = ['LIQUID', 'ACME', 'CORP']; // Add more as needed
+    for (const orgId of orgPrefixes) {
+      const envPrefix = `ORG_${orgId}_`;
+      const accessToken = process.env[`${envPrefix}SPOTIFY_ACCESS_TOKEN`];
+      const refreshToken = process.env[`${envPrefix}SPOTIFY_REFRESH_TOKEN`];
+      
+      if (accessToken && refreshToken) {
+        try {
+          console.log(`🔑 Found tokens for organization ${orgId}, testing connection...`);
+          const orgService = multiTenantSpotify.getService(orgId);
+          await orgService.ensureValidToken();
+          console.log(`✅ Restored ${orgId} Spotify connection from environment variables`);
+          connectedAny = true;
+          
+          // If this is the main organization, also activate preferred device
+          if (orgId === 'LIQUID') {
+            await activatePreferredDevice();
+            console.log('🎵 LIQUID organization ready to serve playlists and control playback');
+          }
+        } catch (error) {
+          console.log(`❌ ${orgId} tokens are invalid:`, error.message);
+        }
+      }
+    }
+    
+    if (connectedAny) {
+      console.log('🎵 Multi-tenant Spotify connections established');
+      return true;
+    } else {
+      console.log('⚠️ No valid Spotify connections found - manual connection required');
+      return false;
+    }
   } catch (error) {
     console.error('❌ Error in auto-connect:', error);
     return false;
