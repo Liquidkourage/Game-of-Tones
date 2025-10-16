@@ -9,6 +9,19 @@ const SpotifyService = require('./spotify');
 const fs = require('fs');
 const path = require('path');
 
+// Database connection for persistent token storage
+let db = null;
+if (process.env.DATABASE_URL) {
+  const { Pool } = require('pg');
+  db = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  });
+  console.log('🗄️ Database connection initialized');
+} else {
+  console.log('⚠️ No DATABASE_URL found - using file-based storage (not persistent on Railway)');
+}
+
 // Enhanced logging with production optimization
 class Logger {
   constructor() {
@@ -428,20 +441,32 @@ class MultiTenantSpotifyManager {
     this.saveOrgTokens(organizationId, tokens);
   }
   
-  loadOrgTokens(organizationId) {
+  async loadOrgTokens(organizationId) {
     try {
-      // Try environment variables first (for Railway deployment)
+      // Try database first (persistent across deployments)
+      const dbTokens = await loadTokensFromDatabase(organizationId);
+      if (dbTokens) {
+        return dbTokens;
+      }
+      
+      // Fallback to environment variables (for backward compatibility)
       const envPrefix = organizationId === this.defaultOrg ? '' : `ORG_${organizationId}_`;
       const accessToken = process.env[`${envPrefix}SPOTIFY_ACCESS_TOKEN`];
       const refreshToken = process.env[`${envPrefix}SPOTIFY_REFRESH_TOKEN`];
       
       if (accessToken && refreshToken) {
         console.log(`🌍 Loaded Spotify tokens for ${organizationId} from environment variables`);
-        return {
+        const tokens = {
           accessToken,
           refreshToken,
           expiresIn: 3600
         };
+        
+        // Migrate to database for future persistence
+        await saveTokensToDatabase(organizationId, tokens);
+        console.log(`🔄 Migrated ${organizationId} tokens to database`);
+        
+        return tokens;
       }
       
       // Fallback to file (for local development)
@@ -452,6 +477,11 @@ class MultiTenantSpotifyManager {
       if (fs.existsSync(tokenFile)) {
         const tokenData = JSON.parse(fs.readFileSync(tokenFile, 'utf8'));
         console.log(`📁 Loaded Spotify tokens for ${organizationId} from file`);
+        
+        // Migrate to database for future persistence
+        await saveTokensToDatabase(organizationId, tokenData);
+        console.log(`🔄 Migrated ${organizationId} tokens from file to database`);
+        
         return tokenData;
       }
     } catch (error) {
@@ -460,43 +490,49 @@ class MultiTenantSpotifyManager {
     return null;
   }
   
-  saveOrgTokens(organizationId, tokens) {
+  async saveOrgTokens(organizationId, tokens) {
     try {
-      // Save to file (for local development)
-      const tokenFile = organizationId === this.defaultOrg ? 
-        TOKEN_FILE : 
-        path.join(__dirname, `spotify_tokens_${organizationId.toLowerCase()}.json`);
-        
-      fs.writeFileSync(tokenFile, JSON.stringify(tokens, null, 2), 'utf8');
+      // Save to database (persistent across deployments)
+      const dbSaved = await saveTokensToDatabase(organizationId, tokens);
       
-      // Log environment variable instructions
-      const envPrefix = organizationId === this.defaultOrg ? '' : `ORG_${organizationId}_`;
-      console.log(`🚀 To persist Spotify tokens for ${organizationId} across Railway deployments, set these environment variables:`);
-      console.log(`   ${envPrefix}SPOTIFY_ACCESS_TOKEN=${tokens.accessToken}`);
-      console.log(`   ${envPrefix}SPOTIFY_REFRESH_TOKEN=${tokens.refreshToken}`);
-      console.log('   Add these in your Railway project settings under "Variables"');
+      if (dbSaved) {
+        console.log(`✅ Tokens for ${organizationId} saved to database - will persist across deployments`);
+      } else {
+        // Fallback to file (for local development)
+        const tokenFile = organizationId === this.defaultOrg ? 
+          TOKEN_FILE : 
+          path.join(__dirname, `spotify_tokens_${organizationId.toLowerCase()}.json`);
+          
+        fs.writeFileSync(tokenFile, JSON.stringify(tokens, null, 2), 'utf8');
+        console.log(`📁 Tokens for ${organizationId} saved to file (local development only)`);
+      }
       
     } catch (error) {
       console.error(`❌ Error saving tokens for ${organizationId}:`, error);
     }
   }
   
-  clearOrgTokens(organizationId) {
+  async clearOrgTokens(organizationId) {
     this.orgTokens.delete(organizationId);
     this.orgServices.delete(organizationId);
     
-    // Remove token file
-    try {
-      const tokenFile = organizationId === this.defaultOrg ? 
-        TOKEN_FILE : 
-        path.join(__dirname, `spotify_tokens_${organizationId.toLowerCase()}.json`);
-        
-      if (fs.existsSync(tokenFile)) {
-        fs.unlinkSync(tokenFile);
-        console.log(`✅ Removed token file for ${organizationId}`);
+    // Remove from database
+    const dbDeleted = await deleteTokensFromDatabase(organizationId);
+    
+    if (!dbDeleted) {
+      // Fallback: Remove token file
+      try {
+        const tokenFile = organizationId === this.defaultOrg ? 
+          TOKEN_FILE : 
+          path.join(__dirname, `spotify_tokens_${organizationId.toLowerCase()}.json`);
+          
+        if (fs.existsSync(tokenFile)) {
+          fs.unlinkSync(tokenFile);
+          console.log(`✅ Removed token file for ${organizationId}`);
+        }
+      } catch (error) {
+        console.error(`❌ Error removing token file for ${organizationId}:`, error);
       }
-    } catch (error) {
-      console.error(`❌ Error removing token file for ${organizationId}:`, error);
     }
   }
 }
@@ -542,6 +578,93 @@ function generateChecksum(orgCode, year) {
   }
   
   return Math.abs(hash).toString(16).toUpperCase().substring(0, 6);
+}
+
+// Database functions for persistent token storage
+async function initializeDatabase() {
+  if (!db) return false;
+  
+  try {
+    // Create spotify_tokens table if it doesn't exist
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS spotify_tokens (
+        organization_id VARCHAR(50) PRIMARY KEY,
+        access_token TEXT NOT NULL,
+        refresh_token TEXT NOT NULL,
+        expires_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✅ Database tables initialized');
+    return true;
+  } catch (error) {
+    console.error('❌ Database initialization failed:', error);
+    return false;
+  }
+}
+
+async function saveTokensToDatabase(organizationId, tokens) {
+  if (!db) return false;
+  
+  try {
+    const expiresAt = new Date(Date.now() + (tokens.expiresIn || 3600) * 1000);
+    
+    await db.query(`
+      INSERT INTO spotify_tokens (organization_id, access_token, refresh_token, expires_at, updated_at)
+      VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+      ON CONFLICT (organization_id) 
+      DO UPDATE SET 
+        access_token = $2,
+        refresh_token = $3,
+        expires_at = $4,
+        updated_at = CURRENT_TIMESTAMP
+    `, [organizationId, tokens.accessToken, tokens.refreshToken, expiresAt]);
+    
+    console.log(`💾 Saved Spotify tokens for ${organizationId} to database`);
+    return true;
+  } catch (error) {
+    console.error(`❌ Failed to save tokens for ${organizationId}:`, error);
+    return false;
+  }
+}
+
+async function loadTokensFromDatabase(organizationId) {
+  if (!db) return null;
+  
+  try {
+    const result = await db.query(
+      'SELECT access_token, refresh_token, expires_at FROM spotify_tokens WHERE organization_id = $1',
+      [organizationId]
+    );
+    
+    if (result.rows.length > 0) {
+      const row = result.rows[0];
+      console.log(`📁 Loaded Spotify tokens for ${organizationId} from database`);
+      return {
+        accessToken: row.access_token,
+        refreshToken: row.refresh_token,
+        expiresIn: 3600 // Will be refreshed automatically
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error(`❌ Failed to load tokens for ${organizationId}:`, error);
+    return null;
+  }
+}
+
+async function deleteTokensFromDatabase(organizationId) {
+  if (!db) return false;
+  
+  try {
+    await db.query('DELETE FROM spotify_tokens WHERE organization_id = $1', [organizationId]);
+    console.log(`🗑️ Deleted Spotify tokens for ${organizationId} from database`);
+    return true;
+  } catch (error) {
+    console.error(`❌ Failed to delete tokens for ${organizationId}:`, error);
+    return false;
+  }
 }
 
 // Initialize Multi-Tenant Spotify Manager
@@ -5098,6 +5221,9 @@ server.listen(PORT, async () => {
   console.log(`🎵 TEMPO - Music Bingo server running on port ${PORT}`);
   console.log('🎮 Ready for some musical bingo action!');
   console.log('🚀 Cache-busting fix deployed - version 2.0');
+  
+  // Initialize database
+  await initializeDatabase();
   
   // Auto-connect to Spotify
   await autoConnectSpotify();
