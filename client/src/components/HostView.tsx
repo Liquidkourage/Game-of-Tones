@@ -1133,38 +1133,7 @@ const HostView: React.FC = () => {
   };
 
   // Round management functions
-  const completeCurrentRound = () => {
-    if (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length) {
-      const updatedRounds = [...eventRounds];
-      updatedRounds[currentRoundIndex] = {
-        ...updatedRounds[currentRoundIndex],
-        status: 'completed',
-        completedAt: Date.now()
-      };
-      setEventRounds(updatedRounds);
-      if (roomId) {
-        localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(updatedRounds));
-      }
-      addLog(`Round ${currentRoundIndex + 1} marked as completed`, 'info');
-    }
-  };
 
-  const resetCurrentRound = () => {
-    if (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length) {
-      const updatedRounds = [...eventRounds];
-      updatedRounds[currentRoundIndex] = {
-        ...updatedRounds[currentRoundIndex],
-        status: 'planned',
-        startedAt: undefined,
-        completedAt: undefined
-      };
-      setEventRounds(updatedRounds);
-      if (roomId) {
-        localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(updatedRounds));
-      }
-      addLog(`Round ${currentRoundIndex + 1} reset to planned status`, 'info');
-    }
-  };
 
 
   const resetEvent = () => {
@@ -1201,18 +1170,6 @@ const HostView: React.FC = () => {
     }
   };
 
-  // Helper functions for round management
-  const getNextPlannedRound = () => {
-    return eventRounds.findIndex(round => round.status === 'planned');
-  };
-
-  const getRoundStatusSummary = () => {
-    const completed = eventRounds.filter(r => r.status === 'completed').length;
-    const active = eventRounds.filter(r => r.status === 'active').length;
-    const planned = eventRounds.filter(r => r.status === 'planned').length;
-    const unplanned = eventRounds.filter(r => r.status === 'unplanned').length;
-    return { completed, active, planned, unplanned };
-  };
 
   const updatePattern = (next: 'line' | 'four_corners' | 'x' | 'full_card' | 'custom') => {
     setPattern(next);
