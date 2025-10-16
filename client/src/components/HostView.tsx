@@ -301,7 +301,7 @@ const HostView: React.FC = () => {
       // Only update if the current visible playlists include assigned ones
       const hasAssignedInVisible = visiblePlaylists.some(p => assignedPlaylistIds.has(p.id));
       if (hasAssignedInVisible) {
-        setVisiblePlaylists(availablePlaylists.slice(0, Math.min(50, availablePlaylists.length)));
+        setVisiblePlaylists(availablePlaylists);
       }
     }
   }, [eventRounds, playlists]); // Re-run when rounds or playlists change
