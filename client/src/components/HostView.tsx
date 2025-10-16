@@ -22,6 +22,17 @@ interface Playlist {
   owner?: string;
 }
 
+interface GotPlaylist {
+  id: string;
+  name: string;
+  trackCount: number;
+  createdAt: string;
+  description: string;
+  external_urls?: {
+    spotify: string;
+  };
+}
+
 interface Song {
   id: string;
   name: string;
@@ -1766,8 +1777,8 @@ const HostView: React.FC = () => {
 
   // Playlist cleanup state
   const [showPlaylistCleanup, setShowPlaylistCleanup] = useState(false);
-  const [gotPlaylists, setGotPlaylists] = useState([]);
-  const [selectedForDeletion, setSelectedForDeletion] = useState(new Set());
+  const [gotPlaylists, setGotPlaylists] = useState<GotPlaylist[]>([]);
+  const [selectedForDeletion, setSelectedForDeletion] = useState(new Set<string>());
   const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
   const [isDeletingPlaylists, setIsDeletingPlaylists] = useState(false);
 
