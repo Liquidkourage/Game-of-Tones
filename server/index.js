@@ -393,14 +393,175 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
   }
 }
 
-// Initialize Spotify service and tokens
-const spotifyService = new SpotifyService();
-let spotifyTokens = loadTokens(); // Load tokens on startup
+// Multi-Tenant Spotify Manager
+class MultiTenantSpotifyManager {
+  constructor() {
+    this.orgServices = new Map();
+    this.orgTokens = new Map();
+    this.defaultOrg = 'DEFAULT';
+  }
+  
+  getService(organizationId = this.defaultOrg) {
+    if (!this.orgServices.has(organizationId)) {
+      const service = new SpotifyService();
+      this.orgServices.set(organizationId, service);
+      
+      // Load org-specific tokens
+      const tokens = this.loadOrgTokens(organizationId);
+      if (tokens) {
+        service.setTokens(tokens.accessToken, tokens.refreshToken);
+        this.orgTokens.set(organizationId, tokens);
+        console.log(`✅ Loaded Spotify tokens for organization: ${organizationId}`);
+      }
+    }
+    return this.orgServices.get(organizationId);
+  }
+  
+  getTokens(organizationId = this.defaultOrg) {
+    return this.orgTokens.get(organizationId);
+  }
+  
+  setTokens(organizationId, tokens) {
+    this.orgTokens.set(organizationId, tokens);
+    const service = this.getService(organizationId);
+    service.setTokens(tokens.accessToken, tokens.refreshToken);
+    this.saveOrgTokens(organizationId, tokens);
+  }
+  
+  loadOrgTokens(organizationId) {
+    try {
+      // Try environment variables first (for Railway deployment)
+      const envPrefix = organizationId === this.defaultOrg ? '' : `ORG_${organizationId}_`;
+      const accessToken = process.env[`${envPrefix}SPOTIFY_ACCESS_TOKEN`];
+      const refreshToken = process.env[`${envPrefix}SPOTIFY_REFRESH_TOKEN`];
+      
+      if (accessToken && refreshToken) {
+        console.log(`🌍 Loaded Spotify tokens for ${organizationId} from environment variables`);
+        return {
+          accessToken,
+          refreshToken,
+          expiresIn: 3600
+        };
+      }
+      
+      // Fallback to file (for local development)
+      const tokenFile = organizationId === this.defaultOrg ? 
+        TOKEN_FILE : 
+        path.join(__dirname, `spotify_tokens_${organizationId.toLowerCase()}.json`);
+        
+      if (fs.existsSync(tokenFile)) {
+        const tokenData = JSON.parse(fs.readFileSync(tokenFile, 'utf8'));
+        console.log(`📁 Loaded Spotify tokens for ${organizationId} from file`);
+        return tokenData;
+      }
+    } catch (error) {
+      console.error(`❌ Error loading tokens for ${organizationId}:`, error);
+    }
+    return null;
+  }
+  
+  saveOrgTokens(organizationId, tokens) {
+    try {
+      // Save to file (for local development)
+      const tokenFile = organizationId === this.defaultOrg ? 
+        TOKEN_FILE : 
+        path.join(__dirname, `spotify_tokens_${organizationId.toLowerCase()}.json`);
+        
+      fs.writeFileSync(tokenFile, JSON.stringify(tokens, null, 2), 'utf8');
+      
+      // Log environment variable instructions
+      const envPrefix = organizationId === this.defaultOrg ? '' : `ORG_${organizationId}_`;
+      console.log(`🚀 To persist Spotify tokens for ${organizationId} across Railway deployments, set these environment variables:`);
+      console.log(`   ${envPrefix}SPOTIFY_ACCESS_TOKEN=${tokens.accessToken}`);
+      console.log(`   ${envPrefix}SPOTIFY_REFRESH_TOKEN=${tokens.refreshToken}`);
+      console.log('   Add these in your Railway project settings under "Variables"');
+      
+    } catch (error) {
+      console.error(`❌ Error saving tokens for ${organizationId}:`, error);
+    }
+  }
+  
+  clearOrgTokens(organizationId) {
+    this.orgTokens.delete(organizationId);
+    this.orgServices.delete(organizationId);
+    
+    // Remove token file
+    try {
+      const tokenFile = organizationId === this.defaultOrg ? 
+        TOKEN_FILE : 
+        path.join(__dirname, `spotify_tokens_${organizationId.toLowerCase()}.json`);
+        
+      if (fs.existsSync(tokenFile)) {
+        fs.unlinkSync(tokenFile);
+        console.log(`✅ Removed token file for ${organizationId}`);
+      }
+    } catch (error) {
+      console.error(`❌ Error removing token file for ${organizationId}:`, error);
+    }
+  }
+}
 
-// If we have tokens, set them in the service
-if (spotifyTokens) {
-  spotifyService.setTokens(spotifyTokens.accessToken, spotifyTokens.refreshToken);
-  console.log('✅ Restored Spotify connection from saved tokens');
+// License Key Validation
+function validateLicenseKey(licenseKey) {
+  if (!licenseKey || typeof licenseKey !== 'string') {
+    return null;
+  }
+  
+  const parts = licenseKey.split('-');
+  if (parts.length !== 4 || parts[0] !== 'TEMPO') {
+    return null;
+  }
+  
+  const [prefix, orgCode, year, checksum] = parts;
+  
+  // Validate year
+  const currentYear = new Date().getFullYear();
+  if (parseInt(year) < 2024 || parseInt(year) > currentYear + 1) {
+    return null;
+  }
+  
+  // Validate checksum
+  const expectedChecksum = generateChecksum(orgCode, year);
+  if (checksum !== expectedChecksum) {
+    return null;
+  }
+  
+  return orgCode; // Return organization ID
+}
+
+function generateChecksum(orgCode, year) {
+  // Simple checksum - combines org code, year, and secret
+  const secret = process.env.LICENSE_SECRET || 'TEMPO_DEFAULT_SECRET_2024';
+  const combined = orgCode + year + secret;
+  
+  let hash = 0;
+  for (let i = 0; i < combined.length; i++) {
+    const char = combined.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  
+  return Math.abs(hash).toString(16).toUpperCase().substring(0, 6);
+}
+
+// Initialize Multi-Tenant Spotify Manager
+const multiTenantSpotify = new MultiTenantSpotifyManager();
+
+// Backward compatibility - initialize default organization
+const defaultTokens = loadTokens();
+if (defaultTokens) {
+  multiTenantSpotify.setTokens('DEFAULT', defaultTokens);
+  console.log('✅ Restored default Spotify connection from saved tokens');
+}
+
+// Legacy support - keep these for backward compatibility
+const spotifyService = multiTenantSpotify.getService('DEFAULT');
+let spotifyTokens = multiTenantSpotify.getTokens('DEFAULT');
+
+// Helper function to get organization from room
+function getOrganizationFromRoom(roomId) {
+  const room = rooms[roomId];
+  return room && room.organizationId ? room.organizationId : 'DEFAULT';
 }
 
 // Timer management to prevent conflicts
@@ -822,14 +983,30 @@ io.on('connection', (socket) => {
 
   // Join room
   socket.on('join-room', (data) => {
-    const { roomId, playerName, isHost = false, clientId } = data;
+    const { roomId, playerName, isHost = false, clientId, licenseKey } = data;
     logger.info(`Player ${playerName} (${isHost ? 'host' : 'player'}) joining room: ${roomId}`, 'player-join');
+    
+    // Validate license key for new rooms (hosts only)
+    let organizationId = 'DEFAULT';
+    if (isHost && licenseKey) {
+      organizationId = validateLicenseKey(licenseKey);
+      if (!organizationId) {
+        console.log(`❌ Invalid license key provided: ${licenseKey}`);
+        socket.emit('join-error', { 
+          error: 'Invalid license key. Please check your license key and try again.' 
+        });
+        return;
+      }
+      console.log(`✅ Valid license key for organization: ${organizationId}`);
+    }
     
     // Create room if it doesn't exist
     if (!rooms.has(roomId)) {
-      logger.info(`Creating new room: ${roomId}`, 'room-create');
+      logger.info(`Creating new room: ${roomId} for organization: ${organizationId}`, 'room-create');
       const newRoom = {
         id: roomId,
+        organizationId: organizationId, // Add organization support
+        licenseKey: licenseKey || null, // Store license key
         host: isHost ? socket.id : null,
         players: new Map(),
         gameState: 'waiting',
@@ -840,9 +1017,15 @@ io.on('connection', (socket) => {
         playlistSongs: [],
         currentSongIndex: 0,
         // Pre-queue system removed for deterministic playback
-        superStrictLock: false
+        superStrictLock: false,
+        createdAt: new Date().toISOString()
       };
       rooms.set(roomId, newRoom);
+      
+      // Log organization info
+      if (organizationId !== 'DEFAULT') {
+        console.log(`🏢 Room ${roomId} created for organization ${organizationId} with license ${licenseKey}`);
+      }
     }
 
     const room = rooms.get(roomId);
@@ -3666,34 +3849,42 @@ app.get('/api/spotify/auth', (req, res) => {
 app.get('/api/spotify/status', async (req, res) => {
   console.log('🔍 Spotify status check requested');
   try {
-    // Check if we have tokens
-    if (!spotifyTokens || !spotifyTokens.accessToken) {
-      console.log('❌ No tokens available - returning disconnected');
+    const { roomId } = req.query;
+    const organizationId = roomId ? getOrganizationFromRoom(roomId) : 'DEFAULT';
+    
+    const orgSpotifyService = multiTenantSpotify.getService(organizationId);
+    const orgTokens = multiTenantSpotify.getTokens(organizationId);
+    
+    // Check if we have tokens for this organization
+    if (!orgTokens || !orgTokens.accessToken) {
+      console.log(`❌ No tokens available for organization ${organizationId} - returning disconnected`);
       return res.json({ 
         connected: false,
-        hasTokens: false
+        hasTokens: false,
+        organizationId: organizationId
       });
     }
 
-    console.log('🔑 Tokens exist, validating...');
+    console.log(`🔑 Tokens exist for ${organizationId}, validating...`);
     // Validate tokens by trying to ensure they're valid
     try {
-      await spotifyService.ensureValidToken();
+      await orgSpotifyService.ensureValidToken();
       // If we get here, tokens are valid
-      console.log('✅ Tokens valid - returning connected');
+      console.log(`✅ Tokens valid for ${organizationId} - returning connected`);
       return res.json({ 
         connected: true,
-        hasTokens: true
+        hasTokens: true,
+        organizationId: organizationId
       });
     } catch (error) {
       // Tokens are invalid, clear them
-      console.log('🔄 Clearing invalid Spotify tokens:', error.message);
-      spotifyTokens = null;
-      spotifyService.setTokens(null, null);
-      console.log('❌ Tokens cleared - returning disconnected');
+      console.log(`🔄 Clearing invalid Spotify tokens for ${organizationId}:`, error.message);
+      multiTenantSpotify.clearOrgTokens(organizationId);
+      console.log(`❌ Tokens cleared for ${organizationId} - returning disconnected`);
       return res.json({ 
         connected: false,
-        hasTokens: false
+        hasTokens: false,
+        organizationId: organizationId
       });
     }
   } catch (error) {
@@ -3774,7 +3965,7 @@ app.post('/api/spotify/clear', (req, res) => {
 });
 
 app.get('/api/spotify/callback', async (req, res) => {
-  const { code } = req.query;
+  const { code, state } = req.query;
   
   console.log('Spotify callback received with code:', code ? code.substring(0, 20) + '...' : 'NO CODE');
   
@@ -3783,30 +3974,52 @@ app.get('/api/spotify/callback', async (req, res) => {
     return res.status(400).json({ error: 'Authorization code required' });
   }
 
-  // Check if we already have tokens (prevent duplicate processing)
-  if (spotifyTokens) {
-    console.log('Already have tokens, returning success without processing code again');
+  // Extract organization from state parameter (format: "roomId:organizationId")
+  let organizationId = 'DEFAULT';
+  let roomId = null;
+  if (state) {
+    try {
+      const parts = state.split(':');
+      if (parts.length >= 2) {
+        roomId = parts[0];
+        organizationId = parts[1];
+      }
+    } catch (e) {
+      console.warn('Could not parse state parameter:', state);
+    }
+  }
+
+  // Check if we already have tokens for this organization
+  const existingTokens = multiTenantSpotify.getTokens(organizationId);
+  if (existingTokens) {
+    console.log(`Already have tokens for ${organizationId}, returning success without processing code again`);
     return res.json({ 
       success: true, 
-      message: 'Spotify already connected',
-      tokens: spotifyTokens
+      message: `Spotify already connected for organization: ${organizationId}`,
+      organizationId: organizationId,
+      tokens: existingTokens
     });
   }
 
   try {
-    console.log('Calling spotifyService.handleCallback...');
-    const tokens = await spotifyService.handleCallback(code);
-    console.log('Successfully got tokens, storing them...');
+    console.log(`Calling spotifyService.handleCallback for organization: ${organizationId}...`);
+    const orgSpotifyService = multiTenantSpotify.getService(organizationId);
+    const tokens = await orgSpotifyService.handleCallback(code);
+    console.log(`Successfully got tokens for ${organizationId}, storing them...`);
     
-    // Store tokens for future use
-    spotifyTokens = tokens;
-    spotifyService.setTokens(tokens.accessToken, tokens.refreshToken);
-    saveTokens(tokens); // Save tokens to file
+    // Store tokens for this organization
+    multiTenantSpotify.setTokens(organizationId, tokens);
     
-    console.log('Spotify connection successful, sending response');
+    // Update legacy variables for backward compatibility
+    if (organizationId === 'DEFAULT') {
+      spotifyTokens = tokens;
+    }
+    
+    console.log(`Spotify connection successful for ${organizationId}, sending response`);
     res.json({ 
       success: true, 
-      message: 'Spotify connected successfully',
+      message: `Spotify connected successfully for organization: ${organizationId}`,
+      organizationId: organizationId,
       tokens
     });
   } catch (error) {
@@ -3817,13 +4030,25 @@ app.get('/api/spotify/callback', async (req, res) => {
 
 app.get('/api/spotify/playlists', async (req, res) => {
   try {
-    // Check if we have tokens
-    if (!spotifyTokens) {
-      return res.status(401).json({ error: 'Spotify not connected. Please connect first.' });
+    const { roomId } = req.query;
+    const organizationId = roomId ? getOrganizationFromRoom(roomId) : 'DEFAULT';
+    
+    const orgSpotifyService = multiTenantSpotify.getService(organizationId);
+    const orgTokens = multiTenantSpotify.getTokens(organizationId);
+    
+    if (!orgTokens) {
+      return res.status(401).json({ 
+        error: `Spotify not connected for organization: ${organizationId}`,
+        organizationId: organizationId
+      });
     }
     
-    const playlists = await spotifyService.getUserPlaylists();
-    res.json({ success: true, playlists: playlists });
+    const playlists = await orgSpotifyService.getUserPlaylists();
+    res.json({ 
+      success: true, 
+      playlists: playlists,
+      organizationId: organizationId
+    });
   } catch (error) {
     console.error('Error getting playlists:', error);
     res.status(500).json({ error: 'Failed to get playlists' });
