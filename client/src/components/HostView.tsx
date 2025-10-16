@@ -1723,6 +1723,45 @@ const HostView: React.FC = () => {
     }
   }, [socket, roomId, playbackState.currentTime]);
 
+  // Create output playlist
+  const createOutputPlaylist = useCallback(async () => {
+    if (!songList || songList.length === 0) {
+      alert('No songs available to create playlist. Please finalize a mix first.');
+      return;
+    }
+
+    const playlistName = prompt('Enter a name for your output playlist:', `Bingo ${roomId} - ${new Date().toLocaleDateString()}`);
+    if (!playlistName) return;
+
+    try {
+      const trackIds = songList.map(song => song.id);
+      const response = await fetch(`${API_BASE || ''}/api/spotify/create-output-playlist`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: playlistName,
+          trackIds: trackIds,
+          description: `Output playlist from TEMPO Music Bingo - Room ${roomId} - ${selectedPlaylists.map(p => p.name).join(', ')}`
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        addLog(`✅ Created output playlist: ${data.playlistName} (${data.trackCount} songs)`, 'success');
+        alert(`Successfully created playlist: ${data.playlistName}\n\nIt will appear in your Spotify library under "Game Of Tones Output" playlists.`);
+      } else {
+        throw new Error(data.error || 'Failed to create playlist');
+      }
+    } catch (error) {
+      console.error('Error creating output playlist:', error);
+      addLog(`❌ Failed to create output playlist: ${error.message}`, 'error');
+      alert(`Failed to create playlist: ${error.message}`);
+    }
+  }, [songList, roomId, selectedPlaylists, addLog]);
+
   // Force device detection
   const forceDeviceDetection = useCallback(async () => {
     try {
@@ -2661,6 +2700,18 @@ const HostView: React.FC = () => {
                        <p className="status-text">✅ Mix finalized - Cards generated for players</p>
                      </div>
                    )}
+                  <button
+                    onClick={createOutputPlaylist}
+                    disabled={!songList || songList.length === 0 || isSpotifyConnecting}
+                    className="control-button create-playlist"
+                    style={{
+                      backgroundColor: '#6b46c1',
+                      borderColor: '#8b5cf6',
+                      marginRight: '10px'
+                    }}
+                  >
+                    📁 Create Output Playlist
+                  </button>
                   <button
                     onClick={startGame}
                     disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}

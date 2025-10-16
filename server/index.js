@@ -4570,6 +4570,39 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
   }
 });
 
+// Create permanent output playlist
+app.post('/api/spotify/create-output-playlist', async (req, res) => {
+  try {
+    const { name, trackIds, description } = req.body;
+    
+    if (!spotifyTokens || !spotifyTokens.accessToken) {
+      return res.status(401).json({ error: 'Spotify not connected' });
+    }
+    
+    if (!name || !trackIds || !Array.isArray(trackIds)) {
+      return res.status(400).json({ error: 'Name and trackIds array required' });
+    }
+    
+    await spotifyService.ensureValidToken();
+    
+    // Convert track IDs to URIs
+    const trackUris = trackIds.map(id => `spotify:track:${id}`);
+    
+    // Create the output playlist
+    const result = await spotifyService.createOutputPlaylist(name, trackUris, description);
+    
+    res.json({
+      success: true,
+      playlistId: result.playlistId,
+      playlistName: result.name,
+      trackCount: trackIds.length
+    });
+  } catch (error) {
+    console.error('Error creating output playlist:', error);
+    res.status(500).json({ error: 'Failed to create output playlist' });
+  }
+});
+
 // AI-powered song suggestions for playlists
 app.post('/api/spotify/suggest-songs', async (req, res) => {
   try {
