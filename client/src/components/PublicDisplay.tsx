@@ -30,7 +30,10 @@ interface GameState {
   currentRound?: {
     name: string;
     number: number;
-    playlistName?: string;
+    playlistCount?: number;
+    songCount?: number;
+    status?: string;
+    startedAt?: number;
   };
 }
 
@@ -277,7 +280,8 @@ const PublicDisplay: React.FC = () => {
             playerCount: payload.playerCount || 0,
             snippetLength: payload.snippetLength || 30,
             winners: payload.winners || prev.winners,
-            playedSongs: payload.playedSongs || prev.playedSongs
+            playedSongs: payload.playedSongs || prev.playedSongs,
+            currentRound: payload.currentRound || prev.currentRound
           }));
           
           if (payload.pattern) {
@@ -643,6 +647,17 @@ const PublicDisplay: React.FC = () => {
       console.log('🔁 Game reset (display)');
       revealSequenceRef.current = [];
       songBaselineRef.current = {};
+    });
+
+    // Round update handler
+    newSocket.on('round-updated', (data: any) => {
+      console.log('🎯 PublicDisplay: Round updated:', data.roundInfo);
+      if (data.roundInfo) {
+        setGameState(prev => ({
+          ...prev,
+          currentRound: data.roundInfo
+        }));
+      }
     });
 
     // Staged reveal event: show name/artist hints without changing the bingo grid

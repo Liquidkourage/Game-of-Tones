@@ -1069,6 +1069,25 @@ const HostView: React.FC = () => {
         pattern,
         customMask
       });
+      
+      // Send current round info when starting game
+      if (eventRounds.length > 0 && currentRoundIndex >= 0) {
+        const currentRound = eventRounds[currentRoundIndex];
+        if (currentRound) {
+          const roundInfo = {
+            name: currentRound.name,
+            number: currentRoundIndex + 1,
+            playlistCount: (currentRound.playlistIds || []).length,
+            songCount: currentRound.songCount || 0,
+            status: currentRound.status,
+            startedAt: currentRound.startedAt
+          };
+          
+          console.log('🎯 Sending round info on game start:', roundInfo);
+          socket.emit('update-round-info', { roomId, roundInfo });
+        }
+      }
+      
       // Safety timeout in case no response comes back
       setTimeout(() => setIsStartingGame(false), 8000);
     } catch (error) {
@@ -1979,8 +1998,21 @@ const HostView: React.FC = () => {
       addLog(`🎯 Started ${round.name}: ${playlistNames}`, 'info');
     }
 
-    // Force refresh all clients to sync with new round
+    // Send round information to server and all clients
     if (socket && roomId) {
+      const roundInfo = {
+        name: round.name,
+        number: roundIndex + 1,
+        playlistCount: (round.playlistIds || []).length,
+        songCount: round.songCount || 0,
+        status: round.status,
+        startedAt: round.startedAt
+      };
+      
+      console.log('🎯 Sending round info to server:', roundInfo);
+      socket.emit('update-round-info', { roomId, roundInfo });
+      
+      // Also force refresh to ensure all clients sync
       setTimeout(() => {
         console.log('🔄 Broadcasting round change to all clients');
         socket.emit('force-refresh', { roomId, reason: 'round-change' });

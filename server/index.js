@@ -1598,6 +1598,8 @@ io.on('connection', (socket) => {
         totalPlayedCount: (room.calledSongIds || []).length,
         currentSongIndex: room.currentSongIndex || 0,
         totalSongs: room.playlistSongs?.length || 0,
+        // Include current round information
+        currentRound: room.currentRound || null,
         // Sync timestamp for client reference
         syncTimestamp: Date.now()
       };
@@ -2181,6 +2183,28 @@ io.on('connection', (socket) => {
   });
 
   // Host-triggered hard refresh/reset for all clients in room
+  socket.on('update-round-info', (data = {}) => {
+    try {
+      const { roomId, roundInfo } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      
+      // Verify the sender is the host
+      const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
+      if (!isCurrentHost) return;
+      
+      // Store round info in room state
+      room.currentRound = roundInfo;
+      
+      // Broadcast round info to all clients in the room
+      io.to(roomId).emit('round-updated', { roundInfo });
+      
+      if (VERBOSE) console.log(`🎯 Round info updated for room ${roomId}:`, roundInfo);
+    } catch (e) {
+      console.error('❌ Error updating round info:', e?.message || e);
+    }
+  });
+
   socket.on('force-refresh', (data = {}) => {
     try {
       const { roomId, reason = 'host-request' } = data;
