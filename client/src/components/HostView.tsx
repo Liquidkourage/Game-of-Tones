@@ -1067,25 +1067,26 @@ const HostView: React.FC = () => {
       let errorMessage = 'Failed to get song suggestions. ';
       let errorDetails = '';
       
-      if (error.message) {
-        if (error.message.includes('Spotify not connected')) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (errorMsg) {
+        if (errorMsg.includes('Spotify not connected')) {
           errorMessage = '🎵 Spotify Connection Required';
           errorDetails = 'Please connect to Spotify first using the "Connect Spotify" button, then try getting suggestions again.';
-        } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-          errorMessage = '�� Network Connection Error';
+        } else if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
+          errorMessage = '🌐 Network Connection Error';
           errorDetails = 'Unable to reach the server. Please check your internet connection and make sure the server is running.';
-        } else if (error.message.includes('401')) {
-          errorMessage = '�� Authentication Error';
+        } else if (errorMsg.includes('401')) {
+          errorMessage = '🔐 Authentication Error';
           errorDetails = 'Your Spotify session may have expired. Please reconnect to Spotify and try again.';
-        } else if (error.message.includes('500')) {
-          errorMessage = '�� Server Error';
+        } else if (errorMsg.includes('500')) {
+          errorMessage = '🔥 Server Error';
           errorDetails = 'The server encountered an error while generating suggestions. Please try again in a moment.';
-        } else if (error.message.includes('HTML error page') || error.message.includes('DOCTYPE')) {
-          errorMessage = '�� Server Restart Required';
+        } else if (errorMsg.includes('HTML error page') || errorMsg.includes('DOCTYPE')) {
+          errorMessage = '🔄 Server Restart Required';
           errorDetails = 'The server appears to be restarting or crashed. Please wait a moment for it to fully start up, then try again.';
         } else {
           errorMessage = '❌ Suggestion Generation Failed';
-          errorDetails = `Error: ${error.message}. Please check the console for more details.`;
+          errorDetails = `Error: ${errorMsg}. Please check the console for more details.`;
         }
       } else {
         errorMessage = '❓ Unknown Error';
@@ -1757,8 +1758,9 @@ const HostView: React.FC = () => {
       }
     } catch (error) {
       console.error('Error creating output playlist:', error);
-      addLog(`❌ Failed to create output playlist: ${error.message}`, 'error');
-      alert(`Failed to create playlist: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      addLog(`❌ Failed to create output playlist: ${errorMessage}`, 'error');
+      alert(`Failed to create playlist: ${errorMessage}`);
     }
   }, [songList, roomId, selectedPlaylists, addLog]);
 
@@ -1790,8 +1792,9 @@ const HostView: React.FC = () => {
       }
     } catch (error) {
       console.error('Error loading Game Of Tones playlists:', error);
-      addLog(`❌ Failed to load playlists: ${error.message}`, 'error');
-      alert(`Failed to load playlists: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      addLog(`❌ Failed to load playlists: ${errorMessage}`, 'error');
+      alert(`Failed to load playlists: ${errorMessage}`);
     } finally {
       setIsLoadingPlaylists(false);
     }
@@ -1839,8 +1842,9 @@ const HostView: React.FC = () => {
       }
     } catch (error) {
       console.error('Error deleting playlists:', error);
-      addLog(`❌ Failed to delete playlists: ${error.message}`, 'error');
-      alert(`Failed to delete playlists: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      addLog(`❌ Failed to delete playlists: ${errorMessage}`, 'error');
+      alert(`Failed to delete playlists: ${errorMessage}`);
     } finally {
       setIsDeletingPlaylists(false);
     }
@@ -3319,7 +3323,7 @@ const HostView: React.FC = () => {
 
               {suggestionsModal.error ? (
                 <div style={{ color: '#ff6b6b', padding: '16px', textAlign: 'center' }}>
-                  {suggestionsModal.error.message}
+                  {suggestionsModal.error.message || 'An error occurred'}
                   {suggestionsModal.error.details && (
                     <div style={{ fontSize: '0.8rem', marginTop: '8px', opacity: 0.8 }}>
                       {suggestionsModal.error.details}
