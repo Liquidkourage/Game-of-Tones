@@ -155,6 +155,8 @@ const HostView: React.FC = () => {
   });
   const [licenseError, setLicenseError] = useState<string | null>(null);
   const [isJoiningRoom, setIsJoiningRoom] = useState<boolean>(false);
+  const [isLicenseValidated, setIsLicenseValidated] = useState<boolean>(false);
+  const [showLicenseModal, setShowLicenseModal] = useState<boolean>(false);
 
   const addLog = (message: string, level: 'info' | 'warn' | 'error' = 'info') => {
     setLogs(prev => [{ level, message, ts: Date.now() }, ...prev].slice(0, 50));
@@ -164,6 +166,11 @@ const HostView: React.FC = () => {
   const handleLicenseKeyChange = useCallback((newLicenseKey: string) => {
     setLicenseKey(newLicenseKey);
     localStorage.setItem('tempo-license-key', newLicenseKey);
+    
+    // Reset validation state when key changes
+    if (newLicenseKey !== licenseKey) {
+      setIsLicenseValidated(false);
+    }
     
     // If we have a socket and room, try to rejoin with new license key
     if (socket && roomId && newLicenseKey.trim()) {
@@ -181,7 +188,23 @@ const HostView: React.FC = () => {
         }
       }, 10000); // 10 second timeout
     }
-  }, [socket, roomId, isJoiningRoom]);
+  }, [socket, roomId, isJoiningRoom, licenseKey]);
+
+  // Handle license key revocation
+  const handleRevokeLicense = useCallback(() => {
+    if (confirm('Are you sure you want to remove your license key? You will need to re-enter it to continue hosting games.')) {
+      setLicenseKey('');
+      setIsLicenseValidated(false);
+      setLicenseError(null);
+      localStorage.removeItem('tempo-license-key');
+      setShowLicenseModal(true);
+      
+      // Disconnect from current room
+      if (socket) {
+        socket.disconnect();
+      }
+    }
+  }, [socket]);
 
   // Advanced playback states
   const [playbackState, setPlaybackState] = useState<PlaybackState>({
@@ -855,6 +878,8 @@ const HostView: React.FC = () => {
       console.log('Successfully joined room:', data);
       setIsJoiningRoom(false);
       setLicenseError(null);
+      setIsLicenseValidated(true);
+      setShowLicenseModal(false);
       addLog(`Joined room ${roomId} successfully`, 'info');
     });
 
@@ -875,7 +900,8 @@ const HostView: React.FC = () => {
           }
         }, 10000); // 10 second timeout
       } else {
-        setLicenseError('License key required to host games. Please enter your license key below.');
+        setShowLicenseModal(true);
+        setLicenseError('License key required to host games.');
       }
     }
 
@@ -2272,73 +2298,54 @@ const HostView: React.FC = () => {
           <div className="tab-content">
             {activeTab === 'setup' && (
               <div className="setup-tab">
-                {/* License Key Section */}
-                <motion.div 
-                  className="license-section"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.1 }}
-                  style={{
-                    background: licenseError ? 'rgba(255, 59, 48, 0.1)' : 'rgba(255, 255, 255, 0.1)',
-                    backdropFilter: 'blur(20px)',
-                    borderRadius: 15,
-                    padding: 20,
-                    border: licenseError ? '1px solid rgba(255, 59, 48, 0.3)' : '1px solid rgba(255, 255, 255, 0.2)',
-                    marginBottom: 20
-                  }}
-                >
-                  <h2>🔑 License Key</h2>
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-                    <input
-                      type="text"
-                      placeholder="Enter your TEMPO license key (e.g., TEMPO-ORG-2025-ABC123)"
-                      value={licenseKey}
-                      onChange={(e) => handleLicenseKeyChange(e.target.value)}
-                      disabled={isJoiningRoom}
-                      style={{
-                        flex: 1,
-                        padding: '12px 16px',
-                        borderRadius: 8,
-                        border: '1px solid rgba(255, 255, 255, 0.2)',
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        color: '#ffffff',
-                        fontSize: '1rem',
-                        fontFamily: 'inherit'
-                      }}
-                    />
-                    {isJoiningRoom && (
-                      <div style={{ color: '#00ff88', fontSize: '0.9rem' }}>
-                        Connecting...
-                      </div>
-                    )}
-                  </div>
-                  {licenseError && (
-                    <div style={{ 
-                      color: '#ff3b30', 
-                      fontSize: '0.9rem', 
-                      marginTop: 8,
-                      padding: '8px 12px',
-                      background: 'rgba(255, 59, 48, 0.1)',
-                      borderRadius: 6,
-                      border: '1px solid rgba(255, 59, 48, 0.2)'
-                    }}>
-                      {licenseError}
-                    </div>
-                  )}
-                  {licenseKey && !licenseError && !isJoiningRoom && (
-                    <div style={{ 
-                      color: '#00ff88', 
-                      fontSize: '0.9rem', 
-                      marginTop: 8,
-                      padding: '8px 12px',
+                {/* License Status - Compact */}
+                {isLicenseValidated && (
+                  <motion.div 
+                    className="license-status-compact"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.1 }}
+                    style={{
                       background: 'rgba(0, 255, 136, 0.1)',
-                      borderRadius: 6,
-                      border: '1px solid rgba(0, 255, 136, 0.2)'
-                    }}>
-                      ✅ License key accepted
+                      backdropFilter: 'blur(20px)',
+                      borderRadius: 10,
+                      padding: '12px 16px',
+                      border: '1px solid rgba(0, 255, 136, 0.2)',
+                      marginBottom: 16,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ color: '#00ff88', fontSize: '1rem' }}>✅</span>
+                      <span style={{ color: '#ffffff', fontSize: '0.9rem' }}>
+                        License: {licenseKey ? `${licenseKey.split('-')[1]}-****-****` : 'Validated'}
+                      </span>
                     </div>
-                  )}
-                </motion.div>
+                    <button
+                      onClick={() => setShowLicenseModal(true)}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: 6,
+                        padding: '6px 12px',
+                        color: '#ffffff',
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                      }}
+                    >
+                      Manage
+                    </button>
+                  </motion.div>
+                )}
 
                 {/* Spotify Connection */}
           <motion.div 
@@ -3292,6 +3299,205 @@ const HostView: React.FC = () => {
           </motion.div>
         )}
       </motion.div>
+
+      {/* License Key Modal */}
+      {showLicenseModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(10px)',
+          zIndex: 10000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 20
+        }}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3 }}
+            style={{
+              background: 'rgba(42, 42, 42, 0.95)',
+              backdropFilter: 'blur(20px)',
+              borderRadius: 20,
+              padding: 30,
+              border: licenseError ? '2px solid rgba(255, 59, 48, 0.5)' : '2px solid rgba(255, 255, 255, 0.2)',
+              maxWidth: 500,
+              width: '100%',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h2 style={{ margin: 0, color: '#ffffff', fontSize: '1.5rem' }}>🔑 License Key</h2>
+              {isLicenseValidated && (
+                <button
+                  onClick={() => setShowLicenseModal(false)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#ffffff',
+                    fontSize: '1.5rem',
+                    cursor: 'pointer',
+                    padding: 5,
+                    borderRadius: 5,
+                    opacity: 0.7,
+                    transition: 'opacity 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                  onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ 
+                display: 'block', 
+                color: '#ffffff', 
+                fontSize: '0.9rem', 
+                marginBottom: 8,
+                opacity: 0.9 
+              }}>
+                Enter your TEMPO license key:
+              </label>
+              <input
+                type={isLicenseValidated ? "password" : "text"}
+                placeholder="TEMPO-ORG-2025-ABC123"
+                value={licenseKey}
+                onChange={(e) => handleLicenseKeyChange(e.target.value)}
+                disabled={isJoiningRoom}
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
+                  borderRadius: 10,
+                  border: licenseError ? '2px solid rgba(255, 59, 48, 0.5)' : '2px solid rgba(255, 255, 255, 0.2)',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  color: '#ffffff',
+                  fontSize: '1rem',
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                  transition: 'border-color 0.2s ease'
+                }}
+                onFocus={(e) => {
+                  if (!licenseError) {
+                    e.currentTarget.style.borderColor = 'rgba(0, 255, 136, 0.5)';
+                  }
+                }}
+                onBlur={(e) => {
+                  if (!licenseError) {
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                  }
+                }}
+              />
+            </div>
+
+            {isJoiningRoom && (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 10,
+                padding: '12px 16px',
+                background: 'rgba(0, 255, 136, 0.1)',
+                borderRadius: 8,
+                border: '1px solid rgba(0, 255, 136, 0.2)',
+                marginBottom: 15
+              }}>
+                <div style={{ 
+                  width: 16, 
+                  height: 16, 
+                  border: '2px solid rgba(0, 255, 136, 0.3)',
+                  borderTop: '2px solid #00ff88',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+                }}></div>
+                <span style={{ color: '#00ff88', fontSize: '0.9rem' }}>
+                  Validating license key...
+                </span>
+              </div>
+            )}
+
+            {licenseError && (
+              <div style={{ 
+                color: '#ff3b30', 
+                fontSize: '0.9rem', 
+                padding: '12px 16px',
+                background: 'rgba(255, 59, 48, 0.1)',
+                borderRadius: 8,
+                border: '1px solid rgba(255, 59, 48, 0.3)',
+                marginBottom: 15
+              }}>
+                {licenseError}
+              </div>
+            )}
+
+            {isLicenseValidated && (
+              <div style={{ 
+                color: '#00ff88', 
+                fontSize: '0.9rem', 
+                padding: '12px 16px',
+                background: 'rgba(0, 255, 136, 0.1)',
+                borderRadius: 8,
+                border: '1px solid rgba(0, 255, 136, 0.2)',
+                marginBottom: 15
+              }}>
+                ✅ License key validated successfully
+              </div>
+            )}
+
+            {isLicenseValidated && (
+              <div style={{ marginBottom: 20 }}>
+                <button
+                  onClick={handleRevokeLicense}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: 8,
+                    border: '2px solid rgba(255, 59, 48, 0.3)',
+                    background: 'rgba(255, 59, 48, 0.1)',
+                    color: '#ff3b30',
+                    fontSize: '0.9rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    fontWeight: 500
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 59, 48, 0.2)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 59, 48, 0.5)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 59, 48, 0.1)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 59, 48, 0.3)';
+                  }}
+                >
+                  🗑️ Revoke License Key
+                </button>
+              </div>
+            )}
+
+            <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.7)', lineHeight: 1.4 }}>
+              <p style={{ margin: '0 0 8px 0' }}>
+                Your license key is required to host TEMPO games and connect to Spotify.
+              </p>
+              <p style={{ margin: 0 }}>
+                Contact your administrator if you need a license key.
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Add spinning animation for loading indicator */}
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 };
