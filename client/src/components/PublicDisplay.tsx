@@ -1702,11 +1702,11 @@ const PublicDisplay: React.FC = () => {
           {revealToast && (
             <motion.div
               key={`toast-${revealToast}-${totalPlayedCount}`}
-              initial={{ opacity: 0, y: -12 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
+              exit={{ opacity: 0, y: 12 }}
               transition={{ duration: 0.25 }}
-              style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.8)', color: '#00ff88', padding: '14px 18px', borderRadius: 12, fontWeight: 900, letterSpacing: '0.06em', fontSize: '2.0rem', boxShadow: '0 8px 28px rgba(0,0,0,0.5)', zIndex: 1000, border: '1px solid rgba(0,255,136,0.35)' }}
+              style={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.8)', color: '#00ff88', padding: '14px 18px', borderRadius: 12, fontWeight: 900, letterSpacing: '0.06em', fontSize: '2.0rem', boxShadow: '0 8px 28px rgba(0,0,0,0.5)', zIndex: 1000, border: '1px solid rgba(0,255,136,0.35)' }}
             >
               Revealed: {revealToast}
             </motion.div>
