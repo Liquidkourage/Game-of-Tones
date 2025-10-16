@@ -1166,22 +1166,6 @@ const HostView: React.FC = () => {
     }
   };
 
-  const jumpToRound = (roundIndex: number) => {
-    if (roundIndex >= 0 && roundIndex < eventRounds.length) {
-      setCurrentRoundIndex(roundIndex);
-      const updatedRounds = [...eventRounds];
-      updatedRounds[roundIndex] = {
-        ...updatedRounds[roundIndex],
-        status: 'active',
-        startedAt: Date.now()
-      };
-      setEventRounds(updatedRounds);
-      if (roomId) {
-        localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(updatedRounds));
-      }
-      addLog(`Jumped to Round ${roundIndex + 1}`, 'info');
-    }
-  };
 
   const resetEvent = () => {
     if (window.confirm('⚠️ Reset entire event?\n\nThis will:\n• Reset all rounds to unplanned status\n• Clear all round progress\n• End the current game if running\n• Allow you to replay from Round 1\n\nThis cannot be undone. Continue?')) {
