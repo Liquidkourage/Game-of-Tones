@@ -2196,10 +2196,27 @@ io.on('connection', (socket) => {
       // Store round info in room state
       room.currentRound = roundInfo;
       
+      // Clear game state for new round (but keep players and basic room settings)
+      console.log(`🧹 Clearing game state for new round in room ${roomId}`);
+      room.gameState = 'waiting';
+      room.currentSong = null;
+      room.currentSongIndex = 0;
+      room.calledSongIds = [];
+      room.playlistSongs = [];
+      room.winners = [];
+      room.roundWinners = [];
+      
+      // Clear all player bingo cards
+      room.players.forEach((player, playerId) => {
+        if (player.bingoCard) {
+          player.bingoCard.squares = [];
+        }
+      });
+      
       // Broadcast round info to all clients in the room
       io.to(roomId).emit('round-updated', { roundInfo });
       
-      if (VERBOSE) console.log(`🎯 Round info updated for room ${roomId}:`, roundInfo);
+      if (VERBOSE) console.log(`🎯 Round info updated and game state cleared for room ${roomId}:`, roundInfo);
     } catch (e) {
       console.error('❌ Error updating round info:', e?.message || e);
     }

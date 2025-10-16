@@ -653,10 +653,32 @@ const PublicDisplay: React.FC = () => {
     newSocket.on('round-updated', (data: any) => {
       console.log('🎯 PublicDisplay: Round updated:', data.roundInfo);
       if (data.roundInfo) {
+        // Clear display state for new round
+        console.log('🧹 Clearing display state for new round');
         setGameState(prev => ({
           ...prev,
-          currentRound: data.roundInfo
+          currentRound: data.roundInfo,
+          // Reset game state for new round
+          isPlaying: false,
+          currentSong: null,
+          winners: [],
+          playedSongs: [],
+          bingoCard: { squares: [], size: 5 }
         }));
+        
+        // Clear internal tracking
+        playedOrderRef.current = [];
+        idMetaRef.current = {};
+        revealSequenceRef.current = [];
+        songBaselineRef.current = {};
+        setTotalPlayedCount(0);
+        setShowWinnerBanner(false);
+        setWinnerName('');
+        
+        // Regenerate grid for new round
+        ensureGrid();
+        
+        console.log('✅ Display state cleared for new round');
       }
     });
 
