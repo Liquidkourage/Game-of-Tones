@@ -1851,7 +1851,7 @@ const HostView: React.FC = () => {
   }, [selectedForDeletion, loadGotPlaylists, addLog]);
 
   // Toggle playlist selection
-  const togglePlaylistSelection = useCallback((playlistId) => {
+  const togglePlaylistSelection = useCallback((playlistId: string) => {
     setSelectedForDeletion(prev => {
       const newSet = new Set(prev);
       if (newSet.has(playlistId)) {
@@ -1864,7 +1864,7 @@ const HostView: React.FC = () => {
   }, []);
 
   // Select all/none playlists
-  const selectAllPlaylists = useCallback((selectAll) => {
+  const selectAllPlaylists = useCallback((selectAll: boolean) => {
     if (selectAll) {
       setSelectedForDeletion(new Set(gotPlaylists.map(p => p.id)));
     } else {
