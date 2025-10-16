@@ -986,9 +986,17 @@ io.on('connection', (socket) => {
     const { roomId, playerName, isHost = false, clientId, licenseKey } = data;
     logger.info(`Player ${playerName} (${isHost ? 'host' : 'player'}) joining room: ${roomId}`, 'player-join');
     
-    // Validate license key for new rooms (hosts only)
-    let organizationId = 'DEFAULT';
-    if (isHost && licenseKey) {
+    // Validate license key for new rooms (hosts only) - REQUIRED for security
+    let organizationId = null;
+    if (isHost) {
+      if (!licenseKey) {
+        console.log(`❌ No license key provided for host`);
+        socket.emit('join-error', { 
+          error: 'License key required to host games. Please contact your administrator for a license key.' 
+        });
+        return;
+      }
+      
       organizationId = validateLicenseKey(licenseKey);
       if (!organizationId) {
         console.log(`❌ Invalid license key provided: ${licenseKey}`);
@@ -998,6 +1006,18 @@ io.on('connection', (socket) => {
         return;
       }
       console.log(`✅ Valid license key for organization: ${organizationId}`);
+    } else {
+      // Players join existing rooms - get org from room
+      const existingRoom = rooms.get(roomId);
+      if (existingRoom) {
+        organizationId = existingRoom.organizationId;
+      } else {
+        console.log(`❌ Player trying to join non-existent room: ${roomId}`);
+        socket.emit('join-error', { 
+          error: 'Room not found. Please check the room code.' 
+        });
+        return;
+      }
     }
     
     // Create room if it doesn't exist

@@ -147,10 +147,31 @@ const HostView: React.FC = () => {
     }
   ]);
   const [currentRoundIndex, setCurrentRoundIndex] = useState<number>(-1);
+  
+  // License key management
+  const [licenseKey, setLicenseKey] = useState<string>(() => {
+    const saved = localStorage.getItem('tempo-license-key');
+    return saved || '';
+  });
+  const [licenseError, setLicenseError] = useState<string | null>(null);
+  const [isJoiningRoom, setIsJoiningRoom] = useState<boolean>(false);
 
   const addLog = (message: string, level: 'info' | 'warn' | 'error' = 'info') => {
     setLogs(prev => [{ level, message, ts: Date.now() }, ...prev].slice(0, 50));
   };
+
+  // Handle license key changes
+  const handleLicenseKeyChange = useCallback((newLicenseKey: string) => {
+    setLicenseKey(newLicenseKey);
+    localStorage.setItem('tempo-license-key', newLicenseKey);
+    
+    // If we have a socket and room, try to rejoin with new license key
+    if (socket && roomId && newLicenseKey.trim()) {
+      setIsJoiningRoom(true);
+      setLicenseError(null);
+      socket.emit('join-room', { roomId, playerName: 'Host', isHost: true, licenseKey: newLicenseKey.trim() });
+    }
+  }, [socket, roomId]);
 
   // Advanced playback states
   const [playbackState, setPlaybackState] = useState<PlaybackState>({
@@ -812,9 +833,22 @@ const HostView: React.FC = () => {
       addLog(`Call revealed: ${data.hint || 'full'} ${data.songName ? '— ' + data.songName : ''} ${data.artistName ? '— ' + data.artistName : ''}`, 'info');
     });
 
-    // Join room as host
+    // Handle join errors (license key validation)
+    newSocket.on('join-error', (data: any) => {
+      console.log('Join error:', data);
+      setLicenseError(data.error || 'Failed to join room');
+      setIsJoiningRoom(false);
+    });
+
+    // Join room as host (with license key if available)
     if (roomId) {
-      newSocket.emit('join-room', { roomId, playerName: 'Host', isHost: true });
+      if (licenseKey) {
+        setIsJoiningRoom(true);
+        setLicenseError(null);
+        newSocket.emit('join-room', { roomId, playerName: 'Host', isHost: true, licenseKey });
+      } else {
+        setLicenseError('License key required to host games. Please enter your license key below.');
+      }
     }
 
     // Check Spotify status and load playlists if connected
@@ -2210,6 +2244,74 @@ const HostView: React.FC = () => {
           <div className="tab-content">
             {activeTab === 'setup' && (
               <div className="setup-tab">
+                {/* License Key Section */}
+                <motion.div 
+                  className="license-section"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.1 }}
+                  style={{
+                    background: licenseError ? 'rgba(255, 59, 48, 0.1)' : 'rgba(255, 255, 255, 0.1)',
+                    backdropFilter: 'blur(20px)',
+                    borderRadius: 15,
+                    padding: 20,
+                    border: licenseError ? '1px solid rgba(255, 59, 48, 0.3)' : '1px solid rgba(255, 255, 255, 0.2)',
+                    marginBottom: 20
+                  }}
+                >
+                  <h2>🔑 License Key</h2>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+                    <input
+                      type="text"
+                      placeholder="Enter your TEMPO license key (e.g., TEMPO-ORG-2025-ABC123)"
+                      value={licenseKey}
+                      onChange={(e) => handleLicenseKeyChange(e.target.value)}
+                      disabled={isJoiningRoom}
+                      style={{
+                        flex: 1,
+                        padding: '12px 16px',
+                        borderRadius: 8,
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        color: '#ffffff',
+                        fontSize: '1rem',
+                        fontFamily: 'inherit'
+                      }}
+                    />
+                    {isJoiningRoom && (
+                      <div style={{ color: '#00ff88', fontSize: '0.9rem' }}>
+                        Connecting...
+                      </div>
+                    )}
+                  </div>
+                  {licenseError && (
+                    <div style={{ 
+                      color: '#ff3b30', 
+                      fontSize: '0.9rem', 
+                      marginTop: 8,
+                      padding: '8px 12px',
+                      background: 'rgba(255, 59, 48, 0.1)',
+                      borderRadius: 6,
+                      border: '1px solid rgba(255, 59, 48, 0.2)'
+                    }}>
+                      {licenseError}
+                    </div>
+                  )}
+                  {licenseKey && !licenseError && !isJoiningRoom && (
+                    <div style={{ 
+                      color: '#00ff88', 
+                      fontSize: '0.9rem', 
+                      marginTop: 8,
+                      padding: '8px 12px',
+                      background: 'rgba(0, 255, 136, 0.1)',
+                      borderRadius: 6,
+                      border: '1px solid rgba(0, 255, 136, 0.2)'
+                    }}>
+                      ✅ License key accepted
+                    </div>
+                  )}
+                </motion.div>
+
                 {/* Spotify Connection */}
           <motion.div 
             className="spotify-section"
