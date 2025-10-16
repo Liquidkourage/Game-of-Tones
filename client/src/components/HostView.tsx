@@ -2454,7 +2454,7 @@ const HostView: React.FC = () => {
                                   }}
                                   title="Get AI suggestions to reach 25+ songs"
                                 >
-                                  ðŸ¤– Suggest Songs
+                                  🤖 Suggest Songs
                                 </button>
                               )}
                             </div>
@@ -2562,7 +2562,7 @@ const HostView: React.FC = () => {
                         )}
                         {mixFinalized && (
                           <div className="mix-finalized-status">
-                            <p className="status-text">âœ… Mix finalized - Cards generated for players</p>
+                            <p className="status-text">✅ Mix finalized - Cards generated for players</p>
                           </div>
                         )}
                         <button
@@ -2599,7 +2599,7 @@ const HostView: React.FC = () => {
                         <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                           <button className="btn-secondary" onClick={endGame}>ðŸ›‘ End Game</button>
                           <button className="btn-secondary" onClick={confirmAndResetGame}>ðŸ” Reset</button>
-                          <button className="btn-secondary" onClick={confirmAndNewRound}>ðŸ†• New Round</button>
+                          <button className="btn-secondary" onClick={confirmAndNewRound}>🆕 New Round</button>
                           <button className="btn-accent" onClick={() => setShowRoundManager(!showRoundManager)}>
                             🎯 Round Manager
                           </button>
@@ -2619,7 +2619,7 @@ const HostView: React.FC = () => {
                           <button className="btn-secondary" onClick={() => revealCall('full')}>Full</button>
                         </div>
                         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                          <button className="btn-secondary" onClick={forceRefreshAll}>ðŸ§¹ Force Refresh Clients</button>
+                          <button className="btn-secondary" onClick={forceRefreshAll}>🧹 Force Refresh Clients</button>
                         </div>
                       </div>
                     )}
@@ -2679,7 +2679,7 @@ const HostView: React.FC = () => {
                             onClick={completeCurrentRound}
                             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                           >
-                            âœ… Complete Current Round
+                            ✅ Complete Current Round
                           </button>
                           <button
                             onClick={resetCurrentRound}
@@ -2962,7 +2962,7 @@ const HostView: React.FC = () => {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <h3 style={{ color: '#00ff88', fontSize: '1.2rem', fontWeight: 'bold' }}>
-                  ðŸ¤– AI Song Suggestions
+                  🤖 AI Song Suggestions
                 </h3>
                 <button
                   onClick={() => setSuggestionsModal({ isOpen: false, playlist: null, suggestions: [], loading: false, analysis: null, error: null })}
@@ -3047,7 +3047,7 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.7 }}
           >
-            <h2>ðŸ“‹ Event Log</h2>
+            <h2>📋 Event Log</h2>
             <div style={{ 
               maxHeight: 200, 
               overflow: 'auto', 
