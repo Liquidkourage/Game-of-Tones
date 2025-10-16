@@ -143,7 +143,7 @@ const HostView: React.FC = () => {
     isPlaying: false,
     currentTime: 0,
     duration: 0,
-    volume: 100,
+    volume: parseInt(localStorage.getItem('spotify-volume') || '100'),
     playbackRate: 1,
     currentSong: null,
     queue: [],
@@ -1540,6 +1540,9 @@ const HostView: React.FC = () => {
     // Set local state immediately for responsive UI
     setPlaybackState(prev => ({ ...prev, volume: newVolume }));
     setIsMuted(false);
+    
+    // Persist volume to localStorage
+    localStorage.setItem('spotify-volume', newVolume.toString());
 
     // Debounce the actual volume change to prevent rapid API calls
     const timeout = setTimeout(async () => {
@@ -2925,12 +2928,67 @@ const HostView: React.FC = () => {
               </div>
 
               {/* Playback Controls */}
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
                 <button className="btn-secondary" onClick={pauseSong}>
                   {!isPlaying ? 'Resume' : 'Pause'}
                 </button>
                 <button className="btn-secondary" onClick={skipSong}>Skip</button>
                 <button className="btn-secondary" onClick={endGame}>End Game</button>
+              </div>
+
+              {/* Volume Control */}
+              <div style={{ 
+                background: 'rgba(255,255,255,0.05)', 
+                padding: 16, 
+                borderRadius: 8, 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 12,
+                justifyContent: 'center'
+              }}>
+                <button 
+                  className="btn-secondary"
+                  onClick={handleMuteToggle}
+                  style={{ 
+                    minWidth: '60px',
+                    fontSize: '0.9rem'
+                  }}
+                >
+                  {isMuted ? '🔇' : '🔊'}
+                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, maxWidth: '300px' }}>
+                  <span style={{ fontSize: '0.9rem', color: '#b3b3b3', minWidth: '30px' }}>
+                    {isMuted ? 0 : playbackState.volume}%
+                  </span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={isMuted ? 0 : playbackState.volume}
+                    onChange={(e) => {
+                      const newVolume = parseInt(e.target.value);
+                      if (isMuted && newVolume > 0) {
+                        setIsMuted(false);
+                      }
+                      setPlaybackState(prev => ({ ...prev, volume: newVolume }));
+                      localStorage.setItem('spotify-volume', newVolume.toString());
+                      handleVolumeChange(newVolume);
+                    }}
+                    style={{
+                      flex: 1,
+                      height: '6px',
+                      borderRadius: '3px',
+                      background: `linear-gradient(to right, #00ff88 0%, #00ff88 ${isMuted ? 0 : playbackState.volume}%, #333 ${isMuted ? 0 : playbackState.volume}%, #333 100%)`,
+                      outline: 'none',
+                      cursor: 'pointer',
+                      WebkitAppearance: 'none',
+                      MozAppearance: 'none',
+                      border: 'none'
+                    }}
+                    className="volume-slider"
+                  />
+                  <span style={{ fontSize: '0.8rem', color: '#666', minWidth: '40px' }}>100%</span>
+                </div>
               </div>
             </div>
           </motion.div>
