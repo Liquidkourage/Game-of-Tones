@@ -192,7 +192,7 @@ const HostView: React.FC = () => {
 
   // Handle license key revocation
   const handleRevokeLicense = useCallback(() => {
-    if (confirm('Are you sure you want to remove your license key? You will need to re-enter it to continue hosting games.')) {
+    if (window.confirm('Are you sure you want to remove your license key? You will need to re-enter it to continue hosting games.')) {
       setLicenseKey('');
       setIsLicenseValidated(false);
       setLicenseError(null);
