@@ -444,9 +444,9 @@ const HostView: React.FC = () => {
     });
 
     newSocket.on('game-started', (data: any) => {
-      console.log('ðŸŽ® GAME-STARTED EVENT RECEIVED:', data);
+      console.log('🎮 GAME-STARTED EVENT RECEIVED:', data);
       setGameState('playing');
-      console.log('ðŸŽ® SET GAME STATE TO PLAYING');
+      console.log('🎮 SET GAME STATE TO PLAYING');
       setIsStartingGame(false);
       addLog('Game started - state set to playing', 'info');
       // Auto-collapse lists during gameplay
@@ -987,7 +987,7 @@ const HostView: React.FC = () => {
       
       if (error.message) {
         if (error.message.includes('Spotify not connected')) {
-          errorMessage = 'ðŸŽµ Spotify Connection Required';
+          errorMessage = '🎵 Spotify Connection Required';
           errorDetails = 'Please connect to Spotify first using the "Connect Spotify" button, then try getting suggestions again.';
         } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
           errorMessage = 'ðŸŒ Network Connection Error';
@@ -2188,7 +2188,7 @@ const HostView: React.FC = () => {
       >
         {/* Header */}
         <div className="host-header">
-          <h1>ðŸŽµ Game Host</h1>
+          <h1>🎵 Game Host</h1>
           <div className="room-info" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
             <span className="room-code">Room: {roomId}</span>
             <span className="player-count">{players.length} Players</span>
@@ -2213,9 +2213,9 @@ const HostView: React.FC = () => {
             paddingBottom: 0
           }}>
             {[
-              { id: 'setup', label: 'ðŸŽµ Setup', desc: 'Connect & Configure' },
-              { id: 'play', label: 'ðŸŽ® Play', desc: 'Game Controls' },
-              { id: 'manage', label: 'ðŸŽ¯ Manage', desc: 'Rounds & Players' }
+              { id: 'setup', label: '🎵 Setup', desc: 'Connect & Configure' },
+              { id: 'play', label: '🎮 Play', desc: 'Game Controls' },
+              { id: 'manage', label: '🎯 Manage', desc: 'Rounds & Players' }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -2254,7 +2254,7 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
           >
-                         <h2>ðŸŽµ Spotify Connection</h2>
+                         <h2>🎵 Spotify Connection</h2>
              {!isSpotifyConnected ? (
                <div className="spotify-connection-section">
                  {spotifyError && (
@@ -2488,7 +2488,7 @@ const HostView: React.FC = () => {
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.2 }}
                 >
-                  <h2>ðŸŽ® Game Controls</h2>
+                  <h2>🎮 Game Controls</h2>
                   
                   {/* Game Settings */}
                   <div style={{ 
@@ -2557,7 +2557,7 @@ const HostView: React.FC = () => {
                             onClick={finalizeMix}
                             disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
                           >
-                            ðŸŽµ Finalize Mix
+                            🎵 Finalize Mix
                           </button>
                         )}
                         {mixFinalized && (
@@ -2595,13 +2595,13 @@ const HostView: React.FC = () => {
                       </>
                     ) : (
                       <div className="game-status">
-                        <p className="status-text">ðŸŽµ Game is running - Use the Now Playing controls below</p>
+                        <p className="status-text">🎵 Game is running - Use the Now Playing controls below</p>
                         <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                           <button className="btn-secondary" onClick={endGame}>ðŸ›‘ End Game</button>
                           <button className="btn-secondary" onClick={confirmAndResetGame}>ðŸ” Reset</button>
                           <button className="btn-secondary" onClick={confirmAndNewRound}>ðŸ†• New Round</button>
                           <button className="btn-accent" onClick={() => setShowRoundManager(!showRoundManager)}>
-                            ðŸŽ¯ Round Manager
+                            🎯 Round Manager
                           </button>
                           <button 
                             className="btn-danger" 
@@ -2637,7 +2637,7 @@ const HostView: React.FC = () => {
                   transition={{ delay: 0.2 }}
                   className="bg-rgba(42, 42, 42, 0.95) backdrop-blur-[20px] border border-rgba(0, 255, 136, 0.3) rounded-2xl p-6 mb-6"
                 >
-                  <h2>ðŸŽ¯ Round & Event Management</h2>
+                  <h2>🎯 Round & Event Management</h2>
                   
                   {/* Round Status Summary */}
                   <div className="mb-6 p-4 bg-rgba(255, 255, 255, 0.05) rounded-xl">
@@ -2906,7 +2906,7 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
-            <h2>ðŸŽµ Now Playing</h2>
+            <h2>🎵 Now Playing</h2>
             <div className="now-playing-content">
               {/* Song Info */}
               <div style={{ 
@@ -2974,7 +2974,7 @@ const HostView: React.FC = () => {
                     cursor: 'pointer'
                   }}
                 >
-                  âœ•
+                  ✕
                 </button>
               </div>
 
@@ -3023,7 +3023,7 @@ const HostView: React.FC = () => {
                               borderRadius: '4px'
                             }}
                           >
-                            ðŸŽµ Preview
+                            🎵 Preview
                           </a>
                         )}
                       </div>
