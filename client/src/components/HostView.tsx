@@ -1750,7 +1750,7 @@ const HostView: React.FC = () => {
       const data = await response.json();
       
       if (data.success) {
-        addLog(`✅ Created output playlist: ${data.playlistName} (${data.trackCount} songs)`, 'success');
+        addLog(`✅ Created output playlist: ${data.playlistName} (${data.trackCount} songs)`, 'info');
         alert(`Successfully created playlist: ${data.playlistName}\n\nIt will appear in your Spotify library under "Game Of Tones Output" playlists.`);
       } else {
         throw new Error(data.error || 'Failed to create playlist');
@@ -1825,9 +1825,9 @@ const HostView: React.FC = () => {
       const data = await response.json();
       
       if (data.success) {
-        addLog(`✅ Deleted ${data.deleted} playlists successfully`, 'success');
+        addLog(`✅ Deleted ${data.deleted} playlists successfully`, 'info');
         if (data.failed > 0) {
-          addLog(`⚠️ Failed to delete ${data.failed} playlists`, 'warning');
+          addLog(`⚠️ Failed to delete ${data.failed} playlists`, 'warn');
         }
         
         // Refresh the list
