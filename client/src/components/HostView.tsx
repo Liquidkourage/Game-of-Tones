@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -223,7 +223,7 @@ const HostView: React.FC = () => {
       if (response.status === 401) {
         console.warn('Spotify not connected (401) while loading playlists');
         // Don't override isSpotifyConnected here - let status endpoint be authoritative
-        console.log('” loadPlaylists got 401, but not overriding connection state');
+        console.log('�� loadPlaylists got 401, but not overriding connection state');
         setSpotifyError('Spotify is not connected. Click Connect Spotify.');
         setPlaylists([]);
         return;
@@ -444,9 +444,9 @@ const HostView: React.FC = () => {
     });
 
     newSocket.on('game-started', (data: any) => {
-      console.log('🎮 GAME-STARTED EVENT RECEIVED:', data);
+      console.log('?? GAME-STARTED EVENT RECEIVED:', data);
       setGameState('playing');
-      console.log('🎮 SET GAME STATE TO PLAYING');
+      console.log('?? SET GAME STATE TO PLAYING');
       setIsStartingGame(false);
       addLog('Game started - state set to playing', 'info');
       // Auto-collapse lists during gameplay
@@ -497,7 +497,7 @@ const HostView: React.FC = () => {
       setIsPausedByInterface(false);
       
       console.log('Song playing:', data);
-      addLog(`Now playing: ${data.songName} â€” ${data.artistName}`, 'info');
+      addLog(`Now playing: ${data.songName} — ${data.artistName}`, 'info');
       
       // Don't sync volume when song starts playing - preserve user's volume setting
       // setTimeout(() => {
@@ -712,7 +712,7 @@ const HostView: React.FC = () => {
 
     newSocket.on('game-ended', () => {
       setGameState('ended');
-      console.log('›‘ Game ended');
+      console.log('�� Game ended');
       // Allow reopening
       setShowPlaylists(true);
       setShowLogs(true);
@@ -725,7 +725,7 @@ const HostView: React.FC = () => {
       setWinners([]);
       setMixFinalized(false);
       setSongList([]);
-      console.log('” Game reset');
+      console.log('�� Game reset');
     });
 
     newSocket.on('playback-error', (data: any) => {
@@ -744,7 +744,7 @@ const HostView: React.FC = () => {
       // Non-blocking toast instead of alert to avoid desync
       try {
         const toast = document.createElement('div');
-        toast.textContent = 'âš ï¸ ' + msg;
+        toast.textContent = '⚠️ ' + msg;
         Object.assign(toast.style, {
           position: 'fixed', bottom: '14px', left: '14px', maxWidth: '70vw',
           background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)',
@@ -761,7 +761,7 @@ const HostView: React.FC = () => {
         const payload = JSON.stringify(diag, null, 2);
         addLog(`Playback diagnostic: ${payload}`, 'warn');
         // Also print to console for devs
-        console.log('”Ž Playback diagnostic', diag);
+        console.log('�� Playback diagnostic', diag);
       } catch {}
     });
 
@@ -779,7 +779,7 @@ const HostView: React.FC = () => {
       // Show toast notification
       try {
         const toast = document.createElement('div');
-        toast.textContent = 'âš ï¸ ' + msg;
+        toast.textContent = '⚠️ ' + msg;
         Object.assign(toast.style, {
           position: 'fixed', bottom: '14px', left: '14px', maxWidth: '70vw',
           background: 'rgba(255,193,7,0.1)', color: '#fff', border: '1px solid rgba(255,193,7,0.5)',
@@ -795,11 +795,11 @@ const HostView: React.FC = () => {
       if (data?.totalDuplicatesRemoved > 0) {
         const msg = `Removed ${data.totalDuplicatesRemoved} duplicate songs across playlists for 5x15 mode`;
         console.log('Deduplication success:', msg);
-        addLog(`âœ… ${msg}`, 'info');
+        addLog(`✅ ${msg}`, 'info');
         if (data?.playlistDetails && Array.isArray(data.playlistDetails)) {
           data.playlistDetails.forEach((detail: any) => {
             if (detail.duplicatesRemoved > 0) {
-              addLog(`  ${detail.name}: ${detail.originalCount} â†’ ${detail.finalCount} songs (${detail.duplicatesRemoved} duplicates removed)`, 'info');
+              addLog(`  ${detail.name}: ${detail.originalCount} → ${detail.finalCount} songs (${detail.duplicatesRemoved} duplicates removed)`, 'info');
             }
           });
         }
@@ -808,7 +808,7 @@ const HostView: React.FC = () => {
 
     // Acknowledge reveal events
     newSocket.on('call-revealed', (data: any) => {
-      addLog(`Call revealed: ${data.hint || 'full'} ${data.songName ? 'â€” ' + data.songName : ''} ${data.artistName ? 'â€” ' + data.artistName : ''}`, 'info');
+      addLog(`Call revealed: ${data.hint || 'full'} ${data.songName ? '— ' + data.songName : ''} ${data.artistName ? '— ' + data.artistName : ''}`, 'info');
     });
 
     // Join room as host
@@ -827,7 +827,7 @@ const HostView: React.FC = () => {
 
         if (data.connected) {
           console.log('Spotify already connected, loading playlists...');
-          console.log('” Status API returned connected=true, setting state to true');
+          console.log('�� Status API returned connected=true, setting state to true');
           setIsSpotifyConnected(true);
           setIsSpotifyConnecting(false);
           await loadPlaylists();
@@ -839,7 +839,7 @@ const HostView: React.FC = () => {
           // }, 1000);
         } else {
           console.log('Spotify not connected');
-          console.log('” Status API returned connected=false, setting state to false');
+          console.log('�� Status API returned connected=false, setting state to false');
           setIsSpotifyConnected(false);
           setIsSpotifyConnecting(false);
         }
@@ -892,16 +892,16 @@ const HostView: React.FC = () => {
         
         // Store the current URL to return to after Spotify auth
         const returnUrl = `/host/${roomId}`;
-        console.log('” Storing return URL in localStorage:', returnUrl);
+        console.log('�� Storing return URL in localStorage:', returnUrl);
         localStorage.setItem('spotify_return_url', returnUrl);
         if (roomId) {
-          console.log('” Storing room ID in localStorage:', roomId);
+          console.log('�� Storing room ID in localStorage:', roomId);
           localStorage.setItem('spotify_room_id', roomId);
         }
         
         // Add room ID to the auth URL as a state parameter
         const authUrlWithState = `${data.authUrl}&state=${encodeURIComponent(roomId || '')}`;
-        console.log('” Redirecting to Spotify with room ID in state parameter');
+        console.log('�� Redirecting to Spotify with room ID in state parameter');
         
         // Redirect to Spotify
         window.location.href = authUrlWithState;
@@ -938,8 +938,8 @@ const HostView: React.FC = () => {
 
       // Get AI suggestions
       const apiUrl = `${API_BASE || ''}/api/spotify/suggest-songs`;
-      console.log('¤– Making AI suggestion request to:', apiUrl);
-      console.log('¤– Request payload:', { playlistId: playlist.id, playlistName: playlist.name, existingSongs: existingSongs.length, targetCount });
+      console.log('�� Making AI suggestion request to:', apiUrl);
+      console.log('�� Request payload:', { playlistId: playlist.id, playlistName: playlist.name, existingSongs: existingSongs.length, targetCount });
       
       const suggestionsResponse = await fetch(apiUrl, {
         method: 'POST',
@@ -954,19 +954,19 @@ const HostView: React.FC = () => {
         })
       });
 
-      console.log('¤– Response status:', suggestionsResponse.status);
-      console.log('¤– Response headers:', Object.fromEntries(suggestionsResponse.headers.entries()));
+      console.log('�� Response status:', suggestionsResponse.status);
+      console.log('�� Response headers:', Object.fromEntries(suggestionsResponse.headers.entries()));
       
       // Check if we got HTML instead of JSON (common when server returns error page)
       const contentType = suggestionsResponse.headers.get('content-type');
       if (contentType && contentType.includes('text/html')) {
         const htmlText = await suggestionsResponse.text();
-        console.error('¤– Received HTML instead of JSON:', htmlText.substring(0, 200) + '...');
+        console.error('�� Received HTML instead of JSON:', htmlText.substring(0, 200) + '...');
         throw new Error('Server returned HTML error page instead of JSON. Check if the server is running properly.');
       }
       
       const suggestionsData = await suggestionsResponse.json();
-      console.log('¤– Response data:', suggestionsData);
+      console.log('�� Response data:', suggestionsData);
 
       if (suggestionsData.success) {
         setSuggestionsModal(prev => ({
@@ -979,7 +979,7 @@ const HostView: React.FC = () => {
         throw new Error(suggestionsData.error || 'Failed to get suggestions');
       }
     } catch (error: any) {
-      console.error('âŒ Error getting song suggestions:', error);
+      console.error('❌ Error getting song suggestions:', error);
       
       // Determine specific error message based on the error type
       let errorMessage = 'Failed to get song suggestions. ';
@@ -987,26 +987,26 @@ const HostView: React.FC = () => {
       
       if (error.message) {
         if (error.message.includes('Spotify not connected')) {
-          errorMessage = '🎵 Spotify Connection Required';
+          errorMessage = '?? Spotify Connection Required';
           errorDetails = 'Please connect to Spotify first using the "Connect Spotify" button, then try getting suggestions again.';
         } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-          errorMessage = 'Œ Network Connection Error';
+          errorMessage = '�� Network Connection Error';
           errorDetails = 'Unable to reach the server. Please check your internet connection and make sure the server is running.';
         } else if (error.message.includes('401')) {
-          errorMessage = '” Authentication Error';
+          errorMessage = '�� Authentication Error';
           errorDetails = 'Your Spotify session may have expired. Please reconnect to Spotify and try again.';
         } else if (error.message.includes('500')) {
-          errorMessage = '”§ Server Error';
+          errorMessage = '�� Server Error';
           errorDetails = 'The server encountered an error while generating suggestions. Please try again in a moment.';
         } else if (error.message.includes('HTML error page') || error.message.includes('DOCTYPE')) {
-          errorMessage = '”„ Server Restart Required';
+          errorMessage = '�� Server Restart Required';
           errorDetails = 'The server appears to be restarting or crashed. Please wait a moment for it to fully start up, then try again.';
         } else {
-          errorMessage = 'âŒ Suggestion Generation Failed';
+          errorMessage = '❌ Suggestion Generation Failed';
           errorDetails = `Error: ${error.message}. Please check the console for more details.`;
         }
       } else {
-        errorMessage = 'â“ Unknown Error';
+        errorMessage = '❓ Unknown Error';
         errorDetails = 'An unexpected error occurred. Please check the browser console (F12) for more details and try again.';
       }
       
@@ -1130,19 +1130,19 @@ const HostView: React.FC = () => {
     }
 
     try {
-      // If we're already playing this song, just resume
+      // If we're already playing this song, justResume
       if (isPlaying && currentSong?.id === song.id) {
         socket.emit('resume-song', { roomId });
         setIsPlaying(true);
         setPlaybackState(prev => ({ ...prev, isPlaying: true }));
         console.log('Resumed song via socket');
       } else {
-        // Check if we were paused by the interface and need to resume from exact position
+        // Check if we were paused by the interface and need toResume from exact position
         if (isPausedByInterface && currentSong?.id === song.id) {
-          console.log(`▶️ Resuming from exact pause position: ${pausePosition}ms`);
+          console.log(`??� Resuming from exact pause position: ${pausePosition}ms`);
           socket.emit('resume-song', { 
             roomId, 
-            resumePosition: pausePosition 
+           ResumePosition: pausePosition 
           });
           setIsPlaying(true);
           setPlaybackState(prev => ({ 
@@ -1152,7 +1152,7 @@ const HostView: React.FC = () => {
           }));
           setIsPausedByInterface(false);
         } else {
-          // For new songs or external changes, just resume normally
+          // For new songs or external changes, justResume normally
           socket.emit('resume-song', { roomId });
           setIsPlaying(true);
           setPlaybackState(prev => ({ ...prev, isPlaying: true }));
@@ -1174,7 +1174,7 @@ const HostView: React.FC = () => {
         socket.emit('pause-song', { roomId });
         setIsPlaying(false);
         setPlaybackState(prev => ({ ...prev, isPlaying: false }));
-        console.log(`â¸ï¸ Paused song at position: ${playbackState.currentTime}ms`);
+        console.log(`⏸️ Paused song at position: ${playbackState.currentTime}ms`);
       }
     } catch (error) {
       console.error('Error pausing song:', error);
@@ -1274,11 +1274,11 @@ const HostView: React.FC = () => {
     const confirmed = window.confirm(
       'Are you sure you want to restart the game?\n\n' +
       'This will:\n' +
-      'â€¢ Stop current playback\n' +
-      'â€¢ Reset all marked squares\n' +
-      'â€¢ Clear all winners\n' +
-      'â€¢ Reset to waiting state\n' +
-      'â€¢ Keep existing bingo cards'
+      '• Stop current playback\n' +
+      '• Reset all marked squares\n' +
+      '• Clear all winners\n' +
+      '• Reset to waiting state\n' +
+      '• Keep existing bingo cards'
     );
     
     if (confirmed) {
@@ -1294,10 +1294,10 @@ const HostView: React.FC = () => {
     const confirmed = window.confirm(
       'Start next round with fresh setup?\n\n' +
       'This will:\n' +
-      'â€¢ Keep all players connected\n' +
-      'â€¢ Keep Spotify connection\n' +
-      'â€¢ Reset to setup screen for new playlists/pattern\n' +
-      'â€¢ Clear all bingo cards'
+      '• Keep all players connected\n' +
+      '• Keep Spotify connection\n' +
+      '• Reset to setup screen for new playlists/pattern\n' +
+      '• Clear all bingo cards'
     );
     
     if (confirmed) {
@@ -1349,9 +1349,9 @@ const HostView: React.FC = () => {
   const emergencyResetAll = () => {
     const confirmed = window.confirm(
       'EMERGENCY RESET: This will:\n' +
-      'â€¢ Stop all playback\n' +
-      'â€¢ Reset all game state\n' +
-      'â€¢ Force sync all clients\n' +
+      '• Stop all playback\n' +
+      '• Reset all game state\n' +
+      '• Force sync all clients\n' +
       'Continue?'
     );
     
@@ -1380,7 +1380,7 @@ const HostView: React.FC = () => {
   const generateSongList = useCallback(async () => {
     if (!isSpotifyConnected) {
       console.warn('Cannot generate song list: Spotify not connected');
-      console.log('” isSpotifyConnected state is currently:', isSpotifyConnected);
+      console.log('�� isSpotifyConnected state is currently:', isSpotifyConnected);
       setSongList([]);
       return;
     }
@@ -1427,7 +1427,7 @@ const HostView: React.FC = () => {
         if (data.success && data.playbackState) {
         const spotifyVolume = (data.playbackState.device?.volume_percent ?? 100) as number;
           setPlaybackState(prev => ({ ...prev, volume: spotifyVolume }));
-          console.log(`”Š Synced volume from Spotify: ${spotifyVolume}%`);
+          console.log(`�� Synced volume from Spotify: ${spotifyVolume}%`);
         }
     } catch {
       // ignore
@@ -1446,9 +1446,9 @@ const HostView: React.FC = () => {
         body: JSON.stringify({ deviceId: selectedDevice.id, play: false })
       });
       if (response.ok) {
-        console.log('âœ… Transferred playback to selected device');
+        console.log('✅ Transferred playback to selected device');
         await fetchPlaybackState();
-        // Nudge resume to ensure correct track/context
+        // NudgeResume to ensure correct track/context
         if (socket && roomId) {
           socket.emit('resume-song', { roomId });
         }
@@ -1458,11 +1458,11 @@ const HostView: React.FC = () => {
           const err = await response.json();
           if (err?.error) msg = String(err.error);
         } catch {}
-        console.error('âŒ Failed to transfer playback:', msg);
+        console.error('❌ Failed to transfer playback:', msg);
         alert(`Transfer failed: ${msg}`);
       }
     } catch (e) {
-      console.error('âŒ Error transferring playback:', e);
+      console.error('❌ Error transferring playback:', e);
     }
   }, [selectedDevice, fetchPlaybackState]);
 
@@ -1482,7 +1482,7 @@ const HostView: React.FC = () => {
     try {
       await fetchPlaybackState();
       if (socket && roomId) {
-        // Nudge resume if host believes a song is active
+        // NudgeResume if host believes a song is active
         socket.emit('resume-song', { roomId });
       }
     } catch {}
@@ -1504,7 +1504,7 @@ const HostView: React.FC = () => {
         setShuffleEnabled(next);
       }
     } catch (e) {
-      console.error('âŒ Error setting shuffle:', e);
+      console.error('❌ Error setting shuffle:', e);
     }
   }, [selectedDevice, shuffleEnabled]);
 
@@ -1526,7 +1526,7 @@ const HostView: React.FC = () => {
         setRepeatState(next);
       }
     } catch (e) {
-      console.error('âŒ Error setting repeat:', e);
+      console.error('❌ Error setting repeat:', e);
     }
   }, [selectedDevice, repeatState]);
 
@@ -1544,7 +1544,7 @@ const HostView: React.FC = () => {
     // Debounce the actual volume change to prevent rapid API calls
     const timeout = setTimeout(async () => {
       try {
-        console.log(`”Š Setting volume to ${newVolume}% on Spotify`);
+        console.log(`�� Setting volume to ${newVolume}% on Spotify`);
         const response = await fetch(`${API_BASE || ''}/api/spotify/volume`, {
           method: 'POST',
           headers: {
@@ -1559,7 +1559,7 @@ const HostView: React.FC = () => {
         
         if (response.ok) {
           // Don't fetch current volume - trust our local state
-          console.log(`âœ… Volume set to ${newVolume}% successfully`);
+          console.log(`✅ Volume set to ${newVolume}% successfully`);
         } else {
           console.error('Failed to set volume, reverting to Spotify state');
           fetchCurrentVolume(); // Only revert on error
@@ -1580,7 +1580,7 @@ const HostView: React.FC = () => {
       setIsMuted(false);
       
       try {
-        console.log(`”Š Unmuting, setting volume to ${previousVolume}%`);
+        console.log(`�� Unmuting, setting volume to ${previousVolume}%`);
         const response = await fetch(`${API_BASE || ''}/api/spotify/volume`, {
           method: 'POST',
           headers: {
@@ -1595,7 +1595,7 @@ const HostView: React.FC = () => {
         
         if (response.ok) {
           // Don't fetch current volume - trust our local state
-          console.log(`âœ… Unmuted to ${previousVolume}% successfully`);
+          console.log(`✅ Unmuted to ${previousVolume}% successfully`);
         } else {
           console.error('Failed to unmute, reverting to Spotify state');
           fetchCurrentVolume();
@@ -1611,7 +1611,7 @@ const HostView: React.FC = () => {
       setIsMuted(true);
       
       try {
-        console.log(`”Š Muting, setting volume to 0%`);
+        console.log(`�� Muting, setting volume to 0%`);
         const response = await fetch(`${API_BASE || ''}/api/spotify/volume`, {
           method: 'POST',
           headers: {
@@ -1626,7 +1626,7 @@ const HostView: React.FC = () => {
         
         if (response.ok) {
           // Don't fetch current volume - trust our local state
-          console.log(`âœ… Muted successfully`);
+          console.log(`✅ Muted successfully`);
         } else {
           console.error('Failed to mute, reverting to Spotify state');
           fetchCurrentVolume();
@@ -1683,7 +1683,7 @@ const HostView: React.FC = () => {
   const forceDeviceDetection = useCallback(async () => {
     try {
       setIsLoadingDevices(true);
-      console.log('”§ Forcing device detection...');
+      console.log('�� Forcing device detection...');
       
       const response = await fetch('/api/spotify/force-device', {
         method: 'POST',
@@ -1693,13 +1693,13 @@ const HostView: React.FC = () => {
       });
       
       if (response.ok) {
-        console.log('âœ… Device detection forced successfully');
+        console.log('✅ Device detection forced successfully');
         await loadDevices();
       } else {
-        console.error('âŒ Failed to force device detection');
+        console.error('❌ Failed to force device detection');
       }
     } catch (error) {
-      console.error('âŒ Error forcing device detection:', error);
+      console.error('❌ Error forcing device detection:', error);
     } finally {
       setIsLoadingDevices(false);
     }
@@ -1709,7 +1709,7 @@ const HostView: React.FC = () => {
   const refreshSpotifyConnection = useCallback(async () => {
     try {
       setIsLoadingDevices(true);
-      console.log('”„ Refreshing Spotify connection...');
+      console.log('�� Refreshing Spotify connection...');
       
       const response = await fetch('/api/spotify/refresh', {
         method: 'POST',
@@ -1719,14 +1719,14 @@ const HostView: React.FC = () => {
       });
       
       if (response.ok) {
-        console.log('âœ… Spotify connection refreshed');
+        console.log('✅ Spotify connection refreshed');
         await loadDevices();
         await loadPlaylists();
       } else {
-        console.error('âŒ Failed to refresh Spotify connection');
+        console.error('❌ Failed to refresh Spotify connection');
       }
     } catch (error) {
-      console.error('âŒ Error refreshing Spotify connection:', error);
+      console.error('❌ Error refreshing Spotify connection:', error);
     } finally {
       setIsLoadingDevices(false);
     }
@@ -1788,11 +1788,11 @@ const HostView: React.FC = () => {
             if (now - lastSongEventAtRef.current < 15000) return;
           }
             if (spotifyIsPlaying !== isPlaying) {
-              console.log(`”„ Spotify playback state changed: ${spotifyIsPlaying}, updating interface`);
+              console.log(`�� Spotify playback state changed: ${spotifyIsPlaying}, updating interface`);
               setIsPlaying(spotifyIsPlaying);
             setPlaybackState(prev => ({ ...prev, isPlaying: spotifyIsPlaying, currentTime: spotifyPosition }));
               if (spotifyIsPlaying && isPausedByInterface) {
-                console.log('”„ Spotify resumed externally, clearing pause tracking');
+                console.log('�� SpotifyResumed externally, clearing pause tracking');
                 setIsPausedByInterface(false);
                 setPausePosition(0);
               }
@@ -1890,7 +1890,7 @@ const HostView: React.FC = () => {
         const progress = Number(data?.playbackState?.progress_ms || 0);
         const is_sp_playing = !!data?.playbackState?.is_playing;
         if ((!is_sp_playing || progress < 1000) && audioRef.current && audioUrlRef.current) {
-          console.warn('âš ï¸ Spotify stall detected on host; playing preview fallback');
+          console.warn('⚠️ Spotify stall detected on host; playing preview fallback');
           try { await audioRef.current.play(); } catch {}
         }
       } catch {}
@@ -2188,7 +2188,7 @@ const HostView: React.FC = () => {
       >
         {/* Header */}
         <div className="host-header">
-          <h1>🎵 Game Host</h1>
+          <h1>?? Game Host</h1>
           <div className="room-info" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
             <span className="room-code">Room: {roomId}</span>
             <span className="player-count">{players.length} Players</span>
@@ -2213,9 +2213,9 @@ const HostView: React.FC = () => {
             paddingBottom: 0
           }}>
             {[
-              { id: 'setup', label: '🎵 Setup', desc: 'Connect & Configure' },
-              { id: 'play', label: '🎮 Play', desc: 'Game Controls' },
-              { id: 'manage', label: '🎯 Manage', desc: 'Rounds & Players' }
+              { id: 'setup', label: '?? Setup', desc: 'Connect & Configure' },
+              { id: 'play', label: '?? Play', desc: 'Game Controls' },
+              { id: 'manage', label: '?? Manage', desc: 'Rounds & Players' }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -2254,7 +2254,7 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
           >
-                         <h2>🎵 Spotify Connection</h2>
+                         <h2>?? Spotify Connection</h2>
              {!isSpotifyConnected ? (
                <div className="spotify-connection-section">
                  {spotifyError && (
@@ -2339,7 +2339,7 @@ const HostView: React.FC = () => {
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.4 }}
                   >
-                    <h2>“š Available Playlists</h2>
+                    <h2>�� Available Playlists</h2>
                     <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
                       <input
                         type="text"
@@ -2433,7 +2433,7 @@ const HostView: React.FC = () => {
                                 fontSize: '0.9rem',
                                 color: isInsufficient ? '#ffc107' : '#fff'
                               }}>
-                                {stripGoTPrefix ? p.name.replace(/^GoT\s*[-â€“:]*\s*/i, '') : p.name}
+                                {stripGoTPrefix ? p.name.replace(/^GoT\s*[-–:]*\s*/i, '') : p.name}
                               </span>
                               <span style={{ 
                                 fontSize: '0.8rem', 
@@ -2454,7 +2454,7 @@ const HostView: React.FC = () => {
                                   }}
                                   title="Get AI suggestions to reach 25+ songs"
                                 >
-                                  🤖 Suggest Songs
+                                  ?? Suggest Songs
                                 </button>
                               )}
                             </div>
@@ -2488,7 +2488,7 @@ const HostView: React.FC = () => {
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.2 }}
                 >
-                  <h2>🎮 Game Controls</h2>
+                  <h2>?? Game Controls</h2>
                   
                   {/* Game Settings */}
                   <div style={{ 
@@ -2557,12 +2557,12 @@ const HostView: React.FC = () => {
                             onClick={finalizeMix}
                             disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
                           >
-                            🎵 Finalize Mix
+                            ?? Finalize Mix
                           </button>
                         )}
                         {mixFinalized && (
                           <div className="mix-finalized-status">
-                            <p className="status-text">✅ Mix finalized - Cards generated for players</p>
+                            <p className="status-text">? Mix finalized - Cards generated for players</p>
                           </div>
                         )}
                         <button
@@ -2595,13 +2595,13 @@ const HostView: React.FC = () => {
                       </>
                     ) : (
                       <div className="game-status">
-                        <p className="status-text">🎵 Game is running - Use the Now Playing controls below</p>
+                        <p className="status-text">?? Game is running - Use the Now Playing controls below</p>
                         <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                          <button className="btn-secondary" onClick={endGame}>›‘ End Game</button>
-                          <button className="btn-secondary" onClick={confirmAndResetGame}>” Reset</button>
-                          <button className="btn-secondary" onClick={confirmAndNewRound}>🆕 New Round</button>
+                          <button className="btn-secondary" onClick={endGame}>End Game</button>
+                          <button className="btn-secondary" onClick={confirmAndResetGame}>�� Reset</button>
+                          <button className="btn-secondary" onClick={confirmAndNewRound}>?? New Round</button>
                           <button className="btn-accent" onClick={() => setShowRoundManager(!showRoundManager)}>
-                            🎯 Round Manager
+                            ?? Round Manager
                           </button>
                           <button 
                             className="btn-danger" 
@@ -2609,7 +2609,7 @@ const HostView: React.FC = () => {
                             style={{ background: '#ff6b6b', borderColor: '#ff4757' }}
                             title="Complete restart: reset all progress, keep cards"
                           >
-                            ”„ Restart
+                            �� Restart
                           </button>
                         </div>
                         <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
@@ -2619,7 +2619,7 @@ const HostView: React.FC = () => {
                           <button className="btn-secondary" onClick={() => revealCall('full')}>Full</button>
                         </div>
                         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                          <button className="btn-secondary" onClick={forceRefreshAll}>🧹 Force Refresh Clients</button>
+                          <button className="btn-secondary" onClick={forceRefreshAll}>?? Force Refresh Clients</button>
                         </div>
                       </div>
                     )}
@@ -2637,7 +2637,7 @@ const HostView: React.FC = () => {
                   transition={{ delay: 0.2 }}
                   className="bg-rgba(42, 42, 42, 0.95) backdrop-blur-[20px] border border-rgba(0, 255, 136, 0.3) rounded-2xl p-6 mb-6"
                 >
-                  <h2>🎯 Round & Event Management</h2>
+                  <h2>?? Round & Event Management</h2>
                   
                   {/* Round Status Summary */}
                   <div className="mb-6 p-4 bg-rgba(255, 255, 255, 0.05) rounded-xl">
@@ -2679,13 +2679,13 @@ const HostView: React.FC = () => {
                             onClick={completeCurrentRound}
                             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                           >
-                            ✅ Complete Current Round
+                            ? Complete Current Round
                           </button>
                           <button
                             onClick={resetCurrentRound}
                             className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
                           >
-                            ”„ Reset Current Round
+                            �� Reset Current Round
                           </button>
                         </>
                       )}
@@ -2696,7 +2696,7 @@ const HostView: React.FC = () => {
                             onClick={() => jumpToRound(nextRound)}
                             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                           >
-                            â­ï¸ Start Next Planned Round
+                            ⏭️ Start Next Planned Round
                           </button>
                         ) : null;
                       })()}
@@ -2740,10 +2740,10 @@ const HostView: React.FC = () => {
                                   )}
                                 </div>
                                 <div className="text-sm text-gray-400 mt-1">
-                                  {(round.playlistIds || []).length} playlist{(round.playlistIds || []).length !== 1 ? 's' : ''} â€¢ {round.songCount} songs
+                                  {(round.playlistIds || []).length} playlist{(round.playlistIds || []).length !== 1 ? 's' : ''} • {round.songCount} songs
                                   {round.status === 'completed' && round.completedAt && (
                                     <span className="ml-2">
-                                      â€¢ Completed {new Date(round.completedAt).toLocaleTimeString()}
+                                      • Completed {new Date(round.completedAt).toLocaleTimeString()}
                                     </span>
                                   )}
                                 </div>
@@ -2774,7 +2774,7 @@ const HostView: React.FC = () => {
                     transition={{ delay: 0.4 }}
                     className="player-cards-section"
                   >
-                    <h2>‘¥ Player Cards & Progress</h2>
+                    <h2>�� Player Cards & Progress</h2>
                     <div style={{ 
                       display: 'grid', 
                       gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', 
@@ -2804,7 +2804,7 @@ const HostView: React.FC = () => {
                             const progressColor = progress.needed === 0 ? '#00ff88' : 
                                                 progress.needed <= 2 ? '#ffaa00' : 
                                                 progress.progress >= 50 ? '#66ccff' : '#888';
-                            const progressText = progress.needed === 0 ? '🎉 BINGO!' : 
+                            const progressText = progress.needed === 0 ? '?? BINGO!' : 
                                                progress.needed === 1 ? '1 more needed!' :
                                                `${progress.needed} more needed`;
                             
@@ -2876,9 +2876,9 @@ const HostView: React.FC = () => {
                                   lineHeight: 1.1,
                                   overflow: 'hidden'
                                 }}
-                                title={`${square.songName} â€” ${square.artistName}`}
+                                title={`${square.songName} — ${square.artistName}`}
                               >
-                                {square.marked && <span style={{ marginRight: 2 }}>âœ“</span>}
+                                {square.marked && <span style={{ marginRight: 2 }}>✓</span>}
                                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                   {square.songName.length > 12 ? square.songName.substring(0, 12) + '...' : square.songName}
                                 </span>
@@ -2906,7 +2906,7 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
-            <h2>🎵 Now Playing</h2>
+            <h2>?? Now Playing</h2>
             <div className="now-playing-content">
               {/* Song Info */}
               <div style={{ 
@@ -2927,10 +2927,10 @@ const HostView: React.FC = () => {
               {/* Playback Controls */}
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
                 <button className="btn-secondary" onClick={pauseSong}>
-                  {!isPlaying ? '▶️ Resume' : 'â¸ï¸ Pause'}
+                  {!isPlaying ? 'Resume' : 'Pause'}
                 </button>
-                <button className="btn-secondary" onClick={skipSong}>â­ï¸ Skip</button>
-                <button className="btn-secondary" onClick={endGame}>›‘ End Game</button>
+                <button className="btn-secondary" onClick={skipSong}>Skip</button>
+                <button className="btn-secondary" onClick={endGame}>End Game</button>
               </div>
             </div>
           </motion.div>
@@ -2962,7 +2962,7 @@ const HostView: React.FC = () => {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <h3 style={{ color: '#00ff88', fontSize: '1.2rem', fontWeight: 'bold' }}>
-                  🤖 AI Song Suggestions
+                  ?? AI Song Suggestions
                 </h3>
                 <button
                   onClick={() => setSuggestionsModal({ isOpen: false, playlist: null, suggestions: [], loading: false, analysis: null, error: null })}
@@ -2974,7 +2974,7 @@ const HostView: React.FC = () => {
                     cursor: 'pointer'
                   }}
                 >
-                  ✕
+                  ?
                 </button>
               </div>
 
@@ -3023,7 +3023,7 @@ const HostView: React.FC = () => {
                               borderRadius: '4px'
                             }}
                           >
-                            🎵 Preview
+                            ?? Preview
                           </a>
                         )}
                       </div>
@@ -3047,7 +3047,7 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.7 }}
           >
-            <h2>📋 Event Log</h2>
+            <h2>?? Event Log</h2>
             <div style={{ 
               maxHeight: 200, 
               overflow: 'auto', 
@@ -3086,3 +3086,4 @@ const HostView: React.FC = () => {
 };
 
 export default HostView;
+
