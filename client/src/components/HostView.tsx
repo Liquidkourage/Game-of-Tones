@@ -870,6 +870,25 @@ const HostView: React.FC = () => {
       setIsLicenseValidated(true);
       setShowLicenseModal(false);
       addLog(`Joined room ${roomId} successfully`, 'info');
+      
+      // Force check Spotify status after joining room
+      setTimeout(async () => {
+        console.log('🔄 Rechecking Spotify status after room join...');
+        try {
+          const cacheBuster = Date.now();
+          const response = await fetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
+          const data = await response.json();
+          console.log('📡 Recheck response:', data);
+          
+          if (data.connected) {
+            console.log('✅ Spotify found connected after room join!');
+            setIsSpotifyConnected(true);
+            setIsSpotifyConnecting(false);
+          }
+        } catch (error) {
+          console.error('Error rechecking Spotify status:', error);
+        }
+      }, 1000);
     });
 
     // Join room as host (license validation temporarily disabled)
