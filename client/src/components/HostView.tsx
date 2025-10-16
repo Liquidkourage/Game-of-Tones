@@ -2405,7 +2405,7 @@ const HostView: React.FC = () => {
                       <button 
                         className="btn-secondary"
                         onClick={() => {
-                          setVisiblePlaylists(playlists.filter(p => !assignedPlaylistIds.has(p.id)).slice(0, 50));
+                          setVisiblePlaylists(playlists.filter(p => !assignedPlaylistIds.has(p.id)));
                           setPlaylistQuery('');
                         }}
                       >
@@ -2417,7 +2417,7 @@ const HostView: React.FC = () => {
                           const gotPlaylists = playlists.filter(p => 
                             p.name.toLowerCase().includes('got') && !assignedPlaylistIds.has(p.id)
                           );
-                          setVisiblePlaylists(gotPlaylists.slice(0, 50));
+                          setVisiblePlaylists(gotPlaylists);
                           setPlaylistQuery('');
                         }}
                       >
@@ -2432,12 +2432,29 @@ const HostView: React.FC = () => {
                       borderRadius: 8, 
                       padding: 8 
                     }}>
-                      {filteredPlaylists.length === 0 ? (
-                        <div style={{ padding: 20, textAlign: 'center', opacity: 0.7 }}>
-                          {playlistQuery ? 'No playlists match your search.' : 'No available playlists.'}
-                        </div>
-                      ) : (
-                        filteredPlaylists.map((p) => {
+                      {(() => {
+                        // Get all playlist IDs that are already assigned to rounds
+                        const assignedPlaylistIds = new Set(
+                          eventRounds.flatMap(round => round.playlistIds || [])
+                        );
+
+                        // Filter playlists by query and exclude already assigned playlists
+                        const filteredPlaylists = (playlistQuery ? playlists.filter(p => {
+                          const q = playlistQuery.toLowerCase();
+                          return (
+                            !assignedPlaylistIds.has(p.id) && // Exclude assigned playlists
+                            ((p.name || '').toLowerCase().includes(q) ||
+                            (p.owner || '').toLowerCase().includes(q) ||
+                            (p.description || '').toLowerCase().includes(q))
+                          );
+                        }) : playlists.filter(p => !assignedPlaylistIds.has(p.id))); // Exclude assigned playlists even without query
+
+                        return filteredPlaylists.length === 0 ? (
+                          <div style={{ padding: 20, textAlign: 'center', opacity: 0.7 }}>
+                            {playlistQuery ? 'No playlists match your search.' : 'No available playlists.'}
+                          </div>
+                        ) : (
+                          filteredPlaylists.map((p) => {
                           const isSelected = selectedPlaylists.some(sp => sp.id === p.id);
                           const isInsufficient = p.tracks < 25;
                           
@@ -2507,19 +2524,8 @@ const HostView: React.FC = () => {
                             </div>
                           );
                         })
-                      )}
-                      
-                      {filteredPlaylists.length >= 50 && !playlistQuery && (
-                        <div style={{ padding: 10, textAlign: 'center' }}>
-                          <button 
-                            className="btn-secondary"
-                            onClick={loadMorePlaylists}
-                            disabled={isLoadingMorePlaylists}
-                          >
-                            {isLoadingMorePlaylists ? 'Loading...' : 'Load More Playlists'}
-                          </button>
-                        </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   </motion.div>
                 )}
