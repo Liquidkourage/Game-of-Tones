@@ -1109,39 +1109,10 @@ io.on('connection', (socket) => {
     const { roomId, playerName, isHost = false, clientId, licenseKey } = data;
     logger.info(`Player ${playerName} (${isHost ? 'host' : 'player'}) joining room: ${roomId}`, 'player-join');
     
-    // Validate license key for new rooms (hosts only) - REQUIRED for security
-    let organizationId = null;
-    if (isHost) {
-      if (!licenseKey) {
-        console.log(`❌ No license key provided for host`);
-        socket.emit('join-error', { 
-          error: 'License key required to host games. Please contact your administrator for a license key.' 
-        });
-        return;
-      }
-      
-      organizationId = validateLicenseKey(licenseKey);
-      if (!organizationId) {
-        console.log(`❌ Invalid license key provided: ${licenseKey}`);
-        socket.emit('join-error', { 
-          error: 'Invalid license key. Please check your license key and try again.' 
-        });
-        return;
-      }
-      console.log(`✅ Valid license key for organization: ${organizationId}`);
-    } else {
-      // Players join existing rooms - get org from room
-      const existingRoom = rooms.get(roomId);
-      if (existingRoom) {
-        organizationId = existingRoom.organizationId;
-      } else {
-        console.log(`❌ Player trying to join non-existent room: ${roomId}`);
-        socket.emit('join-error', { 
-          error: 'Room not found. Please check the room code.' 
-        });
-        return;
-      }
-    }
+    // TEMPORARILY DISABLED: Multi-tenant license validation
+    // Everyone uses the same Spotify account for now
+    let organizationId = 'DEFAULT';
+    console.log(`🔓 License validation disabled - using DEFAULT organization for all users`);
     
     // Create room if it doesn't exist
     if (!rooms.has(roomId)) {
@@ -5232,61 +5203,31 @@ server.listen(PORT, async () => {
   startDeviceKeepAlive();
 });
 
-// Auto-connect to Spotify on server startup
+// Auto-connect to Spotify on server startup (SIMPLIFIED FOR TONIGHT)
 async function autoConnectSpotify() {
-  console.log('🔄 Attempting automatic Spotify connection...');
+  console.log('🔄 Attempting automatic Spotify connection (single-tenant mode)...');
   
   try {
-    // Try to auto-connect for all organizations that have tokens
-    let connectedAny = false;
-    
-    // Check DEFAULT organization (backward compatibility)
+    // Use DEFAULT organization for everyone
     const defaultTokens = multiTenantSpotify.getTokens('DEFAULT');
     if (defaultTokens && defaultTokens.accessToken && defaultTokens.refreshToken) {
       try {
         const defaultService = multiTenantSpotify.getService('DEFAULT');
         await defaultService.ensureValidToken();
         console.log('✅ Restored DEFAULT Spotify connection from saved tokens');
-        connectedAny = true;
+        
+        // Activate preferred device
+        await activatePreferredDevice();
+        console.log('🎵 Ready to serve playlists and control playback');
+        return true;
       } catch (error) {
         console.log('❌ DEFAULT tokens are invalid, clearing...');
         multiTenantSpotify.clearOrgTokens('DEFAULT');
       }
     }
     
-    // Check for organization-specific tokens in environment variables
-    const orgPrefixes = ['LIQUID', 'ACME', 'CORP']; // Add more as needed
-    for (const orgId of orgPrefixes) {
-      const envPrefix = `ORG_${orgId}_`;
-      const accessToken = process.env[`${envPrefix}SPOTIFY_ACCESS_TOKEN`];
-      const refreshToken = process.env[`${envPrefix}SPOTIFY_REFRESH_TOKEN`];
-      
-      if (accessToken && refreshToken) {
-        try {
-          console.log(`🔑 Found tokens for organization ${orgId}, testing connection...`);
-          const orgService = multiTenantSpotify.getService(orgId);
-          await orgService.ensureValidToken();
-          console.log(`✅ Restored ${orgId} Spotify connection from environment variables`);
-          connectedAny = true;
-          
-          // If this is the main organization, also activate preferred device
-          if (orgId === 'LIQUID') {
-            await activatePreferredDevice();
-            console.log('🎵 LIQUID organization ready to serve playlists and control playback');
-          }
-        } catch (error) {
-          console.log(`❌ ${orgId} tokens are invalid:`, error.message);
-        }
-      }
-    }
-    
-    if (connectedAny) {
-      console.log('🎵 Multi-tenant Spotify connections established');
-      return true;
-    } else {
-      console.log('⚠️ No valid Spotify connections found - manual connection required');
-      return false;
-    }
+    console.log('⚠️ Manual Spotify connection required');
+    return false;
   } catch (error) {
     console.error('❌ Error in auto-connect:', error);
     return false;

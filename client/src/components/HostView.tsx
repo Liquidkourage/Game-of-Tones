@@ -872,26 +872,10 @@ const HostView: React.FC = () => {
       addLog(`Joined room ${roomId} successfully`, 'info');
     });
 
-    // Join room as host (with license key if available)
+    // Join room as host (license validation temporarily disabled)
     if (roomId) {
-      if (licenseKey) {
-        console.log('🔑 Initial join attempt with license key:', licenseKey);
-        setIsJoiningRoom(true);
-        setLicenseError(null);
-        newSocket.emit('join-room', { roomId, playerName: 'Host', isHost: true, licenseKey });
-        
-        // Add timeout fallback for initial join
-        setTimeout(() => {
-          if (isJoiningRoom) {
-            console.log('⏰ Initial join timeout - clearing connecting state');
-            setIsJoiningRoom(false);
-            setLicenseError('Connection timeout. Please check your license key and try again.');
-          }
-        }, 10000); // 10 second timeout
-      } else {
-        setShowLicenseModal(true);
-        setLicenseError('License key required to host games.');
-      }
+      console.log('🔓 License validation disabled - joining room directly');
+      newSocket.emit('join-room', { roomId, playerName: 'Host', isHost: true });
     }
 
     // Check Spotify status and load playlists if connected
@@ -2287,53 +2271,9 @@ const HostView: React.FC = () => {
           <div className="tab-content">
             {activeTab === 'setup' && (
               <div className="setup-tab">
-                {/* License Status - Compact */}
-                {isLicenseValidated && (
-                  <motion.div 
-                    className="license-status-compact"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.1 }}
-                    style={{
-                      background: 'rgba(0, 255, 136, 0.1)',
-                      backdropFilter: 'blur(20px)',
-                      borderRadius: 10,
-                      padding: '12px 16px',
-                      border: '1px solid rgba(0, 255, 136, 0.2)',
-                      marginBottom: 16,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ color: '#00ff88', fontSize: '1rem' }}>✅</span>
-                      <span style={{ color: '#ffffff', fontSize: '0.9rem' }}>
-                        License: {licenseKey ? `${licenseKey.split('-')[1]}-****-****` : 'Validated'}
-                      </span>
-                    </div>
-                    <button
-                      onClick={handleUpdateLicense}
-                      style={{
-                        background: 'rgba(255, 255, 255, 0.1)',
-                        border: '1px solid rgba(255, 255, 255, 0.2)',
-                        borderRadius: 6,
-                        padding: '6px 12px',
-                        color: '#ffffff',
-                        fontSize: '0.8rem',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-                      }}
-                    >
-                      Update
-                    </button>
-                  </motion.div>
+                {/* License Status - TEMPORARILY HIDDEN */}
+                {false && (
+                  <div style={{ display: 'none' }}>License validation disabled for tonight</div>
                 )}
 
           {/* Spotify Connection */}
@@ -3292,8 +3232,8 @@ const HostView: React.FC = () => {
         )}
       </motion.div>
 
-      {/* License Key Modal */}
-      {showLicenseModal && (
+      {/* License Key Modal - TEMPORARILY DISABLED */}
+      {false && showLicenseModal && (
                 <div style={{ 
           position: 'fixed',
           top: 0,
