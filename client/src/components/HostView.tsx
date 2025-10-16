@@ -2488,6 +2488,11 @@ const HostView: React.FC = () => {
                           const isSelected = selectedPlaylists.some(sp => sp.id === p.id);
                           const isInsufficient = p.tracks < 25;
                           
+                          // Debug logging for suggestion button - check all playlists with suggest button
+                          if (isInsufficient) {
+                            console.log(`🤖 Suggest button shown for "${p.name}": ${p.tracks} tracks (type: ${typeof p.tracks}), isInsufficient: ${isInsufficient}`);
+                          }
+                          
                           return (
                             <div 
                               key={p.id} 
