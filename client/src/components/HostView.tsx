@@ -987,7 +987,7 @@ const HostView: React.FC = () => {
       
       if (error.message) {
         if (error.message.includes('Spotify not connected')) {
-          errorMessage = '?? Spotify Connection Required';
+          errorMessage = '🎵 Spotify Connection Required';
           errorDetails = 'Please connect to Spotify first using the "Connect Spotify" button, then try getting suggestions again.';
         } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
           errorMessage = '�� Network Connection Error';
@@ -2188,7 +2188,7 @@ const HostView: React.FC = () => {
       >
         {/* Header */}
         <div className="host-header">
-          <h1>?? Game Host</h1>
+          <h1>🎮 Game Host</h1>
           <div className="room-info" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
             <span className="room-code">Room: {roomId}</span>
             <span className="player-count">{players.length} Players</span>
@@ -2213,9 +2213,9 @@ const HostView: React.FC = () => {
             paddingBottom: 0
           }}>
             {[
-              { id: 'setup', label: '?? Setup', desc: 'Connect & Configure' },
-              { id: 'play', label: '?? Play', desc: 'Game Controls' },
-              { id: 'manage', label: '?? Manage', desc: 'Rounds & Players' }
+              { id: 'setup', label: '🎵 Setup', desc: 'Connect & Configure' },
+              { id: 'play', label: '🎮 Play', desc: 'Game Controls' },
+              { id: 'manage', label: '🎯 Manage', desc: 'Rounds & Players' }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -2254,7 +2254,7 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
           >
-                         <h2>?? Spotify Connection</h2>
+                         <h2>🎵 Spotify Connection</h2>
              {!isSpotifyConnected ? (
                <div className="spotify-connection-section">
                  {spotifyError && (
@@ -2339,7 +2339,7 @@ const HostView: React.FC = () => {
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.4 }}
                   >
-                    <h2>�� Available Playlists</h2>
+                    <h2>📚 Available Playlists</h2>
                     <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
                       <input
                         type="text"
@@ -2454,7 +2454,7 @@ const HostView: React.FC = () => {
                                   }}
                                   title="Get AI suggestions to reach 25+ songs"
                                 >
-                                  ?? Suggest Songs
+                                  🤖 Suggest Songs
                                 </button>
                               )}
                             </div>
@@ -2488,7 +2488,7 @@ const HostView: React.FC = () => {
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.2 }}
                 >
-                  <h2>?? Game Controls</h2>
+                  <h2>🎮 Game Controls</h2>
                   
                   {/* Game Settings */}
                   <div style={{ 
@@ -2557,12 +2557,12 @@ const HostView: React.FC = () => {
                             onClick={finalizeMix}
                             disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
                           >
-                            ?? Finalize Mix
+                            🎵 Finalize Mix
                           </button>
                         )}
                         {mixFinalized && (
                           <div className="mix-finalized-status">
-                            <p className="status-text">? Mix finalized - Cards generated for players</p>
+                            <p className="status-text">✅ Mix finalized - Cards generated for players</p>
                           </div>
                         )}
                         <button
@@ -2595,13 +2595,13 @@ const HostView: React.FC = () => {
                       </>
                     ) : (
                       <div className="game-status">
-                        <p className="status-text">?? Game is running - Use the Now Playing controls below</p>
+                        <p className="status-text">🎵 Game is running - Use the Now Playing controls below</p>
                         <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                           <button className="btn-secondary" onClick={endGame}>End Game</button>
-                          <button className="btn-secondary" onClick={confirmAndResetGame}>�� Reset</button>
-                          <button className="btn-secondary" onClick={confirmAndNewRound}>?? New Round</button>
+                          <button className="btn-secondary" onClick={confirmAndResetGame}>🔄 Reset</button>
+                          <button className="btn-secondary" onClick={confirmAndNewRound}>🆕 New Round</button>
                           <button className="btn-accent" onClick={() => setShowRoundManager(!showRoundManager)}>
-                            ?? Round Manager
+                            🎯 Round Manager
                           </button>
                           <button 
                             className="btn-danger" 
@@ -2609,7 +2609,7 @@ const HostView: React.FC = () => {
                             style={{ background: '#ff6b6b', borderColor: '#ff4757' }}
                             title="Complete restart: reset all progress, keep cards"
                           >
-                            �� Restart
+                            🔄 Restart
                           </button>
                         </div>
                         <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
@@ -2619,7 +2619,7 @@ const HostView: React.FC = () => {
                           <button className="btn-secondary" onClick={() => revealCall('full')}>Full</button>
                         </div>
                         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                          <button className="btn-secondary" onClick={forceRefreshAll}>?? Force Refresh Clients</button>
+                          <button className="btn-secondary" onClick={forceRefreshAll}>🧹 Force Refresh Clients</button>
                         </div>
                       </div>
                     )}
@@ -2637,7 +2637,7 @@ const HostView: React.FC = () => {
                   transition={{ delay: 0.2 }}
                   className="bg-rgba(42, 42, 42, 0.95) backdrop-blur-[20px] border border-rgba(0, 255, 136, 0.3) rounded-2xl p-6 mb-6"
                 >
-                  <h2>?? Round & Event Management</h2>
+                  <h2>🎯 Round & Event Management</h2>
                   
                   {/* Round Status Summary */}
                   <div className="mb-6 p-4 bg-rgba(255, 255, 255, 0.05) rounded-xl">
@@ -2685,7 +2685,7 @@ const HostView: React.FC = () => {
                             onClick={resetCurrentRound}
                             className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
                           >
-                            �� Reset Current Round
+                            🔄 Reset Current Round
                           </button>
                         </>
                       )}
@@ -2774,7 +2774,7 @@ const HostView: React.FC = () => {
                     transition={{ delay: 0.4 }}
                     className="player-cards-section"
                   >
-                    <h2>�� Player Cards & Progress</h2>
+                    <h2>👥 Player Cards & Progress</h2>
                     <div style={{ 
                       display: 'grid', 
                       gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', 
@@ -2804,7 +2804,7 @@ const HostView: React.FC = () => {
                             const progressColor = progress.needed === 0 ? '#00ff88' : 
                                                 progress.needed <= 2 ? '#ffaa00' : 
                                                 progress.progress >= 50 ? '#66ccff' : '#888';
-                            const progressText = progress.needed === 0 ? '?? BINGO!' : 
+                            const progressText = progress.needed === 0 ? '🎉 BINGO!' : 
                                                progress.needed === 1 ? '1 more needed!' :
                                                `${progress.needed} more needed`;
                             
@@ -2906,7 +2906,7 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
-            <h2>?? Now Playing</h2>
+            <h2>🎵 Now Playing</h2>
             <div className="now-playing-content">
               {/* Song Info */}
               <div style={{ 
@@ -2962,7 +2962,7 @@ const HostView: React.FC = () => {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <h3 style={{ color: '#00ff88', fontSize: '1.2rem', fontWeight: 'bold' }}>
-                  ?? AI Song Suggestions
+                  🤖 AI Song Suggestions
                 </h3>
                 <button
                   onClick={() => setSuggestionsModal({ isOpen: false, playlist: null, suggestions: [], loading: false, analysis: null, error: null })}
@@ -3023,7 +3023,7 @@ const HostView: React.FC = () => {
                               borderRadius: '4px'
                             }}
                           >
-                            ?? Preview
+                            🎵 Preview
                           </a>
                         )}
                       </div>
@@ -3047,7 +3047,7 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.7 }}
           >
-            <h2>?? Event Log</h2>
+            <h2>📋 Event Log</h2>
             <div style={{ 
               maxHeight: 200, 
               overflow: 'auto', 
