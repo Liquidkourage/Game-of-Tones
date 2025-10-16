@@ -879,6 +879,7 @@ const HostView: React.FC = () => {
           const response = await fetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
           const data = await response.json();
           console.log('📡 Recheck response:', data);
+          console.log('📡 Recheck response details:', JSON.stringify(data, null, 2));
           
           if (data.connected) {
             console.log('✅ Spotify found connected after room join!');
