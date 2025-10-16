@@ -2486,10 +2486,10 @@ const HostView: React.FC = () => {
                         ) : (
                           filteredPlaylists.map((p) => {
                           const isSelected = selectedPlaylists.some(sp => sp.id === p.id);
-                          // Insufficient: < 15 songs OR 60-74 songs (not enough for either mode)
-                          const isInsufficient = p.tracks < 15 || (p.tracks >= 60 && p.tracks < 75);
-                          // Acceptable: 15-59 songs (good for 1x75) OR 75+ songs (good for 5x15)
-                          const isAcceptable = (p.tracks >= 15 && p.tracks < 60) || p.tracks >= 75;
+                          // Insufficient: < 15 songs (not enough for any mode)
+                          const isInsufficient = p.tracks < 15;
+                          // Acceptable: 15+ songs (good for 5x15 mode) and 75+ songs (good for both modes)
+                          const isAcceptable = p.tracks >= 15;
                           
                           return (
                             <div 
@@ -2549,7 +2549,7 @@ const HostView: React.FC = () => {
                                     background: 'linear-gradient(135deg, #ff6b35, #f7931e)',
                                     border: '1px solid rgba(255, 107, 53, 0.5)'
                                   }}
-                                  title="Get AI suggestions to reach 15+ or 75+ songs"
+                                  title="Get AI suggestions to reach 15+ songs"
                                 >
                                   🤖 Suggest Songs
                                 </button>
