@@ -4625,22 +4625,31 @@ app.get('/api/spotify/got-playlists', async (req, res) => {
 
 // Delete multiple playlists
 app.post('/api/spotify/delete-playlists', async (req, res) => {
+  console.log('🗑️ Delete playlists request received');
   try {
     const { playlistIds } = req.body;
+    console.log('🗑️ Request body:', { playlistIds: playlistIds?.length ? `${playlistIds.length} playlists` : 'none' });
     
     if (!spotifyTokens || !spotifyTokens.accessToken) {
+      console.log('❌ Spotify not connected');
       return res.status(401).json({ error: 'Spotify not connected' });
     }
     
     if (!playlistIds || !Array.isArray(playlistIds) || playlistIds.length === 0) {
+      console.log('❌ Invalid playlistIds:', playlistIds);
       return res.status(400).json({ error: 'playlistIds array required' });
     }
     
+    console.log('🔑 Ensuring valid token...');
     await spotifyService.ensureValidToken();
+    
+    console.log('🗑️ Deleting playlists...');
     const results = await spotifyService.deleteMultiplePlaylists(playlistIds);
     
     const successful = results.filter(r => r.success).length;
     const failed = results.filter(r => !r.success).length;
+    
+    console.log(`✅ Delete results: ${successful} successful, ${failed} failed`);
     
     res.json({
       success: true,
@@ -4649,8 +4658,9 @@ app.post('/api/spotify/delete-playlists', async (req, res) => {
       results: results
     });
   } catch (error) {
-    console.error('Error deleting playlists:', error);
-    res.status(500).json({ error: 'Failed to delete playlists' });
+    console.error('❌ Error deleting playlists:', error);
+    console.error('❌ Error stack:', error.stack);
+    res.status(500).json({ error: 'Failed to delete playlists', details: error.message });
   }
 });
 

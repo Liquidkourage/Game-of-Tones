@@ -1836,6 +1836,12 @@ const HostView: React.FC = () => {
         body: JSON.stringify({ playlistIds }),
       });
 
+      // Check if response is HTML (server error) instead of JSON
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        throw new Error('Server returned HTML error page instead of JSON. The server may have crashed or restarted.');
+      }
+
       const data = await response.json();
       
       if (data.success) {
