@@ -434,11 +434,11 @@ class MultiTenantSpotifyManager {
     return this.orgTokens.get(organizationId);
   }
   
-  setTokens(organizationId, tokens) {
+  async setTokens(organizationId, tokens) {
     this.orgTokens.set(organizationId, tokens);
     const service = this.getService(organizationId);
     service.setTokens(tokens.accessToken, tokens.refreshToken);
-    this.saveOrgTokens(organizationId, tokens);
+    await this.saveOrgTokens(organizationId, tokens);
   }
   
   async loadOrgTokens(organizationId) {
@@ -671,11 +671,13 @@ async function deleteTokensFromDatabase(organizationId) {
 const multiTenantSpotify = new MultiTenantSpotifyManager();
 
 // Backward compatibility - initialize default organization
-const defaultTokens = loadTokens();
-if (defaultTokens) {
-  multiTenantSpotify.setTokens('DEFAULT', defaultTokens);
-  console.log('✅ Restored default Spotify connection from saved tokens');
-}
+(async () => {
+  const defaultTokens = loadTokens();
+  if (defaultTokens) {
+    await multiTenantSpotify.setTokens('DEFAULT', defaultTokens);
+    console.log('✅ Restored default Spotify connection from saved tokens');
+  }
+})();
 
 // Legacy support - keep these for backward compatibility
 const spotifyService = multiTenantSpotify.getService('DEFAULT');
@@ -4121,7 +4123,7 @@ app.get('/api/spotify/callback', async (req, res) => {
     console.log(`Successfully got tokens for ${organizationId}, storing them...`);
     
     // Store tokens for this organization
-    multiTenantSpotify.setTokens(organizationId, tokens);
+    await multiTenantSpotify.setTokens(organizationId, tokens);
     
     // Update legacy variables for backward compatibility
     if (organizationId === 'DEFAULT') {
