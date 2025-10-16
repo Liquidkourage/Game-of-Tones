@@ -651,6 +651,70 @@ class SpotifyService {
     }
   }
 
+  // Get user's Game Of Tones output playlists
+  async getGameOfTonesPlaylists() {
+    await this.ensureValidToken();
+    try {
+      // Get current user
+      const userResponse = await this.spotifyApi.getMe();
+      const userId = userResponse.body.id;
+      
+      // Get user's playlists
+      const playlists = [];
+      let offset = 0;
+      const limit = 50;
+      
+      while (true) {
+        const response = await this.spotifyApi.getUserPlaylists(userId, { limit, offset });
+        const batch = response.body.items;
+        
+        // Filter for Game Of Tones Output playlists
+        const gotPlaylists = batch.filter(playlist => 
+          playlist.name.startsWith('Game Of Tones Output -') && 
+          playlist.owner.id === userId
+        );
+        
+        playlists.push(...gotPlaylists.map(playlist => ({
+          id: playlist.id,
+          name: playlist.name,
+          trackCount: playlist.tracks.total,
+          createdAt: playlist.added_at || 'Unknown',
+          description: playlist.description || '',
+          external_urls: playlist.external_urls
+        })));
+        
+        // Check if we have more playlists to fetch
+        if (batch.length < limit) break;
+        offset += limit;
+      }
+      
+      console.log(`✅ Found ${playlists.length} Game Of Tones output playlists`);
+      return playlists;
+    } catch (error) {
+      console.error('Error getting Game Of Tones playlists:', error);
+      throw error;
+    }
+  }
+
+  // Delete multiple playlists
+  async deleteMultiplePlaylists(playlistIds) {
+    await this.ensureValidToken();
+    const results = [];
+    
+    for (const playlistId of playlistIds) {
+      try {
+        await this.spotifyApi.unfollowPlaylist(playlistId);
+        results.push({ playlistId, success: true });
+        console.log(`✅ Deleted playlist: ${playlistId}`);
+      } catch (error) {
+        console.error(`❌ Failed to delete playlist ${playlistId}:`, error);
+        results.push({ playlistId, success: false, error: error.message });
+      }
+    }
+    
+    return results;
+  }
+
   // Delete a temporary playlist
   async deleteTemporaryPlaylist(playlistId) {
     await this.ensureValidToken();

@@ -4603,6 +4603,57 @@ app.post('/api/spotify/create-output-playlist', async (req, res) => {
   }
 });
 
+// Get user's Game Of Tones output playlists
+app.get('/api/spotify/got-playlists', async (req, res) => {
+  try {
+    if (!spotifyTokens || !spotifyTokens.accessToken) {
+      return res.status(401).json({ error: 'Spotify not connected' });
+    }
+    
+    await spotifyService.ensureValidToken();
+    const playlists = await spotifyService.getGameOfTonesPlaylists();
+    
+    res.json({
+      success: true,
+      playlists: playlists
+    });
+  } catch (error) {
+    console.error('Error getting Game Of Tones playlists:', error);
+    res.status(500).json({ error: 'Failed to get playlists' });
+  }
+});
+
+// Delete multiple playlists
+app.post('/api/spotify/delete-playlists', async (req, res) => {
+  try {
+    const { playlistIds } = req.body;
+    
+    if (!spotifyTokens || !spotifyTokens.accessToken) {
+      return res.status(401).json({ error: 'Spotify not connected' });
+    }
+    
+    if (!playlistIds || !Array.isArray(playlistIds) || playlistIds.length === 0) {
+      return res.status(400).json({ error: 'playlistIds array required' });
+    }
+    
+    await spotifyService.ensureValidToken();
+    const results = await spotifyService.deleteMultiplePlaylists(playlistIds);
+    
+    const successful = results.filter(r => r.success).length;
+    const failed = results.filter(r => !r.success).length;
+    
+    res.json({
+      success: true,
+      deleted: successful,
+      failed: failed,
+      results: results
+    });
+  } catch (error) {
+    console.error('Error deleting playlists:', error);
+    res.status(500).json({ error: 'Failed to delete playlists' });
+  }
+});
+
 // AI-powered song suggestions for playlists
 app.post('/api/spotify/suggest-songs', async (req, res) => {
   try {

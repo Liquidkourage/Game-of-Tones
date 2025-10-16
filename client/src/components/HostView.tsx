@@ -1762,6 +1762,112 @@ const HostView: React.FC = () => {
     }
   }, [songList, roomId, selectedPlaylists, addLog]);
 
+  // Playlist cleanup state
+  const [showPlaylistCleanup, setShowPlaylistCleanup] = useState(false);
+  const [gotPlaylists, setGotPlaylists] = useState([]);
+  const [selectedForDeletion, setSelectedForDeletion] = useState(new Set());
+  const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
+  const [isDeletingPlaylists, setIsDeletingPlaylists] = useState(false);
+
+  // Load Game Of Tones playlists
+  const loadGotPlaylists = useCallback(async () => {
+    if (!isSpotifyConnected) {
+      alert('Please connect Spotify first');
+      return;
+    }
+
+    setIsLoadingPlaylists(true);
+    try {
+      const response = await fetch(`${API_BASE || ''}/api/spotify/got-playlists`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setGotPlaylists(data.playlists);
+        setSelectedForDeletion(new Set());
+        addLog(`Found ${data.playlists.length} Game Of Tones output playlists`, 'info');
+      } else {
+        throw new Error(data.error || 'Failed to load playlists');
+      }
+    } catch (error) {
+      console.error('Error loading Game Of Tones playlists:', error);
+      addLog(`❌ Failed to load playlists: ${error.message}`, 'error');
+      alert(`Failed to load playlists: ${error.message}`);
+    } finally {
+      setIsLoadingPlaylists(false);
+    }
+  }, [isSpotifyConnected, addLog]);
+
+  // Delete selected playlists
+  const deleteSelectedPlaylists = useCallback(async () => {
+    if (selectedForDeletion.size === 0) {
+      alert('Please select playlists to delete');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${selectedForDeletion.size} playlist(s)?\n\n` +
+      'This action cannot be undone!'
+    );
+
+    if (!confirmed) return;
+
+    setIsDeletingPlaylists(true);
+    try {
+      const playlistIds = Array.from(selectedForDeletion);
+      const response = await fetch(`${API_BASE || ''}/api/spotify/delete-playlists`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ playlistIds }),
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        addLog(`✅ Deleted ${data.deleted} playlists successfully`, 'success');
+        if (data.failed > 0) {
+          addLog(`⚠️ Failed to delete ${data.failed} playlists`, 'warning');
+        }
+        
+        // Refresh the list
+        await loadGotPlaylists();
+        
+        alert(`Successfully deleted ${data.deleted} playlist(s)${data.failed > 0 ? `\n${data.failed} failed to delete` : ''}`);
+      } else {
+        throw new Error(data.error || 'Failed to delete playlists');
+      }
+    } catch (error) {
+      console.error('Error deleting playlists:', error);
+      addLog(`❌ Failed to delete playlists: ${error.message}`, 'error');
+      alert(`Failed to delete playlists: ${error.message}`);
+    } finally {
+      setIsDeletingPlaylists(false);
+    }
+  }, [selectedForDeletion, loadGotPlaylists, addLog]);
+
+  // Toggle playlist selection
+  const togglePlaylistSelection = useCallback((playlistId) => {
+    setSelectedForDeletion(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(playlistId)) {
+        newSet.delete(playlistId);
+      } else {
+        newSet.add(playlistId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  // Select all/none playlists
+  const selectAllPlaylists = useCallback((selectAll) => {
+    if (selectAll) {
+      setSelectedForDeletion(new Set(gotPlaylists.map(p => p.id)));
+    } else {
+      setSelectedForDeletion(new Set());
+    }
+  }, [gotPlaylists]);
+
   // Force device detection
   const forceDeviceDetection = useCallback(async () => {
     try {
@@ -2713,6 +2819,18 @@ const HostView: React.FC = () => {
                     📁 Create Output Playlist
                   </button>
                   <button
+                    onClick={() => setShowPlaylistCleanup(true)}
+                    disabled={isSpotifyConnecting}
+                    className="control-button cleanup-playlists"
+                    style={{
+                      backgroundColor: '#dc2626',
+                      borderColor: '#ef4444',
+                      marginRight: '10px'
+                    }}
+                  >
+                    🗑️ Cleanup Playlists
+                  </button>
+                  <button
                     onClick={startGame}
                     disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
                     style={{
@@ -3480,11 +3598,184 @@ const HostView: React.FC = () => {
         </div>
       )}
 
+      {/* Playlist Cleanup Modal */}
+      {showPlaylistCleanup && (
+        <motion.div 
+          className="modal-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}
+          onClick={() => setShowPlaylistCleanup(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            style={{
+              background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
+              border: '1px solid rgba(0, 255, 136, 0.3)',
+              borderRadius: '15px',
+              padding: '24px',
+              maxWidth: '800px',
+              width: '90vw',
+              maxHeight: '80vh',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ color: '#00ff88', margin: 0, fontSize: '1.5rem' }}>🗑️ Cleanup Output Playlists</h2>
+              <button
+                onClick={() => setShowPlaylistCleanup(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#fff',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  padding: '5px'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <button
+                onClick={loadGotPlaylists}
+                disabled={isLoadingPlaylists}
+                className="btn-primary"
+                style={{ marginRight: '10px' }}
+              >
+                {isLoadingPlaylists ? '🔄 Loading...' : '🔍 Load My Output Playlists'}
+              </button>
+              
+              {gotPlaylists.length > 0 && (
+                <>
+                  <button
+                    onClick={() => selectAllPlaylists(selectedForDeletion.size !== gotPlaylists.length)}
+                    className="btn-secondary"
+                    style={{ marginRight: '10px' }}
+                  >
+                    {selectedForDeletion.size === gotPlaylists.length ? '❌ Deselect All' : '✅ Select All'}
+                  </button>
+                  
+                  <button
+                    onClick={deleteSelectedPlaylists}
+                    disabled={selectedForDeletion.size === 0 || isDeletingPlaylists}
+                    className="btn-danger"
+                  >
+                    {isDeletingPlaylists ? '🔄 Deleting...' : `🗑️ Delete Selected (${selectedForDeletion.size})`}
+                  </button>
+                </>
+              )}
+            </div>
+
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              {gotPlaylists.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>
+                  {isLoadingPlaylists ? 'Loading playlists...' : 'Click "Load My Output Playlists" to see your Game Of Tones playlists'}
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  {gotPlaylists.map((playlist) => (
+                    <div
+                      key={playlist.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '12px',
+                        background: selectedForDeletion.has(playlist.id) 
+                          ? 'rgba(220, 38, 38, 0.2)' 
+                          : 'rgba(255, 255, 255, 0.05)',
+                        border: selectedForDeletion.has(playlist.id)
+                          ? '1px solid rgba(220, 38, 38, 0.5)'
+                          : '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onClick={() => togglePlaylistSelection(playlist.id)}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedForDeletion.has(playlist.id)}
+                        onChange={() => togglePlaylistSelection(playlist.id)}
+                        style={{ marginRight: '12px', cursor: 'pointer' }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 'bold', color: '#fff', marginBottom: '4px' }}>
+                          {playlist.name.replace('Game Of Tones Output - ', '')}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#888' }}>
+                          {playlist.trackCount} songs • {playlist.createdAt !== 'Unknown' ? new Date(playlist.createdAt).toLocaleDateString() : 'Date unknown'}
+                        </div>
+                        {playlist.description && (
+                          <div style={{ fontSize: '0.7rem', color: '#666', marginTop: '2px' }}>
+                            {playlist.description}
+                          </div>
+                        )}
+                      </div>
+                      <a
+                        href={playlist.external_urls?.spotify}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          color: '#00ff88',
+                          textDecoration: 'none',
+                          fontSize: '0.8rem',
+                          marginLeft: '10px'
+                        }}
+                      >
+                        🎵 Open in Spotify
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
       {/* Add spinning animation for loading indicator */}
       <style>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
+        }
+        .btn-danger {
+          background: #dc2626;
+          border: 1px solid #ef4444;
+          color: white;
+          padding: 8px 16px;
+          border-radius: 6px;
+          cursor: pointer;
+          font-weight: 600;
+          transition: all 0.2s ease;
+        }
+        .btn-danger:hover:not(:disabled) {
+          background: #b91c1c;
+          border-color: #dc2626;
+        }
+        .btn-danger:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
         }
       `}</style>
     </div>
