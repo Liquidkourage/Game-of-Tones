@@ -249,9 +249,8 @@ const HostView: React.FC = () => {
         );
         
         setPlaylists(filteredPlaylists);
-        // initialize first page (50)
-        setPlaylistPage(1);
-        setVisiblePlaylists(filteredPlaylists.slice(0, 50));
+        // Show all playlists (no pagination)
+        setVisiblePlaylists(filteredPlaylists);
         console.log('Playlists loaded:', filteredPlaylists.length, 'playlists (filtered out', data.playlists.length - filteredPlaylists.length, 'TEMPO playlists)');
       } else {
         console.error('Failed to load playlists:', data.error);
@@ -261,17 +260,6 @@ const HostView: React.FC = () => {
     }
   }, []);
 
-  // Append next page of playlists
-  const loadMorePlaylists = useCallback(() => {
-    if (!playlists || playlists.length === 0) return;
-    if (isLoadingMorePlaylists) return;
-    setIsLoadingMorePlaylists(true);
-    const nextPage = playlistPage + 1;
-    const next = playlists.slice(0, nextPage * 50);
-    setVisiblePlaylists(next);
-    setPlaylistPage(nextPage);
-    setIsLoadingMorePlaylists(false);
-  }, [playlists, playlistPage, isLoadingMorePlaylists]);
 
   // Get all playlist IDs that are already assigned to rounds
   const assignedPlaylistIds = new Set(
