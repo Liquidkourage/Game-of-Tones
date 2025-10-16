@@ -1935,8 +1935,23 @@ const HostView: React.FC = () => {
       return;
     }
 
-    // Mark current round as completed if it exists
-    if (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length) {
+    // Stop current game if it's running
+    if (gameState === 'playing' && socket && roomId) {
+      console.log('🛑 Stopping current game for round switch');
+      socket.emit('end-game', { roomId, stopPlayback: true });
+      setIsPlaying(false);
+      addLog('Stopped current game for round switch', 'info');
+    }
+
+    // Reset game state for new round
+    if (socket && roomId) {
+      console.log('🔄 Resetting game state for new round');
+      socket.emit('reset-game', { roomId, stopPlayback: true });
+      addLog('Reset game state for new round', 'info');
+    }
+
+    // Mark current round as completed if it exists and is different
+    if (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length && currentRoundIndex !== roundIndex) {
       const updatedRounds = [...eventRounds];
       updatedRounds[currentRoundIndex] = {
         ...updatedRounds[currentRoundIndex],
@@ -1961,7 +1976,16 @@ const HostView: React.FC = () => {
     if (roundPlaylists.length > 0) {
       setSelectedPlaylists(roundPlaylists);
       const playlistNames = round.playlistNames.join(', ');
-      addLog(`Started ${round.name}: ${playlistNames}`, 'info');
+      addLog(`🎯 Started ${round.name}: ${playlistNames}`, 'info');
+    }
+
+    // Force refresh all clients to sync with new round
+    if (socket && roomId) {
+      setTimeout(() => {
+        console.log('🔄 Broadcasting round change to all clients');
+        socket.emit('force-refresh', { roomId, reason: 'round-change' });
+        addLog('Synced all clients with new round', 'info');
+      }, 500); // Small delay to ensure server state is updated
     }
 
     // Store updated rounds
@@ -1970,7 +1994,7 @@ const HostView: React.FC = () => {
     } catch (error) {
       console.warn('Failed to save rounds to localStorage:', error);
     }
-  }, [eventRounds, currentRoundIndex, playlists, roomId]);
+  }, [eventRounds, currentRoundIndex, playlists, roomId, gameState, socket, isPlaying]);
 
   // Load rounds from localStorage on component mount
   useEffect(() => {
@@ -2277,7 +2301,13 @@ const HostView: React.FC = () => {
                 <button
                   onClick={() => {
                     if (currentRoundIndex > 0) {
-                      handleStartRound(currentRoundIndex - 1);
+                      if (gameState === 'playing') {
+                        if (window.confirm('This will stop the current game and switch to the previous round. Continue?')) {
+                          handleStartRound(currentRoundIndex - 1);
+                        }
+                      } else {
+                        handleStartRound(currentRoundIndex - 1);
+                      }
                     }
                   }}
                   disabled={currentRoundIndex <= 0}
@@ -2294,7 +2324,13 @@ const HostView: React.FC = () => {
                 <button
                   onClick={() => {
                     if (currentRoundIndex < eventRounds.length - 1) {
-                      handleStartRound(currentRoundIndex + 1);
+                      if (gameState === 'playing') {
+                        if (window.confirm('This will stop the current game and switch to the next round. Continue?')) {
+                          handleStartRound(currentRoundIndex + 1);
+                        }
+                      } else {
+                        handleStartRound(currentRoundIndex + 1);
+                      }
                     }
                   }}
                   disabled={currentRoundIndex >= eventRounds.length - 1}
@@ -2331,7 +2367,17 @@ const HostView: React.FC = () => {
                   {eventRounds.map((round, index) => (
                     <button
                       key={round.id}
-                      onClick={() => handleStartRound(index)}
+                      onClick={() => {
+                        if (index !== currentRoundIndex) {
+                          if (gameState === 'playing') {
+                            if (window.confirm(`This will stop the current game and switch to ${round.name}. Continue?`)) {
+                              handleStartRound(index);
+                            }
+                          } else {
+                            handleStartRound(index);
+                          }
+                        }
+                      }}
                       style={{
                         padding: '8px 12px',
                         borderRadius: '8px',
