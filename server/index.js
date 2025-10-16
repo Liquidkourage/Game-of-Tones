@@ -3970,17 +3970,17 @@ app.get('/api/spotify/auth', (req, res) => {
 });
 
 app.get('/api/spotify/status', async (req, res) => {
-  console.log('🔍 Spotify status check requested');
+  console.log('🔍 Spotify status check requested (simplified mode)');
   try {
-    const { roomId } = req.query;
-    const organizationId = roomId ? getOrganizationFromRoom(roomId) : 'DEFAULT';
+    // SIMPLIFIED: Always use DEFAULT organization
+    const organizationId = 'DEFAULT';
     
     const orgSpotifyService = multiTenantSpotify.getService(organizationId);
     const orgTokens = multiTenantSpotify.getTokens(organizationId);
     
     // Check if we have tokens for this organization
     if (!orgTokens || !orgTokens.accessToken) {
-      console.log(`❌ No tokens available for organization ${organizationId} - returning disconnected`);
+      console.log(`❌ No tokens available for DEFAULT organization - returning disconnected`);
       return res.json({ 
         connected: false,
         hasTokens: false,
@@ -3988,12 +3988,12 @@ app.get('/api/spotify/status', async (req, res) => {
       });
     }
 
-    console.log(`🔑 Tokens exist for ${organizationId}, validating...`);
+    console.log(`🔑 Tokens exist for DEFAULT, validating...`);
     // Validate tokens by trying to ensure they're valid
     try {
       await orgSpotifyService.ensureValidToken();
       // If we get here, tokens are valid
-      console.log(`✅ Tokens valid for ${organizationId} - returning connected`);
+      console.log(`✅ Tokens valid for DEFAULT - returning connected`);
       return res.json({ 
         connected: true,
         hasTokens: true,
@@ -4001,9 +4001,9 @@ app.get('/api/spotify/status', async (req, res) => {
       });
     } catch (error) {
       // Tokens are invalid, clear them
-      console.log(`🔄 Clearing invalid Spotify tokens for ${organizationId}:`, error.message);
+      console.log(`🔄 Clearing invalid Spotify tokens for DEFAULT:`, error.message);
       multiTenantSpotify.clearOrgTokens(organizationId);
-      console.log(`❌ Tokens cleared for ${organizationId} - returning disconnected`);
+      console.log(`❌ Tokens cleared for DEFAULT - returning disconnected`);
       return res.json({ 
         connected: false,
         hasTokens: false,
@@ -4012,7 +4012,7 @@ app.get('/api/spotify/status', async (req, res) => {
     }
   } catch (error) {
     console.error('❌ Error checking Spotify status:', error);
-  res.json({ 
+    res.json({ 
       connected: false,
       hasTokens: false
     });
@@ -4097,20 +4097,10 @@ app.get('/api/spotify/callback', async (req, res) => {
     return res.status(400).json({ error: 'Authorization code required' });
   }
 
-  // Extract organization from state parameter (format: "roomId:organizationId")
+  // SIMPLIFIED: Always use DEFAULT organization (multi-tenant disabled)
   let organizationId = 'DEFAULT';
   let roomId = null;
-  if (state) {
-    try {
-      const parts = state.split(':');
-      if (parts.length >= 2) {
-        roomId = parts[0];
-        organizationId = parts[1];
-      }
-    } catch (e) {
-      console.warn('Could not parse state parameter:', state);
-    }
-  }
+  console.log('🔓 Using DEFAULT organization (multi-tenant disabled)');
 
   // Check if we already have tokens for this organization
   const existingTokens = multiTenantSpotify.getTokens(organizationId);
@@ -4153,8 +4143,8 @@ app.get('/api/spotify/callback', async (req, res) => {
 
 app.get('/api/spotify/playlists', async (req, res) => {
   try {
-    const { roomId } = req.query;
-    const organizationId = roomId ? getOrganizationFromRoom(roomId) : 'DEFAULT';
+    // SIMPLIFIED: Always use DEFAULT organization
+    const organizationId = 'DEFAULT';
     
     const orgSpotifyService = multiTenantSpotify.getService(organizationId);
     const orgTokens = multiTenantSpotify.getTokens(organizationId);
