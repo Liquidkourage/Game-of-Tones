@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -223,7 +223,7 @@ const HostView: React.FC = () => {
       if (response.status === 401) {
         console.warn('Spotify not connected (401) while loading playlists');
         // Don't override isSpotifyConnected here - let status endpoint be authoritative
-        console.log('🔍 loadPlaylists got 401, but not overriding connection state');
+        console.log('ðŸ” loadPlaylists got 401, but not overriding connection state');
         setSpotifyError('Spotify is not connected. Click Connect Spotify.');
         setPlaylists([]);
         return;
@@ -444,9 +444,9 @@ const HostView: React.FC = () => {
     });
 
     newSocket.on('game-started', (data: any) => {
-      console.log('🎮 GAME-STARTED EVENT RECEIVED:', data);
+      console.log('ðŸŽ® GAME-STARTED EVENT RECEIVED:', data);
       setGameState('playing');
-      console.log('🎮 SET GAME STATE TO PLAYING');
+      console.log('ðŸŽ® SET GAME STATE TO PLAYING');
       setIsStartingGame(false);
       addLog('Game started - state set to playing', 'info');
       // Auto-collapse lists during gameplay
@@ -497,7 +497,7 @@ const HostView: React.FC = () => {
       setIsPausedByInterface(false);
       
       console.log('Song playing:', data);
-      addLog(`Now playing: ${data.songName} — ${data.artistName}`, 'info');
+      addLog(`Now playing: ${data.songName} â€” ${data.artistName}`, 'info');
       
       // Don't sync volume when song starts playing - preserve user's volume setting
       // setTimeout(() => {
@@ -712,7 +712,7 @@ const HostView: React.FC = () => {
 
     newSocket.on('game-ended', () => {
       setGameState('ended');
-      console.log('🛑 Game ended');
+      console.log('ðŸ›‘ Game ended');
       // Allow reopening
       setShowPlaylists(true);
       setShowLogs(true);
@@ -725,7 +725,7 @@ const HostView: React.FC = () => {
       setWinners([]);
       setMixFinalized(false);
       setSongList([]);
-      console.log('🔁 Game reset');
+      console.log('ðŸ” Game reset');
     });
 
     newSocket.on('playback-error', (data: any) => {
@@ -744,7 +744,7 @@ const HostView: React.FC = () => {
       // Non-blocking toast instead of alert to avoid desync
       try {
         const toast = document.createElement('div');
-        toast.textContent = '⚠️ ' + msg;
+        toast.textContent = 'âš ï¸ ' + msg;
         Object.assign(toast.style, {
           position: 'fixed', bottom: '14px', left: '14px', maxWidth: '70vw',
           background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)',
@@ -761,7 +761,7 @@ const HostView: React.FC = () => {
         const payload = JSON.stringify(diag, null, 2);
         addLog(`Playback diagnostic: ${payload}`, 'warn');
         // Also print to console for devs
-        console.log('🔎 Playback diagnostic', diag);
+        console.log('ðŸ”Ž Playback diagnostic', diag);
       } catch {}
     });
 
@@ -779,7 +779,7 @@ const HostView: React.FC = () => {
       // Show toast notification
       try {
         const toast = document.createElement('div');
-        toast.textContent = '⚠️ ' + msg;
+        toast.textContent = 'âš ï¸ ' + msg;
         Object.assign(toast.style, {
           position: 'fixed', bottom: '14px', left: '14px', maxWidth: '70vw',
           background: 'rgba(255,193,7,0.1)', color: '#fff', border: '1px solid rgba(255,193,7,0.5)',
@@ -795,11 +795,11 @@ const HostView: React.FC = () => {
       if (data?.totalDuplicatesRemoved > 0) {
         const msg = `Removed ${data.totalDuplicatesRemoved} duplicate songs across playlists for 5x15 mode`;
         console.log('Deduplication success:', msg);
-        addLog(`✅ ${msg}`, 'info');
+        addLog(`âœ… ${msg}`, 'info');
         if (data?.playlistDetails && Array.isArray(data.playlistDetails)) {
           data.playlistDetails.forEach((detail: any) => {
             if (detail.duplicatesRemoved > 0) {
-              addLog(`  ${detail.name}: ${detail.originalCount} → ${detail.finalCount} songs (${detail.duplicatesRemoved} duplicates removed)`, 'info');
+              addLog(`  ${detail.name}: ${detail.originalCount} â†’ ${detail.finalCount} songs (${detail.duplicatesRemoved} duplicates removed)`, 'info');
             }
           });
         }
@@ -808,7 +808,7 @@ const HostView: React.FC = () => {
 
     // Acknowledge reveal events
     newSocket.on('call-revealed', (data: any) => {
-      addLog(`Call revealed: ${data.hint || 'full'} ${data.songName ? '— ' + data.songName : ''} ${data.artistName ? '— ' + data.artistName : ''}`, 'info');
+      addLog(`Call revealed: ${data.hint || 'full'} ${data.songName ? 'â€” ' + data.songName : ''} ${data.artistName ? 'â€” ' + data.artistName : ''}`, 'info');
     });
 
     // Join room as host
@@ -827,7 +827,7 @@ const HostView: React.FC = () => {
 
         if (data.connected) {
           console.log('Spotify already connected, loading playlists...');
-          console.log('🔍 Status API returned connected=true, setting state to true');
+          console.log('ðŸ” Status API returned connected=true, setting state to true');
           setIsSpotifyConnected(true);
           setIsSpotifyConnecting(false);
           await loadPlaylists();
@@ -839,7 +839,7 @@ const HostView: React.FC = () => {
           // }, 1000);
         } else {
           console.log('Spotify not connected');
-          console.log('🔍 Status API returned connected=false, setting state to false');
+          console.log('ðŸ” Status API returned connected=false, setting state to false');
           setIsSpotifyConnected(false);
           setIsSpotifyConnecting(false);
         }
@@ -892,16 +892,16 @@ const HostView: React.FC = () => {
         
         // Store the current URL to return to after Spotify auth
         const returnUrl = `/host/${roomId}`;
-        console.log('🔍 Storing return URL in localStorage:', returnUrl);
+        console.log('ðŸ” Storing return URL in localStorage:', returnUrl);
         localStorage.setItem('spotify_return_url', returnUrl);
         if (roomId) {
-          console.log('🔍 Storing room ID in localStorage:', roomId);
+          console.log('ðŸ” Storing room ID in localStorage:', roomId);
           localStorage.setItem('spotify_room_id', roomId);
         }
         
         // Add room ID to the auth URL as a state parameter
         const authUrlWithState = `${data.authUrl}&state=${encodeURIComponent(roomId || '')}`;
-        console.log('🔍 Redirecting to Spotify with room ID in state parameter');
+        console.log('ðŸ” Redirecting to Spotify with room ID in state parameter');
         
         // Redirect to Spotify
         window.location.href = authUrlWithState;
@@ -938,8 +938,8 @@ const HostView: React.FC = () => {
 
       // Get AI suggestions
       const apiUrl = `${API_BASE || ''}/api/spotify/suggest-songs`;
-      console.log('🤖 Making AI suggestion request to:', apiUrl);
-      console.log('🤖 Request payload:', { playlistId: playlist.id, playlistName: playlist.name, existingSongs: existingSongs.length, targetCount });
+      console.log('ðŸ¤– Making AI suggestion request to:', apiUrl);
+      console.log('ðŸ¤– Request payload:', { playlistId: playlist.id, playlistName: playlist.name, existingSongs: existingSongs.length, targetCount });
       
       const suggestionsResponse = await fetch(apiUrl, {
         method: 'POST',
@@ -954,19 +954,19 @@ const HostView: React.FC = () => {
         })
       });
 
-      console.log('🤖 Response status:', suggestionsResponse.status);
-      console.log('🤖 Response headers:', Object.fromEntries(suggestionsResponse.headers.entries()));
+      console.log('ðŸ¤– Response status:', suggestionsResponse.status);
+      console.log('ðŸ¤– Response headers:', Object.fromEntries(suggestionsResponse.headers.entries()));
       
       // Check if we got HTML instead of JSON (common when server returns error page)
       const contentType = suggestionsResponse.headers.get('content-type');
       if (contentType && contentType.includes('text/html')) {
         const htmlText = await suggestionsResponse.text();
-        console.error('🤖 Received HTML instead of JSON:', htmlText.substring(0, 200) + '...');
+        console.error('ðŸ¤– Received HTML instead of JSON:', htmlText.substring(0, 200) + '...');
         throw new Error('Server returned HTML error page instead of JSON. Check if the server is running properly.');
       }
       
       const suggestionsData = await suggestionsResponse.json();
-      console.log('🤖 Response data:', suggestionsData);
+      console.log('ðŸ¤– Response data:', suggestionsData);
 
       if (suggestionsData.success) {
         setSuggestionsModal(prev => ({
@@ -979,7 +979,7 @@ const HostView: React.FC = () => {
         throw new Error(suggestionsData.error || 'Failed to get suggestions');
       }
     } catch (error: any) {
-      console.error('❌ Error getting song suggestions:', error);
+      console.error('âŒ Error getting song suggestions:', error);
       
       // Determine specific error message based on the error type
       let errorMessage = 'Failed to get song suggestions. ';
@@ -987,26 +987,26 @@ const HostView: React.FC = () => {
       
       if (error.message) {
         if (error.message.includes('Spotify not connected')) {
-          errorMessage = '🎵 Spotify Connection Required';
+          errorMessage = 'ðŸŽµ Spotify Connection Required';
           errorDetails = 'Please connect to Spotify first using the "Connect Spotify" button, then try getting suggestions again.';
         } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-          errorMessage = '🌐 Network Connection Error';
+          errorMessage = 'ðŸŒ Network Connection Error';
           errorDetails = 'Unable to reach the server. Please check your internet connection and make sure the server is running.';
         } else if (error.message.includes('401')) {
-          errorMessage = '🔐 Authentication Error';
+          errorMessage = 'ðŸ” Authentication Error';
           errorDetails = 'Your Spotify session may have expired. Please reconnect to Spotify and try again.';
         } else if (error.message.includes('500')) {
-          errorMessage = '🔧 Server Error';
+          errorMessage = 'ðŸ”§ Server Error';
           errorDetails = 'The server encountered an error while generating suggestions. Please try again in a moment.';
         } else if (error.message.includes('HTML error page') || error.message.includes('DOCTYPE')) {
-          errorMessage = '🔄 Server Restart Required';
+          errorMessage = 'ðŸ”„ Server Restart Required';
           errorDetails = 'The server appears to be restarting or crashed. Please wait a moment for it to fully start up, then try again.';
         } else {
-          errorMessage = '❌ Suggestion Generation Failed';
+          errorMessage = 'âŒ Suggestion Generation Failed';
           errorDetails = `Error: ${error.message}. Please check the console for more details.`;
         }
       } else {
-        errorMessage = '❓ Unknown Error';
+        errorMessage = 'â“ Unknown Error';
         errorDetails = 'An unexpected error occurred. Please check the browser console (F12) for more details and try again.';
       }
       
@@ -1139,7 +1139,7 @@ const HostView: React.FC = () => {
       } else {
         // Check if we were paused by the interface and need to resume from exact position
         if (isPausedByInterface && currentSong?.id === song.id) {
-          console.log(`▶️ Resuming from exact pause position: ${pausePosition}ms`);
+          console.log(`â–¶ï¸ Resuming from exact pause position: ${pausePosition}ms`);
           socket.emit('resume-song', { 
             roomId, 
             resumePosition: pausePosition 
@@ -1174,7 +1174,7 @@ const HostView: React.FC = () => {
         socket.emit('pause-song', { roomId });
         setIsPlaying(false);
         setPlaybackState(prev => ({ ...prev, isPlaying: false }));
-        console.log(`⏸️ Paused song at position: ${playbackState.currentTime}ms`);
+        console.log(`â¸ï¸ Paused song at position: ${playbackState.currentTime}ms`);
       }
     } catch (error) {
       console.error('Error pausing song:', error);
@@ -1274,11 +1274,11 @@ const HostView: React.FC = () => {
     const confirmed = window.confirm(
       'Are you sure you want to restart the game?\n\n' +
       'This will:\n' +
-      '• Stop current playback\n' +
-      '• Reset all marked squares\n' +
-      '• Clear all winners\n' +
-      '• Reset to waiting state\n' +
-      '• Keep existing bingo cards'
+      'â€¢ Stop current playback\n' +
+      'â€¢ Reset all marked squares\n' +
+      'â€¢ Clear all winners\n' +
+      'â€¢ Reset to waiting state\n' +
+      'â€¢ Keep existing bingo cards'
     );
     
     if (confirmed) {
@@ -1294,10 +1294,10 @@ const HostView: React.FC = () => {
     const confirmed = window.confirm(
       'Start next round with fresh setup?\n\n' +
       'This will:\n' +
-      '• Keep all players connected\n' +
-      '• Keep Spotify connection\n' +
-      '• Reset to setup screen for new playlists/pattern\n' +
-      '• Clear all bingo cards'
+      'â€¢ Keep all players connected\n' +
+      'â€¢ Keep Spotify connection\n' +
+      'â€¢ Reset to setup screen for new playlists/pattern\n' +
+      'â€¢ Clear all bingo cards'
     );
     
     if (confirmed) {
@@ -1349,9 +1349,9 @@ const HostView: React.FC = () => {
   const emergencyResetAll = () => {
     const confirmed = window.confirm(
       'EMERGENCY RESET: This will:\n' +
-      '• Stop all playback\n' +
-      '• Reset all game state\n' +
-      '• Force sync all clients\n' +
+      'â€¢ Stop all playback\n' +
+      'â€¢ Reset all game state\n' +
+      'â€¢ Force sync all clients\n' +
       'Continue?'
     );
     
@@ -1380,7 +1380,7 @@ const HostView: React.FC = () => {
   const generateSongList = useCallback(async () => {
     if (!isSpotifyConnected) {
       console.warn('Cannot generate song list: Spotify not connected');
-      console.log('🔍 isSpotifyConnected state is currently:', isSpotifyConnected);
+      console.log('ðŸ” isSpotifyConnected state is currently:', isSpotifyConnected);
       setSongList([]);
       return;
     }
@@ -1427,7 +1427,7 @@ const HostView: React.FC = () => {
         if (data.success && data.playbackState) {
         const spotifyVolume = (data.playbackState.device?.volume_percent ?? 100) as number;
           setPlaybackState(prev => ({ ...prev, volume: spotifyVolume }));
-          console.log(`🔊 Synced volume from Spotify: ${spotifyVolume}%`);
+          console.log(`ðŸ”Š Synced volume from Spotify: ${spotifyVolume}%`);
         }
     } catch {
       // ignore
@@ -1446,7 +1446,7 @@ const HostView: React.FC = () => {
         body: JSON.stringify({ deviceId: selectedDevice.id, play: false })
       });
       if (response.ok) {
-        console.log('✅ Transferred playback to selected device');
+        console.log('âœ… Transferred playback to selected device');
         await fetchPlaybackState();
         // Nudge resume to ensure correct track/context
         if (socket && roomId) {
@@ -1458,11 +1458,11 @@ const HostView: React.FC = () => {
           const err = await response.json();
           if (err?.error) msg = String(err.error);
         } catch {}
-        console.error('❌ Failed to transfer playback:', msg);
+        console.error('âŒ Failed to transfer playback:', msg);
         alert(`Transfer failed: ${msg}`);
       }
     } catch (e) {
-      console.error('❌ Error transferring playback:', e);
+      console.error('âŒ Error transferring playback:', e);
     }
   }, [selectedDevice, fetchPlaybackState]);
 
@@ -1504,7 +1504,7 @@ const HostView: React.FC = () => {
         setShuffleEnabled(next);
       }
     } catch (e) {
-      console.error('❌ Error setting shuffle:', e);
+      console.error('âŒ Error setting shuffle:', e);
     }
   }, [selectedDevice, shuffleEnabled]);
 
@@ -1526,7 +1526,7 @@ const HostView: React.FC = () => {
         setRepeatState(next);
       }
     } catch (e) {
-      console.error('❌ Error setting repeat:', e);
+      console.error('âŒ Error setting repeat:', e);
     }
   }, [selectedDevice, repeatState]);
 
@@ -1544,7 +1544,7 @@ const HostView: React.FC = () => {
     // Debounce the actual volume change to prevent rapid API calls
     const timeout = setTimeout(async () => {
       try {
-        console.log(`🔊 Setting volume to ${newVolume}% on Spotify`);
+        console.log(`ðŸ”Š Setting volume to ${newVolume}% on Spotify`);
         const response = await fetch(`${API_BASE || ''}/api/spotify/volume`, {
           method: 'POST',
           headers: {
@@ -1559,7 +1559,7 @@ const HostView: React.FC = () => {
         
         if (response.ok) {
           // Don't fetch current volume - trust our local state
-          console.log(`✅ Volume set to ${newVolume}% successfully`);
+          console.log(`âœ… Volume set to ${newVolume}% successfully`);
         } else {
           console.error('Failed to set volume, reverting to Spotify state');
           fetchCurrentVolume(); // Only revert on error
@@ -1580,7 +1580,7 @@ const HostView: React.FC = () => {
       setIsMuted(false);
       
       try {
-        console.log(`🔊 Unmuting, setting volume to ${previousVolume}%`);
+        console.log(`ðŸ”Š Unmuting, setting volume to ${previousVolume}%`);
         const response = await fetch(`${API_BASE || ''}/api/spotify/volume`, {
           method: 'POST',
           headers: {
@@ -1595,7 +1595,7 @@ const HostView: React.FC = () => {
         
         if (response.ok) {
           // Don't fetch current volume - trust our local state
-          console.log(`✅ Unmuted to ${previousVolume}% successfully`);
+          console.log(`âœ… Unmuted to ${previousVolume}% successfully`);
         } else {
           console.error('Failed to unmute, reverting to Spotify state');
           fetchCurrentVolume();
@@ -1611,7 +1611,7 @@ const HostView: React.FC = () => {
       setIsMuted(true);
       
       try {
-        console.log(`🔊 Muting, setting volume to 0%`);
+        console.log(`ðŸ”Š Muting, setting volume to 0%`);
         const response = await fetch(`${API_BASE || ''}/api/spotify/volume`, {
           method: 'POST',
           headers: {
@@ -1626,7 +1626,7 @@ const HostView: React.FC = () => {
         
         if (response.ok) {
           // Don't fetch current volume - trust our local state
-          console.log(`✅ Muted successfully`);
+          console.log(`âœ… Muted successfully`);
         } else {
           console.error('Failed to mute, reverting to Spotify state');
           fetchCurrentVolume();
@@ -1683,7 +1683,7 @@ const HostView: React.FC = () => {
   const forceDeviceDetection = useCallback(async () => {
     try {
       setIsLoadingDevices(true);
-      console.log('🔧 Forcing device detection...');
+      console.log('ðŸ”§ Forcing device detection...');
       
       const response = await fetch('/api/spotify/force-device', {
         method: 'POST',
@@ -1693,13 +1693,13 @@ const HostView: React.FC = () => {
       });
       
       if (response.ok) {
-        console.log('✅ Device detection forced successfully');
+        console.log('âœ… Device detection forced successfully');
         await loadDevices();
       } else {
-        console.error('❌ Failed to force device detection');
+        console.error('âŒ Failed to force device detection');
       }
     } catch (error) {
-      console.error('❌ Error forcing device detection:', error);
+      console.error('âŒ Error forcing device detection:', error);
     } finally {
       setIsLoadingDevices(false);
     }
@@ -1709,7 +1709,7 @@ const HostView: React.FC = () => {
   const refreshSpotifyConnection = useCallback(async () => {
     try {
       setIsLoadingDevices(true);
-      console.log('🔄 Refreshing Spotify connection...');
+      console.log('ðŸ”„ Refreshing Spotify connection...');
       
       const response = await fetch('/api/spotify/refresh', {
         method: 'POST',
@@ -1719,14 +1719,14 @@ const HostView: React.FC = () => {
       });
       
       if (response.ok) {
-        console.log('✅ Spotify connection refreshed');
+        console.log('âœ… Spotify connection refreshed');
         await loadDevices();
         await loadPlaylists();
       } else {
-        console.error('❌ Failed to refresh Spotify connection');
+        console.error('âŒ Failed to refresh Spotify connection');
       }
     } catch (error) {
-      console.error('❌ Error refreshing Spotify connection:', error);
+      console.error('âŒ Error refreshing Spotify connection:', error);
     } finally {
       setIsLoadingDevices(false);
     }
@@ -1788,11 +1788,11 @@ const HostView: React.FC = () => {
             if (now - lastSongEventAtRef.current < 15000) return;
           }
             if (spotifyIsPlaying !== isPlaying) {
-              console.log(`🔄 Spotify playback state changed: ${spotifyIsPlaying}, updating interface`);
+              console.log(`ðŸ”„ Spotify playback state changed: ${spotifyIsPlaying}, updating interface`);
               setIsPlaying(spotifyIsPlaying);
             setPlaybackState(prev => ({ ...prev, isPlaying: spotifyIsPlaying, currentTime: spotifyPosition }));
               if (spotifyIsPlaying && isPausedByInterface) {
-                console.log('🔄 Spotify resumed externally, clearing pause tracking');
+                console.log('ðŸ”„ Spotify resumed externally, clearing pause tracking');
                 setIsPausedByInterface(false);
                 setPausePosition(0);
               }
@@ -1890,7 +1890,7 @@ const HostView: React.FC = () => {
         const progress = Number(data?.playbackState?.progress_ms || 0);
         const is_sp_playing = !!data?.playbackState?.is_playing;
         if ((!is_sp_playing || progress < 1000) && audioRef.current && audioUrlRef.current) {
-          console.warn('⚠️ Spotify stall detected on host; playing preview fallback');
+          console.warn('âš ï¸ Spotify stall detected on host; playing preview fallback');
           try { await audioRef.current.play(); } catch {}
         }
       } catch {}
@@ -2188,7 +2188,7 @@ const HostView: React.FC = () => {
       >
         {/* Header */}
         <div className="host-header">
-          <h1>🎵 Game Host</h1>
+          <h1>ðŸŽµ Game Host</h1>
           <div className="room-info" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
             <span className="room-code">Room: {roomId}</span>
             <span className="player-count">{players.length} Players</span>
@@ -2213,9 +2213,9 @@ const HostView: React.FC = () => {
             paddingBottom: 0
           }}>
             {[
-              { id: 'setup', label: '🎵 Setup', desc: 'Connect & Configure' },
-              { id: 'play', label: '🎮 Play', desc: 'Game Controls' },
-              { id: 'manage', label: '🎯 Manage', desc: 'Rounds & Players' }
+              { id: 'setup', label: 'ðŸŽµ Setup', desc: 'Connect & Configure' },
+              { id: 'play', label: 'ðŸŽ® Play', desc: 'Game Controls' },
+              { id: 'manage', label: 'ðŸŽ¯ Manage', desc: 'Rounds & Players' }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -2254,7 +2254,7 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
           >
-                         <h2>🎵 Spotify Connection</h2>
+                         <h2>ðŸŽµ Spotify Connection</h2>
              {!isSpotifyConnected ? (
                <div className="spotify-connection-section">
                  {spotifyError && (
@@ -2339,7 +2339,7 @@ const HostView: React.FC = () => {
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.4 }}
                   >
-                    <h2>📚 Available Playlists</h2>
+                    <h2>ðŸ“š Available Playlists</h2>
                     <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
                       <input
                         type="text"
@@ -2433,7 +2433,7 @@ const HostView: React.FC = () => {
                                 fontSize: '0.9rem',
                                 color: isInsufficient ? '#ffc107' : '#fff'
                               }}>
-                                {stripGoTPrefix ? p.name.replace(/^GoT\s*[-–:]*\s*/i, '') : p.name}
+                                {stripGoTPrefix ? p.name.replace(/^GoT\s*[-â€“:]*\s*/i, '') : p.name}
                               </span>
                               <span style={{ 
                                 fontSize: '0.8rem', 
@@ -2454,7 +2454,7 @@ const HostView: React.FC = () => {
                                   }}
                                   title="Get AI suggestions to reach 25+ songs"
                                 >
-                                  🤖 Suggest Songs
+                                  ðŸ¤– Suggest Songs
                                 </button>
                               )}
                             </div>
@@ -2488,7 +2488,7 @@ const HostView: React.FC = () => {
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.2 }}
                 >
-                  <h2>🎮 Game Controls</h2>
+                  <h2>ðŸŽ® Game Controls</h2>
                   
                   {/* Game Settings */}
                   <div style={{ 
@@ -2557,12 +2557,12 @@ const HostView: React.FC = () => {
                             onClick={finalizeMix}
                             disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
                           >
-                            🎵 Finalize Mix
+                            ðŸŽµ Finalize Mix
                           </button>
                         )}
                         {mixFinalized && (
                           <div className="mix-finalized-status">
-                            <p className="status-text">✅ Mix finalized - Cards generated for players</p>
+                            <p className="status-text">âœ… Mix finalized - Cards generated for players</p>
                           </div>
                         )}
                         <button
@@ -2595,13 +2595,13 @@ const HostView: React.FC = () => {
                       </>
                     ) : (
                       <div className="game-status">
-                        <p className="status-text">🎵 Game is running - Use the Now Playing controls below</p>
+                        <p className="status-text">ðŸŽµ Game is running - Use the Now Playing controls below</p>
                         <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                          <button className="btn-secondary" onClick={endGame}>🛑 End Game</button>
-                          <button className="btn-secondary" onClick={confirmAndResetGame}>🔁 Reset</button>
-                          <button className="btn-secondary" onClick={confirmAndNewRound}>🆕 New Round</button>
+                          <button className="btn-secondary" onClick={endGame}>ðŸ›‘ End Game</button>
+                          <button className="btn-secondary" onClick={confirmAndResetGame}>ðŸ” Reset</button>
+                          <button className="btn-secondary" onClick={confirmAndNewRound}>ðŸ†• New Round</button>
                           <button className="btn-accent" onClick={() => setShowRoundManager(!showRoundManager)}>
-                            🎯 Round Manager
+                            ðŸŽ¯ Round Manager
                           </button>
                           <button 
                             className="btn-danger" 
@@ -2609,7 +2609,7 @@ const HostView: React.FC = () => {
                             style={{ background: '#ff6b6b', borderColor: '#ff4757' }}
                             title="Complete restart: reset all progress, keep cards"
                           >
-                            🔄 Restart
+                            ðŸ”„ Restart
                           </button>
                         </div>
                         <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
@@ -2619,7 +2619,7 @@ const HostView: React.FC = () => {
                           <button className="btn-secondary" onClick={() => revealCall('full')}>Full</button>
                         </div>
                         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                          <button className="btn-secondary" onClick={forceRefreshAll}>🧹 Force Refresh Clients</button>
+                          <button className="btn-secondary" onClick={forceRefreshAll}>ðŸ§¹ Force Refresh Clients</button>
                         </div>
                       </div>
                     )}
@@ -2637,7 +2637,7 @@ const HostView: React.FC = () => {
                   transition={{ delay: 0.2 }}
                   className="bg-rgba(42, 42, 42, 0.95) backdrop-blur-[20px] border border-rgba(0, 255, 136, 0.3) rounded-2xl p-6 mb-6"
                 >
-                  <h2>🎯 Round & Event Management</h2>
+                  <h2>ðŸŽ¯ Round & Event Management</h2>
                   
                   {/* Round Status Summary */}
                   <div className="mb-6 p-4 bg-rgba(255, 255, 255, 0.05) rounded-xl">
@@ -2679,13 +2679,13 @@ const HostView: React.FC = () => {
                             onClick={completeCurrentRound}
                             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                           >
-                            ✅ Complete Current Round
+                            âœ… Complete Current Round
                           </button>
                           <button
                             onClick={resetCurrentRound}
                             className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
                           >
-                            🔄 Reset Current Round
+                            ðŸ”„ Reset Current Round
                           </button>
                         </>
                       )}
@@ -2696,7 +2696,7 @@ const HostView: React.FC = () => {
                             onClick={() => jumpToRound(nextRound)}
                             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                           >
-                            ⏭️ Start Next Planned Round
+                            â­ï¸ Start Next Planned Round
                           </button>
                         ) : null;
                       })()}
@@ -2740,10 +2740,10 @@ const HostView: React.FC = () => {
                                   )}
                                 </div>
                                 <div className="text-sm text-gray-400 mt-1">
-                                  {(round.playlistIds || []).length} playlist{(round.playlistIds || []).length !== 1 ? 's' : ''} • {round.songCount} songs
+                                  {(round.playlistIds || []).length} playlist{(round.playlistIds || []).length !== 1 ? 's' : ''} â€¢ {round.songCount} songs
                                   {round.status === 'completed' && round.completedAt && (
                                     <span className="ml-2">
-                                      • Completed {new Date(round.completedAt).toLocaleTimeString()}
+                                      â€¢ Completed {new Date(round.completedAt).toLocaleTimeString()}
                                     </span>
                                   )}
                                 </div>
@@ -2774,7 +2774,7 @@ const HostView: React.FC = () => {
                     transition={{ delay: 0.4 }}
                     className="player-cards-section"
                   >
-                    <h2>👥 Player Cards & Progress</h2>
+                    <h2>ðŸ‘¥ Player Cards & Progress</h2>
                     <div style={{ 
                       display: 'grid', 
                       gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', 
@@ -2804,7 +2804,7 @@ const HostView: React.FC = () => {
                             const progressColor = progress.needed === 0 ? '#00ff88' : 
                                                 progress.needed <= 2 ? '#ffaa00' : 
                                                 progress.progress >= 50 ? '#66ccff' : '#888';
-                            const progressText = progress.needed === 0 ? '🎉 BINGO!' : 
+                            const progressText = progress.needed === 0 ? 'ðŸŽ‰ BINGO!' : 
                                                progress.needed === 1 ? '1 more needed!' :
                                                `${progress.needed} more needed`;
                             
@@ -2876,9 +2876,9 @@ const HostView: React.FC = () => {
                                   lineHeight: 1.1,
                                   overflow: 'hidden'
                                 }}
-                                title={`${square.songName} — ${square.artistName}`}
+                                title={`${square.songName} â€” ${square.artistName}`}
                               >
-                                {square.marked && <span style={{ marginRight: 2 }}>✓</span>}
+                                {square.marked && <span style={{ marginRight: 2 }}>âœ“</span>}
                                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                   {square.songName.length > 12 ? square.songName.substring(0, 12) + '...' : square.songName}
                                 </span>
@@ -2906,1643 +2906,176 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
-            <h2>🎵 Now Playing</h2>
+            <h2>ðŸŽµ Now Playing</h2>
             <div className="now-playing-content">
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
-                <input
-                  type="text"
-                  placeholder="Search playlists..."
-                  value={playlistQuery}
-                  onChange={(e) => setPlaylistQuery(e.target.value)}
-                  className="input"
-                  style={{ flex: 1, minWidth: 240 }}
-                />
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input type="checkbox" checked={stripGoTPrefix} onChange={(e) => setStripGoTPrefix(!!e.target.checked)} />
-                  <span>Strip "GoT" preview</span>
-                </label>
-                <button className="btn-secondary" onClick={() => { setPlaylistQuery(''); }}>Clear</button>
-                <button
-                  className="btn-secondary"
-                  onClick={() => {
-                    const toAdd = filteredPlaylists.slice(0, 5).filter(fp => !selectedPlaylists.some(sp => sp.id === fp.id));
-                    setSelectedPlaylists(prev => [...prev, ...toAdd]);
-                  }}
-                >Add first 5 visible</button>
+              {/* Song Info */}
+              <div style={{ 
+                background: 'rgba(255,255,255,0.05)', 
+                padding: 16, 
+                borderRadius: 8, 
+                marginBottom: 16,
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#00ff88', marginBottom: 8 }}>
+                  {currentSong.name}
+                </div>
+                <div style={{ fontSize: '1rem', color: '#b3b3b3' }}>
+                  by {currentSong.artist}
+                </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 12 }}>
-                <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8 }}>
-                  {filteredPlaylists.length === 0 && (
-                    <div style={{ color: '#b3b3b3', fontStyle: 'italic' }}>No playlists</div>
-                  )}
-                  {filteredPlaylists.map((p) => {
-                    const isSelected = !!selectedPlaylists.find(sp => sp.id === p.id);
-                    const previewName = stripGoTPrefix ? (p.name || '').replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim() : p.name;
-                    
-                    // Determine minimum required songs and if playlist is insufficient
-                    const minRequired = p.tracks >= 60 ? 75 : 15;
-                    const isInsufficient = p.tracks < minRequired;
-                    const shortage = isInsufficient ? minRequired - p.tracks : 0;
-                    
-                    return (
-                      <div 
-                        key={p.id} 
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData('text/plain', p.id);
-                          e.dataTransfer.effectAllowed = 'copy';
-                        }}
-                        style={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: 10, 
-                          padding: '6px 8px', 
-                          borderBottom: '1px solid rgba(255,255,255,0.08)',
-                          backgroundColor: isInsufficient ? 'rgba(255, 193, 7, 0.1)' : 'transparent',
-                          border: isInsufficient ? '1px solid rgba(255, 193, 7, 0.3)' : 'none',
-                          borderRadius: isInsufficient ? '4px' : '0',
-                          margin: isInsufficient ? '2px 0' : '0',
-                          cursor: 'grab'
-                        }}
-                        onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
-                        onMouseUp={(e) => e.currentTarget.style.cursor = 'grab'}
-                      >
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ 
-                            fontWeight: 700, 
-                            overflow: 'hidden', 
-                            textOverflow: 'ellipsis', 
-                            whiteSpace: 'nowrap',
-                            color: isInsufficient ? '#ffc107' : 'inherit'
-                          }}>
-                            {previewName}
-                            {isInsufficient && <span style={{ marginLeft: 6, fontSize: 11 }}>⚠️</span>}
-                          </div>
-                          <div style={{ 
-                            fontSize: 12, 
-                            color: isInsufficient ? '#ffcc33' : '#b3b3b3', 
-                            overflow: 'hidden', 
-                            textOverflow: 'ellipsis', 
-                            whiteSpace: 'nowrap' 
-                          }}>
-                            {p.owner} • {p.tracks} tracks
-                            {isInsufficient && (
-                              <span style={{ marginLeft: 6, fontWeight: 600 }}>
-                                (needs {shortage} more for {minRequired === 75 ? '1x75' : '5x15'} mode)
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          {isInsufficient && (
-                            <button
-                              className="btn-secondary"
-                              onClick={() => handleSuggestSongs(p)}
-                              style={{
-                                fontSize: 11,
-                                padding: '4px 8px',
-                                backgroundColor: 'rgba(255, 193, 7, 0.2)',
-                                border: '1px solid rgba(255, 193, 7, 0.5)',
-                                color: '#ffc107'
-                              }}
-                              title={`Get AI suggestions to reach ${minRequired} songs`}
-                            >
-                              🤖 Suggest
-                            </button>
-                          )}
-                          <button
-                            className={isSelected ? 'btn-secondary active' : 'btn-secondary'}
-                            onClick={() => {
-                              setSelectedPlaylists(prev => (
-                                isSelected ? prev.filter(sp => sp.id !== p.id) : [...prev, p]
-                              ));
-                            }}
-                            style={{
-                              opacity: isInsufficient ? 0.7 : 1
-                            }}
-                          >
-                            {isSelected ? 'Remove' : 'Add'}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  
-                  {/* Load More / Show All Controls */}
-                  {playlists && playlists.length > visiblePlaylists.length && (
-                    <div style={{ padding: '12px 8px', borderTop: '1px solid rgba(255,255,255,0.15)', display: 'flex', gap: 8, justifyContent: 'center' }}>
-                      <button 
-                        className="btn-secondary" 
-                        onClick={loadMorePlaylists}
-                        disabled={isLoadingMorePlaylists}
-                        style={{ fontSize: 12 }}
-                      >
-                        {isLoadingMorePlaylists ? 'Loading...' : `Load More (${playlists.length - visiblePlaylists.length} remaining)`}
-                      </button>
-                      <button 
-                        className="btn-primary" 
-                        onClick={() => {
-                          const availablePlaylists = playlists.filter(p => !assignedPlaylistIds.has(p.id));
-                          setVisiblePlaylists(availablePlaylists);
-                          setPlaylistPage(Math.ceil(availablePlaylists.length / 50));
-                        }}
-                        style={{ fontSize: 12 }}
-                      >
-                        Show All ({playlists.filter(p => !assignedPlaylistIds.has(p.id)).length})
-                      </button>
-                    </div>
-                  )}
-                  
-                  {/* GOT Playlists Quick Filter */}
-                  {playlists && playlists.length > 0 && (
-                    <div style={{ padding: '8px', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', gap: 8, justifyContent: 'center' }}>
-                      <button 
-                        className="btn-accent" 
-                        onClick={() => {
-                          const gotPlaylists = playlists.filter(p => 
-                            (p.name || '').toLowerCase().includes('got') && 
-                            !assignedPlaylistIds.has(p.id)
-                          );
-                          setVisiblePlaylists(gotPlaylists);
-                          setPlaylistPage(Math.ceil(gotPlaylists.length / 50));
-                        }}
-                        style={{ fontSize: 11, padding: '4px 8px' }}
-                      >
-                        🎯 Show Only GOT Playlists ({playlists.filter(p => (p.name || '').toLowerCase().includes('got') && !assignedPlaylistIds.has(p.id)).length})
-                      </button>
-                      <button 
-                        className="btn-secondary" 
-                        onClick={() => {
-                          const availablePlaylists = playlists.filter(p => !assignedPlaylistIds.has(p.id));
-                          setVisiblePlaylists(availablePlaylists.slice(0, 50));
-                          setPlaylistPage(1);
-                        }}
-                        style={{ fontSize: 11, padding: '4px 8px' }}
-                      >
-                        Reset View
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <div style={{ maxHeight: 300, overflow: 'auto', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8, position: 'sticky', top: 8 }}>
-                  <div style={{ fontWeight: 800, marginBottom: 6 }}>Selected ({selectedPlaylists.length})</div>
-                  {selectedPlaylists.length === 0 && (
-                    <div style={{ color: '#b3b3b3', fontStyle: 'italic' }}>None selected</div>
-                  )}
-                  {selectedPlaylists.map((sp) => (
-                    <div key={sp.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: '1px dashed rgba(255,255,255,0.08)' }}>
-                      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stripGoTPrefix ? (sp.name || '').replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim() : sp.name}</div>
-                      <button className="btn-secondary" onClick={() => setSelectedPlaylists(prev => prev.filter(x => x.id !== sp.id))}>Remove</button>
-                    </div>
-                  ))}
-                </div>
+
+              {/* Playback Controls */}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                <button className="btn-secondary" onClick={pauseGame}>
+                  {gamePaused ? 'â–¶ï¸ Resume' : 'â¸ï¸ Pause'}
+                </button>
+                <button className="btn-secondary" onClick={skipSong}>â­ï¸ Skip</button>
+                <button className="btn-secondary" onClick={endGame}>ðŸ›‘ End Game</button>
               </div>
             </div>
-          )}
+          </motion.div>
+        )}
 
-          {/* Playback Device (always visible) */}
-          <motion.div 
-            className="device-section"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.15 }}
-            style={{ marginTop: 12 }}
-          >
-            <h2>🎚️ Playback Device</h2>
-            {!isSpotifyConnected ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ opacity: 0.9 }}>Not connected to Spotify.</span>
-                <button className="btn-secondary" onClick={connectSpotify} disabled={isSpotifyConnecting}>
-                  {isSpotifyConnecting ? 'Connecting…' : 'Connect Spotify'}
+        {/* AI Suggestions Modal */}
+        {suggestionsModal.isOpen && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}>
+            <div style={{
+              background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
+              border: '1px solid rgba(0,255,136,0.3)',
+              borderRadius: '12px',
+              padding: '24px',
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              overflow: 'auto',
+              minWidth: '600px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ color: '#00ff88', fontSize: '1.2rem', fontWeight: 'bold' }}>
+                  ðŸ¤– AI Song Suggestions
+                </h3>
+                <button
+                  onClick={() => setSuggestionsModal({ isOpen: false, playlist: null, suggestions: [], error: null })}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#b3b3b3',
+                    fontSize: '1.5rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  âœ•
                 </button>
               </div>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <span style={{ padding: '4px 8px', borderRadius: 6, background: selectedDevice ? 'rgba(0,255,136,0.12)' : 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', color: selectedDevice ? '#00ff88' : '#e6e6e6' }}>
-                  {selectedDevice ? `Device: ${selectedDevice.name}` : 'No device selected'}
-                </span>
-                <select
-                  value={selectedDevice?.id || ''}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    const dev = devices.find((d) => d.id === id) || null;
-                    setSelectedDevice(dev);
-                  }}
-                  style={{ minWidth: 260, padding: '6px 10px', background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6 }}
-                >
-                  <option value="" disabled>
-                    {isLoadingDevices ? 'Loading devices…' : devices.length === 0 ? 'No devices found' : 'Select a device'}
-                  </option>
-                  {devices.map((dev) => (
-                    <option key={dev.id} value={dev.id}>
-                      {dev.name} {dev.is_active ? '🟢' : '⚪'}
-                    </option>
-                  ))}
-                </select>
-                <button className="btn-secondary" onClick={loadDevices} disabled={isLoadingDevices}>↻ Refresh</button>
-                <button className="btn-secondary" onClick={transferToSelectedDevice} disabled={!selectedDevice}>Transfer Playback</button>
-                <button className="btn-secondary" onClick={saveSelectedDevice} disabled={!selectedDevice}>Save Device</button>
-                <button className="btn-secondary" onClick={recoverPlayback} disabled={!selectedDevice}>Recover Playback</button>
-              </div>
-            )}
-          </motion.div>
 
-          {/* Active Rooms (admin) */}
-          <div style={{ marginTop: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <button className="btn-secondary" onClick={() => { const next = !showRooms; setShowRooms(next); if (next) refreshRooms(); }}>
-                {showRooms ? 'Hide Active Rooms' : 'Show Active Rooms'}
-              </button>
-              {showRooms && (
-                <button className="btn-secondary" onClick={refreshRooms}>↻ Refresh</button>
-              )}
-            </div>
-            {showRooms && (
-              <div style={{ border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8 }}>
-                {rooms.length === 0 ? (
-                  <div style={{ opacity: 0.8 }}>No active rooms.</div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto auto auto', gap: 8, alignItems: 'center' }}>
-                    {rooms.map((r: any) => (
-                      <div key={r.id} style={{ display: 'contents' }}>
-                        <div><strong>{r.id}</strong></div>
-                        <div style={{ opacity: 0.9 }}>{r.playerCount} players</div>
-                        <div style={{ opacity: 0.9 }}>{r.gameState}</div>
-                        <div style={{ opacity: 0.9 }}>{r.pattern}</div>
-                        <button className="btn-secondary" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/display/${r.id}`); }}>Copy Link</button>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <button className="btn-secondary" onClick={async () => { try { await fetch(`${API_BASE || ''}/api/rooms/${r.id}/end`, { method: 'POST' }); refreshRooms(); } catch {} }}>End</button>
-                          <button className="btn-secondary" onClick={async () => { try { await fetch(`${API_BASE || ''}/api/rooms/${r.id}/archive`, { method: 'POST' }); refreshRooms(); } catch {} }}>Archive</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-        )}
-      </div>
-
-
-      {/* Player Cards Viewer */}
-          <div style={{ marginTop: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <button className="btn-secondary" onClick={() => { const next = !showPlayerCards; setShowPlayerCards(next); if (next) requestPlayerCards(); }}>
-                {showPlayerCards ? 'Hide Player Cards' : 'View Player Cards'}
-              </button>
-              {showPlayerCards && (
-                <button className="btn-secondary" onClick={requestPlayerCards}>↻ Refresh</button>
-              )}
-              {showPlayerCards && playerCards.size > 0 && (
-                <span style={{ opacity: 0.8, fontSize: '0.9rem' }}>({playerCards.size} players)</span>
-              )}
-            </div>
-            {showPlayerCards && (
-              <div style={{ border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8, maxHeight: 400, overflowY: 'auto' }}>
-                {playerCards.size === 0 ? (
-                  <div style={{ opacity: 0.8 }}>No player cards available. Cards are generated after finalizing mix.</div>
-                ) : (
-                  <div style={{ 
-                    display: 'grid', 
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', 
-                    gap: 16 
-                  }}>
-                    {Array.from(playerCards.entries()).map(([playerId, playerData]) => (
-                      <div key={playerId} style={{ 
-                        background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
-                        border: '1px solid rgba(0,255,136,0.3)', 
-                        borderRadius: '12px', 
-                        padding: '16px',
-                        boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
+              {suggestionsModal.error ? (
+                <div style={{ color: '#ff6b6b', padding: '16px', textAlign: 'center' }}>
+                  {suggestionsModal.error}
+                </div>
+              ) : suggestionsModal.suggestions.length > 0 ? (
+                <div>
+                  <p style={{ marginBottom: '16px', color: '#b3b3b3' }}>
+                    Suggestions for: <strong style={{ color: '#00ff88' }}>{suggestionsModal.playlist?.name}</strong>
+                  </p>
+                  <div style={{ maxHeight: '400px', overflow: 'auto' }}>
+                    {suggestionsModal.suggestions.map((song: any, index: number) => (
+                      <div key={index} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '8px',
+                        borderBottom: '1px solid rgba(255,255,255,0.1)',
+                        fontSize: '0.9rem'
                       }}>
-                        <div style={{ 
-                          fontWeight: 'bold', 
-                          marginBottom: '8px', 
-                          color: '#00ff88',
-                          fontSize: '1rem',
-                          textAlign: 'center'
-                        }}>
-                          {playerData.playerName}
+                        <span style={{ color: '#00ff88', fontWeight: 'bold', minWidth: '24px' }}>
+                          {index + 1}
+                        </span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 'bold', color: '#fff' }}>{song.name}</div>
+                          <div style={{ color: '#b3b3b3' }}>by {song.artist}</div>
                         </div>
-                        
-                        {/* Win Progress Indicator */}
-                        {(() => {
-                          const progress = calculateWinProgress(playerData.card, pattern);
-                          const progressColor = progress.needed === 0 ? '#00ff88' : 
-                                              progress.needed <= 2 ? '#ffaa00' : 
-                                              progress.progress >= 50 ? '#66ccff' : '#888';
-                          const progressText = progress.needed === 0 ? '🎉 BINGO!' : 
-                                             progress.needed === 1 ? '1 more needed!' :
-                                             `${progress.needed} more needed`;
-                          
-                          return (
-                            <div style={{ 
-                              marginBottom: '12px', 
-                              textAlign: 'center',
-                              fontSize: '0.85rem'
-                            }}>
-                              <div style={{ 
-                                color: progressColor,
-                                fontWeight: 600,
-                                marginBottom: '4px'
-                              }}>
-                                {progressText}
-                              </div>
-                              <div style={{ 
-                                background: 'rgba(255,255,255,0.1)',
-                                borderRadius: '8px',
-                                height: '6px',
-                                overflow: 'hidden',
-                                margin: '0 auto',
-                                maxWidth: '200px'
-                              }}>
-                                <div style={{
-                                  background: progressColor,
-                                  height: '100%',
-                                  width: `${progress.progress}%`,
-                                  transition: 'width 0.3s ease'
-                                }} />
-                              </div>
-                              <div style={{ 
-                                fontSize: '0.75rem',
-                                color: '#b3b3b3',
-                                marginTop: '2px'
-                              }}>
-                                {progress.marked}/{pattern === 'full_card' ? 25 : pattern === 'four_corners' ? 4 : pattern === 'x' ? 9 : 5} ({progress.progress}%)
-                              </div>
-                            </div>
-                          );
-                        })()}
-                        <div style={{ 
-                          display: 'grid', 
-                          gridTemplateColumns: 'repeat(5, 1fr)', 
-                          gap: '4px', 
-                          maxWidth: '300px',
-                          aspectRatio: '1/1',
-                          margin: '0 auto'
-                        }}>
-                          {playerData.card.squares.map((square: any) => (
-                            <div 
-                              key={square.position}
-                              style={{ 
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                background: square.marked 
-                                  ? 'linear-gradient(135deg, #00ff88, #00cc6d)' 
-                                  : 'rgba(255,255,255,0.1)',
-                                border: square.marked 
-                                  ? '2px solid #00ff88' 
-                                  : '1px solid rgba(255,255,255,0.3)',
-                                borderRadius: '8px',
-                                padding: '4px',
-                                fontSize: '0.7rem',
-                                fontWeight: square.marked ? 700 : 400,
-                                color: square.marked ? '#001a0d' : '#ffffff',
-                                textAlign: 'center',
-                                lineHeight: 1.1,
-                                overflow: 'hidden'
-                              }}
-                              title={`${square.songName} — ${square.artistName}`}
-                            >
-                              {square.marked && <span style={{ marginRight: 2 }}>✓</span>}
-                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {square.songName.length > 12 ? square.songName.substring(0, 12) + '...' : square.songName}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
+                        {song.preview_url && (
+                          <a
+                            href={song.preview_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              color: '#00ff88',
+                              textDecoration: 'none',
+                              fontSize: '0.8rem',
+                              padding: '4px 8px',
+                              border: '1px solid rgba(0,255,136,0.3)',
+                              borderRadius: '4px'
+                            }}
+                          >
+                            ðŸŽµ Preview
+                          </a>
+                        )}
                       </div>
                     ))}
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '32px', color: '#b3b3b3' }}>
+                  Generating suggestions...
+                </div>
+              )}
+            </div>
           </div>
+        )}
 
-          {/* Game Controls */}
-          {(gameState !== 'playing' || showAllControls) && showPlaylists && (
+        {/* Logs */}
+        {showLogs && (
           <motion.div 
-            className="controls-section"
+            className="logs-section"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
+            transition={{ delay: 0.7 }}
           >
-            <h2>🎮 Game Controls</h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '6px 0 10px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ opacity: 0.85 }}>Snippet</span>
-                <input
-                  type="range"
-                  min="5"
-                  max="60"
-                  value={snippetLength}
-                  onChange={(e) => setSnippetLength(Number(e.target.value))}
-                />
-                <span style={{ width: 32, textAlign: 'right' }}>{snippetLength}s</span>
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={randomStarts}
-                  onChange={(e) => setRandomStarts(!!e.target.checked)}
-                />
-                <span>Random start</span>
-              </label>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={lockJoins}
-                  onChange={(e) => {
-                    const val = e.target.checked;
-                    setLockJoins(val);
-                    if (socket && roomId) socket.emit('set-lock-joins', { roomId, locked: val });
-                  }}
-                />
-                <span>Lock new joins</span>
-              </label>
-              <span style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.2)' }} />
-              <span style={{ opacity: 0.8, fontSize: 14 }}>Pre-queue removed for robust playback</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={superStrict}
-                  onChange={(e) => {
-                    const val = !!e.target.checked;
-                    setSuperStrict(val);
-                    if (socket && roomId) socket.emit('set-super-strict', { roomId, enabled: val });
-                  }}
-                />
-                <span>Super-Strict Lock</span>
-              </label>
-              <span style={{ opacity: 0.8, fontSize: 12 }}>(faster checks, stricter corrections)</span>
-            </div>
-            {/* Game profiles (snippet + random only) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-              <select
-                onChange={(e) => { if (e.target.value) applyProfile(e.target.value); e.currentTarget.selectedIndex = 0; }}
-                style={{ minWidth: 220, padding: '6px 10px', background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6 }}
-              >
-                <option value="">Apply Profile…</option>
-                {profiles.map(p => (
-                  <option key={p.name} value={p.name}>{p.name} — {p.snippet}s • {p.random ? 'Random' : 'Fixed'}</option>
-                ))}
-              </select>
-              <button className="btn-secondary" onClick={() => {
-                const name = prompt('Save profile as:');
-                if (!name) return;
-                const next = profiles.filter(p => p.name.toLowerCase() !== name.toLowerCase());
-                next.push({ name, snippet: snippetLength, random: randomStarts, window: 0 });
-                persistProfiles(next);
-              }}>Save Current as Profile</button>
-              {profiles.length > 0 && (
-                <button className="btn-secondary" onClick={() => {
-                  const name = prompt('Delete which profile? Enter exact name:');
-                  if (!name) return;
-                  deleteProfile(name);
-                }}>Delete Profile…</button>
-              )}
-            </div>
-             <div className="control-buttons">
-               {gameState === 'waiting' && !currentSong ? (
-                 <>
-                   {!mixFinalized && (
-                     <button 
-                       className="control-button finalize-mix"
-                       onClick={finalizeMix}
-                       disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
-                     >
-                       🎵 Finalize Mix
-                     </button>
-                   )}
-                   {mixFinalized && (
-                     <div className="mix-finalized-status">
-                       <p className="status-text">✅ Mix finalized - Cards generated for players</p>
-                     </div>
-                   )}
-                  <button
-                    onClick={startGame}
-                    disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      padding: '14px 22px',
-                      fontSize: '1.05rem',
-                      fontWeight: 900,
-                      letterSpacing: '0.02em',
-                      borderRadius: 12,
-                      border: (selectedPlaylists.length === 0 || isSpotifyConnecting) ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(0,255,136,0.6)',
-                      color: (selectedPlaylists.length === 0 || isSpotifyConnecting) ? '#c8c8c8' : '#0b0e12',
-                      background: (selectedPlaylists.length === 0 || isSpotifyConnecting)
-                        ? 'rgba(255,255,255,0.08)'
-                        : 'linear-gradient(180deg, #00ff88 0%, #00cc6d 100%)',
-                      boxShadow: (selectedPlaylists.length === 0 || isSpotifyConnecting)
-                        ? 'none'
-                        : '0 10px 30px rgba(0,255,136,0.25), inset 0 1px 0 rgba(255,255,255,0.4)',
-                      cursor: (selectedPlaylists.length === 0 || isSpotifyConnecting) ? 'not-allowed' : 'pointer',
-                      opacity: (isSpotifyConnecting) ? 0.8 : 1
-                    }}
-                  >
-                    <Play className="btn-icon" />
-                    {isSpotifyConnecting ? 'Connecting Spotify...' : 'Start Game'}
-                  </button>
-                 </>
-               ) : (
-                 <div className="game-status">
-                   <p className="status-text">🎵 Game is running - Use the Now Playing controls below</p>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                    <button className="btn-secondary" onClick={endGame}>🛑 End Game</button>
-                    <button className="btn-secondary" onClick={confirmAndResetGame}>🔁 Reset</button>
-                    <button className="btn-secondary" onClick={confirmAndNewRound}>🆕 New Round</button>
-                    <button className="btn-accent" onClick={() => setShowRoundManager(!showRoundManager)}>
-                      🎯 Round Manager
-                    </button>
-                    <button 
-                      className="btn-danger" 
-                      onClick={handleRestartGame}
-                      style={{ background: '#ff6b6b', borderColor: '#ff4757' }}
-                      title="Complete restart: reset all progress, keep cards"
-                    >
-                      🔄 Restart
-                    </button>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
-                    <span style={{ opacity: 0.9 }}>Call Reveal:</span>
-                    <button className="btn-secondary" onClick={() => revealCall('artist')}>Artist</button>
-                    <button className="btn-secondary" onClick={() => revealCall('title')}>Title</button>
-                    <button className="btn-secondary" onClick={() => revealCall('full')}>Full</button>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                    <button className="btn-secondary" onClick={forceRefreshAll}>🧹 Force Refresh Clients</button>
-                  </div>
-                 </div>
-               )}
-             </div>
-           </motion.div>
-          )}
-
-          {/* Emergency controls - always show when needed */}
-          {((gameState === 'waiting' && currentSong) || showAllControls) && (
-            <motion.div style={{ margin: '16px 0' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px', background: 'rgba(255,193,7,0.1)', borderRadius: '8px', border: '1px solid rgba(255,193,7,0.3)' }}>
-                <span style={{ color: '#ffc107', fontSize: '0.9rem', fontWeight: 600 }}>
-                  🚨 MISSING GAME CONTROLS: gameState={gameState}, currentSong={currentSong ? 'YES' : 'NO'}, isPlaying={isPlaying ? 'YES' : 'NO'}
-                </span>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button 
-                    className="btn-danger" 
-                    onClick={forceSetPlaying} 
-                    style={{ 
-                      background: '#dc3545', 
-                      color: 'white', 
-                      fontWeight: 'bold',
-                      fontSize: '0.9rem',
-                      padding: '8px 16px'
-                    }}
-                  >
-                    🔧 FIX: Set to Playing State
-                  </button>
-                  <button className="btn-secondary" onClick={forceSyncGameState} style={{ fontSize: '0.8rem' }}>🔄 Sync State</button>
-                  <button 
-                    className="btn-danger" 
-                    onClick={emergencyStopSpotify} 
-                    style={{ background: '#dc3545', color: 'white', fontSize: '0.8rem' }}
-                  >
-                    🛑 Emergency Stop
-                  </button>
-                  <button 
-                    className="btn-danger" 
-                    onClick={emergencyResetAll} 
-                    style={{ background: '#6f1d1d', color: 'white', fontSize: '0.8rem' }}
-                  >
-                    💥 Nuclear Reset
-                  </button>
+            <h2>ðŸ“‹ Event Log</h2>
+            <div style={{ 
+              maxHeight: 200, 
+              overflow: 'auto', 
+              border: '1px solid rgba(255,255,255,0.1)', 
+              borderRadius: 8, 
+              padding: 8,
+              background: 'rgba(0,0,0,0.3)'
+            }}>
+              {logs.length === 0 ? (
+                <div style={{ color: '#b3b3b3', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>
+                  No events logged yet
                 </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* Pattern selector (setup only; hidden during game unless Show All Controls) */}
-          {(gameState !== 'playing' || showAllControls) && (
-                <motion.div
-              className="pattern-quick-section"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.15 }}
-            >
-              <h2>🎯 Pattern</h2>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <button className="btn-secondary" style={{ padding: '8px 14px', fontSize: '0.95rem', fontWeight: 800, background: pattern==='line' ? 'rgba(0,255,136,0.18)' : undefined, borderColor: pattern==='line' ? 'rgba(0,255,136,0.5)' : undefined, color: pattern==='line' ? '#00ff88' : undefined }} onClick={() => updatePattern('line')}>Line</button>
-                <button className="btn-secondary" style={{ padding: '8px 14px', fontSize: '0.95rem', fontWeight: 800, background: pattern==='four_corners' ? 'rgba(0,255,136,0.18)' : undefined, borderColor: pattern==='four_corners' ? 'rgba(0,255,136,0.5)' : undefined, color: pattern==='four_corners' ? '#00ff88' : undefined }} onClick={() => updatePattern('four_corners')}>Four Corners</button>
-                <button className="btn-secondary" style={{ padding: '8px 14px', fontSize: '0.95rem', fontWeight: 800, background: pattern==='x' ? 'rgba(0,255,136,0.18)' : undefined, borderColor: pattern==='x' ? 'rgba(0,255,136,0.5)' : undefined, color: pattern==='x' ? '#00ff88' : undefined }} onClick={() => updatePattern('x')}>X</button>
-                <button className="btn-secondary" style={{ padding: '8px 14px', fontSize: '0.95rem', fontWeight: 800, background: pattern==='full_card' ? 'rgba(0,255,136,0.18)' : undefined, borderColor: pattern==='full_card' ? 'rgba(0,255,136,0.5)' : undefined, color: pattern==='full_card' ? '#00ff88' : undefined }} onClick={() => updatePattern('full_card')}>Full Card</button>
-                <button className="btn-secondary" style={{ padding: '8px 14px', fontSize: '0.95rem', fontWeight: 800, background: pattern==='custom' ? 'rgba(0,255,136,0.18)' : undefined, borderColor: pattern==='custom' ? 'rgba(0,255,136,0.5)' : undefined, color: pattern==='custom' ? '#00ff88' : undefined }} onClick={() => updatePattern('custom')}>Custom…</button>
-              </div>
-              {pattern === 'custom' && (
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 36px)', gap: 6 }}>
-                    {Array.from({ length: 5 }).map((_, r) => (
-                      Array.from({ length: 5 }).map((__, c) => {
-                        const key = `${r}-${c}`;
-                        const on = customMask.includes(key);
-                        return (
-                          <button
-                            key={key}
-                            onClick={() => {
-                              setCustomMask(prev => {
-                                const has = prev.includes(key);
-                                const next = has ? prev.filter(p => p !== key) : [...prev, key];
-                                if (socket && roomId) {
-                                  socket.emit('set-pattern', { roomId, pattern: 'custom', customMask: next });
-                                  addLog(`Custom pattern updated (${next.length} cells)`, 'info');
-                                }
-                                return next;
-                              });
-                            }}
-                            style={{
-                              width: 36, height: 36, borderRadius: 6,
-                              border: '1px solid rgba(255,255,255,0.25)',
-                              background: on ? 'rgba(0,255,136,0.28)' : 'rgba(255,255,255,0.05)',
-                              color: on ? '#00ff88' : '#e6e6e6',
-                              fontWeight: 800
-                            }}
-                          >
-                            {r+1},{c+1}
-                          </button>
-                        );
-                      })
-                    ))}
-                  </div>
-                  <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-                    <button className="btn-secondary" onClick={() => {
-                      setCustomMask([]);
-                      if (socket && roomId) socket.emit('set-pattern', { roomId, pattern: 'custom', customMask: [] });
-                    }}>Clear</button>
-                    <button className="btn-secondary" onClick={() => {
-                      const all = [] as string[];
-                      for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) all.push(`${r}-${c}`);
-                      setCustomMask(all);
-                      if (socket && roomId) socket.emit('set-pattern', { roomId, pattern: 'custom', customMask: all });
-                    }}>Fill All</button>
-                  </div>
-                </div>
-              )}
-                </motion.div>
-          )}
-
-          {/* Compact Played List (always visible during game) */}
-          {gameState === 'playing' && playedInOrder.length > 0 && (
-            <motion.div 
-              className="played-list-section"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.2 }}
-              style={{ marginTop: 12 }}
-            >
-              <h2>📻 Played (in order)</h2>
-              <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8 }}>
-                {playedInOrder.map((s, i) => (
-                  <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                    <span style={{ minWidth: 26, textAlign: 'right', opacity: 0.85 }}>{i + 1}</span>
-                    <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      <strong>{s.name}</strong>
-                      <span style={{ opacity: 0.8 }}> — {s.artist}</span>
-                    </div>
-                  </div>
-              ))}
-            </div>
-                     </motion.div>
-          )}
-
-          {/* Song List (moved below to avoid shifting playlist picker) */}
-          {(finalizedOrder?.length || songList.length) > 0 && gameState !== 'playing' && (
-             <motion.div 
-               className="song-list-section"
-               initial={{ opacity: 0 }}
-               animate={{ opacity: 1 }}
-               transition={{ delay: 0.4 }}
-             >
-              <h2>🎵 {finalizedOrder ? 'Finalized Order' : 'Song List'} ({(finalizedOrder?.length || songList.length)} songs)</h2>
-               <div className="song-list-controls">
-                 <button
-                   onClick={() => setShowSongList(!showSongList)}
-                   className="btn-secondary"
-                 >
-                   {showSongList ? '📋 Hide Song List' : '📋 Show Song List'}
-                 </button>
-                {!finalizedOrder && (
-                 <button
-                   onClick={generateSongList}
-                   className="btn-secondary"
-                 >
-                   🔀 Reshuffle Songs
-                 </button>
-                )}
-               </div>
-               {showSongList && (
-                 <motion.div
-                   className="song-list-display"
-                   initial={{ opacity: 0, height: 0 }}
-                   animate={{ opacity: 1, height: 'auto' }}
-                   transition={{ duration: 0.3 }}
-                 >
-                   <div className="song-list">
-                    {(finalizedOrder || songList).map((song, index) => (
-                       <div
-                         key={`${song.id}-${index}`}
-                         className="song-list-item"
-                       >
-                         <span className="song-number">{index + 1}</span>
-                         <div className="song-info">
-                           <span className="song-name">{song.name}</span>
-                           <span className="song-artist">{song.artist}</span>
-                         </div>
-                       </div>
-                     ))}
-                   </div>
-                 </motion.div>
-               )}
-             </motion.div>
-           )}
-
-          {/* Logs */}
-          {logs.length > 0 && showLogs && (
-             <motion.div 
-              className="logs-section"
-               initial={{ opacity: 0 }}
-               animate={{ opacity: 1 }}
-              transition={{ delay: 0.55 }}
-            >
-              <h2>📝 Host Logs</h2>
-              <div style={{ maxHeight: 200, overflowY: 'auto', background: 'rgba(255,255,255,0.05)', borderRadius: 8, padding: 8 }}>
-                {logs.map((entry, idx) => (
-                  <div key={entry.ts + '-' + idx} style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '4px 0' }}>
-                    <span style={{ fontFamily: 'monospace', fontSize: 12, opacity: 0.8 }}>
-                      {new Date(entry.ts).toLocaleTimeString()}
-                    </span>
-                    <span style={{ fontWeight: 600, color: entry.level === 'error' ? '#ff6b6b' : entry.level === 'warn' ? '#ffd166' : '#9be564' }}>
-                      {entry.level.toUpperCase()}
-                    </span>
-                    <span>{entry.message}</span>
-                  </div>
-                ))}
-               </div>
-             </motion.div>
-           )}
-
-                       {/* Now Playing Interface - Integrated into main content */}
-            {currentSong && (
-             <motion.div 
-               className="now-playing-section"
-               initial={{ opacity: 0 }}
-               animate={{ opacity: 1 }}
-               transition={{ delay: 0.6 }}
-             >
-               <h2>🎵 Now Playing</h2>
-               <div className="now-playing-content">
-                 {/* Song Info */}
-                 <div className="song-info-display">
-                   <div className="song-details">
-                     <h3>{currentSong.name}</h3>
-                     <p className="artist">{currentSong.artist}</p>
-                   </div>
-                 </div>
-
-                 {/* Main Controls */}
-                 <div className="main-controls">
-                   <button onClick={handleSkipToPrevious} className="control-btn">
-                     ⏮️
-                   </button>
-                                       <button onClick={isPlaying ? pauseSong : () => playSong(currentSong!)} className="control-btn play-btn">
-                      {isPlaying ? '⏸️ Pause' : '▶️ Play'}
-                    </button>
-                   <button onClick={handleSkipToNext} className="control-btn">
-                     ⏭️
-                   </button>
-                 </div>
-
-                 {/* Progress Bar */}
-                 <div className="progress-container">
-                   <input
-                     type="range"
-                     min="0"
-                     max={playbackState.duration}
-                     value={playbackState.currentTime}
-                     onChange={(e) => handleSeek(Number(e.target.value))}
-                     onMouseDown={() => setIsSeeking(true)}
-                     onMouseUp={() => setIsSeeking(false)}
-                     className="progress-bar"
-                   />
-                   <div className="progress-info">
-                     <span>{formatTime(playbackState.currentTime)}</span>
-                     <span>{formatTime(playbackState.duration)}</span>
-                   </div>
-                 </div>
-
-                 {/* Volume Control */}
-                 <div className="volume-control">
-                   <button
-                     onClick={handleMuteToggle}
-                     className="control-btn"
-                     style={{ 
-                       padding: '4px 8px', 
-                       minWidth: 'auto',
-                       background: isMuted ? 'rgba(255, 107, 107, 0.3)' : 'rgba(255, 255, 255, 0.15)'
-                     }}
-                   >
-                     {isMuted ? '🔇' : '🔊'}
-                   </button>
-                   <input
-                     type="range"
-                     min="0"
-                     max="100"
-                     value={isMuted ? 0 : playbackState.volume}
-                     onChange={(e) => handleVolumeChange(Number(e.target.value))}
-                     className="volume-slider"
-                   />
-                   <span className="volume-label">{isMuted ? '0' : playbackState.volume}%</span>
-                 </div>
-
-                                   {/* Keyboard Shortcuts Help */}
-                  <div className="advanced-controls-toggle">
-                    <button
-                      className="toggle-advanced-btn"
-                      onClick={() => {
-                        alert(`🎹 Keyboard Shortcuts:
-• Spacebar: Play/Pause
-• ← → Arrow Keys: Previous/Next
-• M: Mute/Unmute
-• Click and drag progress bar to seek`);
-                      }}
-                      style={{ fontSize: '0.8rem', padding: '6px 12px' }}
-                    >
-                      ⌨️ Help
-                    </button>
-                  </div>
-               </div>
-
-               {/* Played so far list shown above in the compact section */}
-             </motion.div>
-           )}
-
-
-
-          {/* Bingo Verification Modal */}
-          {pendingVerification && (
-            <motion.div
-              className="verification-overlay"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              style={{
-                position: 'fixed',
-                top: 0, left: 0, right: 0, bottom: 0,
-                background: 'rgba(0,0,0,0.8)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 9999
-              }}
-            >
-              <motion.div
-                className="verification-panel"
-                initial={{ scale: 0.8, y: 50 }}
-                animate={{ scale: 1, y: 0 }}
-                style={{
-                  background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
-                  border: '2px solid #00ff88',
-                  borderRadius: '20px',
-                  padding: '2rem',
-                  maxWidth: '90vw',
-                  maxHeight: '90vh',
-                  overflowY: 'auto',
-                  color: 'white'
-                }}
-              >
-                <h2 style={{ color: '#00ff88', marginBottom: '1rem', textAlign: 'center' }}>
-                  🎯 BINGO VERIFICATION REQUIRED
-                </h2>
-                
-                <div style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
-                  <h3 style={{ color: '#ffaa00', fontSize: '1.5rem' }}>
-                    {pendingVerification.playerName} called BINGO!
-                  </h3>
-                  <p style={{ color: '#ccc', marginTop: '0.5rem' }}>
-                    Pattern: {pendingVerification.requiredPattern} | 
-                    Marked: {pendingVerification.markedSquares?.length || 0} squares
-                  </p>
-                </div>
-
-                {/* Enhanced Visual Bingo Card */}
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(5, 1fr)',
-                  gap: '4px',
-                  maxWidth: '400px',
-                  margin: '0 auto 1rem',
-                  aspectRatio: '1/1'
-                }}>
-                  {pendingVerification.playerCard?.squares?.map((square: any) => {
-                    const wasPlayed = pendingVerification.playedSongs?.some((played: any) => 
-                      played.id === square.songId
-                    );
-                    const isMarked = square.marked;
-                    
-                    // Determine cell appearance based on status
-                    let background, border, textColor, statusIcon;
-                    
-                    if (isMarked && wasPlayed) {
-                      // VALID: Marked and played
-                      background = 'linear-gradient(135deg, #00ff88, #00cc6d)';
-                      border = '3px solid #00ff88';
-                      textColor = '#001a0d';
-                      statusIcon = '✅';
-                    } else if (isMarked && !wasPlayed) {
-                      // INVALID: Marked but not played
-                      background = 'linear-gradient(135deg, #ff6b6b, #ff4757)';
-                      border = '3px solid #ff6b6b';
-                      textColor = '#ffffff';
-                      statusIcon = '❌';
-                    } else if (!isMarked && wasPlayed) {
-                      // MISSED: Played but not marked
-                      background = 'linear-gradient(135deg, #ffa500, #ff8c00)';
-                      border = '2px solid #ffa500';
-                      textColor = '#001a0d';
-                      statusIcon = '🎵';
-                    } else {
-                      // NEUTRAL: Not marked and not played
-                      background = 'rgba(255,255,255,0.1)';
-                      border = '1px solid rgba(255,255,255,0.3)';
-                      textColor = '#ffffff';
-                      statusIcon = '';
-                    }
-                    
-                    return (
-                      <div
-                        key={square.position}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          background,
-                          border,
-                          borderRadius: '8px',
-                          padding: '4px',
-                          fontSize: '0.7rem',
-                          fontWeight: (isMarked || wasPlayed) ? 700 : 400,
-                          color: textColor,
-                          textAlign: 'center',
-                          lineHeight: 1.1,
-                          overflow: 'hidden',
-                          position: 'relative'
-                        }}
-                      >
-                        {statusIcon && (
-                          <div style={{
-                            position: 'absolute',
-                            top: '2px',
-                            right: '2px',
-                            fontSize: '0.8rem',
-                            lineHeight: 1
-                          }}>
-                            {statusIcon}
-                          </div>
-                        )}
-                        {square.songName || 'Song'}
-                      </div>
-                    );
-                  })}
-                </div>
-                
-                {/* Status Legend */}
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  gap: '1rem',
-                  marginBottom: '1.5rem',
-                  fontSize: '0.75rem',
-                  flexWrap: 'wrap'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <div style={{ 
-                      width: '12px', 
-                      height: '12px', 
-                      background: 'linear-gradient(135deg, #00ff88, #00cc6d)',
-                      borderRadius: '2px',
-                      border: '1px solid #00ff88'
-                    }}></div>
-                    <span style={{ color: '#00ff88' }}>✅ Valid</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <div style={{ 
-                      width: '12px', 
-                      height: '12px', 
-                      background: 'linear-gradient(135deg, #ff6b6b, #ff4757)',
-                      borderRadius: '2px',
-                      border: '1px solid #ff6b6b'
-                    }}></div>
-                    <span style={{ color: '#ff6b6b' }}>❌ Invalid</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <div style={{ 
-                      width: '12px', 
-                      height: '12px', 
-                      background: 'linear-gradient(135deg, #ffa500, #ff8c00)',
-                      borderRadius: '2px',
-                      border: '1px solid #ffa500'
-                    }}></div>
-                    <span style={{ color: '#ffa500' }}>🎵 Played</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <div style={{ 
-                      width: '12px', 
-                      height: '12px', 
-                      background: 'rgba(255,255,255,0.1)',
-                      borderRadius: '2px',
-                      border: '1px solid rgba(255,255,255,0.3)'
-                    }}></div>
-                    <span style={{ color: '#ccc' }}>⚪ Not Played</span>
-                  </div>
-                </div>
-
-                {/* Verification Details */}
-                <div style={{ 
-                  background: 'rgba(255,193,7,0.1)', 
-                  border: '1px solid rgba(255,193,7,0.3)',
-                  borderRadius: '12px',
-                  padding: '1rem',
-                  margin: '1rem 0',
-                  fontSize: '0.9rem'
-                }}>
-                  <h4 style={{ color: '#ffc107', marginBottom: '0.75rem', textAlign: 'center' }}>
-                    🔍 VERIFICATION ANALYSIS
-                  </h4>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    {/* Marked Songs */}
-                    <div>
-                      <h5 style={{ color: '#00ff88', marginBottom: '0.5rem' }}>
-                        ✓ Player Marked ({pendingVerification.markedSquares?.length || 0}):
-                      </h5>
-                      <div style={{ maxHeight: '120px', overflowY: 'auto', fontSize: '0.8rem' }}>
-                        {pendingVerification.markedSquares?.map((square: any, index: number) => (
-                          <div 
-                            key={index} 
-                            style={{ 
-                              padding: '2px 0',
-                              color: '#ffffff',
-                              opacity: 0.9
-                            }}
-                          >
-                            • {square.songName} — {square.artistName}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Played Songs */}
-                    <div>
-                      <h5 style={{ color: '#ff6b6b', marginBottom: '0.5rem' }}>
-                        🎵 Actually Played ({pendingVerification.playedSongs?.length || 0}):
-                      </h5>
-                      <div style={{ maxHeight: '120px', overflowY: 'auto', fontSize: '0.8rem' }}>
-                        {pendingVerification.playedSongs?.map((song: any, index: number) => {
-                          const wasMarked = pendingVerification.markedSquares?.some((marked: any) => 
-                            marked.songId === song.id
-                          );
-                          return (
-                            <div 
-                              key={index} 
-                              style={{ 
-                                padding: '2px 0',
-                                color: wasMarked ? '#00ff88' : '#ffffff',
-                                opacity: wasMarked ? 1 : 0.6,
-                                fontWeight: wasMarked ? 'bold' : 'normal'
-                              }}
-                            >
-                              {wasMarked ? '✓' : '○'} {song.name} — {song.artist}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Enhanced Decision Summary */}
-                  <div style={{ 
-                    marginTop: '0.75rem', 
-                    padding: '1rem',
-                    background: 'rgba(255,255,255,0.05)',
-                    borderRadius: '8px',
-                    textAlign: 'center',
-                    fontSize: '0.9rem'
+              ) : (
+                logs.slice().reverse().map((log, index) => (
+                  <div key={index} style={{ 
+                    padding: '4px 0', 
+                    borderBottom: index < logs.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                    fontSize: '0.85rem'
                   }}>
-                    {(() => {
-                      const markedCount = pendingVerification.markedSquares?.length || 0;
-                      const playedCount = pendingVerification.playedSongs?.length || 0;
-                      const validMarked = pendingVerification.markedSquares?.filter((marked: any) =>
-                        pendingVerification.playedSongs?.some((played: any) => played.id === marked.songId)
-                      )?.length || 0;
-                      const invalidMarked = markedCount - validMarked;
-                      const playedButNotMarked = pendingVerification.playedSongs?.filter((played: any) =>
-                        !pendingVerification.markedSquares?.some((marked: any) => marked.songId === played.id)
-                      )?.length || 0;
-                      
-                      if (invalidMarked > 0) {
-                        return (
-                          <div>
-                            <div style={{ color: '#ff6b6b', fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
-                              ❌ INVALID BINGO
-                            </div>
-                            <div style={{ color: '#ff6b6b' }}>
-                              {invalidMarked} marked song{invalidMarked > 1 ? 's' : ''} NOT yet played
-                            </div>
-                            <div style={{ color: '#ccc', fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                              Recommend: REJECT
-                            </div>
-                          </div>
-                        );
-                      } else if (validMarked === markedCount && markedCount > 0) {
-                        return (
-                          <div>
-                            <div style={{ color: '#00ff88', fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
-                              ✅ VALID BINGO
-                            </div>
-                            <div style={{ color: '#00ff88' }}>
-                              All {markedCount} marked songs have been played
-                            </div>
-                            {playedButNotMarked > 0 && (
-                              <div style={{ color: '#ffa500', fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                                ({playedButNotMarked} played songs were missed by player)
-                              </div>
-                            )}
-                            <div style={{ color: '#ccc', fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                              Recommend: APPROVE
-                            </div>
-                          </div>
-                        );
-                      } else {
-                        return (
-                          <div>
-                            <div style={{ color: '#ffc107', fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
-                              ⚠️ PARTIAL MATCH
-                            </div>
-                            <div style={{ color: '#ffc107' }}>
-                              {validMarked}/{markedCount} marked songs played
-                            </div>
-                            <div style={{ color: '#ccc', fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                              Review carefully
-                            </div>
-                          </div>
-                        );
-                      }
-                    })()}
-                  </div>
-                </div>
-
-                <div style={{ 
-                  display: 'flex', 
-                  gap: '1rem', 
-                  justifyContent: 'center',
-                  flexWrap: 'wrap'
-                }}>
-                  <button
-                    onClick={() => handleVerifyBingo(true)}
-                    disabled={isProcessingVerification}
-                    style={{
-                      background: isProcessingVerification 
-                        ? 'linear-gradient(135deg, #666, #444)' 
-                        : 'linear-gradient(135deg, #00ff88, #00cc6d)',
-                      color: isProcessingVerification ? '#ccc' : '#001a0d',
-                      border: 'none',
-                      borderRadius: '12px',
-                      padding: '12px 24px',
-                      fontSize: '1.1rem',
-                      fontWeight: 700,
-                      cursor: isProcessingVerification ? 'not-allowed' : 'pointer',
-                      boxShadow: isProcessingVerification 
-                        ? '0 4px 15px rgba(100,100,100,0.2)' 
-                        : '0 4px 15px rgba(0,255,136,0.4)',
-                      opacity: isProcessingVerification ? 0.6 : 1
-                    }}
-                  >
-                    {isProcessingVerification ? '⏳ Processing...' : '✅ APPROVE BINGO'}
-                  </button>
-                  
-                  <button
-                    onClick={() => handleVerifyBingo(false, 'Pattern incomplete')}
-                    disabled={isProcessingVerification}
-                    style={{
-                      background: isProcessingVerification 
-                        ? 'linear-gradient(135deg, #666, #444)' 
-                        : 'linear-gradient(135deg, #ff4444, #cc3333)',
-                      color: isProcessingVerification ? '#ccc' : 'white',
-                      border: 'none',
-                      borderRadius: '12px',
-                      padding: '12px 24px',
-                      fontSize: '1.1rem',
-                      fontWeight: 700,
-                      cursor: isProcessingVerification ? 'not-allowed' : 'pointer',
-                      boxShadow: isProcessingVerification 
-                        ? '0 4px 15px rgba(100,100,100,0.2)' 
-                        : '0 4px 15px rgba(255,68,68,0.4)',
-                      opacity: isProcessingVerification ? 0.6 : 1
-                    }}
-                  >
-                    {isProcessingVerification ? '⏳ Processing...' : '❌ REJECT BINGO'}
-                  </button>
-                </div>
-
-                <div style={{ 
-                  marginTop: '1rem', 
-                  textAlign: 'center', 
-                  fontSize: '0.9rem', 
-                  color: '#aaa' 
-                }}>
-                  Game is paused until you make a decision<br/>
-                  <strong style={{ color: '#ffc107' }}>Approving will end the game and declare the winner!</strong>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-
-          {/* NEW: Round Complete Modal */}
-          {roundComplete && (
-            <motion.div
-              className="verification-overlay"
-              style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                backgroundColor: 'rgba(0,0,0,0.8)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 2000
-              }}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-            >
-              <motion.div
-                style={{
-                  background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
-                  padding: '2rem',
-                  borderRadius: '20px',
-                  minWidth: '500px',
-                  maxWidth: '600px',
-                  border: '2px solid #00ff88',
-                  boxShadow: '0 20px 40px rgba(0,255,136,0.2)'
-                }}
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-              >
-                <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-                  <h2 style={{ 
-                    color: '#00ff88', 
-                    margin: '0 0 1rem 0',
-                    fontSize: '1.8rem',
-                    fontWeight: 700
-                  }}>
-                    🏆 Round {roundComplete.roundNumber} Complete!
-                  </h2>
-                  <p style={{ 
-                    color: '#fff', 
-                    fontSize: '1.2rem',
-                    margin: '0 0 1rem 0'
-                  }}>
-                    <strong>{roundComplete.playerName}</strong> wins this round!
-                  </p>
-                  
-                  {/* Round Winners History */}
-                  {roundWinners.length > 0 && (
-                    <div style={{
-                      background: 'rgba(0,255,136,0.1)',
-                      padding: '1rem',
-                      borderRadius: '10px',
-                      marginBottom: '1.5rem',
-                      border: '1px solid rgba(0,255,136,0.3)'
+                    <span style={{ 
+                      color: log.level === 'error' ? '#ff6b6b' : log.level === 'warn' ? '#ffc107' : '#b3b3b3',
+                      marginRight: 8
                     }}>
-                      <h4 style={{ color: '#00ff88', margin: '0 0 0.5rem 0' }}>Previous Winners:</h4>
-                      {roundWinners.map((winner, index) => (
-                        <div key={index} style={{ color: '#ccc', fontSize: '0.9rem' }}>
-                          Round {winner.roundNumber}: {winner.playerName}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ 
-                  display: 'flex', 
-                  gap: '1.5rem', 
-                  justifyContent: 'center',
-                  flexWrap: 'wrap',
-                  marginBottom: '1.5rem'
-                }}>
-                  <button
-                    onClick={() => handleStartNextRound()}
-                    style={{
-                      background: 'linear-gradient(135deg, #00ff88, #00cc6d)',
-                      color: '#001a0d',
-                      border: 'none',
-                      borderRadius: '12px',
-                      padding: '16px 32px',
-                      fontSize: '1.2rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 15px rgba(0,255,136,0.4)',
-                      minWidth: '200px'
-                    }}
-                  >
-                    🔄 START NEXT ROUND
-                  </button>
-                  
-                  <button
-                    onClick={handleEndGameSession}
-                    style={{
-                      background: 'linear-gradient(135deg, #ff4444, #cc3333)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '12px',
-                      padding: '16px 32px',
-                      fontSize: '1.2rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 15px rgba(255,68,68,0.4)',
-                      minWidth: '200px'
-                    }}
-                  >
-                    🏁 END GAME SESSION
-                  </button>
-                </div>
-
-                <div style={{ 
-                  marginTop: '1rem', 
-                  textAlign: 'center', 
-                  fontSize: '0.9rem', 
-                  color: '#aaa' 
-                }}>
-                  <strong style={{ color: '#00ff88' }}>🔄 Next Round:</strong> Complete fresh setup - select new playlists, pattern, settings<br/>
-                  <strong style={{ color: '#ff4444' }}>🏁 End Session:</strong> Finish the entire game completely<br/>
-                  <em style={{ color: '#ffc107' }}>Players and Spotify stay connected for next round</em>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-
-          {/* Game Paused Indicator */}
-          {gamePaused && !pendingVerification && (
-            <motion.div
-              className="pause-indicator"
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              style={{
-                background: 'linear-gradient(135deg, #ffaa00, #ff8800)',
-                color: 'white',
-                padding: '1rem',
-                borderRadius: '12px',
-                textAlign: 'center',
-                marginBottom: '1rem',
-                fontWeight: 700
-              }}
-            >
-              ⏸️ Game Paused - Bingo Verification in Progress
-            </motion.div>
-          )}
-
-          {/* Winners */}
-          {winners.length > 0 && (
-            <motion.div 
-              className="winners-section"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5 }}
-            >
-              <h2>🏆 Winners</h2>
-              <div className="winners-list">
-                {winners.map((winner, index) => (
-                  <div key={winner.id} className="winner-item">
-                    <Trophy className="trophy-icon" />
-                    <span>{winner.name}</span>
+                      [{new Date(log.ts).toLocaleTimeString()}]
+                    </span>
+                    <span style={{ color: '#fff' }}>{log.message}</span>
                   </div>
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </div>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
       </motion.div>
-
-      {/* AI Song Suggestions Modal */}
-      {suggestionsModal.isOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            backgroundColor: '#1a1a1a',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-            borderRadius: '12px',
-            padding: '24px',
-            maxWidth: '800px',
-            maxHeight: '80vh',
-            overflow: 'auto',
-            width: '90%'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h2 style={{ color: '#fff', margin: 0 }}>
-                🤖 AI Song Suggestions for "{suggestionsModal.playlist?.name}"
-              </h2>
-              <button
-                onClick={() => setSuggestionsModal(prev => ({ ...prev, isOpen: false }))}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#fff',
-                  fontSize: '24px',
-                  cursor: 'pointer',
-                  padding: '4px'
-                }}
-              >
-                ×
-              </button>
-            </div>
-
-            {suggestionsModal.loading ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#fff' }}>
-                <div style={{ marginBottom: '16px' }}>🔍 Analyzing playlist and generating suggestions...</div>
-                <div style={{ fontSize: '14px', color: '#b3b3b3' }}>
-                  This may take a moment as we search Spotify for the best matches
-                </div>
-              </div>
-            ) : (
-              <>
-                {suggestionsModal.analysis && (
-                  <div style={{
-                    backgroundColor: 'rgba(255, 193, 7, 0.1)',
-                    border: '1px solid rgba(255, 193, 7, 0.3)',
-                    borderRadius: '8px',
-                    padding: '16px',
-                    marginBottom: '20px'
-                  }}>
-                    <h3 style={{ color: '#ffc107', margin: '0 0 8px 0', fontSize: '16px' }}>
-                      Analysis Results
-                    </h3>
-                    <div style={{ color: '#fff', fontSize: '14px' }}>
-                      <div><strong>Theme:</strong> {suggestionsModal.analysis.playlistTheme}</div>
-                      <div><strong>Confidence:</strong> {Math.round(suggestionsModal.analysis.confidence * 100)}%</div>
-                      <div><strong>Strategies:</strong> {suggestionsModal.analysis.searchStrategies?.join(', ')}</div>
-                    </div>
-                  </div>
-                )}
-
-                {suggestionsModal.suggestions.length > 0 ? (
-                  <div>
-                    <h3 style={{ color: '#fff', marginBottom: '16px' }}>
-                      Suggested Songs ({suggestionsModal.suggestions.length} found)
-                    </h3>
-                    <div style={{ maxHeight: '400px', overflow: 'auto' }}>
-                      {suggestionsModal.suggestions.map((song: any, index: number) => (
-                        <div
-                          key={song.id}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '12px',
-                            padding: '12px',
-                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                            borderRadius: '8px',
-                            marginBottom: '8px'
-                          }}
-                        >
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{
-                              color: '#fff',
-                              fontWeight: 600,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              {song.name}
-                            </div>
-                            <div style={{
-                              color: '#b3b3b3',
-                              fontSize: '12px',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              {song.artist} • {song.album}
-                            </div>
-                            <div style={{
-                              color: '#ffc107',
-                              fontSize: '11px',
-                              marginTop: '4px'
-                            }}>
-                              {song.strategy} • Score: {Math.round((song.score || 0) * 100)}%
-                            </div>
-                          </div>
-                          <div style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}>
-                            <div style={{
-                              color: '#00ff88',
-                              fontSize: '12px',
-                              fontWeight: 600
-                            }}>
-                              {song.popularity || 0}% popular
-                            </div>
-                            {song.external_urls?.spotify && (
-                              <a
-                                href={song.external_urls.spotify}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  color: '#1db954',
-                                  fontSize: '11px',
-                                  textDecoration: 'none',
-                                  padding: '2px 6px',
-                                  backgroundColor: 'rgba(29, 185, 84, 0.2)',
-                                  borderRadius: '4px'
-                                }}
-                              >
-                                🎵 Listen
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{
-                      marginTop: '16px',
-                      padding: '12px',
-                      backgroundColor: 'rgba(0, 255, 136, 0.1)',
-                      border: '1px solid rgba(0, 255, 136, 0.3)',
-                      borderRadius: '8px',
-                      color: '#00ff88',
-                      fontSize: '14px'
-                    }}>
-                      💡 <strong>Tip:</strong> These suggestions are ranked by relevance to your playlist theme and existing songs. 
-                      Click the Spotify links to preview songs before adding them to your playlist.
-                    </div>
-                  </div>
-                ) : suggestionsModal.error ? (
-                  <div style={{
-                    textAlign: 'center',
-                    padding: '40px',
-                    backgroundColor: 'rgba(255, 107, 107, 0.1)',
-                    border: '1px solid rgba(255, 107, 107, 0.3)',
-                    borderRadius: '8px',
-                    color: '#ff6b6b'
-                  }}>
-                    <h3 style={{ color: '#ff6b6b', margin: '0 0 16px 0' }}>
-                      {suggestionsModal.error.message}
-                    </h3>
-                    <p style={{ color: '#fff', margin: '0 0 20px 0', lineHeight: 1.5 }}>
-                      {suggestionsModal.error.details}
-                    </p>
-                    <button
-                      onClick={() => setSuggestionsModal(prev => ({ ...prev, error: null }))}
-                      style={{
-                        backgroundColor: 'rgba(255, 107, 107, 0.2)',
-                        border: '1px solid rgba(255, 107, 107, 0.5)',
-                        color: '#ff6b6b',
-                        padding: '8px 16px',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '14px'
-                      }}
-                    >
-                      Try Again
-                    </button>
-                  </div>
-                ) : (
-                  <div style={{ textAlign: 'center', padding: '40px', color: '#b3b3b3' }}>
-                    No suggestions found. Try a different playlist name or add some songs first.
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
-      
     </div>
   );
 };
