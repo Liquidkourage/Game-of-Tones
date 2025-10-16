@@ -2926,8 +2926,8 @@ const HostView: React.FC = () => {
 
               {/* Playback Controls */}
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-                <button className="btn-secondary" onClick={pauseGame}>
-                  {gamePaused ? 'â–¶ï¸ Resume' : 'â¸ï¸ Pause'}
+                <button className="btn-secondary" onClick={pauseSong}>
+                  {!isPlaying ? 'â–¶ï¸ Resume' : 'â¸ï¸ Pause'}
                 </button>
                 <button className="btn-secondary" onClick={skipSong}>â­ï¸ Skip</button>
                 <button className="btn-secondary" onClick={endGame}>ðŸ›‘ End Game</button>
