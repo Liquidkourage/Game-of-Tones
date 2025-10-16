@@ -178,25 +178,44 @@ const TOKEN_FILE = path.join(__dirname, 'spotify_tokens.json');
 // Device storage file path
 const DEVICE_FILE = path.join(__dirname, 'spotify_device.json');
 
-// Load tokens from file if they exist
+// Load tokens from environment variables or file
 function loadTokens() {
   try {
+    // First try environment variables (for Railway deployment persistence)
+    if (process.env.SPOTIFY_ACCESS_TOKEN && process.env.SPOTIFY_REFRESH_TOKEN) {
+      console.log('🌍 Loaded Spotify tokens from environment variables');
+      return {
+        accessToken: process.env.SPOTIFY_ACCESS_TOKEN,
+        refreshToken: process.env.SPOTIFY_REFRESH_TOKEN,
+        expiresIn: 3600 // Default 1 hour, will be refreshed automatically
+      };
+    }
+    
+    // Fallback to file (for local development)
     if (fs.existsSync(TOKEN_FILE)) {
       const tokenData = JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));
       console.log('📁 Loaded Spotify tokens from file');
       return tokenData;
     }
   } catch (error) {
-    console.error('❌ Error loading tokens from file:', error);
+    console.error('❌ Error loading tokens:', error);
   }
   return null;
 }
 
-// Save tokens to file
+// Save tokens to file and log environment variable instructions
 function saveTokens(tokens) {
   try {
+    // Save to file (for local development)
     fs.writeFileSync(TOKEN_FILE, JSON.stringify(tokens, null, 2), 'utf8');
     logger.debug('💾 Saved Spotify tokens to file', 'save-tokens');
+    
+    // Log environment variable instructions for Railway deployment
+    console.log('🚀 To persist Spotify tokens across Railway deployments, set these environment variables:');
+    console.log(`   SPOTIFY_ACCESS_TOKEN=${tokens.accessToken}`);
+    console.log(`   SPOTIFY_REFRESH_TOKEN=${tokens.refreshToken}`);
+    console.log('   Add these in your Railway project settings under "Variables"');
+    
   } catch (error) {
     console.error('❌ Error saving tokens to file:', error);
   }
@@ -3684,6 +3703,31 @@ app.get('/api/spotify/status', async (req, res) => {
       hasTokens: false
     });
   }
+});
+
+// Get current tokens for environment variable setup
+app.get('/api/spotify/tokens', (req, res) => {
+  if (!spotifyTokens || !spotifyTokens.accessToken || !spotifyTokens.refreshToken) {
+    return res.status(404).json({ 
+      error: 'No Spotify tokens available. Connect Spotify first.' 
+    });
+  }
+  
+  res.json({
+    success: true,
+    message: 'Copy these environment variables to Railway project settings:',
+    envVars: {
+      SPOTIFY_ACCESS_TOKEN: spotifyTokens.accessToken,
+      SPOTIFY_REFRESH_TOKEN: spotifyTokens.refreshToken
+    },
+    instructions: [
+      '1. Go to your Railway project dashboard',
+      '2. Click on "Variables" tab',
+      '3. Add these two environment variables',
+      '4. Redeploy your app',
+      '5. Spotify will auto-connect on future deployments!'
+    ]
+  });
 });
 
 // Force clear Spotify tokens (for testing)
