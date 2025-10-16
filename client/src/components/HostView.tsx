@@ -104,6 +104,7 @@ const HostView: React.FC = () => {
   const [showPlayerCards, setShowPlayerCards] = useState<boolean>(false);
   const [playerCards, setPlayerCards] = useState<Map<string, any>>(new Map());
   const [showRoundManager, setShowRoundManager] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<'setup' | 'play' | 'manage'>('setup');
   
   // Pause position tracking
   const [pausePosition, setPausePosition] = useState<number>(0);
@@ -287,6 +288,19 @@ const HostView: React.FC = () => {
       }
     }
   }, [eventRounds, playlists]); // Re-run when rounds or playlists change
+
+  // Auto-switch tabs based on game state
+  useEffect(() => {
+    if (gameState === 'playing') {
+      setActiveTab('play');
+    } else if (gameState === 'waiting' && mixFinalized) {
+      setActiveTab('play');
+    } else if (eventRounds.some(r => r.status === 'completed' || r.status === 'active')) {
+      setActiveTab('manage');
+    } else {
+      setActiveTab('setup');
+    }
+  }, [gameState, mixFinalized, eventRounds]);
 
   const refreshRooms = useCallback(async () => {
     try {
@@ -2190,7 +2204,50 @@ const HostView: React.FC = () => {
 
         {/* Main Content */}
         <div className="host-content">
-          {/* Spotify Connection */}
+          {/* Tab Navigation */}
+          <div className="tab-navigation" style={{
+            display: 'flex',
+            gap: 2,
+            marginBottom: 20,
+            borderBottom: '1px solid rgba(255,255,255,0.1)',
+            paddingBottom: 0
+          }}>
+            {[
+              { id: 'setup', label: '🎵 Setup', desc: 'Connect & Configure' },
+              { id: 'play', label: '🎮 Play', desc: 'Game Controls' },
+              { id: 'manage', label: '🎯 Manage', desc: 'Rounds & Players' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
+                style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  border: 'none',
+                  borderRadius: '8px 8px 0 0',
+                  background: activeTab === tab.id 
+                    ? 'linear-gradient(135deg, rgba(0,255,136,0.2), rgba(0,255,136,0.1))'
+                    : 'rgba(255,255,255,0.05)',
+                  color: activeTab === tab.id ? '#00ff88' : '#b3b3b3',
+                  borderBottom: activeTab === tab.id ? '2px solid #00ff88' : '2px solid transparent',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  fontSize: '0.9rem',
+                  fontWeight: activeTab === tab.id ? 600 : 400
+                }}
+              >
+                <div>{tab.label}</div>
+                <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>{tab.desc}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Tab Content */}
+          <div className="tab-content">
+            {activeTab === 'setup' && (
+              <div className="setup-tab">
+                {/* Spotify Connection */}
           <motion.div 
             className="spotify-section"
             initial={{ opacity: 0 }}
@@ -2262,158 +2319,595 @@ const HostView: React.FC = () => {
             />
           )}
 
-          {/* Round Manager Modal */}
-          {showRoundManager && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="bg-rgba(42, 42, 42, 0.95) backdrop-blur-[20px] border border-rgba(0, 255, 136, 0.3) rounded-2xl p-6 mb-6"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-semibold text-white flex items-center gap-2">
-                  🎯 Round Manager
-                </h3>
-                <button
-                  onClick={() => setShowRoundManager(false)}
-                  className="text-gray-400 hover:text-white transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
+                {/* Round Planner */}
+                {isSpotifyConnected && (
+                  <RoundPlanner
+                    rounds={eventRounds}
+                    onUpdateRounds={handleUpdateRounds}
+                    playlists={playlists}
+                    currentRound={currentRoundIndex}
+                    onStartRound={handleStartRound}
+                    gameState={gameState}
+                  />
+                )}
 
-              {/* Round Status Summary */}
-              <div className="mb-6 p-4 bg-rgba(255, 255, 255, 0.05) rounded-xl">
-                <h4 className="text-lg font-semibold text-white mb-3">Event Overview</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {(() => {
-                    const summary = getRoundStatusSummary();
-                    return (
-                      <>
-                        <div className="text-center">
-                          <div className="text-2xl font-bold text-green-400">{summary.completed}</div>
-                          <div className="text-sm text-gray-400">Completed</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-2xl font-bold text-blue-400">{summary.active}</div>
-                          <div className="text-sm text-gray-400">Active</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-2xl font-bold text-yellow-400">{summary.planned}</div>
-                          <div className="text-sm text-gray-400">Planned</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-2xl font-bold text-gray-400">{summary.unplanned}</div>
-                          <div className="text-sm text-gray-400">Unplanned</div>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              {/* Quick Actions */}
-              <div className="mb-6">
-                <h4 className="text-lg font-semibold text-white mb-3">Quick Actions</h4>
-                <div className="flex gap-3 flex-wrap">
-                  {gameState === 'playing' && (
-                    <>
-                      <button
-                        onClick={completeCurrentRound}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                {/* Playlists Section */}
+                {(showPlaylists || showAllControls) && isSpotifyConnected && (
+                  <motion.div 
+                    className="playlists-section"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.4 }}
+                  >
+                    <h2>📚 Available Playlists</h2>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+                      <input
+                        type="text"
+                        placeholder="Search playlists..."
+                        value={playlistQuery}
+                        onChange={(e) => setPlaylistQuery(e.target.value)}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          background: 'rgba(0,0,0,0.3)',
+                          color: '#fff',
+                          minWidth: '200px'
+                        }}
+                      />
+                      <button 
+                        className="btn-secondary"
+                        onClick={() => {
+                          setVisiblePlaylists(playlists.filter(p => !assignedPlaylistIds.has(p.id)).slice(0, 50));
+                          setPlaylistQuery('');
+                        }}
                       >
-                        ✅ Complete Current Round
+                        Show All
                       </button>
-                      <button
-                        onClick={resetCurrentRound}
-                        className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+                      <button 
+                        className="btn-secondary"
+                        onClick={() => {
+                          const gotPlaylists = playlists.filter(p => 
+                            p.name.toLowerCase().includes('got') && !assignedPlaylistIds.has(p.id)
+                          );
+                          setVisiblePlaylists(gotPlaylists.slice(0, 50));
+                          setPlaylistQuery('');
+                        }}
                       >
-                        🔄 Reset Current Round
+                        GOT Playlists
                       </button>
-                    </>
-                  )}
-                  {(() => {
-                    const nextRound = getNextPlannedRound();
-                    return nextRound >= 0 ? (
-                      <button
-                        onClick={() => jumpToRound(nextRound)}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                      >
-                        ⏭️ Start Next Planned Round
-                      </button>
-                    ) : null;
-                  })()}
-                </div>
-              </div>
-
-              {/* Round List */}
-              <div>
-                <h4 className="text-lg font-semibold text-white mb-3">All Rounds</h4>
-                <div className="space-y-3 max-h-64 overflow-y-auto">
-                  {eventRounds.map((round, index) => {
-                    const isCurrentRound = index === currentRoundIndex;
-                    const canStart = round.status !== 'completed' && (round.playlistIds || []).length > 0;
+                    </div>
                     
-                    return (
-                      <div
-                        key={round.id}
-                        className={`p-4 rounded-xl border-2 ${
-                          isCurrentRound
-                            ? 'border-green-400 bg-green-400/10'
-                            : round.status === 'completed'
-                            ? 'border-gray-600 bg-gray-600/10'
-                            : canStart
-                            ? 'border-blue-400 bg-blue-400/10'
-                            : 'border-yellow-600 bg-yellow-600/10'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-white">{round.name}</span>
-                              {isCurrentRound && (
-                                <span className="px-2 py-1 bg-green-400 text-black text-xs font-bold rounded-full">
-                                  CURRENT
-                                </span>
-                              )}
-                              {round.status === 'completed' && (
-                                <span className="px-2 py-1 bg-gray-600 text-white text-xs font-bold rounded-full">
-                                  DONE
-                                </span>
+                    <div style={{ 
+                      maxHeight: 400, 
+                      overflowY: 'auto', 
+                      border: '1px solid rgba(255,255,255,0.1)', 
+                      borderRadius: 8, 
+                      padding: 8 
+                    }}>
+                      {filteredPlaylists.length === 0 ? (
+                        <div style={{ padding: 20, textAlign: 'center', opacity: 0.7 }}>
+                          {playlistQuery ? 'No playlists match your search.' : 'No available playlists.'}
+                        </div>
+                      ) : (
+                        filteredPlaylists.map((p) => {
+                          const isSelected = selectedPlaylists.some(sp => sp.id === p.id);
+                          const isInsufficient = p.tracks < 25;
+                          
+                          return (
+                            <div 
+                              key={p.id} 
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData('text/plain', p.id);
+                                e.dataTransfer.effectAllowed = 'copy';
+                              }}
+                              style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: 10, 
+                                padding: '6px 8px', 
+                                borderBottom: '1px solid rgba(255,255,255,0.08)',
+                                backgroundColor: isInsufficient ? 'rgba(255, 193, 7, 0.1)' : 'transparent',
+                                border: isInsufficient ? '1px solid rgba(255, 193, 7, 0.3)' : 'none',
+                                borderRadius: isInsufficient ? '4px' : '0',
+                                margin: isInsufficient ? '2px 0' : '0',
+                                cursor: 'grab'
+                              }}
+                              onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
+                              onMouseUp={(e) => e.currentTarget.style.cursor = 'grab'}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedPlaylists([...selectedPlaylists, p]);
+                                  } else {
+                                    setSelectedPlaylists(selectedPlaylists.filter(sp => sp.id !== p.id));
+                                  }
+                                }}
+                              />
+                              <span style={{ 
+                                flex: 1, 
+                                fontSize: '0.9rem',
+                                color: isInsufficient ? '#ffc107' : '#fff'
+                              }}>
+                                {stripGoTPrefix ? p.name.replace(/^GoT\s*[-–:]*\s*/i, '') : p.name}
+                              </span>
+                              <span style={{ 
+                                fontSize: '0.8rem', 
+                                opacity: 0.7,
+                                color: isInsufficient ? '#ffc107' : '#b3b3b3'
+                              }}>
+                                {p.tracks} songs
+                              </span>
+                              {isInsufficient && (
+                                <button
+                                  onClick={() => handleSuggestSongs(p)}
+                                  className="btn-accent"
+                                  style={{ 
+                                    padding: '4px 8px', 
+                                    fontSize: '0.75rem',
+                                    background: 'linear-gradient(135deg, #ff6b35, #f7931e)',
+                                    border: '1px solid rgba(255, 107, 53, 0.5)'
+                                  }}
+                                  title="Get AI suggestions to reach 25+ songs"
+                                >
+                                  🤖 Suggest Songs
+                                </button>
                               )}
                             </div>
-                            <div className="text-sm text-gray-400 mt-1">
-                              {(round.playlistIds || []).length} playlist{(round.playlistIds || []).length !== 1 ? 's' : ''} • {round.songCount} songs
-                              {round.status === 'completed' && round.completedAt && (
-                                <span className="ml-2">
-                                  • Completed {new Date(round.completedAt).toLocaleTimeString()}
-                                </span>
-                              )}
-                            </div>
+                          );
+                        })
+                      )}
+                      
+                      {filteredPlaylists.length >= 50 && !playlistQuery && (
+                        <div style={{ padding: 10, textAlign: 'center' }}>
+                          <button 
+                            className="btn-secondary"
+                            onClick={loadMorePlaylists}
+                            disabled={isLoadingMorePlaylists}
+                          >
+                            {isLoadingMorePlaylists ? 'Loading...' : 'Load More Playlists'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'play' && (
+              <div className="play-tab">
+                {/* Game Controls */}
+                <motion.div 
+                  className="controls-section"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  <h2>🎮 Game Controls</h2>
+                  
+                  {/* Game Settings */}
+                  <div style={{ 
+                    background: 'rgba(255,255,255,0.05)', 
+                    padding: 16, 
+                    borderRadius: 8, 
+                    marginBottom: 16 
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ opacity: 0.85 }}>Snippet</span>
+                        <input
+                          type="range"
+                          min="5"
+                          max="60"
+                          value={snippetLength}
+                          onChange={(e) => setSnippetLength(Number(e.target.value))}
+                        />
+                        <span style={{ width: 32, textAlign: 'right' }}>{snippetLength}s</span>
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                          type="checkbox"
+                          checked={randomStarts}
+                          onChange={(e) => setRandomStarts(!!e.target.checked)}
+                        />
+                        <span>Random start</span>
+                      </label>
+                    </div>
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                          type="checkbox"
+                          checked={lockJoins}
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            setLockJoins(val);
+                            if (socket && roomId) socket.emit('set-lock-joins', { roomId, locked: val });
+                          }}
+                        />
+                        <span>Lock new joins</span>
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                          type="checkbox"
+                          checked={superStrict}
+                          onChange={(e) => {
+                            const val = !!e.target.checked;
+                            setSuperStrict(val);
+                            if (socket && roomId) socket.emit('set-super-strict', { roomId, enabled: val });
+                          }}
+                        />
+                        <span>Super-Strict Lock</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Main Game Controls */}
+                  <div className="control-buttons">
+                    {gameState === 'waiting' && !currentSong ? (
+                      <>
+                        {!mixFinalized && (
+                          <button 
+                            className="control-button finalize-mix"
+                            onClick={finalizeMix}
+                            disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
+                          >
+                            🎵 Finalize Mix
+                          </button>
+                        )}
+                        {mixFinalized && (
+                          <div className="mix-finalized-status">
+                            <p className="status-text">✅ Mix finalized - Cards generated for players</p>
                           </div>
-                          <div className="flex gap-2">
-                            {canStart && !isCurrentRound && (
-                              <button
-                                onClick={() => jumpToRound(index)}
-                                className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
-                              >
-                                Start
-                              </button>
-                            )}
-                          </div>
+                        )}
+                        <button
+                          onClick={startGame}
+                          disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            padding: '14px 22px',
+                            fontSize: '1.05rem',
+                            fontWeight: 900,
+                            letterSpacing: '0.02em',
+                            borderRadius: 12,
+                            border: (selectedPlaylists.length === 0 || isSpotifyConnecting) ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(0,255,136,0.6)',
+                            color: (selectedPlaylists.length === 0 || isSpotifyConnecting) ? '#c8c8c8' : '#0b0e12',
+                            background: (selectedPlaylists.length === 0 || isSpotifyConnecting)
+                              ? 'rgba(255,255,255,0.08)'
+                              : 'linear-gradient(180deg, #00ff88 0%, #00cc6d 100%)',
+                            boxShadow: (selectedPlaylists.length === 0 || isSpotifyConnecting)
+                              ? 'none'
+                              : '0 10px 30px rgba(0,255,136,0.25), inset 0 1px 0 rgba(255,255,255,0.4)',
+                            cursor: (selectedPlaylists.length === 0 || isSpotifyConnecting) ? 'not-allowed' : 'pointer',
+                            opacity: (isSpotifyConnecting) ? 0.8 : 1
+                          }}
+                        >
+                          <Play className="btn-icon" />
+                          {isSpotifyConnecting ? 'Connecting Spotify...' : 'Start Game'}
+                        </button>
+                      </>
+                    ) : (
+                      <div className="game-status">
+                        <p className="status-text">🎵 Game is running - Use the Now Playing controls below</p>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                          <button className="btn-secondary" onClick={endGame}>🛑 End Game</button>
+                          <button className="btn-secondary" onClick={confirmAndResetGame}>🔁 Reset</button>
+                          <button className="btn-secondary" onClick={confirmAndNewRound}>🆕 New Round</button>
+                          <button className="btn-accent" onClick={() => setShowRoundManager(!showRoundManager)}>
+                            🎯 Round Manager
+                          </button>
+                          <button 
+                            className="btn-danger" 
+                            onClick={handleRestartGame}
+                            style={{ background: '#ff6b6b', borderColor: '#ff4757' }}
+                            title="Complete restart: reset all progress, keep cards"
+                          >
+                            🔄 Restart
+                          </button>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                          <span style={{ opacity: 0.9 }}>Call Reveal:</span>
+                          <button className="btn-secondary" onClick={() => revealCall('artist')}>Artist</button>
+                          <button className="btn-secondary" onClick={() => revealCall('title')}>Title</button>
+                          <button className="btn-secondary" onClick={() => revealCall('full')}>Full</button>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                          <button className="btn-secondary" onClick={forceRefreshAll}>🧹 Force Refresh Clients</button>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
+                    )}
+                  </div>
+                </motion.div>
               </div>
-            </motion.div>
-          )}
+            )}
 
-          {/* Playlists - Virtualized + Paged */}
-          {(showPlaylists || showAllControls) && (
-            <div className="setting-item">
-              <label>Playlists:</label>
+            {activeTab === 'manage' && (
+              <div className="manage-tab">
+                {/* Round Manager */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                  className="bg-rgba(42, 42, 42, 0.95) backdrop-blur-[20px] border border-rgba(0, 255, 136, 0.3) rounded-2xl p-6 mb-6"
+                >
+                  <h2>🎯 Round & Event Management</h2>
+                  
+                  {/* Round Status Summary */}
+                  <div className="mb-6 p-4 bg-rgba(255, 255, 255, 0.05) rounded-xl">
+                    <h4 className="text-lg font-semibold text-white mb-3">Event Overview</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {(() => {
+                        const summary = getRoundStatusSummary();
+                        return (
+                          <>
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-green-400">{summary.completed}</div>
+                              <div className="text-sm text-gray-400">Completed</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-blue-400">{summary.active}</div>
+                              <div className="text-sm text-gray-400">Active</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-yellow-400">{summary.planned}</div>
+                              <div className="text-sm text-gray-400">Planned</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-gray-400">{summary.unplanned}</div>
+                              <div className="text-sm text-gray-400">Unplanned</div>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Quick Actions */}
+                  <div className="mb-6">
+                    <h4 className="text-lg font-semibold text-white mb-3">Quick Actions</h4>
+                    <div className="flex gap-3 flex-wrap">
+                      {gameState === 'playing' && (
+                        <>
+                          <button
+                            onClick={completeCurrentRound}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                          >
+                            ✅ Complete Current Round
+                          </button>
+                          <button
+                            onClick={resetCurrentRound}
+                            className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+                          >
+                            🔄 Reset Current Round
+                          </button>
+                        </>
+                      )}
+                      {(() => {
+                        const nextRound = getNextPlannedRound();
+                        return nextRound >= 0 ? (
+                          <button
+                            onClick={() => jumpToRound(nextRound)}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                          >
+                            ⏭️ Start Next Planned Round
+                          </button>
+                        ) : null;
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Round List */}
+                  <div>
+                    <h4 className="text-lg font-semibold text-white mb-3">All Rounds</h4>
+                    <div className="space-y-3 max-h-64 overflow-y-auto">
+                      {eventRounds.map((round, index) => {
+                        const isCurrentRound = index === currentRoundIndex;
+                        const canStart = round.status !== 'completed' && (round.playlistIds || []).length > 0;
+                        
+                        return (
+                          <div
+                            key={round.id}
+                            className={`p-4 rounded-xl border-2 ${
+                              isCurrentRound
+                                ? 'border-green-400 bg-green-400/10'
+                                : round.status === 'completed'
+                                ? 'border-gray-600 bg-gray-600/10'
+                                : canStart
+                                ? 'border-blue-400 bg-blue-400/10'
+                                : 'border-yellow-600 bg-yellow-600/10'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-white">{round.name}</span>
+                                  {isCurrentRound && (
+                                    <span className="px-2 py-1 bg-green-400 text-black text-xs font-bold rounded-full">
+                                      CURRENT
+                                    </span>
+                                  )}
+                                  {round.status === 'completed' && (
+                                    <span className="px-2 py-1 bg-gray-600 text-white text-xs font-bold rounded-full">
+                                      DONE
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-sm text-gray-400 mt-1">
+                                  {(round.playlistIds || []).length} playlist{(round.playlistIds || []).length !== 1 ? 's' : ''} • {round.songCount} songs
+                                  {round.status === 'completed' && round.completedAt && (
+                                    <span className="ml-2">
+                                      • Completed {new Date(round.completedAt).toLocaleTimeString()}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                {canStart && !isCurrentRound && (
+                                  <button
+                                    onClick={() => jumpToRound(index)}
+                                    className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+                                  >
+                                    Start
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* Player Cards */}
+                {showPlayerCards && playerCards.size > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.4 }}
+                    className="player-cards-section"
+                  >
+                    <h2>👥 Player Cards & Progress</h2>
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', 
+                      gap: 16 
+                    }}>
+                      {Array.from(playerCards.entries()).map(([playerId, playerData]) => (
+                        <div key={playerId} style={{ 
+                          background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
+                          border: '1px solid rgba(0,255,136,0.3)', 
+                          borderRadius: '12px', 
+                          padding: '16px',
+                          boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
+                        }}>
+                          <div style={{ 
+                            fontWeight: 'bold', 
+                            marginBottom: '8px', 
+                            color: '#00ff88',
+                            fontSize: '1rem',
+                            textAlign: 'center'
+                          }}>
+                            {playerData.playerName}
+                          </div>
+                          
+                          {/* Win Progress Indicator */}
+                          {(() => {
+                            const progress = calculateWinProgress(playerData.card, pattern);
+                            const progressColor = progress.needed === 0 ? '#00ff88' : 
+                                                progress.needed <= 2 ? '#ffaa00' : 
+                                                progress.progress >= 50 ? '#66ccff' : '#888';
+                            const progressText = progress.needed === 0 ? '🎉 BINGO!' : 
+                                               progress.needed === 1 ? '1 more needed!' :
+                                               `${progress.needed} more needed`;
+                            
+                            return (
+                              <div style={{ 
+                                marginBottom: '12px', 
+                                textAlign: 'center',
+                                fontSize: '0.85rem'
+                              }}>
+                                <div style={{ 
+                                  color: progressColor,
+                                  fontWeight: 600,
+                                  marginBottom: '4px'
+                                }}>
+                                  {progressText}
+                                </div>
+                                <div style={{ 
+                                  background: 'rgba(255,255,255,0.1)',
+                                  borderRadius: '8px',
+                                  height: '6px',
+                                  overflow: 'hidden',
+                                  margin: '0 auto',
+                                  maxWidth: '200px'
+                                }}>
+                                  <div style={{
+                                    background: progressColor,
+                                    height: '100%',
+                                    width: `${progress.progress}%`,
+                                    transition: 'width 0.3s ease'
+                                  }} />
+                                </div>
+                                <div style={{ 
+                                  fontSize: '0.75rem',
+                                  color: '#b3b3b3',
+                                  marginTop: '2px'
+                                }}>
+                                  {progress.marked}/{pattern === 'full_card' ? 25 : pattern === 'four_corners' ? 4 : pattern === 'x' ? 9 : 5} ({progress.progress}%)
+                                </div>
+                              </div>
+                            );
+                          })()}
+                          <div style={{ 
+                            display: 'grid', 
+                            gridTemplateColumns: 'repeat(5, 1fr)', 
+                            gap: '4px', 
+                            maxWidth: '300px',
+                            aspectRatio: '1/1',
+                            margin: '0 auto'
+                          }}>
+                            {playerData.card.squares.map((square: any) => (
+                              <div 
+                                key={square.position}
+                                style={{ 
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: square.marked 
+                                    ? 'linear-gradient(135deg, #00ff88, #00cc6d)' 
+                                    : 'rgba(255,255,255,0.1)',
+                                  border: square.marked 
+                                    ? '2px solid #00ff88' 
+                                    : '1px solid rgba(255,255,255,0.3)',
+                                  borderRadius: '8px',
+                                  padding: '4px',
+                                  fontSize: '0.7rem',
+                                  fontWeight: square.marked ? 700 : 400,
+                                  color: square.marked ? '#001a0d' : '#ffffff',
+                                  textAlign: 'center',
+                                  lineHeight: 1.1,
+                                  overflow: 'hidden'
+                                }}
+                                title={`${square.songName} — ${square.artistName}`}
+                              >
+                                {square.marked && <span style={{ marginRight: 2 }}>✓</span>}
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {square.songName.length > 12 ? square.songName.substring(0, 12) + '...' : square.songName}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+            )}
+          </div>
+
+
+          {/* Legacy sections removed - now in tabbed interface */}
+        </div>
+
+        {/* Now Playing Interface - Always visible when active */}
+        {currentSong && (
+          <motion.div 
+            className="now-playing-section"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <h2>🎵 Now Playing</h2>
+            <div className="now-playing-content">
               <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
                 <input
                   type="text"
