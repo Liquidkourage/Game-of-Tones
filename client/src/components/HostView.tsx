@@ -72,7 +72,6 @@ const HostView: React.FC = () => {
   const [socket, setSocket] = useState<any>(null);
   const [gameState, setGameState] = useState<'waiting' | 'playing' | 'ended'>('waiting');
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
-  const [players] = useState<Player[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [selectedPlaylists, setSelectedPlaylists] = useState<Playlist[]>([]);
   const [snippetLength, setSnippetLength] = useState(() => {
@@ -90,8 +89,6 @@ const HostView: React.FC = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
-  const [shuffleEnabled, setShuffleEnabled] = useState<boolean>(false);
-  const [repeatState, setRepeatState] = useState<'off' | 'track' | 'context'>('off');
   const [randomStarts, setRandomStarts] = useState<boolean>(() => {
     const saved = localStorage.getItem('game-random-starts');
     return saved ? saved === 'true' : false;
@@ -172,11 +169,9 @@ const HostView: React.FC = () => {
   const [previousVolume, setPreviousVolume] = useState(100);
   const [songList, setSongList] = useState<Song[]>([]);
   const [finalizedOrder, setFinalizedOrder] = useState<Song[] | null>(null);
-  // Playlists paging/virtualization state
-  const [playlistPage, setPlaylistPage] = useState(1); // pages of 50
+  // Playlists state
   const [visiblePlaylists, setVisiblePlaylists] = useState<Playlist[]>([]);
   const [playlistQuery, setPlaylistQuery] = useState('');
-  const [isLoadingMorePlaylists, setIsLoadingMorePlaylists] = useState(false);
   const [suggestionsModal, setSuggestionsModal] = useState<{
     isOpen: boolean;
     playlist: Playlist | null;
@@ -1378,48 +1373,9 @@ const HostView: React.FC = () => {
     }
   };
 
-  const forceSyncGameState = () => {
-    if (!socket) return;
-    
-    addLog('Syncing game state...', 'info');
-    socket.emit('sync-state', { roomId });
-  };
 
-  const forceSetPlaying = () => {
-    setGameState('playing');
-    addLog('Manually set game state to playing', 'info');
-  };
 
-  const emergencyStopSpotify = async () => {
-    if (!socket) return;
-    
-    try {
-      socket.emit('emergency-stop', { roomId });
-      setIsPlaying(false);
-      addLog('Emergency stop requested', 'warn');
-    } catch (error) {
-      console.error('Emergency stop failed:', error);
-    }
-  };
 
-  const emergencyResetAll = () => {
-    const confirmed = window.confirm(
-      'EMERGENCY RESET: This will:\n' +
-      '• Stop all playback\n' +
-      '• Reset all game state\n' +
-      '• Force sync all clients\n' +
-      'Continue?'
-    );
-    
-    if (confirmed) {
-      setGameState('waiting');
-      setCurrentSong(null);
-      setIsPlaying(false);
-      emergencyStopSpotify();
-      forceRefreshAll();
-      addLog('Emergency reset executed', 'warn');
-    }
-  };
 
   const selectPlaylist = (playlist: Playlist) => {
     setSelectedPlaylists(prev => {
