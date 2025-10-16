@@ -190,21 +190,10 @@ const HostView: React.FC = () => {
     }
   }, [socket, roomId, isJoiningRoom, licenseKey]);
 
-  // Handle license key revocation
-  const handleRevokeLicense = useCallback(() => {
-    if (window.confirm('Are you sure you want to remove your license key? You will need to re-enter it to continue hosting games.')) {
-      setLicenseKey('');
-      setIsLicenseValidated(false);
-      setLicenseError(null);
-      localStorage.removeItem('tempo-license-key');
-      setShowLicenseModal(true);
-      
-      // Disconnect from current room
-      if (socket) {
-        socket.disconnect();
-      }
-    }
-  }, [socket]);
+  // Handle license key update/change
+  const handleUpdateLicense = useCallback(() => {
+    setShowLicenseModal(true);
+  }, []);
 
   // Advanced playback states
   const [playbackState, setPlaybackState] = useState<PlaybackState>({
@@ -2324,7 +2313,7 @@ const HostView: React.FC = () => {
                       </span>
                     </div>
                     <button
-                      onClick={() => setShowLicenseModal(true)}
+                      onClick={handleUpdateLicense}
                       style={{
                         background: 'rgba(255, 255, 255, 0.1)',
                         border: '1px solid rgba(255, 255, 255, 0.2)',
@@ -2342,7 +2331,7 @@ const HostView: React.FC = () => {
                         e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
                       }}
                     >
-                      Manage
+                      Update
                     </button>
                   </motion.div>
                 )}
@@ -3332,7 +3321,9 @@ const HostView: React.FC = () => {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h2 style={{ margin: 0, color: '#ffffff', fontSize: '1.5rem' }}>🔑 License Key</h2>
+              <h2 style={{ margin: 0, color: '#ffffff', fontSize: '1.5rem' }}>
+                {isLicenseValidated ? '🔑 Update License Key' : '🔑 Enter License Key'}
+              </h2>
               {isLicenseValidated && (
                 <button
                   onClick={() => setShowLicenseModal(false)}
@@ -3449,43 +3440,27 @@ const HostView: React.FC = () => {
               </div>
             )}
 
-            {isLicenseValidated && (
-              <div style={{ marginBottom: 20 }}>
-                <button
-                  onClick={handleRevokeLicense}
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    borderRadius: 8,
-                    border: '2px solid rgba(255, 59, 48, 0.3)',
-                    background: 'rgba(255, 59, 48, 0.1)',
-                    color: '#ff3b30',
-                    fontSize: '0.9rem',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    fontWeight: 500
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 59, 48, 0.2)';
-                    e.currentTarget.style.borderColor = 'rgba(255, 59, 48, 0.5)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 59, 48, 0.1)';
-                    e.currentTarget.style.borderColor = 'rgba(255, 59, 48, 0.3)';
-                  }}
-                >
-                  🗑️ Revoke License Key
-                </button>
-              </div>
-            )}
 
             <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.7)', lineHeight: 1.4 }}>
-              <p style={{ margin: '0 0 8px 0' }}>
-                Your license key is required to host TEMPO games and connect to Spotify.
-              </p>
-              <p style={{ margin: 0 }}>
-                Contact your administrator if you need a license key.
-              </p>
+              {isLicenseValidated ? (
+                <div>
+                  <p style={{ margin: '0 0 8px 0' }}>
+                    You can update your license key here if you received a new one.
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    Your current license is working properly - no action needed.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <p style={{ margin: '0 0 8px 0' }}>
+                    Your license key is required to host TEMPO games and connect to Spotify.
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    Contact your administrator if you need a license key.
+                  </p>
+                </div>
+              )}
             </div>
           </motion.div>
         </div>
