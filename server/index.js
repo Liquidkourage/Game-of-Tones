@@ -2210,6 +2210,16 @@ io.on('connection', (socket) => {
       room.mixFinalized = false;
       room.finalizedPlaylists = null;
       
+      // Clear playlist-specific state that affects public display
+      room.fiveByFifteenColumns = null;
+      room.fiveByFifteenColumnsIds = null;
+      room.fiveByFifteenPlaylistNames = null;
+      room.fiveByFifteenMeta = null;
+      room.finalizedSongOrder = null;
+      room.oneBySeventyFivePool = null;
+      room.pattern = null;
+      room.customPattern = null;
+      
       // Clear all player bingo cards
       room.players.forEach((player, playerId) => {
         if (player.bingoCard) {
@@ -2685,16 +2695,6 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
   console.log(`✅ Generated ${cards.size} bingo cards for room ${roomId}`);
   console.log(`📋 Players with cards: ${Array.from(cards.keys()).map(id => room.players.get(id)?.name || id).join(', ')}`);
   console.log(`⚠️ Players without cards: ${Array.from(room.players.keys()).filter(id => !cards.has(id)).map(id => room.players.get(id)?.name || id).join(', ') || 'None'}`);
-  
-  // Always emit playlist names for public display (not just in 5x15 mode)
-  try {
-    const playlistNames = playlists.map(p => p.name || '');
-    console.log(`📋 Sending playlist names to display: ${playlistNames.join(', ')}`);
-    io.to(roomId).emit('mix-finalized', { playlists });
-  } catch (error) {
-    console.error('❌ Error sending playlist names:', error);
-  }
-  
   } catch (error) {
     console.error('❌ Error generating bingo cards:', error);
   }
