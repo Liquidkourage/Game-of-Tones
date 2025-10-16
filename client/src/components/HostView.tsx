@@ -223,7 +223,7 @@ const HostView: React.FC = () => {
       if (response.status === 401) {
         console.warn('Spotify not connected (401) while loading playlists');
         // Don't override isSpotifyConnected here - let status endpoint be authoritative
-        console.log('ðŸ” loadPlaylists got 401, but not overriding connection state');
+        console.log('” loadPlaylists got 401, but not overriding connection state');
         setSpotifyError('Spotify is not connected. Click Connect Spotify.');
         setPlaylists([]);
         return;
@@ -712,7 +712,7 @@ const HostView: React.FC = () => {
 
     newSocket.on('game-ended', () => {
       setGameState('ended');
-      console.log('ðŸ›‘ Game ended');
+      console.log('›‘ Game ended');
       // Allow reopening
       setShowPlaylists(true);
       setShowLogs(true);
@@ -725,7 +725,7 @@ const HostView: React.FC = () => {
       setWinners([]);
       setMixFinalized(false);
       setSongList([]);
-      console.log('ðŸ” Game reset');
+      console.log('” Game reset');
     });
 
     newSocket.on('playback-error', (data: any) => {
@@ -761,7 +761,7 @@ const HostView: React.FC = () => {
         const payload = JSON.stringify(diag, null, 2);
         addLog(`Playback diagnostic: ${payload}`, 'warn');
         // Also print to console for devs
-        console.log('ðŸ”Ž Playback diagnostic', diag);
+        console.log('”Ž Playback diagnostic', diag);
       } catch {}
     });
 
@@ -827,7 +827,7 @@ const HostView: React.FC = () => {
 
         if (data.connected) {
           console.log('Spotify already connected, loading playlists...');
-          console.log('ðŸ” Status API returned connected=true, setting state to true');
+          console.log('” Status API returned connected=true, setting state to true');
           setIsSpotifyConnected(true);
           setIsSpotifyConnecting(false);
           await loadPlaylists();
@@ -839,7 +839,7 @@ const HostView: React.FC = () => {
           // }, 1000);
         } else {
           console.log('Spotify not connected');
-          console.log('ðŸ” Status API returned connected=false, setting state to false');
+          console.log('” Status API returned connected=false, setting state to false');
           setIsSpotifyConnected(false);
           setIsSpotifyConnecting(false);
         }
@@ -892,16 +892,16 @@ const HostView: React.FC = () => {
         
         // Store the current URL to return to after Spotify auth
         const returnUrl = `/host/${roomId}`;
-        console.log('ðŸ” Storing return URL in localStorage:', returnUrl);
+        console.log('” Storing return URL in localStorage:', returnUrl);
         localStorage.setItem('spotify_return_url', returnUrl);
         if (roomId) {
-          console.log('ðŸ” Storing room ID in localStorage:', roomId);
+          console.log('” Storing room ID in localStorage:', roomId);
           localStorage.setItem('spotify_room_id', roomId);
         }
         
         // Add room ID to the auth URL as a state parameter
         const authUrlWithState = `${data.authUrl}&state=${encodeURIComponent(roomId || '')}`;
-        console.log('ðŸ” Redirecting to Spotify with room ID in state parameter');
+        console.log('” Redirecting to Spotify with room ID in state parameter');
         
         // Redirect to Spotify
         window.location.href = authUrlWithState;
@@ -938,8 +938,8 @@ const HostView: React.FC = () => {
 
       // Get AI suggestions
       const apiUrl = `${API_BASE || ''}/api/spotify/suggest-songs`;
-      console.log('ðŸ¤– Making AI suggestion request to:', apiUrl);
-      console.log('ðŸ¤– Request payload:', { playlistId: playlist.id, playlistName: playlist.name, existingSongs: existingSongs.length, targetCount });
+      console.log('¤– Making AI suggestion request to:', apiUrl);
+      console.log('¤– Request payload:', { playlistId: playlist.id, playlistName: playlist.name, existingSongs: existingSongs.length, targetCount });
       
       const suggestionsResponse = await fetch(apiUrl, {
         method: 'POST',
@@ -954,19 +954,19 @@ const HostView: React.FC = () => {
         })
       });
 
-      console.log('ðŸ¤– Response status:', suggestionsResponse.status);
-      console.log('ðŸ¤– Response headers:', Object.fromEntries(suggestionsResponse.headers.entries()));
+      console.log('¤– Response status:', suggestionsResponse.status);
+      console.log('¤– Response headers:', Object.fromEntries(suggestionsResponse.headers.entries()));
       
       // Check if we got HTML instead of JSON (common when server returns error page)
       const contentType = suggestionsResponse.headers.get('content-type');
       if (contentType && contentType.includes('text/html')) {
         const htmlText = await suggestionsResponse.text();
-        console.error('ðŸ¤– Received HTML instead of JSON:', htmlText.substring(0, 200) + '...');
+        console.error('¤– Received HTML instead of JSON:', htmlText.substring(0, 200) + '...');
         throw new Error('Server returned HTML error page instead of JSON. Check if the server is running properly.');
       }
       
       const suggestionsData = await suggestionsResponse.json();
-      console.log('ðŸ¤– Response data:', suggestionsData);
+      console.log('¤– Response data:', suggestionsData);
 
       if (suggestionsData.success) {
         setSuggestionsModal(prev => ({
@@ -990,16 +990,16 @@ const HostView: React.FC = () => {
           errorMessage = '🎵 Spotify Connection Required';
           errorDetails = 'Please connect to Spotify first using the "Connect Spotify" button, then try getting suggestions again.';
         } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-          errorMessage = 'ðŸŒ Network Connection Error';
+          errorMessage = 'Œ Network Connection Error';
           errorDetails = 'Unable to reach the server. Please check your internet connection and make sure the server is running.';
         } else if (error.message.includes('401')) {
-          errorMessage = 'ðŸ” Authentication Error';
+          errorMessage = '” Authentication Error';
           errorDetails = 'Your Spotify session may have expired. Please reconnect to Spotify and try again.';
         } else if (error.message.includes('500')) {
-          errorMessage = 'ðŸ”§ Server Error';
+          errorMessage = '”§ Server Error';
           errorDetails = 'The server encountered an error while generating suggestions. Please try again in a moment.';
         } else if (error.message.includes('HTML error page') || error.message.includes('DOCTYPE')) {
-          errorMessage = 'ðŸ”„ Server Restart Required';
+          errorMessage = '”„ Server Restart Required';
           errorDetails = 'The server appears to be restarting or crashed. Please wait a moment for it to fully start up, then try again.';
         } else {
           errorMessage = 'âŒ Suggestion Generation Failed';
@@ -1139,7 +1139,7 @@ const HostView: React.FC = () => {
       } else {
         // Check if we were paused by the interface and need to resume from exact position
         if (isPausedByInterface && currentSong?.id === song.id) {
-          console.log(`â–¶ï¸ Resuming from exact pause position: ${pausePosition}ms`);
+          console.log(`▶️ Resuming from exact pause position: ${pausePosition}ms`);
           socket.emit('resume-song', { 
             roomId, 
             resumePosition: pausePosition 
@@ -1380,7 +1380,7 @@ const HostView: React.FC = () => {
   const generateSongList = useCallback(async () => {
     if (!isSpotifyConnected) {
       console.warn('Cannot generate song list: Spotify not connected');
-      console.log('ðŸ” isSpotifyConnected state is currently:', isSpotifyConnected);
+      console.log('” isSpotifyConnected state is currently:', isSpotifyConnected);
       setSongList([]);
       return;
     }
@@ -1427,7 +1427,7 @@ const HostView: React.FC = () => {
         if (data.success && data.playbackState) {
         const spotifyVolume = (data.playbackState.device?.volume_percent ?? 100) as number;
           setPlaybackState(prev => ({ ...prev, volume: spotifyVolume }));
-          console.log(`ðŸ”Š Synced volume from Spotify: ${spotifyVolume}%`);
+          console.log(`”Š Synced volume from Spotify: ${spotifyVolume}%`);
         }
     } catch {
       // ignore
@@ -1544,7 +1544,7 @@ const HostView: React.FC = () => {
     // Debounce the actual volume change to prevent rapid API calls
     const timeout = setTimeout(async () => {
       try {
-        console.log(`ðŸ”Š Setting volume to ${newVolume}% on Spotify`);
+        console.log(`”Š Setting volume to ${newVolume}% on Spotify`);
         const response = await fetch(`${API_BASE || ''}/api/spotify/volume`, {
           method: 'POST',
           headers: {
@@ -1580,7 +1580,7 @@ const HostView: React.FC = () => {
       setIsMuted(false);
       
       try {
-        console.log(`ðŸ”Š Unmuting, setting volume to ${previousVolume}%`);
+        console.log(`”Š Unmuting, setting volume to ${previousVolume}%`);
         const response = await fetch(`${API_BASE || ''}/api/spotify/volume`, {
           method: 'POST',
           headers: {
@@ -1611,7 +1611,7 @@ const HostView: React.FC = () => {
       setIsMuted(true);
       
       try {
-        console.log(`ðŸ”Š Muting, setting volume to 0%`);
+        console.log(`”Š Muting, setting volume to 0%`);
         const response = await fetch(`${API_BASE || ''}/api/spotify/volume`, {
           method: 'POST',
           headers: {
@@ -1683,7 +1683,7 @@ const HostView: React.FC = () => {
   const forceDeviceDetection = useCallback(async () => {
     try {
       setIsLoadingDevices(true);
-      console.log('ðŸ”§ Forcing device detection...');
+      console.log('”§ Forcing device detection...');
       
       const response = await fetch('/api/spotify/force-device', {
         method: 'POST',
@@ -1709,7 +1709,7 @@ const HostView: React.FC = () => {
   const refreshSpotifyConnection = useCallback(async () => {
     try {
       setIsLoadingDevices(true);
-      console.log('ðŸ”„ Refreshing Spotify connection...');
+      console.log('”„ Refreshing Spotify connection...');
       
       const response = await fetch('/api/spotify/refresh', {
         method: 'POST',
@@ -1788,11 +1788,11 @@ const HostView: React.FC = () => {
             if (now - lastSongEventAtRef.current < 15000) return;
           }
             if (spotifyIsPlaying !== isPlaying) {
-              console.log(`ðŸ”„ Spotify playback state changed: ${spotifyIsPlaying}, updating interface`);
+              console.log(`”„ Spotify playback state changed: ${spotifyIsPlaying}, updating interface`);
               setIsPlaying(spotifyIsPlaying);
             setPlaybackState(prev => ({ ...prev, isPlaying: spotifyIsPlaying, currentTime: spotifyPosition }));
               if (spotifyIsPlaying && isPausedByInterface) {
-                console.log('ðŸ”„ Spotify resumed externally, clearing pause tracking');
+                console.log('”„ Spotify resumed externally, clearing pause tracking');
                 setIsPausedByInterface(false);
                 setPausePosition(0);
               }
@@ -2339,7 +2339,7 @@ const HostView: React.FC = () => {
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.4 }}
                   >
-                    <h2>ðŸ“š Available Playlists</h2>
+                    <h2>“š Available Playlists</h2>
                     <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
                       <input
                         type="text"
@@ -2597,8 +2597,8 @@ const HostView: React.FC = () => {
                       <div className="game-status">
                         <p className="status-text">🎵 Game is running - Use the Now Playing controls below</p>
                         <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                          <button className="btn-secondary" onClick={endGame}>ðŸ›‘ End Game</button>
-                          <button className="btn-secondary" onClick={confirmAndResetGame}>ðŸ” Reset</button>
+                          <button className="btn-secondary" onClick={endGame}>›‘ End Game</button>
+                          <button className="btn-secondary" onClick={confirmAndResetGame}>” Reset</button>
                           <button className="btn-secondary" onClick={confirmAndNewRound}>🆕 New Round</button>
                           <button className="btn-accent" onClick={() => setShowRoundManager(!showRoundManager)}>
                             🎯 Round Manager
@@ -2609,7 +2609,7 @@ const HostView: React.FC = () => {
                             style={{ background: '#ff6b6b', borderColor: '#ff4757' }}
                             title="Complete restart: reset all progress, keep cards"
                           >
-                            ðŸ”„ Restart
+                            ”„ Restart
                           </button>
                         </div>
                         <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
@@ -2685,7 +2685,7 @@ const HostView: React.FC = () => {
                             onClick={resetCurrentRound}
                             className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
                           >
-                            ðŸ”„ Reset Current Round
+                            ”„ Reset Current Round
                           </button>
                         </>
                       )}
@@ -2774,7 +2774,7 @@ const HostView: React.FC = () => {
                     transition={{ delay: 0.4 }}
                     className="player-cards-section"
                   >
-                    <h2>ðŸ‘¥ Player Cards & Progress</h2>
+                    <h2>‘¥ Player Cards & Progress</h2>
                     <div style={{ 
                       display: 'grid', 
                       gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', 
@@ -2804,7 +2804,7 @@ const HostView: React.FC = () => {
                             const progressColor = progress.needed === 0 ? '#00ff88' : 
                                                 progress.needed <= 2 ? '#ffaa00' : 
                                                 progress.progress >= 50 ? '#66ccff' : '#888';
-                            const progressText = progress.needed === 0 ? 'ðŸŽ‰ BINGO!' : 
+                            const progressText = progress.needed === 0 ? '🎉 BINGO!' : 
                                                progress.needed === 1 ? '1 more needed!' :
                                                `${progress.needed} more needed`;
                             
@@ -2927,10 +2927,10 @@ const HostView: React.FC = () => {
               {/* Playback Controls */}
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
                 <button className="btn-secondary" onClick={pauseSong}>
-                  {!isPlaying ? 'â–¶ï¸ Resume' : 'â¸ï¸ Pause'}
+                  {!isPlaying ? '▶️ Resume' : 'â¸ï¸ Pause'}
                 </button>
                 <button className="btn-secondary" onClick={skipSong}>â­ï¸ Skip</button>
-                <button className="btn-secondary" onClick={endGame}>ðŸ›‘ End Game</button>
+                <button className="btn-secondary" onClick={endGame}>›‘ End Game</button>
               </div>
             </div>
           </motion.div>
