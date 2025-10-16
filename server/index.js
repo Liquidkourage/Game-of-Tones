@@ -1104,6 +1104,15 @@ io.on('connection', (socket) => {
       playerCount: getNonHostPlayerCount(room)
     });
 
+    // Emit successful room join confirmation to the joining socket
+    socket.emit('room-joined', {
+      roomId: roomId,
+      organizationId: organizationId,
+      playerName: playerName,
+      isHost: isHost,
+      playerCount: getNonHostPlayerCount(room)
+    });
+
     // Log available devices for debugging
     console.log('Available devices:', Array.from(room.players.values()).map(p => p.name));
 

@@ -167,11 +167,21 @@ const HostView: React.FC = () => {
     
     // If we have a socket and room, try to rejoin with new license key
     if (socket && roomId && newLicenseKey.trim()) {
+      console.log('🔑 Attempting to join room with license key:', newLicenseKey.trim());
       setIsJoiningRoom(true);
       setLicenseError(null);
       socket.emit('join-room', { roomId, playerName: 'Host', isHost: true, licenseKey: newLicenseKey.trim() });
+      
+      // Add timeout fallback in case server doesn't respond
+      setTimeout(() => {
+        if (isJoiningRoom) {
+          console.log('⏰ Join timeout - clearing connecting state');
+          setIsJoiningRoom(false);
+          setLicenseError('Connection timeout. Please try again.');
+        }
+      }, 10000); // 10 second timeout
     }
-  }, [socket, roomId]);
+  }, [socket, roomId, isJoiningRoom]);
 
   // Advanced playback states
   const [playbackState, setPlaybackState] = useState<PlaybackState>({
@@ -840,12 +850,30 @@ const HostView: React.FC = () => {
       setIsJoiningRoom(false);
     });
 
+    // Handle successful room join
+    newSocket.on('room-joined', (data: any) => {
+      console.log('Successfully joined room:', data);
+      setIsJoiningRoom(false);
+      setLicenseError(null);
+      addLog(`Joined room ${roomId} successfully`, 'info');
+    });
+
     // Join room as host (with license key if available)
     if (roomId) {
       if (licenseKey) {
+        console.log('🔑 Initial join attempt with license key:', licenseKey);
         setIsJoiningRoom(true);
         setLicenseError(null);
         newSocket.emit('join-room', { roomId, playerName: 'Host', isHost: true, licenseKey });
+        
+        // Add timeout fallback for initial join
+        setTimeout(() => {
+          if (isJoiningRoom) {
+            console.log('⏰ Initial join timeout - clearing connecting state');
+            setIsJoiningRoom(false);
+            setLicenseError('Connection timeout. Please check your license key and try again.');
+          }
+        }, 10000); // 10 second timeout
       } else {
         setLicenseError('License key required to host games. Please enter your license key below.');
       }
