@@ -2980,7 +2980,12 @@ const HostView: React.FC = () => {
 
               {suggestionsModal.error ? (
                 <div style={{ color: '#ff6b6b', padding: '16px', textAlign: 'center' }}>
-                  {suggestionsModal.error}
+                  {suggestionsModal.error.message}
+                  {suggestionsModal.error.details && (
+                    <div style={{ fontSize: '0.8rem', marginTop: '8px', opacity: 0.8 }}>
+                      {suggestionsModal.error.details}
+                    </div>
+                  )}
                 </div>
               ) : suggestionsModal.suggestions.length > 0 ? (
                 <div>
