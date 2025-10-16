@@ -3972,53 +3972,49 @@ app.get('/api/spotify/auth', (req, res) => {
 });
 
 app.get('/api/spotify/status', async (req, res) => {
-  console.log('🔍 Spotify status check requested (simplified mode)');
+  console.log('🚨 EMERGENCY SPOTIFY STATUS - Bypassing multi-tenant system');
   try {
-    // SIMPLIFIED: Always use DEFAULT organization
-    const organizationId = 'DEFAULT';
+    // Check direct global tokens
+    console.log('🔍 Checking direct spotifyTokens:', !!spotifyTokens, spotifyTokens ? 'has accessToken: ' + !!spotifyTokens.accessToken : 'no tokens');
     
-    const orgSpotifyService = multiTenantSpotify.getService(organizationId);
-    const orgTokens = multiTenantSpotify.getTokens(organizationId);
-    
-    console.log(`🔍 Status check: orgTokens for ${organizationId}:`, !!orgTokens, orgTokens ? 'has accessToken: ' + !!orgTokens.accessToken : 'no tokens');
-    
-    // Check if we have tokens for this organization
-    if (!orgTokens || !orgTokens.accessToken) {
-      console.log(`❌ No tokens available for DEFAULT organization - returning disconnected`);
+    if (!spotifyTokens || !spotifyTokens.accessToken) {
+      console.log('❌ No direct tokens available - returning disconnected');
       return res.json({ 
         connected: false,
         hasTokens: false,
-        organizationId: organizationId
+        mode: 'emergency'
       });
     }
 
-    console.log(`🔑 Tokens exist for DEFAULT, validating...`);
+    console.log('🔑 Direct tokens exist, validating...');
     // Validate tokens by trying to ensure they're valid
     try {
-      await orgSpotifyService.ensureValidToken();
+      await spotifyService.ensureValidToken();
       // If we get here, tokens are valid
-      console.log(`✅ Tokens valid for DEFAULT - returning connected`);
+      console.log('✅ Direct tokens valid - returning connected');
       return res.json({ 
         connected: true,
         hasTokens: true,
-        organizationId: organizationId
+        mode: 'emergency'
       });
     } catch (error) {
-      // Tokens are invalid, clear them
-      console.log(`🔄 Clearing invalid Spotify tokens for DEFAULT:`, error.message);
-      multiTenantSpotify.clearOrgTokens(organizationId);
-      console.log(`❌ Tokens cleared for DEFAULT - returning disconnected`);
+      console.error('❌ Direct token validation failed:', error?.message || error);
+      // Clear invalid tokens
+      spotifyTokens = null;
       return res.json({ 
         connected: false,
         hasTokens: false,
-        organizationId: organizationId
+        mode: 'emergency',
+        error: 'Token validation failed'
       });
     }
   } catch (error) {
-    console.error('❌ Error checking Spotify status:', error);
-    res.json({ 
+    console.error('❌ Emergency status check error:', error);
+    res.status(500).json({ 
       connected: false,
-      hasTokens: false
+      hasTokens: false,
+      error: 'Status check failed',
+      details: error.message 
     });
   }
 });
@@ -4094,6 +4090,7 @@ app.post('/api/spotify/clear', (req, res) => {
 app.get('/api/spotify/callback', async (req, res) => {
   const { code, state } = req.query;
   
+  console.log('🚨 EMERGENCY SPOTIFY CALLBACK - Bypassing multi-tenant system');
   console.log('Spotify callback received with code:', code ? code.substring(0, 20) + '...' : 'NO CODE');
   
   if (!code) {
@@ -4101,50 +4098,23 @@ app.get('/api/spotify/callback', async (req, res) => {
     return res.status(400).json({ error: 'Authorization code required' });
   }
 
-  // SIMPLIFIED: Always use DEFAULT organization (multi-tenant disabled)
-  let organizationId = 'DEFAULT';
-  let roomId = null;
-  console.log('🔓 Using DEFAULT organization (multi-tenant disabled)');
-
-  // Check if we already have tokens for this organization
-  const existingTokens = multiTenantSpotify.getTokens(organizationId);
-  if (existingTokens) {
-    console.log(`Already have tokens for ${organizationId}, returning success without processing code again`);
-    return res.json({ 
-      success: true, 
-      message: `Spotify already connected for organization: ${organizationId}`,
-      organizationId: organizationId,
-      tokens: existingTokens
-    });
-  }
-
   try {
-    console.log(`Calling spotifyService.handleCallback for organization: ${organizationId}...`);
-    const orgSpotifyService = multiTenantSpotify.getService(organizationId);
-    const tokens = await orgSpotifyService.handleCallback(code);
-    console.log(`Successfully got tokens for ${organizationId}, storing them...`);
+    console.log('🔧 Using direct spotifyService.handleCallback...');
+    const tokens = await spotifyService.handleCallback(code);
+    console.log('✅ Got tokens from Spotify, saving directly...');
     
-    // Store tokens for this organization
-    await multiTenantSpotify.setTokens(organizationId, tokens);
-    
-    // Verify tokens were stored
-    const storedTokens = multiTenantSpotify.getTokens(organizationId);
-    console.log(`🔍 Verification: Tokens stored for ${organizationId}:`, !!storedTokens, storedTokens ? 'has accessToken' : 'no tokens');
-    
-    // Update legacy variables for backward compatibility
-    if (organizationId === 'DEFAULT') {
+    // Save tokens directly to global variables AND file
     spotifyTokens = tokens;
-    }
+    saveTokens(tokens);
     
-    console.log(`Spotify connection successful for ${organizationId}, sending response`);
+    console.log('✅ Tokens saved directly - Emergency fix active');
     res.json({ 
       success: true, 
-      message: `Spotify connected successfully for organization: ${organizationId}`,
-      organizationId: organizationId,
+      message: 'Spotify connected successfully (emergency mode)',
       tokens
     });
   } catch (error) {
-    console.error('Error handling Spotify callback:', error);
+    console.error('❌ Emergency callback failed:', error);
     res.status(500).json({ error: 'Failed to connect Spotify' });
   }
 });
