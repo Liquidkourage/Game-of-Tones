@@ -2965,7 +2965,7 @@ const HostView: React.FC = () => {
                   ðŸ¤– AI Song Suggestions
                 </h3>
                 <button
-                  onClick={() => setSuggestionsModal({ isOpen: false, playlist: null, suggestions: [], error: null })}
+                  onClick={() => setSuggestionsModal({ isOpen: false, playlist: null, suggestions: [], loading: false, analysis: null, error: null })}
                   style={{
                     background: 'none',
                     border: 'none',
