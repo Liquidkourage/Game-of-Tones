@@ -314,32 +314,6 @@ const PlayerView: React.FC = () => {
       console.log('🔁 Game reset');
     });
 
-    // Round update handler - clear player state for new round
-    newSocket.on('round-updated', (data: any) => {
-      console.log('🎯 PlayerView: Round updated:', data.roundInfo);
-      if (data.roundInfo) {
-        console.log('🧹 Clearing player state for new round');
-        // Reset player state for new round
-        setGameState({ 
-          isPlaying: false, 
-          currentSong: null, 
-          playerCount: 0, 
-          hasBingo: false, 
-          pattern: 'full_card' 
-        });
-        setBingoCard(null);
-        setBingoStatus('idle');
-        setBingoMessage('');
-        setSongsPlayed(0);
-        
-        // Show round change notification
-        setBingoMessage(`🎯 Switched to ${data.roundInfo.name}`);
-        setTimeout(() => setBingoMessage(''), 3000);
-        
-        console.log('✅ Player state cleared for new round');
-      }
-    });
-
     newSocket.on('player-left', (data: any) => {
       console.log('Player left:', data);
       setGameState(prev => ({

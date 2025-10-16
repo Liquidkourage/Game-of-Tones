@@ -30,10 +30,7 @@ interface GameState {
   currentRound?: {
     name: string;
     number: number;
-    playlistCount?: number;
-    songCount?: number;
-    status?: string;
-    startedAt?: number;
+    playlistName?: string;
   };
 }
 
@@ -280,8 +277,7 @@ const PublicDisplay: React.FC = () => {
             playerCount: payload.playerCount || 0,
             snippetLength: payload.snippetLength || 30,
             winners: payload.winners || prev.winners,
-            playedSongs: payload.playedSongs || prev.playedSongs,
-            currentRound: payload.currentRound || prev.currentRound
+            playedSongs: payload.playedSongs || prev.playedSongs
           }));
           
           if (payload.pattern) {
@@ -647,56 +643,6 @@ const PublicDisplay: React.FC = () => {
       console.log('🔁 Game reset (display)');
       revealSequenceRef.current = [];
       songBaselineRef.current = {};
-    });
-
-    // Round update handler
-    newSocket.on('round-updated', (data: any) => {
-      console.log('🎯 PublicDisplay: Round updated:', data.roundInfo);
-      if (data.roundInfo) {
-        try {
-          console.log('🧹 Resetting display for new round');
-          
-          // Update game state with new round info and minimal reset
-          setGameState(prev => ({
-            ...prev,
-            currentRound: data.roundInfo,
-            // Only reset essential game state
-            isPlaying: false,
-            currentSong: null,
-            winners: [],
-            playedSongs: []
-            // Keep bingoCard structure intact to prevent render errors
-          }));
-          
-          // Clear playlist names to remove old category headers
-          setPlaylistNames([]);
-          
-          // Reset counters and UI state
-          setTotalPlayedCount(0);
-          setShowWinnerBanner(false);
-          setWinnerName('');
-          
-          // Clear internal tracking refs
-          playedOrderRef.current = [];
-          idMetaRef.current = {};
-          revealSequenceRef.current = [];
-          songBaselineRef.current = {};
-          pendingPlacementRef.current = new Set();
-          playedSeqRef.current = {};
-          playedSeqCounterRef.current = 0;
-          currentIndexRef.current = -1;
-          
-          console.log('✅ Display reset for new round');
-        } catch (error) {
-          console.error('❌ Error resetting display for new round:', error);
-          // Minimal fallback: just update the round info
-          setGameState(prev => ({
-            ...prev,
-            currentRound: data.roundInfo,
-            isPlaying: false
-          }));
-        }
-      }
     });
 
     // Staged reveal event: show name/artist hints without changing the bingo grid

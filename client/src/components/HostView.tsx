@@ -6,8 +6,7 @@ import {
   Pause, 
   SkipForward, 
   Music, 
-  Trophy,
-  Crown
+  Trophy
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL } from '../config';
@@ -104,6 +103,7 @@ const HostView: React.FC = () => {
   const [rooms, setRooms] = useState<Array<any>>([]);
   const [showPlayerCards, setShowPlayerCards] = useState<boolean>(false);
   const [playerCards, setPlayerCards] = useState<Map<string, any>>(new Map());
+  const [showRoundManager, setShowRoundManager] = useState<boolean>(false);
   
   // Pause position tracking
   const [pausePosition, setPausePosition] = useState<number>(0);
@@ -1069,25 +1069,6 @@ const HostView: React.FC = () => {
         pattern,
         customMask
       });
-      
-      // Send current round info when starting game
-      if (eventRounds.length > 0 && currentRoundIndex >= 0) {
-        const currentRound = eventRounds[currentRoundIndex];
-        if (currentRound) {
-          const roundInfo = {
-            name: currentRound.name,
-            number: currentRoundIndex + 1,
-            playlistCount: (currentRound.playlistIds || []).length,
-            songCount: currentRound.songCount || 0,
-            status: currentRound.status,
-            startedAt: currentRound.startedAt
-          };
-          
-          console.log('🎯 Sending round info on game start:', roundInfo);
-          socket.emit('update-round-info', { roomId, roundInfo });
-        }
-      }
-      
       // Safety timeout in case no response comes back
       setTimeout(() => setIsStartingGame(false), 8000);
     } catch (error) {
@@ -1947,6 +1928,7 @@ const HostView: React.FC = () => {
     }
   }, [roomId]);
 
+
   const handleStartRound = useCallback((roundIndex: number) => {
     const round = eventRounds[roundIndex];
     if (!round || round.playlistIds.length === 0) {
@@ -1954,23 +1936,8 @@ const HostView: React.FC = () => {
       return;
     }
 
-    // Stop current game if it's running
-    if (gameState === 'playing' && socket && roomId) {
-      console.log('🛑 Stopping current game for round switch');
-      socket.emit('end-game', { roomId, stopPlayback: true });
-      setIsPlaying(false);
-      addLog('Stopped current game for round switch', 'info');
-    }
-
-    // Reset game state for new round
-    if (socket && roomId) {
-      console.log('🔄 Resetting game state for new round');
-      socket.emit('reset-game', { roomId, stopPlayback: true });
-      addLog('Reset game state for new round', 'info');
-    }
-
-    // Mark current round as completed if it exists and is different
-    if (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length && currentRoundIndex !== roundIndex) {
+    // Mark current round as completed if it exists
+    if (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length) {
       const updatedRounds = [...eventRounds];
       updatedRounds[currentRoundIndex] = {
         ...updatedRounds[currentRoundIndex],
@@ -1995,29 +1962,7 @@ const HostView: React.FC = () => {
     if (roundPlaylists.length > 0) {
       setSelectedPlaylists(roundPlaylists);
       const playlistNames = round.playlistNames.join(', ');
-      addLog(`🎯 Started ${round.name}: ${playlistNames}`, 'info');
-    }
-
-    // Send round information to server and all clients
-    if (socket && roomId) {
-      const roundInfo = {
-        name: round.name,
-        number: roundIndex + 1,
-        playlistCount: (round.playlistIds || []).length,
-        songCount: round.songCount || 0,
-        status: round.status,
-        startedAt: round.startedAt
-      };
-      
-      console.log('🎯 Sending round info to server:', roundInfo);
-      socket.emit('update-round-info', { roomId, roundInfo });
-      
-      // Also force refresh to ensure all clients sync
-      setTimeout(() => {
-        console.log('🔄 Broadcasting round change to all clients');
-        socket.emit('force-refresh', { roomId, reason: 'round-change' });
-        addLog('Synced all clients with new round', 'info');
-      }, 500); // Small delay to ensure server state is updated
+      addLog(`Started ${round.name}: ${playlistNames}`, 'info');
     }
 
     // Store updated rounds
@@ -2026,7 +1971,66 @@ const HostView: React.FC = () => {
     } catch (error) {
       console.warn('Failed to save rounds to localStorage:', error);
     }
-  }, [eventRounds, currentRoundIndex, playlists, roomId, gameState, socket, isPlaying]);
+  }, [eventRounds, currentRoundIndex, playlists, roomId]);
+
+  // Advanced round management functions
+  const jumpToRound = useCallback((roundIndex: number) => {
+    if (roundIndex >= 0 && roundIndex < eventRounds.length) {
+      const round = eventRounds[roundIndex];
+      if (round.status !== 'completed' && (round.playlistIds || []).length > 0) {
+        handleStartRound(roundIndex);
+        setShowRoundManager(false);
+        addLog(`Jumped to ${round.name}`, 'info');
+      }
+    }
+  }, [eventRounds, handleStartRound]);
+
+  const completeCurrentRound = useCallback(() => {
+    if (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length) {
+      const updatedRounds = [...eventRounds];
+      updatedRounds[currentRoundIndex] = {
+        ...updatedRounds[currentRoundIndex],
+        status: 'completed',
+        completedAt: Date.now()
+      };
+      handleUpdateRounds(updatedRounds);
+      addLog(`Completed ${updatedRounds[currentRoundIndex].name}`, 'info');
+    }
+  }, [currentRoundIndex, eventRounds, handleUpdateRounds]);
+
+  const resetCurrentRound = useCallback(() => {
+    if (gameState === 'playing') {
+      // Reset the current game state
+      setGameState('waiting');
+      setCurrentSong(null);
+      setPlayedSoFar([]);
+      setWinners([]);
+      setRoundComplete(null);
+      setRoundWinners([]);
+      
+      // Emit reset to all clients
+      if (socket) {
+        socket.emit('game-reset');
+      }
+      
+      addLog(`Reset current round`, 'info');
+    }
+  }, [gameState, socket]);
+
+  const getNextPlannedRound = useCallback(() => {
+    return eventRounds.findIndex(round => 
+      round.status === 'planned' && (round.playlistIds || []).length > 0
+    );
+  }, [eventRounds]);
+
+  const getRoundStatusSummary = useCallback(() => {
+    const completed = eventRounds.filter(r => r.status === 'completed').length;
+    const active = eventRounds.filter(r => r.status === 'active').length;
+    const planned = eventRounds.filter(r => r.status === 'planned' && (r.playlistIds || []).length > 0).length;
+    const unplanned = eventRounds.filter(r => r.status === 'unplanned' || (r.playlistIds || []).length === 0).length;
+    
+    return { completed, active, planned, unplanned, total: eventRounds.length };
+  }, [eventRounds]);
 
   // Load rounds from localStorage on component mount
   useEffect(() => {
@@ -2246,208 +2250,6 @@ const HostView: React.FC = () => {
              )}
           </motion.div>
 
-          {/* Round Control Panel */}
-          {isSpotifyConnected && eventRounds.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="setting-item"
-              style={{
-                background: 'rgba(0, 255, 136, 0.1)',
-                border: '2px solid rgba(0, 255, 136, 0.3)',
-                borderRadius: '12px',
-                padding: '20px',
-                marginBottom: '20px'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                <Crown style={{ width: '24px', height: '24px', color: '#00ff88' }} />
-                <h3 style={{ color: '#ffffff', fontSize: '1.2rem', fontWeight: '700', margin: 0 }}>
-                  Round Control Center
-                </h3>
-                <div style={{ 
-                  background: 'rgba(0, 255, 136, 0.2)', 
-                  padding: '4px 12px', 
-                  borderRadius: '20px',
-                  fontSize: '0.8rem',
-                  fontWeight: '600',
-                  color: '#00ff88'
-                }}>
-                  Round {currentRoundIndex + 1} of {eventRounds.length}
-                </div>
-              </div>
-
-              {/* Current Round Status */}
-              <div style={{ 
-                background: 'rgba(255, 255, 255, 0.05)', 
-                borderRadius: '8px', 
-                padding: '16px', 
-                marginBottom: '16px',
-                border: '1px solid rgba(255, 255, 255, 0.1)'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <h4 style={{ color: '#ffffff', margin: 0, fontSize: '1rem' }}>
-                    Current: {eventRounds[currentRoundIndex]?.name || 'No Round Selected'}
-                  </h4>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <div style={{
-                      padding: '4px 8px',
-                      borderRadius: '12px',
-                      fontSize: '0.75rem',
-                      fontWeight: '600',
-                      background: eventRounds[currentRoundIndex]?.status === 'active' 
-                        ? 'rgba(0, 255, 136, 0.2)' 
-                        : eventRounds[currentRoundIndex]?.status === 'completed'
-                        ? 'rgba(34, 197, 94, 0.2)'
-                        : 'rgba(156, 163, 175, 0.2)',
-                      color: eventRounds[currentRoundIndex]?.status === 'active' 
-                        ? '#00ff88' 
-                        : eventRounds[currentRoundIndex]?.status === 'completed'
-                        ? '#22c55e'
-                        : '#9ca3af'
-                    }}>
-                      {eventRounds[currentRoundIndex]?.status?.toUpperCase() || 'UNPLANNED'}
-                    </div>
-                  </div>
-                </div>
-                
-                {eventRounds[currentRoundIndex] && (
-                  <div style={{ display: 'flex', gap: '20px', fontSize: '0.9rem', color: '#b3b3b3' }}>
-                    <span>
-                      📝 {(eventRounds[currentRoundIndex].playlistIds || []).length} Playlists
-                    </span>
-                    <span>
-                      🎵 {eventRounds[currentRoundIndex].songCount || 0} Songs
-                    </span>
-                    {eventRounds[currentRoundIndex].startedAt && (
-                      <span>
-                        ⏱️ Started {new Date(eventRounds[currentRoundIndex].startedAt!).toLocaleTimeString()}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Round Navigation */}
-              <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
-                <button
-                  onClick={() => {
-                    if (currentRoundIndex > 0) {
-                      if (gameState === 'playing') {
-                        if (window.confirm('This will stop the current game and switch to the previous round. Continue?')) {
-                          handleStartRound(currentRoundIndex - 1);
-                        }
-                      } else {
-                        handleStartRound(currentRoundIndex - 1);
-                      }
-                    }
-                  }}
-                  disabled={currentRoundIndex <= 0}
-                  className="btn-secondary"
-                  style={{ 
-                    fontSize: '0.9rem',
-                    opacity: currentRoundIndex <= 0 ? 0.5 : 1,
-                    cursor: currentRoundIndex <= 0 ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  ← Previous Round
-                </button>
-                
-                <button
-                  onClick={() => {
-                    if (currentRoundIndex < eventRounds.length - 1) {
-                      if (gameState === 'playing') {
-                        if (window.confirm('This will stop the current game and switch to the next round. Continue?')) {
-                          handleStartRound(currentRoundIndex + 1);
-                        }
-                      } else {
-                        handleStartRound(currentRoundIndex + 1);
-                      }
-                    }
-                  }}
-                  disabled={currentRoundIndex >= eventRounds.length - 1}
-                  className="btn-secondary"
-                  style={{ 
-                    fontSize: '0.9rem',
-                    opacity: currentRoundIndex >= eventRounds.length - 1 ? 0.5 : 1,
-                    cursor: currentRoundIndex >= eventRounds.length - 1 ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  Next Round →
-                </button>
-
-                <button
-                  onClick={confirmAndNewRound}
-                  disabled={gameState !== 'waiting'}
-                  className="btn-accent"
-                  style={{ 
-                    fontSize: '0.9rem',
-                    opacity: gameState !== 'waiting' ? 0.5 : 1,
-                    cursor: gameState !== 'waiting' ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  🔄 New Round
-                </button>
-              </div>
-
-              {/* All Rounds Overview */}
-              <div style={{ marginBottom: '12px' }}>
-                <h5 style={{ color: '#ffffff', fontSize: '0.9rem', marginBottom: '8px', fontWeight: '600' }}>
-                  All Rounds Overview:
-                </h5>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {eventRounds.map((round, index) => (
-                    <button
-                      key={round.id}
-                      onClick={() => {
-                        if (index !== currentRoundIndex) {
-                          if (gameState === 'playing') {
-                            if (window.confirm(`This will stop the current game and switch to ${round.name}. Continue?`)) {
-                              handleStartRound(index);
-                            }
-                          } else {
-                            handleStartRound(index);
-                          }
-                        }
-                      }}
-                      style={{
-                        padding: '8px 12px',
-                        borderRadius: '8px',
-                        border: index === currentRoundIndex ? '2px solid #00ff88' : '1px solid rgba(255, 255, 255, 0.2)',
-                        background: index === currentRoundIndex 
-                          ? 'rgba(0, 255, 136, 0.2)' 
-                          : round.status === 'completed'
-                          ? 'rgba(34, 197, 94, 0.1)'
-                          : 'rgba(255, 255, 255, 0.05)',
-                        color: index === currentRoundIndex ? '#00ff88' : '#ffffff',
-                        fontSize: '0.8rem',
-                        fontWeight: '600',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease'
-                      }}
-                      onMouseEnter={(e) => {
-                        if (index !== currentRoundIndex) {
-                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (index !== currentRoundIndex) {
-                          e.currentTarget.style.background = round.status === 'completed'
-                            ? 'rgba(34, 197, 94, 0.1)'
-                            : 'rgba(255, 255, 255, 0.05)';
-                        }
-                      }}
-                    >
-                      {round.name}
-                      {round.status === 'completed' && ' ✓'}
-                      {index === currentRoundIndex && ' (Current)'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </motion.div>
-          )}
-
           {/* Round Planner */}
           {isSpotifyConnected && (
             <RoundPlanner
@@ -2458,6 +2260,154 @@ const HostView: React.FC = () => {
               onStartRound={handleStartRound}
               gameState={gameState}
             />
+          )}
+
+          {/* Round Manager Modal */}
+          {showRoundManager && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="bg-rgba(42, 42, 42, 0.95) backdrop-blur-[20px] border border-rgba(0, 255, 136, 0.3) rounded-2xl p-6 mb-6"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-semibold text-white flex items-center gap-2">
+                  🎯 Round Manager
+                </h3>
+                <button
+                  onClick={() => setShowRoundManager(false)}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Round Status Summary */}
+              <div className="mb-6 p-4 bg-rgba(255, 255, 255, 0.05) rounded-xl">
+                <h4 className="text-lg font-semibold text-white mb-3">Event Overview</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {(() => {
+                    const summary = getRoundStatusSummary();
+                    return (
+                      <>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-green-400">{summary.completed}</div>
+                          <div className="text-sm text-gray-400">Completed</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-blue-400">{summary.active}</div>
+                          <div className="text-sm text-gray-400">Active</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-yellow-400">{summary.planned}</div>
+                          <div className="text-sm text-gray-400">Planned</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-gray-400">{summary.unplanned}</div>
+                          <div className="text-sm text-gray-400">Unplanned</div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="mb-6">
+                <h4 className="text-lg font-semibold text-white mb-3">Quick Actions</h4>
+                <div className="flex gap-3 flex-wrap">
+                  {gameState === 'playing' && (
+                    <>
+                      <button
+                        onClick={completeCurrentRound}
+                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                      >
+                        ✅ Complete Current Round
+                      </button>
+                      <button
+                        onClick={resetCurrentRound}
+                        className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+                      >
+                        🔄 Reset Current Round
+                      </button>
+                    </>
+                  )}
+                  {(() => {
+                    const nextRound = getNextPlannedRound();
+                    return nextRound >= 0 ? (
+                      <button
+                        onClick={() => jumpToRound(nextRound)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        ⏭️ Start Next Planned Round
+                      </button>
+                    ) : null;
+                  })()}
+                </div>
+              </div>
+
+              {/* Round List */}
+              <div>
+                <h4 className="text-lg font-semibold text-white mb-3">All Rounds</h4>
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {eventRounds.map((round, index) => {
+                    const isCurrentRound = index === currentRoundIndex;
+                    const canStart = round.status !== 'completed' && (round.playlistIds || []).length > 0;
+                    
+                    return (
+                      <div
+                        key={round.id}
+                        className={`p-4 rounded-xl border-2 ${
+                          isCurrentRound
+                            ? 'border-green-400 bg-green-400/10'
+                            : round.status === 'completed'
+                            ? 'border-gray-600 bg-gray-600/10'
+                            : canStart
+                            ? 'border-blue-400 bg-blue-400/10'
+                            : 'border-yellow-600 bg-yellow-600/10'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-white">{round.name}</span>
+                              {isCurrentRound && (
+                                <span className="px-2 py-1 bg-green-400 text-black text-xs font-bold rounded-full">
+                                  CURRENT
+                                </span>
+                              )}
+                              {round.status === 'completed' && (
+                                <span className="px-2 py-1 bg-gray-600 text-white text-xs font-bold rounded-full">
+                                  DONE
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-400 mt-1">
+                              {(round.playlistIds || []).length} playlist{(round.playlistIds || []).length !== 1 ? 's' : ''} • {round.songCount} songs
+                              {round.status === 'completed' && round.completedAt && (
+                                <span className="ml-2">
+                                  • Completed {new Date(round.completedAt).toLocaleTimeString()}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            {canStart && !isCurrentRound && (
+                              <button
+                                onClick={() => jumpToRound(index)}
+                                className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+                              >
+                                Start
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.div>
           )}
 
           {/* Playlists - Virtualized + Paged */}
@@ -3014,6 +2964,9 @@ const HostView: React.FC = () => {
                     <button className="btn-secondary" onClick={endGame}>🛑 End Game</button>
                     <button className="btn-secondary" onClick={confirmAndResetGame}>🔁 Reset</button>
                     <button className="btn-secondary" onClick={confirmAndNewRound}>🆕 New Round</button>
+                    <button className="btn-accent" onClick={() => setShowRoundManager(!showRoundManager)}>
+                      🎯 Round Manager
+                    </button>
                     <button 
                       className="btn-danger" 
                       onClick={handleRestartGame}

@@ -1598,8 +1598,6 @@ io.on('connection', (socket) => {
         totalPlayedCount: (room.calledSongIds || []).length,
         currentSongIndex: room.currentSongIndex || 0,
         totalSongs: room.playlistSongs?.length || 0,
-        // Include current round information
-        currentRound: room.currentRound || null,
         // Sync timestamp for client reference
         syncTimestamp: Date.now()
       };
@@ -2183,59 +2181,6 @@ io.on('connection', (socket) => {
   });
 
   // Host-triggered hard refresh/reset for all clients in room
-  socket.on('update-round-info', (data = {}) => {
-    try {
-      const { roomId, roundInfo } = data;
-      const room = rooms.get(roomId);
-      if (!room) return;
-      
-      // Verify the sender is the host
-      const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
-      if (!isCurrentHost) return;
-      
-      // Store round info in room state
-      room.currentRound = roundInfo;
-      
-      // Clear game state for new round (but keep players and basic room settings)
-      console.log(`🧹 Clearing game state for new round in room ${roomId}`);
-      room.gameState = 'waiting';
-      room.currentSong = null;
-      room.currentSongIndex = 0;
-      room.calledSongIds = [];
-      room.playlistSongs = [];
-      room.winners = [];
-      room.roundWinners = [];
-      
-      // Reset mix finalization to allow new playlists for the new round
-      room.mixFinalized = false;
-      room.finalizedPlaylists = null;
-      
-      // Clear playlist-specific state that affects public display
-      room.fiveByFifteenColumns = null;
-      room.fiveByFifteenColumnsIds = null;
-      room.fiveByFifteenPlaylistNames = null;
-      room.fiveByFifteenMeta = null;
-      room.finalizedSongOrder = null;
-      room.oneBySeventyFivePool = null;
-      room.pattern = null;
-      room.customPattern = null;
-      
-      // Clear all player bingo cards
-      room.players.forEach((player, playerId) => {
-        if (player.bingoCard) {
-          player.bingoCard.squares = [];
-        }
-      });
-      
-      // Broadcast round info to all clients in the room
-      io.to(roomId).emit('round-updated', { roundInfo });
-      
-      if (VERBOSE) console.log(`🎯 Round info updated and game state cleared for room ${roomId}:`, roundInfo);
-    } catch (e) {
-      console.error('❌ Error updating round info:', e?.message || e);
-    }
-  });
-
   socket.on('force-refresh', (data = {}) => {
     try {
       const { roomId, reason = 'host-request' } = data;
