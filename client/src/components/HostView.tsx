@@ -552,9 +552,9 @@ const HostView: React.FC = () => {
     // Handle bingo verification pending
     newSocket.on('bingo-verification-pending', (data: any) => {
       console.log('Bingo verification pending:', data.playerName);
-      setGamePaused(true);
-      // Play alert sound for host
-      playHostAlertSound();
+        setGamePaused(true);
+        // Play alert sound for host
+        playHostAlertSound();
     });
 
     // Handle confirmed bingo wins (for winner tracking)
@@ -2336,7 +2336,7 @@ const HostView: React.FC = () => {
                   </motion.div>
                 )}
 
-                {/* Spotify Connection */}
+          {/* Spotify Connection */}
           <motion.div 
             className="spotify-section"
             initial={{ opacity: 0 }}
@@ -2417,12 +2417,12 @@ const HostView: React.FC = () => {
                     transition={{ delay: 0.4 }}
                   >
                     <h2>📚 Available Playlists</h2>
-                    <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
-                      <input
-                        type="text"
-                        placeholder="Search playlists..."
-                        value={playlistQuery}
-                        onChange={(e) => setPlaylistQuery(e.target.value)}
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  placeholder="Search playlists..."
+                  value={playlistQuery}
+                  onChange={(e) => setPlaylistQuery(e.target.value)}
                         style={{
                           padding: '8px 12px',
                           borderRadius: '6px',
@@ -2432,18 +2432,18 @@ const HostView: React.FC = () => {
                           minWidth: '200px'
                         }}
                       />
-                      <button 
-                        className="btn-secondary"
-                        onClick={() => {
+                <button
+                  className="btn-secondary"
+                  onClick={() => {
                           setVisiblePlaylists(playlists.filter(p => !assignedPlaylistIds.has(p.id)));
                           setPlaylistQuery('');
                         }}
                       >
                         Show All
                       </button>
-                      <button 
+                        <button
                         className="btn-secondary"
-                        onClick={() => {
+                          onClick={() => {
                           const gotPlaylists = playlists.filter(p => 
                             p.name.toLowerCase().includes('got') && !assignedPlaylistIds.has(p.id)
                           );
@@ -2452,8 +2452,8 @@ const HostView: React.FC = () => {
                         }}
                       >
                         GOT Playlists
-                      </button>
-                    </div>
+                        </button>
+                      </div>
                     
                     <div style={{ 
                       maxHeight: 400, 
@@ -2482,16 +2482,14 @@ const HostView: React.FC = () => {
                         return filteredPlaylists.length === 0 ? (
                           <div style={{ padding: 20, textAlign: 'center', opacity: 0.7 }}>
                             {playlistQuery ? 'No playlists match your search.' : 'No available playlists.'}
-                          </div>
+            </div>
                         ) : (
                           filteredPlaylists.map((p) => {
                           const isSelected = selectedPlaylists.some(sp => sp.id === p.id);
-                          const isInsufficient = p.tracks < 25;
-                          
-                          // Debug logging for suggestion button - check all playlists with suggest button
-                          if (isInsufficient) {
-                            console.log(`🤖 Suggest button shown for "${p.name}": ${p.tracks} tracks (type: ${typeof p.tracks}), isInsufficient: ${isInsufficient}`);
-                          }
+                          // Insufficient: < 15 songs OR 60-74 songs (not enough for either mode)
+                          const isInsufficient = p.tracks < 15 || (p.tracks >= 60 && p.tracks < 75);
+                          // Acceptable: 15-59 songs (good for 1x75) OR 75+ songs (good for 5x15)
+                          const isAcceptable = (p.tracks >= 15 && p.tracks < 60) || p.tracks >= 75;
                           
                           return (
                             <div 
@@ -2502,15 +2500,15 @@ const HostView: React.FC = () => {
                                 e.dataTransfer.effectAllowed = 'copy';
                               }}
                               style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
+                                display: 'flex',
+                                alignItems: 'center',
                                 gap: 10, 
                                 padding: '6px 8px', 
                                 borderBottom: '1px solid rgba(255,255,255,0.08)',
-                                backgroundColor: isInsufficient ? 'rgba(255, 193, 7, 0.1)' : 'transparent',
-                                border: isInsufficient ? '1px solid rgba(255, 193, 7, 0.3)' : 'none',
-                                borderRadius: isInsufficient ? '4px' : '0',
-                                margin: isInsufficient ? '2px 0' : '0',
+                                backgroundColor: isAcceptable ? 'rgba(0, 255, 136, 0.1)' : 'transparent',
+                                border: isAcceptable ? '1px solid rgba(0, 255, 136, 0.3)' : 'none',
+                                borderRadius: isAcceptable ? '4px' : '0',
+                                margin: isAcceptable ? '2px 0' : '0',
                                 cursor: 'grab'
                               }}
                               onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
@@ -2530,14 +2528,14 @@ const HostView: React.FC = () => {
                               <span style={{ 
                                 flex: 1, 
                                 fontSize: '0.9rem',
-                                color: isInsufficient ? '#ffc107' : '#fff'
+                                color: isAcceptable ? '#00ff88' : '#fff'
                               }}>
                                 {stripGoTPrefix ? p.name.replace(/^GoT\s*[-–:]*\s*/i, '') : p.name}
                               </span>
                               <span style={{ 
                                 fontSize: '0.8rem', 
                                 opacity: 0.7,
-                                color: isInsufficient ? '#ffc107' : '#b3b3b3'
+                                color: isAcceptable ? '#00ff88' : '#b3b3b3'
                               }}>
                                 {p.tracks} songs
                               </span>
@@ -2551,7 +2549,7 @@ const HostView: React.FC = () => {
                                     background: 'linear-gradient(135deg, #ff6b35, #f7931e)',
                                     border: '1px solid rgba(255, 107, 53, 0.5)'
                                   }}
-                                  title="Get AI suggestions to reach 25+ songs"
+                                  title="Get AI suggestions to reach 15+ or 75+ songs"
                                 >
                                   🤖 Suggest Songs
                                 </button>
@@ -2561,7 +2559,7 @@ const HostView: React.FC = () => {
                         })
                         );
                       })()}
-                    </div>
+                        </div>
                   </motion.div>
                 )}
               </div>
@@ -2569,14 +2567,14 @@ const HostView: React.FC = () => {
 
             {activeTab === 'play' && (
               <div className="play-tab">
-                {/* Game Controls */}
-                <motion.div 
-                  className="controls-section"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
+          {/* Game Controls */}
+          <motion.div 
+            className="controls-section"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
                   transition={{ delay: 0.2 }}
-                >
-                  <h2>🎮 Game Controls</h2>
+          >
+            <h2>🎮 Game Controls</h2>
                   
                   {/* Game Settings */}
                   <div style={{ 
@@ -2591,13 +2589,13 @@ const HostView: React.FC = () => {
                         🎵 Track Playback Settings
                       </h4>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ opacity: 0.85, minWidth: '80px' }}>Track Length:</span>
-                          <input
-                            type="range"
-                            min="5"
-                            max="60"
-                            value={snippetLength}
+                <input
+                  type="range"
+                  min="5"
+                  max="60"
+                  value={snippetLength}
                             onChange={(e) => {
                               const newLength = Number(e.target.value);
                               setSnippetLength(newLength);
@@ -2608,14 +2606,14 @@ const HostView: React.FC = () => {
                           <span style={{ width: 40, textAlign: 'right', color: '#00ff88', fontWeight: 'bold' }}>
                             {snippetLength}s
                           </span>
-                        </label>
+              </label>
                       </div>
                       
                       {/* Start Position Control */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
                         <span style={{ opacity: 0.85, minWidth: '80px' }}>Start Position:</span>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <input
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
                             type="radio"
                             name="startPosition"
                             checked={!randomStarts}
@@ -2630,15 +2628,15 @@ const HostView: React.FC = () => {
                           <input
                             type="radio"
                             name="startPosition"
-                            checked={randomStarts}
+                  checked={randomStarts}
                             onChange={() => {
                               setRandomStarts(true);
                               localStorage.setItem('game-random-starts', 'true');
                             }}
-                          />
+                />
                           <span>Random position</span>
-                        </label>
-                      </div>
+              </label>
+            </div>
                       
                       {/* Description */}
                       <div style={{ 
@@ -2657,112 +2655,112 @@ const HostView: React.FC = () => {
                       </div>
                     </div>
                     
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <input
-                          type="checkbox"
-                          checked={lockJoins}
-                          onChange={(e) => {
-                            const val = e.target.checked;
-                            setLockJoins(val);
-                            if (socket && roomId) socket.emit('set-lock-joins', { roomId, locked: val });
-                          }}
-                        />
-                        <span>Lock new joins</span>
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <input
-                          type="checkbox"
-                          checked={superStrict}
-                          onChange={(e) => {
-                            const val = !!e.target.checked;
-                            setSuperStrict(val);
-                            if (socket && roomId) socket.emit('set-super-strict', { roomId, enabled: val });
-                          }}
-                        />
-                        <span>Super-Strict Lock</span>
-                      </label>
-                    </div>
-                  </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={lockJoins}
+                  onChange={(e) => {
+                    const val = e.target.checked;
+                    setLockJoins(val);
+                    if (socket && roomId) socket.emit('set-lock-joins', { roomId, locked: val });
+                  }}
+                />
+                <span>Lock new joins</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={superStrict}
+                  onChange={(e) => {
+                    const val = !!e.target.checked;
+                    setSuperStrict(val);
+                    if (socket && roomId) socket.emit('set-super-strict', { roomId, enabled: val });
+                  }}
+                />
+                <span>Super-Strict Lock</span>
+              </label>
+            </div>
+            </div>
 
                   {/* Main Game Controls */}
-                  <div className="control-buttons">
-                    {gameState === 'waiting' && !currentSong ? (
-                      <>
-                        {!mixFinalized && (
-                          <button 
-                            className="control-button finalize-mix"
-                            onClick={finalizeMix}
-                            disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
-                          >
-                            🎵 Finalize Mix
-                          </button>
-                        )}
-                        {mixFinalized && (
-                          <div className="mix-finalized-status">
-                            <p className="status-text">✅ Mix finalized - Cards generated for players</p>
-                          </div>
-                        )}
-                        <button
-                          onClick={startGame}
-                          disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 10,
-                            padding: '14px 22px',
-                            fontSize: '1.05rem',
-                            fontWeight: 900,
-                            letterSpacing: '0.02em',
-                            borderRadius: 12,
-                            border: (selectedPlaylists.length === 0 || isSpotifyConnecting) ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(0,255,136,0.6)',
-                            color: (selectedPlaylists.length === 0 || isSpotifyConnecting) ? '#c8c8c8' : '#0b0e12',
-                            background: (selectedPlaylists.length === 0 || isSpotifyConnecting)
-                              ? 'rgba(255,255,255,0.08)'
-                              : 'linear-gradient(180deg, #00ff88 0%, #00cc6d 100%)',
-                            boxShadow: (selectedPlaylists.length === 0 || isSpotifyConnecting)
-                              ? 'none'
-                              : '0 10px 30px rgba(0,255,136,0.25), inset 0 1px 0 rgba(255,255,255,0.4)',
-                            cursor: (selectedPlaylists.length === 0 || isSpotifyConnecting) ? 'not-allowed' : 'pointer',
-                            opacity: (isSpotifyConnecting) ? 0.8 : 1
-                          }}
-                        >
-                          <Play className="btn-icon" />
-                          {isSpotifyConnecting ? 'Connecting Spotify...' : 'Start Game'}
-                        </button>
-                      </>
-                    ) : (
-                      <div className="game-status">
-                        <p className="status-text">🎵 Game is running - Use the Now Playing controls below</p>
-                        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+             <div className="control-buttons">
+               {gameState === 'waiting' && !currentSong ? (
+                 <>
+                   {!mixFinalized && (
+                     <button 
+                       className="control-button finalize-mix"
+                       onClick={finalizeMix}
+                       disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
+                     >
+                       🎵 Finalize Mix
+                     </button>
+                   )}
+                   {mixFinalized && (
+                     <div className="mix-finalized-status">
+                       <p className="status-text">✅ Mix finalized - Cards generated for players</p>
+                     </div>
+                   )}
+                  <button
+                    onClick={startGame}
+                    disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '14px 22px',
+                      fontSize: '1.05rem',
+                      fontWeight: 900,
+                      letterSpacing: '0.02em',
+                      borderRadius: 12,
+                      border: (selectedPlaylists.length === 0 || isSpotifyConnecting) ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(0,255,136,0.6)',
+                      color: (selectedPlaylists.length === 0 || isSpotifyConnecting) ? '#c8c8c8' : '#0b0e12',
+                      background: (selectedPlaylists.length === 0 || isSpotifyConnecting)
+                        ? 'rgba(255,255,255,0.08)'
+                        : 'linear-gradient(180deg, #00ff88 0%, #00cc6d 100%)',
+                      boxShadow: (selectedPlaylists.length === 0 || isSpotifyConnecting)
+                        ? 'none'
+                        : '0 10px 30px rgba(0,255,136,0.25), inset 0 1px 0 rgba(255,255,255,0.4)',
+                      cursor: (selectedPlaylists.length === 0 || isSpotifyConnecting) ? 'not-allowed' : 'pointer',
+                      opacity: (isSpotifyConnecting) ? 0.8 : 1
+                    }}
+                  >
+                    <Play className="btn-icon" />
+                    {isSpotifyConnecting ? 'Connecting Spotify...' : 'Start Game'}
+                  </button>
+                 </>
+               ) : (
+                 <div className="game-status">
+                   <p className="status-text">🎵 Game is running - Use the Now Playing controls below</p>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                           <button className="btn-secondary" onClick={endGame}>End Game</button>
                           <button className="btn-secondary" onClick={confirmAndResetGame}>🔄 Reset</button>
-                          <button className="btn-secondary" onClick={confirmAndNewRound}>🆕 New Round</button>
+                    <button className="btn-secondary" onClick={confirmAndNewRound}>🆕 New Round</button>
                           <button className="btn-accent" onClick={() => setShowRoundManager(!showRoundManager)}>
                             🎯 Round Manager
                           </button>
-                          <button 
-                            className="btn-danger" 
-                            onClick={handleRestartGame}
-                            style={{ background: '#ff6b6b', borderColor: '#ff4757' }}
-                            title="Complete restart: reset all progress, keep cards"
-                          >
-                            🔄 Restart
-                          </button>
-                        </div>
-                        <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
-                          <span style={{ opacity: 0.9 }}>Call Reveal:</span>
-                          <button className="btn-secondary" onClick={() => revealCall('artist')}>Artist</button>
-                          <button className="btn-secondary" onClick={() => revealCall('title')}>Title</button>
-                          <button className="btn-secondary" onClick={() => revealCall('full')}>Full</button>
-                        </div>
-                        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                          <button className="btn-secondary" onClick={forceRefreshAll}>🧹 Force Refresh Clients</button>
-                        </div>
-                      </div>
-                    )}
+                    <button 
+                      className="btn-danger" 
+                      onClick={handleRestartGame}
+                      style={{ background: '#ff6b6b', borderColor: '#ff4757' }}
+                      title="Complete restart: reset all progress, keep cards"
+                    >
+                      🔄 Restart
+                    </button>
                   </div>
-                </motion.div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                    <span style={{ opacity: 0.9 }}>Call Reveal:</span>
+                    <button className="btn-secondary" onClick={() => revealCall('artist')}>Artist</button>
+                    <button className="btn-secondary" onClick={() => revealCall('title')}>Title</button>
+                    <button className="btn-secondary" onClick={() => revealCall('full')}>Full</button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button className="btn-secondary" onClick={forceRefreshAll}>🧹 Force Refresh Clients</button>
+                  </div>
+                 </div>
+               )}
+             </div>
+           </motion.div>
               </div>
             )}
 
@@ -2813,24 +2811,24 @@ const HostView: React.FC = () => {
                     <div className="flex gap-3 flex-wrap">
                       {gameState === 'playing' && (
                         <>
-                          <button
+                  <button 
                             onClick={completeCurrentRound}
                             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                           >
                             ✅ Complete Current Round
-                          </button>
-                          <button
+                  </button>
+                  <button 
                             onClick={resetCurrentRound}
                             className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
-                          >
+                  >
                             🔄 Reset Current Round
-                          </button>
+                  </button>
                         </>
                       )}
                       {(() => {
                         const nextRound = getNextPlannedRound();
                         return nextRound >= 0 ? (
-                          <button
+                  <button 
                             onClick={() => jumpToRound(nextRound)}
                             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                           >
@@ -2846,9 +2844,9 @@ const HostView: React.FC = () => {
                         title="Reset entire event back to the beginning"
                       >
                         🔄 Reset Event
-                      </button>
-                    </div>
-                  </div>
+                  </button>
+                </div>
+              </div>
 
                   {/* Round List */}
                   <div>
@@ -2885,7 +2883,7 @@ const HostView: React.FC = () => {
                                       DONE
                                     </span>
                                   )}
-                                </div>
+              </div>
                                 <div className="text-sm text-gray-400 mt-1">
                                   {(round.playlistIds || []).length} playlist{(round.playlistIds || []).length !== 1 ? 's' : ''} • {round.songCount} songs
                                   {round.status === 'completed' && round.completedAt && (
@@ -2897,28 +2895,28 @@ const HostView: React.FC = () => {
                               </div>
                               <div className="flex gap-2">
                                 {canStart && !isCurrentRound && (
-                                  <button
+                          <button
                                     onClick={() => jumpToRound(index)}
                                     className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
                                   >
                                     Start
-                                  </button>
+                          </button>
                                 )}
-                              </div>
-                            </div>
-                          </div>
+                  </div>
+                  </div>
+                </div>
                         );
                       })}
                     </div>
-                  </div>
-                </motion.div>
+            </div>
+                     </motion.div>
 
                 {/* Player Cards */}
                 {showPlayerCards && playerCards.size > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.4 }}
+             <motion.div 
+               initial={{ opacity: 0 }}
+               animate={{ opacity: 1 }}
+               transition={{ delay: 0.4 }}
                     className="player-cards-section"
                   >
                     <h2>👥 Player Cards & Progress</h2>
@@ -2943,7 +2941,7 @@ const HostView: React.FC = () => {
                             textAlign: 'center'
                           }}>
                             {playerData.playerName}
-                          </div>
+               </div>
                           
                           {/* Win Progress Indicator */}
                           {(() => {
@@ -3031,24 +3029,24 @@ const HostView: React.FC = () => {
                                 </span>
                               </div>
                             ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                 </motion.div>
+               )}
               </div>
             )}
           </div>
 
 
           {/* Legacy sections removed - now in tabbed interface */}
-        </div>
+                  </div>
 
         {/* Now Playing Interface - Always visible when active */}
-        {currentSong && (
-          <motion.div 
-            className="now-playing-section"
+            {currentSong && (
+             <motion.div 
+               className="now-playing-section"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
@@ -3062,10 +3060,10 @@ const HostView: React.FC = () => {
               borderRadius: '15px 15px 0 0',
               boxShadow: '0 -10px 30px rgba(0, 0, 0, 0.3)'
             }}
-          >
-            <h2>🎵 Now Playing</h2>
-            <div className="now-playing-content">
-              {/* Song Info */}
+             >
+               <h2>🎵 Now Playing</h2>
+               <div className="now-playing-content">
+                 {/* Song Info */}
               <div style={{ 
                 background: 'rgba(255,255,255,0.05)', 
                 padding: 16, 
@@ -3078,19 +3076,19 @@ const HostView: React.FC = () => {
                 </div>
                 <div style={{ fontSize: '1rem', color: '#b3b3b3' }}>
                   by {currentSong.artist}
-                </div>
-              </div>
+                   </div>
+                 </div>
 
               {/* Playback Controls */}
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
                 <button className="btn-secondary" onClick={pauseSong}>
                   {!isPlaying ? 'Resume' : 'Pause'}
-                </button>
+                   </button>
                 <button className="btn-secondary" onClick={skipSong}>Skip</button>
                 <button className="btn-secondary" onClick={endGame}>End Game</button>
-              </div>
+                 </div>
 
-              {/* Volume Control */}
+                 {/* Volume Control */}
               <div style={{ 
                 background: 'rgba(255,255,255,0.05)', 
                 padding: 16, 
@@ -3100,25 +3098,25 @@ const HostView: React.FC = () => {
                 gap: 12,
                 justifyContent: 'center'
               }}>
-                <button 
+                   <button
                   className="btn-secondary"
-                  onClick={handleMuteToggle}
-                  style={{ 
+                     onClick={handleMuteToggle}
+                     style={{ 
                     minWidth: '60px',
                     fontSize: '0.9rem'
-                  }}
-                >
-                  {isMuted ? '🔇' : '🔊'}
-                </button>
+                     }}
+                   >
+                     {isMuted ? '🔇' : '🔊'}
+                   </button>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, maxWidth: '300px' }}>
                   <span style={{ fontSize: '0.9rem', color: '#b3b3b3', minWidth: '30px' }}>
                     {isMuted ? 0 : playbackState.volume}%
                   </span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={isMuted ? 0 : playbackState.volume}
+                   <input
+                     type="range"
+                     min="0"
+                     max="100"
+                     value={isMuted ? 0 : playbackState.volume}
                     onChange={(e) => {
                       const newVolume = parseInt(e.target.value);
                       if (isMuted && newVolume > 0) {
@@ -3139,36 +3137,36 @@ const HostView: React.FC = () => {
                       MozAppearance: 'none',
                       border: 'none'
                     }}
-                    className="volume-slider"
-                  />
+                     className="volume-slider"
+                   />
                   <span style={{ fontSize: '0.8rem', color: '#666', minWidth: '40px' }}>100%</span>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
+                 </div>
+                  </div>
+               </div>
+             </motion.div>
+           )}
 
         {/* AI Suggestions Modal */}
         {suggestionsModal.isOpen && (
           <div style={{
-            position: 'fixed',
+                position: 'fixed',
             top: 0,
             left: 0,
             right: 0,
             bottom: 0,
-            background: 'rgba(0,0,0,0.8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+                background: 'rgba(0,0,0,0.8)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
             zIndex: 1000
           }}>
             <div style={{
-              background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
+                  background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
               border: '1px solid rgba(0,255,136,0.3)',
               borderRadius: '12px',
               padding: '24px',
-              maxWidth: '90vw',
-              maxHeight: '90vh',
+                  maxWidth: '90vw',
+                  maxHeight: '90vh',
               overflow: 'auto',
               minWidth: '600px'
             }}>
@@ -3178,7 +3176,7 @@ const HostView: React.FC = () => {
                 </h3>
                 <button
                   onClick={() => setSuggestionsModal({ isOpen: false, playlist: null, suggestions: [], loading: false, analysis: null, error: null })}
-                  style={{
+                      style={{
                     background: 'none',
                     border: 'none',
                     color: '#b3b3b3',
@@ -3188,7 +3186,7 @@ const HostView: React.FC = () => {
                 >
                   ?
                 </button>
-              </div>
+                </div>
 
               {suggestionsModal.error ? (
                 <div style={{ color: '#ff6b6b', padding: '16px', textAlign: 'center' }}>
@@ -3212,8 +3210,8 @@ const HostView: React.FC = () => {
                         gap: '12px',
                         padding: '8px',
                         borderBottom: '1px solid rgba(255,255,255,0.1)',
-                        fontSize: '0.9rem'
-                      }}>
+                  fontSize: '0.9rem'
+                }}>
                         <span style={{ color: '#00ff88', fontWeight: 'bold', minWidth: '24px' }}>
                           {index + 1}
                         </span>
@@ -3226,7 +3224,7 @@ const HostView: React.FC = () => {
                             href={song.preview_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            style={{
+                            style={{ 
                               color: '#00ff88',
                               textDecoration: 'none',
                               fontSize: '0.8rem',
@@ -3238,17 +3236,17 @@ const HostView: React.FC = () => {
                             🎵 Preview
                           </a>
                         )}
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
+                    </div>
               ) : (
                 <div style={{ textAlign: 'center', padding: '32px', color: '#b3b3b3' }}>
                   Generating suggestions...
-                </div>
+                            </div>
               )}
-            </div>
-          </div>
+                      </div>
+                    </div>
         )}
 
         {/* Logs */}
@@ -3260,7 +3258,7 @@ const HostView: React.FC = () => {
             transition={{ delay: 0.7 }}
           >
             <h2>📋 Event Log</h2>
-            <div style={{ 
+                  <div style={{ 
               maxHeight: 200, 
               overflow: 'auto', 
               border: '1px solid rgba(255,255,255,0.1)', 
@@ -3284,19 +3282,19 @@ const HostView: React.FC = () => {
                       marginRight: 8
                     }}>
                       [{new Date(log.ts).toLocaleTimeString()}]
-                    </span>
+                          </span>
                     <span style={{ color: '#fff' }}>{log.message}</span>
                   </div>
                 ))
               )}
-            </div>
+                </div>
           </motion.div>
         )}
       </motion.div>
 
       {/* License Key Modal */}
       {showLicenseModal && (
-        <div style={{
+                <div style={{ 
           position: 'fixed',
           top: 0,
           left: 0,
@@ -3305,16 +3303,16 @@ const HostView: React.FC = () => {
           background: 'rgba(0, 0, 0, 0.8)',
           backdropFilter: 'blur(10px)',
           zIndex: 10000,
-          display: 'flex',
+                  display: 'flex', 
           alignItems: 'center',
-          justifyContent: 'center',
+                  justifyContent: 'center',
           padding: 20
         }}>
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.3 }}
-            style={{
+                    style={{
               background: 'rgba(42, 42, 42, 0.95)',
               backdropFilter: 'blur(20px)',
               borderRadius: 20,
@@ -3330,26 +3328,26 @@ const HostView: React.FC = () => {
                 {isLicenseValidated ? '🔑 Update License Key' : '🔑 Enter License Key'}
               </h2>
               {isLicenseValidated && (
-                <button
+                  <button
                   onClick={() => setShowLicenseModal(false)}
-                  style={{
+                    style={{
                     background: 'none',
-                    border: 'none',
+                      border: 'none',
                     color: '#ffffff',
                     fontSize: '1.5rem',
-                    cursor: 'pointer',
+                      cursor: 'pointer',
                     padding: 5,
                     borderRadius: 5,
                     opacity: 0.7,
                     transition: 'opacity 0.2s ease'
-                  }}
+                    }}
                   onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
                   onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
-                >
+                  >
                   ✕
-                </button>
+                  </button>
               )}
-            </div>
+                </div>
 
             <div style={{ marginBottom: 20 }}>
               <label style={{ 
@@ -3393,7 +3391,7 @@ const HostView: React.FC = () => {
             </div>
 
             {isJoiningRoom && (
-              <div style={{ 
+                <div style={{ 
                 display: 'flex', 
                 alignItems: 'center', 
                 gap: 10,
@@ -3420,7 +3418,7 @@ const HostView: React.FC = () => {
             {licenseError && (
               <div style={{ 
                 color: '#ff3b30', 
-                fontSize: '0.9rem', 
+                  fontSize: '0.9rem', 
                 padding: '12px 16px',
                 background: 'rgba(255, 59, 48, 0.1)',
                 borderRadius: 8,
@@ -3428,7 +3426,7 @@ const HostView: React.FC = () => {
                 marginBottom: 15
               }}>
                 {licenseError}
-              </div>
+                </div>
             )}
 
             {isLicenseValidated && (
@@ -3455,7 +3453,7 @@ const HostView: React.FC = () => {
                   <p style={{ margin: 0 }}>
                     Your current license is working properly - no action needed.
                   </p>
-                </div>
+                  </div>
               ) : (
                 <div>
                   <p style={{ margin: '0 0 8px 0' }}>
@@ -3464,10 +3462,10 @@ const HostView: React.FC = () => {
                   <p style={{ margin: 0 }}>
                     Contact your administrator if you need a license key.
                   </p>
-                </div>
-              )}
-            </div>
-          </motion.div>
+              </div>
+          )}
+        </div>
+      </motion.div>
         </div>
       )}
 

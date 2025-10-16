@@ -1121,35 +1121,35 @@ io.on('connection', (socket) => {
       try {
         // Emit current song to the joining player to sync display timing (non-hosts only)
         if (!isHost && room.currentSong && room.snippetLength) {
-          socket.emit('song-playing', {
-            songId: room.currentSong.id,
-            songName: room.currentSong.name,
-            artistName: room.currentSong.artist,
-            snippetLength: room.snippetLength,
-            currentIndex: room.currentSongIndex || 0,
-            totalSongs: room.playlistSongs?.length || 0,
-            previewUrl: (room.playlistSongs?.[room.currentSongIndex || 0]?.previewUrl) || null
-          });
-        }
+            socket.emit('song-playing', {
+              songId: room.currentSong.id,
+              songName: room.currentSong.name,
+              artistName: room.currentSong.artist,
+              snippetLength: room.snippetLength,
+              currentIndex: room.currentSongIndex || 0,
+              totalSongs: room.playlistSongs?.length || 0,
+              previewUrl: (room.playlistSongs?.[room.currentSongIndex || 0]?.previewUrl) || null
+            });
+          }
 
         // Ensure bingo card exists for ALL players (including hosts) if cards are available
-        if (!room.bingoCards) room.bingoCards = new Map();
-        const bySocket = room.bingoCards.get(socket.id);
-        if (bySocket) {
+          if (!room.bingoCards) room.bingoCards = new Map();
+          const bySocket = room.bingoCards.get(socket.id);
+          if (bySocket) {
           player.bingoCard = bySocket; // Ensure it's also on the player object
-          io.to(socket.id).emit('bingo-card', bySocket);
-        } else if (clientId && room.clientCards && room.clientCards.has(clientId)) {
-          const existingCard = room.clientCards.get(clientId);
-          room.bingoCards.set(socket.id, existingCard);
+            io.to(socket.id).emit('bingo-card', bySocket);
+          } else if (clientId && room.clientCards && room.clientCards.has(clientId)) {
+            const existingCard = room.clientCards.get(clientId);
+            room.bingoCards.set(socket.id, existingCard);
           player.bingoCard = existingCard; // Set on player object
-          io.to(socket.id).emit('bingo-card', existingCard);
-        } else if (room.playlistSongs?.length || room.playlists?.length || room.finalizedPlaylists?.length) {
+            io.to(socket.id).emit('bingo-card', existingCard);
+          } else if (room.playlistSongs?.length || room.playlists?.length || room.finalizedPlaylists?.length) {
           // Generate card for any player (host or not) if playlists exist
           console.log(`🎲 Generating bingo card for ${isHost ? 'host' : 'player'} ${playerName}`);
-          const card = await generateBingoCardForPlayer(roomId, socket.id);
+            const card = await generateBingoCardForPlayer(roomId, socket.id);
           if (card && clientId) {
-            if (!room.clientCards) room.clientCards = new Map();
-            room.clientCards.set(clientId, card);
+              if (!room.clientCards) room.clientCards = new Map();
+              room.clientCards.set(clientId, card);
           }
         }
       } catch (e) {
@@ -2827,40 +2827,40 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
 
       // Build card
       const card = { id: playerId, squares: [] };
-      let idx = 0;
-      for (let row = 0; row < 5; row++) {
-        for (let col = 0; col < 5; col++) {
+    let idx = 0;
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 5; col++) {
           const s = chosen25[idx++];
           if (!s || !s.id) {
             console.error(`❌ Invalid song at position ${row}-${col} for player ${player.name}`);
             continue;
           }
-          card.squares.push({
-            position: `${row}-${col}`,
-            songId: s.id,
-            songName: s.name,
-            artistName: s.artist,
-            marked: false
-          });
-        }
+        card.squares.push({
+          position: `${row}-${col}`,
+          songId: s.id,
+          songName: s.name,
+          artistName: s.artist,
+          marked: false
+        });
       }
+    }
 
       if (card.squares.length < 25) {
         console.error(`❌ Card incomplete for player ${player.name}: only ${card.squares.length}/25 squares`);
         continue; // Skip this player
       }
 
-      const uniqueOnCard = new Set(card.squares.map(q => q.songId));
+    const uniqueOnCard = new Set(card.squares.map(q => q.songId));
       console.log(`✅ Generated card for ${player.name} with ${uniqueOnCard.size} unique songs (mode=${mode})`);
 
       if (!room.bingoCards) room.bingoCards = new Map();
-      player.bingoCard = card;
-      cards.set(playerId, card);
+    player.bingoCard = card;
+    cards.set(playerId, card);
       // Persist by clientId if available to survive refreshes
       if (player.clientId) {
         room.clientCards.set(player.clientId, card);
       }
-      io.to(playerId).emit('bingo-card', card);
+    io.to(playerId).emit('bingo-card', card);
     } catch (e) {
       console.error(`❌ Error generating card for player ${player.name} (${playerId}):`, e?.message || e);
       // Continue with other players
@@ -3918,7 +3918,7 @@ app.get('/api/spotify/status', async (req, res) => {
     }
   } catch (error) {
     console.error('❌ Error checking Spotify status:', error);
-    res.json({ 
+  res.json({ 
       connected: false,
       hasTokens: false
     });
@@ -3956,32 +3956,32 @@ app.post('/api/spotify/clear', (req, res) => {
     console.log('🗑️  Starting Spotify tokens clear...');
     
     // Clear in-memory tokens
-    spotifyTokens = null;
+  spotifyTokens = null;
     console.log('✅ Cleared in-memory tokens');
     
     // Clear service tokens
     if (spotifyService && typeof spotifyService.setTokens === 'function') {
-      spotifyService.setTokens(null, null);
+  spotifyService.setTokens(null, null);
       console.log('✅ Cleared service tokens');
     } else {
       console.warn('⚠️ spotifyService.setTokens not available');
     }
-    
-    // Remove saved tokens file
-    try {
-      if (fs.existsSync(TOKEN_FILE)) {
-        fs.unlinkSync(TOKEN_FILE);
+  
+  // Remove saved tokens file
+  try {
+    if (fs.existsSync(TOKEN_FILE)) {
+      fs.unlinkSync(TOKEN_FILE);
         console.log('✅ Removed saved Spotify tokens file');
       } else {
         console.log('ℹ️ No tokens file to remove');
-      }
+    }
     } catch (fileError) {
       console.error('❌ Error removing tokens file:', fileError);
       // Don't fail the whole request for file errors
-    }
-    
+  }
+  
     console.log('✅ Successfully cleared Spotify tokens');
-    res.json({ success: true, message: 'Spotify tokens cleared' });
+  res.json({ success: true, message: 'Spotify tokens cleared' });
     
   } catch (error) {
     console.error('❌ Error in /api/spotify/clear:', error);
@@ -4041,7 +4041,7 @@ app.get('/api/spotify/callback', async (req, res) => {
     
     // Update legacy variables for backward compatibility
     if (organizationId === 'DEFAULT') {
-      spotifyTokens = tokens;
+    spotifyTokens = tokens;
     }
     
     console.log(`Spotify connection successful for ${organizationId}, sending response`);
