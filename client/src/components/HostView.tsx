@@ -64,7 +64,10 @@ const HostView: React.FC = () => {
   const [players] = useState<Player[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [selectedPlaylists, setSelectedPlaylists] = useState<Playlist[]>([]);
-  const [snippetLength, setSnippetLength] = useState(30);
+  const [snippetLength, setSnippetLength] = useState(() => {
+    const saved = localStorage.getItem('game-snippet-length');
+    return saved ? parseInt(saved) : 30;
+  });
   const [winners, setWinners] = useState<Player[]>([]);
   const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
   const [isSpotifyConnecting, setIsSpotifyConnecting] = useState(false);
@@ -78,7 +81,10 @@ const HostView: React.FC = () => {
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
   const [shuffleEnabled, setShuffleEnabled] = useState<boolean>(false);
   const [repeatState, setRepeatState] = useState<'off' | 'track' | 'context'>('off');
-  const [randomStarts, setRandomStarts] = useState<boolean>(false);
+  const [randomStarts, setRandomStarts] = useState<boolean>(() => {
+    const saved = localStorage.getItem('game-random-starts');
+    return saved ? saved === 'true' : false;
+  });
   const [isStartingGame, setIsStartingGame] = useState(false);
   const [playedSoFar, setPlayedSoFar] = useState<Array<{ id: string; name: string; artist: string }>>([]);
   const [logs, setLogs] = useState<Array<{ level: 'info' | 'warn' | 'error'; message: string; ts: number }>>([]);
@@ -2500,26 +2506,76 @@ const HostView: React.FC = () => {
                     borderRadius: 8, 
                     marginBottom: 16 
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ opacity: 0.85 }}>Snippet</span>
-                        <input
-                          type="range"
-                          min="5"
-                          max="60"
-                          value={snippetLength}
-                          onChange={(e) => setSnippetLength(Number(e.target.value))}
-                        />
-                        <span style={{ width: 32, textAlign: 'right' }}>{snippetLength}s</span>
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <input
-                          type="checkbox"
-                          checked={randomStarts}
-                          onChange={(e) => setRandomStarts(!!e.target.checked)}
-                        />
-                        <span>Random start</span>
-                      </label>
+                    {/* Track Length Control */}
+                    <div style={{ marginBottom: 16 }}>
+                      <h4 style={{ fontSize: '0.9rem', color: '#00ff88', marginBottom: 8, fontWeight: 600 }}>
+                        🎵 Track Playback Settings
+                      </h4>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ opacity: 0.85, minWidth: '80px' }}>Track Length:</span>
+                          <input
+                            type="range"
+                            min="5"
+                            max="60"
+                            value={snippetLength}
+                            onChange={(e) => {
+                              const newLength = Number(e.target.value);
+                              setSnippetLength(newLength);
+                              localStorage.setItem('game-snippet-length', newLength.toString());
+                            }}
+                            style={{ width: '120px' }}
+                          />
+                          <span style={{ width: 40, textAlign: 'right', color: '#00ff88', fontWeight: 'bold' }}>
+                            {snippetLength}s
+                          </span>
+                        </label>
+                      </div>
+                      
+                      {/* Start Position Control */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                        <span style={{ opacity: 0.85, minWidth: '80px' }}>Start Position:</span>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <input
+                            type="radio"
+                            name="startPosition"
+                            checked={!randomStarts}
+                            onChange={() => {
+                              setRandomStarts(false);
+                              localStorage.setItem('game-random-starts', 'false');
+                            }}
+                          />
+                          <span>From beginning</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <input
+                            type="radio"
+                            name="startPosition"
+                            checked={randomStarts}
+                            onChange={() => {
+                              setRandomStarts(true);
+                              localStorage.setItem('game-random-starts', 'true');
+                            }}
+                          />
+                          <span>Random position</span>
+                        </label>
+                      </div>
+                      
+                      {/* Description */}
+                      <div style={{ 
+                        fontSize: '0.8rem', 
+                        color: '#b3b3b3', 
+                        marginTop: 8, 
+                        padding: '8px 12px', 
+                        background: 'rgba(255,255,255,0.03)', 
+                        borderRadius: 4,
+                        borderLeft: '3px solid #00ff88'
+                      }}>
+                        {randomStarts 
+                          ? `Each track will play for ${snippetLength} seconds starting from a random position (avoiding the very end)`
+                          : `Each track will play for ${snippetLength} seconds starting from the beginning`
+                        }
+                      </div>
                     </div>
                     
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
