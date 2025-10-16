@@ -2166,7 +2166,7 @@ const HostView: React.FC = () => {
         </div>
 
         {/* Main Content */}
-        <div className="host-content">
+        <div className="host-content" style={{ paddingBottom: currentSong ? '300px' : '20px' }}>
           {/* Tab Navigation */}
           <div className="tab-navigation" style={{
             display: 'flex',
@@ -2921,6 +2921,16 @@ const HostView: React.FC = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
+            style={{
+              position: 'fixed',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              zIndex: 1000,
+              margin: 0,
+              borderRadius: '15px 15px 0 0',
+              boxShadow: '0 -10px 30px rgba(0, 0, 0, 0.3)'
+            }}
           >
             <h2>🎵 Now Playing</h2>
             <div className="now-playing-content">
