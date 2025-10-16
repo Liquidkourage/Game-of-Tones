@@ -1489,47 +1489,6 @@ const HostView: React.FC = () => {
     } catch {}
   }, [selectedDevice?.id, fetchPlaybackState, socket, roomId]);
 
-  const toggleShuffle = useCallback(async () => {
-    if (!selectedDevice) {
-      alert('Please select a device first');
-      return;
-    }
-    const next = !shuffleEnabled;
-    try {
-      const response = await fetch(`${API_BASE || ''}/api/spotify/shuffle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shuffle: next, deviceId: selectedDevice.id })
-      });
-      if (response.ok) {
-        setShuffleEnabled(next);
-      }
-    } catch (e) {
-      console.error('❌ Error setting shuffle:', e);
-    }
-  }, [selectedDevice, shuffleEnabled]);
-
-  const cycleRepeat = useCallback(async () => {
-    if (!selectedDevice) {
-      alert('Please select a device first');
-      return;
-    }
-    const order: Array<'off' | 'context' | 'track'> = ['off', 'context', 'track'];
-    const idx = order.indexOf(repeatState as any);
-    const next = order[(idx + 1) % order.length];
-    try {
-      const response = await fetch(`${API_BASE || ''}/api/spotify/repeat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: next, deviceId: selectedDevice.id })
-      });
-      if (response.ok) {
-        setRepeatState(next);
-      }
-    } catch (e) {
-      console.error('❌ Error setting repeat:', e);
-    }
-  }, [selectedDevice, repeatState]);
 
   // Debounced volume change with strict synchronization
   const handleVolumeChange = useCallback(async (newVolume: number) => {
