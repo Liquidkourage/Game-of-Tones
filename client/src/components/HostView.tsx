@@ -29,6 +29,17 @@ interface Song {
   duration?: number; // Make duration optional
 }
 
+interface EventRound {
+  id: string;
+  name: string;
+  playlistIds: string[];
+  playlistNames: string[];
+  songCount: number;
+  status: 'completed' | 'active' | 'planned' | 'unplanned';
+  startedAt?: number;
+  completedAt?: number;
+}
+
 interface Player {
   id: string;
   name: string;
@@ -107,6 +118,10 @@ const HostView: React.FC = () => {
   const [showAllControls, setShowAllControls] = useState<boolean>(false);
   const [showRooms, setShowRooms] = useState<boolean>(false);
   const [rooms, setRooms] = useState<Array<any>>([]);
+  
+  // Round management state
+  const [eventRounds, setEventRounds] = useState<EventRound[]>([]);
+  const [currentRoundIndex, setCurrentRoundIndex] = useState(-1);
   const [showPlayerCards, setShowPlayerCards] = useState<boolean>(false);
   const [playerCards, setPlayerCards] = useState<Map<string, any>>(new Map());
   const [showRoundManager, setShowRoundManager] = useState<boolean>(false);
@@ -1119,6 +1134,104 @@ const HostView: React.FC = () => {
     if (!socket || !roomId) return;
     socket.emit('force-refresh', { roomId, reason: 'host-request' });
     addLog('Force refresh broadcast', 'warn');
+  };
+
+  // Round management functions
+  const completeCurrentRound = () => {
+    if (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length) {
+      const updatedRounds = [...eventRounds];
+      updatedRounds[currentRoundIndex] = {
+        ...updatedRounds[currentRoundIndex],
+        status: 'completed',
+        completedAt: Date.now()
+      };
+      setEventRounds(updatedRounds);
+      if (roomId) {
+        localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(updatedRounds));
+      }
+      addLog(`Round ${currentRoundIndex + 1} marked as completed`, 'info');
+    }
+  };
+
+  const resetCurrentRound = () => {
+    if (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length) {
+      const updatedRounds = [...eventRounds];
+      updatedRounds[currentRoundIndex] = {
+        ...updatedRounds[currentRoundIndex],
+        status: 'planned',
+        startedAt: undefined,
+        completedAt: undefined
+      };
+      setEventRounds(updatedRounds);
+      if (roomId) {
+        localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(updatedRounds));
+      }
+      addLog(`Round ${currentRoundIndex + 1} reset to planned status`, 'info');
+    }
+  };
+
+  const jumpToRound = (roundIndex: number) => {
+    if (roundIndex >= 0 && roundIndex < eventRounds.length) {
+      setCurrentRoundIndex(roundIndex);
+      const updatedRounds = [...eventRounds];
+      updatedRounds[roundIndex] = {
+        ...updatedRounds[roundIndex],
+        status: 'active',
+        startedAt: Date.now()
+      };
+      setEventRounds(updatedRounds);
+      if (roomId) {
+        localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(updatedRounds));
+      }
+      addLog(`Jumped to Round ${roundIndex + 1}`, 'info');
+    }
+  };
+
+  const resetEvent = () => {
+    if (window.confirm('⚠️ Reset entire event?\n\nThis will:\n• Reset all rounds to unplanned status\n• Clear all round progress\n• End the current game if running\n• Allow you to replay from Round 1\n\nThis cannot be undone. Continue?')) {
+      // End current game if running
+      if (gameState === 'playing') {
+        endGame();
+      }
+      
+      // Reset all rounds to unplanned status
+      const resetRounds = eventRounds.map((round, index) => ({
+        ...round,
+        status: 'unplanned' as const,
+        startedAt: undefined,
+        completedAt: undefined
+      }));
+      
+      // Update rounds and reset current round index
+      setEventRounds(resetRounds);
+      setCurrentRoundIndex(-1);
+      
+      // Save to localStorage
+      if (roomId) {
+        localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(resetRounds));
+      }
+      
+      // Clear selected playlists and reset game state
+      setSelectedPlaylists([]);
+      setMixFinalized(false);
+      setSongList([]);
+      setGameState('waiting');
+      
+      addLog('🔄 Event reset - All rounds returned to unplanned status', 'info');
+    }
+  };
+
+  // Helper functions for round management
+  const getNextPlannedRound = () => {
+    return eventRounds.findIndex(round => round.status === 'planned');
+  };
+
+  const getRoundStatusSummary = () => {
+    const completed = eventRounds.filter(r => r.status === 'completed').length;
+    const active = eventRounds.filter(r => r.status === 'active').length;
+    const planned = eventRounds.filter(r => r.status === 'planned').length;
+    const unplanned = eventRounds.filter(r => r.status === 'unplanned').length;
+    return { completed, active, planned, unplanned };
   };
 
   const updatePattern = (next: 'line' | 'four_corners' | 'x' | 'full_card' | 'custom') => {
@@ -2738,7 +2851,7 @@ const HostView: React.FC = () => {
                             onClick={completeCurrentRound}
                             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                           >
-                            ? Complete Current Round
+                            ✅ Complete Current Round
                           </button>
                           <button
                             onClick={resetCurrentRound}
@@ -2759,6 +2872,15 @@ const HostView: React.FC = () => {
                           </button>
                         ) : null;
                       })()}
+                      
+                      {/* Reset Event Button - Always available */}
+                      <button
+                        onClick={resetEvent}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                        title="Reset entire event back to the beginning"
+                      >
+                        🔄 Reset Event
+                      </button>
                     </div>
                   </div>
 
