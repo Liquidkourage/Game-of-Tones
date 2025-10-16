@@ -373,9 +373,10 @@ const HostView: React.FC = () => {
       }
       const data = await resp.json();
       if (data.success && data.playbackState) {
-        setShuffleEnabled(!!data.playbackState.shuffle_state);
-        const rep = (data.playbackState.repeat_state || 'off') as 'off' | 'track' | 'context';
-        setRepeatState(rep);
+        // Shuffle/repeat state removed - not used in UI
+        // setShuffleEnabled(!!data.playbackState.shuffle_state);
+        // const rep = (data.playbackState.repeat_state || 'off') as 'off' | 'track' | 'context';
+        // setRepeatState(rep);
       }
     } catch (e) {
       // ignore
