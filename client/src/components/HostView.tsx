@@ -118,10 +118,6 @@ const HostView: React.FC = () => {
   const [showAllControls, setShowAllControls] = useState<boolean>(false);
   const [showRooms, setShowRooms] = useState<boolean>(false);
   const [rooms, setRooms] = useState<Array<any>>([]);
-  
-  // Round management state
-  const [eventRounds, setEventRounds] = useState<EventRound[]>([]);
-  const [currentRoundIndex, setCurrentRoundIndex] = useState(-1);
   const [showPlayerCards, setShowPlayerCards] = useState<boolean>(false);
   const [playerCards, setPlayerCards] = useState<Map<string, any>>(new Map());
   const [showRoundManager, setShowRoundManager] = useState<boolean>(false);
@@ -153,7 +149,7 @@ const HostView: React.FC = () => {
       status: 'unplanned'
     }
   ]);
-  const [currentRoundIndex, setCurrentRoundIndex] = useState<number>(0);
+  const [currentRoundIndex, setCurrentRoundIndex] = useState<number>(-1);
 
   const addLog = (message: string, level: 'info' | 'warn' | 'error' = 'info') => {
     setLogs(prev => [{ level, message, ts: Date.now() }, ...prev].slice(0, 50));
