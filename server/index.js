@@ -2206,6 +2206,10 @@ io.on('connection', (socket) => {
       room.winners = [];
       room.roundWinners = [];
       
+      // Reset mix finalization to allow new playlists for the new round
+      room.mixFinalized = false;
+      room.finalizedPlaylists = null;
+      
       // Clear all player bingo cards
       room.players.forEach((player, playerId) => {
         if (player.bingoCard) {
