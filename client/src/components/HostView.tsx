@@ -2378,18 +2378,6 @@ const HostView: React.FC = () => {
             />
           )}
 
-                {/* Round Planner */}
-                {isSpotifyConnected && (
-                  <RoundPlanner
-                    rounds={eventRounds}
-                    onUpdateRounds={handleUpdateRounds}
-                    playlists={playlists}
-                    currentRound={currentRoundIndex}
-                    onStartRound={handleStartRound}
-                    gameState={gameState}
-                  />
-                )}
-
                 {/* Playlists Section */}
                 {(showPlaylists || showAllControls) && isSpotifyConnected && (
                   <motion.div 
