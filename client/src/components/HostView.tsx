@@ -705,6 +705,14 @@ const HostView: React.FC = () => {
       addLog(`Super-Strict Lock ${data?.enabled ? 'enabled' : 'disabled'}`, 'warn');
     });
 
+    // Listen for pattern updates
+    newSocket.on('pattern-updated', (data: any) => {
+      if (data?.pattern) {
+        setPattern(data.pattern);
+        addLog(`Pattern updated to ${data.pattern}`, 'info');
+      }
+    });
+
     // Listen for player card updates
     newSocket.on('player-cards-update', (data: any) => {
       try {
@@ -2515,6 +2523,65 @@ const HostView: React.FC = () => {
                </div>
              )}
           </motion.div>
+
+          {/* Pattern Selection */}
+          {isSpotifyConnected && (
+            <motion.div 
+              className="pattern-section"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+            >
+              <h2>🎯 Bingo Pattern</h2>
+              <div className="pattern-selection">
+                <div className="pattern-options" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
+                  {[
+                    { value: 'line', label: 'Line', desc: 'Any row, column, or diagonal' },
+                    { value: 'four_corners', label: 'Four Corners', desc: 'All four corner squares' },
+                    { value: 'x', label: 'X Pattern', desc: 'Both diagonals' },
+                    { value: 'full_card', label: 'Full Card', desc: 'All 25 squares' }
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      className={`pattern-option ${pattern === option.value ? 'active' : ''}`}
+                      onClick={() => {
+                        setPattern(option.value as any);
+                        if (socket && roomId) {
+                          socket.emit('set-pattern', { roomId, pattern: option.value });
+                          addLog(`Pattern set to ${option.label}`, 'info');
+                        }
+                      }}
+                      style={{
+                        padding: '12px 16px',
+                        margin: '4px',
+                        border: pattern === option.value ? '2px solid #00ff88' : '1px solid rgba(255,255,255,0.3)',
+                        borderRadius: '8px',
+                        background: pattern === option.value ? 'rgba(0,255,136,0.1)' : 'rgba(255,255,255,0.05)',
+                        color: pattern === option.value ? '#00ff88' : '#ffffff',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        minWidth: '120px'
+                      }}
+                    >
+                      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{option.label}</div>
+                      <div style={{ fontSize: '0.8rem', opacity: 0.8, textAlign: 'center' }}>{option.desc}</div>
+                    </button>
+                  ))}
+                </div>
+                <div style={{ marginTop: '8px', fontSize: '0.9rem', color: '#b3b3b3' }}>
+                  Current pattern: <strong style={{ color: '#00ff88' }}>
+                    {pattern === 'line' ? 'Line' : 
+                     pattern === 'four_corners' ? 'Four Corners' :
+                     pattern === 'x' ? 'X Pattern' :
+                     pattern === 'full_card' ? 'Full Card' : pattern}
+                  </strong>
+                </div>
+              </div>
+            </motion.div>
+          )}
 
           {/* Round Planner */}
           {isSpotifyConnected && (
