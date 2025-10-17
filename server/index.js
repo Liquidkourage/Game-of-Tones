@@ -829,6 +829,11 @@ async function playNextSongSimple(roomId, deviceId) {
     }
   }
 
+  // Track called song
+  room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
+  room.calledSongIds.push(nextSong.id);
+  console.log(`📝 SIMPLE PLAYBACK: Marked song as played: ${nextSong.name} (${nextSong.id}) - Total played: ${room.calledSongIds.length}`);
+  
   // Update current song and store original start position
   room.currentSong = {
     id: nextSong.id,
