@@ -33,6 +33,7 @@ interface GameState {
   playerCount: number;
   hasBingo: boolean;
   pattern: string;
+  customPattern?: string[]; // Array of positions like ['0-0', '2-2', '4-4']
 }
 
 interface Song {
@@ -87,6 +88,7 @@ const PlayerView: React.FC = () => {
   const holdRafRef = useRef<number | null>(null);
   const [bingoStatus, setBingoStatus] = useState<'idle' | 'checking' | 'success' | 'failed'>('idle');
   const [bingoMessage, setBingoMessage] = useState<string>('');
+  const [hasValidBingo, setHasValidBingo] = useState<boolean>(false);
   const [gameState, setGameState] = useState<GameState>({
     isPlaying: false,
     currentSong: null,
@@ -202,6 +204,16 @@ const PlayerView: React.FC = () => {
     newSocket.on('mix-finalized', (data: any) => {
       console.log('Mix finalized:', data);
       // Cards are now available but game hasn't started yet
+    });
+
+    // Listen for pattern updates
+    newSocket.on('pattern-updated', (data: any) => {
+      console.log('Pattern updated:', data);
+      setGameState(prev => ({
+        ...prev,
+        pattern: data.pattern || 'line',
+        customPattern: data.customMask || undefined
+      }));
     });
 
     // Handle bingo validation result (for the caller)
@@ -606,6 +618,13 @@ const PlayerView: React.FC = () => {
   };
 
   const startBingoHold = () => {
+    // Only allow bingo call if there's a valid bingo
+    if (!hasValidBingo) {
+      setBingoMessage('No valid bingo pattern completed!');
+      setTimeout(() => setBingoMessage(''), 2000);
+      return;
+    }
+
     if (bingoHoldTimer.current) window.clearTimeout(bingoHoldTimer.current);
     if (holdRafRef.current) cancelAnimationFrame(holdRafRef.current as any);
     holdStartRef.current = performance.now();
@@ -641,6 +660,19 @@ const PlayerView: React.FC = () => {
     setHoldProgress(0);
     setBingoHolding(false);
   };
+
+  // Auto-detect bingo when card or pattern changes
+  useEffect(() => {
+    if (bingoCard && gameState.pattern) {
+      const isValidBingo = checkBingo(bingoCard);
+      setHasValidBingo(isValidBingo);
+      
+      // Update game state hasBingo for UI consistency
+      if (isValidBingo !== gameState.hasBingo) {
+        setGameState(prev => ({ ...prev, hasBingo: isValidBingo }));
+      }
+    }
+  }, [bingoCard, gameState.pattern, gameState.customPattern]);
 
   const checkBingo = (card: BingoCard): boolean => {
     const pattern = gameState.pattern;
@@ -714,7 +746,15 @@ const PlayerView: React.FC = () => {
       return diag1Complete || diag2Complete;
     }
     
-    // Custom pattern - fallback to line logic for now
+    // Custom pattern - check if all required positions are marked
+    if (pattern === 'custom' && gameState.customPattern) {
+      return gameState.customPattern.every(pos => {
+        const square = card.squares.find(s => s.position === pos);
+        return square && square.marked;
+      });
+    }
+    
+    // Default fallback
     return false;
   };
 
@@ -1045,7 +1085,7 @@ const PlayerView: React.FC = () => {
 
         {/* bottom sheet removed per request */}
         <button
-          className={`bingo-fab ${bingoHolding ? 'holding' : ''}`}
+          className={`bingo-fab ${bingoHolding ? 'holding' : ''} ${hasValidBingo ? 'ready' : 'disabled'}`}
           onPointerDown={startBingoHold}
           onPointerUp={cancelBingoHold}
           onPointerCancel={cancelBingoHold}
@@ -1054,7 +1094,7 @@ const PlayerView: React.FC = () => {
           onTouchCancel={(e) => { e.preventDefault(); cancelBingoHold(); }}
           onContextMenu={(e) => { e.preventDefault(); return false; }}
           onMouseDown={(e) => { e.preventDefault(); }}
-          title="Hold to call BINGO"
+          title={hasValidBingo ? "Hold to call BINGO!" : "Complete a pattern to call BINGO"}
           style={{
             position: 'fixed',
             bottom: 'calc(24px + env(safe-area-inset-bottom))',
@@ -1068,10 +1108,16 @@ const PlayerView: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'linear-gradient(180deg, #00ff88 0%, #00cc6d 100%)',
-            color: '#061a12',
-            border: '2px solid rgba(0,255,136,0.6)',
-            boxShadow: '0 12px 26px rgba(0,0,0,0.35), 0 0 24px rgba(0,255,136,0.35)',
+            background: hasValidBingo 
+              ? 'linear-gradient(180deg, #00ff88 0%, #00cc6d 100%)'
+              : 'linear-gradient(180deg, #666666 0%, #444444 100%)',
+            color: hasValidBingo ? '#061a12' : '#cccccc',
+            border: hasValidBingo 
+              ? '2px solid rgba(0,255,136,0.6)'
+              : '2px solid rgba(102,102,102,0.6)',
+            boxShadow: hasValidBingo 
+              ? '0 12px 26px rgba(0,0,0,0.35), 0 0 24px rgba(0,255,136,0.35)'
+              : '0 8px 16px rgba(0,0,0,0.25)',
             userSelect: 'none',
             WebkitUserSelect: 'none',
             MozUserSelect: 'none',
@@ -1098,7 +1144,7 @@ const PlayerView: React.FC = () => {
             {bingoHolding ? 'Holding…' : 
              bingoStatus === 'checking' ? 'Checking...' :
              bingoStatus === 'success' ? 'WINNER!' :
-             gameState.hasBingo ? 'BINGO!' : 'Hold to BINGO'}
+             hasValidBingo ? 'BINGO READY!' : 'No Pattern'}
           </span>
         </button>
       </div>
