@@ -3029,6 +3029,18 @@ const HostView: React.FC = () => {
                         ) : null;
                       })()}
                       
+                      {/* Player Cards Button - Always available */}
+                      <button
+                        onClick={() => {
+                          requestPlayerCards();
+                          setShowPlayerCards(true);
+                        }}
+                        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                        title="View all player bingo cards"
+                      >
+                        👥 View Player Cards
+                      </button>
+                      
                       {/* Reset Event Button - Always available */}
                       <button
                         onClick={resetEvent}
@@ -3036,7 +3048,7 @@ const HostView: React.FC = () => {
                         title="Reset entire event back to the beginning"
                       >
                         🔄 Reset Event
-                  </button>
+                      </button>
                 </div>
               </div>
 
@@ -3111,7 +3123,16 @@ const HostView: React.FC = () => {
                transition={{ delay: 0.4 }}
                     className="player-cards-section"
                   >
-                    <h2>👥 Player Cards & Progress</h2>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                      <h2>👥 Player Cards & Progress</h2>
+                      <button
+                        onClick={() => setShowPlayerCards(false)}
+                        className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
+                        title="Close player cards view"
+                      >
+                        ✕ Close
+                      </button>
+                    </div>
                     <div style={{ 
                       display: 'grid', 
                       gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', 
