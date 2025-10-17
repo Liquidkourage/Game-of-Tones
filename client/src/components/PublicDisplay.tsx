@@ -647,8 +647,9 @@ const PublicDisplay: React.FC = () => {
 
     // Staged reveal event: show name/artist hints without changing the bingo grid
     newSocket.on('call-revealed', (payload: any) => {
+      console.log('📣 Call revealed:', payload);
       if (payload?.revealToDisplay) {
-        // For now, just update the header Now Playing banner content without marking grid
+        // Update the header Now Playing banner content without marking grid
         setGameState(prev => ({
           ...prev,
           currentSong: {
@@ -657,6 +658,39 @@ const PublicDisplay: React.FC = () => {
             artist: payload.artistName || prev.currentSong?.artist || ''
           }
         }));
+        
+        // Show reveal toast
+        try {
+          const { hint, songName, artistName } = payload;
+          let revealText = '';
+          
+          if (hint === 'artist' && artistName) {
+            revealText = `Artist: ${artistName}`;
+          } else if (hint === 'title' && songName) {
+            revealText = `Song: ${songName}`;
+          } else if (hint === 'full' && songName && artistName) {
+            revealText = `${songName} - ${artistName}`;
+          }
+          
+          if (revealText) {
+            // Clear any existing toast timer
+            if (revealToastTimerRef.current) {
+              clearTimeout(revealToastTimerRef.current);
+              revealToastTimerRef.current = null;
+            }
+            
+            // Show the reveal toast
+            setRevealToast(revealText);
+            
+            // Auto-hide after 4 seconds
+            revealToastTimerRef.current = setTimeout(() => {
+              setRevealToast(null);
+              revealToastTimerRef.current = null;
+            }, 4000);
+          }
+        } catch (error) {
+          console.error('Error showing reveal toast:', error);
+        }
       }
     });
 
@@ -1481,6 +1515,33 @@ const PublicDisplay: React.FC = () => {
             }}
           >
             🏆 Winner: {winnerName}
+          </motion.div>
+        )}
+        {revealToast && (
+          <motion.div
+            key={`toast-${revealToast}-${totalPlayedCount}`}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.25 }}
+            style={{ 
+              position: 'absolute', 
+              bottom: 20, 
+              left: '50%', 
+              transform: 'translateX(-50%)', 
+              background: 'rgba(0,0,0,0.8)', 
+              color: '#00ff88', 
+              padding: '14px 18px', 
+              borderRadius: 12, 
+              fontWeight: 900, 
+              letterSpacing: '0.06em', 
+              fontSize: '2.0rem', 
+              boxShadow: '0 8px 28px rgba(0,0,0,0.5)', 
+              zIndex: 1000, 
+              border: '1px solid rgba(0,255,136,0.35)' 
+            }}
+          >
+            Revealed: {revealToast}
           </motion.div>
         )}
       </AnimatePresence>
