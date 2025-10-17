@@ -1247,15 +1247,15 @@ const HostView: React.FC = () => {
     addLog('Requested player cards', 'info');
   };
 
-  // Calculate win progress for a player's card
+  // Calculate win progress for a player's card based on actual patterns
   const calculateWinProgress = (card: any, currentPattern: string, playedSongs: string[] = []) => {
-    if (!card || !card.squares) return { marked: 0, legitimate: 0, needed: 5, progress: 0 };
+    if (!card || !card.squares) return { marked: 0, legitimate: 0, needed: 5, progress: 0, patternProgress: 0 };
     
     const squares = card.squares;
     let markedCount = 0;
-    let legitimateMarkedCount = 0; // Only count squares that are marked AND actually played
+    let legitimateMarkedCount = 0;
     
-    // Count marked squares and legitimate marks
+    // Count all marked squares and legitimate marks
     squares.forEach((square: any) => {
       if (square.marked) {
         markedCount++;
@@ -1265,20 +1265,103 @@ const HostView: React.FC = () => {
       }
     });
     
-    // Calculate needed based on pattern
-    let totalNeeded = 5; // default for line
-    if (currentPattern === 'full_card') totalNeeded = 25;
-    else if (currentPattern === 'four_corners') totalNeeded = 4;
-    else if (currentPattern === 'x') totalNeeded = 9;
+    // Helper function to check if a square is legitimately marked
+    const isLegitimatelyMarked = (square: any) => {
+      return square.marked && playedSongs.includes(square.songId);
+    };
     
-    const needed = Math.max(0, totalNeeded - legitimateMarkedCount);
-    const progress = totalNeeded > 0 ? Math.round((legitimateMarkedCount / totalNeeded) * 100) : 0;
+    // Calculate pattern-specific progress
+    let patternProgress = 0;
+    let totalNeeded = 5;
+    let bestProgress = 0;
+    
+    if (currentPattern === 'line') {
+      // Check rows, columns, and diagonals for the best progress
+      let maxProgress = 0;
+      
+      // Check rows
+      for (let row = 0; row < 5; row++) {
+        let rowProgress = 0;
+        for (let col = 0; col < 5; col++) {
+          const square = squares.find((s: any) => s.position === `${row}-${col}`);
+          if (square && isLegitimatelyMarked(square)) {
+            rowProgress++;
+          }
+        }
+        maxProgress = Math.max(maxProgress, rowProgress);
+      }
+      
+      // Check columns
+      for (let col = 0; col < 5; col++) {
+        let colProgress = 0;
+        for (let row = 0; row < 5; row++) {
+          const square = squares.find((s: any) => s.position === `${row}-${col}`);
+          if (square && isLegitimatelyMarked(square)) {
+            colProgress++;
+          }
+        }
+        maxProgress = Math.max(maxProgress, colProgress);
+      }
+      
+      // Check diagonals
+      let diag1Progress = 0;
+      let diag2Progress = 0;
+      for (let i = 0; i < 5; i++) {
+        const square1 = squares.find((s: any) => s.position === `${i}-${i}`);
+        const square2 = squares.find((s: any) => s.position === `${i}-${4-i}`);
+        
+        if (square1 && isLegitimatelyMarked(square1)) diag1Progress++;
+        if (square2 && isLegitimatelyMarked(square2)) diag2Progress++;
+      }
+      maxProgress = Math.max(maxProgress, diag1Progress, diag2Progress);
+      
+      patternProgress = maxProgress;
+      bestProgress = maxProgress;
+    } else if (currentPattern === 'full_card') {
+      patternProgress = legitimateMarkedCount;
+      totalNeeded = 25;
+      bestProgress = legitimateMarkedCount;
+    } else if (currentPattern === 'four_corners') {
+      const corners = ['0-0', '0-4', '4-0', '4-4'];
+      let cornerProgress = 0;
+      corners.forEach(pos => {
+        const square = squares.find((s: any) => s.position === pos);
+        if (square && isLegitimatelyMarked(square)) {
+          cornerProgress++;
+        }
+      });
+      patternProgress = cornerProgress;
+      totalNeeded = 4;
+      bestProgress = cornerProgress;
+    } else if (currentPattern === 'x') {
+      let xProgress = 0;
+      for (let i = 0; i < 5; i++) {
+        const square1 = squares.find((s: any) => s.position === `${i}-${i}`);
+        const square2 = squares.find((s: any) => s.position === `${i}-${4-i}`);
+        
+        if (square1 && isLegitimatelyMarked(square1)) xProgress++;
+        if (square2 && isLegitimatelyMarked(square2)) xProgress++;
+      }
+      patternProgress = xProgress;
+      totalNeeded = 9;
+      bestProgress = xProgress;
+    } else if (currentPattern === 'custom') {
+      // For custom patterns, we'd need the custom mask from the server
+      // For now, fall back to line logic
+      patternProgress = legitimateMarkedCount;
+      bestProgress = legitimateMarkedCount;
+    }
+    
+    const needed = Math.max(0, totalNeeded - bestProgress);
+    const progress = totalNeeded > 0 ? Math.round((bestProgress / totalNeeded) * 100) : 0;
     
     return { 
       marked: markedCount, 
       legitimate: legitimateMarkedCount,
       needed, 
-      progress 
+      progress,
+      patternProgress: bestProgress,
+      totalNeeded
     };
   };
 
@@ -3189,6 +3272,7 @@ const HostView: React.FC = () => {
                                                progress.needed === 1 ? '1 more needed!' :
                                                `${progress.needed} more needed`;
                             const cheatingCount = progress.marked - progress.legitimate;
+                            const patternText = `${progress.patternProgress}/${progress.totalNeeded} in pattern (${progress.progress}%)`;
                             
                             return (
                               <div style={{ 
@@ -3233,7 +3317,7 @@ const HostView: React.FC = () => {
                                   color: '#b3b3b3',
                                   marginTop: '2px'
                                 }}>
-                                  {progress.legitimate}/{pattern === 'full_card' ? 25 : pattern === 'four_corners' ? 4 : pattern === 'x' ? 9 : 5} legitimate ({progress.progress}%)
+                                  {patternText}
                                   {progress.marked !== progress.legitimate && (
                                     <span style={{ color: '#ff8888', marginLeft: '4px' }}>
                                       ({progress.marked} total marked)
