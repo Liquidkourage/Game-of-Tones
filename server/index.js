@@ -1972,6 +1972,8 @@ io.on('connection', (socket) => {
       
       socket.emit('player-cards-update', playerCardsData);
       console.log(`📋 Sent ${Object.keys(playerCardsData).length} player cards to host in room ${roomId}`);
+      console.log(`📋 CalledSongIds being sent:`, room.calledSongIds);
+      console.log(`📋 CalledSongIds length:`, room.calledSongIds?.length || 0);
     } catch (e) {
       console.error('❌ Error sending player cards:', e?.message || e);
     }

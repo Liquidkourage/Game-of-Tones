@@ -720,9 +720,15 @@ const HostView: React.FC = () => {
           const newPlayerCards = new Map();
           Object.entries(data).forEach(([playerId, cardData]: [string, any]) => {
             if (cardData && cardData.card) {
+              console.log(`📋 Host received player card for ${cardData.playerName}:`, {
+                playedSongs: cardData.playedSongs,
+                playedSongsLength: cardData.playedSongs?.length || 0,
+                cardSquares: cardData.card.squares?.length || 0
+              });
               newPlayerCards.set(playerId, {
                 playerName: cardData.playerName || 'Unknown',
-                card: cardData.card
+                card: cardData.card,
+                playedSongs: cardData.playedSongs || [] // Ensure playedSongs is included
               });
             }
           });
