@@ -115,6 +115,7 @@ const HostView: React.FC = () => {
   const [preQueueWindow, setPreQueueWindow] = useState<number>(5);
   const [isProcessingVerification, setIsProcessingVerification] = useState<boolean>(false);
   const [roundComplete, setRoundComplete] = useState<any>(null);
+  const [pendingVerification, setPendingVerification] = useState<any>(null);
   const [roundWinners, setRoundWinners] = useState<Array<any>>([]);
   const [stripGoTPrefix, setStripGoTPrefix] = useState<boolean>(true);
   const [showPlaylists, setShowPlaylists] = useState<boolean>(true);
@@ -496,6 +497,24 @@ const HostView: React.FC = () => {
       setPreQueueEnabled(!!data?.enabled);
       if (typeof data?.window === 'number') setPreQueueWindow(data.window);
       addLog(`Pre-queue ${data?.enabled ? 'enabled' : 'disabled'} (window=${data?.window ?? preQueueWindow})`, 'info');
+    });
+
+    // Bingo verification handlers
+    newSocket.on('bingo-verification-needed', (data: any) => {
+      console.log('🔔 Bingo verification needed:', data);
+      setPendingVerification(data);
+      addLog(`🎯 ${data.playerName} called BINGO - verification needed!`, 'warn');
+    });
+
+    newSocket.on('bingo-verified', (data: any) => {
+      console.log('✅ Bingo verified:', data);
+      setPendingVerification(null);
+      setIsProcessingVerification(false);
+      if (data.approved) {
+        addLog(`✅ Bingo approved for ${data.playerName}`, 'info');
+      } else {
+        addLog(`❌ Bingo rejected for ${data.playerName}: ${data.reason}`, 'warn');
+      }
     });
 
     newSocket.on('game-started', (data: any) => {
@@ -1734,6 +1753,30 @@ const HostView: React.FC = () => {
       console.log(`Previous button clicked at position: ${currentPosition}ms`);
     }
   }, [socket, roomId, playbackState.currentTime]);
+
+  // Bingo verification functions
+  const approveBingo = useCallback(async () => {
+    if (!socket || !pendingVerification) return;
+    
+    setIsProcessingVerification(true);
+    socket.emit('verify-bingo', {
+      roomId,
+      playerId: pendingVerification.playerId,
+      approved: true
+    });
+  }, [socket, roomId, pendingVerification]);
+
+  const rejectBingo = useCallback(async (reason: string) => {
+    if (!socket || !pendingVerification) return;
+    
+    setIsProcessingVerification(true);
+    socket.emit('verify-bingo', {
+      roomId,
+      playerId: pendingVerification.playerId,
+      approved: false,
+      reason: reason || 'Invalid bingo pattern'
+    });
+  }, [socket, roomId, pendingVerification]);
 
   // Create output playlist
   const createOutputPlaylist = useCallback(async () => {
@@ -3772,6 +3815,150 @@ const HostView: React.FC = () => {
             </div>
           </motion.div>
         </motion.div>
+      )}
+
+      {/* Bingo Verification Modal */}
+      {pendingVerification && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.9)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000
+          }}
+        >
+          <div
+            style={{
+              background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
+              border: '2px solid #00ff88',
+              borderRadius: '15px',
+              padding: '24px',
+              maxWidth: '600px',
+              width: '90vw',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              boxShadow: '0 20px 60px rgba(0, 255, 136, 0.3)'
+            }}
+          >
+            <h2 style={{ color: '#00ff88', marginBottom: '16px', textAlign: 'center' }}>
+              🎯 BINGO VERIFICATION NEEDED
+            </h2>
+            
+            <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+              <p style={{ fontSize: '1.2rem', color: '#fff', marginBottom: '8px' }}>
+                <strong>{pendingVerification.playerName}</strong> called BINGO!
+              </p>
+              <p style={{ color: '#ccc', fontSize: '0.9rem' }}>
+                Pattern: <strong>{pendingVerification.requiredPattern}</strong>
+              </p>
+            </div>
+
+            {/* Player's Marked Squares */}
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ color: '#00ff88', marginBottom: '12px' }}>Marked Squares:</h3>
+              <div style={{ 
+                maxHeight: '200px', 
+                overflow: 'auto', 
+                background: 'rgba(0,0,0,0.3)', 
+                padding: '12px', 
+                borderRadius: '8px',
+                border: '1px solid rgba(255,255,255,0.1)'
+              }}>
+                {pendingVerification.markedSquares?.map((square: any, index: number) => {
+                  const wasPlayed = pendingVerification.playedSongs?.some((song: any) => song.id === square.songId);
+                  return (
+                    <div 
+                      key={index}
+                      style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center',
+                        padding: '8px',
+                        marginBottom: '4px',
+                        background: wasPlayed ? 'rgba(0, 255, 136, 0.1)' : 'rgba(255, 0, 0, 0.1)',
+                        borderRadius: '4px',
+                        border: `1px solid ${wasPlayed ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 0, 0, 0.3)'}`
+                      }}
+                    >
+                      <span style={{ color: '#fff', fontSize: '0.9rem' }}>
+                        {square.songName} - {square.artistName}
+                      </span>
+                      <span style={{ 
+                        color: wasPlayed ? '#00ff88' : '#ff4444',
+                        fontSize: '0.8rem',
+                        fontWeight: 'bold'
+                      }}>
+                        {wasPlayed ? '✅ PLAYED' : '❌ NOT PLAYED'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Verification Buttons */}
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                onClick={approveBingo}
+                disabled={isProcessingVerification}
+                style={{
+                  background: 'linear-gradient(135deg, #00ff88, #00cc6d)',
+                  color: '#000',
+                  border: 'none',
+                  padding: '12px 24px',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  fontWeight: 'bold',
+                  cursor: isProcessingVerification ? 'not-allowed' : 'pointer',
+                  opacity: isProcessingVerification ? 0.6 : 1
+                }}
+              >
+                {isProcessingVerification ? '⏳ Processing...' : '✅ APPROVE BINGO'}
+              </button>
+              
+              <button
+                onClick={() => {
+                  const reason = prompt('Reason for rejection (optional):') || 'Invalid pattern';
+                  rejectBingo(reason);
+                }}
+                disabled={isProcessingVerification}
+                style={{
+                  background: 'linear-gradient(135deg, #ff4444, #cc3333)',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '12px 24px',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  fontWeight: 'bold',
+                  cursor: isProcessingVerification ? 'not-allowed' : 'pointer',
+                  opacity: isProcessingVerification ? 0.6 : 1
+                }}
+              >
+                {isProcessingVerification ? '⏳ Processing...' : '❌ REJECT BINGO'}
+              </button>
+            </div>
+
+            {/* Debug Info */}
+            {pendingVerification.debugInfo && (
+              <div style={{ 
+                marginTop: '16px', 
+                padding: '8px', 
+                background: 'rgba(0,0,0,0.2)', 
+                borderRadius: '4px',
+                fontSize: '0.8rem',
+                color: '#ccc'
+              }}>
+                <strong>Debug:</strong> {pendingVerification.debugInfo.totalMarkedSquares} marked, {pendingVerification.debugInfo.totalPlayedSongs} played songs
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Add spinning animation for loading indicator */}
