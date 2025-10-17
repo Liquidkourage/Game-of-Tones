@@ -115,7 +115,6 @@ const HostView: React.FC = () => {
   const [preQueueWindow, setPreQueueWindow] = useState<number>(5);
   const [isProcessingVerification, setIsProcessingVerification] = useState<boolean>(false);
   const [roundComplete, setRoundComplete] = useState<any>(null);
-  const [pendingVerification, setPendingVerification] = useState<any>(null);
   const [roundWinners, setRoundWinners] = useState<Array<any>>([]);
   const [stripGoTPrefix, setStripGoTPrefix] = useState<boolean>(true);
   const [showPlaylists, setShowPlaylists] = useState<boolean>(true);
