@@ -89,6 +89,7 @@ const PlayerView: React.FC = () => {
   const [bingoStatus, setBingoStatus] = useState<'idle' | 'checking' | 'success' | 'failed'>('idle');
   const [bingoMessage, setBingoMessage] = useState<string>('');
   const [hasValidBingo, setHasValidBingo] = useState<boolean>(false);
+  const [playedSongIds, setPlayedSongIds] = useState<string[]>([]);
   const [gameState, setGameState] = useState<GameState>({
     isPlaying: false,
     currentSong: null,
@@ -214,6 +215,19 @@ const PlayerView: React.FC = () => {
         pattern: data.pattern || 'line',
         customPattern: data.customMask || undefined
       }));
+    });
+
+    // Listen for song-playing events to track played songs
+    newSocket.on('song-playing', (data: any) => {
+      console.log('Song playing:', data);
+      if (data.songId) {
+        setPlayedSongIds(prev => {
+          if (!prev.includes(data.songId)) {
+            return [...prev, data.songId];
+          }
+          return prev;
+        });
+      }
     });
 
     // Handle bingo validation result (for the caller)
@@ -661,7 +675,7 @@ const PlayerView: React.FC = () => {
     setBingoHolding(false);
   };
 
-  // Auto-detect bingo when card or pattern changes
+  // Auto-detect bingo when card, pattern, or played songs change
   useEffect(() => {
     if (bingoCard && gameState.pattern) {
       const isValidBingo = checkBingo(bingoCard);
@@ -672,26 +686,31 @@ const PlayerView: React.FC = () => {
         setGameState(prev => ({ ...prev, hasBingo: isValidBingo }));
       }
     }
-  }, [bingoCard, gameState.pattern, gameState.customPattern]);
+  }, [bingoCard, gameState.pattern, gameState.customPattern, playedSongIds]);
 
   const checkBingo = (card: BingoCard): boolean => {
     const pattern = gameState.pattern;
     
-    // Full card pattern - all squares must be marked
+    // Helper function to check if a marked square corresponds to a played song
+    const isMarkedSquareValid = (square: BingoSquare): boolean => {
+      return square.marked && playedSongIds.includes(square.songId);
+    };
+    
+    // Full card pattern - all squares must be marked AND correspond to played songs
     if (pattern === 'full_card') {
-      return card.squares.every(square => square.marked);
+      return card.squares.every(square => isMarkedSquareValid(square));
     }
     
-    // Four corners pattern - all 4 corners must be marked
+    // Four corners pattern - all 4 corners must be marked AND correspond to played songs
     if (pattern === 'four_corners') {
       const corners = ['0-0', '0-4', '4-0', '4-4'];
       return corners.every(pos => {
         const square = card.squares.find(s => s.position === pos);
-        return square && square.marked;
+        return square && isMarkedSquareValid(square);
       });
     }
     
-    // X pattern - both diagonals must be marked
+    // X pattern - both diagonals must be marked AND correspond to played songs
     if (pattern === 'x') {
       let diag1Complete = true;
       let diag2Complete = true;
@@ -699,20 +718,20 @@ const PlayerView: React.FC = () => {
         const square1 = card.squares.find(s => s.position === `${i}-${i}`);
         const square2 = card.squares.find(s => s.position === `${i}-${4-i}`);
         
-        if (!square1 || !square1.marked) diag1Complete = false;
-        if (!square2 || !square2.marked) diag2Complete = false;
+        if (!square1 || !isMarkedSquareValid(square1)) diag1Complete = false;
+        if (!square2 || !isMarkedSquareValid(square2)) diag2Complete = false;
       }
       return diag1Complete && diag2Complete;
     }
     
-    // Line pattern - any row, column, or diagonal
+    // Line pattern - any row, column, or diagonal (all marked squares must correspond to played songs)
     if (pattern === 'line') {
       // Check rows
       for (let row = 0; row < 5; row++) {
         let rowComplete = true;
         for (let col = 0; col < 5; col++) {
           const square = card.squares.find(s => s.position === `${row}-${col}`);
-          if (!square || !square.marked) {
+          if (!square || !isMarkedSquareValid(square)) {
             rowComplete = false;
             break;
           }
@@ -725,7 +744,7 @@ const PlayerView: React.FC = () => {
         let colComplete = true;
         for (let row = 0; row < 5; row++) {
           const square = card.squares.find(s => s.position === `${row}-${col}`);
-          if (!square || !square.marked) {
+          if (!square || !isMarkedSquareValid(square)) {
             colComplete = false;
             break;
           }
@@ -740,17 +759,17 @@ const PlayerView: React.FC = () => {
         const square1 = card.squares.find(s => s.position === `${i}-${i}`);
         const square2 = card.squares.find(s => s.position === `${i}-${4-i}`);
         
-        if (!square1 || !square1.marked) diag1Complete = false;
-        if (!square2 || !square2.marked) diag2Complete = false;
+        if (!square1 || !isMarkedSquareValid(square1)) diag1Complete = false;
+        if (!square2 || !isMarkedSquareValid(square2)) diag2Complete = false;
       }
       return diag1Complete || diag2Complete;
     }
     
-    // Custom pattern - check if all required positions are marked
+    // Custom pattern - check if all required positions are marked AND correspond to played songs
     if (pattern === 'custom' && gameState.customPattern) {
       return gameState.customPattern.every(pos => {
         const square = card.squares.find(s => s.position === pos);
-        return square && square.marked;
+        return square && isMarkedSquareValid(square);
       });
     }
     
