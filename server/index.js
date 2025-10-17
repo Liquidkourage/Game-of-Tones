@@ -837,7 +837,7 @@ async function playNextSongSimple(roomId, deviceId) {
     room.calledSongIds.push(nextSong.id);
     console.log(`📝 SIMPLE PLAYBACK: Marked song as played: ${nextSong.name} (${nextSong.id}) - Total played: ${room.calledSongIds.length}`);
     console.log(`📋 SIMPLE PLAYBACK: Current calledSongIds array:`, room.calledSongIds);
-  
+
   // Update current song and store original start position
   room.currentSong = {
     id: nextSong.id,
@@ -2965,7 +2965,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       if (card.squares.length < 25) {
         console.error(`❌ Card incomplete for player ${player.name}: only ${card.squares.length}/25 squares`);
         continue; // Skip this player
-      }
+    }
 
     const uniqueOnCard = new Set(card.squares.map(q => q.songId));
       console.log(`✅ Generated card for ${player.name} with ${uniqueOnCard.size} unique songs (mode=${mode})`);
@@ -4088,7 +4088,7 @@ app.get('/api/spotify/tokens', (req, res) => {
     });
   }
   
-  res.json({
+  res.json({ 
     success: true,
     message: 'Copy these environment variables to Railway project settings:',
     envVars: {

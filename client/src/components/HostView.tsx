@@ -2847,6 +2847,59 @@ const HostView: React.FC = () => {
                         </div>
                   </motion.div>
                 )}
+
+                {/* Round Management Controls - Moved from Monitor Tab */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.4 }}
+                  className="bg-rgba(42, 42, 42, 0.95) backdrop-blur-[20px] border border-rgba(0, 255, 136, 0.3) rounded-2xl p-6 mb-6"
+                >
+                  <h2>🎯 Round Management Controls</h2>
+                  
+                  {/* Quick Actions */}
+                  <div className="mb-6">
+                    <h4 className="text-lg font-semibold text-white mb-3">Quick Actions</h4>
+                    <div className="flex gap-3 flex-wrap">
+                      {gameState === 'playing' && (
+                        <>
+                          <button 
+                            onClick={completeCurrentRound}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                          >
+                            ✅ Complete Current Round
+                          </button>
+                          <button 
+                            onClick={resetCurrentRound}
+                            className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+                          >
+                            🔄 Reset Current Round
+                          </button>
+                        </>
+                      )}
+                      {(() => {
+                        const nextRound = getNextPlannedRound();
+                        return nextRound >= 0 ? (
+                          <button 
+                            onClick={() => jumpToRound(nextRound)}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                          >
+                            ⏭️ Start Next Planned Round
+                          </button>
+                        ) : null;
+                      })()}
+                      
+                      {/* Reset Event Button - Always available */}
+                      <button
+                        onClick={resetEvent}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                        title="Reset entire event back to the beginning"
+                      >
+                        🔄 Reset Event
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
               </div>
             )}
 
@@ -3114,49 +3167,7 @@ const HostView: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Quick Actions */}
-                  <div className="mb-6">
-                    <h4 className="text-lg font-semibold text-white mb-3">Quick Actions</h4>
-                    <div className="flex gap-3 flex-wrap">
-                      {gameState === 'playing' && (
-                        <>
-                  <button 
-                            onClick={completeCurrentRound}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                          >
-                            ✅ Complete Current Round
-                  </button>
-                  <button 
-                            onClick={resetCurrentRound}
-                            className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
-                  >
-                            🔄 Reset Current Round
-                  </button>
-                        </>
-                      )}
-                      {(() => {
-                        const nextRound = getNextPlannedRound();
-                        return nextRound >= 0 ? (
-                  <button 
-                            onClick={() => jumpToRound(nextRound)}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                          >
-                            ⏭️ Start Next Planned Round
-                          </button>
-                        ) : null;
-                      })()}
-                      
-                      
-                      {/* Reset Event Button - Always available */}
-                      <button
-                        onClick={resetEvent}
-                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                        title="Reset entire event back to the beginning"
-                      >
-                        🔄 Reset Event
-                      </button>
-                </div>
-              </div>
+                  {/* Quick Actions - Moved to Manager Tab */}
 
                   {/* Round List */}
                   <div>
