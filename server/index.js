@@ -395,6 +395,9 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       previewUrl: (room.playlistSongs[songIndex]?.previewUrl) || null
     });
 
+    // Send real-time player card updates to host
+    sendPlayerCardUpdates(roomId);
+
     console.log(`✅ Playing song in room ${roomId}: ${song.name} by ${song.artist} on device ${targetDeviceId}`);
 
     // Use simplified progression system
@@ -870,6 +873,9 @@ async function playNextSongSimple(roomId, deviceId) {
       totalSongs: room.playlistSongs.length,
       previewUrl: nextSong.previewUrl || null
     });
+
+    // Send real-time player card updates to host
+    sendPlayerCardUpdates(roomId);
 
     console.log(`✅ Simple advance: ${nextSong.name} by ${nextSong.artist}`);
 
@@ -2579,6 +2585,9 @@ io.on('connection', (socket) => {
         artistName,
         snippetLength: room.snippetLength
       });
+      
+      // Send real-time player card updates to host
+      sendPlayerCardUpdates(roomId);
     }
   });
 
@@ -2596,6 +2605,9 @@ io.on('connection', (socket) => {
         if (square && square.songId === songId) {
           // Toggle mark state to support unmarking
           square.marked = !square.marked;
+          
+          // Send real-time player card updates to host
+          sendPlayerCardUpdates(roomId);
           
           // Check for bingo pattern completion (but don't auto-announce)
           const hasBingo = checkBingo(card);
@@ -3648,6 +3660,9 @@ async function playNextSong(roomId, deviceId) {
       previewUrl: (room.playlistSongs[room.currentSongIndex]?.previewUrl) || null
     });
 
+    // Send real-time player card updates to host
+    sendPlayerCardUpdates(roomId);
+
     console.log(`✅ Playing next song in room ${roomId}: ${nextSong.name} by ${nextSong.artist} on device ${targetDeviceId}`);
 
     // Verify playback actually started and is the correct track; attempt resume/correct if needed
@@ -3714,6 +3729,43 @@ async function playNextSong(roomId, deviceId) {
     setRoomTimer(roomId, () => {
       playNextSong(roomId, deviceId);
     }, 5000);
+  }
+}
+
+// Helper function to send real-time player card updates to host
+function sendPlayerCardUpdates(roomId) {
+  try {
+    const room = rooms.get(roomId);
+    if (!room || !room.bingoCards) return;
+    
+    const playerCardsData = {};
+    room.bingoCards.forEach((card, playerId) => {
+      const player = room.players.get(playerId);
+      if (player && card) {
+        // Only include actual players (not hosts or public display)
+        if (!player.isHost && player.name !== 'Display') {
+          playerCardsData[playerId] = {
+            playerName: player.name,
+            card: card,
+            playedSongs: room.calledSongIds || []
+          };
+        }
+      }
+    });
+    
+    // Send to all hosts in the room
+    room.players.forEach((player, playerId) => {
+      if (player.isHost) {
+        const hostSocket = io.sockets.sockets.get(playerId);
+        if (hostSocket) {
+          hostSocket.emit('player-cards-update', playerCardsData);
+        }
+      }
+    });
+    
+    console.log(`📋 Real-time update: Sent ${Object.keys(playerCardsData).length} player cards to host(s) in room ${roomId}`);
+  } catch (e) {
+    console.error('❌ Error sending real-time player card updates:', e?.message || e);
   }
 }
 

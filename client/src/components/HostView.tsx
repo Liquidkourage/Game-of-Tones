@@ -126,7 +126,7 @@ const HostView: React.FC = () => {
   const [showAllControls, setShowAllControls] = useState<boolean>(false);
   const [showRooms, setShowRooms] = useState<boolean>(false);
   const [rooms, setRooms] = useState<Array<any>>([]);
-  const [showPlayerCards, setShowPlayerCards] = useState<boolean>(false);
+  const [showPlayerCards, setShowPlayerCards] = useState<boolean>(true);
   const [playerCards, setPlayerCards] = useState<Map<string, any>>(new Map());
   const [showRoundManager, setShowRoundManager] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'setup' | 'play' | 'manage'>('setup');
@@ -1209,6 +1209,12 @@ const HostView: React.FC = () => {
         pattern,
         customMask
       });
+      
+      // Request player cards immediately when game starts
+      setTimeout(() => {
+        requestPlayerCards();
+      }, 1000); // Small delay to ensure game is fully started
+      
       // Safety timeout in case no response comes back
       setTimeout(() => setIsStartingGame(false), 8000);
     } catch (error) {
@@ -1233,6 +1239,12 @@ const HostView: React.FC = () => {
     if (!socket || !roomId) return;
     socket.emit('reveal-call', { roomId, revealToDisplay: true, revealToPlayers: false, hint: mode });
     addLog(`Reveal: ${mode}`, 'info');
+  };
+
+  const requestPlayerCards = () => {
+    if (!socket || !roomId) return;
+    socket.emit('request-player-cards', { roomId });
+    addLog('Requested player cards', 'info');
   };
 
   // Calculate win progress for a player's card
@@ -1392,12 +1404,6 @@ const HostView: React.FC = () => {
     }
   };
 
-  const requestPlayerCards = () => {
-    if (socket) {
-      socket.emit('request-player-cards', { roomId });
-      addLog('Requested player cards', 'info');
-    }
-  };
 
   // Host alert sound for bingo calls
   const playHostAlertSound = () => {
@@ -3057,17 +3063,6 @@ const HostView: React.FC = () => {
                         ) : null;
                       })()}
                       
-                      {/* Player Cards Button - Always available */}
-                      <button
-                        onClick={() => {
-                          requestPlayerCards();
-                          setShowPlayerCards(true);
-                        }}
-                        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                        title="View all player bingo cards"
-                      >
-                        👥 View Player Cards
-                      </button>
                       
                       {/* Reset Event Button - Always available */}
                       <button
