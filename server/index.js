@@ -1956,7 +1956,8 @@ io.on('connection', (socket) => {
             if (!player.isHost && player.name !== 'Display') {
               playerCardsData[playerId] = {
                 playerName: player.name,
-                card: card
+                card: card,
+                playedSongs: room.calledSongIds || [] // Include list of actually played songs
               };
             }
           }

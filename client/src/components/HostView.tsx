@@ -1221,6 +1221,41 @@ const HostView: React.FC = () => {
     addLog(`Reveal: ${mode}`, 'info');
   };
 
+  // Calculate win progress for a player's card
+  const calculateWinProgress = (card: any, currentPattern: string, playedSongs: string[] = []) => {
+    if (!card || !card.squares) return { marked: 0, legitimate: 0, needed: 5, progress: 0 };
+    
+    const squares = card.squares;
+    let markedCount = 0;
+    let legitimateMarkedCount = 0; // Only count squares that are marked AND actually played
+    
+    // Count marked squares and legitimate marks
+    squares.forEach((square: any) => {
+      if (square.marked) {
+        markedCount++;
+        if (playedSongs.includes(square.songId)) {
+          legitimateMarkedCount++;
+        }
+      }
+    });
+    
+    // Calculate needed based on pattern
+    let totalNeeded = 5; // default for line
+    if (currentPattern === 'full_card') totalNeeded = 25;
+    else if (currentPattern === 'four_corners') totalNeeded = 4;
+    else if (currentPattern === 'x') totalNeeded = 9;
+    
+    const needed = Math.max(0, totalNeeded - legitimateMarkedCount);
+    const progress = totalNeeded > 0 ? Math.round((legitimateMarkedCount / totalNeeded) * 100) : 0;
+    
+    return { 
+      marked: markedCount, 
+      legitimate: legitimateMarkedCount,
+      needed, 
+      progress 
+    };
+  };
+
   const forceRefreshAll = () => {
     if (!socket || !roomId) return;
     socket.emit('force-refresh', { roomId, reason: 'host-request' });
@@ -2346,89 +2381,6 @@ const HostView: React.FC = () => {
     }
   }, [roomId]);
 
-  // Calculate win progress for a player's bingo card
-  const calculateWinProgress = (card: any, currentPattern: string) => {
-    if (!card || !card.squares) return { needed: 25, marked: 0, progress: 0 };
-    
-    const squares = card.squares;
-    const markedCount = squares.filter((s: any) => s.marked).length;
-    
-    if (currentPattern === 'full_card') {
-      const needed = Math.max(0, 25 - markedCount);
-      return { needed, marked: markedCount, progress: Math.round((markedCount / 25) * 100) };
-    }
-    
-    if (currentPattern === 'four_corners') {
-      const corners = ['0-0', '0-4', '4-0', '4-4'];
-      const markedCorners = corners.filter(pos => 
-        squares.find((s: any) => s.position === pos && s.marked)
-      ).length;
-      const needed = Math.max(0, 4 - markedCorners);
-      return { needed, marked: markedCorners, progress: Math.round((markedCorners / 4) * 100) };
-    }
-    
-    if (currentPattern === 'x') {
-      let diag1Marked = 0, diag2Marked = 0;
-      for (let i = 0; i < 5; i++) {
-        if (squares.find((s: any) => s.position === `${i}-${i}` && s.marked)) diag1Marked++;
-        if (squares.find((s: any) => s.position === `${i}-${4-i}` && s.marked)) diag2Marked++;
-      }
-      const totalDiagSquares = 9; // 5 + 5 - 1 (center overlap)
-      const markedDiagSquares = Math.min(diag1Marked + diag2Marked, totalDiagSquares);
-      const needed = Math.max(0, totalDiagSquares - markedDiagSquares);
-      return { needed, marked: markedDiagSquares, progress: Math.round((markedDiagSquares / totalDiagSquares) * 100) };
-    }
-    
-    if (currentPattern === 'line') {
-      // For line pattern, find the closest line to completion
-      let bestLineProgress = 0;
-      let bestLineNeeded = 5;
-      
-      // Check rows
-      for (let row = 0; row < 5; row++) {
-        let rowMarked = 0;
-        for (let col = 0; col < 5; col++) {
-          if (squares.find((s: any) => s.position === `${row}-${col}` && s.marked)) rowMarked++;
-        }
-        if (rowMarked > bestLineProgress) {
-          bestLineProgress = rowMarked;
-          bestLineNeeded = 5 - rowMarked;
-        }
-      }
-      
-      // Check columns
-      for (let col = 0; col < 5; col++) {
-        let colMarked = 0;
-        for (let row = 0; row < 5; row++) {
-          if (squares.find((s: any) => s.position === `${row}-${col}` && s.marked)) colMarked++;
-        }
-        if (colMarked > bestLineProgress) {
-          bestLineProgress = colMarked;
-          bestLineNeeded = 5 - colMarked;
-        }
-      }
-      
-      // Check diagonals
-      let diag1Marked = 0, diag2Marked = 0;
-      for (let i = 0; i < 5; i++) {
-        if (squares.find((s: any) => s.position === `${i}-${i}` && s.marked)) diag1Marked++;
-        if (squares.find((s: any) => s.position === `${i}-${4-i}` && s.marked)) diag2Marked++;
-      }
-      if (diag1Marked > bestLineProgress) {
-        bestLineProgress = diag1Marked;
-        bestLineNeeded = 5 - diag1Marked;
-      }
-      if (diag2Marked > bestLineProgress) {
-        bestLineProgress = diag2Marked;
-        bestLineNeeded = 5 - diag2Marked;
-      }
-      
-      return { needed: bestLineNeeded, marked: bestLineProgress, progress: Math.round((bestLineProgress / 5) * 100) };
-    }
-    
-    // Default fallback
-    return { needed: 25, marked: markedCount, progress: Math.round((markedCount / 25) * 100) };
-  };
 
   return (
     <div className="host-view">
@@ -3158,13 +3110,14 @@ const HostView: React.FC = () => {
                           
                           {/* Win Progress Indicator */}
                           {(() => {
-                            const progress = calculateWinProgress(playerData.card, pattern);
+                            const progress = calculateWinProgress(playerData.card, pattern, playerData.playedSongs || []);
                             const progressColor = progress.needed === 0 ? '#00ff88' : 
                                                 progress.needed <= 2 ? '#ffaa00' : 
                                                 progress.progress >= 50 ? '#66ccff' : '#888';
                             const progressText = progress.needed === 0 ? '🎉 BINGO!' : 
                                                progress.needed === 1 ? '1 more needed!' :
                                                `${progress.needed} more needed`;
+                            const cheatingCount = progress.marked - progress.legitimate;
                             
                             return (
                               <div style={{ 
@@ -3179,6 +3132,16 @@ const HostView: React.FC = () => {
                                 }}>
                                   {progressText}
                                 </div>
+                                {cheatingCount > 0 && (
+                                  <div style={{
+                                    color: '#ff4444',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 'bold',
+                                    marginBottom: '4px'
+                                  }}>
+                                    ⚠️ {cheatingCount} invalid mark{cheatingCount > 1 ? 's' : ''}
+                                  </div>
+                                )}
                                 <div style={{ 
                                   background: 'rgba(255,255,255,0.1)',
                                   borderRadius: '8px',
@@ -3199,7 +3162,12 @@ const HostView: React.FC = () => {
                                   color: '#b3b3b3',
                                   marginTop: '2px'
                                 }}>
-                                  {progress.marked}/{pattern === 'full_card' ? 25 : pattern === 'four_corners' ? 4 : pattern === 'x' ? 9 : 5} ({progress.progress}%)
+                                  {progress.legitimate}/{pattern === 'full_card' ? 25 : pattern === 'four_corners' ? 4 : pattern === 'x' ? 9 : 5} legitimate ({progress.progress}%)
+                                  {progress.marked !== progress.legitimate && (
+                                    <span style={{ color: '#ff8888', marginLeft: '4px' }}>
+                                      ({progress.marked} total marked)
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -3212,36 +3180,70 @@ const HostView: React.FC = () => {
                             aspectRatio: '1/1',
                             margin: '0 auto'
                           }}>
-                            {playerData.card.squares.map((square: any) => (
-                              <div 
-                                key={square.position}
-                                style={{ 
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  background: square.marked 
-                                    ? 'linear-gradient(135deg, #00ff88, #00cc6d)' 
-                                    : 'rgba(255,255,255,0.1)',
-                                  border: square.marked 
-                                    ? '2px solid #00ff88' 
-                                    : '1px solid rgba(255,255,255,0.3)',
-                                  borderRadius: '8px',
-                                  padding: '4px',
-                                  fontSize: '0.7rem',
-                                  fontWeight: square.marked ? 700 : 400,
-                                  color: square.marked ? '#001a0d' : '#ffffff',
-                                  textAlign: 'center',
-                                  lineHeight: 1.1,
-                                  overflow: 'hidden'
-                                }}
-                                title={`${square.songName} — ${square.artistName}`}
-                              >
-                                {square.marked && <span style={{ marginRight: 2 }}>✓</span>}
+                            {playerData.card.squares.map((square: any) => {
+                              const isPlayed = (playerData.playedSongs || []).includes(square.songId);
+                              const isMarked = square.marked;
+                              
+                              // Determine square status and styling
+                              let bgColor, borderColor, textColor, icon, statusText;
+                              
+                              if (isMarked && isPlayed) {
+                                // ✅ Legitimate mark (played and marked)
+                                bgColor = 'linear-gradient(135deg, #00ff88, #00cc6d)';
+                                borderColor = '#00ff88';
+                                textColor = '#001a0d';
+                                icon = '✓';
+                                statusText = 'Legitimate';
+                              } else if (isMarked && !isPlayed) {
+                                // ⚠️ Invalid mark (marked but not played - cheating!)
+                                bgColor = 'linear-gradient(135deg, #ff6b6b, #ff4757)';
+                                borderColor = '#ff4757';
+                                textColor = '#ffffff';
+                                icon = '⚠';
+                                statusText = 'Invalid - Not played yet!';
+                              } else if (!isMarked && isPlayed) {
+                                // 🔵 Missed opportunity (played but not marked)
+                                bgColor = 'linear-gradient(135deg, #4dabf7, #339af0)';
+                                borderColor = '#339af0';
+                                textColor = '#ffffff';
+                                icon = '○';
+                                statusText = 'Played but not marked';
+                              } else {
+                                // ⚪ Not played and not marked
+                                bgColor = 'rgba(255,255,255,0.1)';
+                                borderColor = 'rgba(255,255,255,0.3)';
+                                textColor = '#ffffff';
+                                icon = '';
+                                statusText = 'Not played';
+                              }
+                              
+                              return (
+                                <div 
+                                  key={square.position}
+                                  style={{ 
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    background: bgColor,
+                                    border: `2px solid ${borderColor}`,
+                                    borderRadius: '8px',
+                                    padding: '4px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: isMarked ? 700 : 400,
+                                    color: textColor,
+                                    textAlign: 'center',
+                                    lineHeight: 1.1,
+                                    overflow: 'hidden'
+                                  }}
+                                  title={`${square.songName} — ${square.artistName}\nStatus: ${statusText}`}
+                                >
+                                {icon && <span style={{ marginRight: 2 }}>{icon}</span>}
                                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                   {square.songName.length > 12 ? square.songName.substring(0, 12) + '...' : square.songName}
                                 </span>
                               </div>
-                            ))}
+                              );
+                            })}
                          </div>
                        </div>
                      ))}
