@@ -2537,9 +2537,8 @@ const HostView: React.FC = () => {
                 <div className="pattern-options" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
                   {[
                     { value: 'line', label: 'Line', desc: 'Any row, column, or diagonal' },
-                    { value: 'four_corners', label: 'Four Corners', desc: 'All four corner squares' },
-                    { value: 'x', label: 'X Pattern', desc: 'Both diagonals' },
-                    { value: 'full_card', label: 'Full Card', desc: 'All 25 squares' }
+                    { value: 'full_card', label: 'Full Card', desc: 'All 25 squares' },
+                    { value: 'custom', label: 'Custom', desc: 'Custom pattern (set squares manually)' }
                   ].map((option) => (
                     <button
                       key={option.value}
@@ -2574,10 +2573,14 @@ const HostView: React.FC = () => {
                 <div style={{ marginTop: '8px', fontSize: '0.9rem', color: '#b3b3b3' }}>
                   Current pattern: <strong style={{ color: '#00ff88' }}>
                     {pattern === 'line' ? 'Line' : 
-                     pattern === 'four_corners' ? 'Four Corners' :
-                     pattern === 'x' ? 'X Pattern' :
-                     pattern === 'full_card' ? 'Full Card' : pattern}
+                     pattern === 'full_card' ? 'Full Card' :
+                     pattern === 'custom' ? 'Custom' : pattern}
                   </strong>
+                  {pattern === 'custom' && (
+                    <div style={{ marginTop: '4px', fontSize: '0.8rem', color: '#ffaa00' }}>
+                      ⚠️ Custom pattern requires manual square selection on player cards
+                    </div>
+                  )}
                 </div>
               </div>
             </motion.div>
