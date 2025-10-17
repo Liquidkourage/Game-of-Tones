@@ -2520,9 +2520,9 @@ const HostView: React.FC = () => {
             paddingBottom: 0
           }}>
             {[
-              { id: 'setup', label: '🎵 Setup', desc: 'Connect & Configure' },
-              { id: 'play', label: '🎮 Play', desc: 'Game Controls' },
-              { id: 'manage', label: '🎯 Manage', desc: 'Rounds & Players' }
+              { id: 'setup', label: '🎯 Manager', desc: 'Setup & Management' },
+              { id: 'play', label: '🎮 Game', desc: 'Live Game Controls' },
+              { id: 'manage', label: '📊 Monitor', desc: 'Rounds & Players' }
             ].map(tab => (
               <button
                 key={tab.id}
