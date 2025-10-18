@@ -120,6 +120,7 @@ const HostView: React.FC = () => {
   const [showPlaylists, setShowPlaylists] = useState<boolean>(true);
   const [showLogs, setShowLogs] = useState<boolean>(true);
   const [customMask, setCustomMask] = useState<string[]>([]);
+  const [customPattern, setCustomPattern] = useState<string[]>([]);
   const [showSongList, setShowSongList] = useState(false);
   const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]);
   const [superStrict, setSuperStrict] = useState<boolean>(false);
@@ -2669,9 +2670,72 @@ const HostView: React.FC = () => {
                      pattern === 'custom' ? 'Custom' : pattern}
                   </strong>
                   {pattern === 'custom' && (
-                    <div style={{ marginTop: '4px', fontSize: '0.8rem', color: '#ffaa00' }}>
-                      ⚠️ Custom pattern requires manual square selection on player cards
-                </div>
+                    <div style={{ marginTop: '8px' }}>
+                      <div style={{ marginBottom: '8px', fontSize: '0.8rem', color: '#ffaa00' }}>
+                        ⚠️ Define which squares are part of the winning pattern
+                      </div>
+                      <div style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: 'repeat(5, 1fr)', 
+                        gap: '4px', 
+                        maxWidth: '200px',
+                        margin: '0 auto'
+                      }}>
+                        {Array.from({ length: 25 }, (_, index) => {
+                          const row = Math.floor(index / 5);
+                          const col = index % 5;
+                          const position = `${row}-${col}`;
+                          const isSelected = customPattern && customPattern.includes(position);
+                          
+                          return (
+                            <button
+                              key={index}
+                              onClick={() => {
+                                const newPattern = customPattern || [];
+                                if (isSelected) {
+                                  // Remove from pattern
+                                  const updatedPattern = newPattern.filter(p => p !== position);
+                                  setCustomPattern(updatedPattern);
+                                  if (socket && roomId) {
+                                    socket.emit('set-custom-pattern', { roomId, customPattern: updatedPattern });
+                                  }
+                                } else {
+                                  // Add to pattern
+                                  const updatedPattern = [...newPattern, position];
+                                  setCustomPattern(updatedPattern);
+                                  if (socket && roomId) {
+                                    socket.emit('set-custom-pattern', { roomId, customPattern: updatedPattern });
+                                  }
+                                }
+                              }}
+                              style={{
+                                width: '32px',
+                                height: '32px',
+                                border: '2px solid rgba(255,255,255,0.3)',
+                                borderRadius: '4px',
+                                background: isSelected ? '#00ff88' : 'rgba(255,255,255,0.1)',
+                                color: isSelected ? '#001a0d' : '#ffffff',
+                                cursor: 'pointer',
+                                fontSize: '12px',
+                                fontWeight: 'bold',
+                                transition: 'all 0.2s ease'
+                              }}
+                              title={`${position} - ${isSelected ? 'Remove from pattern' : 'Add to pattern'}`}
+                            >
+                              {isSelected ? '✓' : ''}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div style={{ marginTop: '8px', fontSize: '0.7rem', color: '#b3b3b3', textAlign: 'center' }}>
+                        Click squares to define the winning pattern
+                        {customPattern && customPattern.length > 0 && (
+                          <div style={{ marginTop: '4px', color: '#00ff88' }}>
+                            {customPattern.length} squares selected
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   )}
                     </div>
                 </div>
