@@ -593,11 +593,11 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                           e.currentTarget.style.transform = 'scale(1)';
                         }}
                       >
-                        <div className="w-12 h-12 rounded-full border-2 border-dashed border-white/40 flex items-center justify-center mb-2">
-                          <Plus className="w-6 h-6" />
+                        <div className="w-12 h-12 rounded-full border-2 border-dashed border-white/60 flex items-center justify-center mb-2">
+                          <Plus className="w-6 h-6 text-white" />
                         </div>
-                        <span className="font-semibold text-sm">Create New Round</span>
-                        <span className="text-xs opacity-75">Click to add round</span>
+                        <span className="font-semibold text-sm text-white">Create New Round</span>
+                        <span className="text-xs opacity-90 text-white">Click to add round</span>
                       </button>
                     </div>
                   )}
