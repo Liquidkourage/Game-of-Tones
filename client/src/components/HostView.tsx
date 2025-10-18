@@ -129,7 +129,7 @@ const HostView: React.FC = () => {
   const [showPlayerCards, setShowPlayerCards] = useState<boolean>(true);
   const [playerCards, setPlayerCards] = useState<Map<string, any>>(new Map());
   const [showRoundManager, setShowRoundManager] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'setup' | 'play' | 'manage'>('setup');
+  const [activeTab, setActiveTab] = useState<'setup' | 'play'>('setup');
   
   // Pause position tracking
   const [pausePosition, setPausePosition] = useState<number>(0);
@@ -349,8 +349,6 @@ const HostView: React.FC = () => {
       setActiveTab('play');
     } else if (gameState === 'waiting' && mixFinalized) {
       setActiveTab('play');
-    } else if (eventRounds.some(r => r.status === 'completed' || r.status === 'active')) {
-      setActiveTab('manage');
     } else {
       setActiveTab('setup');
     }
@@ -2521,8 +2519,7 @@ const HostView: React.FC = () => {
           }}>
             {[
               { id: 'setup', label: '🎯 Manager', desc: 'Setup & Management' },
-              { id: 'play', label: '🎮 Game', desc: 'Live Game Controls' },
-              { id: 'manage', label: '📊 Monitor', desc: 'Rounds & Players' }
+              { id: 'play', label: '🎮 Game', desc: 'Live Game Controls' }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -3126,7 +3123,7 @@ const HostView: React.FC = () => {
                 </div>
           )}
 
-            {activeTab === 'manage' && (
+            {false && (
               <div className="manage-tab">
                 {/* Round Manager */}
                 <motion.div
