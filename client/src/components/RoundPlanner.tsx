@@ -594,10 +594,10 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                         }}
                       >
                         <div className="w-12 h-12 rounded-full border-2 border-dashed border-white/60 flex items-center justify-center mb-2">
-                          <Plus className="w-6 h-6 text-white" />
+                          <Plus className="w-6 h-6 text-white" style={{ color: '#ffffff' }} />
                         </div>
-                        <span className="font-semibold text-sm text-white">Create New Round</span>
-                        <span className="text-xs opacity-90 text-white">Click to add round</span>
+                        <span className="font-semibold text-sm text-white" style={{ color: '#ffffff' }}>Create New Round</span>
+                        <span className="text-xs opacity-90 text-white" style={{ color: '#ffffff' }}>Click to add round</span>
                       </button>
                     </div>
                   )}
