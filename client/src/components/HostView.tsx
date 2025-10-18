@@ -2635,10 +2635,10 @@ const HostView: React.FC = () => {
                     { value: 'full_card', label: 'Full Card', desc: 'All 25 squares' },
                     { value: 'custom', label: 'Custom', desc: 'Custom pattern (set squares manually)' }
                   ].map((option) => (
-                    <button
+                <button
                       key={option.value}
                       className={`pattern-option ${pattern === option.value ? 'active' : ''}`}
-                      onClick={() => {
+                  onClick={() => {
                         setPattern(option.value as any);
                         if (socket && roomId) {
                           socket.emit('set-pattern', { roomId, pattern: option.value });
@@ -2662,9 +2662,9 @@ const HostView: React.FC = () => {
                     >
                       <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{option.label}</div>
                       <div style={{ fontSize: '0.8rem', opacity: 0.8, textAlign: 'center' }}>{option.desc}</div>
-                    </button>
+                        </button>
                   ))}
-                </div>
+                      </div>
                 <div style={{ marginTop: '8px', fontSize: '0.9rem', color: '#b3b3b3' }}>
                   Current pattern: <strong style={{ color: '#00ff88' }}>
                     {pattern === 'line' ? 'Line' : 
@@ -2674,10 +2674,10 @@ const HostView: React.FC = () => {
                   {pattern === 'custom' && (
                     <div style={{ marginTop: '4px', fontSize: '0.8rem', color: '#ffaa00' }}>
                       ⚠️ Custom pattern requires manual square selection on player cards
-                    </div>
-                  )}
                 </div>
-              </div>
+                  )}
+                    </div>
+                </div>
             </motion.div>
           )}
 
@@ -2695,10 +2695,10 @@ const HostView: React.FC = () => {
 
                 {/* Playlists Section */}
                 {(showPlaylists || showAllControls) && isSpotifyConnected && (
-                  <motion.div 
+          <motion.div 
                     className="playlists-section"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
                     transition={{ delay: 0.4 }}
                   >
                     <h2>📚 Available Playlists</h2>
@@ -2725,7 +2725,7 @@ const HostView: React.FC = () => {
                         }}
                       >
                         Show All
-                      </button>
+                </button>
                         <button
                         className="btn-secondary"
                           onClick={() => {
@@ -2737,10 +2737,10 @@ const HostView: React.FC = () => {
                         }}
                       >
                         GOT Playlists
-                        </button>
-                      </div>
-                    
-                    <div style={{ 
+              </button>
+          </div>
+
+                        <div style={{ 
                       maxHeight: 400, 
                       overflowY: 'auto', 
                       border: '1px solid rgba(255,255,255,0.1)', 
@@ -2767,7 +2767,7 @@ const HostView: React.FC = () => {
                         return filteredPlaylists.length === 0 ? (
                           <div style={{ padding: 20, textAlign: 'center', opacity: 0.7 }}>
                             {playlistQuery ? 'No playlists match your search.' : 'No available playlists.'}
-            </div>
+                        </div>
                         ) : (
                           filteredPlaylists.map((p) => {
                           const isSelected = selectedPlaylists.some(sp => sp.id === p.id);
@@ -2897,7 +2897,7 @@ const HostView: React.FC = () => {
                       >
                         🔄 Reset Event
                       </button>
-                    </div>
+                      </div>
                   </div>
                 </motion.div>
               </div>
@@ -3123,15 +3123,15 @@ const HostView: React.FC = () => {
                )}
              </div>
            </motion.div>
-              </div>
-            )}
+                </div>
+          )}
 
             {activeTab === 'manage' && (
               <div className="manage-tab">
                 {/* Round Manager */}
                 <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
                   transition={{ delay: 0.2 }}
                   className="bg-rgba(42, 42, 42, 0.95) backdrop-blur-[20px] border border-rgba(0, 255, 136, 0.3) rounded-2xl p-6 mb-6"
                 >
@@ -3148,15 +3148,15 @@ const HostView: React.FC = () => {
                             <div className="text-center">
                               <div className="text-2xl font-bold text-green-400">{summary.completed}</div>
                               <div className="text-sm text-gray-400">Completed</div>
-                            </div>
+                  </div>
                             <div className="text-center">
                               <div className="text-2xl font-bold text-blue-400">{summary.active}</div>
                               <div className="text-sm text-gray-400">Active</div>
-                            </div>
+                  </div>
                             <div className="text-center">
                               <div className="text-2xl font-bold text-yellow-400">{summary.planned}</div>
                               <div className="text-sm text-gray-400">Planned</div>
-                            </div>
+                </div>
                             <div className="text-center">
                               <div className="text-2xl font-bold text-gray-400">{summary.unplanned}</div>
                               <div className="text-sm text-gray-400">Unplanned</div>
@@ -3223,7 +3223,7 @@ const HostView: React.FC = () => {
                                     Start
                           </button>
                                 )}
-                  </div>
+                    </div>
                   </div>
                 </div>
                         );
@@ -3239,17 +3239,17 @@ const HostView: React.FC = () => {
                animate={{ opacity: 1 }}
                transition={{ delay: 0.4 }}
                     className="player-cards-section"
-                  >
+             >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                       <h2>👥 Player Cards & Progress</h2>
-                      <button
+                 <button
                         onClick={() => setShowPlayerCards(false)}
                         className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
                         title="Close player cards view"
-                      >
+                 >
                         ✕ Close
-                      </button>
-                    </div>
+                 </button>
+               </div>
                     <div style={{ 
                       display: 'grid', 
                       gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', 
@@ -3271,7 +3271,7 @@ const HostView: React.FC = () => {
                             textAlign: 'center'
                           }}>
                             {playerData.playerName}
-               </div>
+                         </div>
                           
                           {/* Win Progress Indicator */}
                           {(() => {
@@ -3297,7 +3297,7 @@ const HostView: React.FC = () => {
                                   marginBottom: '4px'
                                 }}>
                                   {progressText}
-                                </div>
+                       </div>
                                 {cheatingCount > 0 && (
                                   <div style={{
                                     color: '#ff4444',
@@ -3306,7 +3306,7 @@ const HostView: React.FC = () => {
                                     marginBottom: '4px'
                                   }}>
                                     ⚠️ {cheatingCount} invalid mark{cheatingCount > 1 ? 's' : ''}
-                                  </div>
+                   </div>
                                 )}
                                 <div style={{ 
                                   background: 'rgba(255,255,255,0.1)',
@@ -3406,16 +3406,16 @@ const HostView: React.FC = () => {
                                 {icon && <span style={{ marginRight: 2 }}>{icon}</span>}
                                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                   {square.songName.length > 12 ? square.songName.substring(0, 12) + '...' : square.songName}
-                                </span>
+                    </span>
                               </div>
                               );
                             })}
                          </div>
-                       </div>
-                     ))}
-                   </div>
-                 </motion.div>
-               )}
+                  </div>
+                ))}
+               </div>
+             </motion.div>
+           )}
               </div>
             )}
           </div>
@@ -3555,7 +3555,7 @@ const HostView: React.FC = () => {
                 <h3 style={{ color: '#00ff88', fontSize: '1.2rem', fontWeight: 'bold' }}>
                   🤖 AI Song Suggestions
                 </h3>
-                <button
+                    <button
                   onClick={() => setSuggestionsModal({ isOpen: false, playlist: null, suggestions: [], loading: false, analysis: null, error: null })}
                       style={{
                     background: 'none',
@@ -3566,8 +3566,8 @@ const HostView: React.FC = () => {
                   }}
                 >
                   ?
-                </button>
-                </div>
+                    </button>
+                  </div>
 
               {suggestionsModal.error ? (
                 <div style={{ color: '#ff6b6b', padding: '16px', textAlign: 'center' }}>
@@ -3575,7 +3575,7 @@ const HostView: React.FC = () => {
                   {suggestionsModal.error.details && (
                     <div style={{ fontSize: '0.8rem', marginTop: '8px', opacity: 0.8 }}>
                       {suggestionsModal.error.details}
-                    </div>
+               </div>
                   )}
                 </div>
               ) : suggestionsModal.suggestions.length > 0 ? (
@@ -3669,8 +3669,8 @@ const HostView: React.FC = () => {
                 ))
               )}
                 </div>
-          </motion.div>
-        )}
+             </motion.div>
+           )}
       </motion.div>
 
       {/* License Key Modal - TEMPORARILY DISABLED */}
@@ -3852,31 +3852,31 @@ const HostView: React.FC = () => {
 
       {/* Playlist Cleanup Modal */}
       {showPlaylistCleanup && (
-        <motion.div 
+            <motion.div
           className="modal-overlay"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          style={{
-            position: 'fixed',
+              style={{
+                position: 'fixed',
             top: 0,
             left: 0,
             right: 0,
             bottom: 0,
             background: 'rgba(0, 0, 0, 0.8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
             zIndex: 1000
-          }}
+              }}
           onClick={() => setShowPlaylistCleanup(false)}
-        >
-          <motion.div
+            >
+              <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
-            style={{
-              background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
+                style={{
+                  background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
               border: '1px solid rgba(0, 255, 136, 0.3)',
               borderRadius: '15px',
               padding: '24px',
@@ -3935,7 +3935,7 @@ const HostView: React.FC = () => {
                   </button>
                 </>
               )}
-            </div>
+                </div>
 
             <div style={{ flex: 1, overflow: 'auto' }}>
               {gotPlaylists.length === 0 ? (
@@ -3972,10 +3972,10 @@ const HostView: React.FC = () => {
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 'bold', color: '#fff', marginBottom: '4px' }}>
                           {playlist.name.replace('Game Of Tones Output - ', '')}
-                        </div>
+                    </div>
                         <div style={{ fontSize: '0.8rem', color: '#888' }}>
                           {playlist.trackCount} songs • {playlist.createdAt !== 'Unknown' ? new Date(playlist.createdAt).toLocaleDateString() : 'Date unknown'}
-                        </div>
+                </div>
                         {playlist.description && (
                           <div style={{ fontSize: '0.7rem', color: '#666', marginTop: '2px' }}>
                             {playlist.description}
@@ -3987,7 +3987,7 @@ const HostView: React.FC = () => {
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        style={{
+                            style={{ 
                           color: '#00ff88',
                           textDecoration: 'none',
                           fontSize: '0.8rem',
@@ -3996,11 +3996,11 @@ const HostView: React.FC = () => {
                       >
                         🎵 Open in Spotify
                       </a>
-                    </div>
-                  ))}
-                </div>
+                          </div>
+                        ))}
+                      </div>
               )}
-            </div>
+                    </div>
           </motion.div>
         </motion.div>
       )}
@@ -4008,7 +4008,7 @@ const HostView: React.FC = () => {
       {/* Bingo Verification Modal */}
       {pendingVerification && (
         <div 
-          style={{
+                              style={{ 
             position: 'fixed',
             top: 0,
             left: 0,
@@ -4045,12 +4045,12 @@ const HostView: React.FC = () => {
               <p style={{ color: '#ccc', fontSize: '0.9rem' }}>
                 Pattern: <strong>{pendingVerification.requiredPattern}</strong>
               </p>
-            </div>
+                  </div>
 
             {/* Player's Marked Squares */}
             <div style={{ marginBottom: '20px' }}>
               <h3 style={{ color: '#00ff88', marginBottom: '12px' }}>Marked Squares:</h3>
-              <div style={{ 
+                  <div style={{ 
                 maxHeight: '200px', 
                 overflow: 'auto', 
                 background: 'rgba(0,0,0,0.3)', 
@@ -4060,7 +4060,7 @@ const HostView: React.FC = () => {
               }}>
                 {pendingVerification.markedSquares?.map((square: any, index: number) => {
                   const wasPlayed = pendingVerification.playedSongs?.some((song: any) => song.id === square.songId);
-                  return (
+                        return (
                     <div 
                       key={index}
                       style={{ 
@@ -4076,30 +4076,30 @@ const HostView: React.FC = () => {
                     >
                       <span style={{ color: '#fff', fontSize: '0.9rem' }}>
                         {square.songName} - {square.artistName}
-                      </span>
+                          </span>
                       <span style={{ 
                         color: wasPlayed ? '#00ff88' : '#ff4444',
                         fontSize: '0.8rem',
                         fontWeight: 'bold'
                       }}>
                         {wasPlayed ? '✅ PLAYED' : '❌ NOT PLAYED'}
-                      </span>
+                          </span>
                     </div>
                   );
                 })}
-              </div>
-            </div>
+                  </div>
+                </div>
 
             {/* Verification Buttons */}
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-              <button
+                  <button
                 onClick={approveBingo}
                 disabled={isProcessingVerification}
-                style={{
-                  background: 'linear-gradient(135deg, #00ff88, #00cc6d)',
+                    style={{
+                      background: 'linear-gradient(135deg, #00ff88, #00cc6d)',
                   color: '#000',
-                  border: 'none',
-                  padding: '12px 24px',
+                      border: 'none',
+                      padding: '12px 24px',
                   borderRadius: '8px',
                   fontSize: '1rem',
                   fontWeight: 'bold',
@@ -4108,19 +4108,19 @@ const HostView: React.FC = () => {
                 }}
               >
                 {isProcessingVerification ? '⏳ Processing...' : '✅ APPROVE BINGO'}
-              </button>
-              
-              <button
+                  </button>
+                  
+                  <button
                 onClick={() => {
                   const reason = prompt('Reason for rejection (optional):') || 'Invalid pattern';
                   rejectBingo(reason);
                 }}
                 disabled={isProcessingVerification}
-                style={{
-                  background: 'linear-gradient(135deg, #ff4444, #cc3333)',
+                    style={{
+                      background: 'linear-gradient(135deg, #ff4444, #cc3333)',
                   color: '#fff',
-                  border: 'none',
-                  padding: '12px 24px',
+                      border: 'none',
+                      padding: '12px 24px',
                   borderRadius: '8px',
                   fontSize: '1rem',
                   fontWeight: 'bold',
@@ -4129,12 +4129,12 @@ const HostView: React.FC = () => {
                 }}
               >
                 {isProcessingVerification ? '⏳ Processing...' : '❌ REJECT BINGO'}
-              </button>
-            </div>
+                  </button>
+                </div>
 
             {/* Debug Info */}
             {pendingVerification.debugInfo && (
-              <div style={{ 
+                <div style={{ 
                 marginTop: '16px', 
                 padding: '8px', 
                 background: 'rgba(0,0,0,0.2)', 
@@ -4143,10 +4143,10 @@ const HostView: React.FC = () => {
                 color: '#ccc'
               }}>
                 <strong>Debug:</strong> {pendingVerification.debugInfo.totalMarkedSquares} marked, {pendingVerification.debugInfo.totalPlayedSongs} played songs
-              </div>
+                </div>
             )}
-          </div>
-        </div>
+                  </div>
+              </div>
       )}
 
       {/* Add spinning animation for loading indicator */}
