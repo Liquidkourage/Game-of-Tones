@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL } from '../config';
+import { BingoPattern, PATTERN_OPTIONS, BINGO_PATTERNS, getPatternDisplayName } from '../patternDefinitions';
 import RoundPlanner from './RoundPlanner';
 
 interface Playlist {
@@ -108,7 +109,7 @@ const HostView: React.FC = () => {
   const [playedSoFar, setPlayedSoFar] = useState<Array<{ id: string; name: string; artist: string }>>([]);
   const [logs, setLogs] = useState<Array<{ level: 'info' | 'warn' | 'error'; message: string; ts: number }>>([]);
   const [revealMode, setRevealMode] = useState<'off' | 'artist' | 'title' | 'full'>('off');
-  const [pattern, setPattern] = useState<'line' | 'four_corners' | 'x' | 'full_card' | 'custom'>('line');
+  const [pattern, setPattern] = useState<BingoPattern>('line');
   const [showSetup, setShowSetup] = useState<boolean>(false);
   const [lockJoins, setLockJoins] = useState<boolean>(false);
   const [preQueueEnabled, setPreQueueEnabled] = useState<boolean>(false);
@@ -1409,7 +1410,7 @@ const HostView: React.FC = () => {
   };
 
 
-  const updatePattern = (next: 'line' | 'four_corners' | 'x' | 'full_card' | 'custom') => {
+  const updatePattern = (next: BingoPattern) => {
     setPattern(next);
     if (socket && roomId) {
       socket.emit('set-pattern', { roomId, pattern: next, customMask });
@@ -2627,12 +2628,8 @@ const HostView: React.FC = () => {
             >
               <h2>🎯 Bingo Pattern</h2>
               <div className="pattern-selection">
-                <div className="pattern-options" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
-                  {[
-                    { value: 'line', label: 'Line', desc: 'Any row, column, or diagonal' },
-                    { value: 'full_card', label: 'Full Card', desc: 'All 25 squares' },
-                    { value: 'custom', label: 'Custom', desc: 'Custom pattern (set squares manually)' }
-                  ].map((option) => (
+                <div className="pattern-options" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px', justifyContent: 'center' }}>
+                  {PATTERN_OPTIONS.map((option) => (
                 <button
                       key={option.value}
                       className={`pattern-option ${pattern === option.value ? 'active' : ''}`}
@@ -2659,20 +2656,115 @@ const HostView: React.FC = () => {
                       }}
                     >
                       <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{option.label}</div>
-                      <div style={{ fontSize: '0.8rem', opacity: 0.8, textAlign: 'center' }}>{option.desc}</div>
+                      <div style={{ fontSize: '0.8rem', opacity: 0.8, textAlign: 'center' }}>{option.description}</div>
                         </button>
                   ))}
-                      </div>
+              </div>
                 <div style={{ marginTop: '8px', fontSize: '0.9rem', color: '#b3b3b3' }}>
                   Current pattern: <strong style={{ color: '#00ff88' }}>
-                    {pattern === 'line' ? 'Line' : 
-                     pattern === 'full_card' ? 'Full Card' :
-                     pattern === 'custom' ? 'Custom' : pattern}
+                    {getPatternDisplayName(pattern)}
                   </strong>
                   {pattern === 'custom' && (
                     <div style={{ marginTop: '8px' }}>
                       <div style={{ marginBottom: '8px', fontSize: '0.8rem', color: '#ffaa00' }}>
                         ⚠️ Define which squares are part of the winning pattern
+                        </div>
+                      <div style={{ marginBottom: '12px', display: 'flex', flexWrap: 'wrap', gap: '6px', justifyContent: 'center' }}>
+                        <button
+                          onClick={() => {
+                            setCustomPattern(BINGO_PATTERNS.t.positions);
+                            if (socket && roomId) {
+                              socket.emit('set-custom-pattern', { roomId, customPattern: BINGO_PATTERNS.t.positions });
+                            }
+                          }}
+                          style={{
+                            padding: '4px 8px',
+                            fontSize: '0.7rem',
+                            border: '1px solid rgba(255,255,255,0.3)',
+                            borderRadius: '4px',
+                            background: 'rgba(255,255,255,0.1)',
+                            color: '#ffffff',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          T Pattern
+                        </button>
+                        <button
+                          onClick={() => {
+                            setCustomPattern(BINGO_PATTERNS.l.positions);
+                            if (socket && roomId) {
+                              socket.emit('set-custom-pattern', { roomId, customPattern: BINGO_PATTERNS.l.positions });
+                            }
+                          }}
+                          style={{
+                            padding: '4px 8px',
+                            fontSize: '0.7rem',
+                            border: '1px solid rgba(255,255,255,0.3)',
+                            borderRadius: '4px',
+                            background: 'rgba(255,255,255,0.1)',
+                            color: '#ffffff',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          L Pattern
+                        </button>
+                        <button
+                          onClick={() => {
+                            setCustomPattern(BINGO_PATTERNS.u.positions);
+                            if (socket && roomId) {
+                              socket.emit('set-custom-pattern', { roomId, customPattern: BINGO_PATTERNS.u.positions });
+                            }
+                          }}
+                          style={{
+                            padding: '4px 8px',
+                            fontSize: '0.7rem',
+                            border: '1px solid rgba(255,255,255,0.3)',
+                            borderRadius: '4px',
+                            background: 'rgba(255,255,255,0.1)',
+                            color: '#ffffff',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          U Pattern
+                        </button>
+                        <button
+                          onClick={() => {
+                            setCustomPattern(BINGO_PATTERNS.plus.positions);
+                            if (socket && roomId) {
+                              socket.emit('set-custom-pattern', { roomId, customPattern: BINGO_PATTERNS.plus.positions });
+                            }
+                          }}
+                          style={{
+                            padding: '4px 8px',
+                            fontSize: '0.7rem',
+                            border: '1px solid rgba(255,255,255,0.3)',
+                            borderRadius: '4px',
+                            background: 'rgba(255,255,255,0.1)',
+                            color: '#ffffff',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Plus Pattern
+                        </button>
+                        <button
+                          onClick={() => {
+                            setCustomPattern([]);
+                            if (socket && roomId) {
+                              socket.emit('set-custom-pattern', { roomId, customPattern: [] });
+                            }
+                          }}
+                          style={{
+                            padding: '4px 8px',
+                            fontSize: '0.7rem',
+                            border: '1px solid rgba(255,255,255,0.3)',
+                            borderRadius: '4px',
+                            background: 'rgba(255,255,255,0.1)',
+                            color: '#ffffff',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Clear
+                        </button>
                       </div>
                       <div style={{ 
                         display: 'grid', 
@@ -2688,9 +2780,9 @@ const HostView: React.FC = () => {
                           const isSelected = customPattern && customPattern.includes(position);
                           
                           return (
-                            <button
+                        <button
                               key={index}
-                              onClick={() => {
+                          onClick={() => {
                                 const newPattern = customPattern || [];
                                 if (isSelected) {
                                   // Remove from pattern
@@ -2723,10 +2815,10 @@ const HostView: React.FC = () => {
                               title={`${position} - ${isSelected ? 'Remove from pattern' : 'Add to pattern'}`}
                             >
                               {isSelected ? '✓' : ''}
-                            </button>
-                          );
-                        })}
-                      </div>
+                        </button>
+                    );
+                  })}
+                </div>
                       <div style={{ marginTop: '8px', fontSize: '0.7rem', color: '#b3b3b3', textAlign: 'center' }}>
                         Click squares to define the winning pattern
                         {customPattern && customPattern.length > 0 && (
@@ -2734,11 +2826,11 @@ const HostView: React.FC = () => {
                             {customPattern.length} squares selected
                           </div>
                         )}
-                      </div>
-                    </div>
-                  )}
                     </div>
                 </div>
+                  )}
+              </div>
+            </div>
             </motion.div>
           )}
 

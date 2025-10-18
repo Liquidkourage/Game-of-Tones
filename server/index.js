@@ -1328,7 +1328,7 @@ io.on('connection', (socket) => {
       if (!room) return;
       const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
       if (!isCurrentHost) return;
-      const allowed = new Set(['line', 'four_corners', 'x', 'full_card', 'custom']);
+      const allowed = new Set(['line', 'four_corners', 'x', 'full_card', 't', 'l', 'u', 'plus', 'custom']);
       room.pattern = allowed.has(pattern) ? pattern : 'line';
       if (room.pattern === 'custom') {
         const mask = Array.isArray(customMask) ? customMask.filter(p => /^(0|1|2|3|4)-(0|1|2|3|4)$/.test(p)) : [];
@@ -2076,7 +2076,7 @@ io.on('connection', (socket) => {
         room.round = (room.round || 0) + 1;
         // Apply pattern from host if provided; default to 'line' if still unset
         try {
-          const allowed = new Set(['line', 'four_corners', 'x', 'full_card']);
+          const allowed = new Set(['line', 'four_corners', 'x', 'full_card', 't', 'l', 'u', 'plus']);
           if (incomingPattern && allowed.has(incomingPattern)) {
             room.pattern = incomingPattern;
           }
@@ -3810,42 +3810,97 @@ function checkBingo(card) {
   return diag1Complete || diag2Complete;
 }
 
-function validateBingoForPattern(card, room) {
-  const pattern = room?.pattern || 'full_card';
+function checkBingoWithPlayedSongs(card, playedSongIds) {
+  // Helper function to check if a marked square corresponds to a played song
+  const isMarkedSquareValid = (square) => {
+    return square && square.marked && playedSongIds.includes(square.songId);
+  };
   
-  if (pattern === 'custom' && room?.customPattern && room.customPattern.size > 0) {
-    // All positions in customPattern must be marked
-    const unmarkedPositions = [];
-    for (const pos of room.customPattern) {
-      const sq = card.squares.find(s => s.position === pos);
-      if (!sq || !sq.marked) {
-        unmarkedPositions.push(pos);
+  // Check rows
+  for (let row = 0; row < 5; row++) {
+    let rowComplete = true;
+    for (let col = 0; col < 5; col++) {
+      const square = card.squares.find(s => s.position === `${row}-${col}`);
+      if (!isMarkedSquareValid(square)) {
+        rowComplete = false;
+        break;
       }
     }
-    if (unmarkedPositions.length > 0) {
+    if (rowComplete) return { valid: true, type: `Row ${row + 1}` };
+  }
+  
+  // Check columns
+  for (let col = 0; col < 5; col++) {
+    let colComplete = true;
+    for (let row = 0; row < 5; row++) {
+      const square = card.squares.find(s => s.position === `${row}-${col}`);
+      if (!isMarkedSquareValid(square)) {
+        colComplete = false;
+        break;
+      }
+    }
+    if (colComplete) return { valid: true, type: `Column ${col + 1}` };
+  }
+  
+  // Check diagonals
+  let diag1Complete = true;
+  let diag2Complete = true;
+  for (let i = 0; i < 5; i++) {
+    const square1 = card.squares.find(s => s.position === `${i}-${i}`);
+    const square2 = card.squares.find(s => s.position === `${i}-${4-i}`);
+    
+    if (!isMarkedSquareValid(square1)) diag1Complete = false;
+    if (!isMarkedSquareValid(square2)) diag2Complete = false;
+  }
+  
+  if (diag1Complete) return { valid: true, type: 'Diagonal (top-left to bottom-right)' };
+  if (diag2Complete) return { valid: true, type: 'Diagonal (top-right to bottom-left)' };
+  
+  return { valid: false, type: null };
+}
+
+function validateBingoForPattern(card, room) {
+  const pattern = room?.pattern || 'full_card';
+  const playedSongIds = room?.calledSongIds || [];
+  
+  // Helper function to check if a marked square corresponds to a played song
+  const isMarkedSquareValid = (square) => {
+    return square && square.marked && playedSongIds.includes(square.songId);
+  };
+  
+  if (pattern === 'custom' && room?.customPattern && room.customPattern.size > 0) {
+    // All positions in customPattern must be marked AND correspond to played songs
+    const invalidPositions = [];
+    for (const pos of room.customPattern) {
+      const sq = card.squares.find(s => s.position === pos);
+      if (!isMarkedSquareValid(sq)) {
+        invalidPositions.push(pos);
+      }
+    }
+    if (invalidPositions.length > 0) {
       return { 
         valid: false, 
-        reason: `Custom pattern incomplete. Need ${unmarkedPositions.length} more squares marked.`
+        reason: `Custom pattern incomplete. Need ${invalidPositions.length} more squares marked with played songs.`
       };
     }
     return { valid: true, reason: 'Custom pattern complete!' };
   }
   
   if (pattern === 'full_card') {
-    // All squares must be marked
-    let unmarkedCount = 0;
+    // All squares must be marked AND correspond to played songs
+    let invalidCount = 0;
     for (let row = 0; row < 5; row++) {
       for (let col = 0; col < 5; col++) {
         const square = card.squares.find(s => s.position === `${row}-${col}`);
-        if (!square || !square.marked) {
-          unmarkedCount++;
+        if (!isMarkedSquareValid(square)) {
+          invalidCount++;
         }
       }
     }
-    if (unmarkedCount > 0) {
+    if (invalidCount > 0) {
       return { 
         valid: false, 
-        reason: `Full card incomplete. Need ${unmarkedCount} more squares marked.`
+        reason: `Full card incomplete. Need ${invalidCount} more squares marked with played songs.`
       };
     }
     return { valid: true, reason: 'Full card complete!' };
@@ -3853,44 +3908,108 @@ function validateBingoForPattern(card, room) {
   
   if (pattern === 'four_corners') {
     const required = ['0-0', '0-4', '4-0', '4-4'];
-    const unmarked = required.filter(pos => {
+    const invalid = required.filter(pos => {
       const sq = card.squares.find(s => s.position === pos);
-      return !sq || !sq.marked;
+      return !isMarkedSquareValid(sq);
     });
-    if (unmarked.length > 0) {
+    if (invalid.length > 0) {
       return { 
         valid: false, 
-        reason: `Four corners incomplete. Need ${unmarked.length} more corners marked.`
+        reason: `Four corners incomplete. Need ${invalid.length} more corners marked with played songs.`
       };
     }
     return { valid: true, reason: 'Four corners complete!' };
   }
   
   if (pattern === 'x') {
-    const unmarked = [];
+    const invalid = [];
     for (let i = 0; i < 5; i++) {
       const a = card.squares.find(s => s.position === `${i}-${i}`);
       const b = card.squares.find(s => s.position === `${i}-${4 - i}`);
-      if (!a || !a.marked) unmarked.push(`${i}-${i}`);
-      if (!b || !b.marked) unmarked.push(`${i}-${4 - i}`);
+      if (!isMarkedSquareValid(a)) invalid.push(`${i}-${i}`);
+      if (!isMarkedSquareValid(b)) invalid.push(`${i}-${4 - i}`);
     }
-    if (unmarked.length > 0) {
+    if (invalid.length > 0) {
       return { 
         valid: false, 
-        reason: `X pattern incomplete. Need ${unmarked.length} more diagonal squares marked.`
+        reason: `X pattern incomplete. Need ${invalid.length} more diagonal squares marked with played songs.`
       };
     }
     return { valid: true, reason: 'X pattern complete!' };
   }
   
-  // default: any single line using existing checker
-  const lineResult = checkBingo(card);
-  if (lineResult) {
-    return { valid: true, reason: 'Line bingo complete!' };
+  if (pattern === 't') {
+    // T pattern: top row + middle column
+    const tPositions = ['0-0', '0-1', '0-2', '0-3', '0-4', '1-2', '2-2', '3-2', '4-2'];
+    const invalid = tPositions.filter(pos => {
+      const sq = card.squares.find(s => s.position === pos);
+      return !isMarkedSquareValid(sq);
+    });
+    if (invalid.length > 0) {
+      return { 
+        valid: false, 
+        reason: `T pattern incomplete. Need ${invalid.length} more squares marked with played songs.`
+      };
+    }
+    return { valid: true, reason: 'T pattern complete!' };
+  }
+  
+  if (pattern === 'l') {
+    // L pattern: left column + bottom row
+    const lPositions = ['0-0', '1-0', '2-0', '3-0', '4-0', '4-1', '4-2', '4-3', '4-4'];
+    const invalid = lPositions.filter(pos => {
+      const sq = card.squares.find(s => s.position === pos);
+      return !isMarkedSquareValid(sq);
+    });
+    if (invalid.length > 0) {
+      return { 
+        valid: false, 
+        reason: `L pattern incomplete. Need ${invalid.length} more squares marked with played songs.`
+      };
+    }
+    return { valid: true, reason: 'L pattern complete!' };
+  }
+  
+  if (pattern === 'u') {
+    // U pattern: left column + right column + bottom row
+    const uPositions = ['0-0', '1-0', '2-0', '3-0', '4-0', '0-4', '1-4', '2-4', '3-4', '4-4', '4-1', '4-2', '4-3'];
+    const invalid = uPositions.filter(pos => {
+      const sq = card.squares.find(s => s.position === pos);
+      return !isMarkedSquareValid(sq);
+    });
+    if (invalid.length > 0) {
+      return { 
+        valid: false, 
+        reason: `U pattern incomplete. Need ${invalid.length} more squares marked with played songs.`
+      };
+    }
+    return { valid: true, reason: 'U pattern complete!' };
+  }
+  
+  if (pattern === 'plus') {
+    // Plus pattern: middle row + middle column
+    const plusPositions = ['2-0', '2-1', '2-2', '2-3', '2-4', '0-2', '1-2', '3-2', '4-2'];
+    const invalid = plusPositions.filter(pos => {
+      const sq = card.squares.find(s => s.position === pos);
+      return !isMarkedSquareValid(sq);
+    });
+    if (invalid.length > 0) {
+      return { 
+        valid: false, 
+        reason: `Plus pattern incomplete. Need ${invalid.length} more squares marked with played songs.`
+      };
+    }
+    return { valid: true, reason: 'Plus pattern complete!' };
+  }
+  
+  // default: any single line with played song validation
+  const lineResult = checkBingoWithPlayedSongs(card, playedSongIds);
+  if (lineResult.valid) {
+    return { valid: true, reason: `Line bingo complete! (${lineResult.type})` };
   } else {
     return { 
       valid: false, 
-      reason: 'No complete lines found. Need a full row, column, or diagonal.'
+      reason: 'No complete lines found. Need a full row, column, or diagonal with played songs.'
     };
   }
 }

@@ -724,6 +724,42 @@ const PlayerView: React.FC = () => {
       return diag1Complete && diag2Complete;
     }
     
+    // T pattern - top row + middle column must be marked AND correspond to played songs
+    if (pattern === 't') {
+      const tPositions = ['0-0', '0-1', '0-2', '0-3', '0-4', '1-2', '2-2', '3-2', '4-2'];
+      return tPositions.every(pos => {
+        const square = card.squares.find(s => s.position === pos);
+        return square && isMarkedSquareValid(square);
+      });
+    }
+    
+    // L pattern - left column + bottom row must be marked AND correspond to played songs
+    if (pattern === 'l') {
+      const lPositions = ['0-0', '1-0', '2-0', '3-0', '4-0', '4-1', '4-2', '4-3', '4-4'];
+      return lPositions.every(pos => {
+        const square = card.squares.find(s => s.position === pos);
+        return square && isMarkedSquareValid(square);
+      });
+    }
+    
+    // U pattern - left column + right column + bottom row must be marked AND correspond to played songs
+    if (pattern === 'u') {
+      const uPositions = ['0-0', '1-0', '2-0', '3-0', '4-0', '0-4', '1-4', '2-4', '3-4', '4-4', '4-1', '4-2', '4-3'];
+      return uPositions.every(pos => {
+        const square = card.squares.find(s => s.position === pos);
+        return square && isMarkedSquareValid(square);
+      });
+    }
+    
+    // Plus pattern - middle row + middle column must be marked AND correspond to played songs
+    if (pattern === 'plus') {
+      const plusPositions = ['2-0', '2-1', '2-2', '2-3', '2-4', '0-2', '1-2', '3-2', '4-2'];
+      return plusPositions.every(pos => {
+        const square = card.squares.find(s => s.position === pos);
+        return square && isMarkedSquareValid(square);
+      });
+    }
+    
     // Line pattern - any row, column, or diagonal (all marked squares must correspond to played songs)
     if (pattern === 'line') {
       // Check rows
@@ -796,6 +832,26 @@ const PlayerView: React.FC = () => {
     if (pattern === 'x') {
       const [row, col] = position.split('-').map(Number);
       return row === col || row + col === 4; // Diagonal positions
+    }
+    
+    if (pattern === 't') {
+      const tPositions = ['0-0', '0-1', '0-2', '0-3', '0-4', '1-2', '2-2', '3-2', '4-2'];
+      return tPositions.includes(position);
+    }
+    
+    if (pattern === 'l') {
+      const lPositions = ['0-0', '1-0', '2-0', '3-0', '4-0', '4-1', '4-2', '4-3', '4-4'];
+      return lPositions.includes(position);
+    }
+    
+    if (pattern === 'u') {
+      const uPositions = ['0-0', '1-0', '2-0', '3-0', '4-0', '0-4', '1-4', '2-4', '3-4', '4-4', '4-1', '4-2', '4-3'];
+      return uPositions.includes(position);
+    }
+    
+    if (pattern === 'plus') {
+      const plusPositions = ['2-0', '2-1', '2-2', '2-3', '2-4', '0-2', '1-2', '3-2', '4-2'];
+      return plusPositions.includes(position);
     }
     
     return false;

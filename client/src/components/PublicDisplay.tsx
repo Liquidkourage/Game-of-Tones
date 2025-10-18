@@ -984,6 +984,28 @@ const PublicDisplay: React.FC = () => {
     if (pattern === 'custom' && customMask && customMask.size > 0) {
       return customMask.has(`${row}-${col}`);
     }
+    if (pattern === 'four_corners') {
+      return (row === 0 && col === 0) || (row === 0 && col === 4) || (row === 4 && col === 0) || (row === 4 && col === 4);
+    }
+    if (pattern === 'x') {
+      return row === col || row + col === 4;
+    }
+    if (pattern === 't') {
+      const tPositions = ['0-0', '0-1', '0-2', '0-3', '0-4', '1-2', '2-2', '3-2', '4-2'];
+      return tPositions.includes(`${row}-${col}`);
+    }
+    if (pattern === 'l') {
+      const lPositions = ['0-0', '1-0', '2-0', '3-0', '4-0', '4-1', '4-2', '4-3', '4-4'];
+      return lPositions.includes(`${row}-${col}`);
+    }
+    if (pattern === 'u') {
+      const uPositions = ['0-0', '1-0', '2-0', '3-0', '4-0', '0-4', '1-4', '2-4', '3-4', '4-4', '4-1', '4-2', '4-3'];
+      return uPositions.includes(`${row}-${col}`);
+    }
+    if (pattern === 'plus') {
+      const plusPositions = ['2-0', '2-1', '2-2', '2-3', '2-4', '0-2', '1-2', '3-2', '4-2'];
+      return plusPositions.includes(`${row}-${col}`);
+    }
     
     // 12 possible winning lines: 5 horizontal, 5 vertical, 2 diagonal
     const winningLines = [
