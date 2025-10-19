@@ -9,6 +9,13 @@ export interface PatternDefinition {
   positions: string[];
 }
 
+export interface SavedCustomPattern {
+  id: string;
+  name: string;
+  positions: string[];
+  createdAt: number;
+}
+
 export const BINGO_PATTERNS: Record<BingoPattern, PatternDefinition> = {
   line: {
     value: 'line',
@@ -88,4 +95,46 @@ export function getPatternDisplayName(pattern: BingoPattern): string {
 // Helper function to validate pattern positions
 export function validatePatternPositions(positions: string[]): boolean {
   return positions.every(pos => /^[0-4]-[0-4]$/.test(pos));
+}
+
+// Custom pattern storage utilities
+const CUSTOM_PATTERNS_KEY = 'bingo_custom_patterns';
+
+export function getSavedCustomPatterns(): SavedCustomPattern[] {
+  try {
+    const stored = localStorage.getItem(CUSTOM_PATTERNS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCustomPattern(pattern: Omit<SavedCustomPattern, 'id' | 'createdAt'>): SavedCustomPattern {
+  const savedPattern: SavedCustomPattern = {
+    ...pattern,
+    id: `custom_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    createdAt: Date.now()
+  };
+  
+  const existing = getSavedCustomPatterns();
+  existing.push(savedPattern);
+  
+  try {
+    localStorage.setItem(CUSTOM_PATTERNS_KEY, JSON.stringify(existing));
+  } catch (error) {
+    console.error('Failed to save custom pattern:', error);
+  }
+  
+  return savedPattern;
+}
+
+export function deleteCustomPattern(id: string): void {
+  const existing = getSavedCustomPatterns();
+  const filtered = existing.filter(p => p.id !== id);
+  
+  try {
+    localStorage.setItem(CUSTOM_PATTERNS_KEY, JSON.stringify(filtered));
+  } catch (error) {
+    console.error('Failed to delete custom pattern:', error);
+  }
 }
