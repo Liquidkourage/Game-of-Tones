@@ -2619,6 +2619,72 @@ const HostView: React.FC = () => {
           </div>
         </div>
 
+        {/* Display Controls - Always Visible */}
+        <div style={{ 
+          background: 'rgba(255,255,255,0.05)', 
+          border: '1px solid rgba(255,255,255,0.1)', 
+          borderRadius: '8px', 
+          padding: '12px 16px', 
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          flexWrap: 'wrap'
+        }}>
+          <span style={{ 
+            fontWeight: '600', 
+            color: '#00ffa3', 
+            fontSize: '0.9rem',
+            minWidth: 'fit-content'
+          }}>
+            🖥️ Display Controls:
+          </span>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button 
+              className="btn-secondary" 
+              onClick={() => socket?.emit('display-show-rules', { roomId })}
+              style={{ fontSize: '0.8rem', padding: '6px 10px' }}
+            >
+              📋 Show Rules
+            </button>
+            <button 
+              className="btn-secondary" 
+              onClick={() => socket?.emit('display-hide-rules', { roomId })}
+              style={{ fontSize: '0.8rem', padding: '6px 10px' }}
+            >
+              📋 Hide Rules
+            </button>
+            <button 
+              className="btn-secondary" 
+              onClick={() => socket?.emit('display-show-splash', { roomId })}
+              style={{ fontSize: '0.8rem', padding: '6px 10px' }}
+            >
+              🎬 Show Splash
+            </button>
+            <button 
+              className="btn-secondary" 
+              onClick={() => socket?.emit('display-hide-splash', { roomId })}
+              style={{ fontSize: '0.8rem', padding: '6px 10px' }}
+            >
+              🎬 Hide Splash
+            </button>
+            <button 
+              className="btn-secondary" 
+              onClick={() => socket?.emit('display-show-call-reveal', { roomId })}
+              style={{ fontSize: '0.8rem', padding: '6px 10px' }}
+            >
+              🎯 Show Call Reveal
+            </button>
+            <button 
+              className="btn-secondary" 
+              onClick={() => socket?.emit('display-hide-call-reveal', { roomId })}
+              style={{ fontSize: '0.8rem', padding: '6px 10px' }}
+            >
+              🎯 Hide Call Reveal
+            </button>
+          </div>
+        </div>
+
         {/* Main Content */}
         <div className="host-content" style={{ paddingBottom: currentSong ? '300px' : '20px' }}>
           {/* Tab Navigation */}
@@ -3303,29 +3369,6 @@ const HostView: React.FC = () => {
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                     <button className="btn-secondary" onClick={forceRefreshAll}>🧹 Force Refresh Clients</button>
-                  </div>
-                  
-                  {/* Display Controls */}
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
-                    <span style={{ opacity: 0.9 }}>Display:</span>
-                    <button className="btn-secondary" onClick={() => socket?.emit('display-show-rules', { roomId })}>
-                      📋 Show Rules
-                    </button>
-                    <button className="btn-secondary" onClick={() => socket?.emit('display-hide-rules', { roomId })}>
-                      📋 Hide Rules
-                    </button>
-                    <button className="btn-secondary" onClick={() => socket?.emit('display-show-splash', { roomId })}>
-                      🎬 Show Splash
-                    </button>
-                    <button className="btn-secondary" onClick={() => socket?.emit('display-hide-splash', { roomId })}>
-                      🎬 Hide Splash
-                    </button>
-                    <button className="btn-secondary" onClick={() => socket?.emit('display-show-call-reveal', { roomId })}>
-                      🎯 Show Call Reveal
-                    </button>
-                    <button className="btn-secondary" onClick={() => socket?.emit('display-hide-call-reveal', { roomId })}>
-                      🎯 Hide Call Reveal
-                    </button>
                   </div>
                  </div>
                )}
