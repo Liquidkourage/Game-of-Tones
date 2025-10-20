@@ -1471,7 +1471,7 @@ const HostView: React.FC = () => {
           console.log(`??� Resuming from exact pause position: ${pausePosition}ms`);
           socket.emit('resume-song', { 
             roomId, 
-           ResumePosition: pausePosition 
+            resumePosition: pausePosition 
           });
           setIsPlaying(true);
           setPlaybackState(prev => ({ 
@@ -1496,17 +1496,41 @@ const HostView: React.FC = () => {
   const pauseSong = async () => {
     try {
       if (socket) {
-        // Store the exact position where we're pausing
-        setPausePosition(playbackState.currentTime);
-        setIsPausedByInterface(true);
-        
-        socket.emit('pause-song', { roomId });
-        setIsPlaying(false);
-        setPlaybackState(prev => ({ ...prev, isPlaying: false }));
-        console.log(`⏸️ Paused song at position: ${playbackState.currentTime}ms`);
+        if (isPlaying) {
+          // Pause the song
+          setPausePosition(playbackState.currentTime);
+          setIsPausedByInterface(true);
+          
+          socket.emit('pause-song', { roomId });
+          setIsPlaying(false);
+          setPlaybackState(prev => ({ ...prev, isPlaying: false }));
+          console.log(`⏸️ Paused song at position: ${playbackState.currentTime}ms`);
+        } else {
+          // Resume the song
+          if (isPausedByInterface && currentSong) {
+            console.log(`▶️ Resuming from exact pause position: ${pausePosition}ms`);
+            socket.emit('resume-song', { 
+              roomId, 
+              resumePosition: pausePosition 
+            });
+            setIsPlaying(true);
+            setPlaybackState(prev => ({ 
+              ...prev, 
+              isPlaying: true,
+              currentTime: pausePosition 
+            }));
+            setIsPausedByInterface(false);
+          } else {
+            // Resume normally
+            socket.emit('resume-song', { roomId });
+            setIsPlaying(true);
+            setPlaybackState(prev => ({ ...prev, isPlaying: true }));
+            console.log('▶️ Resumed song');
+          }
+        }
       }
     } catch (error) {
-      console.error('Error pausing song:', error);
+      console.error('Error pausing/resuming song:', error);
     }
   };
 
