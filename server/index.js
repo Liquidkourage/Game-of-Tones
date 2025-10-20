@@ -349,7 +349,9 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       let startMs = 0;
       if (room.randomStarts && Number.isFinite(song.duration)) {
         const durationMs = Math.max(0, Number(song.duration));
-        const safeWindow = Math.max(0, durationMs - (room.snippetLength * 1000) - 1500);
+        // Always start within the first 90 seconds (90,000ms)
+        const maxStartMs = 90000; // 90 seconds
+        const safeWindow = Math.min(maxStartMs, Math.max(0, durationMs - (room.snippetLength * 1000) - 1500));
         if (safeWindow > 3000) {
           startMs = Math.floor(Math.random() * safeWindow);
         }
@@ -826,7 +828,9 @@ async function playNextSongSimple(roomId, deviceId) {
   let startMs = 0;
   if (room.randomStarts && Number.isFinite(nextSong.duration)) {
     const dur = Math.max(0, Number(nextSong.duration));
-    const safeWindow = Math.max(0, dur - (room.snippetLength * 1000) - 1500);
+    // Always start within the first 90 seconds (90,000ms)
+    const maxStartMs = 90000; // 90 seconds
+    const safeWindow = Math.min(maxStartMs, Math.max(0, dur - (room.snippetLength * 1000) - 1500));
     if (safeWindow > 3000) {
       startMs = Math.floor(Math.random() * safeWindow);
     }
@@ -3348,7 +3352,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       let startMs = 0;
       if (room.randomStarts && Number.isFinite(firstSong.duration)) {
         const dur = Math.max(0, Number(firstSong.duration));
-        const safeWindow = Math.max(0, dur - (room.snippetLength * 1000) - 1500);
+        // Always start within the first 90 seconds (90,000ms)
+        const maxStartMs = 90000; // 90 seconds
+        const safeWindow = Math.min(maxStartMs, Math.max(0, dur - (room.snippetLength * 1000) - 1500));
         if (safeWindow > 3000) {
           startMs = Math.floor(Math.random() * safeWindow);
         }
@@ -3606,7 +3612,9 @@ async function playNextSong(roomId, deviceId) {
       let startMs = 0;
       if (room.randomStarts && Number.isFinite(nextSong.duration)) {
         const dur = Math.max(0, Number(nextSong.duration));
-        const safeWindow = Math.max(0, dur - (room.snippetLength * 1000) - 1500);
+        // Always start within the first 90 seconds (90,000ms)
+        const maxStartMs = 90000; // 90 seconds
+        const safeWindow = Math.min(maxStartMs, Math.max(0, dur - (room.snippetLength * 1000) - 1500));
         if (safeWindow > 3000) {
           startMs = Math.floor(Math.random() * safeWindow);
         }
