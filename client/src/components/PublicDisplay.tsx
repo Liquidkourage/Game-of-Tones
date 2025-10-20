@@ -68,6 +68,12 @@ const PublicDisplay: React.FC = () => {
   // Splash/intro overlay (can disable with ?splash=0)
   const splashEnabled = (searchParams.get('splash') !== '0');
   const [showSplash, setShowSplash] = useState<boolean>(splashEnabled);
+  
+  // Rules/instruction screen state
+  const [showRules, setShowRules] = useState<boolean>(false);
+  
+  // Call reveal screen state
+  const [showCallReveal, setShowCallReveal] = useState<boolean>(false);
   const [currentWinningLine, setCurrentWinningLine] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const [gameState, setGameState] = useState<GameState>({
@@ -535,6 +541,31 @@ const PublicDisplay: React.FC = () => {
       playedSeqRef.current = {} as any;
       playedSeqCounterRef.current = 0;
       ensureGrid();
+    });
+
+    // Display control events
+    newSocket.on('display-show-rules', () => {
+      setShowRules(true);
+    });
+
+    newSocket.on('display-hide-rules', () => {
+      setShowRules(false);
+    });
+
+    newSocket.on('display-show-splash', () => {
+      setShowSplash(true);
+    });
+
+    newSocket.on('display-hide-splash', () => {
+      setShowSplash(false);
+    });
+
+    newSocket.on('display-show-call-reveal', () => {
+      setShowCallReveal(true);
+    });
+
+    newSocket.on('display-hide-call-reveal', () => {
+      setShowCallReveal(false);
     });
 
     newSocket.on('pattern-updated', (data: any) => {
@@ -1747,6 +1778,203 @@ const PublicDisplay: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+      
+      {/* Rules/Instructions Screen */}
+      <AnimatePresence>
+        {showRules && (
+          <motion.div
+            key="rules"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35 }}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 2000,
+              background: 'linear-gradient(135deg, #1d1b3a 0%, #10283a 60%, #0b1e2d 100%)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              padding: 40, overflow: 'auto'
+            }}
+          >
+            <div style={{ textAlign: 'center', maxWidth: '1200px', width: '100%' }}>
+              <div style={{
+                fontSize: 'clamp(3rem, 6vw, 4.5rem)',
+                fontWeight: 1000,
+                letterSpacing: '0.05em',
+                backgroundImage: 'linear-gradient(90deg,#00ffa3 0%, #7bffd9 35%, #ffffff 50%, #7bffd9 65%, #00ffa3 100%)',
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                textShadow: '0 10px 36px rgba(0,255,170,0.55), 0 0 28px rgba(0,255,170,0.3)',
+                marginBottom: '2rem'
+              }}>
+                How to Play
+              </div>
+              
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                gap: '2rem',
+                marginBottom: '2rem'
+              }}>
+                <div style={{
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  borderRadius: '16px',
+                  padding: '2rem',
+                  textAlign: 'left'
+                }}>
+                  <h3 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem', color: '#00ffa3' }}>
+                    🎵 Listen & Mark
+                  </h3>
+                  <p style={{ fontSize: '1.1rem', lineHeight: 1.6, opacity: 0.9 }}>
+                    Songs will play for 30 seconds. If you recognize the song, mark it on your bingo card!
+                  </p>
+                </div>
+                
+                <div style={{
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  borderRadius: '16px',
+                  padding: '2rem',
+                  textAlign: 'left'
+                }}>
+                  <h3 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem', color: '#00ffa3' }}>
+                    🎯 Complete Patterns
+                  </h3>
+                  <p style={{ fontSize: '1.1rem', lineHeight: 1.6, opacity: 0.9 }}>
+                    Mark squares to complete the winning pattern: {getPatternName()}
+                  </p>
+                </div>
+                
+                <div style={{
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  borderRadius: '16px',
+                  padding: '2rem',
+                  textAlign: 'left'
+                }}>
+                  <h3 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem', color: '#00ffa3' }}>
+                    🏆 Call BINGO!
+                  </h3>
+                  <p style={{ fontSize: '1.1rem', lineHeight: 1.6, opacity: 0.9 }}>
+                    When you complete the pattern, hold the BINGO button to call it out!
+                  </p>
+                </div>
+              </div>
+              
+              <div style={{
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.22)',
+                borderRadius: '16px',
+                padding: '2rem',
+                marginBottom: '2rem'
+              }}>
+                <h3 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem', color: '#00ffa3', textAlign: 'center' }}>
+                  🎮 Tips for Success
+                </h3>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                  gap: '1rem',
+                  fontSize: '1rem',
+                  lineHeight: 1.6,
+                  opacity: 0.9
+                }}>
+                  <div>• Listen carefully to the intro and chorus</div>
+                  <div>• Don't guess - only mark songs you're sure about</div>
+                  <div>• Pay attention to the artist and song title</div>
+                  <div>• Work on multiple patterns simultaneously</div>
+                </div>
+              </div>
+              
+              <div style={{
+                fontSize: '1.2rem',
+                opacity: 0.8,
+                textAlign: 'center',
+                fontStyle: 'italic'
+              }}>
+                Good luck and have fun! 🎉
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      {/* Call Reveal Screen */}
+      <AnimatePresence>
+        {showCallReveal && (
+          <motion.div
+            key="call-reveal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35 }}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 2000,
+              background: 'linear-gradient(135deg, #1d1b3a 0%, #10283a 60%, #0b1e2d 100%)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              padding: 40
+            }}
+          >
+            <div style={{ textAlign: 'center', maxWidth: '800px', width: '100%' }}>
+              <div style={{
+                fontSize: 'clamp(2.5rem, 5vw, 3.5rem)',
+                fontWeight: 1000,
+                letterSpacing: '0.05em',
+                backgroundImage: 'linear-gradient(90deg,#00ffa3 0%, #7bffd9 35%, #ffffff 50%, #7bffd9 65%, #00ffa3 100%)',
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                textShadow: '0 10px 36px rgba(0,255,170,0.55), 0 0 28px rgba(0,255,170,0.3)',
+                marginBottom: '2rem'
+              }}>
+                Call Reveal
+              </div>
+              
+              <div style={{
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.22)',
+                borderRadius: '16px',
+                padding: '2rem',
+                marginBottom: '2rem'
+              }}>
+                <h3 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem', color: '#00ffa3' }}>
+                  🎵 Current Song
+                </h3>
+                {gameState.currentSong ? (
+                  <div>
+                    <div style={{ fontSize: '1.8rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                      {gameState.currentSong.name}
+                    </div>
+                    <div style={{ fontSize: '1.3rem', opacity: 0.8 }}>
+                      by {gameState.currentSong.artist}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '1.2rem', opacity: 0.7 }}>
+                    No song currently playing
+                  </div>
+                )}
+              </div>
+              
+              <div style={{
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.22)',
+                borderRadius: '16px',
+                padding: '2rem'
+              }}>
+                <h3 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem', color: '#00ffa3' }}>
+                  🎯 Pattern: {getPatternName()}
+                </h3>
+                <p style={{ fontSize: '1.1rem', lineHeight: 1.6, opacity: 0.9 }}>
+                  Complete this pattern on your bingo card to win!
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
       {/* Subtle confetti when winner banner shows */}
       <AnimatePresence>
         {showWinnerBanner && (

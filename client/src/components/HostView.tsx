@@ -3304,6 +3304,29 @@ const HostView: React.FC = () => {
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                     <button className="btn-secondary" onClick={forceRefreshAll}>🧹 Force Refresh Clients</button>
                   </div>
+                  
+                  {/* Display Controls */}
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                    <span style={{ opacity: 0.9 }}>Display:</span>
+                    <button className="btn-secondary" onClick={() => socket?.emit('display-show-rules', { roomId })}>
+                      📋 Show Rules
+                    </button>
+                    <button className="btn-secondary" onClick={() => socket?.emit('display-hide-rules', { roomId })}>
+                      📋 Hide Rules
+                    </button>
+                    <button className="btn-secondary" onClick={() => socket?.emit('display-show-splash', { roomId })}>
+                      🎬 Show Splash
+                    </button>
+                    <button className="btn-secondary" onClick={() => socket?.emit('display-hide-splash', { roomId })}>
+                      🎬 Hide Splash
+                    </button>
+                    <button className="btn-secondary" onClick={() => socket?.emit('display-show-call-reveal', { roomId })}>
+                      🎯 Show Call Reveal
+                    </button>
+                    <button className="btn-secondary" onClick={() => socket?.emit('display-hide-call-reveal', { roomId })}>
+                      🎯 Hide Call Reveal
+                    </button>
+                  </div>
                  </div>
                )}
              </div>

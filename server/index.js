@@ -2705,6 +2705,55 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Display control events
+  socket.on('display-show-rules', (data) => {
+    const { roomId } = data;
+    if (roomId && rooms.has(roomId)) {
+      io.to(roomId).emit('display-show-rules');
+      console.log(`📋 Rules screen shown for room ${roomId}`);
+    }
+  });
+
+  socket.on('display-hide-rules', (data) => {
+    const { roomId } = data;
+    if (roomId && rooms.has(roomId)) {
+      io.to(roomId).emit('display-hide-rules');
+      console.log(`📋 Rules screen hidden for room ${roomId}`);
+    }
+  });
+
+  socket.on('display-show-splash', (data) => {
+    const { roomId } = data;
+    if (roomId && rooms.has(roomId)) {
+      io.to(roomId).emit('display-show-splash');
+      console.log(`🎬 Splash screen shown for room ${roomId}`);
+    }
+  });
+
+  socket.on('display-hide-splash', (data) => {
+    const { roomId } = data;
+    if (roomId && rooms.has(roomId)) {
+      io.to(roomId).emit('display-hide-splash');
+      console.log(`🎬 Splash screen hidden for room ${roomId}`);
+    }
+  });
+
+  socket.on('display-show-call-reveal', (data) => {
+    const { roomId } = data;
+    if (roomId && rooms.has(roomId)) {
+      io.to(roomId).emit('display-show-call-reveal');
+      console.log(`🎯 Call reveal screen shown for room ${roomId}`);
+    }
+  });
+
+  socket.on('display-hide-call-reveal', (data) => {
+    const { roomId } = data;
+    if (roomId && rooms.has(roomId)) {
+      io.to(roomId).emit('display-hide-call-reveal');
+      console.log(`🎯 Call reveal screen hidden for room ${roomId}`);
+    }
+  });
+
   // Handle disconnection
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.id}`);
