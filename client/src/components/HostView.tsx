@@ -2654,6 +2654,13 @@ const HostView: React.FC = () => {
             >
               🎬 Splash
             </button>
+            <button 
+              className="btn-secondary" 
+              onClick={() => socket?.emit('display-show-call-list', { roomId })}
+              style={{ fontSize: '0.8rem', padding: '6px 10px' }}
+            >
+              🎵 Call List
+            </button>
           </div>
         </div>
 
