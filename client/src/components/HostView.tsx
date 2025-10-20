@@ -834,29 +834,48 @@ const HostView: React.FC = () => {
 
     newSocket.on('playback-error', (data: any) => {
       const msg = data?.message || 'Playback error: Could not start on locked device.';
+      const type = data?.type || 'general';
+      const suggestions = data?.suggestions || [];
+      
       console.error('Playback error:', msg);
       setSpotifyError(msg);
-      alert(msg + '\n\nTip: Ensure Spotify is open and active on your chosen device, then use "Transfer Playback" or click Force Detection.');
+      
+      if (type === 'restriction' && suggestions.length > 0) {
+        const suggestionText = suggestions.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n');
+        alert(`${msg}\n\nPossible solutions:\n${suggestionText}\n\nTip: Ensure Spotify is open and active on your chosen device, then use "Transfer Playback" or click Force Detection.`);
+      } else {
+        alert(msg + '\n\nTip: Ensure Spotify is open and active on your chosen device, then use "Transfer Playback" or click Force Detection.');
+      }
+      
       addLog(`Playback error: ${msg}`, 'error');
     });
 
     newSocket.on('playback-warning', (data: any) => {
       const msg = data?.message || 'Playback warning occurred';
+      const type = data?.type || 'general';
+      const suggestions = data?.suggestions || [];
+      
       console.warn('Playback warning:', msg);
       setShowLogs(true);
       addLog(`Playback warning: ${msg}`, 'warn');
-      // Non-blocking toast instead of alert to avoid desync
-      try {
-        const toast = document.createElement('div');
-        toast.textContent = '⚠️ ' + msg;
-        Object.assign(toast.style, {
-          position: 'fixed', bottom: '14px', left: '14px', maxWidth: '70vw',
-          background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)',
-          padding: '10px 12px', borderRadius: '10px', zIndex: 9999, fontWeight: 700
-        } as unknown as CSSStyleDeclaration);
-        document.body.appendChild(toast);
-        setTimeout(() => { try { document.body.removeChild(toast); } catch {} }, 3000);
-      } catch {}
+      
+      // Show helpful suggestions for restriction warnings
+      if (type === 'restriction' && suggestions.length > 0) {
+        const suggestionText = suggestions.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n');
+        console.log(`Restriction suggestions:\n${suggestionText}`);
+        // Non-blocking toast instead of alert to avoid desync
+        try {
+          const toast = document.createElement('div');
+          toast.textContent = '⚠️ ' + msg;
+          Object.assign(toast.style, {
+            position: 'fixed', bottom: '14px', left: '14px', maxWidth: '70vw',
+            background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)',
+            padding: '10px 12px', borderRadius: '10px', zIndex: 9999, fontWeight: 700
+          } as unknown as CSSStyleDeclaration);
+          document.body.appendChild(toast);
+          setTimeout(() => { try { document.body.removeChild(toast); } catch {} }, 3000);
+        } catch {}
+      }
     });
 
     newSocket.on('playback-diagnostic', (diag: any) => {

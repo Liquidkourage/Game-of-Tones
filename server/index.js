@@ -387,7 +387,21 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       
       // In strict mode, do not fallback silently
       console.error('❌ Playback error in strict mode:', playbackError?.body?.error?.message || playbackError?.message || playbackError);
-      io.to(roomId).emit('playback-error', { message: 'Playback failed on locked device. Ensure it is online and try again.' });
+      const errorMsg = playbackError?.body?.error?.message || playbackError?.message || '';
+      if (/restriction/i.test(errorMsg) || playbackError?.body?.error?.status === 403) {
+        io.to(roomId).emit('playback-error', { 
+          message: `Playback restricted: ${errorMsg}`,
+          type: 'restriction',
+          suggestions: [
+            'Ensure you have Spotify Premium (required for remote control)',
+            'Check if the device allows remote control',
+            'Try opening Spotify on the target device first',
+            'Wait a moment and try again'
+          ]
+        });
+      } else {
+        io.to(roomId).emit('playback-error', { message: 'Playback failed on locked device. Ensure it is online and try again.' });
+      }
             return;
     }
 
@@ -2384,7 +2398,22 @@ io.on('connection', (socket) => {
       } catch (error) {
         const msg = error?.body?.error?.message || error?.message || 'Failed to pause song';
         console.error('❌ Error pausing song:', msg);
-        io.to(roomId).emit('playback-warning', { message: `Pause problem: ${msg}` });
+        
+        // Provide specific guidance for restriction errors
+        if (/restriction/i.test(msg) || error?.body?.error?.status === 403) {
+          io.to(roomId).emit('playback-warning', { 
+            message: `Pause restricted: ${msg}`,
+            type: 'restriction',
+            suggestions: [
+              'Ensure you have Spotify Premium (required for remote control)',
+              'Try using the Spotify app directly to pause',
+              'Check if the device allows remote control',
+              'Wait a moment and try again'
+            ]
+          });
+        } else {
+          io.to(roomId).emit('playback-warning', { message: `Pause problem: ${msg}` });
+        }
       }
     }
   });
@@ -2446,7 +2475,22 @@ io.on('connection', (socket) => {
       } catch (error) {
         const msg = error?.body?.error?.message || error?.message || 'Failed to resume song';
         console.error('❌ Error resuming song:', msg);
-        socket.emit('error', { message: `Failed to resume song: ${msg}` });
+        
+        // Provide specific guidance for restriction errors
+        if (/restriction/i.test(msg) || error?.body?.error?.status === 403) {
+          io.to(roomId).emit('playback-warning', { 
+            message: `Resume restricted: ${msg}`,
+            type: 'restriction',
+            suggestions: [
+              'Ensure you have Spotify Premium (required for remote control)',
+              'Try using the Spotify app directly to resume',
+              'Check if the device allows remote control',
+              'Wait a moment and try again'
+            ]
+          });
+        } else {
+          socket.emit('error', { message: `Failed to resume song: ${msg}` });
+        }
       }
     }
   });
@@ -3698,7 +3742,21 @@ async function playNextSong(roomId, deviceId) {
       
       // In strict mode, do not fallback silently
       console.error('❌ Playback error in strict mode:', playbackError?.body?.error?.message || playbackError?.message || playbackError);
-      io.to(roomId).emit('playback-error', { message: 'Playback failed on locked device. Ensure it is online and try again.' });
+      const errorMsg = playbackError?.body?.error?.message || playbackError?.message || '';
+      if (/restriction/i.test(errorMsg) || playbackError?.body?.error?.status === 403) {
+        io.to(roomId).emit('playback-error', { 
+          message: `Playback restricted: ${errorMsg}`,
+          type: 'restriction',
+          suggestions: [
+            'Ensure you have Spotify Premium (required for remote control)',
+            'Check if the device allows remote control',
+            'Try opening Spotify on the target device first',
+            'Wait a moment and try again'
+          ]
+        });
+      } else {
+        io.to(roomId).emit('playback-error', { message: 'Playback failed on locked device. Ensure it is online and try again.' });
+      }
             return;
     }
 
