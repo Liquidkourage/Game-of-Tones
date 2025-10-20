@@ -103,9 +103,9 @@ const HostView: React.FC = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
-  const [randomStarts, setRandomStarts] = useState<boolean>(() => {
+  const [randomStarts, setRandomStarts] = useState<'none' | 'early' | 'random'>(() => {
     const saved = localStorage.getItem('game-random-starts');
-    return saved ? saved === 'true' : false;
+    return (saved as 'none' | 'early' | 'random') || 'none';
   });
   const [isStartingGame, setIsStartingGame] = useState(false);
   const [playedSoFar, setPlayedSoFar] = useState<Array<{ id: string; name: string; artist: string }>>([]);
@@ -255,7 +255,7 @@ const HostView: React.FC = () => {
   // const [isPausedByInterface, setIsPausedByInterface] = useState(false);
 
   // Pre-queue profiles (persisted locally)
-  const [profiles, setProfiles] = useState<Array<{ name: string; snippet: number; random: boolean; window: number }>>(() => {
+  const [profiles, setProfiles] = useState<Array<{ name: string; snippet: number; random: boolean | 'none' | 'early' | 'random'; window: number }>>(() => {
     try {
       const raw = localStorage.getItem('prequeue_profiles_v1');
       if (!raw) return [];
@@ -266,8 +266,8 @@ const HostView: React.FC = () => {
       return [];
     }
   });
-  const persistProfiles = (list: Array<{ name: string; snippet: number; random: boolean; window: number }>) => {
-    setProfiles(list);
+  const persistProfiles = (list: Array<{ name: string; snippet: number; random: boolean | 'none' | 'early' | 'random'; window: number }>) => {
+    setProfiles(list as Array<{ name: string; snippet: number; random: boolean | 'none' | 'early' | 'random'; window: number }>);
     try { localStorage.setItem('prequeue_profiles_v1', JSON.stringify(list)); } catch {}
   };
   const saveCurrentAsProfile = () => {
@@ -281,7 +281,12 @@ const HostView: React.FC = () => {
     const p = profiles.find(x => x.name === name);
     if (!p) return;
     setSnippetLength(p.snippet);
-    setRandomStarts(p.random);
+    // Handle migration from old boolean values to new string values
+    if (typeof p.random === 'boolean') {
+      setRandomStarts(p.random ? 'random' : 'none');
+    } else {
+      setRandomStarts(p.random);
+    }
     // Pre-queue removed, only snippet and random settings apply
   };
   const deleteProfile = (name: string) => {
@@ -669,7 +674,7 @@ const HostView: React.FC = () => {
       setSelectedPlaylists([]);
       setPattern('line');
       setSnippetLength(30);
-      setRandomStarts(false);
+      setRandomStarts('none');
       setRevealMode('off');
       setPlayedSoFar([]);
       if (data.roundWinners) {
@@ -3044,10 +3049,10 @@ const HostView: React.FC = () => {
                 <input
                             type="radio"
                             name="startPosition"
-                            checked={!randomStarts}
+                            checked={randomStarts === 'none'}
                             onChange={() => {
-                              setRandomStarts(false);
-                              localStorage.setItem('game-random-starts', 'false');
+                              setRandomStarts('none');
+                              localStorage.setItem('game-random-starts', 'none');
                             }}
                           />
                           <span>From beginning</span>
@@ -3056,12 +3061,24 @@ const HostView: React.FC = () => {
                           <input
                             type="radio"
                             name="startPosition"
-                  checked={randomStarts}
+                            checked={randomStarts === 'early'}
                             onChange={() => {
-                              setRandomStarts(true);
-                              localStorage.setItem('game-random-starts', 'true');
+                              setRandomStarts('early');
+                              localStorage.setItem('game-random-starts', 'early');
                             }}
-                />
+                          />
+                          <span>Early random (first 90s)</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <input
+                            type="radio"
+                            name="startPosition"
+                            checked={randomStarts === 'random'}
+                            onChange={() => {
+                              setRandomStarts('random');
+                              localStorage.setItem('game-random-starts', 'random');
+                            }}
+                          />
                           <span>Random position</span>
               </label>
             </div>
@@ -3076,9 +3093,11 @@ const HostView: React.FC = () => {
                         borderRadius: 4,
                         borderLeft: '3px solid #00ff88'
                       }}>
-                        {randomStarts 
-                          ? `Each track will play for ${snippetLength} seconds starting from a random position (avoiding the very end)`
-                          : `Each track will play for ${snippetLength} seconds starting from the beginning`
+                        {randomStarts === 'none' 
+                          ? `Each track will play for ${snippetLength} seconds starting from the beginning`
+                          : randomStarts === 'early'
+                          ? `Each track will play for ${snippetLength} seconds starting from a random position within the first 90 seconds`
+                          : `Each track will play for ${snippetLength} seconds starting from a random position (avoiding the last 30+ seconds)`
                         }
                       </div>
                     </div>

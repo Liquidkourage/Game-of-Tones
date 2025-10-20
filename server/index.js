@@ -347,13 +347,24 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       try { await spotifyService.setRepeatState('off', targetDeviceId); } catch (_) {}
       // Determine randomized start when enabled and safe
       let startMs = 0;
-      if (room.randomStarts && Number.isFinite(song.duration)) {
+      if (room.randomStarts && room.randomStarts !== 'none' && Number.isFinite(song.duration)) {
         const durationMs = Math.max(0, Number(song.duration));
-        // Always start within the first 90 seconds (90,000ms)
-        const maxStartMs = 90000; // 90 seconds
-        const safeWindow = Math.min(maxStartMs, Math.max(0, durationMs - (room.snippetLength * 1000) - 1500));
-        if (safeWindow > 3000) {
-          startMs = Math.floor(Math.random() * safeWindow);
+        const snippetMs = room.snippetLength * 1000;
+        const bufferMs = 1500;
+        
+        if (room.randomStarts === 'early') {
+          // Early random: first 90 seconds
+          const maxStartMs = 90000; // 90 seconds
+          const safeWindow = Math.min(maxStartMs, Math.max(0, durationMs - snippetMs - bufferMs));
+          if (safeWindow > 3000) {
+            startMs = Math.floor(Math.random() * safeWindow);
+          }
+        } else if (room.randomStarts === 'random') {
+          // Random: anywhere but last 30+ seconds
+          const safeWindow = Math.max(0, durationMs - snippetMs - bufferMs - 30000); // 30 second buffer
+          if (safeWindow > 3000) {
+            startMs = Math.floor(Math.random() * safeWindow);
+          }
         }
       }
       await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${song.id}`], startMs);
@@ -826,13 +837,24 @@ async function playNextSongSimple(roomId, deviceId) {
 
   // Calculate start position if random starts enabled
   let startMs = 0;
-  if (room.randomStarts && Number.isFinite(nextSong.duration)) {
+  if (room.randomStarts && room.randomStarts !== 'none' && Number.isFinite(nextSong.duration)) {
     const dur = Math.max(0, Number(nextSong.duration));
-    // Always start within the first 90 seconds (90,000ms)
-    const maxStartMs = 90000; // 90 seconds
-    const safeWindow = Math.min(maxStartMs, Math.max(0, dur - (room.snippetLength * 1000) - 1500));
-    if (safeWindow > 3000) {
-      startMs = Math.floor(Math.random() * safeWindow);
+    const snippetMs = room.snippetLength * 1000;
+    const bufferMs = 1500;
+    
+    if (room.randomStarts === 'early') {
+      // Early random: first 90 seconds
+      const maxStartMs = 90000; // 90 seconds
+      const safeWindow = Math.min(maxStartMs, Math.max(0, dur - snippetMs - bufferMs));
+      if (safeWindow > 3000) {
+        startMs = Math.floor(Math.random() * safeWindow);
+      }
+    } else if (room.randomStarts === 'random') {
+      // Random: anywhere but last 30+ seconds
+      const safeWindow = Math.max(0, dur - snippetMs - bufferMs - 30000); // 30 second buffer
+      if (safeWindow > 3000) {
+        startMs = Math.floor(Math.random() * safeWindow);
+      }
     }
   }
 
@@ -1813,7 +1835,7 @@ io.on('connection', (socket) => {
     
     // Reset settings to defaults  
     room.snippetLength = 30;
-    room.randomStarts = false;
+    room.randomStarts = 'none';
     room.revealMode = 'off';
     
     // Clear all bingo cards - they'll be regenerated when new playlists are selected
@@ -2053,7 +2075,7 @@ io.on('connection', (socket) => {
 
   socket.on('start-game', async (data) => {
     console.log('🎮 Start game event received:', data);
-    const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = false, pattern: incomingPattern } = data;
+    const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = 'none', pattern: incomingPattern } = data;
     const room = rooms.get(roomId);
     
     console.log('🔍 Room found:', !!room);
@@ -2074,7 +2096,7 @@ io.on('connection', (socket) => {
       room.snippetLength = snippetLength;
       room.playlists = playlists;
         room.selectedDeviceId = deviceId; // Store the selected device ID
-        room.randomStarts = !!randomStarts;
+        room.randomStarts = randomStarts || 'none';
         // Initialize call history and round
         room.calledSongIds = [];
         room.round = (room.round || 0) + 1;
@@ -3350,13 +3372,24 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       // Use explicit device_id and uris as fallback in case transfer isn't picked up
       // Randomized start position within track when enabled and safe
       let startMs = 0;
-      if (room.randomStarts && Number.isFinite(firstSong.duration)) {
+      if (room.randomStarts && room.randomStarts !== 'none' && Number.isFinite(firstSong.duration)) {
         const dur = Math.max(0, Number(firstSong.duration));
-        // Always start within the first 90 seconds (90,000ms)
-        const maxStartMs = 90000; // 90 seconds
-        const safeWindow = Math.min(maxStartMs, Math.max(0, dur - (room.snippetLength * 1000) - 1500));
-        if (safeWindow > 3000) {
-          startMs = Math.floor(Math.random() * safeWindow);
+        const snippetMs = room.snippetLength * 1000;
+        const bufferMs = 1500;
+        
+        if (room.randomStarts === 'early') {
+          // Early random: first 90 seconds
+          const maxStartMs = 90000; // 90 seconds
+          const safeWindow = Math.min(maxStartMs, Math.max(0, dur - snippetMs - bufferMs));
+          if (safeWindow > 3000) {
+            startMs = Math.floor(Math.random() * safeWindow);
+          }
+        } else if (room.randomStarts === 'random') {
+          // Random: anywhere but last 30+ seconds
+          const safeWindow = Math.max(0, dur - snippetMs - bufferMs - 30000); // 30 second buffer
+          if (safeWindow > 3000) {
+            startMs = Math.floor(Math.random() * safeWindow);
+          }
         }
       }
       console.log(`🎯 Starting first song with randomized offset: ${startMs}ms (${Math.floor(startMs/1000)}s)`);
@@ -3610,13 +3643,24 @@ async function playNextSong(roomId, deviceId) {
       await new Promise(resolve => setTimeout(resolve, 200));
       // Randomized start position within track when enabled and safe
       let startMs = 0;
-      if (room.randomStarts && Number.isFinite(nextSong.duration)) {
+      if (room.randomStarts && room.randomStarts !== 'none' && Number.isFinite(nextSong.duration)) {
         const dur = Math.max(0, Number(nextSong.duration));
-        // Always start within the first 90 seconds (90,000ms)
-        const maxStartMs = 90000; // 90 seconds
-        const safeWindow = Math.min(maxStartMs, Math.max(0, dur - (room.snippetLength * 1000) - 1500));
-        if (safeWindow > 3000) {
-          startMs = Math.floor(Math.random() * safeWindow);
+        const snippetMs = room.snippetLength * 1000;
+        const bufferMs = 1500;
+        
+        if (room.randomStarts === 'early') {
+          // Early random: first 90 seconds
+          const maxStartMs = 90000; // 90 seconds
+          const safeWindow = Math.min(maxStartMs, Math.max(0, dur - snippetMs - bufferMs));
+          if (safeWindow > 3000) {
+            startMs = Math.floor(Math.random() * safeWindow);
+          }
+        } else if (room.randomStarts === 'random') {
+          // Random: anywhere but last 30+ seconds
+          const safeWindow = Math.max(0, dur - snippetMs - bufferMs - 30000); // 30 second buffer
+          if (safeWindow > 3000) {
+            startMs = Math.floor(Math.random() * safeWindow);
+          }
         }
       }
       // Use playlist context if available, otherwise fall back to individual track
