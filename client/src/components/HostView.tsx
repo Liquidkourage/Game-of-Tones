@@ -2768,7 +2768,6 @@ const HostView: React.FC = () => {
                     </div>
                   )}
               </div>
-            </div>
             </motion.div>
           )}
 
