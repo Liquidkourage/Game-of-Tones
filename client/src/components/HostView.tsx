@@ -218,7 +218,7 @@ const HostView: React.FC = () => {
     isPlaying: false,
     currentTime: 0,
     duration: 0,
-    volume: parseInt(localStorage.getItem('spotify-volume') || '100'),
+    volume: 100, // Always start at 100% volume
     playbackRate: 1,
     currentSong: null,
     queue: [],
@@ -585,10 +585,10 @@ const HostView: React.FC = () => {
       console.log('Song playing:', data);
       addLog(`Now playing: ${data.songName} — ${data.artistName}`, 'info');
       
-      // Don't sync volume when song starts playing - preserve user's volume setting
-      // setTimeout(() => {
-      //   fetchCurrentVolume();
-      // }, 500);
+      // Sync volume when song starts playing to ensure it matches interface
+      setTimeout(() => {
+        syncVolumeToSpotify();
+      }, 500);
     });
 
     // Handle bingo verification pending
@@ -641,6 +641,10 @@ const HostView: React.FC = () => {
 
     newSocket.on('game-resumed', () => {
       setGamePaused(false);
+      // Sync volume after resume to ensure it matches interface
+      setTimeout(() => {
+        syncVolumeToSpotify();
+      }, 500);
     });
 
     newSocket.on('game-ended', () => {
@@ -971,10 +975,10 @@ const HostView: React.FC = () => {
           await loadPlaylists();
           await loadDevices(); // Load devices when connected
           
-          // Don't sync initial volume - keep user's 100% default
-          // setTimeout(() => {
-          //   fetchCurrentVolume();
-          // }, 1000);
+          // Sync volume when Spotify connects to ensure it matches interface
+          setTimeout(() => {
+            syncVolumeToSpotify();
+          }, 1000);
         } else {
           console.log('Spotify not connected');
           console.log('�� Status API returned connected=false, setting state to false');
@@ -1742,6 +1746,36 @@ const HostView: React.FC = () => {
     }
   }, []);
 
+  // Function to ensure Spotify volume matches interface volume
+  const syncVolumeToSpotify = useCallback(async () => {
+    if (!selectedDevice?.id) return;
+    
+    try {
+      const currentVolume = playbackState.volume;
+      console.log(`🔊 Syncing interface volume (${currentVolume}%) to Spotify`);
+      
+      const response = await fetch(`${API_BASE || ''}/api/spotify/volume`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          volume: currentVolume,
+          deviceId: selectedDevice.id,
+          roomId: roomId
+        })
+      });
+      
+      if (response.ok) {
+        console.log(`✅ Volume synced to Spotify: ${currentVolume}%`);
+      } else {
+        console.warn('⚠️ Failed to sync volume to Spotify');
+      }
+    } catch (error) {
+      console.error('Error syncing volume to Spotify:', error);
+    }
+  }, [selectedDevice?.id, playbackState.volume, roomId]);
+
   const transferToSelectedDevice = useCallback(async () => {
     if (!selectedDevice) {
       alert('Please select a device first');
@@ -1808,8 +1842,7 @@ const HostView: React.FC = () => {
     setPlaybackState(prev => ({ ...prev, volume: newVolume }));
     setIsMuted(false);
     
-    // Persist volume to localStorage
-    localStorage.setItem('spotify-volume', newVolume.toString());
+    // Don't persist volume to localStorage - always default to 100%
 
     // Debounce the actual volume change to prevent rapid API calls
     const timeout = setTimeout(async () => {
@@ -3637,7 +3670,6 @@ const HostView: React.FC = () => {
                         setIsMuted(false);
                       }
                       setPlaybackState(prev => ({ ...prev, volume: newVolume }));
-                      localStorage.setItem('spotify-volume', newVolume.toString());
                       handleVolumeChange(newVolume);
                     }}
                     style={{

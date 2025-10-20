@@ -2370,9 +2370,9 @@ io.on('connection', (socket) => {
               await new Promise(r => setTimeout(r, 200));
               await spotifyService.pausePlayback(deviceId);
             } catch (retryErr) {
-              console.warn('⚠️ Pause retry failed; muting as fallback:', retryErr?.message || retryErr);
-              // Last-resort mute so show continues silently
-              try { await spotifyService.setVolume(0, deviceId); } catch {}
+              console.warn('⚠️ Pause retry failed:', retryErr?.message || retryErr);
+              // Don't mute as fallback - let the user handle this manually
+              throw retryErr;
             }
         } else {
             throw pauseErr;
@@ -2418,6 +2418,15 @@ io.on('connection', (socket) => {
           } else {
           await spotifyService.resumePlayback(deviceId);
             console.log('✅ Playback resumed successfully');
+          }
+          
+          // Restore volume to match room's saved volume or default to 100%
+          try {
+            const targetVolume = room.volume || 100;
+            await spotifyService.setVolume(targetVolume, deviceId);
+            console.log(`🔊 Restored volume to ${targetVolume}% on resume`);
+          } catch (volumeError) {
+            console.warn('⚠️ Failed to restore volume on resume:', volumeError?.message || volumeError);
           }
           
           room.gameState = 'playing';
