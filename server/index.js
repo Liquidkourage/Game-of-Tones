@@ -2738,21 +2738,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('display-show-call-reveal', (data) => {
-    const { roomId } = data;
-    if (roomId && rooms.has(roomId)) {
-      io.to(roomId).emit('display-show-call-reveal');
-      console.log(`🎯 Call reveal screen shown for room ${roomId}`);
-    }
-  });
-
-  socket.on('display-hide-call-reveal', (data) => {
-    const { roomId } = data;
-    if (roomId && rooms.has(roomId)) {
-      io.to(roomId).emit('display-hide-call-reveal');
-      console.log(`🎯 Call reveal screen hidden for room ${roomId}`);
-    }
-  });
 
   // Handle disconnection
   socket.on('disconnect', () => {

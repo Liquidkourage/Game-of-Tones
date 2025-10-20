@@ -72,8 +72,6 @@ const PublicDisplay: React.FC = () => {
   // Rules/instruction screen state
   const [showRules, setShowRules] = useState<boolean>(false);
   
-  // Call reveal screen state
-  const [showCallReveal, setShowCallReveal] = useState<boolean>(false);
   const [currentWinningLine, setCurrentWinningLine] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const [gameState, setGameState] = useState<GameState>({
@@ -560,13 +558,6 @@ const PublicDisplay: React.FC = () => {
       setShowSplash(false);
     });
 
-    newSocket.on('display-show-call-reveal', () => {
-      setShowCallReveal(true);
-    });
-
-    newSocket.on('display-hide-call-reveal', () => {
-      setShowCallReveal(false);
-    });
 
     newSocket.on('pattern-updated', (data: any) => {
       try {
@@ -1900,80 +1891,6 @@ const PublicDisplay: React.FC = () => {
         )}
       </AnimatePresence>
       
-      {/* Call Reveal Screen */}
-      <AnimatePresence>
-        {showCallReveal && (
-          <motion.div
-            key="call-reveal"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.35 }}
-            style={{
-              position: 'fixed', inset: 0, zIndex: 2000,
-              background: 'linear-gradient(135deg, #1d1b3a 0%, #10283a 60%, #0b1e2d 100%)',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              padding: 40
-            }}
-          >
-            <div style={{ textAlign: 'center', maxWidth: '800px', width: '100%' }}>
-              <div style={{
-                fontSize: 'clamp(2.5rem, 5vw, 3.5rem)',
-                fontWeight: 1000,
-                letterSpacing: '0.05em',
-                backgroundImage: 'linear-gradient(90deg,#00ffa3 0%, #7bffd9 35%, #ffffff 50%, #7bffd9 65%, #00ffa3 100%)',
-                WebkitBackgroundClip: 'text',
-                backgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                textShadow: '0 10px 36px rgba(0,255,170,0.55), 0 0 28px rgba(0,255,170,0.3)',
-                marginBottom: '2rem'
-              }}>
-                Call Reveal
-              </div>
-              
-              <div style={{
-                background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.22)',
-                borderRadius: '16px',
-                padding: '2rem',
-                marginBottom: '2rem'
-              }}>
-                <h3 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem', color: '#00ffa3' }}>
-                  🎵 Current Song
-                </h3>
-                {gameState.currentSong ? (
-                  <div>
-                    <div style={{ fontSize: '1.8rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-                      {gameState.currentSong.name}
-                    </div>
-                    <div style={{ fontSize: '1.3rem', opacity: 0.8 }}>
-                      by {gameState.currentSong.artist}
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ fontSize: '1.2rem', opacity: 0.7 }}>
-                    No song currently playing
-                  </div>
-                )}
-              </div>
-              
-              <div style={{
-                background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.22)',
-                borderRadius: '16px',
-                padding: '2rem'
-              }}>
-                <h3 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem', color: '#00ffa3' }}>
-                  🎯 Pattern: {getPatternName()}
-                </h3>
-                <p style={{ fontSize: '1.1rem', lineHeight: 1.6, opacity: 0.9 }}>
-                  Complete this pattern on your bingo card to win!
-                </p>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
       
       {/* Subtle confetti when winner banner shows */}
       <AnimatePresence>

@@ -2668,20 +2668,6 @@ const HostView: React.FC = () => {
             >
               🎬 Hide Splash
             </button>
-            <button 
-              className="btn-secondary" 
-              onClick={() => socket?.emit('display-show-call-reveal', { roomId })}
-              style={{ fontSize: '0.8rem', padding: '6px 10px' }}
-            >
-              🎯 Show Call Reveal
-            </button>
-            <button 
-              className="btn-secondary" 
-              onClick={() => socket?.emit('display-hide-call-reveal', { roomId })}
-              style={{ fontSize: '0.8rem', padding: '6px 10px' }}
-            >
-              🎯 Hide Call Reveal
-            </button>
           </div>
         </div>
 
