@@ -2619,50 +2619,6 @@ const HostView: React.FC = () => {
           </div>
         </div>
 
-        {/* Display Controls - Always Visible */}
-        <div style={{ 
-          background: 'rgba(255,255,255,0.05)', 
-          border: '1px solid rgba(255,255,255,0.1)', 
-          borderRadius: '8px', 
-          padding: '12px 16px', 
-          marginBottom: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          flexWrap: 'wrap'
-        }}>
-          <span style={{ 
-            fontWeight: '600', 
-            color: '#00ffa3', 
-            fontSize: '0.9rem',
-            minWidth: 'fit-content'
-          }}>
-            🖥️ Display Controls:
-          </span>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button 
-              className="btn-secondary" 
-              onClick={() => socket?.emit('display-show-rules', { roomId })}
-              style={{ fontSize: '0.8rem', padding: '6px 10px' }}
-            >
-              📋 Rules
-            </button>
-            <button 
-              className="btn-secondary" 
-              onClick={() => socket?.emit('display-show-splash', { roomId })}
-              style={{ fontSize: '0.8rem', padding: '6px 10px' }}
-            >
-              🎬 Splash
-            </button>
-            <button 
-              className="btn-secondary" 
-              onClick={() => socket?.emit('display-show-call-list', { roomId })}
-              style={{ fontSize: '0.8rem', padding: '6px 10px' }}
-            >
-              🎵 Call List
-            </button>
-          </div>
-        </div>
 
         {/* Main Content */}
         <div className="host-content" style={{ paddingBottom: currentSong ? '300px' : '20px' }}>
@@ -3114,6 +3070,82 @@ const HostView: React.FC = () => {
                         🔄 Reset Event
                       </button>
                       </div>
+                  </div>
+                </motion.div>
+
+                {/* Display Controls */}
+                <motion.div
+                  className="display-controls-section"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.4 }}
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    marginTop: '20px'
+                  }}
+                >
+                  <h3 style={{ 
+                    color: '#00ffa3', 
+                    fontSize: '1.2rem', 
+                    fontWeight: '600', 
+                    marginBottom: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    🖥️ Display Controls
+                  </h3>
+                  <p style={{ 
+                    color: 'rgba(255,255,255,0.7)', 
+                    fontSize: '0.9rem', 
+                    marginBottom: '16px',
+                    lineHeight: '1.4'
+                  }}>
+                    Control what's displayed on the public screen for players.
+                  </p>
+                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    <button 
+                      className="btn-secondary" 
+                      onClick={() => socket?.emit('display-show-rules', { roomId })}
+                      style={{ 
+                        fontSize: '0.9rem', 
+                        padding: '10px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      📋 Rules
+                    </button>
+                    <button 
+                      className="btn-secondary" 
+                      onClick={() => socket?.emit('display-show-splash', { roomId })}
+                      style={{ 
+                        fontSize: '0.9rem', 
+                        padding: '10px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      🎬 Splash
+                    </button>
+                    <button 
+                      className="btn-secondary" 
+                      onClick={() => socket?.emit('display-show-call-list', { roomId })}
+                      style={{ 
+                        fontSize: '0.9rem', 
+                        padding: '10px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      🎵 Call List
+                    </button>
                   </div>
                 </motion.div>
               </div>
