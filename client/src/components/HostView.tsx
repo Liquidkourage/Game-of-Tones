@@ -2645,28 +2645,14 @@ const HostView: React.FC = () => {
               onClick={() => socket?.emit('display-show-rules', { roomId })}
               style={{ fontSize: '0.8rem', padding: '6px 10px' }}
             >
-              📋 Show Rules
-            </button>
-            <button 
-              className="btn-secondary" 
-              onClick={() => socket?.emit('display-hide-rules', { roomId })}
-              style={{ fontSize: '0.8rem', padding: '6px 10px' }}
-            >
-              📋 Hide Rules
+              📋 Rules
             </button>
             <button 
               className="btn-secondary" 
               onClick={() => socket?.emit('display-show-splash', { roomId })}
               style={{ fontSize: '0.8rem', padding: '6px 10px' }}
             >
-              🎬 Show Splash
-            </button>
-            <button 
-              className="btn-secondary" 
-              onClick={() => socket?.emit('display-hide-splash', { roomId })}
-              style={{ fontSize: '0.8rem', padding: '6px 10px' }}
-            >
-              🎬 Hide Splash
+              🎬 Splash
             </button>
           </div>
         </div>
