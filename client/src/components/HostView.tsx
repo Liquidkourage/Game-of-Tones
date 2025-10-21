@@ -3765,8 +3765,20 @@ const HostView: React.FC = () => {
              </motion.div>
            )}
 
+                {/* Debug Info */}
+                <div style={{ 
+                  background: 'rgba(255,0,0,0.1)', 
+                  border: '1px solid rgba(255,0,0,0.3)', 
+                  padding: '10px', 
+                  margin: '10px 0',
+                  fontSize: '0.8rem',
+                  color: '#ff6666'
+                }}>
+                  DEBUG: songList.length = {songList.length}, finalizedOrder?.length = {finalizedOrder?.length}
+                </div>
+
                 {/* Finalized Playlist Display */}
-                {(songList.length > 0 || finalizedOrder) && (
+                {(songList.length > 0 || finalizedOrder?.length > 0) && (
                   <motion.div
                     className="finalized-playlist-section"
                     initial={{ opacity: 0 }}
