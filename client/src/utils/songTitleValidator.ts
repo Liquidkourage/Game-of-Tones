@@ -141,15 +141,25 @@ export async function validateSongTitle(
     }
   }
 
-  // Check for over-cleaning by comparing with original
+  // Check for titles that had parentheticals, dashes, or colons that were cleaned
   if (options.checkForOverCleaning && originalTitle) {
     const originalWords = originalTitle.toLowerCase().split(/\s+/).filter(w => w.length > 0);
     const cleanedWords = words;
     
-    // Only flag as over-cleaned if:
-    // 1. We removed more than 50% of words AND
-    // 2. The cleaned title is suspiciously short (less than 3 words) AND
-    // 3. The original title had technical metadata that was removed
+    // Check if original title had separators (parentheticals, dashes, colons)
+    const originalHasSeparators = /[\(\)\[\]\-\–\—\:]/.test(originalTitle);
+    const cleanedHasSeparators = /[\(\)\[\]\-\–\—\:]/.test(cleanTitle);
+    
+    if (originalHasSeparators && !cleanedHasSeparators) {
+      // Original had separators but cleaned version doesn't - flag for review
+      result.warnings.push('Title was cleaned (removed parentheticals/dashes/colons)');
+      result.confidence -= 0.1; // Small confidence reduction since this is expected
+      result.suggestions.push('Verify the cleaned title is correct and recognizable');
+      result.suggestions.push(`Original: "${originalTitle}"`);
+      result.suggestions.push(`Cleaned: "${cleanTitle}"`);
+    }
+
+    // Check for over-cleaning by comparing with original (legacy logic for edge cases)
     const wordReduction = (originalWords.length - cleanedWords.length) / originalWords.length;
     const originalHasTechnicalMetadata = /\(feat\.|featuring|with|from|live|remaster|version|explicit|clean|radio edit|single version|album version|extended|instrumental|acoustic|studio\)/i.test(originalTitle);
     const cleanedIsVeryShort = cleanedWords.length < 3;
@@ -166,16 +176,6 @@ export async function validateSongTitle(
         result.confidence -= 0.3;
         result.suggestions.push('Consider keeping more of the original title');
       }
-    }
-
-    // If original had recognizable patterns but cleaned doesn't
-    const originalHasPatterns = /\(feat\.|featuring|with|from|live|remaster|version\)/i.test(originalTitle);
-    const cleanedHasPatterns = /\(feat\.|featuring|with|from|live|remaster|version\)/i.test(cleanTitle);
-    
-    if (originalHasPatterns && !cleanedHasPatterns && wordReduction > 0.3) {
-      result.warnings.push('Removed potentially important information');
-      result.confidence -= 0.2;
-      result.suggestions.push('Some removed text might be important for recognition');
     }
   }
 
@@ -373,15 +373,25 @@ export function validateSongTitleSync(
     }
   }
 
-  // Check for over-cleaning by comparing with original
+  // Check for titles that had parentheticals, dashes, or colons that were cleaned
   if (options.checkForOverCleaning && originalTitle) {
     const originalWords = originalTitle.toLowerCase().split(/\s+/).filter(w => w.length > 0);
     const cleanedWords = words;
     
-    // Only flag as over-cleaned if:
-    // 1. We removed more than 50% of words AND
-    // 2. The cleaned title is suspiciously short (less than 3 words) AND
-    // 3. The original title had technical metadata that was removed
+    // Check if original title had separators (parentheticals, dashes, colons)
+    const originalHasSeparators = /[\(\)\[\]\-\–\—\:]/.test(originalTitle);
+    const cleanedHasSeparators = /[\(\)\[\]\-\–\—\:]/.test(cleanTitle);
+    
+    if (originalHasSeparators && !cleanedHasSeparators) {
+      // Original had separators but cleaned version doesn't - flag for review
+      result.warnings.push('Title was cleaned (removed parentheticals/dashes/colons)');
+      result.confidence -= 0.1; // Small confidence reduction since this is expected
+      result.suggestions.push('Verify the cleaned title is correct and recognizable');
+      result.suggestions.push(`Original: "${originalTitle}"`);
+      result.suggestions.push(`Cleaned: "${cleanTitle}"`);
+    }
+
+    // Check for over-cleaning by comparing with original (legacy logic for edge cases)
     const wordReduction = (originalWords.length - cleanedWords.length) / originalWords.length;
     const originalHasTechnicalMetadata = /\(feat\.|featuring|with|from|live|remaster|version|explicit|clean|radio edit|single version|album version|extended|instrumental|acoustic|studio\)/i.test(originalTitle);
     const cleanedIsVeryShort = cleanedWords.length < 3;
