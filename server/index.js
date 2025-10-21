@@ -18,6 +18,16 @@ function cleanSongTitle(title) {
   let cleaned = title.trim();
 
   // Remove remastered versions
+  // Handle specific patterns first (most specific to least specific)
+  cleaned = cleaned.replace(/\s*\(\d{4}\s+remastered\s+version\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(\d{4}\s+remaster\s+version\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(\d{4}\s+remastered\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(\d{4}\s+remaster\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*-\s*\d{4}\s+remastered\s+version\s*$/i, '');
+  cleaned = cleaned.replace(/\s*-\s*\d{4}\s+remaster\s+version\s*$/i, '');
+  cleaned = cleaned.replace(/\s*-\s*\d{4}\s+remastered\s*$/i, '');
+  cleaned = cleaned.replace(/\s*-\s*\d{4}\s+remaster\s*$/i, '');
+  // Handle generic patterns
   cleaned = cleaned.replace(/\s*-\s*remastered\s*\d*\s*$/i, '');
   cleaned = cleaned.replace(/\s*\(remastered\s*\d*\)\s*$/i, '');
   cleaned = cleaned.replace(/\s*\[remastered\s*\d*\]\s*$/i, '');
