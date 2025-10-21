@@ -1,0 +1,244 @@
+/**
+ * Song Title Validation Utility
+ * Detects potentially over-cleaned or problematic song titles
+ * to help ensure important words aren't missing
+ */
+
+export interface ValidationResult {
+  isValid: boolean;
+  confidence: number; // 0-1, where 1 is very confident it's a real song
+  warnings: string[];
+  suggestions: string[];
+}
+
+export interface SongValidationOptions {
+  minLength?: number;
+  maxLength?: number;
+  requireCommonWords?: boolean;
+  checkForOverCleaning?: boolean;
+  checkForGenericTitles?: boolean;
+}
+
+const DEFAULT_OPTIONS: SongValidationOptions = {
+  minLength: 3,
+  maxLength: 100,
+  requireCommonWords: true,
+  checkForOverCleaning: true,
+  checkForGenericTitles: true
+};
+
+// Common words that appear in many song titles
+const COMMON_SONG_WORDS = [
+  'love', 'heart', 'dream', 'night', 'day', 'time', 'life', 'world', 'home',
+  'baby', 'girl', 'boy', 'man', 'woman', 'friend', 'family', 'mother', 'father',
+  'sun', 'moon', 'star', 'sky', 'rain', 'fire', 'water', 'wind', 'earth',
+  'music', 'song', 'dance', 'sing', 'play', 'rock', 'roll', 'blues', 'jazz',
+  'happy', 'sad', 'free', 'wild', 'young', 'old', 'new', 'good', 'bad',
+  'big', 'small', 'high', 'low', 'fast', 'slow', 'hot', 'cold', 'warm',
+  'red', 'blue', 'green', 'black', 'white', 'gold', 'silver', 'bright',
+  'city', 'town', 'street', 'road', 'house', 'door', 'window', 'room',
+  'car', 'train', 'plane', 'boat', 'ship', 'fly', 'drive', 'walk', 'run',
+  'eyes', 'hands', 'face', 'smile', 'tears', 'kiss', 'touch', 'hold',
+  'break', 'fall', 'rise', 'turn', 'change', 'stay', 'go', 'come', 'leave',
+  'find', 'lose', 'win', 'fight', 'peace', 'war', 'hope', 'fear', 'pain'
+];
+
+// Generic titles that might indicate over-cleaning
+const GENERIC_TITLES = [
+  'song', 'music', 'track', 'melody', 'tune', 'beat', 'rhythm', 'sound',
+  'piece', 'composition', 'number', 'hit', 'single', 'album', 'record',
+  'untitled', 'unknown', 'mystery', 'secret', 'hidden', 'lost', 'found'
+];
+
+// Very short titles that might be problematic
+const SUSPICIOUSLY_SHORT = [
+  'a', 'an', 'the', 'i', 'me', 'my', 'we', 'us', 'it', 'is', 'am', 'are',
+  'be', 'do', 'go', 'no', 'so', 'up', 'in', 'on', 'at', 'to', 'of', 'or',
+  'oh', 'ah', 'la', 'da', 'na', 'yeah', 'hey', 'wow', 'yes', 'ok'
+];
+
+/**
+ * Validates a song title to detect potential issues
+ */
+export function validateSongTitle(
+  title: string, 
+  originalTitle?: string,
+  options: SongValidationOptions = DEFAULT_OPTIONS
+): ValidationResult {
+  const result: ValidationResult = {
+    isValid: true,
+    confidence: 1.0,
+    warnings: [],
+    suggestions: []
+  };
+
+  if (!title || typeof title !== 'string') {
+    result.isValid = false;
+    result.confidence = 0;
+    result.warnings.push('Title is empty or invalid');
+    return result;
+  }
+
+  const cleanTitle = title.trim();
+  const words = cleanTitle.toLowerCase().split(/\s+/).filter(word => word.length > 0);
+
+  // Check minimum length
+  if (cleanTitle.length < (options.minLength || 3)) {
+    result.warnings.push(`Title is very short (${cleanTitle.length} characters)`);
+    result.confidence -= 0.3;
+  }
+
+  // Check maximum length
+  if (cleanTitle.length > (options.maxLength || 100)) {
+    result.warnings.push(`Title is very long (${cleanTitle.length} characters)`);
+    result.confidence -= 0.1;
+  }
+
+  // Check for suspiciously short titles
+  if (SUSPICIOUSLY_SHORT.includes(cleanTitle.toLowerCase())) {
+    result.warnings.push('Title appears to be a single common word');
+    result.confidence -= 0.5;
+    result.suggestions.push('Consider if this is the complete song title');
+  }
+
+  // Check for generic titles
+  if (options.checkForGenericTitles) {
+    const isGeneric = GENERIC_TITLES.some(generic => 
+      cleanTitle.toLowerCase().includes(generic.toLowerCase())
+    );
+    if (isGeneric && words.length <= 2) {
+      result.warnings.push('Title appears generic or incomplete');
+      result.confidence -= 0.4;
+      result.suggestions.push('This might be missing the actual song name');
+    }
+  }
+
+  // Check for common song words (if enabled)
+  if (options.requireCommonWords && words.length > 1) {
+    const hasCommonWords = words.some(word => 
+      COMMON_SONG_WORDS.includes(word.toLowerCase())
+    );
+    if (!hasCommonWords && words.length >= 3) {
+      result.warnings.push('Title doesn\'t contain common song words');
+      result.confidence -= 0.2;
+    }
+  }
+
+  // Check for over-cleaning by comparing with original
+  if (options.checkForOverCleaning && originalTitle) {
+    const originalWords = originalTitle.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+    const cleanedWords = words;
+    
+    // If we removed more than 50% of words, it might be over-cleaned
+    const wordReduction = (originalWords.length - cleanedWords.length) / originalWords.length;
+    if (wordReduction > 0.5) {
+      result.warnings.push('Title may be over-cleaned (removed >50% of words)');
+      result.confidence -= 0.3;
+      result.suggestions.push('Consider keeping more of the original title');
+    }
+
+    // If original had recognizable patterns but cleaned doesn't
+    const originalHasPatterns = /\(feat\.|featuring|with|from|live|remaster|version\)/i.test(originalTitle);
+    const cleanedHasPatterns = /\(feat\.|featuring|with|from|live|remaster|version\)/i.test(cleanTitle);
+    
+    if (originalHasPatterns && !cleanedHasPatterns && wordReduction > 0.3) {
+      result.warnings.push('Removed potentially important information');
+      result.confidence -= 0.2;
+      result.suggestions.push('Some removed text might be important for recognition');
+    }
+  }
+
+  // Check for titles that are just numbers or symbols
+  if (/^[\d\s\-_\.]+$/.test(cleanTitle)) {
+    result.warnings.push('Title contains only numbers and symbols');
+    result.confidence -= 0.6;
+    result.suggestions.push('This doesn\'t appear to be a song title');
+  }
+
+  // Check for titles that are all caps (might indicate issues)
+  if (cleanTitle === cleanTitle.toUpperCase() && cleanTitle.length > 5) {
+    result.warnings.push('Title is in all caps');
+    result.confidence -= 0.1;
+    result.suggestions.push('Consider proper capitalization');
+  }
+
+  // Determine overall validity
+  result.isValid = result.confidence >= 0.5;
+  result.confidence = Math.max(0, Math.min(1, result.confidence));
+
+  return result;
+}
+
+/**
+ * Get a validation summary for multiple songs
+ */
+export function validateSongList(
+  songs: Array<{ id: string; name: string; originalName?: string }>,
+  options: SongValidationOptions = DEFAULT_OPTIONS
+): {
+  totalSongs: number;
+  validSongs: number;
+  problematicSongs: Array<{
+    id: string;
+    name: string;
+    originalName?: string;
+    validation: ValidationResult;
+  }>;
+  overallConfidence: number;
+} {
+  const problematicSongs: Array<{
+    id: string;
+    name: string;
+    originalName?: string;
+    validation: ValidationResult;
+  }> = [];
+
+  let totalConfidence = 0;
+
+  songs.forEach(song => {
+    const validation = validateSongTitle(song.name, song.originalName, options);
+    totalConfidence += validation.confidence;
+
+    if (!validation.isValid || validation.confidence < 0.7) {
+      problematicSongs.push({
+        id: song.id,
+        name: song.name,
+        originalName: song.originalName,
+        validation
+      });
+    }
+  });
+
+  return {
+    totalSongs: songs.length,
+    validSongs: songs.length - problematicSongs.length,
+    problematicSongs,
+    overallConfidence: songs.length > 0 ? totalConfidence / songs.length : 1
+  };
+}
+
+/**
+ * Get a user-friendly validation message
+ */
+export function getValidationMessage(validation: ValidationResult): string {
+  if (validation.isValid && validation.confidence >= 0.8) {
+    return '✅ Title looks good';
+  } else if (validation.isValid && validation.confidence >= 0.6) {
+    return '⚠️ Title might need review';
+  } else {
+    return '❌ Title needs attention';
+  }
+}
+
+/**
+ * Get validation color for UI display
+ */
+export function getValidationColor(validation: ValidationResult): string {
+  if (validation.isValid && validation.confidence >= 0.8) {
+    return '#00ff88'; // Green
+  } else if (validation.isValid && validation.confidence >= 0.6) {
+    return '#ffaa00'; // Orange
+  } else {
+    return '#ff4444'; // Red
+  }
+}

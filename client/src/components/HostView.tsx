@@ -16,6 +16,7 @@ import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
 import RoundPlanner from './RoundPlanner';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
+import { validateSongTitle, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
 
 interface Playlist {
   id: string;
@@ -3532,61 +3533,100 @@ const HostView: React.FC = () => {
                       borderRadius: '8px',
                       background: 'rgba(0,0,0,0.2)'
                     }}>
-                      {(finalizedOrder || songList).map((song: any, index: number) => (
-                        <div key={song.id} style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '12px',
-                          padding: '12px',
-                          borderBottom: index < (finalizedOrder || songList).length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none',
-                          fontSize: '0.9rem'
-                        }}>
-                          <span style={{ 
-                            color: '#00ff88', 
-                            fontWeight: 'bold', 
-                            minWidth: '30px',
-                            fontSize: '0.8rem'
+                      {(finalizedOrder || songList).map((song: any, index: number) => {
+                        const displayTitle = getDisplaySongTitle(song.id, song.name);
+                        const validation = validateSongTitle(displayTitle, song.name);
+                        const validationColor = getValidationColor(validation);
+                        const validationMessage = getValidationMessage(validation);
+                        
+                        return (
+                          <div key={song.id} style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: '12px',
+                            borderBottom: index < (finalizedOrder || songList).length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                            fontSize: '0.9rem',
+                            // Highlight problematic titles
+                            background: validation.confidence < 0.7 ? 'rgba(255,68,68,0.1)' : 'transparent',
+                            borderLeft: validation.confidence < 0.7 ? `3px solid ${validationColor}` : '3px solid transparent',
+                            borderRadius: '4px',
+                            margin: '2px 0'
                           }}>
-                            #{index + 1}
-                          </span>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 'bold', color: '#fff' }}>
-                              {getDisplaySongTitle(song.id, song.name)}
-                              {customSongTitles[song.id] && (
-                                <span style={{ 
-                                  fontSize: '0.8rem', 
-                                  color: '#00ffa3', 
-                                  marginLeft: '8px',
-                                  fontStyle: 'italic'
-                                }}>
-                                  (edited)
+                            <span style={{ 
+                              color: '#00ff88', 
+                              fontWeight: 'bold', 
+                              minWidth: '30px',
+                              fontSize: '0.8rem'
+                            }}>
+                              #{index + 1}
+                            </span>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ 
+                                fontWeight: 'bold', 
+                                color: '#fff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}>
+                                {displayTitle}
+                                {customSongTitles[song.id] && (
+                                  <span style={{ 
+                                    fontSize: '0.8rem', 
+                                    color: '#00ffa3', 
+                                    fontStyle: 'italic'
+                                  }}>
+                                    (edited)
+                                  </span>
+                                )}
+                                {/* Validation indicator */}
+                                <span 
+                                  style={{ 
+                                    fontSize: '0.7rem',
+                                    color: validationColor,
+                                    fontWeight: 'normal',
+                                    cursor: 'help'
+                                  }}
+                                  title={`${validationMessage}. ${validation.warnings.join('; ')}`}
+                                >
+                                  {validation.confidence < 0.7 ? '⚠️' : validation.confidence < 0.8 ? '⚡' : '✅'}
                                 </span>
-                              )}
+                              </div>
+                              <div style={{ color: '#b3b3b3', fontSize: '0.8rem' }}>
+                                by {song.artist}
+                                {validation.warnings.length > 0 && (
+                                  <span style={{ 
+                                    color: validationColor, 
+                                    fontSize: '0.7rem',
+                                    marginLeft: '8px',
+                                    fontStyle: 'italic'
+                                  }}>
+                                    {validation.warnings[0]}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <div style={{ color: '#b3b3b3', fontSize: '0.8rem' }}>
-                              by {song.artist}
-                            </div>
+                            <button
+                              onClick={() => handleEditSongTitle({id: song.id, title: song.name, artist: song.artist})}
+                              style={{
+                                background: 'rgba(0,255,163,0.1)',
+                                border: '1px solid rgba(0,255,163,0.3)',
+                                borderRadius: '6px',
+                                color: '#00ffa3',
+                                padding: '6px 10px',
+                                fontSize: '0.8rem',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                              title="Edit song title for Game of Tones"
+                            >
+                              ✏️ Edit
+                            </button>
                           </div>
-                          <button
-                            onClick={() => handleEditSongTitle({id: song.id, title: song.name, artist: song.artist})}
-                            style={{
-                              background: 'rgba(0,255,163,0.1)',
-                              border: '1px solid rgba(0,255,163,0.3)',
-                              borderRadius: '6px',
-                              color: '#00ffa3',
-                              padding: '6px 10px',
-                              fontSize: '0.8rem',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                            title="Edit song title for Game of Tones"
-                          >
-                            ✏️ Edit
-                          </button>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </motion.div>
                 )}
