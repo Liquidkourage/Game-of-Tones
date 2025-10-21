@@ -3258,107 +3258,6 @@ const HostView: React.FC = () => {
                     </button>
                   </div>
                 </motion.div>
-
-                {/* Finalized Playlist Display */}
-                {(songList.length > 0 || finalizedOrder) && (
-                  <motion.div
-                    className="finalized-playlist-section"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.6 }}
-                    style={{
-                      background: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: '12px',
-                      padding: '20px',
-                      marginTop: '20px'
-                    }}
-                  >
-                    <h3 style={{
-                      color: '#00ffa3',
-                      fontSize: '1.2rem',
-                      fontWeight: '600',
-                      marginBottom: '16px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px'
-                    }}>
-                      🎵 Finalized Playlist ({songList.length || finalizedOrder?.length || 0} songs)
-                    </h3>
-                    <p style={{
-                      color: 'rgba(255,255,255,0.7)',
-                      fontSize: '0.9rem',
-                      marginBottom: '16px',
-                      lineHeight: '1.4'
-                    }}>
-                      These are the songs that will be used in your bingo game. You can edit titles to make them more recognizable for players.
-                    </p>
-                    
-                    <div style={{
-                      maxHeight: '400px',
-                      overflowY: 'auto',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: '8px',
-                      background: 'rgba(0,0,0,0.2)'
-                    }}>
-                      {(finalizedOrder || songList).map((song: any, index: number) => (
-                        <div key={song.id} style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '12px',
-                          padding: '12px',
-                          borderBottom: index < (finalizedOrder || songList).length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none',
-                          fontSize: '0.9rem'
-                        }}>
-                          <span style={{ 
-                            color: '#00ff88', 
-                            fontWeight: 'bold', 
-                            minWidth: '30px',
-                            fontSize: '0.8rem'
-                          }}>
-                            #{index + 1}
-                          </span>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 'bold', color: '#fff' }}>
-                              {getDisplaySongTitle(song.id, song.name)}
-                              {customSongTitles[song.id] && (
-                                <span style={{ 
-                                  fontSize: '0.8rem', 
-                                  color: '#00ffa3', 
-                                  marginLeft: '8px',
-                                  fontStyle: 'italic'
-                                }}>
-                                  (edited)
-                                </span>
-                              )}
-                            </div>
-                            <div style={{ color: '#b3b3b3', fontSize: '0.8rem' }}>
-                              by {song.artist}
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => handleEditSongTitle({id: song.id, title: song.name, artist: song.artist})}
-                            style={{
-                              background: 'rgba(0,255,163,0.1)',
-                              border: '1px solid rgba(0,255,163,0.3)',
-                              borderRadius: '6px',
-                              color: '#00ffa3',
-                              padding: '6px 10px',
-                              fontSize: '0.8rem',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                            title="Edit song title for Game of Tones"
-                          >
-                            ✏️ Edit
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
               </div>
             )}
 
@@ -3865,6 +3764,107 @@ const HostView: React.FC = () => {
                </div>
              </motion.div>
            )}
+
+                {/* Finalized Playlist Display */}
+                {(songList.length > 0 || finalizedOrder) && (
+                  <motion.div
+                    className="finalized-playlist-section"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.6 }}
+                    style={{
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '12px',
+                      padding: '20px',
+                      marginTop: '20px'
+                    }}
+                  >
+                    <h3 style={{
+                      color: '#00ffa3',
+                      fontSize: '1.2rem',
+                      fontWeight: '600',
+                      marginBottom: '16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      🎵 Finalized Playlist ({songList.length || finalizedOrder?.length || 0} songs)
+                    </h3>
+                    <p style={{
+                      color: 'rgba(255,255,255,0.7)',
+                      fontSize: '0.9rem',
+                      marginBottom: '16px',
+                      lineHeight: '1.4'
+                    }}>
+                      These are the songs that will be used in your bingo game. You can edit titles to make them more recognizable for players.
+                    </p>
+                    
+                    <div style={{
+                      maxHeight: '400px',
+                      overflowY: 'auto',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '8px',
+                      background: 'rgba(0,0,0,0.2)'
+                    }}>
+                      {(finalizedOrder || songList).map((song: any, index: number) => (
+                        <div key={song.id} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          padding: '12px',
+                          borderBottom: index < (finalizedOrder || songList).length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                          fontSize: '0.9rem'
+                        }}>
+                          <span style={{ 
+                            color: '#00ff88', 
+                            fontWeight: 'bold', 
+                            minWidth: '30px',
+                            fontSize: '0.8rem'
+                          }}>
+                            #{index + 1}
+                          </span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 'bold', color: '#fff' }}>
+                              {getDisplaySongTitle(song.id, song.name)}
+                              {customSongTitles[song.id] && (
+                                <span style={{ 
+                                  fontSize: '0.8rem', 
+                                  color: '#00ffa3', 
+                                  marginLeft: '8px',
+                                  fontStyle: 'italic'
+                                }}>
+                                  (edited)
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ color: '#b3b3b3', fontSize: '0.8rem' }}>
+                              by {song.artist}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleEditSongTitle({id: song.id, title: song.name, artist: song.artist})}
+                            style={{
+                              background: 'rgba(0,255,163,0.1)',
+                              border: '1px solid rgba(0,255,163,0.3)',
+                              borderRadius: '6px',
+                              color: '#00ffa3',
+                              padding: '6px 10px',
+                              fontSize: '0.8rem',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                            title="Edit song title for Game of Tones"
+                          >
+                            ✏️ Edit
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
               </div>
             )}
           </div>
