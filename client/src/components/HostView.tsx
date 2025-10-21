@@ -3540,19 +3540,34 @@ const HostView: React.FC = () => {
                         const validationMessage = getValidationMessage(validation);
                         
                         return (
-                          <div key={song.id} style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '12px',
-                            padding: '12px',
-                            borderBottom: index < (finalizedOrder || songList).length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none',
-                            fontSize: '0.9rem',
-                            // Highlight problematic titles
-                            background: validation.confidence < 0.7 ? 'rgba(255,68,68,0.1)' : 'transparent',
-                            borderLeft: validation.confidence < 0.7 ? `3px solid ${validationColor}` : '3px solid transparent',
-                            borderRadius: '4px',
-                            margin: '2px 0'
-                          }}>
+                          <div 
+                            key={song.id} 
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              padding: '12px',
+                              borderBottom: index < (finalizedOrder || songList).length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                              fontSize: '0.9rem',
+                              // Highlight problematic titles
+                              background: validation.confidence < 0.7 ? 'rgba(255,68,68,0.1)' : 'transparent',
+                              borderLeft: validation.confidence < 0.7 ? `3px solid ${validationColor}` : '3px solid transparent',
+                              borderRadius: '4px',
+                              margin: '2px 0',
+                              cursor: 'help'
+                            }}
+                            title={`Song Title Comparison:
+                            
+Original: "${song.name}"
+Cleaned: "${displayTitle}"
+${customSongTitles[song.id] ? 'Custom: "' + customSongTitles[song.id] + '"' : ''}
+
+${validationMessage}
+${validation.warnings.length > 0 ? '\nWarnings: ' + validation.warnings.join('; ') : ''}
+${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions.slice(0, 3).join('; ') : ''}
+
+Hover over the ${validation.confidence < 0.7 ? '⚠️' : validation.confidence < 0.8 ? '⚡' : '✅'} icon for detailed validation info.`}
+                          >
                             <span style={{ 
                               color: '#00ff88', 
                               fontWeight: 'bold', 
@@ -3579,6 +3594,16 @@ const HostView: React.FC = () => {
                                     (edited)
                                   </span>
                                 )}
+                                {!customSongTitles[song.id] && displayTitle !== song.name && (
+                                  <span style={{ 
+                                    fontSize: '0.7rem', 
+                                    color: '#ffaa00', 
+                                    fontStyle: 'italic',
+                                    marginLeft: '4px'
+                                  }}>
+                                    (cleaned)
+                                  </span>
+                                )}
                                 {/* Validation indicator */}
                                 <span 
                                   style={{ 
@@ -3587,7 +3612,11 @@ const HostView: React.FC = () => {
                                     fontWeight: 'normal',
                                     cursor: 'help'
                                   }}
-                                  title={`${validationMessage}. ${validation.warnings.join('; ')}`}
+                                  title={`${validationMessage}. ${validation.warnings.join('; ')}
+                                  
+Original: "${song.name}"
+Cleaned: "${displayTitle}"
+${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions.slice(0, 2).join('; ') : ''}`}
                                 >
                                   {validation.confidence < 0.7 ? '⚠️' : validation.confidence < 0.8 ? '⚡' : '✅'}
                                 </span>
