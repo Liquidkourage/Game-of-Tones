@@ -3424,7 +3424,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       for (const playlist of playlists) {
         try {
           console.log(`📋 Fetching songs for playlist: ${playlist.name}`);
-          const songs = await spotifyService.getPlaylistTracks(playlist.id);
+          const songs = await spotifyService.getPlaylistTracks(playlist.id, playlist);
           console.log(`✅ Found ${songs.length} songs in playlist: ${playlist.name}`);
           perListFetched.push({ id: playlist.id, name: playlist.name, songs });
           allSongs.push(...songs);
