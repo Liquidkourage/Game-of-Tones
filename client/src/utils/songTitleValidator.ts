@@ -66,6 +66,11 @@ const SUSPICIOUSLY_SHORT = [
   'oh', 'ah', 'la', 'da', 'na', 'yeah', 'hey', 'wow', 'yes', 'ok'
 ];
 
+// Known complete song titles that are short but valid
+const KNOWN_COMPLETE_TITLES = [
+  'lowdown', 'uptown', 'downtown', 'uptight'
+];
+
 /**
  * Validates a song title to detect potential issues
  * Now includes real song database lookup for accurate validation
@@ -141,12 +146,26 @@ export async function validateSongTitle(
     const originalWords = originalTitle.toLowerCase().split(/\s+/).filter(w => w.length > 0);
     const cleanedWords = words;
     
-    // If we removed more than 50% of words, it might be over-cleaned
+    // Only flag as over-cleaned if:
+    // 1. We removed more than 50% of words AND
+    // 2. The cleaned title is suspiciously short (less than 3 words) AND
+    // 3. The original title had technical metadata that was removed
     const wordReduction = (originalWords.length - cleanedWords.length) / originalWords.length;
-    if (wordReduction > 0.5) {
-      result.warnings.push('Title may be over-cleaned (removed >50% of words)');
-      result.confidence -= 0.3;
-      result.suggestions.push('Consider keeping more of the original title');
+    const originalHasTechnicalMetadata = /\(feat\.|featuring|with|from|live|remaster|version|explicit|clean|radio edit|single version|album version|extended|instrumental|acoustic|studio\)/i.test(originalTitle);
+    const cleanedIsVeryShort = cleanedWords.length < 3;
+    
+    if (wordReduction > 0.5 && cleanedIsVeryShort && originalHasTechnicalMetadata) {
+      // But don't flag if the cleaned title is a known complete song title
+      const isKnownCompleteTitle = cleanedWords.length >= 2 || 
+        KNOWN_COMPLETE_TITLES.includes(cleanTitle.toLowerCase()) ||
+        !SUSPICIOUSLY_SHORT.includes(cleanTitle.toLowerCase()) ||
+        !GENERIC_TITLES.some(generic => cleanTitle.toLowerCase().includes(generic.toLowerCase()));
+      
+      if (!isKnownCompleteTitle) {
+        result.warnings.push('Title may be over-cleaned (removed >50% of words)');
+        result.confidence -= 0.3;
+        result.suggestions.push('Consider keeping more of the original title');
+      }
     }
 
     // If original had recognizable patterns but cleaned doesn't
@@ -359,12 +378,26 @@ export function validateSongTitleSync(
     const originalWords = originalTitle.toLowerCase().split(/\s+/).filter(w => w.length > 0);
     const cleanedWords = words;
     
-    // If we removed more than 50% of words, it might be over-cleaned
+    // Only flag as over-cleaned if:
+    // 1. We removed more than 50% of words AND
+    // 2. The cleaned title is suspiciously short (less than 3 words) AND
+    // 3. The original title had technical metadata that was removed
     const wordReduction = (originalWords.length - cleanedWords.length) / originalWords.length;
-    if (wordReduction > 0.5) {
-      result.warnings.push('Title may be over-cleaned (removed >50% of words)');
-      result.confidence -= 0.3;
-      result.suggestions.push('Consider keeping more of the original title');
+    const originalHasTechnicalMetadata = /\(feat\.|featuring|with|from|live|remaster|version|explicit|clean|radio edit|single version|album version|extended|instrumental|acoustic|studio\)/i.test(originalTitle);
+    const cleanedIsVeryShort = cleanedWords.length < 3;
+    
+    if (wordReduction > 0.5 && cleanedIsVeryShort && originalHasTechnicalMetadata) {
+      // But don't flag if the cleaned title is a known complete song title
+      const isKnownCompleteTitle = cleanedWords.length >= 2 || 
+        KNOWN_COMPLETE_TITLES.includes(cleanTitle.toLowerCase()) ||
+        !SUSPICIOUSLY_SHORT.includes(cleanTitle.toLowerCase()) ||
+        !GENERIC_TITLES.some(generic => cleanTitle.toLowerCase().includes(generic.toLowerCase()));
+      
+      if (!isKnownCompleteTitle) {
+        result.warnings.push('Title may be over-cleaned (removed >50% of words)');
+        result.confidence -= 0.3;
+        result.suggestions.push('Consider keeping more of the original title');
+      }
     }
   }
 
