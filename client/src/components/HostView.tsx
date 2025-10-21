@@ -14,6 +14,7 @@ import { API_BASE, SOCKET_URL } from '../config';
 import { BingoPattern, PATTERN_OPTIONS, BINGO_PATTERNS, getPatternDisplayName, getSavedCustomPatterns, saveCustomPattern, SavedCustomPattern } from '../patternDefinitions';
 import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
+import SongReplacementModal from './SongReplacementModal';
 import RoundPlanner from './RoundPlanner';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
 import { validateSongTitle, validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
@@ -44,6 +45,8 @@ interface Song {
   name: string;
   artist: string;
   duration?: number; // Make duration optional
+  sourcePlaylistId?: string;
+  sourcePlaylistName?: string;
 }
 
 interface EventRound {
@@ -122,6 +125,8 @@ const HostView: React.FC = () => {
   // Song title editing
   const [showSongTitleModal, setShowSongTitleModal] = useState(false);
   const [editingSong, setEditingSong] = useState<{id: string, title: string, artist: string} | null>(null);
+  const [showSongReplacementModal, setShowSongReplacementModal] = useState(false);
+  const [replacingSong, setReplacingSong] = useState<{id: string, name: string, artist: string, sourcePlaylistName?: string} | null>(null);
   const [customSongTitles, setCustomSongTitles] = useState<Record<string, string>>({});
   const [showSetup, setShowSetup] = useState<boolean>(false);
   const [lockJoins, setLockJoins] = useState<boolean>(false);
@@ -688,6 +693,32 @@ const HostView: React.FC = () => {
       setPendingVerification(null);
       setCurrentSong(null);
       addLog('Game restarted by host', 'info');
+    });
+
+    newSocket.on('song-replaced', (data: any) => {
+      console.log('Song replaced:', data);
+      // Update the song list with the new song
+      setSongList(prev => {
+        const newList = [...prev];
+        const index = newList.findIndex(s => s.id === data.oldSongId);
+        if (index !== -1) {
+          newList[index] = data.newSong;
+        }
+        return newList;
+      });
+      
+      // Update finalized order if it exists
+      setFinalizedOrder(prev => {
+        if (!prev) return prev;
+        const newOrder = [...prev];
+        const index = newOrder.findIndex(s => s.id === data.oldSongId);
+        if (index !== -1) {
+          newOrder[index] = data.newSong;
+        }
+        return newOrder;
+      });
+      
+      addLog(`Song replaced: ${data.newSong.name} by ${data.newSong.artist}`, 'info');
     });
 
     // NEW: Handle next round reset (back to setup)
@@ -1510,6 +1541,17 @@ const HostView: React.FC = () => {
     if (socket) {
       socket.emit('set-custom-song-title', { songId, customTitle });
     }
+  };
+
+  const handleReplaceSong = (song: {id: string, name: string, artist: string, sourcePlaylistName?: string}) => {
+    setReplacingSong(song);
+    setShowSongReplacementModal(true);
+  };
+
+  const handleSongReplaced = (newSongId: string) => {
+    // The server will broadcast the change via socket, so we just need to close the modal
+    setShowSongReplacementModal(false);
+    setReplacingSong(null);
   };
 
   const getDisplaySongTitle = (songId: string, originalTitle: string) => {
@@ -3635,24 +3677,49 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                                 )}
                               </div>
                             </div>
-                            <button
-                              onClick={() => handleEditSongTitle({id: song.id, title: song.name, artist: song.artist})}
-                              style={{
-                                background: 'rgba(0,255,163,0.1)',
-                                border: '1px solid rgba(0,255,163,0.3)',
-                                borderRadius: '6px',
-                                color: '#00ffa3',
-                                padding: '6px 10px',
-                                fontSize: '0.8rem',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px'
-                              }}
-                              title="Edit song title for Game of Tones"
-                            >
-                              ✏️ Edit
-                            </button>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                onClick={() => handleEditSongTitle({id: song.id, title: song.name, artist: song.artist})}
+                                style={{
+                                  background: 'rgba(0,255,163,0.1)',
+                                  border: '1px solid rgba(0,255,163,0.3)',
+                                  borderRadius: '6px',
+                                  color: '#00ffa3',
+                                  padding: '6px 10px',
+                                  fontSize: '0.8rem',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                                title="Edit song title for Game of Tones"
+                              >
+                                ✏️ Edit
+                              </button>
+                              <button
+                                onClick={() => handleReplaceSong({
+                                  id: song.id,
+                                  name: song.name,
+                                  artist: song.artist,
+                                  sourcePlaylistName: song.sourcePlaylistName
+                                })}
+                                style={{
+                                  background: 'rgba(255,165,0,0.1)',
+                                  border: '1px solid rgba(255,165,0,0.3)',
+                                  borderRadius: '6px',
+                                  color: '#ffa500',
+                                  padding: '6px 10px',
+                                  fontSize: '0.8rem',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                                title={`Replace this song in the game and in ${song.sourcePlaylistName || 'the original playlist'}`}
+                              >
+                                🔄 Replace
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
@@ -4863,6 +4930,20 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
           originalTitle={editingSong.title}
           customTitle={customSongTitles[editingSong.id]}
           artistName={editingSong.artist}
+        />
+      )}
+
+      {/* Song Replacement Modal */}
+      {replacingSong && roomId && (
+        <SongReplacementModal
+          isOpen={showSongReplacementModal}
+          onClose={() => {
+            setShowSongReplacementModal(false);
+            setReplacingSong(null);
+          }}
+          onReplace={handleSongReplaced}
+          currentSong={replacingSong}
+          roomId={roomId}
         />
       )}
     </div>

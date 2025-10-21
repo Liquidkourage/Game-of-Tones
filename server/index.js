@@ -2926,7 +2926,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
     for (const playlist of playlists) {
       try {
         console.log(`📋 Fetching songs for playlist: ${playlist.name}`);
-        const songs = await spotifyService.getPlaylistTracks(playlist.id);
+        const songs = await spotifyService.getPlaylistTracks(playlist.id, playlist);
         console.log(`✅ Found ${songs.length} songs in playlist: ${playlist.name}`);
         playlistsWithSongs.push({ ...playlist, songs });
       } catch (error) {
@@ -3237,7 +3237,7 @@ async function generateBingoCardForPlayer(roomId, playerId) {
     const playlistsWithSongs = [];
     for (const playlist of playlists) {
       try {
-        const songs = await spotifyService.getPlaylistTracks(playlist.id);
+        const songs = await spotifyService.getPlaylistTracks(playlist.id, playlist);
         playlistsWithSongs.push({ ...playlist, songs });
       } catch (error) {
         console.error(`❌ Error fetching songs for playlist ${playlist.id}:`, error);
@@ -5113,6 +5113,145 @@ app.post('/api/spotify/delete-playlists', async (req, res) => {
     console.error('❌ Error deleting playlists:', error);
     console.error('❌ Error stack:', error.stack);
     res.status(500).json({ error: 'Failed to delete playlists', details: error.message });
+  }
+});
+
+// Search for tracks
+app.get('/api/spotify/search-tracks', async (req, res) => {
+  try {
+    const { q, limit = 20 } = req.query;
+    
+    if (!spotifyTokens || !spotifyTokens.accessToken) {
+      return res.status(401).json({ error: 'Spotify not connected' });
+    }
+    
+    if (!q) {
+      return res.status(400).json({ error: 'Query parameter q is required' });
+    }
+    
+    await spotifyService.ensureValidToken();
+    
+    const tracks = await spotifyService.searchTracks(q, parseInt(limit));
+    
+    res.json({
+      success: true,
+      tracks: tracks
+    });
+  } catch (error) {
+    console.error('Error searching tracks:', error);
+    res.status(500).json({ error: 'Failed to search tracks', details: error.message });
+  }
+});
+
+// Replace a song in the finalized playlist and update the original playlist
+app.post('/api/spotify/replace-song', async (req, res) => {
+  try {
+    const { roomId, oldSongId, newSongId, position } = req.body;
+    
+    if (!spotifyTokens || !spotifyTokens.accessToken) {
+      return res.status(401).json({ error: 'Spotify not connected' });
+    }
+    
+    if (!roomId || !oldSongId || !newSongId) {
+      return res.status(400).json({ error: 'roomId, oldSongId, and newSongId are required' });
+    }
+    
+    const room = rooms.get(roomId);
+    if (!room) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+    
+    await spotifyService.ensureValidToken();
+    
+    // Find the old song in the finalized playlist
+    const oldSong = room.playlistSongs?.find(song => song.id === oldSongId);
+    if (!oldSong) {
+      return res.status(404).json({ error: 'Old song not found in playlist' });
+    }
+    
+    // Get the new song details from Spotify
+    const newSongResponse = await spotifyService.spotifyApi.getTrack(newSongId);
+    const newSongData = newSongResponse.body;
+    
+    const newSong = {
+      id: newSongData.id,
+      name: newSongData.name,
+      artist: newSongData.artists.map(artist => artist.name).join(', '),
+      album: newSongData.album.name,
+      duration: newSongData.duration_ms,
+      uri: newSongData.uri,
+      previewUrl: newSongData.preview_url || null,
+      sourcePlaylistId: oldSong.sourcePlaylistId,
+      sourcePlaylistName: oldSong.sourcePlaylistName
+    };
+    
+    // Replace the song in the original Spotify playlist
+    if (oldSong.sourcePlaylistId) {
+      try {
+        await spotifyService.replaceTrackInPlaylist(
+          oldSong.sourcePlaylistId,
+          `spotify:track:${oldSongId}`,
+          `spotify:track:${newSongId}`,
+          position
+        );
+        console.log(`✅ Replaced song in original playlist: ${oldSong.sourcePlaylistName}`);
+      } catch (error) {
+        console.error('❌ Failed to replace song in original playlist:', error);
+        // Continue with local replacement even if Spotify update fails
+      }
+    }
+    
+    // Update the song in the room's playlist
+    const songIndex = room.playlistSongs.findIndex(song => song.id === oldSongId);
+    if (songIndex !== -1) {
+      room.playlistSongs[songIndex] = newSong;
+    }
+    
+    // Update finalized song order if it exists
+    if (room.finalizedSongOrder) {
+      const orderIndex = room.finalizedSongOrder.indexOf(oldSongId);
+      if (orderIndex !== -1) {
+        room.finalizedSongOrder[orderIndex] = newSongId;
+      }
+    }
+    
+    // Update oneBySeventyFivePool if it exists
+    if (room.oneBySeventyFivePool) {
+      const poolIndex = room.oneBySeventyFivePool.findIndex(item => item.id === oldSongId);
+      if (poolIndex !== -1) {
+        room.oneBySeventyFivePool[poolIndex] = newSong;
+      }
+    }
+    
+    // Update fiveByFifteenColumns if they exist
+    if (room.fiveByFifteenColumns) {
+      for (let col = 0; col < room.fiveByFifteenColumns.length; col++) {
+        const colIndex = room.fiveByFifteenColumns[col].findIndex(item => item.id === oldSongId);
+        if (colIndex !== -1) {
+          room.fiveByFifteenColumns[col][colIndex] = newSong;
+        }
+      }
+    }
+    
+    // Broadcast the song replacement to all clients
+    io.to(roomId).emit('song-replaced', {
+      oldSongId,
+      newSong,
+      position: songIndex
+    });
+    
+    console.log(`✅ Song replaced successfully: ${oldSong.name} -> ${newSong.name}`);
+    
+    res.json({
+      success: true,
+      oldSong: oldSong,
+      newSong: newSong,
+      position: songIndex
+    });
+    
+  } catch (error) {
+    console.error('Error replacing song:', error);
+    res.status(500).json({ error: 'Failed to replace song', details: error.message });
   }
 });
 

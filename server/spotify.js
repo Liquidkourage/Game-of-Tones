@@ -181,7 +181,7 @@ class SpotifyService {
   }
 
   // Get playlist tracks
-  async getPlaylistTracks(playlistId) {
+  async getPlaylistTracks(playlistId, playlistInfo = null) {
     await this.ensureValidToken();
     
     try {
@@ -205,7 +205,9 @@ class SpotifyService {
             album: item.track.album.name,
             duration: item.track.duration_ms,
             uri: item.track.uri,
-            previewUrl: item.track.preview_url || null
+            previewUrl: item.track.preview_url || null,
+            sourcePlaylistId: playlistId,
+            sourcePlaylistName: playlistInfo?.name || 'Unknown Playlist'
           }));
         
         tracks.push(...validTracks);
@@ -772,6 +774,58 @@ class SpotifyService {
       };
     } catch (error) {
       console.error('Error getting current user profile:', error);
+      throw error;
+    }
+  }
+
+  // Add tracks to playlist
+  async addTracksToPlaylist(playlistId, trackUris, position = null) {
+    await this.ensureValidToken();
+    try {
+      const options = {};
+      if (position !== null) {
+        options.position = position;
+      }
+      
+      const response = await this.spotifyApi.addTracksToPlaylist(playlistId, trackUris, options);
+      console.log(`✅ Added ${trackUris.length} tracks to playlist ${playlistId} at position ${position || 'end'}`);
+      return response.body;
+    } catch (error) {
+      console.error('Error adding tracks to playlist:', error);
+      throw error;
+    }
+  }
+
+  // Remove tracks from playlist
+  async removeTracksFromPlaylist(playlistId, trackUris) {
+    await this.ensureValidToken();
+    try {
+      // Convert track URIs to the format expected by removeTracksFromPlaylist
+      const tracksToRemove = trackUris.map(uri => ({ uri }));
+      
+      const response = await this.spotifyApi.removeTracksFromPlaylist(playlistId, tracksToRemove);
+      console.log(`✅ Removed ${trackUris.length} tracks from playlist ${playlistId}`);
+      return response.body;
+    } catch (error) {
+      console.error('Error removing tracks from playlist:', error);
+      throw error;
+    }
+  }
+
+  // Replace a track in a playlist (remove old, add new at same position)
+  async replaceTrackInPlaylist(playlistId, oldTrackUri, newTrackUri, position = null) {
+    await this.ensureValidToken();
+    try {
+      // First, remove the old track
+      await this.removeTracksFromPlaylist(playlistId, [oldTrackUri]);
+      
+      // Then add the new track at the specified position
+      await this.addTracksToPlaylist(playlistId, [newTrackUri], position);
+      
+      console.log(`✅ Replaced track in playlist ${playlistId}: ${oldTrackUri} -> ${newTrackUri} at position ${position || 'end'}`);
+      return { success: true };
+    } catch (error) {
+      console.error('Error replacing track in playlist:', error);
       throw error;
     }
   }
