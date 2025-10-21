@@ -3527,6 +3527,10 @@ const HostView: React.FC = () => {
                     color: '#ff6666'
                   }}>
                     DEBUG: songList.length = {songList.length}, finalizedOrder?.length = {finalizedOrder?.length}
+                    <br />
+                    Condition: {(songList.length > 0 || (finalizedOrder?.length ?? 0) > 0) ? 'TRUE' : 'FALSE'}
+                    <br />
+                    mixFinalized = {mixFinalized ? 'true' : 'false'}
                   </div>
 
                   {/* Round List */}
@@ -3778,7 +3782,7 @@ const HostView: React.FC = () => {
            )}
 
                 {/* Finalized Playlist Display */}
-                {(songList.length > 0 || (finalizedOrder?.length ?? 0) > 0) && (
+                {(songList.length > 0 || (finalizedOrder?.length ?? 0) > 0 || mixFinalized) && (
                   <motion.div
                     className="finalized-playlist-section"
                     initial={{ opacity: 0 }}
