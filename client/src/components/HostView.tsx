@@ -13,6 +13,7 @@ import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL } from '../config';
 import { BingoPattern, PATTERN_OPTIONS, BINGO_PATTERNS, getPatternDisplayName, getSavedCustomPatterns, saveCustomPattern, SavedCustomPattern } from '../patternDefinitions';
 import CustomPatternModal from './CustomPatternModal';
+import SongTitleEditModal from './SongTitleEditModal';
 import RoundPlanner from './RoundPlanner';
 
 interface Playlist {
@@ -115,6 +116,11 @@ const HostView: React.FC = () => {
   const [selectedCustomPattern, setSelectedCustomPattern] = useState<SavedCustomPattern | null>(null);
   const [savedCustomPatterns, setSavedCustomPatterns] = useState<SavedCustomPattern[]>([]);
   const [showCustomPatternModal, setShowCustomPatternModal] = useState<boolean>(false);
+  
+  // Song title editing
+  const [showSongTitleModal, setShowSongTitleModal] = useState(false);
+  const [editingSong, setEditingSong] = useState<{id: string, title: string, artist: string} | null>(null);
+  const [customSongTitles, setCustomSongTitles] = useState<Record<string, string>>({});
   const [showSetup, setShowSetup] = useState<boolean>(false);
   const [lockJoins, setLockJoins] = useState<boolean>(false);
   const [preQueueEnabled, setPreQueueEnabled] = useState<boolean>(false);
@@ -485,6 +491,11 @@ const HostView: React.FC = () => {
 
     // Load saved custom patterns
     setSavedCustomPatterns(getSavedCustomPatterns());
+    
+    // Request all custom song titles
+    if (socket) {
+      socket.emit('get-all-custom-titles');
+    }
 
     // Initialize socket connection
     const newSocket = io(SOCKET_URL || undefined, {
@@ -645,6 +656,18 @@ const HostView: React.FC = () => {
       setTimeout(() => {
         syncVolumeToSpotify();
       }, 500);
+    });
+
+    // Custom song title events
+    newSocket.on('custom-song-title-updated', (data: any) => {
+      setCustomSongTitles(prev => ({
+        ...prev,
+        [data.songId]: data.customTitle
+      }));
+    });
+
+    newSocket.on('all-custom-titles-response', (data: any) => {
+      setCustomSongTitles(data);
     });
 
     newSocket.on('game-ended', () => {
@@ -1473,6 +1496,22 @@ const HostView: React.FC = () => {
     setSavedCustomPatterns(getSavedCustomPatterns());
     handleCustomPatternSelect(savedPattern);
     setShowCustomPatternModal(false);
+  };
+
+  // Song title editing functions
+  const handleEditSongTitle = (song: {id: string, title: string, artist: string}) => {
+    setEditingSong(song);
+    setShowSongTitleModal(true);
+  };
+
+  const handleSaveSongTitle = (songId: string, customTitle: string) => {
+    if (socket) {
+      socket.emit('set-custom-song-title', { songId, customTitle });
+    }
+  };
+
+  const getDisplaySongTitle = (songId: string, originalTitle: string) => {
+    return customSongTitles[songId] || originalTitle;
   };
 
   const playSong = async (song: Song) => {
@@ -3905,9 +3944,40 @@ const HostView: React.FC = () => {
                           {index + 1}
                         </span>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 'bold', color: '#fff' }}>{song.name}</div>
+                          <div style={{ fontWeight: 'bold', color: '#fff' }}>
+                            {getDisplaySongTitle(song.id, song.name)}
+                            {customSongTitles[song.id] && (
+                              <span style={{ 
+                                fontSize: '0.8rem', 
+                                color: '#00ffa3', 
+                                marginLeft: '8px',
+                                fontStyle: 'italic'
+                              }}>
+                                (edited)
+                              </span>
+                            )}
+                          </div>
                           <div style={{ color: '#b3b3b3' }}>by {song.artist}</div>
                         </div>
+                        <button
+                          onClick={() => handleEditSongTitle({id: song.id, title: song.name, artist: song.artist})}
+                          style={{
+                            background: 'rgba(0,255,163,0.1)',
+                            border: '1px solid rgba(0,255,163,0.3)',
+                            borderRadius: '6px',
+                            color: '#00ffa3',
+                            padding: '6px 10px',
+                            fontSize: '0.8rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            marginRight: '8px'
+                          }}
+                          title="Edit song title for Game of Tones"
+                        >
+                          ✏️ Edit
+                        </button>
                         {song.preview_url && (
                           <a
                             href={song.preview_url}
@@ -4489,6 +4559,22 @@ const HostView: React.FC = () => {
         onClose={() => setShowCustomPatternModal(false)}
         onSave={handleSaveCustomPattern}
       />
+
+      {/* Song Title Edit Modal */}
+      {editingSong && (
+        <SongTitleEditModal
+          isOpen={showSongTitleModal}
+          onClose={() => {
+            setShowSongTitleModal(false);
+            setEditingSong(null);
+          }}
+          onSave={handleSaveSongTitle}
+          songId={editingSong.id}
+          originalTitle={editingSong.title}
+          customTitle={customSongTitles[editingSong.id]}
+          artistName={editingSong.artist}
+        />
+      )}
     </div>
   );
 };

@@ -173,6 +173,9 @@ app.use(express.static('public'));
 // Game state management
 const games = new Map();
 const rooms = new Map();
+
+// Store custom song titles (songId -> customTitle)
+const customSongTitles = new Map();
 const PREQUEUE_WINDOW_DEFAULT = 10;
 // Utility: count non-host players in a room
 function getNonHostPlayerCount(room) {
@@ -415,6 +418,8 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     io.to(roomId).emit('song-playing', {
       songId: song.id,
       songName: song.name,
+      customSongName: customSongTitles.get(song.id) || song.name,
+      customSongName: customSongTitles.get(song.id) || song.name,
       artistName: song.artist,
       snippetLength: room.snippetLength,
       currentIndex: songIndex,
@@ -907,6 +912,7 @@ async function playNextSongSimple(roomId, deviceId) {
     io.to(roomId).emit('song-playing', {
       songId: nextSong.id,
       songName: nextSong.name,
+      customSongName: customSongTitles.get(nextSong.id) || nextSong.name,
       artistName: nextSong.artist,
       snippetLength: room.snippetLength,
       currentIndex: room.currentSongIndex,
@@ -2661,6 +2667,7 @@ io.on('connection', (socket) => {
       io.to(roomId).emit('song-playing', {
         songId,
         songName,
+        customSongName: customSongTitles.get(songId) || songName,
         artistName,
         snippetLength: room.snippetLength
       });
@@ -2737,6 +2744,30 @@ io.on('connection', (socket) => {
       io.to(roomId).emit('display-show-call-list');
       console.log(`🎵 Call list screen shown for room ${roomId}`);
     }
+  });
+
+  // Custom song title management
+  socket.on('set-custom-song-title', (data) => {
+    const { songId, customTitle } = data;
+    if (songId && customTitle) {
+      customSongTitles.set(songId, customTitle);
+      console.log(`✏️ Custom title set for song ${songId}: "${customTitle}"`);
+      // Broadcast to all clients in all rooms
+      io.emit('custom-song-title-updated', { songId, customTitle });
+    }
+  });
+
+  socket.on('get-custom-song-title', (data) => {
+    const { songId } = data;
+    if (songId) {
+      const customTitle = customSongTitles.get(songId);
+      socket.emit('custom-song-title-response', { songId, customTitle });
+    }
+  });
+
+  socket.on('get-all-custom-titles', () => {
+    const allTitles = Object.fromEntries(customSongTitles);
+    socket.emit('all-custom-titles-response', allTitles);
   });
 
 
@@ -3070,6 +3101,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           position: `${row}-${col}`,
           songId: s.id,
           songName: s.name,
+          customSongName: customSongTitles.get(s.id) || s.name,
           artistName: s.artist,
           marked: false
         });
@@ -3246,6 +3278,7 @@ async function generateBingoCardForPlayer(roomId, playerId) {
           position: `${row}-${col}`,
           songId: s.id,
           songName: s.name,
+          customSongName: customSongTitles.get(s.id) || s.name,
           artistName: s.artist,
           marked: false
         });
@@ -3562,6 +3595,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     io.to(roomId).emit('song-playing', {
       songId: firstSong.id,
       songName: firstSong.name,
+      customSongName: customSongTitles.get(firstSong.id) || firstSong.name,
       artistName: firstSong.artist,
       snippetLength: room.snippetLength,
       currentIndex: 0,
@@ -3807,6 +3841,7 @@ async function playNextSong(roomId, deviceId) {
     io.to(roomId).emit('song-playing', {
       songId: nextSong.id,
       songName: nextSong.name,
+      customSongName: customSongTitles.get(nextSong.id) || nextSong.name,
       artistName: nextSong.artist,
       snippetLength: room.snippetLength,
       currentIndex: room.currentSongIndex,

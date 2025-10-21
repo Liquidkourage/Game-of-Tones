@@ -409,7 +409,11 @@ const PublicDisplay: React.FC = () => {
 
     newSocket.on('bingo-card', (card: any) => {
       const squares = (card.squares || []).map((s: any) => ({
-        song: { id: s.songId, name: s.songName, artist: s.artistName },
+        song: { 
+          id: s.songId, 
+          name: s.customSongName || s.songName, 
+          artist: s.artistName 
+        },
         isPlayed: false,
         position: { row: parseInt(s.position.split('-')[0], 10), col: parseInt(s.position.split('-')[1], 10) }
       }));
@@ -424,7 +428,11 @@ const PublicDisplay: React.FC = () => {
     });
 
     newSocket.on('song-playing', (data: any) => {
-      const song = { id: data.songId, name: data.songName, artist: data.artistName };
+      const song = { 
+        id: data.songId, 
+        name: data.customSongName || data.songName, 
+        artist: data.artistName 
+      };
       // cache metadata for reveal lookups
       idMetaRef.current[song.id] = { name: song.name, artist: song.artist };
       if (typeof data.currentIndex === 'number') {

@@ -18,6 +18,7 @@ interface BingoSquare {
   position: string;
   songId: string;
   songName: string;
+  customSongName?: string;
   artistName: string;
   marked: boolean;
 }
@@ -422,7 +423,7 @@ const PlayerView: React.FC = () => {
           const textElement = squareElement.querySelector('.square-text') as HTMLElement;
           
           if (textElement) {
-            const text = displayMode === 'title' ? square.songName : square.artistName;
+            const text = displayMode === 'title' ? (square.customSongName || square.songName) : square.artistName;
             const isArtist = displayMode === 'artist';
             console.log(`🔍 Processing cell ${square.position}: "${text}" (${text.length} chars)`);
             fitTextToCell(textElement, text, isArtist);
@@ -449,7 +450,7 @@ const PlayerView: React.FC = () => {
             const textElement = squareElement.querySelector('.square-text') as HTMLElement;
             
             if (textElement) {
-              const text = displayMode === 'title' ? square.songName : square.artistName;
+              const text = displayMode === 'title' ? (square.customSongName || square.songName) : square.artistName;
               const isArtist = displayMode === 'artist';
               fitTextToCell(textElement, text, isArtist);
             }
