@@ -9,6 +9,80 @@ const SpotifyService = require('./spotify');
 const fs = require('fs');
 const path = require('path');
 
+// Song title cleaning utility
+function cleanSongTitle(title) {
+  if (!title || typeof title !== 'string') {
+    return title;
+  }
+
+  let cleaned = title.trim();
+
+  // Remove remastered versions
+  cleaned = cleaned.replace(/\s*-\s*remastered\s*\d*\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(remastered\s*\d*\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\[remastered\s*\d*\]\s*$/i, '');
+  cleaned = cleaned.replace(/\s*remastered\s*\d*\s*$/i, '');
+
+  // Remove live versions
+  cleaned = cleaned.replace(/\s*-\s*live\s*at\s*[^)]*\)?\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(live\s*at\s*[^)]*\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\[live\s*at\s*[^\]]*\]\s*$/i, '');
+  cleaned = cleaned.replace(/\s*live\s*at\s*[^)]*\)?\s*$/i, '');
+  cleaned = cleaned.replace(/\s*-\s*live\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(live\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\[live\]\s*$/i, '');
+
+  // Remove explicit/clean versions
+  cleaned = cleaned.replace(/\s*-\s*explicit\s*$/i, '');
+  cleaned = cleaned.replace(/\s*-\s*clean\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(explicit\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(clean\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\[explicit\]\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\[clean\]\s*$/i, '');
+
+  // Remove version indicators
+  cleaned = cleaned.replace(/\s*-\s*single\s*version\s*$/i, '');
+  cleaned = cleaned.replace(/\s*-\s*radio\s*edit\s*$/i, '');
+  cleaned = cleaned.replace(/\s*-\s*album\s*version\s*$/i, '');
+  cleaned = cleaned.replace(/\s*-\s*extended\s*version\s*$/i, '');
+  cleaned = cleaned.replace(/\s*-\s*short\s*version\s*$/i, '');
+  cleaned = cleaned.replace(/\s*-\s*instrumental\s*$/i, '');
+  cleaned = cleaned.replace(/\s*-\s*acoustic\s*$/i, '');
+  cleaned = cleaned.replace(/\s*-\s*studio\s*version\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(single\s*version\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(radio\s*edit\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(album\s*version\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(extended\s*version\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(instrumental\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(acoustic\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(studio\s*version\)\s*$/i, '');
+
+  // Remove years
+  cleaned = cleaned.replace(/\s*-\s*\d{4}\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(\d{4}\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\[\d{4}\]\s*$/i, '');
+
+  // Remove parenthetical content
+  cleaned = cleaned.replace(/\s*\(feat\.?\s*[^)]*\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(featuring\s*[^)]*\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(with\s*[^)]*\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(from\s*[^)]*\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(soundtrack\s*version\)\s*$/i, '');
+  cleaned = cleaned.replace(/\s*\(original\s*motion\s*picture\s*soundtrack\)\s*$/i, '');
+
+  // Remove leading/trailing dashes and clean up spacing
+  cleaned = cleaned.replace(/^\s*-\s*/, '');
+  cleaned = cleaned.replace(/\s*-\s*$/, '');
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+  // If we've cleaned too much, return original
+  if (cleaned.length < 3) {
+    return title.trim();
+  }
+
+  return cleaned;
+}
+
 // Database connection for persistent token storage
 let db = null;
 if (process.env.DATABASE_URL) {
@@ -418,8 +492,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     io.to(roomId).emit('song-playing', {
       songId: song.id,
       songName: song.name,
-      customSongName: customSongTitles.get(song.id) || song.name,
-      customSongName: customSongTitles.get(song.id) || song.name,
+      customSongName: customSongTitles.get(song.id) || cleanSongTitle(song.name),
       artistName: song.artist,
       snippetLength: room.snippetLength,
       currentIndex: songIndex,
@@ -3101,7 +3174,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           position: `${row}-${col}`,
           songId: s.id,
           songName: s.name,
-          customSongName: customSongTitles.get(s.id) || s.name,
+          customSongName: customSongTitles.get(s.id) || cleanSongTitle(s.name),
           artistName: s.artist,
           marked: false
         });
@@ -3278,7 +3351,7 @@ async function generateBingoCardForPlayer(roomId, playerId) {
           position: `${row}-${col}`,
           songId: s.id,
           songName: s.name,
-          customSongName: customSongTitles.get(s.id) || s.name,
+          customSongName: customSongTitles.get(s.id) || cleanSongTitle(s.name),
           artistName: s.artist,
           marked: false
         });

@@ -13,6 +13,7 @@ import {
   Timer,
   Crown
 } from 'lucide-react';
+import { cleanSongTitle } from '../utils/songTitleCleaner';
 
 interface BingoSquare {
   position: string;
@@ -423,7 +424,7 @@ const PlayerView: React.FC = () => {
           const textElement = squareElement.querySelector('.square-text') as HTMLElement;
           
           if (textElement) {
-            const text = displayMode === 'title' ? (square.customSongName || square.songName) : square.artistName;
+            const text = displayMode === 'title' ? (square.customSongName || cleanSongTitle(square.songName)) : square.artistName;
             const isArtist = displayMode === 'artist';
             console.log(`🔍 Processing cell ${square.position}: "${text}" (${text.length} chars)`);
             fitTextToCell(textElement, text, isArtist);
@@ -450,7 +451,7 @@ const PlayerView: React.FC = () => {
             const textElement = squareElement.querySelector('.square-text') as HTMLElement;
             
             if (textElement) {
-              const text = displayMode === 'title' ? (square.customSongName || square.songName) : square.artistName;
+              const text = displayMode === 'title' ? (square.customSongName || cleanSongTitle(square.songName)) : square.artistName;
               const isArtist = displayMode === 'artist';
               fitTextToCell(textElement, text, isArtist);
             }

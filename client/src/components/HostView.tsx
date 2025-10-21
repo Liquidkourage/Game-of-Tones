@@ -15,6 +15,7 @@ import { BingoPattern, PATTERN_OPTIONS, BINGO_PATTERNS, getPatternDisplayName, g
 import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
 import RoundPlanner from './RoundPlanner';
+import { cleanSongTitle } from '../utils/songTitleCleaner';
 
 interface Playlist {
   id: string;
@@ -1511,7 +1512,8 @@ const HostView: React.FC = () => {
   };
 
   const getDisplaySongTitle = (songId: string, originalTitle: string) => {
-    return customSongTitles[songId] || originalTitle;
+    // If there's a custom title, use it; otherwise use auto-cleaned original title
+    return customSongTitles[songId] || cleanSongTitle(originalTitle);
   };
 
   const playSong = async (song: Song) => {

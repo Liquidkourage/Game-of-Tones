@@ -18,6 +18,7 @@ import {
   QrCode
 } from 'lucide-react';
 import { API_BASE } from '../config';
+import { cleanSongTitle } from '../utils/songTitleCleaner';
 
 interface GameState {
   isPlaying: boolean;
@@ -411,7 +412,7 @@ const PublicDisplay: React.FC = () => {
       const squares = (card.squares || []).map((s: any) => ({
         song: { 
           id: s.songId, 
-          name: s.customSongName || s.songName, 
+          name: s.customSongName || cleanSongTitle(s.songName), 
           artist: s.artistName 
         },
         isPlayed: false,
@@ -430,7 +431,7 @@ const PublicDisplay: React.FC = () => {
     newSocket.on('song-playing', (data: any) => {
       const song = { 
         id: data.songId, 
-        name: data.customSongName || data.songName, 
+        name: data.customSongName || cleanSongTitle(data.songName), 
         artist: data.artistName 
       };
       // cache metadata for reveal lookups
