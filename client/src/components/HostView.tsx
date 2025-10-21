@@ -16,7 +16,7 @@ import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
 import RoundPlanner from './RoundPlanner';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
-import { validateSongTitle, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
+import { validateSongTitle, validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
 
 interface Playlist {
   id: string;
@@ -3535,7 +3535,7 @@ const HostView: React.FC = () => {
                     }}>
                       {(finalizedOrder || songList).map((song: any, index: number) => {
                         const displayTitle = getDisplaySongTitle(song.id, song.name);
-                        const validation = validateSongTitle(displayTitle, song.name);
+                        const validation = validateSongTitleSync(displayTitle, song.name);
                         const validationColor = getValidationColor(validation);
                         const validationMessage = getValidationMessage(validation);
                         

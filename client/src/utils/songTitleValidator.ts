@@ -2,13 +2,18 @@
  * Song Title Validation Utility
  * Detects potentially over-cleaned or problematic song titles
  * to help ensure important words aren't missing
+ * Now includes real song database lookup for accurate validation
  */
+
+import { lookupSong, SongLookupResult, getLookupMessage, getLookupColor } from './songLookupService';
 
 export interface ValidationResult {
   isValid: boolean;
   confidence: number; // 0-1, where 1 is very confident it's a real song
   warnings: string[];
   suggestions: string[];
+  lookupResult?: SongLookupResult; // Real database lookup result
+  useLookup: boolean; // Whether lookup was used
 }
 
 export interface SongValidationOptions {
@@ -17,6 +22,8 @@ export interface SongValidationOptions {
   requireCommonWords?: boolean;
   checkForOverCleaning?: boolean;
   checkForGenericTitles?: boolean;
+  useLookup?: boolean; // Whether to use real song database lookup
+  lookupTimeout?: number; // Timeout for lookup requests
 }
 
 const DEFAULT_OPTIONS: SongValidationOptions = {
@@ -24,7 +31,9 @@ const DEFAULT_OPTIONS: SongValidationOptions = {
   maxLength: 100,
   requireCommonWords: true,
   checkForOverCleaning: true,
-  checkForGenericTitles: true
+  checkForGenericTitles: true,
+  useLookup: true,
+  lookupTimeout: 3000
 };
 
 // Common words that appear in many song titles
@@ -59,17 +68,20 @@ const SUSPICIOUSLY_SHORT = [
 
 /**
  * Validates a song title to detect potential issues
+ * Now includes real song database lookup for accurate validation
  */
-export function validateSongTitle(
+export async function validateSongTitle(
   title: string, 
   originalTitle?: string,
+  artist?: string,
   options: SongValidationOptions = DEFAULT_OPTIONS
-): ValidationResult {
+): Promise<ValidationResult> {
   const result: ValidationResult = {
     isValid: true,
     confidence: 1.0,
     warnings: [],
-    suggestions: []
+    suggestions: [],
+    useLookup: false
   };
 
   if (!title || typeof title !== 'string') {
@@ -162,6 +174,40 @@ export function validateSongTitle(
     result.suggestions.push('Consider proper capitalization');
   }
 
+  // Use real song database lookup if enabled and artist is provided
+  if (options.useLookup && artist && title.length > 2) {
+    try {
+      result.useLookup = true;
+      const lookupResult = await lookupSong(title, artist, {
+        timeout: options.lookupTimeout || 3000
+      });
+      
+      result.lookupResult = lookupResult;
+      
+      if (lookupResult.found) {
+        // If lookup found the song, use its confidence
+        result.confidence = Math.max(result.confidence, lookupResult.confidence);
+        
+        if (lookupResult.confidence >= 0.9) {
+          result.warnings = result.warnings.filter(w => !w.includes('over-cleaned'));
+          result.suggestions.push('Song verified in music database');
+        } else if (lookupResult.confidence >= 0.7) {
+          result.warnings.push('Song found but title may not match exactly');
+          result.suggestions.push('Consider using the exact title from the database');
+        }
+      } else {
+        // If lookup didn't find the song, it might be over-cleaned or incorrect
+        result.confidence = Math.min(result.confidence, 0.3);
+        result.warnings.push('Song not found in music databases');
+        result.suggestions.push('Verify the song title and artist are correct');
+        result.suggestions.push('The title might be over-cleaned or misspelled');
+      }
+    } catch (error) {
+      result.warnings.push(`Database lookup failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      result.suggestions.push('Using pattern-based validation only');
+    }
+  }
+
   // Determine overall validity
   result.isValid = result.confidence >= 0.5;
   result.confidence = Math.max(0, Math.min(1, result.confidence));
@@ -172,40 +218,53 @@ export function validateSongTitle(
 /**
  * Get a validation summary for multiple songs
  */
-export function validateSongList(
-  songs: Array<{ id: string; name: string; originalName?: string }>,
+export async function validateSongList(
+  songs: Array<{ id: string; name: string; originalName?: string; artist?: string }>,
   options: SongValidationOptions = DEFAULT_OPTIONS
-): {
+): Promise<{
   totalSongs: number;
   validSongs: number;
   problematicSongs: Array<{
     id: string;
     name: string;
     originalName?: string;
+    artist?: string;
     validation: ValidationResult;
   }>;
   overallConfidence: number;
-} {
+}> {
   const problematicSongs: Array<{
     id: string;
     name: string;
     originalName?: string;
+    artist?: string;
     validation: ValidationResult;
   }> = [];
 
   let totalConfidence = 0;
 
-  songs.forEach(song => {
-    const validation = validateSongTitle(song.name, song.originalName, options);
-    totalConfidence += validation.confidence;
+  // Process songs in parallel for better performance
+  const validationPromises = songs.map(async (song) => {
+    const validation = await validateSongTitle(song.name, song.originalName, song.artist, options);
+    return { song, validation };
+  });
 
-    if (!validation.isValid || validation.confidence < 0.7) {
-      problematicSongs.push({
-        id: song.id,
-        name: song.name,
-        originalName: song.originalName,
-        validation
-      });
+  const results = await Promise.allSettled(validationPromises);
+
+  results.forEach((result) => {
+    if (result.status === 'fulfilled') {
+      const { song, validation } = result.value;
+      totalConfidence += validation.confidence;
+
+      if (!validation.isValid || validation.confidence < 0.7) {
+        problematicSongs.push({
+          id: song.id,
+          name: song.name,
+          originalName: song.originalName,
+          artist: song.artist,
+          validation
+        });
+      }
     }
   });
 
@@ -241,4 +300,77 @@ export function getValidationColor(validation: ValidationResult): string {
   } else {
     return '#ff4444'; // Red
   }
+}
+
+/**
+ * Quick synchronous validation for immediate UI display
+ * Uses only pattern-based validation without database lookup
+ */
+export function validateSongTitleSync(
+  title: string, 
+  originalTitle?: string,
+  options: SongValidationOptions = DEFAULT_OPTIONS
+): ValidationResult {
+  const result: ValidationResult = {
+    isValid: true,
+    confidence: 1.0,
+    warnings: [],
+    suggestions: [],
+    useLookup: false
+  };
+
+  if (!title || typeof title !== 'string') {
+    result.isValid = false;
+    result.confidence = 0;
+    result.warnings.push('Title is empty or invalid');
+    return result;
+  }
+
+  const cleanTitle = title.trim();
+  const words = cleanTitle.toLowerCase().split(/\s+/).filter(word => word.length > 0);
+
+  // Check minimum length
+  if (cleanTitle.length < (options.minLength || 3)) {
+    result.warnings.push(`Title is very short (${cleanTitle.length} characters)`);
+    result.confidence -= 0.3;
+  }
+
+  // Check for suspiciously short titles
+  if (SUSPICIOUSLY_SHORT.includes(cleanTitle.toLowerCase())) {
+    result.warnings.push('Title appears to be a single common word');
+    result.confidence -= 0.5;
+    result.suggestions.push('Consider if this is the complete song title');
+  }
+
+  // Check for generic titles
+  if (options.checkForGenericTitles) {
+    const isGeneric = GENERIC_TITLES.some(generic => 
+      cleanTitle.toLowerCase().includes(generic.toLowerCase())
+    );
+    if (isGeneric && words.length <= 2) {
+      result.warnings.push('Title appears generic or incomplete');
+      result.confidence -= 0.4;
+      result.suggestions.push('This might be missing the actual song name');
+    }
+  }
+
+  // Check for over-cleaning by comparing with original
+  if (options.checkForOverCleaning && originalTitle) {
+    const originalWords = originalTitle.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+    const cleanedWords = words;
+    
+    // If we removed more than 50% of words, it might be over-cleaned
+    const wordReduction = (originalWords.length - cleanedWords.length) / originalWords.length;
+    if (wordReduction > 0.5) {
+      result.warnings.push('Title may be over-cleaned (removed >50% of words)');
+      result.confidence -= 0.3;
+      result.suggestions.push('Consider keeping more of the original title');
+    }
+  }
+
+  // Determine overall validity
+  result.isValid = result.confidence >= 0.5;
+  result.confidence = Math.max(0, Math.min(1, result.confidence));
+
+  return result;
 }
