@@ -3778,7 +3778,7 @@ const HostView: React.FC = () => {
                 </div>
 
                 {/* Finalized Playlist Display */}
-                {(songList.length > 0 || finalizedOrder?.length > 0) && (
+                {(songList.length > 0 || (finalizedOrder?.length ?? 0) > 0) && (
                   <motion.div
                     className="finalized-playlist-section"
                     initial={{ opacity: 0 }}
