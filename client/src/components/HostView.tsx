@@ -3148,6 +3148,77 @@ const HostView: React.FC = () => {
                     </button>
                   </div>
                 </motion.div>
+
+                {/* Playlist Management */}
+                <motion.div
+                  className="playlist-management-section"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.5 }}
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    marginTop: '20px'
+                  }}
+                >
+                  <h3 style={{ 
+                    color: '#00ffa3', 
+                    fontSize: '1.2rem', 
+                    fontWeight: '600', 
+                    marginBottom: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    🎵 Playlist Management
+                  </h3>
+                  <p style={{ 
+                    color: 'rgba(255,255,255,0.7)', 
+                    fontSize: '0.9rem', 
+                    marginBottom: '16px',
+                    lineHeight: '1.4'
+                  }}>
+                    Manage playlists and create output playlists from your game sessions.
+                  </p>
+                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={createOutputPlaylist}
+                      disabled={!songList || songList.length === 0 || isSpotifyConnecting}
+                      className="btn-secondary"
+                      style={{
+                        backgroundColor: '#6b46c1',
+                        borderColor: '#8b5cf6',
+                        color: 'white',
+                        fontSize: '0.9rem',
+                        padding: '10px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      📁 Create Output Playlist
+                    </button>
+                    <button
+                      onClick={() => setShowPlaylistCleanup(true)}
+                      disabled={isSpotifyConnecting}
+                      className="btn-secondary"
+                      style={{
+                        backgroundColor: '#dc2626',
+                        borderColor: '#ef4444',
+                        color: 'white',
+                        fontSize: '0.9rem',
+                        padding: '10px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      🗑️ Cleanup Playlists
+                    </button>
+                  </div>
+                </motion.div>
               </div>
             )}
 
@@ -3301,30 +3372,6 @@ const HostView: React.FC = () => {
                        <p className="status-text">✅ Mix finalized - Cards generated for players</p>
                      </div>
                    )}
-                  <button
-                    onClick={createOutputPlaylist}
-                    disabled={!songList || songList.length === 0 || isSpotifyConnecting}
-                    className="control-button create-playlist"
-                    style={{
-                      backgroundColor: '#6b46c1',
-                      borderColor: '#8b5cf6',
-                      marginRight: '10px'
-                    }}
-                  >
-                    📁 Create Output Playlist
-                  </button>
-                  <button
-                    onClick={() => setShowPlaylistCleanup(true)}
-                    disabled={isSpotifyConnecting}
-                    className="control-button cleanup-playlists"
-                    style={{
-                      backgroundColor: '#dc2626',
-                      borderColor: '#ef4444',
-                      marginRight: '10px'
-                    }}
-                  >
-                    🗑️ Cleanup Playlists
-                  </button>
                   <button
                     onClick={startGame}
                     disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
