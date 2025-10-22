@@ -789,6 +789,7 @@ const HostView: React.FC = () => {
     // Listen for player card updates
     newSocket.on('player-cards-update', (data: any) => {
       try {
+        console.log('📋 Received player-cards-update:', data);
         if (data && typeof data === 'object') {
           const newPlayerCards = new Map();
           Object.entries(data).forEach(([playerId, cardData]: [string, any]) => {
@@ -805,7 +806,10 @@ const HostView: React.FC = () => {
               });
             }
           });
+          console.log('📋 Setting playerCards to:', newPlayerCards.size, 'cards');
           setPlayerCards(newPlayerCards);
+        } else {
+          console.log('📋 No valid player cards data received');
         }
       } catch (e) {
         console.warn('Failed to parse player cards:', e);
@@ -1359,7 +1363,11 @@ const HostView: React.FC = () => {
   };
 
   const requestPlayerCards = () => {
-    if (!socket || !roomId) return;
+    if (!socket || !roomId) {
+      console.log('❌ Cannot request player cards: socket or roomId missing', { socket: !!socket, roomId });
+      return;
+    }
+    console.log('🔍 Requesting player cards for room:', roomId);
     socket.emit('request-player-cards', { roomId });
     addLog('Requested player cards', 'info');
   };
