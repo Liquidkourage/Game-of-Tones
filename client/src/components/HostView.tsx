@@ -3531,6 +3531,15 @@ const HostView: React.FC = () => {
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                     <button className="btn-secondary" onClick={forceRefreshAll}>🧹 Force Refresh Clients</button>
+                    {!showPlayerCards && (
+                      <button 
+                        className="btn-secondary" 
+                        onClick={() => setShowPlayerCards(true)}
+                        title="Show player bingo cards and progress"
+                      >
+                        👥 Show Player Cards
+                      </button>
+                    )}
                   </div>
                  </div>
                )}
