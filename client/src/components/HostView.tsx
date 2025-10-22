@@ -3914,15 +3914,50 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                animate={{ opacity: 1 }}
                transition={{ delay: 0.4 }}
                     className="player-cards-section"
+                    style={{ 
+                      backgroundColor: 'rgba(255,0,0,0.1)', 
+                      border: '2px solid red',
+                      padding: '10px',
+                      margin: '10px 0'
+                    }}
              >
                     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '1rem' }}>
                       <h2>👥 Player Cards & Progress</h2>
+                      <span style={{ 
+                        marginLeft: '10px', 
+                        fontSize: '0.8rem', 
+                        color: 'red',
+                        backgroundColor: 'rgba(255,0,0,0.2)',
+                        padding: '2px 6px',
+                        borderRadius: '3px'
+                      }}>
+                        DEBUG: {playerCards.size} cards, showPlayerCards: {showPlayerCards.toString()}
+                      </span>
                </div>
                     <div style={{ 
                       display: 'grid', 
                       gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', 
                       gap: 16 
                     }}>
+                      {/* Debug: Show player cards data */}
+                      <div style={{ 
+                        gridColumn: '1 / -1', 
+                        backgroundColor: 'rgba(255,255,0,0.1)', 
+                        border: '1px solid yellow',
+                        padding: '10px',
+                        marginBottom: '10px'
+                      }}>
+                        <h4 style={{ color: 'yellow', margin: '0 0 10px 0' }}>DEBUG: Player Cards Data</h4>
+                        <pre style={{ color: 'white', fontSize: '0.7rem', margin: 0 }}>
+                          {JSON.stringify(Array.from(playerCards.entries()).map(([id, data]) => ({
+                            playerId: id,
+                            playerName: data.playerName,
+                            hasCard: !!data.card,
+                            cardSquares: data.card?.squares?.length || 0,
+                            playedSongs: data.playedSongs?.length || 0
+                          })), null, 2)}
+                        </pre>
+                      </div>
                       {Array.from(playerCards.entries()).map(([playerId, playerData]) => (
                         <div key={playerId} style={{ 
                           background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
