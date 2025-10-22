@@ -2798,8 +2798,9 @@ io.on('connection', (socket) => {
           sendPlayerCardUpdates(roomId);
           
           // Check for bingo pattern completion (but don't auto-announce)
-          const hasBingo = checkBingo(card);
-          if (hasBingo && !player.patternComplete) {
+          // Use the same validation logic as the actual bingo call for consistency
+          const validationResult = validateBingoForPattern(card, room);
+          if (validationResult.valid && !player.patternComplete) {
             player.patternComplete = true; // Use separate flag for pattern completion
             console.log(`🎯 Player ${player.name} completed bingo pattern but hasn't called it yet`);
             
@@ -4177,20 +4178,32 @@ function validateBingoForPattern(card, room) {
   if (pattern === 'full_card') {
     // All squares must be marked AND correspond to played songs
     let invalidCount = 0;
+    let invalidSquares = [];
     for (let row = 0; row < 5; row++) {
       for (let col = 0; col < 5; col++) {
         const square = card.squares.find(s => s.position === `${row}-${col}`);
         if (!isMarkedSquareValid(square)) {
           invalidCount++;
+          if (square) {
+            invalidSquares.push({
+              position: square.position,
+              songId: square.songId,
+              marked: square.marked,
+              played: playedSongIds.includes(square.songId)
+            });
+          }
         }
       }
     }
     if (invalidCount > 0) {
+      console.log(`🎯 Full card validation failed: ${invalidCount} invalid squares`);
+      console.log(`🎯 Invalid squares:`, invalidSquares.slice(0, 5)); // Log first 5 for debugging
       return { 
         valid: false, 
         reason: `Full card incomplete. Need ${invalidCount} more squares marked with played songs.`
       };
     }
+    console.log(`🎯 Full card validation passed: all 25 squares marked with played songs`);
     return { valid: true, reason: 'Full card complete!' };
   }
   
