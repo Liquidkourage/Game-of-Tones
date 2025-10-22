@@ -225,16 +225,51 @@ const SongReplacementModal: React.FC<SongReplacementModalProps> = ({
                 {searchResults.map((song) => (
                   <div
                     key={song.id}
-                    className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                      selectedSong?.id === song.id
-                        ? 'border-blue-500 bg-blue-500/10'
-                        : 'border-gray-700 bg-gray-800 hover:border-gray-600'
-                    }`}
+                    style={{
+                      padding: '16px',
+                      borderRadius: '8px',
+                      border: selectedSong?.id === song.id 
+                        ? '2px solid #3b82f6' 
+                        : '1px solid #374151',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      background: selectedSong?.id === song.id 
+                        ? 'rgba(59, 130, 246, 0.1)' 
+                        : '#1f2937',
+                      marginBottom: '8px'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (selectedSong?.id !== song.id) {
+                        e.currentTarget.style.background = '#374151';
+                        e.currentTarget.style.borderColor = '#6b7280';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (selectedSong?.id !== song.id) {
+                        e.currentTarget.style.background = '#1f2937';
+                        e.currentTarget.style.borderColor = '#374151';
+                      }
+                    }}
                     onClick={() => setSelectedSong(song)}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
-                        <div className="font-medium text-white">{song.name}</div>
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '8px' 
+                        }}>
+                          <div className="font-medium text-white">{song.name}</div>
+                          {selectedSong?.id === song.id && (
+                            <span style={{ 
+                              color: '#3b82f6', 
+                              fontSize: '16px',
+                              fontWeight: 'bold'
+                            }}>
+                              ✓
+                            </span>
+                          )}
+                        </div>
                         <div className="text-gray-300 text-sm">{song.artist}</div>
                         <div className="text-gray-400 text-xs">{song.album}</div>
                       </div>
