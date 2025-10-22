@@ -1495,11 +1495,16 @@ code {
   align-items: center;  /* center grid vertically */
   overflow: hidden;
   padding: 5px;
-  /* mask area for scaled grid */
+  /* Make container responsive to its parent */
   width: 100%;
   height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   margin-top: auto; /* vertically center within container */
   margin-bottom: auto;
+  /* Ensure the container can shrink if needed */
+  min-width: 0;
+  min-height: 0;
 }
 
 /* Public display: enforce fixed 5x5 grid */
@@ -1508,12 +1513,21 @@ code {
   grid-template-columns: repeat(5, 1fr);
   grid-template-rows: repeat(5, 1fr);
   gap: clamp(2px, 0.4vmin, 8px);
-  width: 95%;
-  height: 95%;
+  /* Size the grid to fit its container while maintaining square aspect ratio */
+  /* Use the smaller dimension to ensure it fits */
+  width: min(100%, 100%);
+  height: min(100%, 100%);
   aspect-ratio: 1 / 1;
   align-self: center;
+  justify-self: center;
   transform: translateY(-5%) scale(var(--bingo-scale));
-  transform-origin: center center; /* ensure centered scaling */
+  transform-origin: center center;
+  /* Ensure the grid never overflows its container */
+  max-width: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
+  /* Force the grid to respect container bounds */
+  overflow: hidden;
 }
 
 .bingo-row { display: contents; }
@@ -1743,7 +1757,8 @@ code {
   }
   
   .bingo-grid {
-    max-width: 200px;
+    max-width: min(200px, 100%);
+    max-height: min(200px, 100%);
   }
   
   .song-name {
@@ -1763,7 +1778,8 @@ code {
   }
   
   .bingo-grid {
-    max-width: 150px;
+    max-width: min(150px, 100%);
+    max-height: min(150px, 100%);
   }
   
   .song-name {
