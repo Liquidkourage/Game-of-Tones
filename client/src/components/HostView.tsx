@@ -3922,6 +3922,41 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   <p style={{ color: 'white', margin: '5px 0' }}>playerCards entries: {Array.from(playerCards.entries()).length}</p>
                 </div>
                 
+                {/* FORCE RENDER: Always show player cards section for debugging */}
+                <div style={{ 
+                  backgroundColor: 'rgba(255,0,255,0.2)', 
+                  border: '3px solid magenta',
+                  padding: '20px',
+                  margin: '20px 0',
+                  minHeight: '200px'
+                }}>
+                  <h2 style={{ color: 'magenta', margin: '0 0 20px 0' }}>🔍 FORCED PLAYER CARDS SECTION</h2>
+                  <p style={{ color: 'white' }}>This section should ALWAYS be visible for debugging</p>
+                  <p style={{ color: 'white' }}>playerCards.size: {playerCards.size}</p>
+                  <p style={{ color: 'white' }}>showPlayerCards: {showPlayerCards.toString()}</p>
+                  
+                  {playerCards.size > 0 ? (
+                    <div>
+                      <h3 style={{ color: 'white' }}>Player Cards Found:</h3>
+                      {Array.from(playerCards.entries()).map(([playerId, playerData]) => (
+                        <div key={playerId} style={{ 
+                          backgroundColor: 'rgba(255,255,255,0.1)',
+                          border: '1px solid white',
+                          padding: '10px',
+                          margin: '5px 0',
+                          borderRadius: '5px'
+                        }}>
+                          <strong style={{ color: 'white' }}>{playerData.playerName}</strong>
+                          <p style={{ color: 'white', margin: '5px 0' }}>Card squares: {playerData.card?.squares?.length || 0}</p>
+                          <p style={{ color: 'white', margin: '5px 0' }}>Played songs: {playerData.playedSongs?.length || 0}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ color: 'red' }}>NO PLAYER CARDS FOUND</p>
+                  )}
+                </div>
+                
                 {playerCards.size > 0 && (
              <motion.div 
                initial={{ opacity: 0 }}
