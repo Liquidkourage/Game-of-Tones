@@ -1245,6 +1245,26 @@ const HostView: React.FC = () => {
     if (!socket || selectedPlaylists.length === 0) return;
     
     try {
+      // Check if songs have playlist information, if not regenerate
+      const needsRegeneration = songList.length > 0 && !songList[0]?.sourcePlaylistId;
+      if (needsRegeneration) {
+        console.log('🔄 Songs missing playlist info, regenerating...');
+        await generateSongList();
+        // Wait a moment for the song list to update
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      console.log('📋 Finalizing mix with songList:', {
+        length: songList.length,
+        hasPlaylistInfo: songList.length > 0 ? !!songList[0]?.sourcePlaylistId : false,
+        firstSong: songList.length > 0 ? {
+          id: songList[0].id,
+          name: songList[0].name,
+          sourcePlaylistId: songList[0].sourcePlaylistId,
+          sourcePlaylistName: songList[0].sourcePlaylistName
+        } : null
+      });
+      
       // Include current host-side songList ordering to enforce 1x75 pool deterministically
       socket.emit('finalize-mix', {
         roomId: roomId,

@@ -1436,8 +1436,21 @@ io.on('connection', (socket) => {
       
       // Store the full song objects for song replacement functionality
       if (Array.isArray(songList) && songList.length > 0) {
+        console.log('📋 Received songList for finalization:', {
+          length: songList.length,
+          hasPlaylistInfo: songList.length > 0 ? !!songList[0]?.sourcePlaylistId : false,
+          firstSong: songList.length > 0 ? {
+            id: songList[0].id,
+            name: songList[0].name,
+            sourcePlaylistId: songList[0].sourcePlaylistId,
+            sourcePlaylistName: songList[0].sourcePlaylistName
+          } : null
+        });
+        
         room.finalizedSongs = songList; // Store full song objects with sourcePlaylistId, etc.
         console.log(`📝 Stored ${songList.length} finalized songs for room ${roomId}`);
+      } else {
+        console.log('⚠️ No songList received or empty songList for finalization');
       }
       
       // Generate bingo cards for all players (respect host order where applicable)
