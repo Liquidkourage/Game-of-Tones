@@ -1434,6 +1434,12 @@ io.on('connection', (socket) => {
       room.finalizedPlaylists = playlists;
       room.finalizedSongOrder = Array.isArray(songList) ? songList : null;
       
+      // Store the full song objects for song replacement functionality
+      if (Array.isArray(songList) && songList.length > 0) {
+        room.finalizedSongs = songList; // Store full song objects with sourcePlaylistId, etc.
+        console.log(`📝 Stored ${songList.length} finalized songs for room ${roomId}`);
+      }
+      
       // Generate bingo cards for all players (respect host order where applicable)
       await generateBingoCards(roomId, playlists, room.finalizedSongOrder || null);
       
@@ -5191,6 +5197,11 @@ app.post('/api/spotify/replace-song', async (req, res) => {
       }
     }
     
+    // If not found, check finalizedSongs (for pre-game song replacement)
+    if (!oldSong && room.finalizedSongs) {
+      oldSong = room.finalizedSongs.find(song => song.id === oldSongId);
+    }
+    
     if (!oldSong) {
       console.log('❌ Song not found in any room data structure:', oldSongId);
       console.log('📊 Room data structures available:', {
@@ -5198,6 +5209,8 @@ app.post('/api/spotify/replace-song', async (req, res) => {
         playlistSongsLength: room.playlistSongs?.length || 0,
         hasFinalizedSongOrder: !!room.finalizedSongOrder,
         finalizedSongOrderLength: room.finalizedSongOrder?.length || 0,
+        hasFinalizedSongs: !!room.finalizedSongs,
+        finalizedSongsLength: room.finalizedSongs?.length || 0,
         hasOneBySeventyFivePool: !!room.oneBySeventyFivePool,
         oneBySeventyFivePoolLength: room.oneBySeventyFivePool?.length || 0,
         hasFiveByFifteenColumns: !!room.fiveByFifteenColumns,
@@ -5280,6 +5293,16 @@ app.post('/api/spotify/replace-song', async (req, res) => {
           updatedInAnyStructure = true;
           console.log(`✅ Updated song in room.fiveByFifteenColumns[${col}] at index ${colIndex}`);
         }
+      }
+    }
+    
+    // Update finalizedSongs if it exists (for pre-game song replacement)
+    if (room.finalizedSongs) {
+      const finalizedIndex = room.finalizedSongs.findIndex(item => item.id === oldSongId);
+      if (finalizedIndex !== -1) {
+        room.finalizedSongs[finalizedIndex] = newSong;
+        updatedInAnyStructure = true;
+        console.log(`✅ Updated song in room.finalizedSongs at index ${finalizedIndex}`);
       }
     }
     
