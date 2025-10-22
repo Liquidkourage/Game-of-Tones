@@ -3908,6 +3908,20 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                      </motion.div>
 
                 {/* Player Cards */}
+                {/* DEBUG: Always show this section to test rendering */}
+                <div style={{ 
+                  backgroundColor: 'rgba(0,255,0,0.1)', 
+                  border: '2px solid green',
+                  padding: '10px',
+                  margin: '10px 0'
+                }}>
+                  <h3 style={{ color: 'green', margin: '0 0 10px 0' }}>DEBUG: Player Cards Section Test</h3>
+                  <p style={{ color: 'white', margin: '5px 0' }}>showPlayerCards: {showPlayerCards.toString()}</p>
+                  <p style={{ color: 'white', margin: '5px 0' }}>playerCards.size: {playerCards.size}</p>
+                  <p style={{ color: 'white', margin: '5px 0' }}>Condition (showPlayerCards && playerCards.size &gt; 0): {(showPlayerCards && playerCards.size > 0).toString()}</p>
+                  <p style={{ color: 'white', margin: '5px 0' }}>playerCards entries: {Array.from(playerCards.entries()).length}</p>
+                </div>
+                
                 {showPlayerCards && playerCards.size > 0 && (
              <motion.div 
                initial={{ opacity: 0 }}
