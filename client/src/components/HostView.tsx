@@ -3536,6 +3536,11 @@ const HostView: React.FC = () => {
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                     <button className="btn-secondary" onClick={forceRefreshAll}>🧹 Force Refresh Clients</button>
+                    <button className="btn-secondary" onClick={requestPlayerCards}>🔍 Request Player Cards</button>
+                    {/* Debug info for player cards */}
+                    <span style={{ fontSize: '0.8rem', color: '#666', marginLeft: '8px' }}>
+                      Players: {playerCards.size} | Show: {showPlayerCards ? 'true' : 'false'}
+                    </span>
                     {playerCards.size > 0 && (
                       <button 
                         className="btn-secondary" 
