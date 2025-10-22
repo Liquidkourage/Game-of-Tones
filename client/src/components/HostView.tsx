@@ -1276,6 +1276,11 @@ const HostView: React.FC = () => {
       socket.once('mix-finalized', (data: any) => {
         console.log('Mix finalized:', data);
         setMixFinalized(true);
+        
+        // Request player cards immediately after finalization so host can see them pre-game
+        setTimeout(() => {
+          requestPlayerCards();
+        }, 500); // Small delay to ensure cards are fully generated and sent to players
       });
     } catch (error) {
       console.error('Error finalizing mix:', error);
