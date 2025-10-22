@@ -4148,8 +4148,11 @@ function checkBingoWithPlayedSongs(card, playedSongIds) {
 }
 
 function validateBingoForPattern(card, room) {
-  const pattern = room?.pattern || 'full_card';
+  const pattern = room?.pattern || 'line';
   const playedSongIds = room?.calledSongIds || [];
+  
+  console.log(`🎯 Validating bingo for pattern: "${pattern}" (room pattern: "${room?.pattern}")`);
+  console.log(`🎯 Played songs count: ${playedSongIds.length}`);
   
   // Helper function to check if a marked square corresponds to a played song
   const isMarkedSquareValid = (square) => {
