@@ -995,7 +995,7 @@ async function playNextSongSimple(roomId, deviceId) {
     io.to(roomId).emit('song-playing', {
       songId: nextSong.id,
       songName: nextSong.name,
-      customSongName: customSongTitles.get(nextSong.id) || nextSong.name,
+      customSongName: customSongTitles.get(nextSong.id) || cleanSongTitle(nextSong.name),
       artistName: nextSong.artist,
       snippetLength: room.snippetLength,
       currentIndex: room.currentSongIndex,
@@ -2769,7 +2769,7 @@ io.on('connection', (socket) => {
       io.to(roomId).emit('song-playing', {
         songId,
         songName,
-        customSongName: customSongTitles.get(songId) || songName,
+        customSongName: customSongTitles.get(songId) || cleanSongTitle(songName),
         artistName,
         snippetLength: room.snippetLength
       });
@@ -3694,7 +3694,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     io.to(roomId).emit('song-playing', {
       songId: firstSong.id,
       songName: firstSong.name,
-      customSongName: customSongTitles.get(firstSong.id) || firstSong.name,
+      customSongName: customSongTitles.get(firstSong.id) || cleanSongTitle(firstSong.name),
       artistName: firstSong.artist,
       snippetLength: room.snippetLength,
       currentIndex: 0,
@@ -3940,7 +3940,7 @@ async function playNextSong(roomId, deviceId) {
     io.to(roomId).emit('song-playing', {
       songId: nextSong.id,
       songName: nextSong.name,
-      customSongName: customSongTitles.get(nextSong.id) || nextSong.name,
+      customSongName: customSongTitles.get(nextSong.id) || cleanSongTitle(nextSong.name),
       artistName: nextSong.artist,
       snippetLength: room.snippetLength,
       currentIndex: room.currentSongIndex,
