@@ -5163,9 +5163,46 @@ app.post('/api/spotify/replace-song', async (req, res) => {
     
     await spotifyService.ensureValidToken();
     
-    // Find the old song in the finalized playlist
-    const oldSong = room.playlistSongs?.find(song => song.id === oldSongId);
+    // Find the old song in various possible data structures
+    let oldSong = null;
+    
+    // Check room.playlistSongs first (for active games)
+    if (room.playlistSongs) {
+      oldSong = room.playlistSongs.find(song => song.id === oldSongId);
+    }
+    
+    // If not found, check finalizedSongOrder (for 5x15 mode)
+    if (!oldSong && room.finalizedSongOrder) {
+      // For finalizedSongOrder, we need to find the song in the original song list
+      // This is a bit tricky since finalizedSongOrder only contains IDs
+      console.log('🔍 Searching in finalizedSongOrder for song:', oldSongId);
+    }
+    
+    // If not found, check oneBySeventyFivePool (for 1x75 mode)
+    if (!oldSong && room.oneBySeventyFivePool) {
+      oldSong = room.oneBySeventyFivePool.find(song => song.id === oldSongId);
+    }
+    
+    // If not found, check fiveByFifteenColumns (for 5x15 mode)
+    if (!oldSong && room.fiveByFifteenColumns) {
+      for (const column of room.fiveByFifteenColumns) {
+        oldSong = column.find(song => song.id === oldSongId);
+        if (oldSong) break;
+      }
+    }
+    
     if (!oldSong) {
+      console.log('❌ Song not found in any room data structure:', oldSongId);
+      console.log('📊 Room data structures available:', {
+        hasPlaylistSongs: !!room.playlistSongs,
+        playlistSongsLength: room.playlistSongs?.length || 0,
+        hasFinalizedSongOrder: !!room.finalizedSongOrder,
+        finalizedSongOrderLength: room.finalizedSongOrder?.length || 0,
+        hasOneBySeventyFivePool: !!room.oneBySeventyFivePool,
+        oneBySeventyFivePoolLength: room.oneBySeventyFivePool?.length || 0,
+        hasFiveByFifteenColumns: !!room.fiveByFifteenColumns,
+        fiveByFifteenColumnsLength: room.fiveByFifteenColumns?.length || 0
+      });
       return res.status(404).json({ error: 'Old song not found in playlist' });
     }
     
@@ -5201,17 +5238,26 @@ app.post('/api/spotify/replace-song', async (req, res) => {
       }
     }
     
-    // Update the song in the room's playlist
-    const songIndex = room.playlistSongs.findIndex(song => song.id === oldSongId);
-    if (songIndex !== -1) {
-      room.playlistSongs[songIndex] = newSong;
+    // Update the song in all relevant data structures
+    let updatedInAnyStructure = false;
+    
+    // Update room.playlistSongs if it exists
+    if (room.playlistSongs) {
+      const songIndex = room.playlistSongs.findIndex(song => song.id === oldSongId);
+      if (songIndex !== -1) {
+        room.playlistSongs[songIndex] = newSong;
+        updatedInAnyStructure = true;
+        console.log(`✅ Updated song in room.playlistSongs at index ${songIndex}`);
+      }
     }
     
-    // Update finalized song order if it exists
+    // Update finalized song order if it exists (this only contains IDs, so we just replace the ID)
     if (room.finalizedSongOrder) {
       const orderIndex = room.finalizedSongOrder.indexOf(oldSongId);
       if (orderIndex !== -1) {
         room.finalizedSongOrder[orderIndex] = newSongId;
+        updatedInAnyStructure = true;
+        console.log(`✅ Updated song ID in room.finalizedSongOrder at index ${orderIndex}`);
       }
     }
     
@@ -5220,6 +5266,8 @@ app.post('/api/spotify/replace-song', async (req, res) => {
       const poolIndex = room.oneBySeventyFivePool.findIndex(item => item.id === oldSongId);
       if (poolIndex !== -1) {
         room.oneBySeventyFivePool[poolIndex] = newSong;
+        updatedInAnyStructure = true;
+        console.log(`✅ Updated song in room.oneBySeventyFivePool at index ${poolIndex}`);
       }
     }
     
@@ -5229,8 +5277,14 @@ app.post('/api/spotify/replace-song', async (req, res) => {
         const colIndex = room.fiveByFifteenColumns[col].findIndex(item => item.id === oldSongId);
         if (colIndex !== -1) {
           room.fiveByFifteenColumns[col][colIndex] = newSong;
+          updatedInAnyStructure = true;
+          console.log(`✅ Updated song in room.fiveByFifteenColumns[${col}] at index ${colIndex}`);
         }
       }
+    }
+    
+    if (!updatedInAnyStructure) {
+      console.log('⚠️ Song was found but not updated in any data structure');
     }
     
     // Broadcast the song replacement to all clients
