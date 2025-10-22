@@ -2083,7 +2083,16 @@ const PublicDisplay: React.FC = () => {
                 <h2 style={{ fontSize: '3.2rem', fontWeight: 900, textShadow: '0 2px 6px rgba(0,0,0,0.8)' }}>{getPatternName()}</h2>
                 {showNowPlaying && gameState.currentSong && (
                   <div className="now-playing-banner" style={{ marginTop: 6, fontSize: '0.95rem' }}>
-                    Now Playing: {gameState.currentSong.name} — {gameState.currentSong.artist}
+                    Now Playing: {(() => {
+                      const currentRevealed = new Set(revealSequenceRef.current);
+                      const title = renderMaskedText(gameState.currentSong.name, currentRevealed, revealToast);
+                      const artist = renderMaskedText(gameState.currentSong.artist, currentRevealed, revealToast);
+                      return (
+                        <span>
+                          {title} — {artist}
+                        </span>
+                      );
+                    })()}
                     {countdownMs > 0 && (
                       <span style={{ marginLeft: 8, opacity: 0.8 }}>
                         ({Math.ceil(countdownMs / 1000)}s)
@@ -2205,8 +2214,14 @@ const PublicDisplay: React.FC = () => {
                       >
                             <div className="call-number">#{Math.max(1, totalPlayedCount - (Math.min(10, gameState.playedSongs.length) - 1) + index)}</div>
                         <div className="call-song-info">
-                          <div className="call-song-name">{song.name}</div>
-                          <div className="call-song-artist">{song.artist}</div>
+                          <div className="call-song-name">{(() => {
+                            const currentRevealed = new Set(revealSequenceRef.current);
+                            return renderMaskedText(song.name, currentRevealed, revealToast);
+                          })()}</div>
+                          <div className="call-song-artist">{(() => {
+                            const currentRevealed = new Set(revealSequenceRef.current);
+                            return renderMaskedText(song.artist, currentRevealed, revealToast);
+                          })()}</div>
                         </div>
                         <Music className="call-icon" />
                       </motion.div>
