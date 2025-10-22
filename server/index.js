@@ -3159,13 +3159,9 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           columns.push(colPicks);
         }
         if (!ok) {
-          console.warn(`⚠️ 5x15 mode fell short for player ${player.name}; falling back to global pool`);
-          const global = buildGlobalPool();
-          if (!ensureEnough(global.length)) {
-            console.error(`❌ Not enough songs in global pool for player ${player.name}: need ${songsNeededPerCard}, have ${global.length}`);
-            continue; // Skip this player but continue with others
-          }
-          chosen25 = properShuffle(global).slice(0, songsNeededPerCard);
+          console.error(`❌ 5x15 mode failed for player ${player.name} - insufficient unique songs per column`);
+          console.error(`❌ This should not happen if playlists have enough songs. Skipping player.`);
+          continue; // Skip this player - don't use fallback that creates different card types
         } else {
           // Flatten column-major into row-major 5x5
           for (let row = 0; row < 5; row++) {
@@ -3214,6 +3210,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
 
     const uniqueOnCard = new Set(card.squares.map(q => q.songId));
       console.log(`✅ Generated card for ${player.name} with ${uniqueOnCard.size} unique songs (mode=${mode})`);
+      console.log(`🎲 Card generation method: ${mode === '5x15' ? '5x15 column-based' : mode === '1x75' ? '1x75 pool-based' : 'global pool'}`);
 
       if (!room.bingoCards) room.bingoCards = new Map();
     player.bingoCard = card;
@@ -3349,10 +3346,9 @@ async function generateBingoCardForPlayer(roomId, playerId) {
         columns.push(colPicks);
       }
       if (!ok) {
-        console.warn('⚠️ 5x15 late-join fell short; falling back to global pool');
-        const global = buildGlobalPool();
-        if (!ensureEnough(global.length)) return;
-        chosen25 = properShuffle(global).slice(0, songsNeededPerCard);
+        console.error('❌ 5x15 late-join failed - insufficient unique songs per column');
+        console.error('❌ This should not happen if playlists have enough songs. Cannot generate card.');
+        return; // Don't use fallback that creates different card types
       } else {
         for (let row = 0; row < 5; row++) {
           for (let col = 0; col < 5; col++) {
@@ -4153,6 +4149,7 @@ function validateBingoForPattern(card, room) {
   
   console.log(`🎯 Validating bingo for pattern: "${pattern}" (room pattern: "${room?.pattern}")`);
   console.log(`🎯 Played songs count: ${playedSongIds.length}`);
+  console.log(`🎯 Card has ${card.squares.length} squares, ${card.squares.filter(s => s.marked).length} marked`);
   
   // Helper function to check if a marked square corresponds to a played song
   const isMarkedSquareValid = (square) => {
