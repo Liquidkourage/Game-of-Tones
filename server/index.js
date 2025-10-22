@@ -5016,7 +5016,21 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
     }
     
     await spotifyService.ensureValidToken();
-    const tracks = await spotifyService.getPlaylistTracks(playlistId);
+    
+    // First get the playlist information to include in track data
+    let playlistInfo = null;
+    try {
+      const playlistResponse = await spotifyService.spotifyApi.getPlaylist(playlistId);
+      playlistInfo = {
+        id: playlistResponse.body.id,
+        name: playlistResponse.body.name
+      };
+    } catch (error) {
+      console.warn('⚠️ Could not fetch playlist info for', playlistId, ':', error.message);
+      // Continue without playlist info
+    }
+    
+    const tracks = await spotifyService.getPlaylistTracks(playlistId, playlistInfo);
     
     res.json({
       success: true,
