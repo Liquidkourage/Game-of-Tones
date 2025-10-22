@@ -73,8 +73,6 @@ const PublicDisplay: React.FC = () => {
   // Rules/instruction screen state
   const [showRules, setShowRules] = useState<boolean>(false);
   
-  // Call list screen state (main game display as overlay)
-  const [showCallList, setShowCallList] = useState<boolean>(false);
   
   const [currentWinningLine, setCurrentWinningLine] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -570,13 +568,6 @@ const PublicDisplay: React.FC = () => {
       setShowSplash(false);
     });
 
-    newSocket.on('display-show-call-list', () => {
-      setShowCallList(true);
-    });
-
-    newSocket.on('display-hide-call-list', () => {
-      setShowCallList(false);
-    });
 
 
     newSocket.on('pattern-updated', (data: any) => {
@@ -1911,114 +1902,6 @@ const PublicDisplay: React.FC = () => {
         )}
       </AnimatePresence>
       
-      {/* Call List Screen (Main Game Display as Overlay) */}
-      <AnimatePresence>
-        {showCallList && (
-          <motion.div
-            key="call-list"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.35 }}
-            style={{
-              position: 'fixed', inset: 0, zIndex: 2000,
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              padding: 40, overflow: 'auto'
-            }}
-          >
-            <div style={{ textAlign: 'center', maxWidth: '1400px', width: '100%' }}>
-              <div style={{
-                fontSize: 'clamp(2.5rem, 5vw, 3.5rem)',
-                fontWeight: 1000,
-                letterSpacing: '0.05em',
-                backgroundImage: 'linear-gradient(90deg,#00ffa3 0%, #7bffd9 35%, #ffffff 50%, #7bffd9 65%, #00ffa3 100%)',
-                WebkitBackgroundClip: 'text',
-                backgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                textShadow: '0 10px 36px rgba(0,255,170,0.55), 0 0 28px rgba(0,255,170,0.3)',
-                marginBottom: '2rem'
-              }}>
-                Call List
-              </div>
-              
-              {/* Bingo Card Display */}
-              <div style={{
-                background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.22)',
-                borderRadius: '16px',
-                padding: '2rem',
-                marginBottom: '2rem'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '1rem' }}>
-                  <Grid3X3 style={{ width: '30px', height: '30px', color: '#00ffa3' }} />
-                  <h3 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#00ffa3', margin: 0 }}>
-                    {getPatternName()}
-                  </h3>
-                </div>
-                <div className="bingo-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px', maxWidth: '400px', margin: '0 auto' }}>
-                  {renderBingoCard()}
-                </div>
-              </div>
-              
-              {/* Current Song */}
-              {gameState.currentSong && (
-                <div style={{
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(255,255,255,0.22)',
-                  borderRadius: '16px',
-                  padding: '2rem',
-                  marginBottom: '2rem'
-                }}>
-                  <h3 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem', color: '#00ffa3' }}>
-                    🎵 Now Playing
-                  </h3>
-                  <div style={{ fontSize: '1.8rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-                    {gameState.currentSong.name}
-                  </div>
-                  <div style={{ fontSize: '1.3rem', opacity: 0.8 }}>
-                    by {gameState.currentSong.artist}
-                  </div>
-                </div>
-              )}
-              
-              {/* Played Songs List */}
-              {gameState.playedSongs.length > 0 && (
-                <div style={{
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(255,255,255,0.22)',
-                  borderRadius: '16px',
-                  padding: '2rem'
-                }}>
-                  <h3 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem', color: '#00ffa3' }}>
-                    🎵 Songs Played ({gameState.playedSongs.length})
-                  </h3>
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-                    gap: '1rem',
-                    maxHeight: '400px',
-                    overflowY: 'auto'
-                  }}>
-                    {gameState.playedSongs.slice(-20).reverse().map((song, index) => (
-                      <div key={index} style={{
-                        background: 'rgba(255,255,255,0.05)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        borderRadius: '8px',
-                        padding: '12px',
-                        fontSize: '0.9rem'
-                      }}>
-                        <div style={{ fontWeight: 600, marginBottom: '4px' }}>{song.name}</div>
-                        <div style={{ opacity: 0.8 }}>by {song.artist}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
       
       {/* Subtle confetti when winner banner shows */}
       <AnimatePresence>
