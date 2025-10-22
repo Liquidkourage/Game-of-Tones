@@ -3531,13 +3531,13 @@ const HostView: React.FC = () => {
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                     <button className="btn-secondary" onClick={forceRefreshAll}>🧹 Force Refresh Clients</button>
-                    {!showPlayerCards && (
+                    {playerCards.size > 0 && (
                       <button 
                         className="btn-secondary" 
-                        onClick={() => setShowPlayerCards(true)}
-                        title="Show player bingo cards and progress"
+                        onClick={() => setShowPlayerCards(!showPlayerCards)}
+                        title={showPlayerCards ? "Hide player bingo cards" : "Show player bingo cards and progress"}
                       >
-                        👥 Show Player Cards
+                        {showPlayerCards ? "👥 Hide Player Cards" : "👥 Show Player Cards"}
                       </button>
                     )}
                   </div>
@@ -3872,15 +3872,8 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                transition={{ delay: 0.4 }}
                     className="player-cards-section"
              >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '1rem' }}>
                       <h2>👥 Player Cards & Progress</h2>
-                 <button
-                        onClick={() => setShowPlayerCards(false)}
-                        className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
-                        title="Close player cards view"
-                 >
-                        ✕ Close
-                 </button>
                </div>
                     <div style={{ 
                       display: 'grid', 
