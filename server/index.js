@@ -4146,15 +4146,27 @@ function checkBingoWithPlayedSongs(card, playedSongIds) {
 
 function validateBingoForPattern(card, room) {
   const pattern = room?.pattern || 'line';
-  const playedSongIds = room?.calledSongIds || [];
+  // Make a copy to avoid race conditions during validation
+  const playedSongIds = Array.isArray(room?.calledSongIds) ? [...room.calledSongIds] : [];
   
   console.log(`🎯 Validating bingo for pattern: "${pattern}" (room pattern: "${room?.pattern}")`);
   console.log(`🎯 Played songs count: ${playedSongIds.length}`);
+  console.log(`🎯 Called song IDs:`, playedSongIds.slice(-10)); // Show last 10 for debugging
   console.log(`🎯 Card has ${card.squares.length} squares, ${card.squares.filter(s => s.marked).length} marked`);
+  
+  // Debug: Show card song IDs vs played song IDs
+  const cardSongIds = card.squares.map(s => s.songId);
+  const markedCardSongIds = card.squares.filter(s => s.marked).map(s => s.songId);
+  console.log(`🎯 Card song IDs (first 10):`, cardSongIds.slice(0, 10));
+  console.log(`🎯 Marked card song IDs (first 10):`, markedCardSongIds.slice(0, 10));
   
   // Helper function to check if a marked square corresponds to a played song
   const isMarkedSquareValid = (square) => {
-    return square && square.marked && playedSongIds.includes(square.songId);
+    const isValid = square && square.marked && playedSongIds.includes(square.songId);
+    if (!isValid && square && square.marked) {
+      console.log(`🎯 Invalid marked square: ${square.position} - songId: ${square.songId}, marked: ${square.marked}, inPlayedList: ${playedSongIds.includes(square.songId)}`);
+    }
+    return isValid;
   };
   
   if (pattern === 'custom' && room?.customPattern && room.customPattern.size > 0) {
