@@ -3574,9 +3574,9 @@ const HostView: React.FC = () => {
                         onClick={() => setShowPlayerCards(!showPlayerCards)}
                         title={showPlayerCards ? "Hide player bingo cards" : "Show player bingo cards and progress"}
                         style={{ 
-                          backgroundColor: '#00ffa3', 
-                          borderColor: '#00ffa3',
-                          color: 'black',
+                          backgroundColor: showPlayerCards ? '#ff6b35' : '#00ffa3', 
+                          borderColor: showPlayerCards ? '#ff6b35' : '#00ffa3',
+                          color: showPlayerCards ? 'white' : 'black',
                           fontWeight: 'bold'
                         }}
                       >
@@ -3922,7 +3922,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   <p style={{ color: 'white', margin: '5px 0' }}>playerCards entries: {Array.from(playerCards.entries()).length}</p>
                 </div>
                 
-                {showPlayerCards && playerCards.size > 0 && (
+                {playerCards.size > 0 && (
              <motion.div 
                initial={{ opacity: 0 }}
                animate={{ opacity: 1 }}
