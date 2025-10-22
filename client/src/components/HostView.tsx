@@ -3542,11 +3542,30 @@ const HostView: React.FC = () => {
                     <button className="btn-secondary" onClick={() => revealCall('title')}>Title</button>
                     <button className="btn-secondary" onClick={() => revealCall('full')}>Full</button>
                   </div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                     <button className="btn-secondary" onClick={forceRefreshAll}>🧹 Force Refresh Clients</button>
-                    <button className="btn-secondary" onClick={requestPlayerCards}>🔍 Request Player Cards</button>
+                    <button 
+                      className="btn-secondary" 
+                      onClick={requestPlayerCards}
+                      style={{ 
+                        backgroundColor: '#ff6b35', 
+                        borderColor: '#ff6b35',
+                        color: 'white',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      🔍 Request Player Cards
+                    </button>
                     {/* Debug info for player cards */}
-                    <span style={{ fontSize: '0.8rem', color: '#666', marginLeft: '8px' }}>
+                    <span style={{ 
+                      fontSize: '0.8rem', 
+                      color: '#ff6b35', 
+                      marginLeft: '8px',
+                      fontWeight: 'bold',
+                      backgroundColor: 'rgba(255,107,53,0.1)',
+                      padding: '4px 8px',
+                      borderRadius: '4px'
+                    }}>
                       Players: {playerCards.size} | Show: {showPlayerCards ? 'true' : 'false'}
                     </span>
                     {playerCards.size > 0 && (
@@ -3554,6 +3573,12 @@ const HostView: React.FC = () => {
                         className="btn-secondary" 
                         onClick={() => setShowPlayerCards(!showPlayerCards)}
                         title={showPlayerCards ? "Hide player bingo cards" : "Show player bingo cards and progress"}
+                        style={{ 
+                          backgroundColor: '#00ffa3', 
+                          borderColor: '#00ffa3',
+                          color: 'black',
+                          fontWeight: 'bold'
+                        }}
                       >
                         {showPlayerCards ? "👥 Hide Player Cards" : "👥 Show Player Cards"}
                       </button>
