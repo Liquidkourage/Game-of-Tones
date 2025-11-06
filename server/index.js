@@ -1275,6 +1275,8 @@ io.on('connection', (socket) => {
         currentSongIndex: 0,
         // Pre-queue system removed for deterministic playback
         superStrictLock: false,
+        pattern: 'line', // Default pattern
+        customPattern: undefined, // Will be set when custom pattern is chosen
         createdAt: new Date().toISOString()
       };
       rooms.set(roomId, newRoom);
@@ -2309,7 +2311,9 @@ io.on('connection', (socket) => {
           repeatMode: false,
           volume: 100,
           playlistSongs: [],
-          currentSongIndex: 0
+          currentSongIndex: 0,
+          pattern: 'line', // Default pattern
+          customPattern: undefined // Will be set when custom pattern is chosen
         };
         rooms.set(roomId, newRoom);
         socket.join(roomId);
@@ -2808,6 +2812,16 @@ io.on('connection', (socket) => {
             socket.emit('pattern-complete', {
               message: 'You have a bingo pattern! Hold the BINGO button to call it.',
               hasPattern: true
+            });
+          } else if (!validationResult.valid && player.patternComplete) {
+            // Reset pattern completion flag if pattern is no longer valid (e.g., player unmarked a square)
+            player.patternComplete = false;
+            console.log(`🎯 Player ${player.name} no longer has a valid bingo pattern`);
+            
+            // Notify player that pattern is no longer complete
+            socket.emit('pattern-complete', {
+              message: '',
+              hasPattern: false
             });
           }
         }

@@ -3556,18 +3556,6 @@ const HostView: React.FC = () => {
                     >
                       🔍 Request Player Cards
                     </button>
-                    {/* Debug info for player cards */}
-                    <span style={{ 
-                      fontSize: '0.8rem', 
-                      color: '#ff6b35', 
-                      marginLeft: '8px',
-                      fontWeight: 'bold',
-                      backgroundColor: 'rgba(255,107,53,0.1)',
-                      padding: '4px 8px',
-                      borderRadius: '4px'
-                    }}>
-                      Players: {playerCards.size} | Show: {showPlayerCards ? 'true' : 'false'}
-                    </span>
                     {playerCards.size > 0 && (
                       <button 
                         className="btn-secondary" 
@@ -3908,55 +3896,6 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                      </motion.div>
 
                 {/* Player Cards */}
-                {/* DEBUG: Always show this section to test rendering */}
-                <div style={{ 
-                  backgroundColor: 'rgba(0,255,0,0.1)', 
-                  border: '2px solid green',
-                  padding: '10px',
-                  margin: '10px 0'
-                }}>
-                  <h3 style={{ color: 'green', margin: '0 0 10px 0' }}>DEBUG: Player Cards Section Test</h3>
-                  <p style={{ color: 'white', margin: '5px 0' }}>showPlayerCards: {showPlayerCards.toString()}</p>
-                  <p style={{ color: 'white', margin: '5px 0' }}>playerCards.size: {playerCards.size}</p>
-                  <p style={{ color: 'white', margin: '5px 0' }}>Condition (showPlayerCards && playerCards.size &gt; 0): {(showPlayerCards && playerCards.size > 0).toString()}</p>
-                  <p style={{ color: 'white', margin: '5px 0' }}>playerCards entries: {Array.from(playerCards.entries()).length}</p>
-                </div>
-                
-                {/* FORCE RENDER: Always show player cards section for debugging */}
-                <div style={{ 
-                  backgroundColor: 'rgba(255,0,255,0.2)', 
-                  border: '3px solid magenta',
-                  padding: '20px',
-                  margin: '20px 0',
-                  minHeight: '200px'
-                }}>
-                  <h2 style={{ color: 'magenta', margin: '0 0 20px 0' }}>🔍 FORCED PLAYER CARDS SECTION</h2>
-                  <p style={{ color: 'white' }}>This section should ALWAYS be visible for debugging</p>
-                  <p style={{ color: 'white' }}>playerCards.size: {playerCards.size}</p>
-                  <p style={{ color: 'white' }}>showPlayerCards: {showPlayerCards.toString()}</p>
-                  
-                  {playerCards.size > 0 ? (
-                    <div>
-                      <h3 style={{ color: 'white' }}>Player Cards Found:</h3>
-                      {Array.from(playerCards.entries()).map(([playerId, playerData]) => (
-                        <div key={playerId} style={{ 
-                          backgroundColor: 'rgba(255,255,255,0.1)',
-                          border: '1px solid white',
-                          padding: '10px',
-                          margin: '5px 0',
-                          borderRadius: '5px'
-                        }}>
-                          <strong style={{ color: 'white' }}>{playerData.playerName}</strong>
-                          <p style={{ color: 'white', margin: '5px 0' }}>Card squares: {playerData.card?.squares?.length || 0}</p>
-                          <p style={{ color: 'white', margin: '5px 0' }}>Played songs: {playerData.playedSongs?.length || 0}</p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p style={{ color: 'red' }}>NO PLAYER CARDS FOUND</p>
-                  )}
-                </div>
-                
                 {playerCards.size > 0 && (
              <motion.div 
                initial={{ opacity: 0 }}
@@ -3988,25 +3927,6 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                       gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', 
                       gap: 16 
                     }}>
-                      {/* Debug: Show player cards data */}
-                      <div style={{ 
-                        gridColumn: '1 / -1', 
-                        backgroundColor: 'rgba(255,255,0,0.1)', 
-                        border: '1px solid yellow',
-                        padding: '10px',
-                        marginBottom: '10px'
-                      }}>
-                        <h4 style={{ color: 'yellow', margin: '0 0 10px 0' }}>DEBUG: Player Cards Data</h4>
-                        <pre style={{ color: 'white', fontSize: '0.7rem', margin: 0 }}>
-                          {JSON.stringify(Array.from(playerCards.entries()).map(([id, data]) => ({
-                            playerId: id,
-                            playerName: data.playerName,
-                            hasCard: !!data.card,
-                            cardSquares: data.card?.squares?.length || 0,
-                            playedSongs: data.playedSongs?.length || 0
-                          })), null, 2)}
-                        </pre>
-                      </div>
                       {Array.from(playerCards.entries()).map(([playerId, playerData]) => (
                         <div key={playerId} style={{ 
                           background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
