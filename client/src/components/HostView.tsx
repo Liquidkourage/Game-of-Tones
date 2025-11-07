@@ -807,7 +807,16 @@ const HostView: React.FC = () => {
             }
           });
           console.log('📋 Setting playerCards to:', newPlayerCards.size, 'cards');
+          console.log('📋 Previous playerCards size:', playerCards.size);
+          console.log('📋 showPlayerCards state:', showPlayerCards);
+          console.log('📋 Render condition will be:', showPlayerCards && newPlayerCards.size > 0);
           setPlayerCards(newPlayerCards);
+          
+          // Force a check after state update
+          setTimeout(() => {
+            const element = document.querySelector('.player-cards-section');
+            console.log('📋 Post-update DOM check:', element ? 'FOUND' : 'NOT FOUND');
+          }, 100);
         } else {
           console.log('📋 No valid player cards data received');
         }
@@ -868,6 +877,10 @@ const HostView: React.FC = () => {
         await fetchPlaybackState();
         await loadDevices();
         await loadPlaylists();
+        // Re-request player cards after reconnection to restore UI state
+        setTimeout(() => {
+          requestPlayerCards();
+        }, 1000);
       })();
     });
     newSocket.io.on('reconnect_error', (err: any) => {
@@ -1368,6 +1381,7 @@ const HostView: React.FC = () => {
       return;
     }
     console.log('🔍 Requesting player cards for room:', roomId);
+    console.log('🔍 Current playerCards state:', { size: playerCards.size, showPlayerCards });
     socket.emit('request-player-cards', { roomId });
     addLog('Requested player cards', 'info');
   };
