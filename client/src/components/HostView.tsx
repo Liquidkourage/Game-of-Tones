@@ -4192,6 +4192,201 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
              </motion.div>
            )}
 
+                {/* Player Cards - MOVED OUTSIDE DISABLED BLOCK */}
+                {showPlayerCards && playerCards.size > 0 && (
+             <motion.div 
+               key={`player-cards-${playerCardsVersion}`}
+               initial={{ opacity: 0 }}
+               animate={{ opacity: 1 }}
+               transition={{ delay: 0.4 }}
+                    className="player-cards-section"
+                    style={{ 
+                      backgroundColor: 'rgba(255,0,0,0.1)', 
+                      border: '2px solid red',
+                      padding: '10px',
+                      margin: '10px 0'
+                    }}
+             >
+                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '1rem' }}>
+                      <h2>👥 Player Cards & Progress</h2>
+                      <span style={{ 
+                        marginLeft: '10px', 
+                        fontSize: '0.8rem', 
+                        color: 'red',
+                        backgroundColor: 'rgba(255,0,0,0.2)',
+                        padding: '2px 6px',
+                        borderRadius: '3px'
+                      }}>
+                        DEBUG: {playerCards.size} cards, showPlayerCards: {showPlayerCards.toString()}
+                      </span>
+               </div>
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', 
+                      gap: 16 
+                    }}>
+                      {Array.from(playerCards.entries()).map(([playerId, playerData]) => (
+                        <div key={playerId} style={{ 
+                          background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
+                          border: '1px solid rgba(0,255,136,0.3)', 
+                          borderRadius: '12px', 
+                          padding: '16px',
+                          boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
+                        }}>
+                          <div style={{ 
+                            fontWeight: 'bold', 
+                            marginBottom: '8px', 
+                            color: '#00ff88',
+                            fontSize: '1rem',
+                            textAlign: 'center'
+                          }}>
+                            {playerData.playerName}
+                         </div>
+                          
+                          {/* Win Progress Indicator */}
+                          {(() => {
+                            const progress = calculateWinProgress(playerData.card, pattern, playerData.playedSongs || []);
+                            const progressColor = progress.needed === 0 ? '#00ff88' : 
+                                                progress.needed <= 2 ? '#ffaa00' : 
+                                                progress.progress >= 50 ? '#66ccff' : '#888';
+                            const progressText = progress.needed === 0 ? '🎉 BINGO!' : 
+                                               progress.needed === 1 ? '1 more needed!' :
+                                               `${progress.needed} more needed`;
+                            const cheatingCount = progress.marked - progress.legitimate;
+                            const patternText = `${progress.patternProgress}/${progress.totalNeeded} in pattern (${progress.progress}%)`;
+                            
+                            return (
+                              <div style={{ 
+                                marginBottom: '12px', 
+                                textAlign: 'center',
+                                fontSize: '0.85rem'
+                              }}>
+                                <div style={{ 
+                                  color: progressColor,
+                                  fontWeight: 600,
+                                  marginBottom: '4px'
+                                }}>
+                                  {progressText}
+                       </div>
+                                {cheatingCount > 0 && (
+                                  <div style={{
+                                    color: '#ff4444',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 'bold',
+                                    marginBottom: '4px'
+                                  }}>
+                                    ⚠️ {cheatingCount} invalid mark{cheatingCount > 1 ? 's' : ''}
+                   </div>
+                                )}
+                                <div style={{ 
+                                  background: 'rgba(255,255,255,0.1)',
+                                  borderRadius: '8px',
+                                  height: '6px',
+                                  overflow: 'hidden',
+                                  margin: '0 auto',
+                                  maxWidth: '200px'
+                                }}>
+                                  <div style={{
+                                    background: progressColor,
+                                    height: '100%',
+                                    width: `${progress.progress}%`,
+                                    transition: 'width 0.3s ease'
+                                  }} />
+                                </div>
+                                <div style={{ 
+                                  fontSize: '0.75rem',
+                                  color: '#b3b3b3',
+                                  marginTop: '2px'
+                                }}>
+                                  {patternText}
+                                  {progress.marked !== progress.legitimate && (
+                                    <span style={{ color: '#ff8888', marginLeft: '4px' }}>
+                                      ({progress.marked} total marked)
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                          <div style={{ 
+                            display: 'grid', 
+                            gridTemplateColumns: 'repeat(5, 1fr)', 
+                            gap: '4px', 
+                            maxWidth: '300px',
+                            aspectRatio: '1/1',
+                            margin: '0 auto'
+                          }}>
+                            {playerData.card.squares.map((square: any) => {
+                              const isPlayed = (playerData.playedSongs || []).includes(square.songId);
+                              const isMarked = square.marked;
+                              
+                              // Determine square status and styling
+                              let bgColor, borderColor, textColor, icon, statusText;
+                              
+                              if (isMarked && isPlayed) {
+                                // ✅ Legitimate mark (played and marked)
+                                bgColor = 'linear-gradient(135deg, #00ff88, #00cc6d)';
+                                borderColor = '#00ff88';
+                                textColor = '#001a0d';
+                                icon = '✓';
+                                statusText = 'Legitimate';
+                              } else if (isMarked && !isPlayed) {
+                                // ⚠️ Invalid mark (marked but not played - cheating!)
+                                bgColor = 'linear-gradient(135deg, #ff6b6b, #ff4757)';
+                                borderColor = '#ff4757';
+                                textColor = '#ffffff';
+                                icon = '⚠';
+                                statusText = 'Invalid - Not played yet!';
+                              } else if (!isMarked && isPlayed) {
+                                // 🔵 Missed opportunity (played but not marked)
+                                bgColor = 'linear-gradient(135deg, #4dabf7, #339af0)';
+                                borderColor = '#339af0';
+                                textColor = '#ffffff';
+                                icon = '○';
+                                statusText = 'Played but not marked';
+                              } else {
+                                // ⚪ Not played and not marked
+                                bgColor = 'rgba(255,255,255,0.1)';
+                                borderColor = 'rgba(255,255,255,0.3)';
+                                textColor = '#ffffff';
+                                icon = '';
+                                statusText = 'Not played';
+                              }
+                              
+                              return (
+                                <div 
+                                  key={square.position}
+                                  style={{ 
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    background: bgColor,
+                                    border: `2px solid ${borderColor}`,
+                                    borderRadius: '8px',
+                                    padding: '4px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: isMarked ? 700 : 400,
+                                    color: textColor,
+                                    textAlign: 'center',
+                                    lineHeight: 1.1,
+                                    overflow: 'hidden'
+                                  }}
+                                  title={`${square.songName} — ${square.artistName}\nStatus: ${statusText}`}
+                                >
+                                {icon && <span style={{ marginRight: 2 }}>{icon}</span>}
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {square.songName.length > 12 ? square.songName.substring(0, 12) + '...' : square.songName}
+                    </span>
+                              </div>
+                              );
+                            })}
+                         </div>
+                  </div>
+                ))}
+               </div>
+             </motion.div>
+           )}
+
                 {/* Finalized Playlist Display */}
                 {(songList.length > 0 || (finalizedOrder?.length ?? 0) > 0 || mixFinalized) && (
                   <motion.div
