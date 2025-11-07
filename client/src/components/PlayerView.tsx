@@ -646,12 +646,12 @@ const PlayerView: React.FC = () => {
   };
 
   const startBingoHold = () => {
-    // Only allow bingo call if there's a valid bingo
-    if (!hasValidBingo) {
-      setBingoMessage('No valid bingo pattern completed!');
-      setTimeout(() => setBingoMessage(''), 2000);
-      return;
-    }
+    // TEMPORARILY DISABLED: Allow bingo calls even without valid pattern (host will verify)
+    // if (!hasValidBingo) {
+    //   setBingoMessage('No valid bingo pattern completed!');
+    //   setTimeout(() => setBingoMessage(''), 2000);
+    //   return;
+    // }
 
     if (bingoHoldTimer.current) window.clearTimeout(bingoHoldTimer.current);
     if (holdRafRef.current) cancelAnimationFrame(holdRafRef.current as any);
