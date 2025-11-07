@@ -193,6 +193,43 @@ const HostView: React.FC = () => {
     setLogs(prev => [{ level, message, ts: Date.now() }, ...prev].slice(0, 50));
   };
 
+  // Show toast notification to host
+  const showToast = (message: string, type: 'info' | 'success' | 'warn' | 'error' = 'info') => {
+    const toast = document.createElement('div');
+    const icons = { info: 'ℹ️', success: '✅', warn: '⚠️', error: '❌' };
+    const colors = { 
+      info: '#00aaff', 
+      success: '#00ff88', 
+      warn: '#ffaa00', 
+      error: '#ff4444' 
+    };
+    
+    toast.textContent = `${icons[type]} ${message}`;
+    Object.assign(toast.style, {
+      position: 'fixed',
+      top: '20px',
+      right: '20px',
+      background: colors[type],
+      color: type === 'warn' ? '#000' : '#fff',
+      padding: '12px 20px',
+      borderRadius: '8px',
+      fontWeight: 'bold',
+      fontSize: '14px',
+      zIndex: '10000',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+      animation: 'slideIn 0.3s ease-out'
+    });
+    
+    document.body.appendChild(toast);
+    setTimeout(() => { 
+      try { 
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s';
+        setTimeout(() => document.body.removeChild(toast), 300);
+      } catch {} 
+    }, 3000);
+  };
+
   // Handle license key changes
   const handleLicenseKeyChange = useCallback((newLicenseKey: string) => {
     setLicenseKey(newLicenseKey);
@@ -812,10 +849,18 @@ const HostView: React.FC = () => {
           console.log('📋 Render condition will be:', showPlayerCards && newPlayerCards.size > 0);
           setPlayerCards(newPlayerCards);
           
+          // Show toast notification
+          if (newPlayerCards.size > 0) {
+            showToast(`Player cards loaded: ${newPlayerCards.size} players`, 'success');
+          }
+          
           // Force a check after state update
           setTimeout(() => {
             const element = document.querySelector('.player-cards-section');
             console.log('📋 Post-update DOM check:', element ? 'FOUND' : 'NOT FOUND');
+            if (!element && newPlayerCards.size > 0) {
+              showToast('Player cards not rendering - check console', 'error');
+            }
           }, 100);
         } else {
           console.log('📋 No valid player cards data received');
@@ -856,12 +901,16 @@ const HostView: React.FC = () => {
 
     newSocket.on('disconnect', (reason: string) => {
       console.warn('Socket disconnected:', reason);
+      if (reason !== 'io client disconnect') {
+        showToast('Connection lost - reconnecting...', 'warn');
+      }
     });
     newSocket.io.on('reconnect_attempt', (attempt) => {
       console.log(`Reconnecting socket (attempt ${attempt})...`);
     });
     newSocket.io.on('reconnect', () => {
       console.log('Socket reconnected. Refreshing Spotify status and devices.');
+      showToast('Connection restored', 'success');
       lastReconnectAtRef.current = Date.now();
       ignorePollingUntilRef.current = Date.now() + 15000; // ignore polling flips for 15s
       if (roomId && gameState === 'playing') {
@@ -879,6 +928,7 @@ const HostView: React.FC = () => {
         await loadPlaylists();
         // Re-request player cards after reconnection to restore UI state
         setTimeout(() => {
+          showToast('Reloading player cards...', 'info');
           requestPlayerCards();
         }, 1000);
       })();
@@ -1378,11 +1428,13 @@ const HostView: React.FC = () => {
   const requestPlayerCards = () => {
     if (!socket || !roomId) {
       console.log('❌ Cannot request player cards: socket or roomId missing', { socket: !!socket, roomId });
+      showToast('Cannot request cards - not connected', 'error');
       return;
     }
     console.log('🔍 Requesting player cards for room:', roomId);
     console.log('🔍 Current playerCards state:', { size: playerCards.size, showPlayerCards });
     socket.emit('request-player-cards', { roomId });
+    showToast('Requesting player cards...', 'info');
     addLog('Requested player cards', 'info');
   };
 
