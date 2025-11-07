@@ -201,7 +201,19 @@ const PlayerView: React.FC = () => {
 
     newSocket.on('bingo-card', (data: any) => {
       console.log('Received bingo card:', data);
-      setBingoCard(data);
+      // Preserve existing marks when receiving updated card
+      setBingoCard(prev => {
+        if (!prev) return data;
+        // Merge: keep marks from previous card if positions match
+        const updatedSquares = data.squares.map((newSquare: any) => {
+          const oldSquare = prev.squares.find((s: any) => s.position === newSquare.position);
+          return {
+            ...newSquare,
+            marked: oldSquare?.marked || false // Preserve mark state
+          };
+        });
+        return { ...data, squares: updatedSquares };
+      });
     });
 
     newSocket.on('mix-finalized', (data: any) => {

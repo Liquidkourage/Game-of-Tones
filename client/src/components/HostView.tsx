@@ -3896,7 +3896,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                      </motion.div>
 
                 {/* Player Cards */}
-                {playerCards.size > 0 && (
+                {showPlayerCards && playerCards.size > 0 && (
              <motion.div 
                initial={{ opacity: 0 }}
                animate={{ opacity: 1 }}
