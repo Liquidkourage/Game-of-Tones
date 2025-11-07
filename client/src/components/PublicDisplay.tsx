@@ -701,7 +701,7 @@ const PublicDisplay: React.FC = () => {
           if (hint === 'artist' && artistName) {
             revealText = `Artist: ${artistName}`;
             // Reveal all letters in artist name
-            Array.from(artistName.toUpperCase()).forEach(ch => {
+            Array.from(artistName.toUpperCase()).forEach((ch: string) => {
               if (/^[A-Z0-9]$/.test(ch) && !revealSequenceRef.current.includes(ch)) {
                 lettersToReveal.push(ch);
               }
@@ -709,7 +709,7 @@ const PublicDisplay: React.FC = () => {
           } else if (hint === 'title' && songName) {
             revealText = `Song: ${songName}`;
             // Reveal all letters in song title
-            Array.from(songName.toUpperCase()).forEach(ch => {
+            Array.from(songName.toUpperCase()).forEach((ch: string) => {
               if (/^[A-Z0-9]$/.test(ch) && !revealSequenceRef.current.includes(ch)) {
                 lettersToReveal.push(ch);
               }
@@ -718,7 +718,7 @@ const PublicDisplay: React.FC = () => {
             revealText = `${songName} - ${artistName}`;
             // Reveal all letters in both
             const fullText = `${songName} ${artistName}`;
-            Array.from(fullText.toUpperCase()).forEach(ch => {
+            Array.from(fullText.toUpperCase()).forEach((ch: string) => {
               if (/^[A-Z0-9]$/.test(ch) && !revealSequenceRef.current.includes(ch)) {
                 lettersToReveal.push(ch);
               }
