@@ -3556,6 +3556,19 @@ const HostView: React.FC = () => {
                     >
                       🔍 Request Player Cards
                     </button>
+                    <button
+                      onClick={requestPlayerCards}
+                      className="btn-secondary"
+                      style={{ 
+                        backgroundColor: '#ff6b35', 
+                        borderColor: '#ff6b35',
+                        color: 'white',
+                        fontWeight: 'bold',
+                        marginRight: '8px'
+                      }}
+                    >
+                      🔍 Request Player Cards ({playerCards.size})
+                    </button>
                     {playerCards.size > 0 && (
                       <button 
                         className="btn-secondary" 

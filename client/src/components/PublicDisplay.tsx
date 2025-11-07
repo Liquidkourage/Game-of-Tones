@@ -692,17 +692,43 @@ const PublicDisplay: React.FC = () => {
           }
         }));
         
-        // Show reveal toast
+        // Update reveal sequence for wheel of fortune masking
         try {
           const { hint, songName, artistName } = payload;
+          const lettersToReveal: string[] = [];
           let revealText = '';
           
           if (hint === 'artist' && artistName) {
             revealText = `Artist: ${artistName}`;
+            // Reveal all letters in artist name
+            Array.from(artistName.toUpperCase()).forEach(ch => {
+              if (/^[A-Z0-9]$/.test(ch) && !revealSequenceRef.current.includes(ch)) {
+                lettersToReveal.push(ch);
+              }
+            });
           } else if (hint === 'title' && songName) {
             revealText = `Song: ${songName}`;
+            // Reveal all letters in song title
+            Array.from(songName.toUpperCase()).forEach(ch => {
+              if (/^[A-Z0-9]$/.test(ch) && !revealSequenceRef.current.includes(ch)) {
+                lettersToReveal.push(ch);
+              }
+            });
           } else if (hint === 'full' && songName && artistName) {
             revealText = `${songName} - ${artistName}`;
+            // Reveal all letters in both
+            const fullText = `${songName} ${artistName}`;
+            Array.from(fullText.toUpperCase()).forEach(ch => {
+              if (/^[A-Z0-9]$/.test(ch) && !revealSequenceRef.current.includes(ch)) {
+                lettersToReveal.push(ch);
+              }
+            });
+          }
+          
+          // Add revealed letters to sequence
+          if (lettersToReveal.length > 0) {
+            revealSequenceRef.current = [...revealSequenceRef.current, ...lettersToReveal];
+            console.log('🎡 Wheel of Fortune: Revealed letters:', lettersToReveal, 'Total revealed:', revealSequenceRef.current.length);
           }
           
           if (revealText) {
@@ -739,11 +765,20 @@ const PublicDisplay: React.FC = () => {
 
   // Time-based letter reveal every 10 seconds (weighted by unrevealed frequency across played songs)
   useEffect(() => {
-    if (!gameState.isPlaying || isVerificationPending) return;
+    console.log('🎡 Auto-reveal effect triggered:', { isPlaying: gameState.isPlaying, isVerificationPending });
+    if (!gameState.isPlaying || isVerificationPending) {
+      console.log('🎡 Auto-reveal disabled:', !gameState.isPlaying ? 'game not playing' : 'verification pending');
+      return;
+    }
+    console.log('🎡 Auto-reveal enabled, starting 15s interval');
     const interval = setInterval(() => {
       try {
         const ids = playedOrderRef.current;
-        if (!ids || ids.length === 0) return;
+        console.log('🎡 Auto-reveal tick:', { playedSongs: ids?.length || 0, revealedLetters: revealSequenceRef.current.length });
+        if (!ids || ids.length === 0) {
+          console.log('🎡 No played songs yet');
+          return;
+        }
         const weights: Record<string, number> = {};
         for (let i = 0; i < ids.length; i++) {
           const pid = ids[i];
@@ -761,7 +796,10 @@ const PublicDisplay: React.FC = () => {
           }
         }
         const entries = Object.entries(weights);
-        if (entries.length === 0) return;
+        if (entries.length === 0) {
+          console.log('🎡 All letters revealed!');
+          return;
+        }
         const total = entries.reduce((sum, [, w]) => sum + w, 0);
         let r = Math.random() * total;
         let revealedChar = entries[0][0];
@@ -771,15 +809,21 @@ const PublicDisplay: React.FC = () => {
           r -= w;
         }
         revealSequenceRef.current.push(revealedChar);
+        console.log('🎡 Auto-revealed letter:', revealedChar, 'Total revealed:', revealSequenceRef.current.length);
         if (revealToastTimerRef.current) { clearTimeout(revealToastTimerRef.current); revealToastTimerRef.current = null; }
         setRevealToast(revealedChar);
         revealToastTimerRef.current = setTimeout(() => {
           setRevealToast(null);
           revealToastTimerRef.current = null;
         }, 3000);
-      } catch {}
+      } catch (err) {
+        console.error('🎡 Auto-reveal error:', err);
+      }
     }, 15000);
-    return () => clearInterval(interval);
+    return () => {
+      console.log('🎡 Auto-reveal interval cleared');
+      clearInterval(interval);
+    };
   }, [gameState.isPlaying, isVerificationPending]);
 
   // Auto-advance the 15x5 grouped columns carousel
