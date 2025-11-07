@@ -2860,6 +2860,19 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('display-reset-letters', (data) => {
+    const { roomId } = data;
+    const room = rooms.get(roomId);
+    if (!room) return;
+    
+    // Only host can reset letters
+    const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
+    if (!isCurrentHost) return;
+    
+    console.log(`🔤 Letter reset requested for public display in room ${roomId}`);
+    io.to(roomId).emit('display-reset-letters');
+  });
+
   // Custom song title management
   socket.on('set-custom-song-title', (data) => {
     const { songId, customTitle } = data;

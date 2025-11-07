@@ -568,7 +568,13 @@ const PublicDisplay: React.FC = () => {
       setShowSplash(false);
     });
 
-
+    newSocket.on('display-reset-letters', () => {
+      console.log('🔤 Resetting revealed letters on public display');
+      revealSequenceRef.current = [];
+      songBaselineRef.current = {};
+      setRevealToast('Letters reset - auto-reveal restarting');
+      setTimeout(() => setRevealToast(null), 3000);
+    });
 
     newSocket.on('pattern-updated', (data: any) => {
       try {

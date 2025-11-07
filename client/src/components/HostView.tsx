@@ -148,6 +148,7 @@ const HostView: React.FC = () => {
   const [rooms, setRooms] = useState<Array<any>>([]);
   const [showPlayerCards, setShowPlayerCards] = useState<boolean>(true);
   const [playerCards, setPlayerCards] = useState<Map<string, any>>(new Map());
+  const [playerCardsVersion, setPlayerCardsVersion] = useState<number>(0); // Force re-render trigger
   const [showRoundManager, setShowRoundManager] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'setup' | 'play'>('setup');
   
@@ -848,6 +849,7 @@ const HostView: React.FC = () => {
           console.log('📋 showPlayerCards state:', showPlayerCards);
           console.log('📋 Render condition will be:', showPlayerCards && newPlayerCards.size > 0);
           setPlayerCards(newPlayerCards);
+          setPlayerCardsVersion(prev => prev + 1); // Force re-render
           
           // Show toast notification
           if (newPlayerCards.size > 0) {
@@ -861,7 +863,7 @@ const HostView: React.FC = () => {
             if (!element && newPlayerCards.size > 0) {
               showToast('Player cards not rendering - check console', 'error');
             }
-          }, 100);
+          }, 200); // Increased timeout for re-render
         } else {
           console.log('📋 No valid player cards data received');
         }
@@ -1560,6 +1562,13 @@ const HostView: React.FC = () => {
     if (!socket || !roomId) return;
     socket.emit('force-refresh', { roomId, reason: 'host-request' });
     addLog('Force refresh broadcast', 'warn');
+  };
+
+  const resetDisplayLetters = () => {
+    if (!socket || !roomId) return;
+    socket.emit('display-reset-letters', { roomId });
+    showToast('Resetting letters on public display...', 'info');
+    addLog('Display letters reset', 'info');
   };
 
   // Round management functions
@@ -3607,6 +3616,20 @@ const HostView: React.FC = () => {
                     <button className="btn-secondary" onClick={() => revealCall('artist')}>Artist</button>
                     <button className="btn-secondary" onClick={() => revealCall('title')}>Title</button>
                     <button className="btn-secondary" onClick={() => revealCall('full')}>Full</button>
+                    <button 
+                      className="btn-secondary" 
+                      onClick={resetDisplayLetters}
+                      style={{ 
+                        backgroundColor: '#ffaa00', 
+                        borderColor: '#ffaa00',
+                        color: '#000',
+                        fontWeight: 'bold',
+                        marginLeft: '12px'
+                      }}
+                      title="Reset revealed letters on public display (fixes stuck letters)"
+                    >
+                      🔤 Reset Letters
+                    </button>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                     <button className="btn-secondary" onClick={forceRefreshAll}>🧹 Force Refresh Clients</button>
@@ -3977,6 +4000,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                 {/* Player Cards */}
                 {showPlayerCards && playerCards.size > 0 && (
              <motion.div 
+               key={`player-cards-${playerCardsVersion}`}
                initial={{ opacity: 0 }}
                animate={{ opacity: 1 }}
                transition={{ delay: 0.4 }}
