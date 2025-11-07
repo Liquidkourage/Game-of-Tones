@@ -2,7 +2,7 @@ FROM node:18-alpine AS builder
 WORKDIR /app
 
 # Force cache-bust when needed
-ARG CACHE_BREAKER=1
+ARG CACHE_BREAKER=2
 RUN echo "Cache breaker: ${CACHE_BREAKER}"
 
 # Reduce npm resource usage
