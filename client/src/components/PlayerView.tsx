@@ -705,9 +705,19 @@ const PlayerView: React.FC = () => {
   const checkBingo = (card: BingoCard): boolean => {
     const pattern = gameState.pattern;
     
+    console.log('🎯 checkBingo called:', {
+      pattern,
+      playedSongIds: playedSongIds.length,
+      markedSquares: card.squares.filter(s => s.marked).length
+    });
+    
     // Helper function to check if a marked square corresponds to a played song
     const isMarkedSquareValid = (square: BingoSquare): boolean => {
-      return square.marked && playedSongIds.includes(square.songId);
+      const isValid = square.marked && playedSongIds.includes(square.songId);
+      if (square.marked && !isValid) {
+        console.log('❌ Invalid mark:', square.position, square.songId, 'not in played list');
+      }
+      return isValid;
     };
     
     // Full card pattern - all squares must be marked AND correspond to played songs
