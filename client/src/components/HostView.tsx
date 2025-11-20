@@ -4950,52 +4950,197 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                 <strong>{pendingVerification.playerName}</strong> called BINGO!
               </p>
               <p style={{ color: '#ccc', fontSize: '0.9rem' }}>
-                Pattern: <strong>{pendingVerification.requiredPattern}</strong>
+                Pattern: <strong>{pendingVerification.winningPatternType || pendingVerification.requiredPattern}</strong>
               </p>
-                  </div>
+            </div>
 
-            {/* Player's Marked Squares */}
+            {/* Full Card Visualization */}
+            {pendingVerification.playerCard && (
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ color: '#00ff88', marginBottom: '12px', fontSize: '1rem' }}>Player's Card:</h3>
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(5, 1fr)', 
+                  gap: '4px',
+                  maxWidth: '400px',
+                  margin: '0 auto',
+                  background: 'rgba(0,0,0,0.3)',
+                  padding: '8px',
+                  borderRadius: '8px'
+                }}>
+                  {pendingVerification.playerCard.squares?.map((square: any) => {
+                    const isInWinningPattern = pendingVerification.winningPatternPositions?.includes(square.position);
+                    const wasPlayed = pendingVerification.playedSongs?.some((song: any) => song.id === square.songId);
+                    const isMarked = square.marked;
+                    const isInvalid = isMarked && !wasPlayed;
+                    
+                    let bgColor = 'rgba(255,255,255,0.1)';
+                    let borderColor = 'rgba(255,255,255,0.3)';
+                    let borderWidth = '1px';
+                    
+                    if (isInWinningPattern) {
+                      borderWidth = '3px';
+                      if (isInvalid) {
+                        bgColor = 'rgba(255, 0, 0, 0.3)';
+                        borderColor = '#ff4444';
+                      } else if (wasPlayed && isMarked) {
+                        bgColor = 'rgba(0, 255, 136, 0.3)';
+                        borderColor = '#00ff88';
+                      } else {
+                        bgColor = 'rgba(255, 255, 0, 0.2)';
+                        borderColor = '#ffaa00';
+                      }
+                    } else if (isInvalid) {
+                      bgColor = 'rgba(255, 0, 0, 0.1)';
+                      borderColor = 'rgba(255, 0, 0, 0.5)';
+                    }
+                    
+                    return (
+                      <div
+                        key={square.position}
+                        style={{
+                          aspectRatio: '1',
+                          background: bgColor,
+                          border: `${borderWidth} solid ${borderColor}`,
+                          borderRadius: '4px',
+                          padding: '4px',
+                          fontSize: '0.65rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          textAlign: 'center',
+                          color: '#fff',
+                          fontWeight: isInWinningPattern ? 'bold' : 'normal'
+                        }}
+                        title={`${square.songName} - ${square.artistName}\n${isInWinningPattern ? 'IN WINNING PATTERN' : ''}\n${isInvalid ? '❌ INVALID MARK' : wasPlayed ? '✅ PLAYED' : 'Not played'}`}
+                      >
+                        {isInWinningPattern && isInvalid && '⚠️'}
+                        {isInWinningPattern && !isInvalid && wasPlayed && '✓'}
+                        {square.songName.substring(0, 8)}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Winning Pattern Squares List */}
             <div style={{ marginBottom: '20px' }}>
-              <h3 style={{ color: '#00ff88', marginBottom: '12px' }}>Marked Squares:</h3>
-                  <div style={{ 
-                maxHeight: '200px', 
+              <h3 style={{ color: '#00ff88', marginBottom: '12px', fontSize: '1rem' }}>
+                Winning Pattern Squares ({pendingVerification.winningPatternPositions?.length || 0} squares):
+              </h3>
+              <div style={{ 
+                maxHeight: '300px', 
                 overflow: 'auto', 
                 background: 'rgba(0,0,0,0.3)', 
                 padding: '12px', 
                 borderRadius: '8px',
                 border: '1px solid rgba(255,255,255,0.1)'
               }}>
-                {pendingVerification.markedSquares?.map((square: any, index: number) => {
+                {pendingVerification.winningPatternPositions?.map((position: string, index: number) => {
+                  const square = pendingVerification.playerCard?.squares?.find((s: any) => s.position === position);
+                  if (!square) return null;
+                  
                   const wasPlayed = pendingVerification.playedSongs?.some((song: any) => song.id === square.songId);
-                        return (
+                  const isMarked = square.marked;
+                  const isInvalid = isMarked && !wasPlayed;
+                  
+                  return (
                     <div 
                       key={index}
                       style={{ 
                         display: 'flex', 
                         justifyContent: 'space-between', 
                         alignItems: 'center',
-                        padding: '8px',
-                        marginBottom: '4px',
-                        background: wasPlayed ? 'rgba(0, 255, 136, 0.1)' : 'rgba(255, 0, 0, 0.1)',
-                        borderRadius: '4px',
-                        border: `1px solid ${wasPlayed ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 0, 0, 0.3)'}`
+                        padding: '10px',
+                        marginBottom: '6px',
+                        background: isInvalid ? 'rgba(255, 0, 0, 0.2)' : wasPlayed && isMarked ? 'rgba(0, 255, 136, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                        borderRadius: '6px',
+                        border: `2px solid ${isInvalid ? '#ff4444' : wasPlayed && isMarked ? '#00ff88' : 'rgba(255,255,255,0.2)'}`,
+                        borderLeftWidth: isInvalid ? '6px' : wasPlayed && isMarked ? '6px' : '2px'
                       }}
                     >
-                      <span style={{ color: '#fff', fontSize: '0.9rem' }}>
-                        {square.songName} - {square.artistName}
-                          </span>
-                      <span style={{ 
-                        color: wasPlayed ? '#00ff88' : '#ff4444',
-                        fontSize: '0.8rem',
-                        fontWeight: 'bold'
+                      <div style={{ flex: 1 }}>
+                        <div style={{ color: '#fff', fontSize: '0.95rem', fontWeight: 'bold', marginBottom: '2px' }}>
+                          {square.songName}
+                        </div>
+                        <div style={{ color: '#ccc', fontSize: '0.85rem' }}>
+                          {square.artistName}
+                        </div>
+                        <div style={{ color: '#888', fontSize: '0.75rem', marginTop: '4px' }}>
+                          Position: {position}
+                        </div>
+                      </div>
+                      <div style={{ 
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-end',
+                        gap: '4px'
                       }}>
-                        {wasPlayed ? '✅ PLAYED' : '❌ NOT PLAYED'}
-                          </span>
+                        {isInvalid ? (
+                          <>
+                            <span style={{ 
+                              color: '#ff4444',
+                              fontSize: '0.85rem',
+                              fontWeight: 'bold',
+                              backgroundColor: 'rgba(255, 0, 0, 0.2)',
+                              padding: '4px 8px',
+                              borderRadius: '4px'
+                            }}>
+                              ❌ INVALID MARK
+                            </span>
+                            <span style={{ 
+                              color: '#ff8888',
+                              fontSize: '0.75rem'
+                            }}>
+                              Not in played list
+                            </span>
+                          </>
+                        ) : wasPlayed && isMarked ? (
+                          <>
+                            <span style={{ 
+                              color: '#00ff88',
+                              fontSize: '0.85rem',
+                              fontWeight: 'bold',
+                              backgroundColor: 'rgba(0, 255, 136, 0.2)',
+                              padding: '4px 8px',
+                              borderRadius: '4px'
+                            }}>
+                              ✅ VALID
+                            </span>
+                            <span style={{ 
+                              color: '#88ffaa',
+                              fontSize: '0.75rem'
+                            }}>
+                              Played & marked
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span style={{ 
+                              color: '#ffaa00',
+                              fontSize: '0.85rem',
+                              fontWeight: 'bold',
+                              backgroundColor: 'rgba(255, 170, 0, 0.2)',
+                              padding: '4px 8px',
+                              borderRadius: '4px'
+                            }}>
+                              ⚠️ NOT MARKED
+                            </span>
+                            <span style={{ 
+                              color: '#ffcc88',
+                              fontSize: '0.75rem'
+                            }}>
+                              {wasPlayed ? 'Played but not marked' : 'Not played'}
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
-                  </div>
-                </div>
+              </div>
+            </div>
 
             {/* Verification Buttons */}
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>

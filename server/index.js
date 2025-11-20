@@ -1540,6 +1540,9 @@ io.on('connection', (socket) => {
     
     const validationResult = validateBingoForPattern(player.bingoCard, room);
     
+    // Get winning pattern positions for verification display
+    const winningPatternPositions = getWinningPatternPositions(player.bingoCard, room, validationResult);
+    
     if (validationResult.valid) {
       // AUTO-PAUSE the game for host verification
       if (room.gameState === 'playing') {
@@ -1632,6 +1635,8 @@ io.on('connection', (socket) => {
           currentSongIndex: room.currentSongIndex || 0,
           timestamp: Date.now(),
           validationReason: validationResult.reason,
+          winningPatternPositions: winningPatternPositions, // Positions that form the winning pattern
+          winningPatternType: validationResult.type || room.pattern, // Type of winning pattern
           // Add debug info for troubleshooting
           debugInfo: {
             totalCalledIds: calledIds.length,
@@ -4404,6 +4409,97 @@ function validateBingoForPattern(card, room) {
       reason: 'No complete lines found. Need a full row, column, or diagonal with played songs.'
     };
   }
+}
+
+// Helper function to get winning pattern positions for verification display
+function getWinningPatternPositions(card, room, validationResult) {
+  const pattern = room?.pattern || 'line';
+  const playedSongIds = Array.isArray(room?.calledSongIds) ? [...room.calledSongIds] : [];
+  
+  // Include current song if it exists
+  if (room?.currentSong?.id && !playedSongIds.includes(room.currentSong.id)) {
+    playedSongIds.push(room.currentSong.id);
+  }
+  
+  const isMarkedSquareValid = (square) => {
+    return square && square.marked && playedSongIds.includes(square.songId);
+  };
+  
+  if (pattern === 'custom' && room?.customPattern && room.customPattern.size > 0) {
+    return Array.from(room.customPattern);
+  }
+  
+  if (pattern === 'full_card') {
+    // All 25 squares
+    const positions = [];
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 5; col++) {
+        positions.push(`${row}-${col}`);
+      }
+    }
+    return positions;
+  }
+  
+  if (pattern === 'four_corners') {
+    return ['0-0', '0-4', '4-0', '4-4'];
+  }
+  
+  if (pattern === 'x') {
+    const positions = [];
+    for (let i = 0; i < 5; i++) {
+      positions.push(`${i}-${i}`);
+      positions.push(`${i}-${4-i}`);
+    }
+    return positions;
+  }
+  
+  if (pattern === 't') {
+    return ['0-0', '0-1', '0-2', '0-3', '0-4', '1-2', '2-2', '3-2', '4-2'];
+  }
+  
+  if (pattern === 'l') {
+    return ['0-0', '1-0', '2-0', '3-0', '4-0', '4-1', '4-2', '4-3', '4-4'];
+  }
+  
+  if (pattern === 'u') {
+    return ['0-0', '1-0', '2-0', '3-0', '4-0', '0-4', '1-4', '2-4', '3-4', '4-4', '4-1', '4-2', '4-3'];
+  }
+  
+  if (pattern === 'plus') {
+    return ['2-0', '2-1', '2-2', '2-3', '2-4', '0-2', '1-2', '3-2', '4-2'];
+  }
+  
+  // Default: line pattern - find which line won
+  if (validationResult.valid && validationResult.type) {
+    const type = validationResult.type;
+    const positions = [];
+    
+    // Extract row/column number from type string like "Row 1" or "Column 3"
+    if (type.startsWith('Row')) {
+      const rowNum = parseInt(type.replace('Row ', '')) - 1;
+      for (let col = 0; col < 5; col++) {
+        positions.push(`${rowNum}-${col}`);
+      }
+    } else if (type.startsWith('Column')) {
+      const colNum = parseInt(type.replace('Column ', '')) - 1;
+      for (let row = 0; row < 5; row++) {
+        positions.push(`${row}-${colNum}`);
+      }
+    } else if (type.includes('top-left to bottom-right')) {
+      for (let i = 0; i < 5; i++) {
+        positions.push(`${i}-${i}`);
+      }
+    } else if (type.includes('top-right to bottom-left')) {
+      for (let i = 0; i < 5; i++) {
+        positions.push(`${i}-${4-i}`);
+      }
+    }
+    
+    return positions;
+  }
+  
+  // Fallback: return empty array if pattern not found
+  return [];
 }
 
 // API Routes
