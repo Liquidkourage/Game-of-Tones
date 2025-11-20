@@ -529,7 +529,11 @@ const PublicDisplay: React.FC = () => {
     });
 
     newSocket.on('game-started', (data: any) => {
-      setGameState(prev => ({ ...prev, isPlaying: true }));
+      setGameState(prev => ({ 
+        ...prev, 
+        isPlaying: true,
+        snippetLength: data?.snippetLength || prev.snippetLength || 30
+      }));
       // Hide splash when a game starts
       setShowSplash(false);
       if (data?.pattern) {
@@ -1879,79 +1883,33 @@ const PublicDisplay: React.FC = () => {
               </div>
               
               <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-                gap: '2rem',
-                marginBottom: '2rem'
-              }}>
-                <div style={{
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(255,255,255,0.22)',
-                  borderRadius: '16px',
-                  padding: '2rem',
-                  textAlign: 'left'
-                }}>
-                  <h3 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem', color: '#00ffa3' }}>
-                    🎵 Listen & Mark
-                  </h3>
-                  <p style={{ fontSize: '1.1rem', lineHeight: 1.6, opacity: 0.9 }}>
-                    Songs will play for 30 seconds. If you recognize the song, mark it on your bingo card!
-                  </p>
-                </div>
-                
-                <div style={{
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(255,255,255,0.22)',
-                  borderRadius: '16px',
-                  padding: '2rem',
-                  textAlign: 'left'
-                }}>
-                  <h3 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem', color: '#00ffa3' }}>
-                    🎯 Complete Patterns
-                  </h3>
-                  <p style={{ fontSize: '1.1rem', lineHeight: 1.6, opacity: 0.9 }}>
-                    Mark squares to complete the winning pattern: {getPatternName()}
-                  </p>
-                </div>
-                
-                <div style={{
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(255,255,255,0.22)',
-                  borderRadius: '16px',
-                  padding: '2rem',
-                  textAlign: 'left'
-                }}>
-                  <h3 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem', color: '#00ffa3' }}>
-                    🏆 Call BINGO!
-                  </h3>
-                  <p style={{ fontSize: '1.1rem', lineHeight: 1.6, opacity: 0.9 }}>
-                    When you complete the pattern, hold the BINGO button to call it out!
-                  </p>
-                </div>
-              </div>
-              
-              <div style={{
                 background: 'rgba(255,255,255,0.08)',
                 border: '1px solid rgba(255,255,255,0.22)',
                 borderRadius: '16px',
-                padding: '2rem',
-                marginBottom: '2rem'
+                padding: '2.5rem',
+                marginBottom: '2rem',
+                maxWidth: '900px',
+                margin: '0 auto 2rem'
               }}>
-                <h3 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem', color: '#00ffa3', textAlign: 'center' }}>
-                  🎮 Tips for Success
-                </h3>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-                  gap: '1rem',
-                  fontSize: '1rem',
-                  lineHeight: 1.6,
-                  opacity: 0.9
-                }}>
-                  <div>• Listen carefully to the intro and chorus</div>
-                  <div>• Don't guess - only mark songs you're sure about</div>
-                  <div>• Pay attention to the artist and song title</div>
-                  <div>• Work on multiple patterns simultaneously</div>
+                <div style={{ fontSize: '1.15rem', lineHeight: 1.8, opacity: 0.95 }}>
+                  <p style={{ marginBottom: '1.5rem' }}>
+                    <strong style={{ color: '#00ffa3', fontSize: '1.2rem' }}>🎵 Step 1: Listen & Mark</strong><br />
+                    Songs will play for {gameState.snippetLength || 30} seconds. When you recognize a song that matches a square on your bingo card, tap that square to mark it. Each square shows the song title and artist name.
+                  </p>
+                  
+                  <p style={{ marginBottom: '1.5rem' }}>
+                    <strong style={{ color: '#00ffa3', fontSize: '1.2rem' }}>🎯 Step 2: Complete the Pattern</strong><br />
+                    Mark squares to complete the winning pattern: <strong>{getPatternName()}</strong>. You can mark squares in any order - just make sure all required squares for the pattern are marked with songs that have actually played.
+                  </p>
+                  
+                  <p style={{ marginBottom: '1.5rem' }}>
+                    <strong style={{ color: '#00ffa3', fontSize: '1.2rem' }}>🏆 Step 3: Call BINGO!</strong><br />
+                    Once you've completed the pattern, hold down the BINGO button on your device to call it out. The host will verify your card - make sure you only marked songs that have actually played!
+                  </p>
+                  
+                  <p style={{ marginBottom: '0', fontSize: '1rem', opacity: 0.85, fontStyle: 'italic', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1.5rem', marginTop: '1.5rem' }}>
+                    ⚠️ Important: Only mark songs you're certain have played. The host verifies all winning cards, and incorrectly marked squares will disqualify your bingo.
+                  </p>
                 </div>
               </div>
               
