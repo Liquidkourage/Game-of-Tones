@@ -1376,11 +1376,14 @@ io.on('connection', (socket) => {
           const bySocket = room.bingoCards.get(socket.id);
           if (bySocket) {
           player.bingoCard = bySocket; // Ensure it's also on the player object
+            // Card already has marks preserved from room.bingoCards
             io.to(socket.id).emit('bingo-card', bySocket);
           } else if (clientId && room.clientCards && room.clientCards.has(clientId)) {
             const existingCard = room.clientCards.get(clientId);
+            // CRITICAL: Restore card to room.bingoCards with preserved marks
             room.bingoCards.set(socket.id, existingCard);
           player.bingoCard = existingCard; // Set on player object
+            // Card already has marks preserved from clientCards
             io.to(socket.id).emit('bingo-card', existingCard);
           } else if (room.playlistSongs?.length || room.playlists?.length || room.finalizedPlaylists?.length) {
           // Generate card for any player (host or not) if playlists exist
@@ -1520,6 +1523,21 @@ io.on('connection', (socket) => {
       return;
     }
     
+    // CRITICAL: Mark current song as played BEFORE validation so it's included in validation
+    // This ensures that if a player calls bingo while a song is playing, that song counts
+    if (room.currentSong && room.currentSong.id) {
+      room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
+      if (!room.calledSongIds.includes(room.currentSong.id)) {
+        room.calledSongIds.push(room.currentSong.id);
+        console.log(`📝 BINGO CALL: Marked current song as played BEFORE validation: ${room.currentSong.name} (${room.currentSong.id})`);
+      } else {
+        console.log(`✅ BINGO CALL: Current song already in played list: ${room.currentSong.name} (${room.currentSong.id})`);
+      }
+      console.log(`📋 BINGO CALL: Total played songs before validation: ${room.calledSongIds.length}`);
+    } else {
+      console.warn(`⚠️ BINGO CALL: No current song to mark as played! This could cause validation issues.`);
+    }
+    
     const validationResult = validateBingoForPattern(player.bingoCard, room);
     
     if (validationResult.valid) {
@@ -1546,19 +1564,8 @@ io.on('connection', (socket) => {
         console.log(`🛑 Game auto-paused for bingo verification by ${player.name}`);
       }
       
-      // CRITICAL: Mark current song as played BEFORE verification modal so it shows in verification
-      if (room.currentSong && room.currentSong.id) {
-        room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
-        if (!room.calledSongIds.includes(room.currentSong.id)) {
-          room.calledSongIds.push(room.currentSong.id);
-          console.log(`📝 BINGO CALL: Marked current song as played for verification: ${room.currentSong.name} (${room.currentSong.id})`);
-        } else {
-          console.log(`✅ BINGO CALL: Current song already in played list: ${room.currentSong.name} (${room.currentSong.id})`);
-        }
-        console.log(`📋 BINGO CALL: Total played songs now: ${room.calledSongIds.length}`);
-      } else {
-        console.warn(`⚠️ BINGO CALL: No current song to mark as played! This could cause verification issues.`);
-      }
+      // Current song already added to calledSongIds before validation above
+      // No need to add it again here
       
       player.hasBingo = true;
       const winnerData = { playerId: socket.id, playerName: player.name, timestamp: Date.now() };
@@ -2064,6 +2071,12 @@ io.on('connection', (socket) => {
       
       console.log(`🔄 SYNC-STATE: Sending state to ${socket.id} for room ${roomId}`);
       
+      // Build played songs list that includes current song if it exists
+      const playedSongIds = Array.isArray(room.calledSongIds) ? [...room.calledSongIds] : [];
+      if (room.currentSong && room.currentSong.id && !playedSongIds.includes(room.currentSong.id)) {
+        playedSongIds.push(room.currentSong.id);
+      }
+      
       // Enhanced payload with more comprehensive state data
       const payload = {
         isPlaying: room.gameState === 'playing',
@@ -2075,8 +2088,8 @@ io.on('connection', (socket) => {
         gameState: room.gameState,
         winners: room.winners || [],
         roundWinners: room.roundWinners || [],
-        // Include played songs for PublicDisplay sync
-        playedSongs: (room.calledSongIds || []).map(songId => {
+        // Include played songs for PublicDisplay sync (includes current song)
+        playedSongs: playedSongIds.map(songId => {
           const foundSong = room.playlistSongs?.find(s => s.id === songId);
           return foundSong ? {
             id: foundSong.id,
@@ -2084,7 +2097,9 @@ io.on('connection', (socket) => {
             artist: foundSong.artist
           } : null;
         }).filter(Boolean),
-        totalPlayedCount: (room.calledSongIds || []).length,
+        // Also send song IDs array for client state sync
+        playedSongIds: playedSongIds,
+        totalPlayedCount: playedSongIds.length,
         currentSongIndex: room.currentSongIndex || 0,
         totalSongs: room.playlistSongs?.length || 0,
         // Sync timestamp for client reference
@@ -2109,6 +2124,12 @@ io.on('connection', (socket) => {
       const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
       if (!isHost) return;
       
+      // Build playedSongs array that includes current song if it exists
+      const playedSongs = Array.isArray(room.calledSongIds) ? [...room.calledSongIds] : [];
+      if (room.currentSong && room.currentSong.id && !playedSongs.includes(room.currentSong.id)) {
+        playedSongs.push(room.currentSong.id);
+      }
+      
       const playerCardsData = {};
       if (room.bingoCards) {
         room.bingoCards.forEach((card, playerId) => {
@@ -2119,7 +2140,7 @@ io.on('connection', (socket) => {
               playerCardsData[playerId] = {
                 playerName: player.name,
                 card: card,
-                playedSongs: room.calledSongIds || [] // Include list of actually played songs
+                playedSongs: playedSongs // Include current song if playing
               };
             }
           }
@@ -2797,6 +2818,24 @@ io.on('connection', (socket) => {
         if (square && square.songId === songId) {
           // Toggle mark state to support unmarking
           square.marked = !square.marked;
+          
+          // CRITICAL: Persist mark to room.bingoCards to prevent loss on reconnect/refresh
+          if (room.bingoCards && room.bingoCards.has(socket.id)) {
+            const roomCard = room.bingoCards.get(socket.id);
+            const roomSquare = roomCard.squares.find(s => s.position === position);
+            if (roomSquare && roomSquare.songId === songId) {
+              roomSquare.marked = square.marked;
+            }
+          }
+          
+          // Also persist to clientCards if clientId exists (for reconnection)
+          if (player.clientId && room.clientCards && room.clientCards.has(player.clientId)) {
+            const clientCard = room.clientCards.get(player.clientId);
+            const clientSquare = clientCard.squares.find(s => s.position === position);
+            if (clientSquare && clientSquare.songId === songId) {
+              clientSquare.marked = square.marked;
+            }
+          }
           
           // Send real-time player card updates to host
           sendPlayerCardUpdates(roomId);
@@ -4050,6 +4089,12 @@ function sendPlayerCardUpdates(roomId) {
     const room = rooms.get(roomId);
     if (!room || !room.bingoCards) return;
     
+    // Build playedSongs array that includes current song if it exists
+    const playedSongs = Array.isArray(room.calledSongIds) ? [...room.calledSongIds] : [];
+    if (room.currentSong && room.currentSong.id && !playedSongs.includes(room.currentSong.id)) {
+      playedSongs.push(room.currentSong.id);
+    }
+    
     const playerCardsData = {};
     room.bingoCards.forEach((card, playerId) => {
       const player = room.players.get(playerId);
@@ -4059,7 +4104,7 @@ function sendPlayerCardUpdates(roomId) {
           playerCardsData[playerId] = {
             playerName: player.name,
             card: card,
-            playedSongs: room.calledSongIds || []
+            playedSongs: playedSongs // Include current song if playing
           };
         }
       }
@@ -4175,6 +4220,13 @@ function validateBingoForPattern(card, room) {
   const pattern = room?.pattern || 'line';
   // Make a copy to avoid race conditions during validation
   const playedSongIds = Array.isArray(room?.calledSongIds) ? [...room.calledSongIds] : [];
+  
+  // CRITICAL: Always include current song if it exists (defensive programming against race conditions)
+  // This ensures validation works even if current song hasn't been added to calledSongIds yet
+  if (room?.currentSong?.id && !playedSongIds.includes(room.currentSong.id)) {
+    playedSongIds.push(room.currentSong.id);
+    console.log(`🎯 Added current song to validation list: ${room.currentSong.name} (${room.currentSong.id})`);
+  }
   
   console.log(`🎯 Validating bingo for pattern: "${pattern}" (room pattern: "${room?.pattern}")`);
   console.log(`🎯 Played songs count: ${playedSongIds.length}`);

@@ -571,7 +571,20 @@ const PublicDisplay: React.FC = () => {
     newSocket.on('display-reset-letters', () => {
       console.log('🔤 Resetting revealed letters on public display');
       revealSequenceRef.current = [];
-      songBaselineRef.current = {};
+      // CRITICAL: Reset all baselines to 0 so auto-reveal starts fresh
+      // Recalculate baselines for all currently played songs
+      const currentBaseline = 0;
+      const playedIds = playedOrderRef.current || [];
+      const newBaselines: Record<string, number> = {};
+      playedIds.forEach((pid: string) => {
+        newBaselines[pid] = currentBaseline;
+      });
+      songBaselineRef.current = newBaselines;
+      // Clear any pending toast
+      if (revealToastTimerRef.current) {
+        clearTimeout(revealToastTimerRef.current);
+        revealToastTimerRef.current = null;
+      }
       setRevealToast('Letters reset - auto-reveal restarting');
       setTimeout(() => setRevealToast(null), 3000);
     });

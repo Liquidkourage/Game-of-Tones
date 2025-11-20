@@ -167,10 +167,18 @@ const PlayerView: React.FC = () => {
       }));
       // Reset songs played counter when game starts
       setSongsPlayed(0);
+      // CRITICAL: Reset playedSongIds to empty array (server will sync via room-state)
+      setPlayedSongIds([]);
     });
 
     newSocket.on('room-state', (payload: any) => {
       try {
+        // CRITICAL: Sync playedSongIds from server (single source of truth)
+        if (Array.isArray(payload?.playedSongIds)) {
+          setPlayedSongIds(payload.playedSongIds);
+          console.log(`🔄 Synced ${payload.playedSongIds.length} played songs from server`);
+        }
+        
         if (payload?.isPlaying) {
           setGameState(prev => ({
             ...prev,
@@ -321,6 +329,8 @@ const PlayerView: React.FC = () => {
       setBingoMessage('');
       // Reset songs played counter
       setSongsPlayed(0);
+      // CRITICAL: Reset playedSongIds to empty array (server will sync via room-state)
+      setPlayedSongIds([]);
       
       // Reset bingo card marked state
       if (bingoCard && bingoCard.squares) {
@@ -351,6 +361,8 @@ const PlayerView: React.FC = () => {
       setBingoCard(null);
       // Reset songs played counter
       setSongsPlayed(0);
+      // CRITICAL: Reset playedSongIds to empty array (server will sync via room-state)
+      setPlayedSongIds([]);
       console.log('🔁 Game reset');
     });
 
