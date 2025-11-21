@@ -2055,6 +2055,24 @@ const HostView: React.FC = () => {
     } catch {}
   }, [selectedDevice?.id, fetchPlaybackState, socket, roomId]);
 
+  // Manual resume game if stuck in paused state (recovery for missed verification modal)
+  const handleManualResumeGame = useCallback(() => {
+    if (!socket || !roomId) return;
+    
+    const confirmed = window.confirm(
+      'Resume the game?\n\n' +
+      'This will resume playback if the game is paused for verification.\n' +
+      'Use this if you missed a bingo verification modal.'
+    );
+    
+    if (confirmed) {
+      socket.emit('manual-resume-game', { roomId });
+      setPendingVerification(null); // Clear any stuck verification state
+      setGamePaused(false);
+      addLog('Manually resuming game', 'info');
+    }
+  }, [socket, roomId]);
+
 
   // Debounced volume change with strict synchronization
   const handleVolumeChange = useCallback(async (newVolume: number) => {
@@ -3608,7 +3626,38 @@ const HostView: React.FC = () => {
                  </>
                ) : (
                  <div className="game-status">
-                   <p className="status-text">🎵 Game is running - Use the Now Playing controls below</p>
+                  <p className="status-text">🎵 Game is running - Use the Now Playing controls below</p>
+                  {gamePaused && (
+                    <div style={{ 
+                      background: 'rgba(255, 170, 0, 0.2)', 
+                      border: '2px solid #ffaa00', 
+                      borderRadius: '8px', 
+                      padding: '12px', 
+                      marginBottom: '12px',
+                      textAlign: 'center'
+                    }}>
+                      <p style={{ color: '#ffaa00', fontWeight: 'bold', marginBottom: '8px' }}>
+                        ⚠️ Game is PAUSED
+                      </p>
+                      <p style={{ color: '#fff', fontSize: '0.9rem', marginBottom: '8px' }}>
+                        {pendingVerification 
+                          ? `Waiting for bingo verification: ${pendingVerification.playerName}`
+                          : 'Game paused - waiting for action'}
+                      </p>
+                      <button 
+                        className="btn-secondary" 
+                        onClick={handleManualResumeGame}
+                        style={{ 
+                          background: '#00ff88', 
+                          borderColor: '#00ff88',
+                          color: '#000',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        ▶️ Resume Game
+                      </button>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                           <button className="btn-secondary" onClick={endGame}>End Game</button>
                           <button className="btn-secondary" onClick={confirmAndResetGame}>🔄 Reset</button>

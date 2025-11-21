@@ -823,9 +823,18 @@ function clearPlaybackWatcher(roomId) {
   }
 }
 
-// NEW: Simplified context monitor - only watches for context hijacks
+// NEW: Simplified context monitor - watches for context hijacks AND device switches
 function startSimpleContextMonitor(roomId, deviceId) {
   clearPlaybackWatcher(roomId);
+  
+  // Get the target device ID (use saved device if deviceId not provided)
+  let targetDeviceId = deviceId;
+  if (!targetDeviceId) {
+    const savedDevice = loadSavedDevice();
+    if (savedDevice) {
+      targetDeviceId = savedDevice.id;
+    }
+  }
   
   const intervalId = setInterval(async () => {
     try {
@@ -835,7 +844,33 @@ function startSimpleContextMonitor(roomId, deviceId) {
         return; 
       }
       
+      // Get current playback state to check device
       const state = await spotifyService.getCurrentPlaybackState();
+      const currentDeviceId = state?.device?.id;
+      
+      // CRITICAL: Check if playback has switched to a different device
+      if (targetDeviceId && currentDeviceId && currentDeviceId !== targetDeviceId) {
+        console.warn(`⚠️ Device switch detected! Expected: ${targetDeviceId}, Got: ${currentDeviceId}. Transferring back...`);
+        
+        try {
+          // Immediately transfer playback back to the correct device
+          await spotifyService.transferPlayback(targetDeviceId, false);
+          console.log(`✅ Transferred playback back to locked device: ${targetDeviceId}`);
+          
+          // Small delay then verify it worked
+          await new Promise(resolve => setTimeout(resolve, 500));
+          const verifyState = await spotifyService.getCurrentPlaybackState();
+          if (verifyState?.device?.id === targetDeviceId) {
+            console.log(`✅ Device lock restored successfully`);
+          } else {
+            console.warn(`⚠️ Device transfer may have failed - still on ${verifyState?.device?.id}`);
+          }
+        } catch (e) {
+          console.warn('⚠️ Failed to transfer playback back to locked device:', e?.message);
+        }
+        return; // Skip other checks this cycle
+      }
+      
       const expectedContext = room.temporaryPlaylistId ? `spotify:playlist:${room.temporaryPlaylistId}` : null;
       const currentContext = state?.context?.uri || null;
       
@@ -849,10 +884,15 @@ function startSimpleContextMonitor(roomId, deviceId) {
         console.warn(`🔄 Context lost. Expected: ${expectedContext}, Got: ${currentContext}. Restoring...`);
         
         try {
+          // Ensure we're on the correct device first
+          if (targetDeviceId && currentDeviceId !== targetDeviceId) {
+            await spotifyService.transferPlayback(targetDeviceId, false);
+          }
+          
           // Restore playlist context with original start position
           const originalStartMs = room.currentSongStartMs || 0;
           if (room.currentSongIndex !== undefined) {
-            await spotifyService.startPlaybackFromPlaylist(deviceId, room.temporaryPlaylistId, room.currentSongIndex, originalStartMs);
+            await spotifyService.startPlaybackFromPlaylist(targetDeviceId || deviceId, room.temporaryPlaylistId, room.currentSongIndex, originalStartMs);
           }
         } catch (e) {
           console.warn('⚠️ Context restore failed:', e?.message);
@@ -863,8 +903,13 @@ function startSimpleContextMonitor(roomId, deviceId) {
         console.log(`🔄 Track restart detected. Restoring original start position: ${room.currentSongStartMs}ms`);
         
         try {
+          // Ensure we're on the correct device first
+          if (targetDeviceId && currentDeviceId !== targetDeviceId) {
+            await spotifyService.transferPlayback(targetDeviceId, false);
+          }
+          
           // Restore original start position for this track
-          await spotifyService.seekToPosition(room.currentSongStartMs, deviceId);
+          await spotifyService.seekToPosition(room.currentSongStartMs, targetDeviceId || deviceId);
         } catch (e) {
           console.warn('⚠️ Failed to restore original start position:', e?.message);
         }
@@ -872,7 +917,7 @@ function startSimpleContextMonitor(roomId, deviceId) {
     } catch (_e) {
       // Ignore monitor errors to prevent spam
     }
-  }, 5000); // Check every 5 seconds - much less aggressive
+  }, 3000); // Check every 3 seconds - more frequent to catch device switches quickly
   
   roomPlaybackWatchers.set(roomId, intervalId);
 }
@@ -1583,68 +1628,94 @@ io.on('connection', (socket) => {
         awaitingVerification: true
       });
       
-      // Send detailed verification data to HOST ONLY
-      const hostSocket = io.sockets.sockets.get(room.host);
-      if (hostSocket) {
-        // Build actual played songs from calledSongIds with enhanced validation
-        const actuallyPlayedSongs = [];
-        const calledIds = room.calledSongIds || [];
-        const missingFromPlaylist = [];
-        
-        console.log(`🔍 BINGO VERIFICATION: Building played songs list from ${calledIds.length} called IDs`);
-        console.log(`🔍 Called song IDs: [${calledIds.join(', ')}]`);
-        
-        for (const songId of calledIds) {
-          // Find the song in the playlist
-          const foundSong = room.playlistSongs?.find(s => s.id === songId);
-          if (foundSong) {
-            actuallyPlayedSongs.push({
-              id: foundSong.id,
-              name: foundSong.name,
-              artist: foundSong.artist
-            });
-            console.log(`✅ Found played song: ${foundSong.name} by ${foundSong.artist}`);
+      // Send detailed verification data to ALL HOSTS (in case host reconnected)
+      // Build actual played songs from calledSongIds with enhanced validation
+      const actuallyPlayedSongs = [];
+      const calledIds = room.calledSongIds || [];
+      const missingFromPlaylist = [];
+      
+      console.log(`🔍 BINGO VERIFICATION: Building played songs list from ${calledIds.length} called IDs`);
+      console.log(`🔍 Called song IDs: [${calledIds.join(', ')}]`);
+      
+      for (const songId of calledIds) {
+        // Find the song in the playlist
+        const foundSong = room.playlistSongs?.find(s => s.id === songId);
+        if (foundSong) {
+          actuallyPlayedSongs.push({
+            id: foundSong.id,
+            name: foundSong.name,
+            artist: foundSong.artist
+          });
+          console.log(`✅ Found played song: ${foundSong.name} by ${foundSong.artist}`);
+        } else {
+          missingFromPlaylist.push(songId);
+          console.warn(`⚠️ Song ID ${songId} in calledSongIds but NOT found in room.playlistSongs`);
+        }
+      }
+      
+      console.log(`📊 VERIFICATION SUMMARY: ${actuallyPlayedSongs.length} played songs found, ${missingFromPlaylist.length} missing from playlist`);
+      if (missingFromPlaylist.length > 0) {
+        console.warn(`🚨 MISSING SONGS: [${missingFromPlaylist.join(', ')}] - This could indicate a data integrity issue`);
+      }
+      
+      // Validate marked squares data
+      const markedSquares = player.bingoCard.squares.filter(s => s.marked);
+      console.log(`🔍 MARKED SQUARES: Player has ${markedSquares.length} marked squares`);
+      markedSquares.forEach((square, index) => {
+        const wasPlayed = actuallyPlayedSongs.some(played => played.id === square.songId);
+        console.log(`${index + 1}. ${square.songName} by ${square.artistName} (${square.songId}) - ${wasPlayed ? '✅ PLAYED' : '❌ NOT PLAYED'}`);
+      });
+      
+      const verificationData = {
+        playerId: socket.id,
+        playerName: player.name,
+        playerCard: player.bingoCard,
+        markedSquares: markedSquares,
+        requiredPattern: room.pattern,
+        customMask: room.pattern === 'custom' ? Array.from(room.customPattern || []) : null,
+        playedSongs: actuallyPlayedSongs, // Use the proper actually played songs
+        calledSongIds: room.calledSongIds || [],
+        currentSongIndex: room.currentSongIndex || 0,
+        timestamp: Date.now(),
+        validationReason: validationResult.reason,
+        winningPatternPositions: winningPatternPositions, // Positions that form the winning pattern
+        winningPatternType: validationResult.type || room.pattern, // Type of winning pattern
+        // Add debug info for troubleshooting
+        debugInfo: {
+          totalCalledIds: calledIds.length,
+          totalPlayedSongs: actuallyPlayedSongs.length,
+          totalMarkedSquares: markedSquares.length,
+          missingFromPlaylist: missingFromPlaylist.length
+        }
+      };
+      
+      // Send to ALL hosts in the room (handles reconnection case)
+      let hostsFound = 0;
+      room.players.forEach((playerData, playerId) => {
+        if (playerData.isHost) {
+          const hostSocket = io.sockets.sockets.get(playerId);
+          if (hostSocket) {
+            hostSocket.emit('bingo-verification-needed', verificationData);
+            hostsFound++;
+            console.log(`📤 Sent bingo verification to host: ${playerData.name} (${playerId})`);
           } else {
-            missingFromPlaylist.push(songId);
-            console.warn(`⚠️ Song ID ${songId} in calledSongIds but NOT found in room.playlistSongs`);
+            console.warn(`⚠️ Host socket not found for ${playerData.name} (${playerId}) - may have disconnected`);
           }
         }
-        
-        console.log(`📊 VERIFICATION SUMMARY: ${actuallyPlayedSongs.length} played songs found, ${missingFromPlaylist.length} missing from playlist`);
-        if (missingFromPlaylist.length > 0) {
-          console.warn(`🚨 MISSING SONGS: [${missingFromPlaylist.join(', ')}] - This could indicate a data integrity issue`);
+      });
+      
+      // Fallback: Also try room.host if no hosts found via player list
+      if (hostsFound === 0 && room.host) {
+        const fallbackHostSocket = io.sockets.sockets.get(room.host);
+        if (fallbackHostSocket) {
+          fallbackHostSocket.emit('bingo-verification-needed', verificationData);
+          console.log(`📤 Sent bingo verification to fallback host (${room.host})`);
+        } else {
+          console.error(`❌ CRITICAL: No host sockets found! Room host: ${room.host}, Hosts in players: ${Array.from(room.players.entries()).filter(([_, p]) => p.isHost).map(([id, p]) => `${p.name}(${id})`).join(', ')}`);
+          // Emit to room as last resort - host should still receive it
+          io.to(roomId).emit('bingo-verification-needed', verificationData);
+          console.log(`📤 Emitted bingo verification to entire room as fallback`);
         }
-        
-        // Validate marked squares data
-        const markedSquares = player.bingoCard.squares.filter(s => s.marked);
-        console.log(`🔍 MARKED SQUARES: Player has ${markedSquares.length} marked squares`);
-        markedSquares.forEach((square, index) => {
-          const wasPlayed = actuallyPlayedSongs.some(played => played.id === square.songId);
-          console.log(`${index + 1}. ${square.songName} by ${square.artistName} (${square.songId}) - ${wasPlayed ? '✅ PLAYED' : '❌ NOT PLAYED'}`);
-        });
-        
-        hostSocket.emit('bingo-verification-needed', {
-          playerId: socket.id,
-          playerName: player.name,
-          playerCard: player.bingoCard,
-          markedSquares: markedSquares,
-          requiredPattern: room.pattern,
-          customMask: room.pattern === 'custom' ? Array.from(room.customPattern || []) : null,
-          playedSongs: actuallyPlayedSongs, // Use the proper actually played songs
-          calledSongIds: room.calledSongIds || [],
-          currentSongIndex: room.currentSongIndex || 0,
-          timestamp: Date.now(),
-          validationReason: validationResult.reason,
-          winningPatternPositions: winningPatternPositions, // Positions that form the winning pattern
-          winningPatternType: validationResult.type || room.pattern, // Type of winning pattern
-          // Add debug info for troubleshooting
-          debugInfo: {
-            totalCalledIds: calledIds.length,
-            totalPlayedSongs: actuallyPlayedSongs.length,
-            totalMarkedSquares: markedSquares.length,
-            missingFromPlaylist: missingFromPlaylist.length
-          }
-        });
       }
       
       // Notify all players about the bingo call (but not confirmed yet)
@@ -1799,6 +1870,46 @@ io.on('connection', (socket) => {
         // Notify all clients that game has resumed
         io.to(roomId).emit('game-resumed', { reason: 'Bingo rejected, game continues' });
       }
+    }
+  });
+
+  // Host manually resumes game (for recovery if verification modal didn't appear)
+  socket.on('manual-resume-game', (data) => {
+    const { roomId } = data || {};
+    const room = rooms.get(roomId);
+    if (!room) return;
+    
+    // Verify this is the host
+    const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+    if (!isHost) return;
+    
+    // Only resume if game is paused for verification
+    if (room.gameState === 'paused_for_verification') {
+      console.log(`▶️ Host manually resuming game from paused_for_verification state`);
+      room.gameState = 'playing';
+      
+      // Resume Spotify playback
+      (async () => {
+        try {
+          const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+          if (deviceId) {
+            await spotifyService.resumePlayback(deviceId);
+            console.log(`▶️ Spotify resumed after manual resume`);
+          }
+          // Start progression timer for the remainder of the current song
+          startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
+        } catch (error) {
+          console.log(`⚠️ Failed to resume Spotify: ${error.message}`);
+          // Still start progression timer as fallback
+          startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
+        }
+      })();
+      
+      // Notify all clients that game has resumed
+      io.to(roomId).emit('game-resumed', { reason: 'Host manually resumed game' });
+      console.log(`✅ Game manually resumed by host`);
+    } else {
+      console.log(`⚠️ Cannot manually resume: game state is ${room.gameState}, expected paused_for_verification`);
     }
   });
 

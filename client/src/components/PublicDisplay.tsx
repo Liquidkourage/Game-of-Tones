@@ -1299,39 +1299,18 @@ const PublicDisplay: React.FC = () => {
             const name = raw.replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
             const bingoLetter = ['B', 'I', 'N', 'G', 'O'][i];
             
-            // Calculate dynamic font size based on text length
-            const fullText = name ? `${bingoLetter} - ${name}` : bingoLetter;
-            const textLength = fullText.length;
-            let fontSize = '2.4rem'; // Default size
-            
-            if (textLength > 30) {
-              fontSize = '1.0rem';
-            } else if (textLength > 25) {
-              fontSize = '1.2rem';
-            } else if (textLength > 22) {
-              fontSize = '1.4rem';
-            } else if (textLength > 18) {
-              fontSize = '1.6rem';
-            } else if (textLength > 15) {
-              fontSize = '1.8rem';
-            } else if (textLength > 12) {
-              fontSize = '2.0rem';
-            } else if (textLength > 8) {
-              fontSize = '2.2rem';
-            }
-            
             return (
               <div key={i} className="call-col-title" style={{ textAlign: 'center' }}>
                 {name ? (
                   <div style={{ 
-                    fontSize, 
+                    fontSize: '2.4rem', // Match single line display size
                     fontWeight: 900, 
                     opacity: 0.95, 
-                    whiteSpace: 'nowrap', 
-                    overflow: 'hidden', 
-                    textOverflow: 'ellipsis', 
+                    whiteSpace: 'normal', // Allow wrapping instead of truncating
+                    wordBreak: 'break-word', // Break long words if needed
                     textShadow: '0 2px 4px rgba(0,0,0,0.8)',
-                    maxWidth: '100%'
+                    maxWidth: '100%',
+                    lineHeight: 1.2 // Slightly tighter line height for multi-line
                   }}>
                     <span style={{ color: '#00ff88', marginRight: '0.3em' }}>{bingoLetter}</span>
                     <span style={{ color: '#ffffff', margin: '0 0.2em' }}>-</span>
