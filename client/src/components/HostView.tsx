@@ -848,8 +848,22 @@ const HostView: React.FC = () => {
           console.log('📋 Previous playerCards size:', playerCards.size);
           console.log('📋 showPlayerCards state:', showPlayerCards);
           console.log('📋 Render condition will be:', showPlayerCards && newPlayerCards.size > 0);
-          setPlayerCards(newPlayerCards);
-          setPlayerCardsVersion(prev => prev + 1); // Force re-render
+          
+          // Only update if data actually changed to prevent unnecessary re-renders
+          const hasChanged = playerCards.size !== newPlayerCards.size || 
+            Array.from(newPlayerCards.keys()).some(id => {
+              const old = playerCards.get(id);
+              const updated = newPlayerCards.get(id);
+              if (!old) return true;
+              // Compare playedSongs length as a quick check
+              return (old.playedSongs?.length || 0) !== (updated?.playedSongs?.length || 0);
+            });
+          
+          if (hasChanged) {
+            setPlayerCards(newPlayerCards);
+            // Only increment version on actual data changes, not on every song update
+            // This prevents the visual flash when only playedSongs updates
+          }
           
           // Show toast notification
           if (newPlayerCards.size > 0) {
@@ -2813,7 +2827,7 @@ const HostView: React.FC = () => {
 
 
         {/* Main Content */}
-        <div className="host-content" style={{ paddingBottom: currentSong ? '300px' : '20px' }}>
+        <div className="host-content" style={{ paddingBottom: currentSong ? '450px' : '20px' }}>
           {/* Tab Navigation */}
           <div className="tab-navigation" style={{
             display: 'flex',
@@ -5204,10 +5218,9 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
       {/* Player Cards - PROPERLY PLACED AT TOP LEVEL */}
       {showPlayerCards && playerCards.size > 0 && (
         <motion.div 
-          key={`player-cards-${playerCardsVersion}`}
-          initial={{ opacity: 0 }}
+          key="player-cards-section"
+          initial={false}
           animate={{ opacity: 1 }}
-          transition={{ delay: 0.4 }}
           className="player-cards-section"
           style={{ 
             backgroundColor: 'rgba(255,0,0,0.1)', 
@@ -5235,7 +5248,11 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
             gap: 16 
           }}>
             {Array.from(playerCards.entries()).map(([playerId, playerData]) => (
-              <div key={playerId} style={{ 
+              <motion.div 
+                key={playerId}
+                layout
+                transition={{ duration: 0.2 }}
+                style={{ 
                 background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
                 border: '1px solid rgba(0,255,136,0.3)', 
                 borderRadius: '12px', 
@@ -5390,7 +5407,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                     );
                   })}
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </motion.div>
