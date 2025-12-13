@@ -570,6 +570,10 @@ const HostView: React.FC = () => {
     // Bingo verification handlers
     newSocket.on('bingo-verification-needed', (data: any) => {
       console.log('🔔 Bingo verification needed:', data);
+      console.log('🔔 Player card data:', data.playerCard);
+      console.log('🔔 Player card squares:', data.playerCard?.squares);
+      console.log('🔔 Marked squares count:', data.playerCard?.squares?.filter((s: any) => s.marked)?.length || 0);
+      console.log('🔔 Sample square:', data.playerCard?.squares?.[0]);
       setPendingVerification(data);
       addLog(`🎯 ${data.playerName} called BINGO - verification needed!`, 'warn');
     });
@@ -677,13 +681,15 @@ const HostView: React.FC = () => {
     newSocket.on('bingo-verified', (data: any) => {
       console.log('Bingo verified:', data);
       setPendingVerification(null);
-      setGamePaused(false);
       setIsProcessingVerification(false);
       
       if (data.approved) {
         if (data.roundComplete) {
           // NEW: Round complete - show multi-round options
           setRoundComplete(data);
+          setGamePaused(true); // Keep paused until host decides
+          setIsPlaying(false);
+          setCurrentSong(null);
           addLog(`Round ${data.roundNumber} complete - ${data.playerName} wins!`, 'info');
           console.log('Round complete, showing options to host');
         } else if (data.gameEnded) {
@@ -691,8 +697,21 @@ const HostView: React.FC = () => {
           addLog(`Game ended - ${data.playerName} wins!`, 'info');
           setGameState('ended');
           setIsPlaying(false);
+          setGamePaused(false);
         }
+      } else {
+        // Rejected - resume game
+        setGamePaused(false);
       }
+    });
+
+    // Handle round-complete event (sent to all clients)
+    newSocket.on('round-complete', (data: any) => {
+      console.log('Round complete event received:', data);
+      if (data.roundWinners) {
+        setRoundWinners(data.roundWinners);
+      }
+      // Don't set roundComplete here - it's set by bingo-verified for host only
     });
 
     newSocket.on('game-resumed', () => {
@@ -2845,7 +2864,7 @@ const HostView: React.FC = () => {
 
 
         {/* Main Content */}
-        <div className="host-content" style={{ paddingBottom: currentSong ? '450px' : '20px' }}>
+        <div className="host-content" style={{ paddingBottom: '20px' }}>
           {/* Tab Navigation */}
           <div className="tab-navigation" style={{
             display: 'flex',
@@ -4362,26 +4381,27 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
 
 
           {/* Legacy sections removed - now in tabbed interface */}
-                  </div>
-
-        {/* Now Playing Interface - Always visible when active */}
-            {currentSong && (
-             <motion.div 
-               className="now-playing-section"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            style={{
-              position: 'fixed',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              zIndex: 1000,
-              margin: 0,
-              borderRadius: '15px 15px 0 0',
-              boxShadow: '0 -10px 30px rgba(0, 0, 0, 0.3)'
-            }}
-             >
+                  
+          {/* Now Playing Interface - Always visible when active, inside scrollable content */}
+          {currentSong && (
+            <motion.div 
+              className="now-playing-section"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              style={{
+                position: 'sticky',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                zIndex: 100,
+                margin: '20px 0 0 0',
+                borderRadius: '15px 15px 0 0',
+                boxShadow: '0 -10px 30px rgba(0, 0, 0, 0.3)',
+                background: 'rgba(26, 26, 46, 0.98)',
+                backdropFilter: 'blur(10px)'
+              }}
+            >
                <h2>🎵 Now Playing</h2>
                <div className="now-playing-content">
                  {/* Song Info */}
@@ -4465,6 +4485,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                </div>
              </motion.div>
            )}
+          </div> {/* Close host-content */}
 
         {/* AI Suggestions Modal */}
         {suggestionsModal.isOpen && (
@@ -5034,28 +5055,48 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   {pendingVerification.playerCard.squares?.map((square: any) => {
                     const isInWinningPattern = pendingVerification.winningPatternPositions?.includes(square.position);
                     const wasPlayed = pendingVerification.playedSongs?.some((song: any) => song.id === square.songId);
-                    const isMarked = square.marked;
+                    const isMarked = square.marked === true; // Explicit check for true
                     const isInvalid = isMarked && !wasPlayed;
                     
                     let bgColor = 'rgba(255,255,255,0.1)';
                     let borderColor = 'rgba(255,255,255,0.3)';
                     let borderWidth = '1px';
+                    let icon = '';
                     
+                    // Determine styling based on state
                     if (isInWinningPattern) {
                       borderWidth = '3px';
                       if (isInvalid) {
                         bgColor = 'rgba(255, 0, 0, 0.3)';
                         borderColor = '#ff4444';
+                        icon = '⚠️';
                       } else if (wasPlayed && isMarked) {
                         bgColor = 'rgba(0, 255, 136, 0.3)';
                         borderColor = '#00ff88';
+                        icon = '✓';
                       } else {
                         bgColor = 'rgba(255, 255, 0, 0.2)';
                         borderColor = '#ffaa00';
+                        icon = '○';
                       }
-                    } else if (isInvalid) {
-                      bgColor = 'rgba(255, 0, 0, 0.1)';
-                      borderColor = 'rgba(255, 0, 0, 0.5)';
+                    } else {
+                      // Squares NOT in winning pattern
+                      if (isInvalid) {
+                        bgColor = 'rgba(255, 0, 0, 0.2)';
+                        borderColor = '#ff4444';
+                        borderWidth = '2px';
+                        icon = '⚠️';
+                      } else if (isMarked && wasPlayed) {
+                        bgColor = 'rgba(0, 255, 136, 0.15)';
+                        borderColor = '#00ff88';
+                        borderWidth = '2px';
+                        icon = '✓';
+                      } else if (isMarked && !wasPlayed) {
+                        bgColor = 'rgba(255, 255, 0, 0.15)';
+                        borderColor = '#ffaa00';
+                        borderWidth = '2px';
+                        icon = '?';
+                      }
                     }
                     
                     return (
@@ -5069,17 +5110,19 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                           padding: '4px',
                           fontSize: '0.65rem',
                           display: 'flex',
+                          flexDirection: 'column',
                           alignItems: 'center',
                           justifyContent: 'center',
                           textAlign: 'center',
                           color: '#fff',
-                          fontWeight: isInWinningPattern ? 'bold' : 'normal'
+                          fontWeight: isInWinningPattern ? 'bold' : (isMarked ? 'bold' : 'normal')
                         }}
-                        title={`${square.songName} - ${square.artistName}\n${isInWinningPattern ? 'IN WINNING PATTERN' : ''}\n${isInvalid ? '❌ INVALID MARK' : wasPlayed ? '✅ PLAYED' : 'Not played'}`}
+                        title={`${square.songName} - ${square.artistName}\nMarked: ${isMarked ? 'YES' : 'NO'}\nPlayed: ${wasPlayed ? 'YES' : 'NO'}\n${isInWinningPattern ? 'IN WINNING PATTERN' : 'NOT in pattern'}\n${isInvalid ? '❌ INVALID MARK' : isMarked && wasPlayed ? '✅ VALID MARK' : isMarked ? '⏳ MARKED (not played yet)' : 'Not marked'}`}
                       >
-                        {isInWinningPattern && isInvalid && '⚠️'}
-                        {isInWinningPattern && !isInvalid && wasPlayed && '✓'}
-                        {square.songName.substring(0, 8)}
+                        {icon && <span style={{ fontSize: '0.8rem', marginBottom: '2px' }}>{icon}</span>}
+                        <span style={{ fontSize: '0.6rem', lineHeight: 1.1 }}>
+                          {square.songName.substring(0, 8)}
+                        </span>
                       </div>
                     );
                   })}
@@ -5262,6 +5305,130 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
             )}
                   </div>
               </div>
+      )}
+
+      {/* Round Complete Modal - Shows after bingo is approved */}
+      {roundComplete && (
+        <div 
+          style={{ 
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.95)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10001 // Above bingo verification modal
+          }}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3 }}
+            style={{
+              background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
+              border: '3px solid #00ff88',
+              borderRadius: '20px',
+              padding: '32px',
+              maxWidth: '600px',
+              width: '90vw',
+              boxShadow: '0 20px 60px rgba(0, 255, 136, 0.4)',
+              textAlign: 'center'
+            }}
+          >
+            <h2 style={{ color: '#00ff88', marginBottom: '20px', fontSize: '2rem', fontWeight: 'bold' }}>
+              🏆 Round Complete!
+            </h2>
+            
+            <div style={{ marginBottom: '24px' }}>
+              <p style={{ fontSize: '1.4rem', color: '#fff', marginBottom: '8px', fontWeight: 'bold' }}>
+                {roundComplete.playerName} Wins Round {roundComplete.roundNumber}!
+              </p>
+              {roundWinners.length > 0 && (
+                <div style={{ 
+                  background: 'rgba(0,255,136,0.1)', 
+                  padding: '12px', 
+                  borderRadius: '8px',
+                  marginTop: '12px'
+                }}>
+                  <p style={{ color: '#00ff88', fontSize: '0.9rem', marginBottom: '8px' }}>Round Winners:</p>
+                  {roundWinners.map((winner: any, idx: number) => (
+                    <div key={idx} style={{ color: '#fff', fontSize: '0.85rem', marginBottom: '4px' }}>
+                      Round {winner.roundNumber}: {winner.playerName}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '12px',
+              marginTop: '24px'
+            }}>
+              <button
+                onClick={handleStartNextRound}
+                style={{
+                  background: 'linear-gradient(135deg, #00ff88, #00cc6d)',
+                  border: 'none',
+                  borderRadius: '10px',
+                  padding: '16px 24px',
+                  fontSize: '1.1rem',
+                  fontWeight: 'bold',
+                  color: '#001a0d',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 4px 15px rgba(0, 255, 136, 0.3)'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 255, 136, 0.5)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 255, 136, 0.3)';
+                }}
+              >
+                🎮 Start Next Round
+              </button>
+
+              <button
+                onClick={handleEndGameSession}
+                style={{
+                  background: 'rgba(255, 68, 68, 0.2)',
+                  border: '2px solid #ff4444',
+                  borderRadius: '10px',
+                  padding: '12px 24px',
+                  fontSize: '1rem',
+                  fontWeight: 'bold',
+                  color: '#ff4444',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 68, 68, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 68, 68, 0.2)';
+                }}
+              >
+                🛑 End Game Session
+              </button>
+            </div>
+
+            <p style={{ 
+              color: '#888', 
+              fontSize: '0.85rem', 
+              marginTop: '20px',
+              fontStyle: 'italic'
+            }}>
+              The game is paused. Choose an option above to continue.
+            </p>
+          </motion.div>
+        </div>
       )}
 
       {/* Player Cards - PROPERLY PLACED AT TOP LEVEL */}

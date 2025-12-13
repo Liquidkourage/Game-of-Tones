@@ -1658,18 +1658,43 @@ io.on('connection', (socket) => {
         console.warn(`🚨 MISSING SONGS: [${missingFromPlaylist.join(', ')}] - This could indicate a data integrity issue`);
       }
       
-      // Validate marked squares data
-      const markedSquares = player.bingoCard.squares.filter(s => s.marked);
+      // CRITICAL: Use room.bingoCards as source of truth (it's kept in sync with marks)
+      // Fallback to player.bingoCard if room card doesn't exist
+      const sourceCard = room.bingoCards?.get(socket.id) || player.bingoCard;
+      if (!sourceCard) {
+        console.error(`❌ No card found for player ${player.name} (${socket.id})`);
+        socket.emit('bingo-result', { success: false, reason: 'Card data not found' });
+        return;
+      }
+      
+      // Validate marked squares data using the source card
+      const markedSquares = sourceCard.squares.filter(s => s.marked);
       console.log(`🔍 MARKED SQUARES: Player has ${markedSquares.length} marked squares`);
+      console.log(`🔍 VERIFICATION DEBUG: Using ${room.bingoCards?.get(socket.id) ? 'room.bingoCards' : 'player.bingoCard'} as source`);
       markedSquares.forEach((square, index) => {
         const wasPlayed = actuallyPlayedSongs.some(played => played.id === square.songId);
         console.log(`${index + 1}. ${square.songName} by ${square.artistName} (${square.songId}) - ${wasPlayed ? '✅ PLAYED' : '❌ NOT PLAYED'}`);
       });
       
+      // Debug: Verify card has marked properties before sending
+      const markedCount = sourceCard.squares.filter(s => s.marked).length;
+      console.log(`🔍 VERIFICATION DEBUG: Card has ${markedCount} marked squares out of ${sourceCard.squares.length} total`);
+      console.log(`🔍 VERIFICATION DEBUG: Sample square marked state:`, sourceCard.squares[0]?.marked);
+      console.log(`🔍 VERIFICATION DEBUG: Marked squares positions:`, sourceCard.squares.filter(s => s.marked).map(s => `${s.position} (${s.songName})`));
+      
+      // Create a deep copy to ensure we're sending fresh data
+      const cardToSend = {
+        ...sourceCard,
+        squares: sourceCard.squares.map(s => ({
+          ...s,
+          marked: s.marked === true // Explicit boolean conversion
+        }))
+      };
+      
       const verificationData = {
         playerId: socket.id,
         playerName: player.name,
-        playerCard: player.bingoCard,
+        playerCard: cardToSend, // Use the synchronized card with explicit marked properties
         markedSquares: markedSquares,
         requiredPattern: room.pattern,
         customMask: room.pattern === 'custom' ? Array.from(room.customPattern || []) : null,
@@ -1685,7 +1710,9 @@ io.on('connection', (socket) => {
           totalCalledIds: calledIds.length,
           totalPlayedSongs: actuallyPlayedSongs.length,
           totalMarkedSquares: markedSquares.length,
-          missingFromPlaylist: missingFromPlaylist.length
+          missingFromPlaylist: missingFromPlaylist.length,
+          cardMarkedCount: markedCount,
+          cardSource: room.bingoCards?.get(socket.id) ? 'room.bingoCards' : 'player.bingoCard'
         }
       };
       
@@ -1783,6 +1810,21 @@ io.on('connection', (socket) => {
       // PAUSE GAME for host to decide: next round or end completely
       room.gameState = 'round_complete';
       clearRoomTimer(roomId);
+      clearPlaybackWatcher(roomId);
+      
+      // CRITICAL: Stop Spotify playback when round completes
+      (async () => {
+        try {
+          const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+          if (deviceId) {
+            await spotifyService.pausePlayback(deviceId);
+            console.log(`⏸️ Spotify paused - round complete`);
+          }
+        } catch (error) {
+          console.warn(`⚠️ Failed to pause Spotify on round complete: ${error.message}`);
+        }
+      })();
+      
       console.log(`🏁 Round complete - ${player.name} wins! Waiting for host decision...`);
       
       // Store round winner
@@ -2045,12 +2087,30 @@ io.on('connection', (socket) => {
     const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
     if (!isHost) return;
     
-    if (room.gameState !== 'round_complete') {
-      console.warn(`⚠️ Cannot start next round: game state is ${room.gameState}, expected 'round_complete'`);
-      return;
+    // Allow starting next round from round_complete or waiting (in case state got stuck)
+    if (room.gameState !== 'round_complete' && room.gameState !== 'waiting') {
+      console.warn(`⚠️ Cannot start next round: game state is ${room.gameState}, expected 'round_complete' or 'waiting'. Forcing reset...`);
+      // Don't return - allow the reset to proceed to fix stuck states
     }
     
     console.log(`🔄 Host starting FRESH round ${(room.roundWinners?.length || 0) + 1} for room ${roomId}`);
+    
+    // CRITICAL: Clean up all active timers and watchers BEFORE reset
+    clearRoomTimer(roomId);
+    clearPlaybackWatcher(roomId);
+    
+    // CRITICAL: Stop Spotify playback before reset
+    (async () => {
+      try {
+        const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+        if (deviceId) {
+          await spotifyService.pausePlayback(deviceId);
+          console.log(`⏸️ Spotify paused before round reset`);
+        }
+      } catch (error) {
+        console.warn(`⚠️ Failed to pause Spotify before reset: ${error.message}`);
+      }
+    })();
     
     // FULL RESET - back to point 0 of game setup (but keep players & Spotify)
     const playersToKeep = room.players; // Preserve players
@@ -2106,6 +2166,14 @@ io.on('connection', (socket) => {
     room.roundWinners = roundWinnersToKeep;
     room.selectedDeviceId = deviceToKeep;
     
+    // CRITICAL: Clean up temporary playlist if it exists
+    if (room.temporaryPlaylistId) {
+      spotifyService.deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
+        console.warn('⚠️ Failed to delete temporary playlist during reset:', err)
+      );
+      room.temporaryPlaylistId = null;
+    }
+    
     console.log(`🔄 Room ${roomId} reset to setup state, keeping ${room.players.size} players and Spotify connection`);
     
     // Notify all clients that we're starting fresh
@@ -2125,6 +2193,13 @@ io.on('connection', (socket) => {
         playlists: [],
         snippetLength: 30
       }
+    });
+    
+    // Also emit game-restarted for players to reset their cards
+    io.to(roomId).emit('game-restarted', {
+      roomId,
+      roundNumber: roundWinnersToKeep.length + 1,
+      message: 'New round starting - fresh setup!'
     });
     
     console.log(`✅ Fresh round ${roundWinnersToKeep.length + 1} setup ready for room ${roomId}`);

@@ -1438,14 +1438,17 @@ const PublicDisplay: React.FC = () => {
 
   // New: 15 groups of 5, auto-scrolling horizontally with 3 columns visible
   const renderOneBy75GroupedColumns = () => {
-    if (!oneBy75Ids) return null;
+    // Use state if available, otherwise fallback to ref (for fallback mode)
+    const idsToUse = oneBy75Ids || oneBy75IdsRef.current;
+    if (!idsToUse) return null;
     const playedCount = Math.max(0, (currentIndexRef.current ?? -1) + 1);
-    const played = new Set(oneBy75Ids.slice(0, playedCount));
+    // For fallback mode, use all available songs as "played"
+    const played = oneBy75Ids ? new Set(idsToUse.slice(0, playedCount)) : new Set(idsToUse.filter(id => !id.startsWith('__placeholder_')));
     // Build 15 groups from the full pool, then filter to only played IDs within each group
     const groups: string[][] = Array.from({ length: 15 }, (_, g) => {
       const start = g * 5;
-      const slice = oneBy75Ids.slice(start, start + 5);
-      return slice.filter((id) => played.has(id));
+      const slice = idsToUse.slice(start, start + 5);
+      return slice.filter((id) => !id.startsWith('__placeholder_') && played.has(id));
     });
     const visibleGroups = groups.filter(g => g.length > 0);
     const total = visibleGroups.length;
@@ -1486,7 +1489,7 @@ const PublicDisplay: React.FC = () => {
               <div key={gi} className="call-carousel-col">
                 <div className="call-carousel-col-inner">
                   {group.map((id) => {
-                    const poolIdx = oneBy75Ids.indexOf(id);
+                    const poolIdx = idsToUse.indexOf(id);
                     const playedIdx = playedOrderRef.current.indexOf(id);
                     const meta = idMetaRef.current[id];
                     const isCurrent = gameState.currentSong?.id === id;
@@ -2085,42 +2088,78 @@ const PublicDisplay: React.FC = () => {
             >
               <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1, minHeight: 0 }}>
               {/* Removed call count header and redundant BINGO row; playlist titles shown above columns */}
-              {oneBy75Ids ? ((fiveBy15Columns || (searchParams.get('mode') === '5x15')) ? renderOneBy75Columns() : renderOneBy75GroupedColumns()) : (
-                  <div className="call-list-content" style={{ height: '100%' }}>
-                  {/* Column headers moved to App header to free vertical space */}
-                    <div className="call-list" style={{ height: '100%' }}>
-                      {totalPlayedCount > 0 && (
-                    gameState.playedSongs.slice(-10).map((song, index) => (
-                      <motion.div
-                        key={song.id + '-' + index}
-                        className="call-item"
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.4, delay: 0.3 + index * 0.05 }}
-                      >
-                            <div className="call-number">#{Math.max(1, totalPlayedCount - (Math.min(10, gameState.playedSongs.length) - 1) + index)}</div>
-                        <div className="call-song-info">
-                          <div className="call-song-name">{(() => {
-                            const currentRevealed = new Set(revealSequenceRef.current);
-                            return renderMaskedText(song.name, currentRevealed, revealToast);
-                          })()}</div>
-                          <div className="call-song-artist">{(() => {
-                            const currentRevealed = new Set(revealSequenceRef.current);
-                            return renderMaskedText(song.artist, currentRevealed, revealToast);
-                          })()}</div>
-                        </div>
-                        <Music className="call-icon" />
-                      </motion.div>
-                    ))
-                  )}
-                </div>
-                    {totalPlayedCount === 0 && (
-                  <div className="no-calls">
-                    <p>No songs played yet</p>
+              {(() => {
+                // If we have oneBy75Ids, use the normal rendering
+                if (oneBy75Ids) {
+                  return (fiveBy15Columns || (searchParams.get('mode') === '5x15')) 
+                    ? renderOneBy75Columns() 
+                    : renderOneBy75GroupedColumns();
+                }
+                
+                // FALLBACK: Construct 1x75 schema from played songs
+                // Build a temporary oneBy75Ids array from available data
+                const fallbackIds: string[] = [];
+                
+                // First, try to get IDs from gameState.playedSongs
+                if (gameState.playedSongs && gameState.playedSongs.length > 0) {
+                  gameState.playedSongs.forEach(song => {
+                    if (song.id && !fallbackIds.includes(song.id)) {
+                      fallbackIds.push(song.id);
+                    }
+                  });
+                }
+                
+                // Pad to 75 if we have fewer songs (for proper grouping)
+                // Fill remaining slots with placeholder IDs that won't render
+                while (fallbackIds.length < 75) {
+                  fallbackIds.push(`__placeholder_${fallbackIds.length}__`);
+                }
+                
+                // Ensure metadata is set for played songs
+                if (gameState.playedSongs && gameState.playedSongs.length > 0) {
+                  gameState.playedSongs.forEach((song, idx) => {
+                    if (song.id && song.name && song.artist) {
+                      idMetaRef.current[song.id] = { name: song.name, artist: song.artist };
+                      // Set currentIndexRef to track how many songs have been played
+                      currentIndexRef.current = idx;
+                    }
+                  });
+                }
+                
+                // Temporarily override the ref so renderOneBy75GroupedColumns can use it
+                const originalIds = oneBy75IdsRef.current;
+                const originalIndex = currentIndexRef.current;
+                oneBy75IdsRef.current = fallbackIds;
+                // Set currentIndexRef to the number of real songs (not placeholders)
+                currentIndexRef.current = Math.min(fallbackIds.filter(id => !id.startsWith('__placeholder_')).length - 1, 74);
+                
+                try {
+                  // Use the 1x75 grouped columns renderer as fallback
+                  const result = renderOneBy75GroupedColumns();
+                  // Restore original refs
+                  oneBy75IdsRef.current = originalIds;
+                  currentIndexRef.current = originalIndex;
+                  return result || (
+                    <div className="call-list-content" style={{ height: '100%' }}>
+                      <div className="no-calls">
+                        <p>No songs played yet</p>
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  );
+                } catch (e) {
+                  // If rendering fails, restore refs and show simple fallback
+                  oneBy75IdsRef.current = originalIds;
+                  currentIndexRef.current = originalIndex;
+                  console.warn('Fallback render failed:', e);
+                  return (
+                    <div className="call-list-content" style={{ height: '100%' }}>
+                      <div className="no-calls">
+                        <p>Initializing display...</p>
+                      </div>
+                    </div>
+                  );
+                }
+              })()}
               </div>
             </motion.div>
 
