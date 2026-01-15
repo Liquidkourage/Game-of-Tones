@@ -377,6 +377,20 @@ const HostView: React.FC = () => {
           return startsWithGot || containsGameOfTones;
         });
         
+        // Debug: log some matched playlists to see what's being matched
+        console.log(`✅ Sample matched GoT playlists (first 20):`, gotPlaylists.slice(0, 20).map((p: Playlist) => `"${p.name}"`));
+        
+        // Debug: check if any non-GoT playlists are being matched
+        const suspicious = gotPlaylists.filter((p: Playlist) => {
+          const nameLower = p.name.toLowerCase();
+          const startsWithGot = /^got\s*[-–:]*\s*/i.test(p.name);
+          const containsGameOfTones = nameLower.includes('game of tones') || nameLower.includes('gameoftones');
+          return !startsWithGot && !containsGameOfTones;
+        });
+        if (suspicious.length > 0) {
+          console.warn(`⚠️ Found ${suspicious.length} playlists that don't match GoT pattern but were included:`, suspicious.slice(0, 10).map((p: Playlist) => `"${p.name}"`));
+        }
+        
         setPlaylists(allPlaylists);
         // Reset filter to GoT-only by default when playlists are reloaded
         setShowAllPlaylists(false);
@@ -423,6 +437,9 @@ const HostView: React.FC = () => {
           });
       
       console.log(`🔍 Filter applied: showAllPlaylists=${showAllPlaylists}, total playlists=${playlists.length}, filtered to=${basePlaylists.length}`);
+      if (!showAllPlaylists && basePlaylists.length > 0) {
+        console.log(`✅ Sample filtered playlists (first 10):`, basePlaylists.slice(0, 10).map((p: Playlist) => p.name));
+      }
       
       // Always exclude assigned playlists
       const availablePlaylists = basePlaylists.filter((p: Playlist) => !assignedPlaylistIds.has(p.id));
