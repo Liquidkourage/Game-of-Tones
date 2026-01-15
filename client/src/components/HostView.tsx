@@ -284,6 +284,7 @@ const HostView: React.FC = () => {
   // Playlists state
   const [visiblePlaylists, setVisiblePlaylists] = useState<Playlist[]>([]);
   const [playlistQuery, setPlaylistQuery] = useState('');
+  const [showAllPlaylists, setShowAllPlaylists] = useState<boolean>(false); // false = show only GoT playlists by default
   const [suggestionsModal, setSuggestionsModal] = useState<{
     isOpen: boolean;
     playlist: Playlist | null;
@@ -371,7 +372,10 @@ const HostView: React.FC = () => {
         );
         
         setPlaylists(allPlaylists);
+        // Reset filter to GoT-only by default when playlists are reloaded
+        setShowAllPlaylists(false);
         // Show only GoT playlists by default (no pagination)
+        // Note: assigned playlists will be filtered out by the useEffect hook
         setVisiblePlaylists(gotPlaylists);
         console.log('Playlists loaded:', gotPlaylists.length, 'GoT playlists shown by default (from', allPlaylists.length, 'total playlists)');
       } else {
@@ -399,17 +403,21 @@ const HostView: React.FC = () => {
     );
   }) : visiblePlaylists.filter(p => !assignedPlaylistIds.has(p.id))); // Exclude assigned playlists even without query
 
-  // Update visible playlists when rounds change to exclude newly assigned playlists
+  // Update visible playlists when rounds change to exclude newly assigned playlists, or when filter mode changes
   useEffect(() => {
     if (playlists && playlists.length > 0) {
-      const availablePlaylists = playlists.filter(p => !assignedPlaylistIds.has(p.id));
-      // Only update if the current visible playlists include assigned ones
-      const hasAssignedInVisible = visiblePlaylists.some(p => assignedPlaylistIds.has(p.id));
-      if (hasAssignedInVisible) {
-        setVisiblePlaylists(availablePlaylists);
-      }
+      // Apply filter based on showAllPlaylists state
+      const basePlaylists = showAllPlaylists 
+        ? playlists 
+        : playlists.filter((p: Playlist) => p.name.toLowerCase().includes('got'));
+      
+      // Always exclude assigned playlists
+      const availablePlaylists = basePlaylists.filter((p: Playlist) => !assignedPlaylistIds.has(p.id));
+      
+      // Update visible playlists to match current filter and assigned state
+      setVisiblePlaylists(availablePlaylists);
     }
-  }, [eventRounds, playlists]); // Re-run when rounds or playlists change
+  }, [eventRounds, playlists, showAllPlaylists]); // Re-run when rounds, playlists, or filter mode change
 
   // Auto-switch tabs based on game state
   useEffect(() => {
@@ -3140,6 +3148,7 @@ const HostView: React.FC = () => {
                 <button
                   className="btn-secondary"
                   onClick={() => {
+                          setShowAllPlaylists(true);
                           setVisiblePlaylists(playlists.filter(p => !assignedPlaylistIds.has(p.id)));
                           setPlaylistQuery('');
                         }}
@@ -3149,6 +3158,7 @@ const HostView: React.FC = () => {
                         <button
                         className="btn-secondary"
                           onClick={() => {
+                          setShowAllPlaylists(false);
                           const gotPlaylists = playlists.filter(p => 
                             p.name.toLowerCase().includes('got') && !assignedPlaylistIds.has(p.id)
                           );
