@@ -5290,19 +5290,23 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   </button>
                 </div>
 
-            {/* Debug Info */}
-            {pendingVerification.debugInfo && (
+            {/* Debug Info - Only show in debug mode */}
+            {pendingVerification.debugInfo && (() => {
+              const searchParams = new URLSearchParams(window.location.search);
+              const debugMode = searchParams.get('debug') === '1' || searchParams.get('dbg') === '1';
+              return debugMode ? (
                 <div style={{ 
-                marginTop: '16px', 
-                padding: '8px', 
-                background: 'rgba(0,0,0,0.2)', 
-                borderRadius: '4px',
-                fontSize: '0.8rem',
-                color: '#ccc'
-              }}>
-                <strong>Debug:</strong> {pendingVerification.debugInfo.totalMarkedSquares} marked, {pendingVerification.debugInfo.totalPlayedSongs} played songs
+                  marginTop: '16px', 
+                  padding: '8px', 
+                  background: 'rgba(0,0,0,0.2)', 
+                  borderRadius: '4px',
+                  fontSize: '0.8rem',
+                  color: '#ccc'
+                }}>
+                  <strong>Debug:</strong> {pendingVerification.debugInfo.totalMarkedSquares} marked, {pendingVerification.debugInfo.totalPlayedSongs} played songs
                 </div>
-            )}
+              ) : null;
+            })()}
                   </div>
               </div>
       )}

@@ -511,7 +511,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     });
 
     // Send real-time player card updates to host
-    sendPlayerCardUpdates(roomId);
+    sendPlayerCardUpdates(roomId, true); // Immediate update on game start
 
     console.log(`✅ Playing song in room ${roomId}: ${song.name} by ${song.artist} on device ${targetDeviceId}`);
 
@@ -1049,7 +1049,7 @@ async function playNextSongSimple(roomId, deviceId) {
     });
 
     // Send real-time player card updates to host
-    sendPlayerCardUpdates(roomId);
+    sendPlayerCardUpdates(roomId, true); // Immediate update on game start
 
     console.log(`✅ Simple advance: ${nextSong.name} by ${nextSong.artist}`);
 
@@ -1403,8 +1403,34 @@ io.on('connection', (socket) => {
     // If a game is already in progress or mix is finalized, provide the joining player with state
     (async () => {
       try {
-        // Emit current song to the joining player to sync display timing (non-hosts only)
-        if (!isHost && room.currentSong && room.snippetLength) {
+        // HOST RECONNECTION: Send comprehensive state sync
+        if (isHost) {
+          console.log(`🔄 Host reconnecting - sending full state sync for ${playerName}`);
+          
+          // Send current game state
+          const playedSongIds = Array.isArray(room.calledSongIds) ? [...room.calledSongIds] : [];
+          if (room.currentSong && room.currentSong.id && !playedSongIds.includes(room.currentSong.id)) {
+            playedSongIds.push(room.currentSong.id);
+          }
+          
+          socket.emit('room-state', {
+            isPlaying: room.gameState === 'playing',
+            pattern: room.pattern || 'line',
+            customMask: Array.from(room.customPattern || []),
+            currentSong: room.currentSong || null,
+            snippetLength: room.snippetLength || 30,
+            playerCount: getNonHostPlayerCount(room),
+            gameState: room.gameState,
+            winners: room.winners || [],
+            playedSongs: playedSongIds,
+            roundWinners: room.roundWinners || [],
+            mixFinalized: room.mixFinalized || false,
+            playlists: room.finalizedPlaylists || room.playlists || [],
+            selectedDeviceId: room.selectedDeviceId || null
+          });
+          
+          // Send current song info if playing
+          if (room.currentSong && room.snippetLength) {
             socket.emit('song-playing', {
               songId: room.currentSong.id,
               songName: room.currentSong.name,
@@ -1415,28 +1441,50 @@ io.on('connection', (socket) => {
               previewUrl: (room.playlistSongs?.[room.currentSongIndex || 0]?.previewUrl) || null
             });
           }
+          
+          // Immediately send player cards to reconnecting host
+          sendPlayerCardUpdates(roomId, true); // Immediate update for reconnecting host
+          
+          // Note: Pending verifications are sent to all hosts when bingo is called,
+          // so if host reconnects during verification, they'll receive it via the normal flow
+          
+          console.log(`✅ Host reconnection state sync complete for ${playerName}`);
+        } else {
+          // Non-host player: Emit current song to sync display timing
+          if (room.currentSong && room.snippetLength) {
+            socket.emit('song-playing', {
+              songId: room.currentSong.id,
+              songName: room.currentSong.name,
+              artistName: room.currentSong.artist,
+              snippetLength: room.snippetLength,
+              currentIndex: room.currentSongIndex || 0,
+              totalSongs: room.playlistSongs?.length || 0,
+              previewUrl: (room.playlistSongs?.[room.currentSongIndex || 0]?.previewUrl) || null
+            });
+          }
+        }
 
         // Ensure bingo card exists for ALL players (including hosts) if cards are available
-          if (!room.bingoCards) room.bingoCards = new Map();
-          const bySocket = room.bingoCards.get(socket.id);
-          if (bySocket) {
+        if (!room.bingoCards) room.bingoCards = new Map();
+        const bySocket = room.bingoCards.get(socket.id);
+        if (bySocket) {
           player.bingoCard = bySocket; // Ensure it's also on the player object
-            // Card already has marks preserved from room.bingoCards
-            io.to(socket.id).emit('bingo-card', bySocket);
-          } else if (clientId && room.clientCards && room.clientCards.has(clientId)) {
-            const existingCard = room.clientCards.get(clientId);
-            // CRITICAL: Restore card to room.bingoCards with preserved marks
-            room.bingoCards.set(socket.id, existingCard);
+          // Card already has marks preserved from room.bingoCards
+          io.to(socket.id).emit('bingo-card', bySocket);
+        } else if (clientId && room.clientCards && room.clientCards.has(clientId)) {
+          const existingCard = room.clientCards.get(clientId);
+          // CRITICAL: Restore card to room.bingoCards with preserved marks
+          room.bingoCards.set(socket.id, existingCard);
           player.bingoCard = existingCard; // Set on player object
-            // Card already has marks preserved from clientCards
-            io.to(socket.id).emit('bingo-card', existingCard);
-          } else if (room.playlistSongs?.length || room.playlists?.length || room.finalizedPlaylists?.length) {
+          // Card already has marks preserved from clientCards
+          io.to(socket.id).emit('bingo-card', existingCard);
+        } else if (room.playlistSongs?.length || room.playlists?.length || room.finalizedPlaylists?.length) {
           // Generate card for any player (host or not) if playlists exist
           console.log(`🎲 Generating bingo card for ${isHost ? 'host' : 'player'} ${playerName}`);
-            const card = await generateBingoCardForPlayer(roomId, socket.id);
+          const card = await generateBingoCardForPlayer(roomId, socket.id);
           if (card && clientId) {
-              if (!room.clientCards) room.clientCards = new Map();
-              room.clientCards.set(clientId, card);
+            if (!room.clientCards) room.clientCards = new Map();
+            room.clientCards.set(clientId, card);
           }
         }
       } catch (e) {
@@ -2098,6 +2146,7 @@ io.on('connection', (socket) => {
     // CRITICAL: Clean up all active timers and watchers BEFORE reset
     clearRoomTimer(roomId);
     clearPlaybackWatcher(roomId);
+    clearPlayerCardUpdateTimer(roomId); // Clear debounce timer
     
     // CRITICAL: Stop Spotify playback before reset
     (async () => {
@@ -2220,6 +2269,7 @@ io.on('connection', (socket) => {
     // Stop any current playback and clean up
     clearRoomTimer(roomId);
     clearPlaybackWatcher(roomId);
+    clearPlayerCardUpdateTimer(roomId); // Clear debounce timer
     
     try {
       const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
@@ -2991,7 +3041,7 @@ io.on('connection', (socket) => {
       });
       
       // Send real-time player card updates to host
-      sendPlayerCardUpdates(roomId);
+      sendPlayerCardUpdates(roomId, true); // Immediate update on game start
     }
   });
 
@@ -3028,7 +3078,7 @@ io.on('connection', (socket) => {
             }
           }
           
-          // Send real-time player card updates to host
+          // Send real-time player card updates to host (debounced for rapid marks)
           sendPlayerCardUpdates(roomId);
           
           // Check for bingo pattern completion (but don't auto-announce)
@@ -4203,7 +4253,7 @@ async function playNextSong(roomId, deviceId) {
     });
 
     // Send real-time player card updates to host
-    sendPlayerCardUpdates(roomId);
+    sendPlayerCardUpdates(roomId, true); // Immediate update on game start
 
     console.log(`✅ Playing next song in room ${roomId}: ${nextSong.name} by ${nextSong.artist} on device ${targetDeviceId}`);
 
@@ -4275,7 +4325,42 @@ async function playNextSong(roomId, deviceId) {
 }
 
 // Helper function to send real-time player card updates to host
-function sendPlayerCardUpdates(roomId) {
+// Debounce timers for player card updates (one per room)
+const playerCardUpdateTimers = new Map();
+
+function sendPlayerCardUpdates(roomId, immediate = false) {
+  try {
+    const room = rooms.get(roomId);
+    if (!room || !room.bingoCards) return;
+    
+    // If immediate flag is set (e.g., game start/end), send right away
+    if (immediate) {
+      clearPlayerCardUpdateTimer(roomId);
+      sendPlayerCardUpdatesNow(roomId);
+      return;
+    }
+    
+    // Debounce: clear existing timer and set new one
+    clearPlayerCardUpdateTimer(roomId);
+    const timerId = setTimeout(() => {
+      sendPlayerCardUpdatesNow(roomId);
+      playerCardUpdateTimers.delete(roomId);
+    }, 400); // 400ms debounce - balances responsiveness with network efficiency
+    playerCardUpdateTimers.set(roomId, timerId);
+  } catch (e) {
+    console.error('❌ Error scheduling player card updates:', e?.message || e);
+  }
+}
+
+function clearPlayerCardUpdateTimer(roomId) {
+  const timerId = playerCardUpdateTimers.get(roomId);
+  if (timerId) {
+    clearTimeout(timerId);
+    playerCardUpdateTimers.delete(roomId);
+  }
+}
+
+function sendPlayerCardUpdatesNow(roomId) {
   try {
     const room = rooms.get(roomId);
     if (!room || !room.bingoCards) return;
