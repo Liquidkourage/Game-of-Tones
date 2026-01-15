@@ -366,18 +366,20 @@ const HostView: React.FC = () => {
           !playlist.name.startsWith('TEMPO')
         );
         
-        // Filter to only Game of Tones playlists for default view (contain "got" in name)
-        const gotPlaylists = allPlaylists.filter((playlist: Playlist) => 
-          playlist.name.toLowerCase().includes('got')
-        );
+        // Filter to only Game of Tones playlists for default view
+        // Match "got", "game of tones", or "gameoftones" (case-insensitive)
+        const gotPlaylists = allPlaylists.filter((playlist: Playlist) => {
+          const nameLower = playlist.name.toLowerCase();
+          return nameLower.includes('got') || 
+                 nameLower.includes('game of tones') || 
+                 nameLower.includes('gameoftones');
+        });
         
         setPlaylists(allPlaylists);
         // Reset filter to GoT-only by default when playlists are reloaded
         setShowAllPlaylists(false);
-        // Show only GoT playlists by default (no pagination)
-        // Note: assigned playlists will be filtered out by the useEffect hook
-        setVisiblePlaylists(gotPlaylists);
-        console.log('Playlists loaded:', gotPlaylists.length, 'GoT playlists shown by default (from', allPlaylists.length, 'total playlists)');
+        // Don't set visiblePlaylists here - let the useEffect handle it to ensure consistency
+        console.log('Playlists loaded:', gotPlaylists.length, 'GoT playlists will be shown by default (from', allPlaylists.length, 'total playlists)');
       } else {
         console.error('Failed to load playlists:', data.error);
       }
@@ -409,13 +411,25 @@ const HostView: React.FC = () => {
       // Apply filter based on showAllPlaylists state
       const basePlaylists = showAllPlaylists 
         ? playlists 
-        : playlists.filter((p: Playlist) => p.name.toLowerCase().includes('got'));
+        : playlists.filter((p: Playlist) => {
+            const nameLower = p.name.toLowerCase();
+            return nameLower.includes('got') || 
+                   nameLower.includes('game of tones') || 
+                   nameLower.includes('gameoftones');
+          });
+      
+      console.log(`🔍 Filter applied: showAllPlaylists=${showAllPlaylists}, total playlists=${playlists.length}, filtered to=${basePlaylists.length}`);
       
       // Always exclude assigned playlists
       const availablePlaylists = basePlaylists.filter((p: Playlist) => !assignedPlaylistIds.has(p.id));
       
+      console.log(`📋 Final visible playlists: ${availablePlaylists.length} (after excluding ${assignedPlaylistIds.size} assigned)`);
+      
       // Update visible playlists to match current filter and assigned state
       setVisiblePlaylists(availablePlaylists);
+    } else if (playlists && playlists.length === 0) {
+      // Clear visible playlists if playlists array is empty
+      setVisiblePlaylists([]);
     }
   }, [eventRounds, playlists, showAllPlaylists]); // Re-run when rounds, playlists, or filter mode change
 
@@ -3149,7 +3163,7 @@ const HostView: React.FC = () => {
                   className="btn-secondary"
                   onClick={() => {
                           setShowAllPlaylists(true);
-                          setVisiblePlaylists(playlists.filter(p => !assignedPlaylistIds.has(p.id)));
+                          // The useEffect will handle updating visiblePlaylists based on showAllPlaylists state
                           setPlaylistQuery('');
                         }}
                       >
@@ -3159,10 +3173,7 @@ const HostView: React.FC = () => {
                         className="btn-secondary"
                           onClick={() => {
                           setShowAllPlaylists(false);
-                          const gotPlaylists = playlists.filter(p => 
-                            p.name.toLowerCase().includes('got') && !assignedPlaylistIds.has(p.id)
-                          );
-                          setVisiblePlaylists(gotPlaylists);
+                          // The useEffect will handle updating visiblePlaylists based on showAllPlaylists state
                           setPlaylistQuery('');
                         }}
                       >
