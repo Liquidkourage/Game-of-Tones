@@ -367,12 +367,14 @@ const HostView: React.FC = () => {
         );
         
         // Filter to only Game of Tones playlists for default view
-        // Match "got", "game of tones", or "gameoftones" (case-insensitive)
+        // Match playlists that start with "got" (with optional separator) or contain "game of tones" or "gameoftones"
         const gotPlaylists = allPlaylists.filter((playlist: Playlist) => {
           const nameLower = playlist.name.toLowerCase();
-          return nameLower.includes('got') || 
-                 nameLower.includes('game of tones') || 
-                 nameLower.includes('gameoftones');
+          // Match "got" at the start of the name (with optional separator like "got -", "got:", etc.)
+          const startsWithGot = /^got\s*[-–:]*\s*/i.test(playlist.name);
+          // Match "game of tones" or "gameoftones" anywhere in the name
+          const containsGameOfTones = nameLower.includes('game of tones') || nameLower.includes('gameoftones');
+          return startsWithGot || containsGameOfTones;
         });
         
         setPlaylists(allPlaylists);
@@ -413,9 +415,11 @@ const HostView: React.FC = () => {
         ? playlists 
         : playlists.filter((p: Playlist) => {
             const nameLower = p.name.toLowerCase();
-            return nameLower.includes('got') || 
-                   nameLower.includes('game of tones') || 
-                   nameLower.includes('gameoftones');
+            // Match "got" at the start of the name (with optional separator like "got -", "got:", etc.)
+            const startsWithGot = /^got\s*[-–:]*\s*/i.test(p.name);
+            // Match "game of tones" or "gameoftones" anywhere in the name
+            const containsGameOfTones = nameLower.includes('game of tones') || nameLower.includes('gameoftones');
+            return startsWithGot || containsGameOfTones;
           });
       
       console.log(`🔍 Filter applied: showAllPlaylists=${showAllPlaylists}, total playlists=${playlists.length}, filtered to=${basePlaylists.length}`);
