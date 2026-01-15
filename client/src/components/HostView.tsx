@@ -368,8 +368,13 @@ const HostView: React.FC = () => {
         
         // Filter to only Game of Tones playlists for default view
         // Match playlists that start with "got" (with optional separator) or contain "game of tones" or "gameoftones"
+        // BUT exclude output playlists (generated when starting a round)
         const gotPlaylists = allPlaylists.filter((playlist: Playlist) => {
           const nameLower = playlist.name.toLowerCase();
+          // Exclude output playlists
+          if (nameLower.includes('game of tones output') || nameLower.includes('gameoftones output')) {
+            return false;
+          }
           // Match "got" at the start of the name (with optional separator like "got -", "got:", etc.)
           const startsWithGot = /^got\s*[-–:]*\s*/i.test(playlist.name);
           // Match "game of tones" or "gameoftones" anywhere in the name
@@ -383,14 +388,18 @@ const HostView: React.FC = () => {
         // Debug: verify ALL matched playlists actually match the pattern
         const suspicious = gotPlaylists.filter((p: Playlist) => {
           const nameLower = p.name.toLowerCase();
+          // Check if it's an output playlist (should be excluded)
+          if (nameLower.includes('game of tones output') || nameLower.includes('gameoftones output')) {
+            return true; // This shouldn't be in the list
+          }
           const startsWithGot = /^got\s*[-–:]*\s*/i.test(p.name);
           const containsGameOfTones = nameLower.includes('game of tones') || nameLower.includes('gameoftones');
           return !startsWithGot && !containsGameOfTones;
         });
         if (suspicious.length > 0) {
-          console.warn(`⚠️ Found ${suspicious.length} playlists that don't match GoT pattern but were included:`, suspicious.slice(0, 20).map((p: Playlist) => `"${p.name}"`));
+          console.warn(`⚠️ Found ${suspicious.length} playlists that don't match GoT pattern or are output playlists:`, suspicious.slice(0, 20).map((p: Playlist) => `"${p.name}"`));
         } else {
-          console.log(`✅ All ${gotPlaylists.length} matched playlists verified to match GoT pattern`);
+          console.log(`✅ All ${gotPlaylists.length} matched playlists verified (GoT pattern, excluding output playlists)`);
         }
         
         // Debug: show some examples of what will be displayed (with prefix stripped)
@@ -440,6 +449,10 @@ const HostView: React.FC = () => {
         ? playlists 
         : playlists.filter((p: Playlist) => {
             const nameLower = p.name.toLowerCase();
+            // Exclude output playlists (generated when starting a round)
+            if (nameLower.includes('game of tones output') || nameLower.includes('gameoftones output')) {
+              return false;
+            }
             // Match "got" at the start of the name (with optional separator like "got -", "got:", etc.)
             const startsWithGot = /^got\s*[-–:]*\s*/i.test(p.name);
             // Match "game of tones" or "gameoftones" anywhere in the name
