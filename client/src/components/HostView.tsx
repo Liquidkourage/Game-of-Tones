@@ -360,15 +360,20 @@ const HostView: React.FC = () => {
       const data = await response.json();
       
       if (data.success) {
-        // Filter out temporary TEMPO playlists
-        const filteredPlaylists = data.playlists.filter((playlist: Playlist) => 
+        // Filter out temporary TEMPO playlists (store all others in state)
+        const allPlaylists = data.playlists.filter((playlist: Playlist) => 
           !playlist.name.startsWith('TEMPO')
         );
         
-        setPlaylists(filteredPlaylists);
-        // Show all playlists (no pagination)
-        setVisiblePlaylists(filteredPlaylists);
-        console.log('Playlists loaded:', filteredPlaylists.length, 'playlists (filtered out', data.playlists.length - filteredPlaylists.length, 'TEMPO playlists)');
+        // Filter to only Game of Tones playlists for default view (contain "got" in name)
+        const gotPlaylists = allPlaylists.filter((playlist: Playlist) => 
+          playlist.name.toLowerCase().includes('got')
+        );
+        
+        setPlaylists(allPlaylists);
+        // Show only GoT playlists by default (no pagination)
+        setVisiblePlaylists(gotPlaylists);
+        console.log('Playlists loaded:', gotPlaylists.length, 'GoT playlists shown by default (from', allPlaylists.length, 'total playlists)');
       } else {
         console.error('Failed to load playlists:', data.error);
       }
