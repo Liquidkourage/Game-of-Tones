@@ -3227,15 +3227,8 @@ const HostView: React.FC = () => {
                         );
 
                         // Filter playlists by query and exclude already assigned playlists
-                        const filteredPlaylists = (playlistQuery ? playlists.filter(p => {
-                          const q = playlistQuery.toLowerCase();
-                          return (
-                            !assignedPlaylistIds.has(p.id) && // Exclude assigned playlists
-                            ((p.name || '').toLowerCase().includes(q) ||
-                            (p.owner || '').toLowerCase().includes(q) ||
-                            (p.description || '').toLowerCase().includes(q))
-                          );
-                        }) : playlists.filter(p => !assignedPlaylistIds.has(p.id))); // Exclude assigned playlists even without query
+                        // Use the filteredPlaylists computed above (which uses visiblePlaylists, not all playlists)
+                        // This ensures the GoT filter is applied correctly
 
                         return filteredPlaylists.length === 0 ? (
                           <div style={{ padding: 20, textAlign: 'center', opacity: 0.7 }}>
@@ -3243,6 +3236,10 @@ const HostView: React.FC = () => {
                         </div>
                         ) : (
                           filteredPlaylists.map((p) => {
+                            // Debug: log playlists being rendered (first 10 only)
+                            if (filteredPlaylists.indexOf(p) < 10) {
+                              console.log(`🎨 Rendering playlist ${filteredPlaylists.indexOf(p) + 1}: "${p.name}" (display: "${stripGoTPrefix ? p.name.replace(/^GoT\s*[-–:]*\s*/i, '') : p.name}")`);
+                            }
                           const isSelected = selectedPlaylists.some(sp => sp.id === p.id);
                           // Insufficient: < 15 songs (not enough for any mode)
                           const isInsufficient = p.tracks < 15;
@@ -3286,9 +3283,25 @@ const HostView: React.FC = () => {
                               <span style={{ 
                                 flex: 1, 
                                 fontSize: '0.9rem',
-                                color: isAcceptable ? '#00ff88' : '#fff'
+                                color: isAcceptable ? '#00ff88' : '#fff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
                               }}>
                                 {stripGoTPrefix ? p.name.replace(/^GoT\s*[-–:]*\s*/i, '') : p.name}
+                                {/* Show GoT badge when filtering is active and prefix is stripped */}
+                                {!showAllPlaylists && stripGoTPrefix && (/^got\s*[-–:]*\s*/i.test(p.name) || p.name.toLowerCase().includes('game of tones') || p.name.toLowerCase().includes('gameoftones')) && (
+                                  <span style={{
+                                    fontSize: '0.7rem',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    background: 'rgba(0, 255, 136, 0.2)',
+                                    color: '#00ff88',
+                                    border: '1px solid rgba(0, 255, 136, 0.3)'
+                                  }}>
+                                    GoT
+                                  </span>
+                                )}
                               </span>
                               <span style={{ 
                                 fontSize: '0.8rem', 
