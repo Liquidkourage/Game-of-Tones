@@ -380,7 +380,7 @@ const HostView: React.FC = () => {
         // Debug: log some matched playlists to see what's being matched
         console.log(`✅ Sample matched GoT playlists (first 20):`, gotPlaylists.slice(0, 20).map((p: Playlist) => `"${p.name}"`));
         
-        // Debug: check if any non-GoT playlists are being matched
+        // Debug: verify ALL matched playlists actually match the pattern
         const suspicious = gotPlaylists.filter((p: Playlist) => {
           const nameLower = p.name.toLowerCase();
           const startsWithGot = /^got\s*[-–:]*\s*/i.test(p.name);
@@ -388,7 +388,18 @@ const HostView: React.FC = () => {
           return !startsWithGot && !containsGameOfTones;
         });
         if (suspicious.length > 0) {
-          console.warn(`⚠️ Found ${suspicious.length} playlists that don't match GoT pattern but were included:`, suspicious.slice(0, 10).map((p: Playlist) => `"${p.name}"`));
+          console.warn(`⚠️ Found ${suspicious.length} playlists that don't match GoT pattern but were included:`, suspicious.slice(0, 20).map((p: Playlist) => `"${p.name}"`));
+        } else {
+          console.log(`✅ All ${gotPlaylists.length} matched playlists verified to match GoT pattern`);
+        }
+        
+        // Debug: show some examples of what will be displayed (with prefix stripped)
+        if (stripGoTPrefix) {
+          const displayExamples = gotPlaylists.slice(0, 10).map((p: Playlist) => {
+            const displayName = p.name.replace(/^GoT\s*[-–:]*\s*/i, '');
+            return `"${p.name}" → "${displayName}"`;
+          });
+          console.log(`📺 Display examples (with prefix stripped):`, displayExamples);
         }
         
         setPlaylists(allPlaylists);
