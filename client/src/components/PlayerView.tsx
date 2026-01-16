@@ -704,16 +704,151 @@ const PlayerView: React.FC = () => {
   // Auto-detect bingo when card, pattern, or played songs change
   useEffect(() => {
     if (bingoCard && gameState.pattern) {
-      const isValidBingo = checkBingo(bingoCard);
-      setHasValidBingo(isValidBingo);
+      // Use visual pattern check for button enablement (allows calls even with invalid marks)
+      const hasVisualPattern = checkVisualPattern(bingoCard);
+      setHasValidBingo(hasVisualPattern);
       
       // Update game state hasBingo for UI consistency
-      if (isValidBingo !== gameState.hasBingo) {
-        setGameState(prev => ({ ...prev, hasBingo: isValidBingo }));
+      if (hasVisualPattern !== gameState.hasBingo) {
+        setGameState(prev => ({ ...prev, hasBingo: hasVisualPattern }));
       }
     }
-  }, [bingoCard, gameState.pattern, gameState.customPattern, playedSongIds]);
+  }, [bingoCard, gameState.pattern, gameState.customPattern]);
 
+  // Check if a visual pattern is complete (only checks if squares are marked, not if songs played)
+  const checkVisualPattern = (card: BingoCard): boolean => {
+    const pattern = gameState.pattern;
+    
+    console.log('🎯 checkVisualPattern called:', {
+      pattern,
+      markedSquares: card.squares.filter(s => s.marked).length
+    });
+    
+    // Helper function to check if a square is marked (visual check only)
+    const isSquareMarked = (square: BingoSquare): boolean => {
+      return square && square.marked === true;
+    };
+    
+    // Full card pattern - all squares must be marked
+    if (pattern === 'full_card') {
+      return card.squares.every(square => isSquareMarked(square));
+    }
+    
+    // Four corners pattern - all 4 corners must be marked
+    if (pattern === 'four_corners') {
+      const corners = ['0-0', '0-4', '4-0', '4-4'];
+      return corners.every(pos => {
+        const square = card.squares.find(s => s.position === pos);
+        return square ? isSquareMarked(square) : false;
+      });
+    }
+    
+    // X pattern - both diagonals must be marked
+    if (pattern === 'x') {
+      let diag1Complete = true;
+      let diag2Complete = true;
+      for (let i = 0; i < 5; i++) {
+        const square1 = card.squares.find(s => s.position === `${i}-${i}`);
+        const square2 = card.squares.find(s => s.position === `${i}-${4-i}`);
+        
+        if (!square1 || !isSquareMarked(square1)) diag1Complete = false;
+        if (!square2 || !isSquareMarked(square2)) diag2Complete = false;
+      }
+      return diag1Complete && diag2Complete;
+    }
+    
+    // T pattern - top row + middle column must be marked
+    if (pattern === 't') {
+      const tPositions = ['0-0', '0-1', '0-2', '0-3', '0-4', '1-2', '2-2', '3-2', '4-2'];
+      return tPositions.every(pos => {
+        const square = card.squares.find(s => s.position === pos);
+        return square ? isSquareMarked(square) : false;
+      });
+    }
+    
+    // L pattern - left column + bottom row must be marked
+    if (pattern === 'l') {
+      const lPositions = ['0-0', '1-0', '2-0', '3-0', '4-0', '4-1', '4-2', '4-3', '4-4'];
+      return lPositions.every(pos => {
+        const square = card.squares.find(s => s.position === pos);
+        return square ? isSquareMarked(square) : false;
+      });
+    }
+    
+    // U pattern - left column + right column + bottom row must be marked
+    if (pattern === 'u') {
+      const uPositions = ['0-0', '1-0', '2-0', '3-0', '4-0', '0-4', '1-4', '2-4', '3-4', '4-4', '4-1', '4-2', '4-3'];
+      return uPositions.every(pos => {
+        const square = card.squares.find(s => s.position === pos);
+        return square ? isSquareMarked(square) : false;
+      });
+    }
+    
+    // Plus pattern - middle row + middle column must be marked
+    if (pattern === 'plus') {
+      const plusPositions = ['2-0', '2-1', '2-2', '2-3', '2-4', '0-2', '1-2', '3-2', '4-2'];
+      return plusPositions.every(pos => {
+        const square = card.squares.find(s => s.position === pos);
+        return square ? isSquareMarked(square) : false;
+      });
+    }
+    
+    // Line pattern - any row, column, or diagonal (all squares must be marked)
+    if (pattern === 'line') {
+      // Check rows
+      for (let row = 0; row < 5; row++) {
+        let rowComplete = true;
+        for (let col = 0; col < 5; col++) {
+          const square = card.squares.find(s => s.position === `${row}-${col}`);
+          if (!square || !isSquareMarked(square)) {
+            rowComplete = false;
+            break;
+          }
+        }
+        if (rowComplete) return true;
+      }
+
+      // Check columns
+      for (let col = 0; col < 5; col++) {
+        let colComplete = true;
+        for (let row = 0; row < 5; row++) {
+          const square = card.squares.find(s => s.position === `${row}-${col}`);
+          if (!square || !isSquareMarked(square)) {
+            colComplete = false;
+            break;
+          }
+        }
+        if (colComplete) return true;
+      }
+
+      // Check diagonals
+      let diag1Complete = true;
+      let diag2Complete = true;
+      for (let i = 0; i < 5; i++) {
+        const square1 = card.squares.find(s => s.position === `${i}-${i}`);
+        const square2 = card.squares.find(s => s.position === `${i}-${4-i}`);
+        
+        if (!square1 || !isSquareMarked(square1)) diag1Complete = false;
+        if (!square2 || !isSquareMarked(square2)) diag2Complete = false;
+      }
+      if (diag1Complete || diag2Complete) return true;
+    }
+    
+    // Custom pattern - check if all custom positions are marked
+    if (pattern === 'custom' && gameState.customPattern) {
+      const customPositions = Array.isArray(gameState.customPattern) 
+        ? gameState.customPattern 
+        : Array.from(gameState.customPattern);
+      return customPositions.every(pos => {
+        const square = card.squares.find(s => s.position === pos);
+        return square ? isSquareMarked(square) : false;
+      });
+    }
+    
+    return false;
+  };
+
+  // Server-side validation check (checks if marked squares correspond to played songs)
   const checkBingo = (card: BingoCard): boolean => {
     const pattern = gameState.pattern;
     

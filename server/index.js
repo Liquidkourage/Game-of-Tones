@@ -1821,12 +1821,119 @@ io.on('connection', (socket) => {
         awaitingVerification: true
       });
     } else {
-      // Send detailed failure reason
-      socket.emit('bingo-result', { 
-        success: false, 
-        reason: validationResult.reason || 'Invalid bingo pattern',
+      // INVALID BINGO: Still send to host for verification (host can reject)
+      // This allows players to attempt bingo calls even with invalid marks
+      console.log(`⚠️ Invalid bingo call from ${player.name}, but sending to host for verification`);
+      
+      // AUTO-PAUSE the game for host verification even if invalid
+      if (room.gameState === 'playing') {
+        room.gameState = 'paused_for_verification';
+        clearRoomTimer(roomId);
+        
+        // Pause Spotify playback during verification
+        (async () => {
+          try {
+            const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+            if (deviceId) {
+              await spotifyService.pausePlayback(deviceId);
+              console.log(`⏸️ Spotify paused for invalid bingo verification by ${player.name}`);
+            }
+          } catch (error) {
+            console.log(`⚠️ Failed to pause Spotify during bingo verification: ${error.message}`);
+          }
+        })();
+        
+        console.log(`🛑 Game auto-paused for invalid bingo verification by ${player.name}`);
+      }
+      
+      // Build played songs list
+      const actuallyPlayedSongs = [];
+      const calledIds = room.calledSongIds || [];
+      
+      for (const songId of calledIds) {
+        const foundSong = room.playlistSongs?.find(s => s.id === songId);
+        if (foundSong) {
+          actuallyPlayedSongs.push({
+            id: foundSong.id,
+            name: foundSong.name,
+            artist: foundSong.artist
+          });
+        }
+      }
+      
+      // Use room.bingoCards as source of truth
+      const sourceCard = room.bingoCards?.get(socket.id) || player.bingoCard;
+      if (!sourceCard) {
+        socket.emit('bingo-result', { success: false, reason: 'Card data not found' });
+        return;
+      }
+      
+      const markedSquares = sourceCard.squares.filter(s => s.marked);
+      const winningPatternPositions = getWinningPatternPositions(player.bingoCard, room, validationResult);
+      
+      const cardToSend = {
+        ...sourceCard,
+        squares: sourceCard.squares.map(s => ({
+          ...s,
+          marked: s.marked === true
+        }))
+      };
+      
+      const verificationData = {
+        playerId: socket.id,
+        playerName: player.name,
+        playerCard: cardToSend,
+        markedSquares: markedSquares,
         requiredPattern: room.pattern,
-        customMask: room.pattern === 'custom' ? Array.from(room.customPattern || []) : null
+        customMask: room.pattern === 'custom' ? Array.from(room.customPattern || []) : null,
+        playedSongs: actuallyPlayedSongs,
+        calledSongIds: room.calledSongIds || [],
+        currentSongIndex: room.currentSongIndex || 0,
+        timestamp: Date.now(),
+        validationReason: validationResult.reason || 'Invalid bingo pattern',
+        isValid: false, // Mark as invalid for host
+        winningPatternPositions: winningPatternPositions,
+        winningPatternType: validationResult.type || room.pattern
+      };
+      
+      // Send to ALL hosts even though validation failed
+      let hostsFound = 0;
+      room.players.forEach((playerData, playerId) => {
+        if (playerData.isHost) {
+          const hostSocket = io.sockets.sockets.get(playerId);
+          if (hostSocket) {
+            hostSocket.emit('bingo-verification-needed', verificationData);
+            hostsFound++;
+            console.log(`📤 Sent invalid bingo verification to host: ${playerData.name} (${playerId})`);
+          }
+        }
+      });
+      
+      if (hostsFound === 0 && room.host) {
+        const fallbackHostSocket = io.sockets.sockets.get(room.host);
+        if (fallbackHostSocket) {
+          fallbackHostSocket.emit('bingo-verification-needed', verificationData);
+          console.log(`📤 Sent invalid bingo verification to fallback host (${room.host})`);
+        } else {
+          io.to(roomId).emit('bingo-verification-needed', verificationData);
+          console.log(`📤 Emitted invalid bingo verification to entire room as fallback`);
+        }
+      }
+      
+      // Notify player that bingo call was received (awaiting host verification)
+      socket.emit('bingo-result', { 
+        success: true, 
+        message: 'BINGO! Waiting for host verification...',
+        isWinner: false,
+        awaitingVerification: true,
+        isValid: false // Let player know validation failed but host will verify
+      });
+      
+      // Notify all players about the bingo call
+      io.to(roomId).emit('bingo-verification-pending', { 
+        playerId: socket.id, 
+        playerName: player.name, 
+        awaitingVerification: true
       });
     }
   });
