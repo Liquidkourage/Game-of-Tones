@@ -59,6 +59,7 @@ interface BingoSquare {
 
 const PublicDisplay: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
+  const [fontSizeMultiplier, setFontSizeMultiplier] = useState<number>(1.0);
   const navigate = useNavigate();
   const [connectCode, setConnectCode] = useState<string>('');
   const [searchParams] = useSearchParams();
@@ -299,6 +300,11 @@ const PublicDisplay: React.FC = () => {
             setTotalPlayedCount(payload.totalPlayedCount);
           }
           
+          // Update font size multiplier if provided
+          if (typeof payload.publicDisplayFontSize === 'number') {
+            setFontSizeMultiplier(payload.publicDisplayFontSize);
+          }
+          
           // Sync played songs to internal tracking
           if (Array.isArray(payload.playedSongs)) {
             const playedIds = payload.playedSongs.map((song: any) => song.id);
@@ -322,6 +328,14 @@ const PublicDisplay: React.FC = () => {
         }
       } catch (error) {
         console.error('🖥️ PublicDisplay: Error processing room state:', error);
+      }
+    });
+
+    // Listen for font size updates
+    newSocket.on('public-display-font-size-updated', (data: any) => {
+      if (typeof data?.fontSize === 'number') {
+        setFontSizeMultiplier(data.fontSize);
+        console.log(`📏 Public display font size updated to ${data.fontSize}x`);
       }
     });
 
@@ -1405,7 +1419,7 @@ const PublicDisplay: React.FC = () => {
                             exit={{ opacity: 0, y: -6, scale: 0.98 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-name"
-                            style={{ fontWeight: 900, lineHeight: 1.12, fontSize: '32px', color: '#ffffff', textShadow: '0 2px 4px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            style={{ fontWeight: 900, lineHeight: 1.12, fontSize: `${32 * fontSizeMultiplier}px`, color: '#ffffff', textShadow: '0 2px 4px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                           >
                             {title}
                           </motion.div>
@@ -1416,7 +1430,7 @@ const PublicDisplay: React.FC = () => {
                             exit={{ opacity: 0, y: -4 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-artist"
-                            style={{ fontSize: '26px', color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 2px 4px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            style={{ fontSize: `${26 * fontSizeMultiplier}px`, color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 2px 4px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                           >
                             {artist}
                           </motion.div>
@@ -1522,7 +1536,7 @@ const PublicDisplay: React.FC = () => {
                               exit={{ opacity: 0, y: -6, scale: 0.98 }}
                               transition={{ duration: 0.25 }}
                               className="call-song-name"
-                              style={{ fontWeight: 900, lineHeight: 1.25, fontSize: '32px', color: '#ffffff', textShadow: '0 2px 6px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                              style={{ fontWeight: 900, lineHeight: 1.25, fontSize: `${32 * fontSizeMultiplier}px`, color: '#ffffff', textShadow: '0 2px 6px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                             >
                               {title}
                             </motion.div>
@@ -1533,7 +1547,7 @@ const PublicDisplay: React.FC = () => {
                               exit={{ opacity: 0, y: -4 }}
                               transition={{ duration: 0.25 }}
                               className="call-song-artist"
-                              style={{ fontSize: '26px', color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 2px 4px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                              style={{ fontSize: `${26 * fontSizeMultiplier}px`, color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 2px 4px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                             >
                               {artist}
                             </motion.div>

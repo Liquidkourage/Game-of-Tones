@@ -118,6 +118,16 @@ const HostView: React.FC = () => {
   const [logs, setLogs] = useState<Array<{ level: 'info' | 'warn' | 'error'; message: string; ts: number }>>([]);
   const [revealMode, setRevealMode] = useState<'off' | 'artist' | 'title' | 'full'>('off');
   const [pattern, setPattern] = useState<BingoPattern>('line');
+  const [publicDisplayFontSize, setPublicDisplayFontSize] = useState<number>(1.0); // Multiplier for public display font sizes
+
+  // Handler to update public display font size
+  const updatePublicDisplayFontSize = (newSize: number) => {
+    const clampedSize = Math.max(0.5, Math.min(3.0, newSize));
+    setPublicDisplayFontSize(clampedSize);
+    if (socket && roomId) {
+      socket.emit('set-public-display-font-size', { roomId, fontSize: clampedSize });
+    }
+  };
   const [selectedCustomPattern, setSelectedCustomPattern] = useState<SavedCustomPattern | null>(null);
   const [savedCustomPatterns, setSavedCustomPatterns] = useState<SavedCustomPattern[]>([]);
   const [showCustomPatternModal, setShowCustomPatternModal] = useState<boolean>(false);
@@ -912,6 +922,12 @@ const HostView: React.FC = () => {
       if (data?.pattern) {
         setPattern(data.pattern);
         addLog(`Pattern updated to ${data.pattern}`, 'info');
+      }
+    });
+
+    newSocket.on('public-display-font-size-updated', (data: any) => {
+      if (typeof data?.fontSize === 'number') {
+        setPublicDisplayFontSize(data.fontSize);
       }
     });
 
@@ -3167,6 +3183,79 @@ const HostView: React.FC = () => {
               </div>
             </motion.div>
           )}
+
+          {/* Public Display Font Size Controls */}
+          <motion.div 
+            className="font-size-section"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4 }}
+            style={{
+              background: 'rgba(0,0,0,0.3)',
+              borderRadius: '12px',
+              padding: '20px',
+              marginBottom: '20px',
+              border: '1px solid rgba(255,255,255,0.1)'
+            }}
+          >
+            <h2 style={{ marginBottom: '16px', fontSize: '1.2rem', fontWeight: 'bold' }}>📺 Public Display Font Size</h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => updatePublicDisplayFontSize(publicDisplayFontSize - 0.1)}
+                disabled={publicDisplayFontSize <= 0.5}
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  background: publicDisplayFontSize <= 0.5 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)',
+                  color: publicDisplayFontSize <= 0.5 ? '#666' : '#ffffff',
+                  cursor: publicDisplayFontSize <= 0.5 ? 'not-allowed' : 'pointer',
+                  fontSize: '1.2rem',
+                  fontWeight: 'bold',
+                  minWidth: '50px'
+                }}
+              >
+                −
+              </button>
+              
+              <div style={{
+                minWidth: '120px',
+                textAlign: 'center',
+                padding: '10px 20px',
+                background: 'rgba(0,255,136,0.1)',
+                borderRadius: '8px',
+                border: '1px solid rgba(0,255,136,0.3)'
+              }}>
+                <div style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#00ff88' }}>
+                  {(publicDisplayFontSize * 100).toFixed(0)}%
+                </div>
+                <div style={{ fontSize: '0.8rem', color: '#b3b3b3', marginTop: '4px' }}>
+                  {publicDisplayFontSize.toFixed(1)}x multiplier
+                </div>
+              </div>
+              
+              <button
+                onClick={() => updatePublicDisplayFontSize(publicDisplayFontSize + 0.1)}
+                disabled={publicDisplayFontSize >= 3.0}
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  background: publicDisplayFontSize >= 3.0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)',
+                  color: publicDisplayFontSize >= 3.0 ? '#666' : '#ffffff',
+                  cursor: publicDisplayFontSize >= 3.0 ? 'not-allowed' : 'pointer',
+                  fontSize: '1.2rem',
+                  fontWeight: 'bold',
+                  minWidth: '50px'
+                }}
+              >
+                +
+              </button>
+            </div>
+            <div style={{ marginTop: '12px', fontSize: '0.85rem', color: '#b3b3b3', textAlign: 'center' }}>
+              Adjusts song and artist name font sizes on the public display
+            </div>
+          </motion.div>
 
           {/* Round Planner */}
           {isSpotifyConnected && (

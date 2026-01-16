@@ -1589,6 +1589,27 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Set public display font size multiplier
+  socket.on('set-public-display-font-size', (data = {}) => {
+    try {
+      const { roomId, fontSize } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
+      if (!isCurrentHost) return;
+      
+      // Validate font size (0.5 to 3.0 multiplier)
+      const validFontSize = Math.max(0.5, Math.min(3.0, parseFloat(fontSize) || 1.0));
+      room.publicDisplayFontSize = validFontSize;
+      
+      // Broadcast to all clients in room
+      io.to(roomId).emit('public-display-font-size-updated', { fontSize: validFontSize });
+      console.log(`📏 Public display font size set to ${validFontSize}x for room ${roomId}`);
+    } catch (e) {
+      console.error('❌ Error setting public display font size:', e?.message || e);
+    }
+  });
+
   // Player calls BINGO (validated server-side)
   socket.on('player-bingo', (data) => {
     const { roomId } = data || {};
@@ -2329,6 +2350,7 @@ io.on('connection', (socket) => {
         gameState: room.gameState,
         winners: room.winners || [],
         roundWinners: room.roundWinners || [],
+        publicDisplayFontSize: room.publicDisplayFontSize || 1.0,
         // Include played songs for PublicDisplay sync (includes current song)
         playedSongs: playedSongIds.map(songId => {
           const foundSong = room.playlistSongs?.find(s => s.id === songId);
