@@ -92,6 +92,9 @@ const PlayerView: React.FC = () => {
   const [bingoMessage, setBingoMessage] = useState<string>('');
   const [hasValidBingo, setHasValidBingo] = useState<boolean>(false);
   const [playedSongIds, setPlayedSongIds] = useState<string[]>([]);
+  const [connectionToast, setConnectionToast] = useState<string>('');
+  const previousPlayedSongIdsRef = useRef<string[]>([]); // Track previous state for missed songs calculation
+  const wasReconnectingRef = useRef<boolean>(false); // Track if we're in a reconnection state
   const [gameState, setGameState] = useState<GameState>({
     isPlaying: false,
     currentSong: null,
@@ -173,19 +176,38 @@ const PlayerView: React.FC = () => {
         newSocket.emit('join-room', { roomId, playerName, isHost: false, clientId });
       }
       // Ask server for state in case game already started
+      // This will trigger room-state which will calculate missed songs
       newSocket.emit('sync-state', { roomId });
+      
+      // Show reconnected toast if we were reconnecting
+      if (wasReconnectingRef.current && gameState.isPlaying) {
+        // Toast will be shown by room-state handler after calculating missed songs
+        // But show immediate feedback
+        setConnectionToast('🔄 Reconnecting...');
+      }
     });
 
     newSocket.on('reconnect_attempt', (attempt: number) => {
       setConnectionStatus('reconnecting');
       setReconnectAttempts(attempt || 1);
+      wasReconnectingRef.current = true;
     });
     newSocket.on('reconnect', () => {
       setConnectionStatus('connected');
       setReconnectAttempts(0);
+      // Request sync to get latest state and calculate missed songs
+      newSocket.emit('sync-state', { roomId });
     });
     newSocket.on('disconnect', () => {
       setConnectionStatus('disconnected');
+      wasReconnectingRef.current = true;
+      // Save current playedSongIds before disconnect to compare later
+      previousPlayedSongIdsRef.current = [...playedSongIds];
+      // Show disconnect toast
+      if (gameState.isPlaying) {
+        setConnectionToast('⚠️ Connection lost - attempting to reconnect...');
+        setTimeout(() => setConnectionToast(''), 5000);
+      }
     });
     newSocket.on('connect_error', () => {
       setConnectionStatus('reconnecting');
@@ -213,6 +235,9 @@ const PlayerView: React.FC = () => {
       setSongsPlayed(0);
       // CRITICAL: Reset playedSongIds to empty array (server will sync via room-state)
       setPlayedSongIds([]);
+      // Reset reconnection tracking for new game
+      previousPlayedSongIdsRef.current = [];
+      wasReconnectingRef.current = false;
     });
 
     newSocket.on('room-state', (payload: any) => {
@@ -224,6 +249,24 @@ const PlayerView: React.FC = () => {
             // Validate sync: compare local vs server state
             const serverCount = payload.playedSongIds.length;
             const localCount = prev.length;
+            
+            // Calculate missed songs if reconnecting
+            if (wasReconnectingRef.current && previousPlayedSongIdsRef.current.length > 0) {
+              const missedSongs = payload.playedSongIds.filter(
+                (id: string) => !previousPlayedSongIdsRef.current.includes(id)
+              );
+              if (missedSongs.length > 0) {
+                setConnectionToast(`🔄 Reconnected! You missed ${missedSongs.length} song${missedSongs.length > 1 ? 's' : ''} while disconnected`);
+                setTimeout(() => setConnectionToast(''), 6000);
+                console.log(`🔄 Reconnected: Missed ${missedSongs.length} songs`);
+              } else {
+                setConnectionToast('✅ Reconnected successfully');
+                setTimeout(() => setConnectionToast(''), 3000);
+              }
+              // Reset reconnection flag after handling
+              wasReconnectingRef.current = false;
+            }
+            
             if (serverCount !== localCount) {
               console.log(`🔄 Sync detected mismatch: local=${localCount}, server=${serverCount} - syncing from server`);
             }
@@ -1374,6 +1417,42 @@ const PlayerView: React.FC = () => {
         </motion.div>
 
         {/* Game Status and Instructions removed per request */}
+
+        {/* Connection Status Toast */}
+        {connectionToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            style={{
+              position: 'fixed',
+              top: '80px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              padding: '12px 20px',
+              borderRadius: '25px',
+              fontWeight: 600,
+              fontSize: '0.9rem',
+              zIndex: 1000,
+              textAlign: 'center',
+              minWidth: '200px',
+              maxWidth: '90vw',
+              background: connectionToast.includes('missed') 
+                ? 'linear-gradient(135deg, #ffaa00, #ff8800)'
+                : connectionToast.includes('Reconnected')
+                ? 'linear-gradient(135deg, #00ff88, #00cc6d)'
+                : 'rgba(255,255,255,0.15)',
+              color: connectionToast.includes('missed') || connectionToast.includes('Reconnected')
+                ? '#ffffff'
+                : '#ffffff',
+              border: '2px solid rgba(255,255,255,0.2)',
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
+            }}
+          >
+            {connectionToast}
+          </motion.div>
+        )}
 
         {/* Bingo Status Feedback */}
         {(bingoStatus !== 'idle' || bingoMessage) && (
