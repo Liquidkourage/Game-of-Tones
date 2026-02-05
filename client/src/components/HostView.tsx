@@ -863,7 +863,12 @@ const HostView: React.FC = () => {
     // NEW: Handle next round reset (back to setup)
     newSocket.on('next-round-reset', (data: any) => {
       console.log('Next round reset to setup:', data);
+      // CRITICAL: Clear round complete modal and pending verification
       setRoundComplete(null);
+      setPendingVerification(null);
+      setIsProcessingVerification(false);
+      
+      // Reset all game state
       setWinners([]);
       setGamePaused(false);
       setIsPlaying(false);
@@ -876,10 +881,16 @@ const HostView: React.FC = () => {
       setRandomStarts('none');
       setRevealMode('off');
       setPlayedSoFar([]);
+      setSongList([]);
+      setFinalizedOrder([]);
+      
+      // Preserve round winners history
       if (data.roundWinners) {
         setRoundWinners(data.roundWinners);
       }
-      addLog(`Round ${data.roundNumber} - Fresh setup ready!`, 'info');
+      
+      addLog(`Round ${data.roundNumber} - Fresh setup ready! Select playlists to start.`, 'info');
+      console.log('✅ Host UI reset complete - ready for new round setup');
     });
 
     // NEW: Handle game session ended
@@ -1456,6 +1467,11 @@ const HostView: React.FC = () => {
       });
       
       // Include current host-side songList ordering to enforce 1x75 pool deterministically
+      console.log('📋 Finalizing mix - Playlist order being sent to server:');
+      selectedPlaylists.forEach((p, i) => {
+        console.log(`   ${i + 1}. ${p.name} (will be column ${i})`);
+      });
+      
       socket.emit('finalize-mix', {
         roomId: roomId,
         playlists: selectedPlaylists,
@@ -1543,7 +1559,13 @@ const HostView: React.FC = () => {
   };
 
   const revealCall = (mode: 'artist' | 'title' | 'full') => {
-    if (!socket || !roomId) return;
+    if (!socket || !roomId) {
+      console.warn('⚠️ Cannot reveal: socket or roomId missing', { socket: !!socket, roomId });
+      return;
+    }
+    // Don't block on client-side currentSong check - server will validate
+    // This allows reveals even if client state is out of sync (e.g., during verification pause)
+    console.log(`📣 Revealing ${mode} (client currentSong: ${currentSong ? currentSong.name : 'null'})`);
     socket.emit('reveal-call', { roomId, revealToDisplay: true, revealToPlayers: false, hint: mode });
     addLog(`Reveal: ${mode}`, 'info');
   };
@@ -1972,7 +1994,11 @@ const HostView: React.FC = () => {
 
   // NEW: Multi-round system handlers
   const handleStartNextRound = () => {
-    if (!socket) return;
+    if (!socket || !roomId) {
+      console.error('⚠️ Cannot start next round: socket or roomId missing', { socket: !!socket, roomId });
+      addLog('Error: Cannot start next round - connection issue', 'error');
+      return;
+    }
     
     const confirmed = window.confirm(
       'Start next round with fresh setup?\n\n' +
@@ -1980,13 +2006,21 @@ const HostView: React.FC = () => {
       '• Keep all players connected\n' +
       '• Keep Spotify connection\n' +
       '• Reset to setup screen for new playlists/pattern\n' +
-      '• Clear all bingo cards'
+      '• Clear all bingo cards\n\n' +
+      'Click OK to proceed.'
     );
     
     if (confirmed) {
-      console.log('Starting next round with full reset');
-      socket.emit('start-next-round', { roomId });
-      addLog(`Starting fresh round setup`, 'info');
+      console.log('🔄 Starting next round with full reset for room:', roomId);
+      try {
+        socket.emit('start-next-round', { roomId, fullReset: true });
+        addLog(`Starting fresh round setup...`, 'info');
+        // Optimistically close modal (will be confirmed by next-round-reset event)
+        setRoundComplete(null);
+      } catch (error) {
+        console.error('❌ Error starting next round:', error);
+        addLog('Error starting next round - please try again', 'error');
+      }
     }
   };
 
@@ -2738,29 +2772,9 @@ const HostView: React.FC = () => {
   };
 
   const confirmAndNewRound = () => {
-    if (!roomId || !socket) return;
-    if (window.confirm('Start a new round? This keeps playlists but resets progress.')) {
-      // Mark current round as completed
-      if (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length) {
-        const updatedRounds = [...eventRounds];
-        updatedRounds[currentRoundIndex] = {
-          ...updatedRounds[currentRoundIndex],
-          status: 'completed',
-          completedAt: Date.now()
-        };
-        setEventRounds(updatedRounds);
-        
-        // Store updated rounds
-        try {
-          localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(updatedRounds));
-        } catch (error) {
-          console.warn('Failed to save rounds to localStorage:', error);
-        }
-      }
-      
-      socket.emit('new-round', { roomId });
-      addLog('New Round requested', 'info');
-    }
+    // Use the same handler as the modal button for consistency
+    // This ensures full reset and proper round transition
+    handleStartNextRound();
   };
 
   // Round management functions

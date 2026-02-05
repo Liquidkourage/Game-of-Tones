@@ -1048,6 +1048,42 @@ async function playNextSongSimple(roomId, deviceId) {
       previewUrl: nextSong.previewUrl || null
     });
 
+    // CRITICAL: Sync room-state after every song starts to ensure clients stay in sync
+    // This makes server the single source of truth for played songs
+    const playedSongIds = Array.isArray(room.calledSongIds) ? [...room.calledSongIds] : [];
+    if (room.currentSong && room.currentSong.id && !playedSongIds.includes(room.currentSong.id)) {
+      playedSongIds.push(room.currentSong.id);
+    }
+    
+    const syncPayload = {
+      isPlaying: room.gameState === 'playing',
+      pattern: room.pattern || 'line',
+      customMask: Array.from(room.customPattern || []),
+      currentSong: room.currentSong || null,
+      snippetLength: room.snippetLength || 30,
+      playerCount: getNonHostPlayerCount(room),
+      gameState: room.gameState,
+      winners: room.winners || [],
+      roundWinners: room.roundWinners || [],
+      publicDisplayFontSize: room.publicDisplayFontSize || 1.0,
+      playedSongs: playedSongIds.map(songId => {
+        const foundSong = room.playlistSongs?.find(s => s.id === songId);
+        return foundSong ? {
+          id: foundSong.id,
+          name: foundSong.name,
+          artist: foundSong.artist
+        } : null;
+      }).filter(Boolean),
+      playedSongIds: playedSongIds,
+      totalPlayedCount: playedSongIds.length,
+      currentSongIndex: room.currentSongIndex || 0,
+      totalSongs: room.playlistSongs?.length || 0,
+      syncTimestamp: Date.now()
+    };
+    
+    io.to(roomId).emit('room-state', syncPayload);
+    console.log(`🔄 Synced room-state after song start: ${playedSongIds.length} played songs`);
+
     // Send real-time player card updates to host
     sendPlayerCardUpdates(roomId, true); // Immediate update on game start
 
@@ -2012,21 +2048,71 @@ io.on('connection', (socket) => {
         timestamp: new Date().toISOString()
       });
       
-      // Notify host with next round options
-      socket.emit('bingo-verified', { 
-        approved: true, 
-        playerName: player.name,
-        gameEnded: false,
-        roundComplete: true,
-        roundNumber: room.roundWinners.length,
-        message: `Round ${room.roundWinners.length} complete - ${player.name} wins!`,
-        options: {
-          nextRound: true,
-          endGame: true,
-          changePattern: true,
-          changePlaylists: true
+      // Notify ALL hosts with next round options (not just the approving host)
+      // This ensures modal appears even if host reconnected or multiple hosts exist
+      let hostsNotified = 0;
+      room.players.forEach((playerData, playerId) => {
+        if (playerData.isHost) {
+          const hostSocket = io.sockets.sockets.get(playerId);
+          if (hostSocket) {
+            hostSocket.emit('bingo-verified', { 
+              approved: true, 
+              playerName: player.name,
+              gameEnded: false,
+              roundComplete: true,
+              roundNumber: room.roundWinners.length,
+              message: `Round ${room.roundWinners.length} complete - ${player.name} wins!`,
+              options: {
+                nextRound: true,
+                endGame: true,
+                changePattern: true,
+                changePlaylists: true
+              }
+            });
+            hostsNotified++;
+            console.log(`📤 Sent round-complete notification to host: ${playerData.name} (${playerId})`);
+          }
         }
       });
+      
+      // Fallback: if no active host sockets found, try room.host
+      if (hostsNotified === 0 && room.host) {
+        const fallbackHostSocket = io.sockets.sockets.get(room.host);
+        if (fallbackHostSocket) {
+          fallbackHostSocket.emit('bingo-verified', { 
+            approved: true, 
+            playerName: player.name,
+            gameEnded: false,
+            roundComplete: true,
+            roundNumber: room.roundWinners.length,
+            message: `Round ${room.roundWinners.length} complete - ${player.name} wins!`,
+            options: {
+              nextRound: true,
+              endGame: true,
+              changePattern: true,
+              changePlaylists: true
+            }
+          });
+          console.log(`📤 Sent round-complete notification to fallback host (${room.host})`);
+        } else {
+          // Last resort: emit to entire room
+          io.to(roomId).emit('bingo-verified', { 
+            approved: true, 
+            playerName: player.name,
+            gameEnded: false,
+            roundComplete: true,
+            roundNumber: room.roundWinners.length,
+            message: `Round ${room.roundWinners.length} complete - ${player.name} wins!`,
+            options: {
+              nextRound: true,
+              endGame: true,
+              changePattern: true,
+              changePlaylists: true
+            }
+          });
+          console.log(`📤 Emitted round-complete notification to entire room as last resort`);
+        }
+      }
       
       // Notify all clients that round is complete (not game ended)
       io.to(roomId).emit('round-complete', { 
@@ -2257,16 +2343,28 @@ io.on('connection', (socket) => {
   socket.on('start-next-round', (data) => {
     const { roomId, fullReset = true } = data || {};
     const room = rooms.get(roomId);
-    if (!room) return;
+    if (!room) {
+      console.error(`❌ start-next-round: Room ${roomId} not found`);
+      socket.emit('error', { message: 'Room not found' });
+      return;
+    }
     
     // Verify this is the host
     const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
-    if (!isHost) return;
+    if (!isHost) {
+      console.warn(`⚠️ start-next-round: Socket ${socket.id} is not host for room ${roomId}`);
+      socket.emit('error', { message: 'Only host can start next round' });
+      return;
+    }
     
     // Allow starting next round from round_complete or waiting (in case state got stuck)
-    if (room.gameState !== 'round_complete' && room.gameState !== 'waiting') {
-      console.warn(`⚠️ Cannot start next round: game state is ${room.gameState}, expected 'round_complete' or 'waiting'. Forcing reset...`);
+    // Also allow from 'playing' or 'paused_for_verification' as fallback recovery
+    const allowedStates = ['round_complete', 'waiting', 'playing', 'paused_for_verification'];
+    if (!allowedStates.includes(room.gameState)) {
+      console.warn(`⚠️ start-next-round: Unexpected game state ${room.gameState} for room ${roomId}. Forcing reset anyway...`);
       // Don't return - allow the reset to proceed to fix stuck states
+    } else {
+      console.log(`✅ start-next-round: Game state is ${room.gameState} - proceeding with reset`);
     }
     
     console.log(`🔄 Host starting FRESH round ${(room.roundWinners?.length || 0) + 1} for room ${roomId}`);
@@ -2373,10 +2471,13 @@ io.on('connection', (socket) => {
     });
     
     // Also emit game-restarted for players to reset their cards
+    // Include clearCard flag so players know to clear their cards completely
     io.to(roomId).emit('game-restarted', {
       roomId,
       roundNumber: roundWinnersToKeep.length + 1,
-      message: 'New round starting - fresh setup!'
+      message: 'New round starting - fresh setup!',
+      clearCard: true, // Signal that cards should be cleared (will be regenerated)
+      resetToSetup: true
     });
     
     console.log(`✅ Fresh round ${roundWinnersToKeep.length + 1} setup ready for room ${roomId}`);
@@ -3074,12 +3175,56 @@ io.on('connection', (socket) => {
     try {
       const { roomId, revealToDisplay = true, revealToPlayers = false, hint = 'full' } = data;
       const room = rooms.get(roomId);
-      if (!room) return;
+      if (!room) {
+        console.warn(`⚠️ Reveal-call: Room ${roomId} not found`);
+        return;
+      }
       // Only host can reveal
       const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
-      if (!isCurrentHost) return;
-      const song = room.currentSong;
-      if (!song) return;
+      if (!isCurrentHost) {
+        console.warn(`⚠️ Reveal-call: Socket ${socket.id} is not the host for room ${roomId}`);
+        return;
+      }
+      // Allow reveals even when game is paused for verification - use currentSong or last played song
+      let song = room.currentSong;
+      
+      // Fallback strategies if currentSong is null:
+      // 1. If we have played songs (calledSongIds), use the last one from playlistSongs
+      // 2. If currentSongIndex is valid, use that song from playlistSongs
+      // 3. If no songs have played yet, use the first song from playlistSongs (for reveals before game starts)
+      if (!song && room.playlistSongs && room.playlistSongs.length > 0) {
+        // Try to find last played song from calledSongIds
+        if (room.calledSongIds && room.calledSongIds.length > 0) {
+          const lastPlayedId = room.calledSongIds[room.calledSongIds.length - 1];
+          song = room.playlistSongs.find(s => s.id === lastPlayedId);
+          if (song) {
+            console.log(`📣 Reveal-call: Using last played song as fallback: "${song.name}"`);
+          }
+        }
+        
+        // If still no song, try using currentSongIndex
+        if (!song && room.currentSongIndex !== undefined && room.currentSongIndex >= 0) {
+          const index = Math.min(room.currentSongIndex, room.playlistSongs.length - 1);
+          song = room.playlistSongs[index];
+          if (song) {
+            console.log(`📣 Reveal-call: Using song at currentSongIndex ${index} as fallback: "${song.name}"`);
+          }
+        }
+        
+        // Last resort: use first song in playlist (for reveals before any songs have played)
+        if (!song) {
+          song = room.playlistSongs[0];
+          if (song) {
+            console.log(`📣 Reveal-call: Using first song in playlist as fallback: "${song.name}"`);
+          }
+        }
+      }
+      
+      if (!song) {
+        console.warn(`⚠️ Reveal-call: No song available in room ${roomId}. GameState: ${room.gameState}, CurrentSongIndex: ${room.currentSongIndex}, PlaylistSongs: ${room.playlistSongs?.length || 0}, CalledSongIds: ${room.calledSongIds?.length || 0}`);
+        return;
+      }
+      console.log(`📣 Reveal-call: Revealing ${hint} for song "${song.name}" by ${song.artist} in room ${roomId}`);
       // Build payload according to hint level
       let payload = {
         roomId,
@@ -3374,17 +3519,19 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
 
   try {
     console.log('📋 Fetching songs from playlists...');
+    console.log(`📋 Playlist order received: ${playlists.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
     // Fetch songs from each playlist
     const playlistsWithSongs = [];
-    for (const playlist of playlists) {
+    for (let i = 0; i < playlists.length; i++) {
+      const playlist = playlists[i];
       try {
-        console.log(`📋 Fetching songs for playlist: ${playlist.name}`);
+        console.log(`📋 [${i + 1}/${playlists.length}] Fetching songs for playlist: ${playlist.name}`);
         const songs = await spotifyService.getPlaylistTracks(playlist.id, playlist);
         console.log(`✅ Found ${songs.length} songs in playlist: ${playlist.name}`);
-        playlistsWithSongs.push({ ...playlist, songs });
+        playlistsWithSongs.push({ ...playlist, songs, originalIndex: i });
       } catch (error) {
         console.error(`❌ Error fetching songs for playlist ${playlist.id}:`, error);
-        playlistsWithSongs.push({ ...playlist, songs: [] });
+        playlistsWithSongs.push({ ...playlist, songs: [], originalIndex: i });
       }
     }
 
@@ -3488,14 +3635,20 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
     // If 5x15, compute and broadcast fixed 5 columns × 15 songs for the display
     if (mode === '5x15') {
       try {
+        console.log(`🎯 5x15 Mode: Assigning columns based on playlist order:`);
+        perListGloballyUnique.forEach((pl, idx) => {
+          console.log(`   Column ${idx} (left-to-right position ${idx + 1}): ${pl.name}`);
+        });
+        
         const fiveCols = [];
         const colNames = [];
         const metaMap = {};
         for (let col = 0; col < 5; col++) {
-          // Use the globally deduplicated song pools
+          // Use the globally deduplicated song pools - order matches input playlist order
           const src = properShuffle(perListGloballyUnique[col].songs).slice(0, 15);
           fiveCols.push(src);
           colNames.push(perListGloballyUnique[col].name || `Column ${col+1}`);
+          console.log(`   ✅ Column ${col} assigned to playlist: ${perListGloballyUnique[col].name}`);
           src.forEach(s => { if (s && s.id) metaMap[s.id] = { name: s.name, artist: s.artist }; });
         }
         const roomRef = rooms.get(roomId);
@@ -3506,7 +3659,20 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           // Finalize a single global shuffled order of the 75 picks
           const globalOrder = properShuffle(fiveCols.flat().map(s => s.id));
           roomRef.finalizedSongOrder = globalOrder;
+          console.log(`📊 Final column assignment for display:`);
+          colNames.forEach((name, idx) => {
+            console.log(`   Column ${idx} (left-to-right position ${idx + 1}): "${name}"`);
+          });
+          
           io.to(roomId).emit('fiveby15-pool', { columns: roomRef.fiveByFifteenColumnsIds, names: colNames, meta: metaMap });
+          
+          // Build and emit id->column map for clients (needed for display)
+          const idToCol = {};
+          roomRef.fiveByFifteenColumnsIds.forEach((colIds, colIdx) => {
+            colIds.forEach((id) => { idToCol[id] = colIdx; });
+          });
+          io.to(roomId).emit('fiveby15-map', { idToColumn: idToCol });
+          
           // Emit finalized global order for Host UI
           try {
             const orderWithMeta = globalOrder.map(id => ({ id, name: metaMap[id]?.name || '', artist: metaMap[id]?.artist || '' }));

@@ -94,6 +94,8 @@ const PublicDisplay: React.FC = () => {
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   const [totalPlayedCount, setTotalPlayedCount] = useState<number>(0);
   const [isVerificationPending, setIsVerificationPending] = useState<boolean>(false);
+  // Flag to prevent auto-reveal during reset operations
+  const isResettingRef = useRef<boolean>(false);
   // Visible carousel columns (default 3; can be overridden via ?cols=5)
   const visibleCols = (() => {
     const p = Number.parseInt(searchParams.get('cols') || '', 10);
@@ -109,8 +111,41 @@ const PublicDisplay: React.FC = () => {
   const playedOrderRef = useRef<string[]>([]);
   const idMetaRef = useRef<Record<string, { name: string; artist: string }>>({});
   const currentIndexRef = useRef<number>(-1);
-  const revealSequenceRef = useRef<string[]>([]);
-  const songBaselineRef = useRef<Record<string, number>>({});
+  // Initialize revealed letters from localStorage if available (persist across refresh)
+  const getStoredRevealedLetters = (): string[] => {
+    try {
+      const stored = localStorage.getItem(`display_revealed_letters_${roomId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  };
+  
+  const getStoredBaselines = (): Record<string, number> => {
+    try {
+      const stored = localStorage.getItem(`display_baselines_${roomId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (typeof parsed === 'object' && parsed !== null) return parsed;
+      }
+    } catch {}
+    return {};
+  };
+  
+  const revealSequenceRef = useRef<string[]>(getStoredRevealedLetters());
+  const songBaselineRef = useRef<Record<string, number>>(getStoredBaselines());
+  
+  // Persist revealed letters to localStorage whenever they change
+  const persistRevealedLetters = () => {
+    try {
+      localStorage.setItem(`display_revealed_letters_${roomId}`, JSON.stringify(revealSequenceRef.current));
+      localStorage.setItem(`display_baselines_${roomId}`, JSON.stringify(songBaselineRef.current));
+    } catch (e) {
+      console.warn('Failed to persist revealed letters:', e);
+    }
+  };
   const playedSeqRef = useRef<Record<string, number>>({});
   const playedSeqCounterRef = useRef<number>(0);
   // Carousel state for grouped 15x5 columns (show 3 at a time)
@@ -305,9 +340,21 @@ const PublicDisplay: React.FC = () => {
             setFontSizeMultiplier(payload.publicDisplayFontSize);
           }
           
-          // Sync played songs to internal tracking
+          // CRITICAL: Sync played songs to internal tracking from server (single source of truth)
+          // This is the ONLY place where playedOrderRef should be updated
           if (Array.isArray(payload.playedSongs)) {
             const playedIds = payload.playedSongs.map((song: any) => song.id);
+            // Validate sync: compare local vs server state
+            const serverCount = playedIds.length;
+            const localCount = playedOrderRef.current.length;
+            const wasReconnecting = serverCount > 0 && localCount === 0;
+            const hadMismatch = serverCount !== localCount || JSON.stringify(playedIds) !== JSON.stringify(playedOrderRef.current);
+            
+            if (hadMismatch) {
+              console.log(`🔄 Display sync detected mismatch: local=${localCount}, server=${serverCount} - syncing from server`);
+            }
+            
+            // Always use server state as source of truth (ensures correct order)
             playedOrderRef.current = playedIds;
             
             // Update metadata cache
@@ -319,10 +366,60 @@ const PublicDisplay: React.FC = () => {
                 };
               }
             });
+            
+            // BUG #3 FIX: If reconnecting during active game, ensure baselines are set correctly
+            // Revealed letters should already be restored by pool handlers, but ensure baselines match
+            if (wasReconnecting || (hadMismatch && serverCount > 0)) {
+              console.log('🔄 Reconnection detected - ensuring baselines are correct');
+              
+              // If revealed letters weren't restored yet (shouldn't happen, but safe fallback)
+              if (revealSequenceRef.current.length === 0) {
+                const storedLetters = getStoredRevealedLetters();
+                if (storedLetters.length > 0) {
+                  console.log(`📝 Fallback: Restoring ${storedLetters.length} revealed letters from storage`);
+                  revealSequenceRef.current = storedLetters;
+                }
+              }
+              
+              // If baselines weren't restored yet, restore them
+              if (Object.keys(songBaselineRef.current).length === 0) {
+                const storedBaselines = getStoredBaselines();
+                if (Object.keys(storedBaselines).length > 0) {
+                  console.log(`📝 Fallback: Restoring baselines for ${Object.keys(storedBaselines).length} songs`);
+                  songBaselineRef.current = storedBaselines;
+                }
+              }
+              
+              // Ensure all played songs have baselines (set to current length if missing)
+              const currentBaseline = revealSequenceRef.current.length;
+              const newBaselines: Record<string, number> = {};
+              playedIds.forEach((songId: string) => {
+                // If baseline doesn't exist, set it to current length (meaning no letters revealed before this song)
+                if (songBaselineRef.current[songId] === undefined) {
+                  newBaselines[songId] = currentBaseline;
+                }
+              });
+              // Merge with existing baselines
+              if (Object.keys(newBaselines).length > 0) {
+                songBaselineRef.current = { ...songBaselineRef.current, ...newBaselines };
+                console.log(`✅ Set baselines for ${Object.keys(newBaselines).length} songs without baselines`);
+              }
+              
+              // Persist the current state
+              persistRevealedLetters();
+            }
           }
           
           // Use server timestamp if available, otherwise current time
           setLastSyncTime(payload.syncTimestamp || Date.now());
+          
+          // BUG FIX: If game is already playing when display refreshes, hide splash screen
+          // This ensures refresh during active game shows game view immediately
+          if (payload.isPlaying && showSplash) {
+            console.log('🎮 Game already playing - hiding splash screen');
+            setShowSplash(false);
+            setShowRules(false);
+          }
           
           console.log(`🖥️ PublicDisplay: Synced ${payload.totalPlayedCount || 0} played songs, ${payload.playerCount || 0} players`);
         }
@@ -358,8 +455,35 @@ const PublicDisplay: React.FC = () => {
         setOneBy75Ids(data.ids);
         oneBy75IdsRef.current = data.ids;
         // Do not clear playedOrder; preserve any songs already recorded
-        revealSequenceRef.current = [];
-        songBaselineRef.current = {};
+        // BUG #3 FIX: Check if we're reconnecting (has stored letters) vs new game
+        // Restore revealed letters from localStorage if available (persists across refresh)
+        const storedLetters = getStoredRevealedLetters();
+        const storedBaselines = getStoredBaselines();
+        const hasPlayedSongs = playedOrderRef.current.length > 0;
+        const hasStoredState = storedLetters.length > 0 || Object.keys(storedBaselines).length > 0;
+        
+        if (hasStoredState || hasPlayedSongs) {
+          // Reconnecting - restore revealed letters and baselines from localStorage
+          if (storedLetters.length > 0) {
+            console.log(`🔄 Reconnecting: Restoring ${storedLetters.length} revealed letters from storage`);
+            revealSequenceRef.current = storedLetters;
+          } else {
+            revealSequenceRef.current = [];
+          }
+          if (Object.keys(storedBaselines).length > 0) {
+            console.log(`🔄 Reconnecting: Restoring baselines for ${Object.keys(storedBaselines).length} songs`);
+            songBaselineRef.current = storedBaselines;
+          }
+        } else {
+          // New game - clear everything
+          revealSequenceRef.current = [];
+          songBaselineRef.current = {};
+          // Clear persisted state for new game
+          try {
+            localStorage.removeItem(`display_revealed_letters_${roomId}`);
+            localStorage.removeItem(`display_baselines_${roomId}`);
+          } catch {}
+        }
         setCarouselIndex(0);
         setFiveBy15Columns(null);
         // Do not auto-seed played list by pool order; rely on actual song-playing events
@@ -384,8 +508,35 @@ const PublicDisplay: React.FC = () => {
           setOneBy75Ids(flat);
           oneBy75IdsRef.current = flat;
           // Preserve playedOrder; do not clear
-          revealSequenceRef.current = [];
-          songBaselineRef.current = {};
+          // BUG #3 FIX: Check if we're reconnecting (has stored letters) vs new game
+          // Restore revealed letters from localStorage if available (persists across refresh)
+          const storedLetters = getStoredRevealedLetters();
+          const storedBaselines = getStoredBaselines();
+          const hasPlayedSongs = playedOrderRef.current.length > 0;
+          const hasStoredState = storedLetters.length > 0 || Object.keys(storedBaselines).length > 0;
+          
+          if (hasStoredState || hasPlayedSongs) {
+            // Reconnecting - restore revealed letters and baselines from localStorage
+            if (storedLetters.length > 0) {
+              console.log(`🔄 Reconnecting: Restoring ${storedLetters.length} revealed letters from storage`);
+              revealSequenceRef.current = storedLetters;
+            } else {
+              revealSequenceRef.current = [];
+            }
+            if (Object.keys(storedBaselines).length > 0) {
+              console.log(`🔄 Reconnecting: Restoring baselines for ${Object.keys(storedBaselines).length} songs`);
+              songBaselineRef.current = storedBaselines;
+            }
+          } else {
+            // New game - clear everything
+            revealSequenceRef.current = [];
+            songBaselineRef.current = {};
+            // Clear persisted state for new game
+            try {
+              localStorage.removeItem(`display_revealed_letters_${roomId}`);
+              localStorage.removeItem(`display_baselines_${roomId}`);
+            } catch {}
+          }
           setCarouselIndex(0);
           // Do not seed by flattened pool; rely solely on actual play events
           // Reconcile any pending placements now that columns are known
@@ -492,10 +643,9 @@ const PublicDisplay: React.FC = () => {
             pendingPlacementRef.current.add(song.id);
           }
         }
-        // Append only the current song id for this tick (actual playback order)
-        if (!playedOrderRef.current.includes(song.id)) {
-          playedOrderRef.current = [...playedOrderRef.current, song.id];
-        }
+        // NOTE: Do NOT update playedOrderRef here - server is single source of truth
+        // playedOrderRef is only updated via room-state sync events to ensure correct order
+        // This prevents out-of-order updates if song-playing events arrive late
         if (debugMode) {
           const col = idToColumnRef.current[song.id];
           try { console.log('[Display] song-playing', { index: currentIndexRef.current, id: song.id, col, name: song.name }); } catch {}
@@ -519,8 +669,14 @@ const PublicDisplay: React.FC = () => {
           }
         } catch {}
         // Set baseline when song starts so letters revealed before it started stay hidden on that song
-        if (songBaselineRef.current[song.id] === undefined) {
-          songBaselineRef.current[song.id] = revealSequenceRef.current.length;
+        // BUG #3 FIX: Always set baseline to current length, even if reset just happened
+        // This ensures songs starting right after reset get correct baseline (0)
+        const currentBaseline = revealSequenceRef.current.length;
+        if (songBaselineRef.current[song.id] === undefined || isResettingRef.current) {
+          // If reset is in progress or baseline doesn't exist, set to current length
+          songBaselineRef.current[song.id] = currentBaseline;
+          persistRevealedLetters(); // Persist baseline change
+          console.log(`📝 Set baseline for song ${song.id} to ${currentBaseline} (reset=${isResettingRef.current})`);
         }
       }
       // reset countdown timer
@@ -566,6 +722,11 @@ const PublicDisplay: React.FC = () => {
       songBaselineRef.current = {};
       playedSeqRef.current = {} as any;
       playedSeqCounterRef.current = 0;
+      // Clear persisted state for new game
+      try {
+        localStorage.removeItem(`display_revealed_letters_${roomId}`);
+        localStorage.removeItem(`display_baselines_${roomId}`);
+      } catch {}
       ensureGrid();
     });
 
@@ -588,23 +749,52 @@ const PublicDisplay: React.FC = () => {
 
     newSocket.on('display-reset-letters', () => {
       console.log('🔤 Resetting revealed letters on public display');
+      
+      // BUG #3 FIX: Set reset flag to prevent auto-reveal race conditions
+      isResettingRef.current = true;
+      
+      // CRITICAL: Reset all baselines to current revealSequenceRef length (not 0)
+      // This ensures songs that started before reset maintain their baselines
+      // Songs that start after reset will get baseline = revealSequenceRef.length (which is now 0)
+      const resetBaseline = revealSequenceRef.current.length; // Should be 0 after clearing, but use current for safety
       revealSequenceRef.current = [];
-      // CRITICAL: Reset all baselines to 0 so auto-reveal starts fresh
+      
       // Recalculate baselines for all currently played songs
-      const currentBaseline = 0;
+      // Set baseline to the length BEFORE clearing (so they don't show letters revealed after reset)
       const playedIds = playedOrderRef.current || [];
       const newBaselines: Record<string, number> = {};
       playedIds.forEach((pid: string) => {
-        newBaselines[pid] = currentBaseline;
+        // Use existing baseline if it exists and is less than resetBaseline
+        // Otherwise set to resetBaseline (meaning no letters revealed before reset)
+        const existingBaseline = songBaselineRef.current[pid];
+        if (existingBaseline !== undefined && existingBaseline <= resetBaseline) {
+          newBaselines[pid] = resetBaseline; // Reset to current length (0 after clear)
+        } else {
+          newBaselines[pid] = resetBaseline;
+        }
       });
       songBaselineRef.current = newBaselines;
+      
+      // Clear persisted state since we're resetting
+      try {
+        localStorage.removeItem(`display_revealed_letters_${roomId}`);
+        localStorage.removeItem(`display_baselines_${roomId}`);
+      } catch {}
+      
       // Clear any pending toast
       if (revealToastTimerRef.current) {
         clearTimeout(revealToastTimerRef.current);
         revealToastTimerRef.current = null;
       }
       setRevealToast('Letters reset - auto-reveal restarting');
-      setTimeout(() => setRevealToast(null), 3000);
+      setTimeout(() => {
+        setRevealToast(null);
+        // BUG #3 FIX: Clear reset flag after a short delay to allow baselines to stabilize
+        setTimeout(() => {
+          isResettingRef.current = false;
+          console.log('🔤 Reset complete - auto-reveal re-enabled');
+        }, 500);
+      }, 3000);
     });
 
     newSocket.on('pattern-updated', (data: any) => {
@@ -660,6 +850,11 @@ const PublicDisplay: React.FC = () => {
       try {
         const names = Array.isArray(payload?.playlists) ? payload.playlists.map((p: any) => String(p?.name || '')) : [];
         setPlaylistNames(names);
+        
+        // Switch to game mode: hide splash and rules, show bingo card
+        console.log('🎮 Mix finalized - switching to game mode');
+        setShowSplash(false);
+        setShowRules(false);
       } catch {}
       ensureGrid();
     });
@@ -690,13 +885,51 @@ const PublicDisplay: React.FC = () => {
       setShowWinnerBanner(false);
       setWinnerName('');
       
+      // Clear reveal state
+      revealSequenceRef.current = [];
+      songBaselineRef.current = {};
+      
       // Show restart notification briefly
-      setWinnerName('🔄 Game Restarted');
+      if (data.clearCard || data.resetToSetup) {
+        setWinnerName('🔄 New Round Starting - Waiting for Setup...');
+      } else {
+        setWinnerName('🔄 Game Restarted');
+      }
       setShowWinnerBanner(true);
       setTimeout(() => {
         setShowWinnerBanner(false);
         setWinnerName('');
       }, 3000);
+    });
+
+    // Handle next-round-reset event (full reset to setup)
+    newSocket.on('next-round-reset', (data: any) => {
+      console.log('Next round reset (public display):', data);
+      // Reset display state completely
+      setGameState({
+        isPlaying: false,
+        currentSong: null,
+        playerCount: 0,
+        winners: [],
+        snippetLength: data.roomState?.snippetLength || 30,
+        playedSongs: [],
+        bingoCard: { squares: [], size: 5 }
+      });
+      setShowWinnerBanner(false);
+      setWinnerName('');
+      setIsVerificationPending(false);
+      
+      // Clear all reveal state
+      revealSequenceRef.current = [];
+      songBaselineRef.current = {};
+      
+      // Show new round notification
+      setWinnerName(`🔄 Round ${data.roundNumber} - Waiting for Setup...`);
+      setShowWinnerBanner(true);
+      setTimeout(() => {
+        setShowWinnerBanner(false);
+        setWinnerName('');
+      }, 4000);
     });
 
     newSocket.on('game-reset', () => {
@@ -713,6 +946,11 @@ const PublicDisplay: React.FC = () => {
       console.log('🔁 Game reset (display)');
       revealSequenceRef.current = [];
       songBaselineRef.current = {};
+      // Clear persisted state for new round
+      try {
+        localStorage.removeItem(`display_revealed_letters_${roomId}`);
+        localStorage.removeItem(`display_baselines_${roomId}`);
+      } catch {}
     });
 
     // Staged reveal event: show name/artist hints without changing the bingo grid
@@ -766,9 +1004,13 @@ const PublicDisplay: React.FC = () => {
           }
           
           // Add revealed letters to sequence
-          if (lettersToReveal.length > 0) {
+          // BUG #3 FIX: Skip manual reveal if reset is in progress
+          if (lettersToReveal.length > 0 && !isResettingRef.current) {
             revealSequenceRef.current = [...revealSequenceRef.current, ...lettersToReveal];
             console.log('🎡 Wheel of Fortune: Revealed letters:', lettersToReveal, 'Total revealed:', revealSequenceRef.current.length);
+            persistRevealedLetters(); // Persist revealed letters
+          } else if (isResettingRef.current) {
+            console.log('🎡 Manual reveal skipped - reset in progress');
           }
           
           if (revealText) {
@@ -803,6 +1045,21 @@ const PublicDisplay: React.FC = () => {
     };
   }, [roomId]);
 
+  // Periodic sync during gameplay to ensure state stays in sync with server
+  useEffect(() => {
+    if (!socket || !gameState.isPlaying) return;
+    
+    // Request sync every 30 seconds during gameplay
+    const syncInterval = setInterval(() => {
+      if (socket && socket.connected && gameState.isPlaying) {
+        socket.emit('sync-state', { roomId });
+        console.log('🔄 PublicDisplay: Periodic sync requested');
+      }
+    }, 30000); // 30 seconds
+    
+    return () => clearInterval(syncInterval);
+  }, [socket, gameState.isPlaying, roomId]);
+
   // Time-based letter reveal every 10 seconds (weighted by unrevealed frequency across played songs)
   useEffect(() => {
     console.log('🎡 Auto-reveal effect triggered:', { isPlaying: gameState.isPlaying, isVerificationPending });
@@ -812,6 +1069,11 @@ const PublicDisplay: React.FC = () => {
     }
     console.log('🎡 Auto-reveal enabled, starting 15s interval');
     const interval = setInterval(() => {
+      // BUG #3 FIX: Skip auto-reveal if reset is in progress
+      if (isResettingRef.current) {
+        console.log('🎡 Auto-reveal skipped - reset in progress');
+        return;
+      }
       try {
         const ids = playedOrderRef.current;
         console.log('🎡 Auto-reveal tick:', { playedSongs: ids?.length || 0, revealedLetters: revealSequenceRef.current.length });
@@ -848,8 +1110,15 @@ const PublicDisplay: React.FC = () => {
           if (r < w) { revealedChar = ch; break; }
           r -= w;
         }
+        // BUG #3 FIX: Skip auto-reveal if reset is in progress
+        if (isResettingRef.current) {
+          console.log('🎡 Auto-reveal skipped - reset in progress');
+          return;
+        }
+        
         revealSequenceRef.current.push(revealedChar);
         console.log('🎡 Auto-revealed letter:', revealedChar, 'Total revealed:', revealSequenceRef.current.length);
+        persistRevealedLetters(); // Persist auto-revealed letter
         if (revealToastTimerRef.current) { clearTimeout(revealToastTimerRef.current); revealToastTimerRef.current = null; }
         setRevealToast(revealedChar);
         revealToastTimerRef.current = setTimeout(() => {

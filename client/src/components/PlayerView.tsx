@@ -174,8 +174,18 @@ const PlayerView: React.FC = () => {
     newSocket.on('room-state', (payload: any) => {
       try {
         // CRITICAL: Sync playedSongIds from server (single source of truth)
+        // This is the ONLY place where playedSongIds should be updated
         if (Array.isArray(payload?.playedSongIds)) {
-          setPlayedSongIds(payload.playedSongIds);
+          setPlayedSongIds(prev => {
+            // Validate sync: compare local vs server state
+            const serverCount = payload.playedSongIds.length;
+            const localCount = prev.length;
+            if (serverCount !== localCount) {
+              console.log(`🔄 Sync detected mismatch: local=${localCount}, server=${serverCount} - syncing from server`);
+            }
+            // Always use server state as source of truth
+            return payload.playedSongIds;
+          });
           console.log(`🔄 Synced ${payload.playedSongIds.length} played songs from server`);
         }
         
@@ -239,17 +249,13 @@ const PlayerView: React.FC = () => {
       }));
     });
 
-    // Listen for song-playing events to track played songs
+    // Listen for song-playing events (for UI display only)
+    // NOTE: Do NOT update playedSongIds here - server is single source of truth
+    // playedSongIds is only updated via room-state sync events
     newSocket.on('song-playing', (data: any) => {
       console.log('Song playing:', data);
-      if (data.songId) {
-        setPlayedSongIds(prev => {
-          if (!prev.includes(data.songId)) {
-            return [...prev, data.songId];
-          }
-          return prev;
-        });
-      }
+      // Only update UI state, not playedSongIds
+      // Server will send room-state sync with updated playedSongIds
     });
 
     // Handle bingo validation result (for the caller)
@@ -332,21 +338,27 @@ const PlayerView: React.FC = () => {
       // CRITICAL: Reset playedSongIds to empty array (server will sync via room-state)
       setPlayedSongIds([]);
       
-      // Reset bingo card marked state
-      if (bingoCard && bingoCard.squares) {
-        const resetCard = {
-          ...bingoCard,
-          squares: bingoCard.squares.map(square => ({
-            ...square,
-            marked: false
-          }))
-        };
-        setBingoCard(resetCard);
+      // For new round: clear card entirely (will be regenerated with new playlists)
+      // For restart: reset marks but keep card structure
+      if (data.message && data.message.includes('New round starting')) {
+        // New round - clear card completely
+        setBingoCard(null);
+        setBingoMessage('🔄 New round starting - waiting for new card...');
+      } else {
+        // Regular restart - reset marks but keep card
+        if (bingoCard && bingoCard.squares) {
+          const resetCard = {
+            ...bingoCard,
+            squares: bingoCard.squares.map(square => ({
+              ...square,
+              marked: false
+            }))
+          };
+          setBingoCard(resetCard);
+        }
+        setBingoMessage('🔄 Game restarted by host');
       }
-      
-      // Show restart notification
-      setBingoMessage('🔄 Game restarted by host');
-      setTimeout(() => setBingoMessage(''), 3000);
+      setTimeout(() => setBingoMessage(''), 5000);
     });
 
     newSocket.on('pattern-complete', (data: any) => {
@@ -393,6 +405,21 @@ const PlayerView: React.FC = () => {
       newSocket.close();
     };
   }, [roomId, playerName]);
+
+  // Periodic sync during gameplay to ensure state stays in sync with server
+  useEffect(() => {
+    if (!socket || !gameState.isPlaying) return;
+    
+    // Request sync every 30 seconds during gameplay
+    const syncInterval = setInterval(() => {
+      if (socket && socket.connected && gameState.isPlaying) {
+        socket.emit('sync-state', { roomId });
+        console.log('🔄 Periodic sync requested');
+      }
+    }, 30000); // 30 seconds
+    
+    return () => clearInterval(syncInterval);
+  }, [socket, gameState.isPlaying, roomId]);
 
   // If name becomes available after initial connect, join the room
   useEffect(() => {
