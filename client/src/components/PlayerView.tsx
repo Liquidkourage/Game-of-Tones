@@ -101,6 +101,50 @@ const PlayerView: React.FC = () => {
   });
   const [songsPlayed, setSongsPlayed] = useState<number>(0);
 
+  // Mark persistence functions
+  const getStoredMarks = (): Record<string, boolean> => {
+    try {
+      const stored = localStorage.getItem(`player_marks_${roomId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (typeof parsed === 'object' && parsed !== null) return parsed;
+      }
+    } catch {}
+    return {};
+  };
+
+  const persistMarks = (card: BingoCard | null) => {
+    if (!card) {
+      try {
+        localStorage.removeItem(`player_marks_${roomId}`);
+      } catch {}
+      return;
+    }
+    try {
+      const marks: Record<string, boolean> = {};
+      card.squares.forEach(square => {
+        if (square.marked) {
+          marks[square.position] = true;
+        }
+      });
+      localStorage.setItem(`player_marks_${roomId}`, JSON.stringify(marks));
+    } catch (e) {
+      console.warn('Failed to persist marks:', e);
+    }
+  };
+
+  const applyStoredMarks = (card: BingoCard | null): BingoCard | null => {
+    if (!card) return card;
+    const storedMarks = getStoredMarks();
+    if (Object.keys(storedMarks).length === 0) return card;
+    
+    const updatedSquares = card.squares.map(square => ({
+      ...square,
+      marked: storedMarks[square.position] === true || square.marked
+    }));
+    return { ...card, squares: updatedSquares };
+  };
+
   const countUniqueSongs = (card: BingoCard): number => {
     if (!card || !card.squares) return 0;
     const uniqueSongIds = new Set(card.squares.map(square => square.songId));
@@ -221,16 +265,25 @@ const PlayerView: React.FC = () => {
       console.log('Received bingo card:', data);
       // Preserve existing marks when receiving updated card
       setBingoCard(prev => {
-        if (!prev) return data;
-        // Merge: keep marks from previous card if positions match
-        const updatedSquares = data.squares.map((newSquare: any) => {
+        if (!prev) {
+          // New card - apply stored marks from localStorage
+          const cardWithMarks = applyStoredMarks(data);
+          persistMarks(cardWithMarks);
+          return cardWithMarks;
+        }
+        // Merge: keep marks from previous card if positions match, then apply stored marks
+        const mergedSquares = data.squares.map((newSquare: any) => {
           const oldSquare = prev.squares.find((s: any) => s.position === newSquare.position);
           return {
             ...newSquare,
-            marked: oldSquare?.marked || false // Preserve mark state
+            marked: oldSquare?.marked || false // Preserve mark state from previous card
           };
         });
-        return { ...data, squares: updatedSquares };
+        const mergedCard = { ...data, squares: mergedSquares };
+        // Apply stored marks (localStorage takes precedence for persistence)
+        const cardWithStoredMarks = applyStoredMarks(mergedCard);
+        persistMarks(cardWithStoredMarks);
+        return cardWithStoredMarks;
       });
     });
 
@@ -341,8 +394,11 @@ const PlayerView: React.FC = () => {
       // For new round: clear card entirely (will be regenerated with new playlists)
       // For restart: reset marks but keep card structure
       if (data.message && data.message.includes('New round starting')) {
-        // New round - clear card completely
+        // New round - clear card completely and clear persisted marks
         setBingoCard(null);
+        try {
+          localStorage.removeItem(`player_marks_${roomId}`);
+        } catch {}
         setBingoMessage('🔄 New round starting - waiting for new card...');
       } else {
         // Regular restart - reset marks but keep card
@@ -354,6 +410,11 @@ const PlayerView: React.FC = () => {
               marked: false
             }))
           };
+          // Clear persisted marks
+          try {
+            localStorage.removeItem(`player_marks_${roomId}`);
+          } catch {}
+          persistMarks(resetCard); // Persist empty marks
           setBingoCard(resetCard);
         }
         setBingoMessage('🔄 Game restarted by host');
@@ -371,6 +432,10 @@ const PlayerView: React.FC = () => {
     newSocket.on('game-reset', () => {
       setGameState({ isPlaying: false, currentSong: null, playerCount: 0, hasBingo: false, pattern: 'full_card' });
       setBingoCard(null);
+      // Clear persisted marks
+      try {
+        localStorage.removeItem(`player_marks_${roomId}`);
+      } catch {}
       // Reset songs played counter
       setSongsPlayed(0);
       // CRITICAL: Reset playedSongIds to empty array (server will sync via room-state)
@@ -545,7 +610,10 @@ const PlayerView: React.FC = () => {
     setBingoCard(prev => {
       if (!prev) return prev;
       const updatedSquares = prev.squares.map(s => s.position === position ? { ...s, marked: !s.marked } : s);
-      return { ...prev, squares: updatedSquares };
+      const updatedCard = { ...prev, squares: updatedSquares };
+      // Persist marks to localStorage immediately
+      persistMarks(updatedCard);
+      return updatedCard;
     });
     if (navigator.vibrate) navigator.vibrate(10);
   };
