@@ -4078,6 +4078,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           // If it's full objects, use them directly (they're already in the correct order)
           console.log('📋 Using finalizedSongOrder (full objects) directly');
           allSongs = room.finalizedSongOrder;
+        }
       } else if (Array.isArray(room.oneBySeventyFivePool) && room.oneBySeventyFivePool.length > 0) {
         // CRITICAL FIX: For 1x75 mode, use the EXACT same 75-song pool as bingo cards
         console.log('📋 1x75 detected: using server-side 75-song pool to match bingo cards EXACTLY');
