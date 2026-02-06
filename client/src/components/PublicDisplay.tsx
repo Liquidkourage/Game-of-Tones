@@ -729,10 +729,11 @@ const PublicDisplay: React.FC = () => {
         localStorage.removeItem(`display_baselines_${roomId}`);
       } catch {}
       ensureGrid();
-      // Request sync to get fiveby15 columns if not already received
-      if (!fiveBy15Columns) {
+      // Always request sync to ensure we have columns and latest state
+      // This ensures columns are received even if we missed the initial emission
+      setTimeout(() => {
         newSocket.emit('sync-state', { roomId });
-      }
+      }, 100); // Small delay to ensure server has finished emitting columns
     });
 
     // Display control events

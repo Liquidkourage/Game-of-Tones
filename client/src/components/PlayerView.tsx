@@ -306,15 +306,36 @@ const PlayerView: React.FC = () => {
 
     newSocket.on('bingo-card', (data: any) => {
       console.log('Received bingo card:', data);
-      // Preserve existing marks when receiving updated card
+      // Check if this is a new card (different song IDs) vs an update to existing card
       setBingoCard(prev => {
-        if (!prev) {
-          // New card - apply stored marks from localStorage
-          const cardWithMarks = applyStoredMarks(data);
-          persistMarks(cardWithMarks);
-          return cardWithMarks;
+        // Check if server explicitly marked this as a new card, or if it's actually a new card
+        const isExplicitNewCard = data.isNewCard === true;
+        const isNoPreviousCard = !prev;
+        
+        // Check if this is a new card (different songs) vs an update (same songs)
+        let isNewCardByContent = false;
+        if (prev && data.squares) {
+          const prevSongIds = new Set(prev.squares.map(s => s.songId));
+          const newSongIds = new Set(data.squares.map((s: any) => s.songId));
+          isNewCardByContent = prevSongIds.size !== newSongIds.size || 
+                                !Array.from(prevSongIds).every(id => newSongIds.has(id));
         }
-        // Merge: keep marks from previous card if positions match, then apply stored marks
+        
+        if (isNoPreviousCard || isExplicitNewCard || isNewCardByContent) {
+          // Brand new card - start with blank marks (don't apply stored marks from previous round)
+          console.log('🔄 New card detected - clearing all marks', { isNoPreviousCard, isExplicitNewCard, isNewCardByContent });
+          // Clear any persisted marks for this room
+          try {
+            localStorage.removeItem(`player_marks_${roomId}`);
+          } catch {}
+          // Remove isNewCard flag from card data before storing
+          const cleanCard = { ...data };
+          delete cleanCard.isNewCard;
+          persistMarks(cleanCard); // Persist blank marks
+          return cleanCard;
+        }
+        
+        // Same card structure - preserve marks from previous card, then apply stored marks
         const mergedSquares = data.squares.map((newSquare: any) => {
           const oldSquare = prev.squares.find((s: any) => s.position === newSquare.position);
           return {
@@ -323,6 +344,8 @@ const PlayerView: React.FC = () => {
           };
         });
         const mergedCard = { ...data, squares: mergedSquares };
+        // Remove isNewCard flag if present
+        delete mergedCard.isNewCard;
         // Apply stored marks (localStorage takes precedence for persistence)
         const cardWithStoredMarks = applyStoredMarks(mergedCard);
         persistMarks(cardWithStoredMarks);
@@ -417,6 +440,28 @@ const PlayerView: React.FC = () => {
     newSocket.on('game-ended', () => {
       setGameState(prev => ({ ...prev, isPlaying: false }));
       console.log('🛑 Game ended');
+    });
+
+    // Listen for mark confirmation from server to ensure sync
+    newSocket.on('mark-confirmed', (data: any) => {
+      const { position, songId, marked } = data;
+      if (!position || !songId) return;
+      
+      setBingoCard(prev => {
+        if (!prev) return prev;
+        const square = prev.squares.find(s => s.position === position && s.songId === songId);
+        if (square && square.marked !== marked) {
+          // Server state differs from local - sync to server state
+          console.log(`🔄 Mark sync: Server says position ${position} should be ${marked ? 'marked' : 'unmarked'}, updating local state`);
+          const updatedSquares = prev.squares.map(s => 
+            s.position === position && s.songId === songId ? { ...s, marked: marked } : s
+          );
+          const updatedCard = { ...prev, squares: updatedSquares };
+          persistMarks(updatedCard);
+          return updatedCard;
+        }
+        return prev;
+      });
     });
 
     newSocket.on('game-restarted', (data: any) => {
@@ -650,6 +695,7 @@ const PlayerView: React.FC = () => {
     });
 
     // Update local state optimistically (toggle)
+    // Server will send mark-confirmed event to ensure sync
     setBingoCard(prev => {
       if (!prev) return prev;
       const updatedSquares = prev.squares.map(s => s.position === position ? { ...s, marked: !s.marked } : s);

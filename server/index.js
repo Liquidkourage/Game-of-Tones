@@ -1506,6 +1506,7 @@ io.on('connection', (socket) => {
         if (bySocket) {
           player.bingoCard = bySocket; // Ensure it's also on the player object
           // Card already has marks preserved from room.bingoCards
+          // Don't send isNewCard flag on reconnect - this is an existing card with marks
           io.to(socket.id).emit('bingo-card', bySocket);
         } else if (clientId && room.clientCards && room.clientCards.has(clientId)) {
           const existingCard = room.clientCards.get(clientId);
@@ -1513,6 +1514,7 @@ io.on('connection', (socket) => {
           room.bingoCards.set(socket.id, existingCard);
           player.bingoCard = existingCard; // Set on player object
           // Card already has marks preserved from clientCards
+          // Don't send isNewCard flag on reconnect - this is an existing card with marks
           io.to(socket.id).emit('bingo-card', existingCard);
         } else if (room.playlistSongs?.length || room.playlists?.length || room.finalizedPlaylists?.length) {
           // Generate card for any player (host or not) if playlists exist
@@ -2592,6 +2594,12 @@ io.on('connection', (socket) => {
         socket.emit('fiveby15-map', { idToColumn: idToCol });
       }
       
+      // Include oneby75 pool if available (for public display fallback)
+      if (room.oneBySeventyFivePool && Array.isArray(room.oneBySeventyFivePool) && room.oneBySeventyFivePool.length > 0) {
+        const oneBy75Ids = room.oneBySeventyFivePool.map(s => s.id).filter(Boolean);
+        socket.emit('oneby75-pool', { ids: oneBy75Ids });
+      }
+      
       io.to(socket.id).emit('room-state', payload);
       console.log(`✅ SYNC-STATE: Sent comprehensive state (${payload.totalPlayedCount} played songs, ${payload.playerCount} players)`);
     } catch (e) {
@@ -2752,6 +2760,13 @@ io.on('connection', (socket) => {
         console.log('🎵 Generating bingo cards...');
         // If mix is already finalized and cards exist, do NOT regenerate to avoid reshuffle
         if (!room.mixFinalized || !room.bingoCards || room.bingoCards.size === 0) {
+          // Clear old cards before generating new ones to ensure fresh start
+          if (room.bingoCards) {
+            room.bingoCards.clear();
+          }
+          if (room.clientCards) {
+            room.clientCards.clear();
+          }
           // If mix was finalized, reuse finalized song order to enforce 1x75 deterministically
           await generateBingoCards(roomId, playlists, room.finalizedSongOrder || null);
         } else {
@@ -3349,12 +3364,14 @@ io.on('connection', (socket) => {
           // Toggle mark state to support unmarking
           square.marked = !square.marked;
           
-          // CRITICAL: Persist mark to room.bingoCards to prevent loss on reconnect/refresh
+          // CRITICAL: Persist mark to room.bingoCards FIRST (source of truth for host)
           if (room.bingoCards && room.bingoCards.has(socket.id)) {
             const roomCard = room.bingoCards.get(socket.id);
             const roomSquare = roomCard.squares.find(s => s.position === position);
             if (roomSquare && roomSquare.songId === songId) {
               roomSquare.marked = square.marked;
+              // CRITICAL: Also update player.bingoCard to keep them in sync
+              player.bingoCard = roomCard;
             }
           }
           
@@ -3366,6 +3383,14 @@ io.on('connection', (socket) => {
               clientSquare.marked = square.marked;
             }
           }
+          
+          // CRITICAL: Send confirmation back to player to ensure their state matches server
+          // This prevents desync where server has mark but player doesn't
+          socket.emit('mark-confirmed', {
+            position,
+            songId,
+            marked: square.marked
+          });
           
           // Send real-time player card updates to host (debounced for rapid marks)
           sendPlayerCardUpdates(roomId);
@@ -3843,7 +3868,8 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       if (player.clientId) {
         room.clientCards.set(player.clientId, card);
       }
-    io.to(playerId).emit('bingo-card', card);
+    // Emit card with isNewCard flag to help client detect new rounds
+    io.to(playerId).emit('bingo-card', { ...card, isNewCard: true });
     } catch (e) {
       console.error(`❌ Error generating card for player ${player.name} (${playerId}):`, e?.message || e);
       // Continue with other players
@@ -4008,7 +4034,8 @@ async function generateBingoCardForPlayer(roomId, playerId) {
     // Also store on player if present
     const p = room.players.get(playerId);
     if (p) p.bingoCard = card;
-    io.to(playerId).emit('bingo-card', card);
+    // Emit card with isNewCard flag to help client detect new rounds
+    io.to(playerId).emit('bingo-card', { ...card, isNewCard: true });
     return card;
   } catch (e) {
     console.error('❌ Error generating single player card:', e?.message || e);
@@ -4037,12 +4064,20 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     const perListFetched = [];
     
     if (songList && songList.length > 0) {
-      // If we are in 5x15 mode and have a finalized global order, honor it exactly
+      // If we have a finalized song order, use it exactly (it's the source of truth)
       if (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) {
-        console.log('📋 5x15 detected: overriding client-provided songList with finalized global shuffle');
-        const idToSong = new Map(songList.map(s => [s.id, s]));
-        const mapped = room.finalizedSongOrder.map(id => idToSong.get(id)).filter(Boolean);
-        allSongs = mapped.length > 0 ? mapped : songList;
+        // finalizedSongOrder can be either IDs or full song objects
+        const isIdArray = typeof room.finalizedSongOrder[0] === 'string';
+        if (isIdArray) {
+          // If it's IDs, map them to full song objects from songList
+          console.log('📋 Using finalizedSongOrder (IDs) to reorder songList');
+          const idToSong = new Map(songList.map(s => [s.id, s]));
+          const mapped = room.finalizedSongOrder.map(id => idToSong.get(id)).filter(Boolean);
+          allSongs = mapped.length > 0 ? mapped : songList;
+        } else {
+          // If it's full objects, use them directly (they're already in the correct order)
+          console.log('📋 Using finalizedSongOrder (full objects) directly');
+          allSongs = room.finalizedSongOrder;
       } else if (Array.isArray(room.oneBySeventyFivePool) && room.oneBySeventyFivePool.length > 0) {
         // CRITICAL FIX: For 1x75 mode, use the EXACT same 75-song pool as bingo cards
         console.log('📋 1x75 detected: using server-side 75-song pool to match bingo cards EXACTLY');
@@ -4138,9 +4173,15 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       try {
         // Use the finalized global shuffle order if present
         if (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) {
-          const idToSong = new Map(allSongs.map(s => [s.id, s]));
-          allSongs = room.finalizedSongOrder.map(id => idToSong.get(id)).filter(Boolean);
-          console.log('🎼 Using finalized 5x15 global shuffled order (75 songs)');
+          const isIdArray = typeof room.finalizedSongOrder[0] === 'string';
+          if (isIdArray) {
+            const idToSong = new Map(allSongs.map(s => [s.id, s]));
+            allSongs = room.finalizedSongOrder.map(id => idToSong.get(id)).filter(Boolean);
+            console.log('🎼 Using finalized 5x15 global shuffled order (75 songs) from IDs');
+          } else {
+            allSongs = room.finalizedSongOrder;
+            console.log('🎼 Using finalized 5x15 global shuffled order (75 songs) from full objects');
+          }
         }
       } catch (e) {
         console.warn('⚠️ Failed to align playback with 5x15 columns:', e?.message || e);
@@ -4154,11 +4195,23 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       return;
     }
 
+    // CRITICAL: If finalizedSongOrder exists, ensure allSongs matches that exact order
+    // This ensures the Spotify playlist order matches what the host interface shows
+    if (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) {
+      const idToSong = new Map(allSongs.map(s => [s.id, s]));
+      const orderedSongs = room.finalizedSongOrder.map(id => idToSong.get(id)).filter(Boolean);
+      if (orderedSongs.length > 0) {
+        console.log(`🎯 Reordering allSongs to match finalizedSongOrder (${orderedSongs.length} songs)`);
+        allSongs = orderedSongs;
+      }
+    }
+    
     // Store the song list in the room for ordered playback
     room.playlistSongs = allSongs;
     room.currentSongIndex = 0;
     room.gameState = 'playing';
     console.log(`📝 Stored ${allSongs.length} songs in room ${roomId} for ordered playback`);
+    console.log(`📋 First 5 songs in order: ${allSongs.slice(0, 5).map(s => `${s.name} (${s.id})`).join(', ')}`);
     
     // Create temporary playlist for context-based playback to prevent hijacks
     try {
@@ -4166,6 +4219,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       const playlistName = `TEMPO Bingo Room ${roomId} - ${new Date().toISOString().slice(0,16)}`;
       room.temporaryPlaylistId = await spotifyService.createTemporaryPlaylist(playlistName, trackUris);
       console.log(`🎼 Created temporary playlist for context: ${room.temporaryPlaylistId}`);
+      console.log(`📋 Playlist track order (first 5): ${trackUris.slice(0, 5).join(', ')}`);
     } catch (error) {
       console.warn('⚠️ Failed to create temporary playlist, falling back to individual track playback:', error);
       room.temporaryPlaylistId = null;
