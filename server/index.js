@@ -2748,15 +2748,6 @@ io.on('connection', (socket) => {
         } catch {}
         room.pattern = room.pattern || 'line';
 
-        // Emit game started as soon as state is ready so UI can show controls
-        io.to(roomId).emit('game-started', {
-          roomId,
-          snippetLength,
-          deviceId,
-          pattern: room.pattern,
-          customMask: Array.from(room.customPattern || [])
-        });
-      
         console.log('🎵 Generating bingo cards...');
         // If mix is already finalized and cards exist, do NOT regenerate to avoid reshuffle
         if (!room.mixFinalized || !room.bingoCards || room.bingoCards.size === 0) {
@@ -2767,8 +2758,14 @@ io.on('connection', (socket) => {
           if (room.clientCards) {
             room.clientCards.clear();
           }
+          // CRITICAL: Use finalizedPlaylists if available to preserve order, otherwise use playlists
+          const playlistsToUse = room.finalizedPlaylists && room.finalizedPlaylists.length > 0 
+            ? room.finalizedPlaylists 
+            : playlists;
+          console.log(`📋 Using ${room.finalizedPlaylists ? 'finalized' : 'regular'} playlists for card generation`);
+          console.log(`📋 Playlist order: ${playlistsToUse.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
           // If mix was finalized, reuse finalized song order to enforce 1x75 deterministically
-          await generateBingoCards(roomId, playlists, room.finalizedSongOrder || null);
+          await generateBingoCards(roomId, playlistsToUse, room.finalizedSongOrder || null);
         } else {
           console.log('🛑 Skipping card regeneration (mix finalized and cards already exist)');
           
@@ -2795,9 +2792,23 @@ io.on('connection', (socket) => {
           }
         }
 
-        // Emit fiveby15 columns if computed during card generation
+        // Emit game started AFTER columns are ready so display can receive them immediately
+        io.to(roomId).emit('game-started', {
+          roomId,
+          snippetLength,
+          deviceId,
+          pattern: room.pattern,
+          customMask: Array.from(room.customPattern || [])
+        });
+        
+        // Emit fiveby15 columns if computed during card generation (AFTER game-started so display can sync)
         if (room.fiveByFifteenColumnsIds) {
-          io.to(roomId).emit('fiveby15-pool', { columns: room.fiveByFifteenColumnsIds, names: room.fiveByFifteenPlaylistNames || [] });
+          console.log(`📊 Emitting fiveby15-pool with ${room.fiveByFifteenColumnsIds.length} columns`);
+          io.to(roomId).emit('fiveby15-pool', { 
+            columns: room.fiveByFifteenColumnsIds, 
+            names: room.fiveByFifteenPlaylistNames || [],
+            meta: room.fiveByFifteenMeta || {}
+          });
           // Build id->column map for clients
           const idToCol = {};
           room.fiveByFifteenColumnsIds.forEach((colIds, colIdx) => {
@@ -3890,9 +3901,13 @@ async function generateBingoCardForPlayer(roomId, playerId) {
   const room = rooms.get(roomId);
   if (!room) return;
   
-  // Use finalized playlists if available, otherwise fall back to regular playlists
-  const playlists = room.finalizedPlaylists || room.playlists;
+  // CRITICAL: Use finalized playlists if available to preserve order, otherwise fall back to regular playlists
+  const playlists = room.finalizedPlaylists && room.finalizedPlaylists.length > 0 
+    ? room.finalizedPlaylists 
+    : room.playlists;
   if (!Array.isArray(playlists)) return;
+  console.log(`📋 Late-join card generation using ${room.finalizedPlaylists ? 'finalized' : 'regular'} playlists`);
+  console.log(`📋 Playlist order: ${playlists.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
   
   // Build a single card using the same 1x75 / 5x15 logic used for all players
   try {

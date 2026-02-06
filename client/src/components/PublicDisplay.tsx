@@ -340,6 +340,12 @@ const PublicDisplay: React.FC = () => {
             setFontSizeMultiplier(payload.publicDisplayFontSize);
           }
           
+          // CRITICAL: Sync currentIndexRef from server state (needed for proper display on refresh)
+          if (typeof payload.currentSongIndex === 'number') {
+            currentIndexRef.current = payload.currentSongIndex;
+            console.log(`🔄 Synced currentIndexRef from room-state: ${payload.currentSongIndex}`);
+          }
+          
           // CRITICAL: Sync played songs to internal tracking from server (single source of truth)
           // This is the ONLY place where playedOrderRef should be updated
           if (Array.isArray(payload.playedSongs)) {
@@ -602,6 +608,17 @@ const PublicDisplay: React.FC = () => {
       if (typeof data.currentIndex === 'number') {
         currentIndexRef.current = data.currentIndex;
       }
+      
+      // CRITICAL: Force refresh on first song to ensure columns are loaded
+      // This is more reliable than timing delays since we know columns are ready when first song plays
+      const isFirstSong = data.currentIndex === 0;
+      if (isFirstSong && (!fiveBy15Columns || fiveBy15Columns.length === 0) && !oneBy75IdsRef.current.length) {
+        console.log('🔄 First song started - forcing sync-state to get columns');
+        setTimeout(() => {
+          newSocket.emit('sync-state', { roomId });
+        }, 100);
+      }
+      
       setTotalPlayedCount(prev => (typeof data.currentIndex === 'number' ? (data.currentIndex + 1) : prev + 1));
       setGameState(prev => ({
         ...prev,
@@ -730,10 +747,11 @@ const PublicDisplay: React.FC = () => {
       } catch {}
       ensureGrid();
       // Always request sync to ensure we have columns and latest state
-      // This ensures columns are received even if we missed the initial emission
+      // Use longer delay to ensure server has finished generating cards and emitting columns
       setTimeout(() => {
+        console.log('🔄 game-started: Requesting sync-state to get columns');
         newSocket.emit('sync-state', { roomId });
-      }, 100); // Small delay to ensure server has finished emitting columns
+      }, 500); // Longer delay to ensure card generation and column emission complete
     });
 
     // Display control events
@@ -1730,7 +1748,17 @@ const PublicDisplay: React.FC = () => {
     // Use state if available, otherwise fallback to ref (for fallback mode)
     const idsToUse = oneBy75Ids || oneBy75IdsRef.current;
     if (!idsToUse) return null;
-    const playedCount = Math.max(0, (currentIndexRef.current ?? -1) + 1);
+    // CRITICAL: Use playedOrderRef as source of truth for played songs (not currentIndexRef)
+    // This ensures all played songs are shown, not just up to currentIndex
+    const playedCountFromOrder = playedOrderRef.current.length;
+    const playedCountFromIndex = Math.max(0, (currentIndexRef.current ?? -1) + 1);
+    // Use the maximum of both to ensure we show all played songs
+    const playedCount = Math.max(playedCountFromOrder, playedCountFromIndex);
+    
+    // Debug logging if there's a mismatch
+    if (playedCountFromOrder !== playedCountFromIndex && playedCountFromOrder > 0) {
+      console.log(`🔄 1x75 display: playedOrderRef.length=${playedCountFromOrder}, currentIndexRef=${currentIndexRef.current}, using playedCount=${playedCount}`);
+    }
     // For fallback mode, use all available songs as "played"
     const played = oneBy75Ids ? new Set(idsToUse.slice(0, playedCount)) : new Set(idsToUse.filter(id => !id.startsWith('__placeholder_')));
     // Build 15 groups from the full pool, then filter to only played IDs within each group
