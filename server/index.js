@@ -2577,6 +2577,21 @@ io.on('connection', (socket) => {
         syncTimestamp: Date.now()
       };
       
+      // Include fiveby15 columns if available (for public display)
+      if (room.fiveByFifteenColumnsIds && Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5) {
+        const idToCol = {};
+        room.fiveByFifteenColumnsIds.forEach((colIds, colIdx) => {
+          colIds.forEach((id) => { idToCol[id] = colIdx; });
+        });
+        // Emit fiveby15-pool and map to ensure display has columns
+        socket.emit('fiveby15-pool', { 
+          columns: room.fiveByFifteenColumnsIds, 
+          names: room.fiveByFifteenPlaylistNames || [],
+          meta: room.fiveByFifteenMeta || {}
+        });
+        socket.emit('fiveby15-map', { idToColumn: idToCol });
+      }
+      
       io.to(socket.id).emit('room-state', payload);
       console.log(`✅ SYNC-STATE: Sent comprehensive state (${payload.totalPlayedCount} played songs, ${payload.playerCount} players)`);
     } catch (e) {
@@ -3748,10 +3763,13 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       } else if (mode === '5x15') {
         // For each of 5 playlists, sample 5 unique tracks from globally deduplicated pools
         // Note: Cross-playlist duplicates are already removed, so we only need cross-column uniqueness within this card
+        // CRITICAL: Use perListGloballyUnique in the SAME ORDER as display columns to ensure alignment
         const used = new Set();
         const columns = [];
         let ok = true;
         for (let col = 0; col < 5; col++) {
+          // Use perListGloballyUnique[col] which matches display column col
+          const playlistName = perListGloballyUnique[col].name || `Column ${col}`;
           const pool = properShuffle(perListGloballyUnique[col].songs);
           const colPicks = [];
           for (const s of pool) {
@@ -3760,6 +3778,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           }
           if (colPicks.length < 5) { ok = false; break; }
           columns.push(colPicks);
+          console.log(`🎯 Card for ${player.name}: Column ${col} (${playlistName}) - ${colPicks.length} songs selected`);
         }
         if (!ok) {
           console.error(`❌ 5x15 mode failed for player ${player.name} - insufficient unique songs per column`);
@@ -3767,11 +3786,13 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           continue; // Skip this player - don't use fallback that creates different card types
         } else {
           // Flatten column-major into row-major 5x5
+          // This ensures column 0 songs go to card column 0, column 1 to card column 1, etc.
           for (let row = 0; row < 5; row++) {
             for (let col = 0; col < 5; col++) {
               chosen25.push(columns[col][row]);
             }
           }
+          console.log(`✅ Card for ${player.name}: Built with columns in order: ${columns.map((_, idx) => perListGloballyUnique[idx].name).join(', ')}`);
         }
       } else {
         const pool = buildGlobalPool();

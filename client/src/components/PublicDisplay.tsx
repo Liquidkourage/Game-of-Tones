@@ -608,7 +608,8 @@ const PublicDisplay: React.FC = () => {
         isPlaying: true,
         currentSong: song,
         snippetLength: Number(data.snippetLength) || prev.snippetLength,
-        playedSongs: [...prev.playedSongs, song].slice(-25)
+        // Don't limit playedSongs - we need all songs for fallback display mode
+        playedSongs: [...prev.playedSongs, song]
       }));
       // Track played order for reveal lag
       {
@@ -728,6 +729,10 @@ const PublicDisplay: React.FC = () => {
         localStorage.removeItem(`display_baselines_${roomId}`);
       } catch {}
       ensureGrid();
+      // Request sync to get fiveby15 columns if not already received
+      if (!fiveBy15Columns) {
+        newSocket.emit('sync-state', { roomId });
+      }
     });
 
     // Display control events
@@ -2383,8 +2388,16 @@ const PublicDisplay: React.FC = () => {
                 // Build a temporary oneBy75Ids array from available data
                 const fallbackIds: string[] = [];
                 
-                // First, try to get IDs from gameState.playedSongs
-                if (gameState.playedSongs && gameState.playedSongs.length > 0) {
+                // Use playedOrderRef as source of truth (has all played songs, not limited to 25)
+                if (playedOrderRef.current && playedOrderRef.current.length > 0) {
+                  playedOrderRef.current.forEach(songId => {
+                    if (songId && !fallbackIds.includes(songId)) {
+                      fallbackIds.push(songId);
+                    }
+                  });
+                }
+                // Fallback to gameState.playedSongs if playedOrderRef is empty
+                else if (gameState.playedSongs && gameState.playedSongs.length > 0) {
                   gameState.playedSongs.forEach(song => {
                     if (song.id && !fallbackIds.includes(song.id)) {
                       fallbackIds.push(song.id);
@@ -2399,11 +2412,25 @@ const PublicDisplay: React.FC = () => {
                 }
                 
                 // Ensure metadata is set for played songs
-                if (gameState.playedSongs && gameState.playedSongs.length > 0) {
+                // Use playedOrderRef to get all songs, then look up metadata from idMetaRef or gameState
+                if (playedOrderRef.current && playedOrderRef.current.length > 0) {
+                  playedOrderRef.current.forEach((songId, idx) => {
+                    // Metadata should already be in idMetaRef from room-state or song-playing events
+                    if (!idMetaRef.current[songId]) {
+                      // Fallback: try to get from gameState.playedSongs
+                      const song = gameState.playedSongs.find(s => s.id === songId);
+                      if (song && song.name && song.artist) {
+                        idMetaRef.current[songId] = { name: song.name, artist: song.artist };
+                      }
+                    }
+                    // Set currentIndexRef to track how many songs have been played
+                    currentIndexRef.current = idx;
+                  });
+                } else if (gameState.playedSongs && gameState.playedSongs.length > 0) {
+                  // Fallback to gameState.playedSongs if playedOrderRef is empty
                   gameState.playedSongs.forEach((song, idx) => {
                     if (song.id && song.name && song.artist) {
                       idMetaRef.current[song.id] = { name: song.name, artist: song.artist };
-                      // Set currentIndexRef to track how many songs have been played
                       currentIndexRef.current = idx;
                     }
                   });
