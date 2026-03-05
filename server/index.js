@@ -3613,7 +3613,9 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       perListGloballyUnique = perListUnique.map((pl, index) => {
         const uniqueSongs = [];
         const duplicatesFound = [];
+        const replacementsFound = [];
         
+        // First pass: collect unique songs and identify duplicates
         for (const song of pl.songs) {
           if (!globalSeen.has(song.id)) {
             globalSeen.add(song.id);
@@ -3623,7 +3625,43 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           }
         }
         
-        if (duplicatesFound.length > 0) {
+        // Second pass: replace duplicates with alternative songs from the same playlist
+        if (duplicatesFound.length > 0 && uniqueSongs.length < 15) {
+          const needed = 15 - uniqueSongs.length;
+          let replacementsAdded = 0;
+          
+          // Look for replacement songs from the same playlist
+          for (const song of pl.songs) {
+            if (replacementsAdded >= needed) break;
+            
+            // Skip if already in uniqueSongs or if it's a duplicate we're replacing
+            const isAlreadyIncluded = uniqueSongs.some(s => s.id === song.id);
+            const isDuplicate = duplicatesFound.some(d => d.id === song.id);
+            
+            if (!isAlreadyIncluded && !isDuplicate && !globalSeen.has(song.id)) {
+              globalSeen.add(song.id);
+              uniqueSongs.push(song);
+              replacementsFound.push(song);
+              replacementsAdded++;
+              console.log(`✅ Replacement found for playlist "${pl.name}": "${song.name}" by ${song.artist}`);
+            }
+          }
+          
+          if (duplicatesFound.length > 0) {
+            console.log(`⚠️ Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
+            duplicatesFound.forEach(dup => {
+              console.log(`   - Duplicate: "${dup.name}" by ${dup.artist}`);
+            });
+          }
+          
+          if (replacementsFound.length > 0) {
+            console.log(`✅ Playlist "${pl.name}" had ${replacementsFound.length} replacement songs added`);
+            replacementsFound.forEach(rep => {
+              console.log(`   + Replacement: "${rep.name}" by ${rep.artist}`);
+            });
+          }
+        } else if (duplicatesFound.length > 0) {
+          // Log duplicates even if we don't need replacements
           console.log(`⚠️ Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
           duplicatesFound.forEach(dup => {
             console.log(`   - Duplicate: "${dup.name}" by ${dup.artist}`);
@@ -3632,14 +3670,15 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
         
         if (uniqueSongs.length < 15) {
           const shortage = 15 - uniqueSongs.length;
-          warnings.push(`Playlist "${pl.name}" only has ${uniqueSongs.length} unique songs after deduplication (needs 15, short by ${shortage})`);
+          warnings.push(`Playlist "${pl.name}" only has ${uniqueSongs.length} unique songs after deduplication and replacement (needs 15, short by ${shortage})`);
         }
         
         return {
           ...pl,
           songs: uniqueSongs,
           originalCount: pl.songs.length,
-          duplicatesRemoved: duplicatesFound.length
+          duplicatesRemoved: duplicatesFound.length,
+          replacementsAdded: replacementsFound.length
         };
       });
       
@@ -3655,16 +3694,19 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
         // Fall back to using original perListUnique for other modes
         perListGloballyUnique = perListUnique;
       } else {
-        const totalDuplicates = perListGloballyUnique.reduce((sum, pl) => sum + pl.duplicatesRemoved, 0);
-        if (totalDuplicates > 0) {
-          console.log(`✅ Successfully removed ${totalDuplicates} cross-playlist duplicates. All playlists still have ≥15 unique songs.`);
+        const totalDuplicates = perListGloballyUnique.reduce((sum, pl) => sum + (pl.duplicatesRemoved || 0), 0);
+        const totalReplacements = perListGloballyUnique.reduce((sum, pl) => sum + (pl.replacementsAdded || 0), 0);
+        if (totalDuplicates > 0 || totalReplacements > 0) {
+          console.log(`✅ Successfully processed duplicates: ${totalDuplicates} removed, ${totalReplacements} replaced. All playlists still have ≥15 unique songs.`);
           io.to(roomId).emit('deduplication-success', {
             totalDuplicatesRemoved: totalDuplicates,
+            totalReplacementsAdded: totalReplacements,
             playlistDetails: perListGloballyUnique.map(pl => ({
               name: pl.name,
               originalCount: pl.originalCount,
               finalCount: pl.songs.length,
-              duplicatesRemoved: pl.duplicatesRemoved
+              duplicatesRemoved: pl.duplicatesRemoved || 0,
+              replacementsAdded: pl.replacementsAdded || 0
             }))
           });
         }
@@ -3709,7 +3751,8 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           roomRef.fiveByFifteenMeta = metaMap;
           // Finalize a single global shuffled order of the 75 picks
           const globalOrder = properShuffle(fiveCols.flat().map(s => s.id));
-          roomRef.finalizedSongOrder = globalOrder;
+          // Deduplicate IDs to prevent duplicates in output playlist
+          roomRef.finalizedSongOrder = [...new Set(globalOrder)];
           console.log(`📊 Final column assignment for display:`);
           colNames.forEach((name, idx) => {
             console.log(`   Column ${idx} (left-to-right position ${idx + 1}): "${name}"`);
@@ -3945,17 +3988,56 @@ async function generateBingoCardForPlayer(roomId, playerId) {
       
       perListGloballyUnique = perListUnique.map((pl, index) => {
         const uniqueSongs = [];
+        const duplicatesFound = [];
+        const replacementsFound = [];
         
+        // First pass: collect unique songs and identify duplicates
         for (const song of pl.songs) {
           if (!globalSeen.has(song.id)) {
             globalSeen.add(song.id);
             uniqueSongs.push(song);
+          } else {
+            duplicatesFound.push(song);
           }
+        }
+        
+        // Second pass: replace duplicates with alternative songs from the same playlist
+        if (duplicatesFound.length > 0 && uniqueSongs.length < 15) {
+          const needed = 15 - uniqueSongs.length;
+          let replacementsAdded = 0;
+          
+          // Look for replacement songs from the same playlist
+          for (const song of pl.songs) {
+            if (replacementsAdded >= needed) break;
+            
+            // Skip if already in uniqueSongs or if it's a duplicate we're replacing
+            const isAlreadyIncluded = uniqueSongs.some(s => s.id === song.id);
+            const isDuplicate = duplicatesFound.some(d => d.id === song.id);
+            
+            if (!isAlreadyIncluded && !isDuplicate && !globalSeen.has(song.id)) {
+              globalSeen.add(song.id);
+              uniqueSongs.push(song);
+              replacementsFound.push(song);
+              replacementsAdded++;
+              console.log(`✅ Late-join replacement found for playlist "${pl.name}": "${song.name}" by ${song.artist}`);
+            }
+          }
+          
+          if (duplicatesFound.length > 0) {
+            console.log(`⚠️ Late-join: Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
+          }
+          if (replacementsFound.length > 0) {
+            console.log(`✅ Late-join: Playlist "${pl.name}" had ${replacementsFound.length} replacement songs added`);
+          }
+        } else if (duplicatesFound.length > 0) {
+          console.log(`⚠️ Late-join: Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
         }
         
         return {
           ...pl,
-          songs: uniqueSongs
+          songs: uniqueSongs,
+          duplicatesRemoved: duplicatesFound.length,
+          replacementsAdded: replacementsFound.length
         };
       });
     }
@@ -4142,17 +4224,56 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         
         perListGloballyUnique = perListUnique.map((pl, index) => {
           const uniqueSongs = [];
+          const duplicatesFound = [];
+          const replacementsFound = [];
           
+          // First pass: collect unique songs and identify duplicates
           for (const song of pl.songs) {
             if (!globalSeen.has(song.id)) {
               globalSeen.add(song.id);
               uniqueSongs.push(song);
+            } else {
+              duplicatesFound.push(song);
             }
+          }
+          
+          // Second pass: replace duplicates with alternative songs from the same playlist
+          if (duplicatesFound.length > 0 && uniqueSongs.length < 15) {
+            const needed = 15 - uniqueSongs.length;
+            let replacementsAdded = 0;
+            
+            // Look for replacement songs from the same playlist
+            for (const song of pl.songs) {
+              if (replacementsAdded >= needed) break;
+              
+              // Skip if already in uniqueSongs or if it's a duplicate we're replacing
+              const isAlreadyIncluded = uniqueSongs.some(s => s.id === song.id);
+              const isDuplicate = duplicatesFound.some(d => d.id === song.id);
+              
+              if (!isAlreadyIncluded && !isDuplicate && !globalSeen.has(song.id)) {
+                globalSeen.add(song.id);
+                uniqueSongs.push(song);
+                replacementsFound.push(song);
+                replacementsAdded++;
+                console.log(`✅ Playback replacement found for playlist "${pl.name}": "${song.name}" by ${song.artist}`);
+              }
+            }
+            
+            if (duplicatesFound.length > 0) {
+              console.log(`⚠️ Playback: Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
+            }
+            if (replacementsFound.length > 0) {
+              console.log(`✅ Playback: Playlist "${pl.name}" had ${replacementsFound.length} replacement songs added`);
+            }
+          } else if (duplicatesFound.length > 0) {
+            console.log(`⚠️ Playback: Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
           }
           
           return {
             ...pl,
-            songs: uniqueSongs
+            songs: uniqueSongs,
+            duplicatesRemoved: duplicatesFound.length,
+            replacementsAdded: replacementsFound.length
           };
         });
       }
@@ -4215,9 +4336,20 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     // This ensures the Spotify playlist order matches what the host interface shows
     if (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) {
       const idToSong = new Map(allSongs.map(s => [s.id, s]));
-      const orderedSongs = room.finalizedSongOrder.map(id => idToSong.get(id)).filter(Boolean);
+      // Deduplicate finalizedSongOrder IDs to prevent duplicate songs in output playlist
+      const seenIds = new Set();
+      const orderedSongs = room.finalizedSongOrder
+        .map(id => {
+          if (seenIds.has(id)) {
+            console.log(`⚠️ Skipping duplicate ID in finalizedSongOrder: ${id}`);
+            return null;
+          }
+          seenIds.add(id);
+          return idToSong.get(id);
+        })
+        .filter(Boolean);
       if (orderedSongs.length > 0) {
-        console.log(`🎯 Reordering allSongs to match finalizedSongOrder (${orderedSongs.length} songs)`);
+        console.log(`🎯 Reordering allSongs to match finalizedSongOrder (${orderedSongs.length} unique songs)`);
         allSongs = orderedSongs;
       }
     }

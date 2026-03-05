@@ -2079,8 +2079,19 @@ const HostView: React.FC = () => {
         }
       }
 
+      // Deduplicate songs by ID (fix for duplicate songs appearing in output playlist)
+      const seen = new Set<string>();
+      const uniqueSongs = allSongs.filter(song => {
+        if (seen.has(song.id)) {
+          console.log(`⚠️ Duplicate song removed: "${song.name}" by ${song.artist} (ID: ${song.id})`);
+          return false;
+        }
+        seen.add(song.id);
+        return true;
+      });
+
       // Shuffle the songs using Fisher-Yates algorithm
-      const shuffledSongs = [...allSongs];
+      const shuffledSongs = [...uniqueSongs];
       for (let i = shuffledSongs.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [shuffledSongs[i], shuffledSongs[j]] = [shuffledSongs[j], shuffledSongs[i]];

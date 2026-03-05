@@ -280,11 +280,194 @@
 
 ## Summary
 
-**Total Issues Found:** 13
-- **Critical:** 7
+**Total Issues Found:** 14
+- **Critical:** 8
 - **Medium:** 3
 - **Low:** 3
 
 **Most Critical:** Bug #5 (current song not in calledSongIds during validation) - this directly causes valid bingos to be rejected.
+
+---
+
+### 14. 🔄 **Duplicate Songs Not Replaced with Alternative Tracks in 5x15 Mode**
+**Location:** `server/index.js:3608-3671` in `generateBingoCards()`
+
+**Problem:**
+- When duplicate songs are detected across child playlists in 5x15 mode, the system **removes** duplicates but does **NOT replace** them with alternative tracks from the same playlist
+- The deduplication logic (lines 3613-3644) iterates through each playlist and filters out songs that have already been seen globally
+- When a duplicate is found in playlist B (because it was already seen in playlist A), the code simply skips it (line 3622) and adds it to `duplicatesFound` array
+- The playlist is then left with fewer songs than needed (potentially < 15 unique songs)
+- If a playlist ends up with fewer than 15 songs after deduplication, the system only **warns** (lines 3647-3656) but does not attempt to fetch replacement songs
+
+**Expected Behavior:**
+- When a duplicate song is detected in a playlist, the system should:
+  1. Remove the duplicate from that playlist's pool
+  2. Find the **next unique song** from the same playlist that hasn't been seen globally yet
+  3. Replace the duplicate with this new song
+  4. Continue until the playlist has at least 15 unique songs (or exhausts available songs)
+
+**Current Behavior:**
+- Duplicates are detected and logged (lines 3626-3630)
+- Duplicates are removed from the playlist's song array (line 3640)
+- No replacement logic exists - playlists are left short
+- System falls back to a different mode or warns if playlists don't have enough songs
+
+**Code Flow:**
+```javascript
+// Lines 3617-3624: Duplicate detection
+for (const song of pl.songs) {
+  if (!globalSeen.has(song.id)) {
+    globalSeen.add(song.id);
+    uniqueSongs.push(song);
+  } else {
+    duplicatesFound.push(song);  // ❌ Just tracks it, doesn't replace
+  }
+}
+```
+
+**Impact:**
+- **High:** Games fail to start in 5x15 mode when duplicates cause playlists to have < 15 unique songs
+- **Medium:** Even if playlists have exactly 15 songs after deduplication, the system doesn't utilize the full playlist content - songs that could be used are ignored
+- **User Experience:** Host sees warning messages but game may still proceed with incomplete playlists, or game fails to start entirely
+
+**Root Cause:**
+- The deduplication logic processes playlists sequentially and only uses songs that appear **first** in the iteration order
+- No mechanism exists to "backfill" playlists that lose songs due to duplicates
+- The `getPlaylistTracks()` function (in `server/spotify.js:184-224`) fetches ALL songs from a playlist, but the replacement logic to use those additional songs doesn't exist
+
+**Affected Code Paths:**
+1. `generateBingoCards()` - Main card generation (lines 3608-3671)
+2. `generateBingoCardForPlayer()` - Late-join card generation (lines 3940-3960) - **Same issue exists here**
+3. `startAutomaticPlayback()` - Playback initialization (lines 4137-4158) - **Same issue exists here**
+
+**Fix Strategy:**
+1. After detecting duplicates in a playlist, iterate through the **remaining songs** in that playlist
+2. For each duplicate found, find the next song from the same playlist that:
+   - Hasn't been seen globally (`!globalSeen.has(song.id)`)
+   - Is not already in the `uniqueSongs` array for this playlist
+3. Replace the duplicate with this alternative song
+4. Continue until playlist has 15 unique songs OR all songs from playlist are exhausted
+5. If playlist still has < 15 songs after replacement attempts, then warn/fallback
+
+**Example Scenario:**
+- Playlist A has songs: [Song1, Song2, Song3, ..., Song20]
+- Playlist B has songs: [Song1 (duplicate), Song21, Song22, ..., Song30]
+- **Current behavior:** Playlist B ends up with [Song21, Song22, ..., Song30] = 10 songs (short by 5)
+- **Expected behavior:** Playlist B should replace Song1 with Song31, Song32, etc. from its remaining tracks until it has 15 unique songs
+
+**Testing Notes:**
+- Test with playlists where the same song appears in multiple child playlists
+- Verify that playlists maintain 15+ unique songs after deduplication
+- Verify that replacement songs come from the same playlist (maintaining theme consistency)
+- Verify that the same replacement logic works in `generateBingoCardForPlayer()` and `startAutomaticPlayback()`
+
+**Additional Finding - Duplicate Songs in Output Playlist:**
+The user reports that "Sweet Home Alabama" appears TWICE in the final output/playback playlist, even though deduplication should have occurred.
+
+## 🎯 **EXACT CULPRIT IDENTIFIED:**
+
+**Location:** `server/index.js:4216-4222` in `startAutomaticPlayback()`
+
+**The Bug:**
+After `startAutomaticPlayback()` correctly maps deduplicated IDs from `room.finalizedSongOrder` to songs (lines 4089-4091), there's a SECOND reordering step at lines 4216-4222 that can reintroduce duplicates:
+
+```javascript
+// Line 4216-4222: SECOND reordering (BUG HERE)
+if (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) {
+  const idToSong = new Map(allSongs.map(s => [s.id, s]));
+  const orderedSongs = room.finalizedSongOrder.map(id => idToSong.get(id)).filter(Boolean);
+  if (orderedSongs.length > 0) {
+    console.log(`🎯 Reordering allSongs to match finalizedSongOrder (${orderedSongs.length} songs)`);
+    allSongs = orderedSongs;
+  }
+}
+```
+
+**Why This Causes Duplicates:**
+
+1. **Client `generateSongList()` creates duplicates** (`client/src/components/HostView.tsx:2058-2094`):
+   - Loops through all playlists and pushes ALL songs into `allSongs` array (line 2078)
+   - **NO DEDUPLICATION** - if "Sweet Home Alabama" is in 2 playlists, it gets added twice
+   - This duplicate-containing `songList` is sent to `finalize-mix`
+
+2. **Server stores duplicate list** (`server/index.js:1571`):
+   - `room.finalizedSongOrder = songList` (stores duplicate-containing list)
+
+3. **Card generation deduplicates** (`server/index.js:3712`):
+   - `generateBingoCards()` creates deduplicated columns
+   - **OVERWRITES** `room.finalizedSongOrder = globalOrder` (deduplicated IDs)
+
+4. **Playback starts with duplicate `songList`** (`server/index.js:2822`):
+   - `start-game` event passes the original `songList` (with duplicates) to `startAutomaticPlayback()`
+
+5. **First mapping works correctly** (`server/index.js:4089-4091`):
+   - Creates Map from `songList` (duplicates collapse to single entry per ID)
+   - Maps deduplicated IDs from `finalizedSongOrder` → correctly deduplicated `allSongs`
+
+6. **BUG: Second reordering reintroduces duplicates** (`server/index.js:4216-4222`):
+   - Creates NEW Map from `allSongs` (which is now deduplicated)
+   - Maps IDs from `room.finalizedSongOrder` again
+   - **IF `room.finalizedSongOrder` somehow still contains duplicates** (race condition, or if card generation didn't complete), OR
+   - **IF the check at line 4083 fails** and `finalizedSongOrder` is the original duplicate-containing list from line 1571, then duplicates get through
+
+**Most Likely Scenario:**
+The issue occurs when `room.finalizedSongOrder` still contains the original duplicate-containing list from line 1571. This can happen if:
+
+1. **Race condition:** `startAutomaticPlayback()` is called before `generateBingoCards()` completes (unlikely since it's `await`ed, but possible if there's an error)
+2. **Mode detection fails:** If the mode isn't detected as '5x15' (line 3680), the code block at line 3687-3736 doesn't execute, so `finalizedSongOrder` never gets overwritten with deduplicated IDs
+3. **Exception in card generation:** If an exception occurs in the try-catch at line 3688-3735, `finalizedSongOrder` remains as the duplicate-containing list
+
+**The Second Reordering Bug (lines 4216-4222):**
+Even if the first mapping works correctly, the SECOND reordering creates a new Map from `allSongs` and maps IDs from `room.finalizedSongOrder` again. If `finalizedSongOrder` contains duplicate IDs (from the original client list), mapping them will create duplicate song entries in the final array.
+
+**Example:**
+- `room.finalizedSongOrder = ['id1', 'id2', 'id1', 'id3']` (duplicate IDs)
+- `allSongs = [song1, song2, song3]` (deduplicated)
+- Line 4217: `idToSong = Map{id1: song1, id2: song2, id3: song3}`
+- Line 4218: Maps `['id1', 'id2', 'id1', 'id3']` → `[song1, song2, song1, song3]` (DUPLICATES!)
+
+**Root Cause:**
+- Client-side `generateSongList()` doesn't deduplicate (line 2078 in HostView.tsx)
+- Server has TWO places that set `room.finalizedSongOrder`:
+  1. Line 1571: Stores duplicate-containing list from client
+  2. Line 3712: Overwrites with deduplicated IDs
+- The second reordering at line 4216-4222 is redundant and can cause issues if `finalizedSongOrder` isn't properly deduplicated
+
+**Fix:**
+1. **Immediate:** Ensure `room.finalizedSongOrder` is ALWAYS deduplicated. After line 3712, add deduplication:
+   ```javascript
+   roomRef.finalizedSongOrder = [...new Set(globalOrder)]; // Deduplicate IDs
+   ```
+
+2. **Critical:** Fix the second reordering at lines 4216-4222 to deduplicate:
+   ```javascript
+   if (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) {
+     const idToSong = new Map(allSongs.map(s => [s.id, s]));
+     const seenIds = new Set();
+     const orderedSongs = room.finalizedSongOrder
+       .map(id => {
+         if (seenIds.has(id)) return null; // Skip duplicates
+         seenIds.add(id);
+         return idToSong.get(id);
+       })
+       .filter(Boolean);
+     if (orderedSongs.length > 0) {
+       allSongs = orderedSongs;
+     }
+   }
+   ```
+
+3. **Better:** Add deduplication to client-side `generateSongList()` (HostView.tsx line 2078):
+   ```javascript
+   // After line 2078, deduplicate:
+   const seen = new Set();
+   const uniqueSongs = allSongs.filter(song => {
+     if (seen.has(song.id)) return false;
+     seen.add(song.id);
+     return true;
+   });
+   ```
+
+4. **Best:** Ensure `finalizedSongOrder` is set ONLY after successful deduplication, never store the original duplicate-containing list
 
 
