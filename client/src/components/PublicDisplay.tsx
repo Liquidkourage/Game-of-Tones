@@ -612,7 +612,7 @@ const PublicDisplay: React.FC = () => {
       // CRITICAL: Force refresh on first song to ensure columns are loaded
       // This is more reliable than timing delays since we know columns are ready when first song plays
       const isFirstSong = data.currentIndex === 0;
-      if (isFirstSong && (!fiveBy15Columns || fiveBy15Columns.length === 0) && !oneBy75IdsRef.current.length) {
+      if (isFirstSong && (!fiveBy15Columns || fiveBy15Columns.length === 0) && (!oneBy75IdsRef.current || oneBy75IdsRef.current.length === 0)) {
         console.log('🔄 First song started - forcing sync-state to get columns');
         setTimeout(() => {
           newSocket.emit('sync-state', { roomId });
