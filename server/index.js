@@ -2766,8 +2766,20 @@ io.on('connection', (socket) => {
           console.log(`📋 Playlist order: ${playlistsToUse.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
           // If mix was finalized, reuse finalized song order to enforce 1x75 deterministically
           await generateBingoCards(roomId, playlistsToUse, room.finalizedSongOrder || null);
+          
+          // CRITICAL: Auto-set pattern to 'full_card' for 1x75 mode if pattern wasn't explicitly set
+          if (room.oneBySeventyFivePool && room.oneBySeventyFivePool.length === 75 && !incomingPattern) {
+            console.log('🎯 1x75 mode detected: Auto-setting pattern to full_card');
+            room.pattern = 'full_card';
+          }
         } else {
           console.log('🛑 Skipping card regeneration (mix finalized and cards already exist)');
+          
+          // Also check for 1x75 mode when cards already exist
+          if (room.oneBySeventyFivePool && room.oneBySeventyFivePool.length === 75 && !incomingPattern && room.pattern === 'line') {
+            console.log('🎯 1x75 mode detected (existing cards): Auto-setting pattern to full_card');
+            room.pattern = 'full_card';
+          }
           
           // BUT check for any players who don't have cards (joined after finalization)
           const playersWithoutCards = [];
