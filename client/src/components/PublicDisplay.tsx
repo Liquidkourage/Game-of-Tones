@@ -358,10 +358,22 @@ const PublicDisplay: React.FC = () => {
             
             if (hadMismatch) {
               console.log(`🔄 Display sync detected mismatch: local=${localCount}, server=${serverCount} - syncing from server`);
+              console.log(`🔄 Local order: [${playedOrderRef.current.slice(0, 5).join(', ')}...]`);
+              console.log(`🔄 Server order: [${playedIds.slice(0, 5).join(', ')}...]`);
             }
             
             // Always use server state as source of truth (ensures correct order)
+            // Server order is authoritative - it corrects any ordering issues from immediate updates
             playedOrderRef.current = playedIds;
+            
+            // Ensure playedSeqRef matches playedOrderRef order for consistent sorting
+            // Rebuild playedSeqRef based on server order to ensure consistency
+            playedSeqCounterRef.current = 0;
+            playedIds.forEach((id: string) => {
+              playedSeqCounterRef.current = playedSeqCounterRef.current + 1;
+              playedSeqRef.current[id] = playedSeqCounterRef.current;
+            });
+            console.log(`🔄 Synced playedSeqRef to match server order (${playedIds.length} songs)`);
             
             // Update metadata cache
             payload.playedSongs.forEach((song: any) => {
@@ -661,9 +673,29 @@ const PublicDisplay: React.FC = () => {
             pendingPlacementRef.current.add(song.id);
           }
         }
-        // NOTE: Do NOT update playedOrderRef here - server is single source of truth
-        // playedOrderRef is only updated via room-state sync events to ensure correct order
-        // This prevents out-of-order updates if song-playing events arrive late
+        // CRITICAL FIX: Update playedOrderRef immediately so songs appear and letters can reveal
+        // But maintain order - if currentIndex is available, use it; otherwise append
+        // room-state sync will still override with authoritative server order if there's a mismatch
+        if (!playedOrderRef.current.includes(song.id)) {
+          if (typeof data.currentIndex === 'number' && data.currentIndex >= 0) {
+            // Insert at correct position based on currentIndex
+            // If currentIndex is 0, insert at start; if 1, after first, etc.
+            const newOrder = [...playedOrderRef.current];
+            // Remove if already exists (shouldn't happen, but safety check)
+            const existingIdx = newOrder.indexOf(song.id);
+            if (existingIdx >= 0) {
+              newOrder.splice(existingIdx, 1);
+            }
+            // Insert at position matching currentIndex
+            newOrder.splice(data.currentIndex, 0, song.id);
+            playedOrderRef.current = newOrder;
+            console.log(`🔄 Updated playedOrderRef immediately: song ${song.id} at index ${data.currentIndex}, total: ${newOrder.length}`);
+          } else {
+            // Fallback: append if no index available
+            playedOrderRef.current = [...playedOrderRef.current, song.id];
+            console.log(`🔄 Updated playedOrderRef (append): song ${song.id}, total: ${playedOrderRef.current.length}`);
+          }
+        }
         if (debugMode) {
           const col = idToColumnRef.current[song.id];
           try { console.log('[Display] song-playing', { index: currentIndexRef.current, id: song.id, col, name: song.name }); } catch {}
@@ -1750,22 +1782,30 @@ const PublicDisplay: React.FC = () => {
     if (!idsToUse) return null;
     // CRITICAL: Use playedOrderRef as source of truth for played songs (not currentIndexRef)
     // This ensures all played songs are shown, not just up to currentIndex
+    // CRITICAL FIX: Use playedOrderRef directly instead of slicing idsToUse
+    // Songs may be played in different order than pool order, so slicing would exclude songs beyond position 45
+    const played = new Set(playedOrderRef.current);
+    
+    // Debug logging for tracking
     const playedCountFromOrder = playedOrderRef.current.length;
     const playedCountFromIndex = Math.max(0, (currentIndexRef.current ?? -1) + 1);
-    // Use the maximum of both to ensure we show all played songs
-    const playedCount = Math.max(playedCountFromOrder, playedCountFromIndex);
-    
-    // Debug logging if there's a mismatch
     if (playedCountFromOrder !== playedCountFromIndex && playedCountFromOrder > 0) {
-      console.log(`🔄 1x75 display: playedOrderRef.length=${playedCountFromOrder}, currentIndexRef=${currentIndexRef.current}, using playedCount=${playedCount}`);
+      console.log(`🔄 1x75 display: playedOrderRef.length=${playedCountFromOrder}, currentIndexRef=${currentIndexRef.current}`);
     }
-    // For fallback mode, use all available songs as "played"
-    const played = oneBy75Ids ? new Set(idsToUse.slice(0, playedCount)) : new Set(idsToUse.filter(id => !id.startsWith('__placeholder_')));
     // Build 15 groups from the full pool, then filter to only played IDs within each group
+    // CRITICAL FIX: Sort within each group by play order so songs appear sequentially
     const groups: string[][] = Array.from({ length: 15 }, (_, g) => {
       const start = g * 5;
       const slice = idsToUse.slice(start, start + 5);
-      return slice.filter((id) => !id.startsWith('__placeholder_') && played.has(id));
+      const playedInGroup = slice.filter((id) => !id.startsWith('__placeholder_') && played.has(id));
+      // Sort by play sequence to ensure songs appear in order played
+      return playedInGroup.sort((a, b) => {
+        const sa = playedSeqRef.current[a] ?? Number.MAX_SAFE_INTEGER;
+        const sb = playedSeqRef.current[b] ?? Number.MAX_SAFE_INTEGER;
+        if (sa !== sb) return sa - sb;
+        // Fallback to original group order
+        return slice.indexOf(a) - slice.indexOf(b);
+      });
     });
     const visibleGroups = groups.filter(g => g.length > 0);
     const total = visibleGroups.length;
