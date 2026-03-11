@@ -1565,7 +1565,9 @@ const PublicDisplay: React.FC = () => {
     if (requestedFiveByFifteen && !fiveBy15Columns) return (
       <div className="call-list-content"><div className="no-calls"><p>Initializing columns…</p></div></div>
     );
-    if (!oneBy75Ids) return null;
+    // CRITICAL FIX: Use ref as fallback if state isn't set yet (fixes first song not displaying)
+    const idsToUse = oneBy75Ids || oneBy75IdsRef.current;
+    if (!idsToUse) return null;
     const played = new Set(playedOrderRef.current);
     // If we have explicit 5x15 columns, respect those per-column lists; otherwise derive from flat pool
     // Build base columns from authoritative map if available, else fallback
@@ -1574,13 +1576,13 @@ const PublicDisplay: React.FC = () => {
       baseCols = fiveBy15Columns;
     } else if (idToColumnRef.current && Object.keys(idToColumnRef.current).length > 0) {
       const colsInit: string[][] = [[], [], [], [], []];
-      for (const id of oneBy75Ids) {
+      for (const id of idsToUse) {
         const col = idToColumnRef.current[id];
         if (col >= 0 && col < 5) colsInit[col].push(id);
       }
       baseCols = colsInit;
     } else {
-      baseCols = [0,1,2,3,4].map(c => oneBy75Ids.slice(c*15, c*15 + 15));
+      baseCols = [0,1,2,3,4].map(c => idsToUse.slice(c*15, c*15 + 15));
     }
     // Build visible columns: filter by played and sort by per-song play sequence so new items append
     const cols = baseCols.map(col => col
@@ -1792,6 +1794,12 @@ const PublicDisplay: React.FC = () => {
     if (playedCountFromOrder !== playedCountFromIndex && playedCountFromOrder > 0) {
       console.log(`🔄 1x75 display: playedOrderRef.length=${playedCountFromOrder}, currentIndexRef=${currentIndexRef.current}`);
     }
+    // CRITICAL FIX: Ensure we have the full 75-song pool
+    // If idsToUse has fewer than 75 songs, log a warning but continue
+    if (idsToUse.length < 75) {
+      console.warn(`⚠️ 1x75 display: Pool has only ${idsToUse.length} songs (expected 75). This may cause songs beyond position ${idsToUse.length} to not display.`);
+    }
+    
     // Build 15 groups from the full pool, then filter to only played IDs within each group
     // CRITICAL FIX: Sort within each group by play order so songs appear sequentially
     const groups: string[][] = Array.from({ length: 15 }, (_, g) => {
@@ -2446,24 +2454,32 @@ const PublicDisplay: React.FC = () => {
               <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1, minHeight: 0 }}>
               {/* Removed call count header and redundant BINGO row; playlist titles shown above columns */}
               {(() => {
-                // If we have oneBy75Ids, use the normal rendering
-                if (oneBy75Ids) {
+                // CRITICAL FIX: Use ref as fallback if state isn't set yet (fixes first song not displaying)
+                // Check both state and ref to ensure rendering works even when columns are still loading
+                const hasIds = oneBy75Ids || oneBy75IdsRef.current;
+                if (hasIds) {
                   return (fiveBy15Columns || (searchParams.get('mode') === '5x15')) 
                     ? renderOneBy75Columns() 
                     : renderOneBy75GroupedColumns();
                 }
                 
                 // FALLBACK: Construct 1x75 schema from played songs
-                // Build a temporary oneBy75Ids array from available data
-                const fallbackIds: string[] = [];
+                // CRITICAL FIX: Prefer oneBy75IdsRef.current if available (has full 75-song pool)
+                // Only build from playedOrderRef if ref doesn't have the pool
+                let fallbackIds: string[] = [];
                 
-                // Use playedOrderRef as source of truth (has all played songs, not limited to 25)
-                if (playedOrderRef.current && playedOrderRef.current.length > 0) {
+                if (oneBy75IdsRef.current && oneBy75IdsRef.current.length >= 75) {
+                  // Use the full pool from ref (preferred - has all 75 songs)
+                  fallbackIds = [...oneBy75IdsRef.current];
+                  console.log(`🔄 Using oneBy75IdsRef.current for fallback (${fallbackIds.length} songs)`);
+                } else if (playedOrderRef.current && playedOrderRef.current.length > 0) {
+                  // Fallback: build from played songs (only if pool isn't available)
                   playedOrderRef.current.forEach(songId => {
                     if (songId && !fallbackIds.includes(songId)) {
                       fallbackIds.push(songId);
                     }
                   });
+                  console.log(`⚠️ Fallback: Built from playedOrderRef (${fallbackIds.length} songs) - pool may be incomplete`);
                 }
                 // Fallback to gameState.playedSongs if playedOrderRef is empty
                 else if (gameState.playedSongs && gameState.playedSongs.length > 0) {

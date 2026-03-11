@@ -81,23 +81,39 @@
 
 ---
 
-### 5. ⏱️ **Current Song Not Always in `calledSongIds` Before Bingo Validation**
-**Location:** `server/index.js:1549-1561`
+### 5. ⏱️ **Current Song Not Always in `calledSongIds` Before Bingo Validation** ✅ **MOSTLY FIXED**
+**Location:** `server/index.js:1678-1693` (player-bingo handler) and `server/index.js:5032-5035` (validateBingoForPattern)
 
-**Problem:**
-- When player calls bingo, code tries to add current song to `calledSongIds` (lines 1550-1558)
-- But this happens AFTER validation is called (line 1523 calls `validateBingoForPattern()` BEFORE adding current song)
-- Wait, actually it's BEFORE validation - let me check... No, validation is at line 1523, adding song is at 1550
-- Actually, validation happens at 1523, then current song is added at 1550-1558
-- So validation might run WITHOUT the current song in the list!
+**Status:** ✅ **RESOLVED FOR PRIMARY PATH** - Multiple layers of protection in place, but minor edge cases exist
 
-**Impact:**
-- Player hears song playing → marks square → calls bingo immediately
-- Validation runs → current song not in `calledSongIds` yet → bingo rejected even though valid
+**Original Problem:**
+- When player calls bingo, validation might run before current song is added to `calledSongIds`
+- This could cause valid bingos to be rejected
 
-**Fix:**
-- Move the "add current song to calledSongIds" logic BEFORE validation (before line 1523)
-- OR: Include `room.currentSong.id` in validation if it exists
+**Current Implementation - PRIMARY PATH (✅ FIXED):**
+1. **Primary Protection** (lines 1678-1693): `player-bingo` handler adds current song to `calledSongIds` BEFORE calling validation
+2. **Defensive Protection** (lines 5032-5035): `validateBingoForPattern()` function includes current song if missing (defensive programming)
+3. **Normal Playback Order**: Songs are added to `calledSongIds` BEFORE `room.currentSong` is set in:
+   - `playNextSongSimple()` (lines 1010→1015)
+   - `playNextSong()` (lines 4767→4768)
+   - `startAutomaticPlayback()` (lines 4521→4522)
+
+**Edge Cases Found (⚠️ MINOR ISSUES):**
+1. **`play-song` handler** (lines 3355-3373): Manual song play sets `room.currentSong` WITHOUT adding to `calledSongIds`. 
+   - **Impact**: Low - defensive code in validation handles it, but not ideal
+   - **Fix Needed**: Add song to `calledSongIds` when setting `room.currentSong` in this handler
+
+2. **`playSongAtIndex()` function** (lines 395-499): Used for replay/previous song, sets `room.currentSong` WITHOUT adding to `calledSongIds`
+   - **Impact**: Low - song may already be in `calledSongIds` from first play, defensive code handles it
+   - **Fix Needed**: Add song to `calledSongIds` when setting `room.currentSong` in this function (or check if already present)
+
+3. **`mark-square` handler** (line 3423): Calls validation for UI feedback without adding current song first
+   - **Impact**: None - defensive code handles it, this is just for UI notifications
+
+**Recommendation:**
+- ✅ Primary bingo validation path is fully protected
+- ⚠️ Consider fixing edge cases #1 and #2 for consistency, though defensive code prevents actual bugs
+- Current implementation is safe for production use
 
 ---
 
