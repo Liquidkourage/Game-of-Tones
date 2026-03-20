@@ -997,12 +997,13 @@ body {
   inset: 0;
   flex: none;
   z-index: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
+  /* Grid centers the card reliably (flex+auto margins was shifting wide cards on some mobile browsers). */
+  display: grid;
+  place-items: center;
+  justify-items: center;
   min-height: 100%;
   width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   overflow: visible;
 }
@@ -1872,6 +1873,16 @@ button.conn-chip.conn-chip-compact {
   color: var(--secondary-text);
 }
 
+/* Player: full-width waiting panel (not shrink-to-fit text column) */
+.player-container .bingo-section .loading-card {
+  width: 100%;
+  max-width: min(32rem, 100%);
+  margin-left: auto;
+  margin-right: auto;
+  justify-self: center;
+  box-sizing: border-box;
+}
+
 /* Player: waiting for host (pre-game) */
 .loading-card {
   margin: 2rem auto;
@@ -2445,12 +2456,10 @@ button.conn-chip.conn-chip-compact {
     gap: 0.45rem;
   }
   
-  /* Landscape-optimized bingo card */
-  .bingo-card {
-    width: min(calc(100vh - 80px), calc(100vw - 2rem)); /* More horizontal padding for safety */
-    height: min(calc(100vh - 80px), calc(100vw - 2rem));
-    margin: 0 auto; /* Center the card */
-    max-width: 95vw; /* Ensure it never exceeds 95% of viewport width */
+  /* Player bingo card only (only PlayerView uses .bingo-card); keep JS sizing, avoid fighting centering */
+  .player-container .bingo-card {
+    max-width: 100%;
+    margin-inline: auto;
   }
   
   /* Optimize current song section for landscape */

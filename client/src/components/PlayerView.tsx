@@ -1312,11 +1312,13 @@ const PlayerView: React.FC = () => {
     const cardBoxStyle: React.CSSProperties | undefined =
       bingoCardSidePx != null
         ? {
+            // Shrink to slot width; height follows aspect-ratio (fixed px w+h caused off-center overflow on narrow viewports).
             width: bingoCardSidePx,
-            height: bingoCardSidePx,
-            maxWidth: bingoCardSidePx,
-            maxHeight: bingoCardSidePx,
+            maxWidth: "100%",
+            height: "auto",
             flex: "none",
+            boxSizing: "border-box",
+            marginInline: "auto",
           }
         : undefined;
 
