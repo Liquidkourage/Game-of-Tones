@@ -84,8 +84,10 @@ const PlayerView: React.FC = () => {
   const [focusedSquare, setFocusedSquare] = useState<BingoSquare | null>(null);
   const longPressTimer = useRef<number | null>(null);
   const [displayMode, setDisplayMode] = useState<'title' | 'artist'>(() => (localStorage.getItem('display_mode') as 'title' | 'artist') || 'title');
-  const [tooltipSquare, setTooltipSquare] = useState<string | null>(null);
-  const [tooltipText, setTooltipText] = useState<string>('');
+  const [longPressTooltip, setLongPressTooltip] = useState<{
+    title: string;
+    artist: string;
+  } | null>(null);
   const [fontSize, setFontSize] = useState<number>(() => readStoredFontSizePercent());
   const [bingoHolding, setBingoHolding] = useState<boolean>(false);
   const bingoHoldTimer = useRef<number | null>(null);
@@ -698,8 +700,11 @@ const PlayerView: React.FC = () => {
     const indicator = cell.querySelector('.played-indicator') as HTMLElement | null;
     const indicatorH = indicator ? indicator.getBoundingClientRect().height + 4 : 0;
 
-    const maxW = Math.max(12, rect.width - padX - 2);
-    const maxH = Math.max(12, rect.height - padY - indicatorH - 2);
+    /* Extra inset so fitted font is not at the edge (reduces mid-word breaks). */
+    const inset = 8;
+    const maxW = Math.max(12, rect.width - padX - inset);
+    const maxH = Math.max(12, rect.height - padY - indicatorH - inset);
+
 
     textElement.style.width = `${maxW}px`;
     textElement.style.maxWidth = `${maxW}px`;
@@ -714,17 +719,19 @@ const PlayerView: React.FC = () => {
     textElement.style.hyphens = 'none';
     textElement.style.whiteSpace = 'normal';
 
-    const baseCap = Math.min(maxW * 0.48, maxH * 0.28);
-    const upper = Math.max(8, Math.min(56, Math.round(baseCap * scale)));
+    const baseCap = Math.min(maxW * 0.38, maxH * 0.2);
+    const len = text.length;
+    const lenFactor = len > 48 ? 0.82 : len > 32 ? 0.9 : len > 20 ? 0.95 : 1;
+    const upper = Math.max(8, Math.min(44, Math.round(baseCap * scale * lenFactor)));
 
     let low = 6;
     let high = upper;
     let best = low;
 
     const trySize = (px: number) => {
-      textElement.style.fontSize = `${px}px`;
-      const hOk = textElement.scrollHeight <= maxH + 1;
-      const wOk = textElement.scrollWidth <= maxW + 1;
+      textElement.style.fontSize = px + "px";
+      const hOk = textElement.scrollHeight <= maxH + 2;
+      const wOk = textElement.scrollWidth <= maxW + 2;
       return hOk && wOk;
     };
 
@@ -737,7 +744,8 @@ const PlayerView: React.FC = () => {
         high = mid - 1;
       }
     }
-    textElement.style.fontSize = `${best}px`;
+    best = Math.max(6, best - 1);
+    textElement.style.fontSize = best + "px";
   }, [fontSize]);
 
   const refitAllBingoCells = useCallback(() => {
@@ -801,17 +809,22 @@ const PlayerView: React.FC = () => {
     if (navigator.vibrate) navigator.vibrate(10);
   };
 
-  // Long-press to reveal a readable bottom sheet on mobile
+  // Long-press: show title + artist (fixed panel; in-cell tooltips were clipped by overflow on the card).
   const handlePointerDown = (square: BingoSquare, e: React.PointerEvent) => {
-    // Only prevent default for actual pointer events, not touch scrolling
     if (e.pointerType === 'mouse' || e.pointerType === 'pen') {
       e.preventDefault();
     }
     if (longPressTimer.current) window.clearTimeout(longPressTimer.current);
-    const text = displayMode === 'title' ? square.artistName : square.songName;
+    const title = square.customSongName || cleanSongTitle(square.songName);
+    const artist = square.artistName;
     longPressTimer.current = window.setTimeout(() => {
-      setTooltipSquare(square.position);
-      setTooltipText(text);
+      setLongPressTooltip({
+        title,
+        artist,
+      });
+      try {
+        if (navigator.vibrate) navigator.vibrate(12);
+      } catch {}
     }, 350);
   };
 
@@ -820,8 +833,7 @@ const PlayerView: React.FC = () => {
       window.clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
-    setTooltipSquare(null);
-    setTooltipText('');
+    setLongPressTooltip(null);
   };
 
   const vibrate = (pattern: number | number[]) => {
@@ -1355,10 +1367,10 @@ const PlayerView: React.FC = () => {
               draggable={false}
               style={{
                 display: 'flex',
-                alignItems: 'stretch',
+                alignItems: 'center',
                 justifyContent: 'center',
                 textAlign: 'center',
-                padding: 3,
+                padding: 0,
                 lineHeight: 1.12,
                 fontWeight: 700,
                 userSelect: 'none'
@@ -1613,6 +1625,16 @@ const PlayerView: React.FC = () => {
             {bingoStatus === 'failed' && '❌ '}
             {bingoMessage}
           </motion.div>
+        )}
+
+        {/* Long-press: title + artist (fixed; avoids overflow clip) */}
+        {longPressTooltip && (
+          <div className="player-longpress-tooltip" role="status" aria-live="polite">
+            <div className="player-longpress-tooltip-heading">Title</div>
+            <div className="player-longpress-tooltip-line player-longpress-tooltip-primary">{longPressTooltip.title}</div>
+            <div className="player-longpress-tooltip-heading">Artist</div>
+            <div className="player-longpress-tooltip-line">{longPressTooltip.artist}</div>
+          </div>
         )}
 
         {/* bottom sheet removed per request */}
