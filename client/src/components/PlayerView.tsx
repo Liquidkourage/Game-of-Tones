@@ -1347,66 +1347,51 @@ const PlayerView: React.FC = () => {
           </div>
         </div>
       ) : null}
-      {/* Unified chrome: header + controls (single mode) */}
+      {/* Unified chrome: two-line header + stacked controls (less cramped) */}
       <motion.div 
         className="player-header"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <div className="player-header-line">
-          <Users className="player-icon" />
-          <span className="player-line">{playerName}</span>
-          <span className="player-count">{gameState.playerCount} players</span>
-          {gameState.isPlaying && (
-            <span className="songs-played" style={{ 
-              fontSize: '0.8rem', 
-              color: '#b3b3b3',
-              padding: '2px 6px',
-              borderRadius: '8px',
-              background: 'rgba(255,255,255,0.1)'
-            }}>
-              {songsPlayed} played
-            </span>
-          )}
-          {gameState.hasBingo && (
-            <span className="player-bingo">BINGO!</span>
-          )}
-          <span
-            className="conn-chip"
+        <div className="player-header-top">
+          <div className="player-header-identity">
+            <Users className="player-icon" aria-hidden />
+            <span className="player-line">{playerName}</span>
+          </div>
+          <button
+            type="button"
+            className={`conn-chip conn-chip-compact conn-status-${connectionStatus}`}
             onClick={handleResync}
-            style={{
-              marginLeft: 'auto',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              padding: '2px 8px',
-              borderRadius: '12px',
-              cursor: 'pointer',
-              border: '1px solid rgba(255,255,255,0.15)',
-              background: connectionStatus === 'connected' ? 'rgba(0,128,0,0.15)'
-                : connectionStatus === 'reconnecting' ? 'rgba(255,165,0,0.15)'
-                : 'rgba(255,0,0,0.15)'
-            }}
-            title="Tap to resync if you think you missed a call"
+            title={
+              connectionStatus === 'connected'
+                ? 'Connected — tap to resync if you missed a call'
+                : connectionStatus === 'reconnecting'
+                  ? `Reconnecting (${reconnectAttempts}) — tap to resync`
+                  : 'Disconnected — tap to resync'
+            }
           >
             <span
+              className="conn-dot"
               style={{
-                width: 8,
-                height: 8,
-                borderRadius: 999,
                 background: connectionStatus === 'connected' ? '#1DB954'
                   : connectionStatus === 'reconnecting' ? '#FFA500'
                   : '#FF4D4F'
               }}
             />
-            <span style={{ fontSize: '0.8rem', color: '#e0e0e0' }}>
-              {connectionStatus === 'connected' && 'Connected'}
-              {connectionStatus === 'reconnecting' && `Reconnecting… (${reconnectAttempts})`}
-              {connectionStatus === 'disconnected' && 'Disconnected'}
-            </span>
-            <span style={{ fontSize: '0.8rem', color: '#9aa0a6' }}>Resync</span>
+            <span className="conn-chip-label">Resync</span>
+          </button>
+        </div>
+        <div className="player-header-meta">
+          <span className="player-meta-line">
+            {gameState.playerCount} players
+            {gameState.isPlaying ? ` · ${songsPlayed} played` : ''}
           </span>
+          {gameState.hasBingo ? (
+            <span className="player-bingo">BINGO!</span>
+          ) : (
+            <span className="player-bingo-spacer" aria-hidden />
+          )}
         </div>
       </motion.div>
 
@@ -1417,28 +1402,28 @@ const PlayerView: React.FC = () => {
         transition={{ duration: 0.4, delay: 0.1 }}
       >
         {bingoCard && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>Display</span>
-            <label className="toggle-switch">
-              <input
-                type="checkbox"
-                checked={displayMode === 'artist'}
-                onChange={(e) => handleDisplayModeToggle(e.target.checked)}
-              />
-              <span className="slider" />
-            </label>
-            <span style={{ fontSize: '0.85rem', color: '#b3b3b3', minWidth: 60, textAlign: 'right' }}>
-              {displayMode === 'title' ? 'Title' : 'Artist'}
-            </span>
+          <div className="player-controls-row">
+            <span className="player-controls-label">Display</span>
+            <div className="player-controls-slot">
+              <span className="player-controls-hint">{displayMode === 'title' ? 'Title' : 'Artist'}</span>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={displayMode === 'artist'}
+                  onChange={(e) => handleDisplayModeToggle(e.target.checked)}
+                />
+                <span className="slider" />
+              </label>
+            </div>
           </div>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>Text size</span>
-          <div className="font-size-controls" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <button className="font-btn" onClick={decreaseFontSize} disabled={fontSize <= 50}>−</button>
-            <span style={{ fontSize: '0.8rem', minWidth: '36px', textAlign: 'center', color: '#b3b3b3' }}>{fontSize}%</span>
-            <button className="font-btn" onClick={increaseFontSize} disabled={fontSize >= 200}>+</button>
+        <div className="player-controls-row">
+          <span className="player-controls-label">Text size</span>
+          <div className="font-size-controls">
+            <button type="button" className="font-btn" onClick={decreaseFontSize} disabled={fontSize <= 50}>−</button>
+            <span className="font-size-readout">{fontSize}%</span>
+            <button type="button" className="font-btn" onClick={increaseFontSize} disabled={fontSize >= 200}>+</button>
           </div>
         </div>
       </motion.div>
