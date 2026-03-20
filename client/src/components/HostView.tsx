@@ -942,40 +942,30 @@ const HostView: React.FC = () => {
               });
             }
           });
-          console.log('📋 Setting playerCards to:', newPlayerCards.size, 'cards');
-          console.log('📋 Previous playerCards size:', playerCards.size);
-          console.log('📋 showPlayerCards state:', showPlayerCards);
-          console.log('📋 Render condition will be:', showPlayerCards && newPlayerCards.size > 0);
-          
-          // Only update if data actually changed to prevent unnecessary re-renders
-          const hasChanged = playerCards.size !== newPlayerCards.size || 
-            Array.from(newPlayerCards.keys()).some(id => {
-              const old = playerCards.get(id);
-              const updated = newPlayerCards.get(id);
-              if (!old) return true;
-              // Compare playedSongs length as a quick check
-              return (old.playedSongs?.length || 0) !== (updated?.playedSongs?.length || 0);
-            });
-          
-          if (hasChanged) {
-            setPlayerCards(newPlayerCards);
-            // Only increment version on actual data changes, not on every song update
-            // This prevents the visual flash when only playedSongs updates
-          }
-          
-          // Show toast notification
+          setPlayerCards((prev) => {
+            const hasChanged =
+              prev.size !== newPlayerCards.size ||
+              Array.from(newPlayerCards.keys()).some((id) => {
+                const old = prev.get(id);
+                const updated = newPlayerCards.get(id);
+                if (!old) return true;
+                return (old.playedSongs?.length || 0) !== (updated?.playedSongs?.length || 0);
+              });
+            if (!hasChanged) return prev;
+            console.log('📋 Updating playerCards map:', newPlayerCards.size, 'cards (was', prev.size, ')');
+            return newPlayerCards;
+          });
+
           if (newPlayerCards.size > 0) {
             showToast(`Player cards loaded: ${newPlayerCards.size} players`, 'success');
           }
-          
-          // Force a check after state update
-          setTimeout(() => {
-            const element = document.querySelector('.player-cards-section');
-            console.log('📋 Post-update DOM check:', element ? 'FOUND' : 'NOT FOUND');
-            if (!element && newPlayerCards.size > 0) {
-              showToast('Player cards not rendering - check console', 'error');
-            }
-          }, 200); // Increased timeout for re-render
+
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              const element = document.querySelector('.player-cards-section');
+              console.log('📋 Post-update DOM check (.player-cards-section):', element ? 'FOUND' : 'NOT FOUND');
+            });
+          });
         } else {
           console.log('📋 No valid player cards data received');
         }
@@ -3839,7 +3829,10 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
             </div>
                      </motion.div>
 
-                {/* Player Cards (Game tab — single copy) */}
+              </div>
+            )}
+
+                {/* Player Cards (visible on all host tabs when enabled) */}
                 {showPlayerCards && playerCards.size > 0 && (
              <motion.div 
                key={`player-cards-${playerCardsVersion}`}
@@ -4024,9 +4017,6 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                </div>
              </motion.div>
            )}
-
-              </div>
-            )}
           </div>
 
 
