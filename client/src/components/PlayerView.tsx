@@ -45,6 +45,18 @@ interface Song {
   artist: string;
 }
 
+function readStoredFontSizePercent(): number {
+  try {
+    const raw = localStorage.getItem('font_size_percent');
+    if (raw == null || raw === '') return 100;
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n)) return 100;
+    return Math.max(50, Math.min(200, n));
+  } catch {
+    return 100;
+  }
+}
+
 const PlayerView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [searchParams] = useSearchParams();
@@ -74,10 +86,7 @@ const PlayerView: React.FC = () => {
   const [displayMode, setDisplayMode] = useState<'title' | 'artist'>(() => (localStorage.getItem('display_mode') as 'title' | 'artist') || 'title');
   const [tooltipSquare, setTooltipSquare] = useState<string | null>(null);
   const [tooltipText, setTooltipText] = useState<string>('');
-  const [fontSize, setFontSize] = useState<number>(() => {
-    const stored = localStorage.getItem('font_size_percent');
-    return stored ? parseInt(stored, 10) : 130;
-  });
+  const [fontSize, setFontSize] = useState<number>(() => readStoredFontSizePercent());
   const [bingoHolding, setBingoHolding] = useState<boolean>(false);
   const bingoHoldTimer = useRef<number | null>(null);
   const [holdProgress, setHoldProgress] = useState<number>(0); // 0..1
@@ -1490,8 +1499,11 @@ const PlayerView: React.FC = () => {
           </div>
         )}
 
-        <div className="player-controls-row">
-          <span className="player-controls-label">Text size</span>
+        <div className="player-controls-row player-controls-row-textsize">
+          <div className="player-textsize-label-block">
+            <span className="player-controls-label">Text size</span>
+            <span className="player-font-hint">In-app only · saved on this device</span>
+          </div>
           <div className="font-size-controls">
             <button type="button" className="font-btn" onClick={decreaseFontSize} disabled={fontSize <= 50}>−</button>
             <span className="font-size-readout">{fontSize}%</span>
