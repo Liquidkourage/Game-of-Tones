@@ -978,6 +978,32 @@ body {
   min-height: 0;
 }
 
+.player-container .bingo-section-slot {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  position: relative;
+}
+
+.player-container .bingo-card-measure-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.player-container .bingo-section-slot > .bingo-section {
+  position: absolute;
+  inset: 0;
+  flex: none;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 0;
+}
+
 .section-header {
   flex-shrink: 0;
   margin-bottom: 0.5rem;

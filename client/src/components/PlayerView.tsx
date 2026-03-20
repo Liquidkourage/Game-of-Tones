@@ -1461,16 +1461,18 @@ const PlayerView: React.FC = () => {
 
       {/* Main Content */}
       <div className="player-content">
-        {/* Bingo Card - centered in remaining space */}
-        <motion.div 
-          ref={bingoCardAreaRef}
-          className="bingo-section"
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-        >
-          {renderBingoCard()}
-        </motion.div>
+        {/* Measure layer separate from card: avoids ResizeObserver ↔ card px feedback loop */}
+        <div className="bingo-section-slot">
+          <div ref={bingoCardAreaRef} className="bingo-card-measure-layer" aria-hidden />
+          <motion.div
+            className="bingo-section"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.45, delay: 0.15 }}
+          >
+            {renderBingoCard()}
+          </motion.div>
+        </div>
 
         {/* Game Status and Instructions removed per request */}
 
