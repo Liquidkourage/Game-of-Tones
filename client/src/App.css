@@ -1004,7 +1004,7 @@ body {
   min-height: 100%;
   width: 100%;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .section-header {
@@ -1315,7 +1315,9 @@ button.conn-chip.conn-chip-compact {
   justify-content: center; /* Center the bingo card vertically */
   max-width: 100%;
   margin: 0 auto;
-  min-height: 0;
+  /* Floor height so the card slot cannot flex-shrink to zero */
+  min-height: min(48svh, 440px);
+  min-height: 36vh;
   box-sizing: border-box;
   padding: 0 0.5rem; /* ZERO SCROLL: Add minimal side padding */
 }

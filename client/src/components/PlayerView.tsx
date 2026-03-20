@@ -554,32 +554,47 @@ const PlayerView: React.FC = () => {
     };
   }, [roomId, playerName]);
 
-  // Bingo card: size from flex slot, clamped to visual/layout viewport so the card never overflows sideways (mobile / text zoom).
+  // Bingo card: size from flex slot, clamped to viewport width (never use negative caps — avoids NaN / collapsed card).
   useEffect(() => {
     const el = bingoCardAreaRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
 
     const measure = () => {
-      const r = el.getBoundingClientRect();
       const pad = 8;
-      const vv = typeof window !== "undefined" ? window.visualViewport : null;
-      const docEl = typeof document !== "undefined" ? document.documentElement : null;
+      const insetX = 24;
+      const r = el.getBoundingClientRect();
+      const vv = window.visualViewport;
+      const docEl = document.documentElement;
+
       const clientW = Math.max(1, docEl?.clientWidth ?? window.innerWidth ?? 1);
       const clientH = Math.max(1, docEl?.clientHeight ?? window.innerHeight ?? 1);
       const viewW = Math.max(1, Math.min(vv?.width ?? clientW, clientW));
       const viewH = Math.max(1, vv?.height ?? clientH);
-      const insetX = 24;
 
-      let raw = Math.floor(Math.min(r.width, r.height, viewW - insetX) - pad);
+      const slotW = Math.max(0, r.width);
+      const slotH = Math.max(0, r.height);
+      const slotMin = slotW > 0 && slotH > 0 ? Math.min(slotW, slotH) : 0;
 
-      if (raw < 120) {
-        const availH = Math.max(0, viewH - 200);
-        const availW = Math.max(0, viewW - insetX);
-        raw = Math.max(raw, Math.floor(Math.min(availW, availH) - pad));
+      const maxSideByViewport = Math.max(0, Math.floor(viewW - insetX - pad));
+      const maxSideBySlot = Math.max(0, Math.floor(slotMin - pad));
+
+      let side = maxSideBySlot;
+      if (maxSideByViewport > 0) {
+        const candidate = side > 0 ? Math.min(side, maxSideByViewport) : maxSideByViewport;
+        side = candidate;
+      } else if (side <= 0) {
+        side = maxSideByViewport;
       }
 
-      raw = Math.min(raw, Math.floor(viewW - insetX - pad));
-      const side = Math.max(120, Math.min(raw, 4096));
+      if (side < 120) {
+        const availW = Math.max(0, Math.floor(viewW - insetX - pad));
+        const availH = Math.max(0, Math.floor(viewH - 200));
+        const fallback = Math.floor(Math.min(availW, availH));
+        side = Math.max(side, fallback);
+      }
+
+      side = Math.max(120, Math.min(side, 4096));
+      if (!Number.isFinite(side)) side = 280;
       setBingoCardSidePx(side);
     };
 
