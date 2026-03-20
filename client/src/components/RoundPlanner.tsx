@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ChevronDown, 
-  ChevronUp, 
-  Play, 
-  CheckCircle, 
-  Circle, 
-  Plus, 
-  Trash2, 
-  GripVertical,
+import {
+  ChevronDown,
+  ChevronUp,
+  Play,
+  CheckCircle,
+  Circle,
+  Plus,
+  Trash2,
   Music,
-  Folder,
-  FolderOpen
+  Folder
 } from 'lucide-react';
 
 interface Playlist {
@@ -76,7 +74,6 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
   gameState
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [draggedPlaylist, setDraggedPlaylist] = useState<Playlist | null>(null);
   const [dragOverBucket, setDragOverBucket] = useState<number | null>(null);
 
   // Utility function to ensure consistent round numbering
@@ -163,18 +160,6 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
     onUpdateRounds(newRounds);
   };
 
-  // Playlist drag handlers
-  const handlePlaylistDragStart = (e: React.DragEvent, playlist: Playlist) => {
-    setDraggedPlaylist(playlist);
-    e.dataTransfer.effectAllowed = 'copy';
-    e.dataTransfer.setData('text/plain', playlist.id);
-  };
-
-  const handlePlaylistDragEnd = () => {
-    setDraggedPlaylist(null);
-    setDragOverBucket(null);
-  };
-
   // Bucket drop handlers
   const handleBucketDragOver = (e: React.DragEvent, bucketIndex: number) => {
     e.preventDefault();
@@ -210,7 +195,6 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
       }
     }
     
-    setDraggedPlaylist(null);
     setDragOverBucket(null);
   };
 
@@ -230,12 +214,30 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
   };
 
   const getNextRoundIndex = () => {
-    return rounds.findIndex(round => round.status === 'planned');
+    for (let i = 0; i < rounds.length; i++) {
+      const r = rounds[i];
+      if (r.status === 'planned' && (r.playlistIds || []).length > 0) return i;
+    }
+    return -1;
   };
 
-  const canStartNextRound = () => {
-    const nextIndex = getNextRoundIndex();
-    return nextIndex !== -1 && gameState !== 'playing';
+  const nextRoundIndex = getNextRoundIndex();
+  const canStartNextRound = () => nextRoundIndex !== -1 && gameState !== 'playing';
+
+  const startNextRoundDisabledReason = (): string | null => {
+    if (gameState === 'playing') {
+      return 'Finish or pause the live game first, then start the next round.';
+    }
+    if (nextRoundIndex === -1) {
+      const hasPlannedEmpty = rounds.some(
+        r => r.status === 'planned' && (r.playlistIds || []).length === 0
+      );
+      if (hasPlannedEmpty) {
+        return 'Add playlists to the next planned round until it shows Ready.';
+      }
+      return 'No round is queued yet — drag playlists into a bucket until it\'s planned and ready.';
+    }
+    return null;
   };
 
   const canStartRound = (round: EventRound) => {
@@ -244,46 +246,71 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
 
   return (
     <div className="bg-rgba(42, 42, 42, 0.8) backdrop-blur-[20px] border border-rgba(0, 255, 136, 0.2) rounded-2xl p-6 mb-6 w-full max-w-none">
-      <div 
-        className="flex items-center justify-between cursor-pointer mb-4"
-        onClick={() => setIsCollapsed(!isCollapsed)}
-      >
-        <div className="flex items-center gap-3">
-          <Folder className="w-6 h-6 text-[#00ff88]" />
-          <h3 className="text-xl font-semibold text-white">Round Buckets</h3>
-          <span className="text-sm text-gray-400">
-            Drag playlists into buckets to organize rounds
-          </span>
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div className="flex items-start gap-3 min-w-0 flex-1">
+          <Folder className="w-6 h-6 text-[#00ff88] shrink-0 mt-0.5" aria-hidden />
+          <div className="min-w-0">
+            <h3 className="text-xl font-semibold text-white leading-tight">Round buckets</h3>
+            <p className="text-sm text-gray-400 mt-1">
+              Drag playlists from the list above into each column. Up to 6 rounds.
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          {canStartNextRound() && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onStartRound(getNextRoundIndex());
-              }}
-              className="px-4 py-2 bg-[#00ff88] text-black font-semibold rounded-lg hover:bg-[#00cc6a] transition-colors"
-            >
-              Start Next Round
-            </button>
-          )}
-          {isCollapsed ? (
-            <ChevronDown className="w-5 h-5 text-gray-400" />
-          ) : (
-            <ChevronUp className="w-5 h-5 text-gray-400" />
-          )}
+        <div className="flex flex-wrap items-center justify-end gap-2 shrink-0 w-full sm:w-auto">
+          <button
+            type="button"
+            disabled={!canStartNextRound()}
+            title={startNextRoundDisabledReason() || 'Start the next queued round (syncs playlists)'}
+            onClick={() => {
+              if (!canStartNextRound()) return;
+              onStartRound(nextRoundIndex);
+            }}
+            className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm sm:text-base transition-colors min-h-[44px] ${
+              canStartNextRound()
+                ? 'bg-[#00ff88] text-black hover:bg-[#00cc6a] shadow-[0_0_20px_rgba(0,255,136,0.35)]'
+                : 'bg-white/10 text-gray-500 cursor-not-allowed border border-white/10'
+            }`}
+          >
+            <Play className="w-4 h-4 shrink-0" aria-hidden />
+            Start next round
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsCollapsed((c) => !c)}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border border-white/20 text-gray-300 hover:bg-white/10 hover:text-white transition-colors min-h-[44px]"
+            aria-expanded={!isCollapsed}
+            aria-controls="round-planner-buckets"
+            title={isCollapsed ? 'Expand round buckets' : 'Collapse round buckets'}
+          >
+            {isCollapsed ? (
+              <>
+                <ChevronDown className="w-5 h-5" aria-hidden />
+                <span className="text-sm font-medium">Show</span>
+              </>
+            ) : (
+              <>
+                <ChevronUp className="w-5 h-5" aria-hidden />
+                <span className="text-sm font-medium">Hide</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
+      {!canStartNextRound() && (
+        <p className="text-xs text-amber-200/90 bg-amber-500/10 border border-amber-400/25 rounded-lg px-3 py-2 mb-3">
+          {startNextRoundDisabledReason()}
+        </p>
+      )}
 
       {!isCollapsed && (
-        <div className="space-y-4">
-          {/* Instructions */}
+        <div id="round-planner-buckets" className="space-y-4">
           <div className="text-center text-gray-300 text-sm bg-gradient-to-r from-[#00ff88]/10 to-[#00ff88]/5 border border-[#00ff88]/20 rounded-lg p-4">
             <div className="flex items-center justify-center gap-2 mb-1">
               <Music className="w-4 h-4 text-[#00ff88]" />
-              <span className="font-semibold text-white">Round Organization</span>
+              <span className="font-semibold text-white">Round organization</span>
             </div>
-            <span>Drag playlists from above into round buckets to organize your event</span>
+            <span>Drag playlists from above into round buckets. Use <strong className="text-white">Start round</strong> on a
+              column or <strong className="text-white">Start next round</strong> in the header between rounds.</span>
           </div>
 
           {/* Round Buckets */}
@@ -476,6 +503,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                                 
                                 {!isActive && round.status !== 'completed' && (
                                   <button
+                                    type="button"
                                     onClick={() => removePlaylistFromRound(index, playlistId)}
                                     className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 ml-3 flex-shrink-0"
                                     style={{
@@ -537,23 +565,26 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                       </div>
                     )}
                     
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-stretch">
                       {!isActive && round.status !== 'completed' && canStartRound(round) && (
                         <button
+                          type="button"
                           onClick={() => onStartRound(index)}
-                          className="flex-1 px-3 py-1 bg-[#00ff88] text-black text-xs font-semibold rounded hover:bg-[#00cc6a] transition-colors"
+                          className="flex-1 min-h-[44px] px-3 py-2.5 bg-[#00ff88] text-black text-sm font-bold rounded-lg hover:bg-[#00cc6a] transition-colors flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(0,255,136,0.25)]"
                         >
-                          Start Round
+                          <Play className="w-4 h-4 shrink-0" aria-hidden />
+                          Start round
                         </button>
                       )}
                       
                       {rounds.length > 1 && round.status !== 'active' && (
                         <button
+                          type="button"
                           onClick={() => removeRound(index)}
-                          className="px-2 py-1 bg-red-500/20 text-red-400 text-xs rounded hover:bg-red-500/30 transition-colors"
+                          className="px-3 py-2.5 min-h-[44px] min-w-[44px] bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors flex items-center justify-center shrink-0"
                           title="Remove round"
                         >
-                          <Trash2 className="w-3 h-3" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       )}
                     </div>
@@ -567,6 +598,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                   {rounds.length < 6 && (
                     <div style={{ flex: '2 1 0%', minWidth: '300px' }}>
                       <button
+                        type="button"
                         onClick={addRound}
                         className="w-full h-full min-h-[200px] p-4 rounded-2xl border-2 border-dashed 
                                  text-gray-400 hover:text-white transition-all duration-300 
@@ -596,8 +628,10 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                         <div className="w-12 h-12 rounded-full border-2 border-dashed border-white/60 flex items-center justify-center mb-2">
                           <Plus className="w-6 h-6 text-white" style={{ color: '#ffffff' }} />
                         </div>
-                        <span className="font-semibold text-sm text-white" style={{ color: '#ffffff' }}>Create New Round</span>
-                        <span className="text-xs opacity-90 text-white" style={{ color: '#ffffff' }}>Click to add round</span>
+                        <span className="font-bold text-base text-white" style={{ color: '#ffffff' }}>+ Add round</span>
+                        <span className="text-xs opacity-90 text-white" style={{ color: '#ffffff' }}>
+                          {6 - rounds.length} slot{6 - rounds.length !== 1 ? 's' : ''} left (max 6)
+                        </span>
                       </button>
                     </div>
                   )}

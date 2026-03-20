@@ -2674,22 +2674,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Host can lock/unlock room joins
-  socket.on('set-lock-joins', (data = {}) => {
-    try {
-      const { roomId, locked } = data;
-      const room = rooms.get(roomId);
-      if (!room) return;
-      const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
-      if (!isCurrentHost) return;
-      room.lockJoins = !!locked;
-      io.to(roomId).emit('lock-joins-updated', { locked: room.lockJoins });
-      console.log(`🔒 Lock joins set to ${room.lockJoins} for room ${roomId}`);
-    } catch (e) {
-      console.error('❌ Error setting lock joins:', e?.message || e);
-    }
-  });
-
   // Pre-queue system removed - deterministic playback only
 
   // Toggle super-strict lock mode from Host
@@ -4375,6 +4359,14 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     
     // Create temporary playlist for context-based playback to prevent hijacks
     try {
+      try {
+        await spotifyService.deleteAllGameOfTonesOutputPlaylists();
+      } catch (clearErr) {
+        console.warn(
+          '⚠️ Could not auto-clear prior GOT output playlists (non-fatal):',
+          clearErr?.message || clearErr
+        );
+      }
       const trackUris = allSongs.map(song => `spotify:track:${song.id}`);
       const playlistName = `TEMPO Bingo Room ${roomId} - ${new Date().toISOString().slice(0,16)}`;
       room.temporaryPlaylistId = await spotifyService.createTemporaryPlaylist(playlistName, trackUris);
@@ -6145,7 +6137,9 @@ app.post('/api/spotify/delete-playlists', async (req, res) => {
     await spotifyService.ensureValidToken();
     
     console.log('🗑️ Deleting playlists...');
-    const results = await spotifyService.deleteMultiplePlaylists(playlistIds);
+    const results = await spotifyService.deleteMultiplePlaylists(playlistIds, {
+      requireGotOutputPrefix: true
+    });
     
     const successful = results.filter(r => r.success).length;
     const failed = results.filter(r => !r.success).length;

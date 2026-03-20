@@ -370,3 +370,45 @@
 .queue-list::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.5);
 } 
+/* Host: paused / resume — high visibility in dense layout */
+.host-paused-banner {
+  animation: hostPausedPulse 2.2s ease-in-out infinite;
+}
+
+@keyframes hostPausedPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 12px 40px rgba(255, 160, 0, 0.22);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 16px 48px rgba(255, 200, 80, 0.45);
+  }
+}
+
+.host-resume-game-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 28px;
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 12px;
+  border: 2px solid #00cc6a;
+  background: linear-gradient(180deg, #00ff88 0%, #00cc6d 100%);
+  color: #0b0e12;
+  cursor: pointer;
+  box-shadow: 0 8px 28px rgba(0, 255, 136, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.host-resume-game-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 36px rgba(0, 255, 136, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.host-resume-game-btn:active {
+  transform: translateY(0);
+}

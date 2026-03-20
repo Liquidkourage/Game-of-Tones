@@ -1,6 +1,13 @@
 const SpotifyWebApi = require('spotify-web-api-node');
 const https = require('https');
 
+/**
+ * Universal Spotify playlist name prefix for GOT output / temp setlists.
+ * createTemporaryPlaylist, createOutputPlaylist, got-playlists cleanup, and
+ * delete-playlists (when validated) must all use this — do not duplicate the string elsewhere.
+ */
+const GOT_OUTPUT_PLAYLIST_NAME_PREFIX = 'Game Of Tones Output - ';
+
 class SpotifyService {
   constructor() {
     this.spotifyApi = new SpotifyWebApi({
@@ -591,8 +598,7 @@ class SpotifyService {
       const userResponse = await this.spotifyApi.getMe();
       const userId = userResponse.body.id;
       
-      // Add Game of Tones prefix to organize playlists
-      const organizedName = `Game Of Tones Output - ${name}`;
+      const organizedName = `${GOT_OUTPUT_PLAYLIST_NAME_PREFIX}${name}`;
       
       // Create playlist
       const playlistResponse = await this.spotifyApi.createPlaylist(userId, {
@@ -626,8 +632,7 @@ class SpotifyService {
       const userResponse = await this.spotifyApi.getMe();
       const userId = userResponse.body.id;
       
-      // Add Game of Tones prefix to organize playlists
-      const organizedName = `Game Of Tones Output - ${name}`;
+      const organizedName = `${GOT_OUTPUT_PLAYLIST_NAME_PREFIX}${name}`;
       
       // Create playlist
       const playlistResponse = await this.spotifyApi.createPlaylist(userId, {
@@ -670,9 +675,10 @@ class SpotifyService {
         const response = await this.spotifyApi.getUserPlaylists(userId, { limit, offset });
         const batch = response.body.items;
         
-        // Filter for Game Of Tones Output playlists
-        const gotPlaylists = batch.filter(playlist => 
-          playlist.name.startsWith('Game Of Tones Output -') && 
+        // Only playlists the app created with GOT_OUTPUT_PLAYLIST_NAME_PREFIX
+        const gotPlaylists = batch.filter(playlist =>
+          typeof playlist.name === 'string' &&
+          playlist.name.startsWith(GOT_OUTPUT_PLAYLIST_NAME_PREFIX) &&
           playlist.owner.id === userId
         );
         
@@ -698,13 +704,71 @@ class SpotifyService {
     }
   }
 
-  // Delete multiple playlists
-  async deleteMultiplePlaylists(playlistIds) {
+  /**
+   * Before a new game-stage Spotify playlist is created: remove every existing GOT output
+   * playlist for this user (same rule as getGameOfTonesPlaylists / Manager cleanup).
+   * IDs come from our own listing (trusted); skips per-ID getPlaylist checks.
+   */
+  async deleteAllGameOfTonesOutputPlaylists() {
+    await this.ensureValidToken();
+    const prior = await this.getGameOfTonesPlaylists();
+    if (!prior.length) {
+      return { deleted: 0, failed: 0, results: [] };
+    }
+    const ids = prior.map((p) => p.id);
+    const results = await this.deleteMultiplePlaylists(ids, {
+      requireGotOutputPrefix: false
+    });
+    const deleted = results.filter((r) => r.success).length;
+    const failed = results.filter((r) => !r.success).length;
+    console.log(
+      `🧹 Auto-cleared ${deleted} prior GOT output playlist(s) (${failed} failed)`
+    );
+    return { deleted, failed, results };
+  }
+
+  // Delete multiple playlists.
+  // When requireGotOutputPrefix is true (Manager cleanup / #32), each ID must be owned by
+  // the current user and name must start with GOT_OUTPUT_PLAYLIST_NAME_PREFIX.
+  async deleteMultiplePlaylists(playlistIds, options = {}) {
+    const { requireGotOutputPrefix = false } = options;
     await this.ensureValidToken();
     const results = [];
-    
+
+    let userId = null;
+    if (requireGotOutputPrefix) {
+      const userResponse = await this.spotifyApi.getMe();
+      userId = userResponse.body.id;
+    }
+
     for (const playlistId of playlistIds) {
       try {
+        if (requireGotOutputPrefix) {
+          const pl = await this.spotifyApi.getPlaylist(playlistId);
+          const body = pl.body;
+          if (body.owner.id !== userId) {
+            results.push({
+              playlistId,
+              success: false,
+              error: 'Playlist not owned by current user'
+            });
+            continue;
+          }
+          if (
+            typeof body.name !== 'string' ||
+            !body.name.startsWith(GOT_OUTPUT_PLAYLIST_NAME_PREFIX)
+          ) {
+            results.push({
+              playlistId,
+              success: false,
+              error:
+                'Not a GOT output playlist (name must start with: ' +
+                JSON.stringify(GOT_OUTPUT_PLAYLIST_NAME_PREFIX) +
+                ')'
+            });
+            continue;
+          }
+        }
         await this.spotifyApi.unfollowPlaylist(playlistId);
         results.push({ playlistId, success: true });
         console.log(`✅ Deleted playlist: ${playlistId}`);
@@ -713,7 +777,7 @@ class SpotifyService {
         results.push({ playlistId, success: false, error: error.message });
       }
     }
-    
+
     return results;
   }
 
