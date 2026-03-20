@@ -975,19 +975,34 @@ body {
   margin-bottom: 0.5rem;
 }
 
-/* Responsive bingo card sizing - force perfect square */
-.bingo-card {
-  width: min(84vmin, 88vw) !important;
-  height: min(84vmin, 88vw) !important;
-  aspect-ratio: 1 / 1 !important;
+/* Player bingo card: pixel size from PlayerView ResizeObserver; square 5×5 grid below */
+.player-container .bingo-card {
   margin: 0 auto !important;
-  max-width: 88vw !important;
-  max-height: 88vw !important;
+  aspect-ratio: 1 / 1 !important;
+  flex: none !important;
+  overflow: hidden;
+  /* Fallback square before JS measures (ResizeObserver assigns width/height in px) */
+  width: min(100%, calc(100vh - 14rem), calc(100vw - 1rem)) !important;
+  width: min(100%, calc(100svh - 14rem), calc(100vw - 1rem)) !important;
+  height: auto !important;
+  max-width: min(calc(100vh - 14rem), calc(100vw - 1rem)) !important;
+  max-width: min(calc(100svh - 14rem), calc(100vw - 1rem)) !important;
+  max-height: min(calc(100vh - 14rem), calc(100vw - 1rem)) !important;
+  max-height: min(calc(100svh - 14rem), calc(100vw - 1rem)) !important;
 }
 
-.bingo-card-grid {
-  aspect-ratio: 1 !important;
-  gap: 0.3rem !important;
+.player-container .bingo-card-grid {
+  display: grid !important;
+  grid-template-columns: repeat(5, 1fr) !important;
+  grid-template-rows: repeat(5, 1fr) !important;
+  width: 100% !important;
+  height: 100% !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  gap: 0 !important;
+  aspect-ratio: unset !important;
+  margin: 0 !important;
 }
 
 /* Dynamic font sizing for bingo squares - REMOVED conflicting padding */
@@ -1021,11 +1036,10 @@ body {
 
 /* Responsive breakpoints for different screen sizes */
 @media (max-width: 768px) {
-  .bingo-card { width: 88vw !important; height: 88vw !important; aspect-ratio: 1 / 1 !important; max-width: 88vw !important; max-height: 88vw !important; }
-  
+  /* Player card size: PlayerView ResizeObserver — do not force vw here */
   .bingo-card-grid { gap: 0 !important; }
   
-  .bingo-square { padding: 0 !important; aspect-ratio: 1 / 1 !important; }
+  .bingo-square { padding: 0 !important; }
   
   .bingo-square .song-name {
     font-size: 14px; /* Base fallback - JavaScript will override */
@@ -1039,17 +1053,13 @@ body {
 }
 
 @media (max-width: 480px) {
-  .bingo-card { width: 86vw !important; height: 86vw !important; aspect-ratio: 1 / 1 !important; max-width: 86vw !important; max-height: 86vw !important; }
-  
   .bingo-card-grid { 
     gap: 0 !important; 
     width: 100% !important;
-    max-width: 96vw !important;
   }
   
   .bingo-square { 
     padding: 1px !important; 
-    aspect-ratio: 1 / 1 !important;
     min-width: 0 !important;
     width: 100% !important;
   }
@@ -1065,12 +1075,10 @@ body {
   }
 }
 
-/* Extra small screens - even more compact */
+/* Extra small screens */
 @media (max-width: 360px) {
-  .bingo-card { width: 90vw !important; margin: 0 auto !important; max-width: 90vw !important; }
-  
   .bingo-card-grid { 
-    max-width: 90vw !important;
+    max-width: 100% !important;
   }
   
   .bingo-square { 
@@ -1082,7 +1090,9 @@ body {
 /* .bingo-square[data-density] font sizes removed - JavaScript handles all sizing */
 .player-container {
   min-height: 100vh;
-  height: 100vh; /* ZERO SCROLL: Force exact viewport height */
+  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh; /* stable viewport on mobile vs 100vh URL-bar bugs */
   padding: 0; /* ZERO SCROLL: Remove all padding */
   padding-top: 60px; /* Account for sticky header */
   display: flex;
@@ -1147,38 +1157,20 @@ body {
   padding: 0 0.5rem; /* ZERO SCROLL: Add minimal side padding */
 }
 
-.bingo-card {
+/* Player card visuals + layout (size: see .player-container .bingo-card above + PlayerView inline px) */
+.player-container .bingo-card {
   background: rgba(42, 42, 42, 0.8);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(0, 255, 136, 0.2);
-  border-radius: 12px; /* ZERO SCROLL: Smaller radius */
-  padding: 0.125rem; /* ZERO SCROLL: Minimal padding */
-  margin: 0 auto;
+  border-radius: 12px;
+  padding: 0.125rem;
   display: flex;
   flex-direction: column;
   min-height: 0;
   box-sizing: border-box;
-  /* ZERO SCROLL: Force perfect square */
-  width: min(calc(100vh - 200px), calc(100vw - 3rem), 88vw);
-  height: min(calc(100vh - 200px), calc(100vw - 3rem), 88vw);
-  aspect-ratio: 1 / 1 !important;
-  flex: 1;
 }
 
 /* removed bingo-card-header and title for player view */
-
-.bingo-card-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 0 0; /* remove horizontal spacing */
-  width: 100%;
-  flex: 1;
-  min-height: 0;
-  box-sizing: border-box;
-  /* near-square card area; we will widen cells slightly for horizontal butt-up */
-  aspect-ratio: 1 / 1;
-  margin: 0 auto; /* ensure centering within card */
-}
 
 /* Scope row-flattening to player only to avoid affecting public display */
 .player-container .bingo-row {
@@ -1213,6 +1205,17 @@ body {
 /* Restore the outer edges so the grid has a clean single border around */
 .bingo-card-grid .bingo-square:nth-child(5n) { border-right-width: 1px; }
 .bingo-card-grid .bingo-square:nth-last-child(-n+5) { border-bottom-width: 1px; }
+
+/* In player view, grid cell size comes from 5 equal rows/cols in a square card — drop per-cell aspect-ratio. */
+.player-container .bingo-card .bingo-square {
+  aspect-ratio: unset;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  align-self: stretch;
+  justify-self: stretch;
+}
 
 /* Tooltip shown on long-press for alternate text */
 .hover-tooltip {
@@ -2044,10 +2047,9 @@ body {
     justify-content: center;
   }
 
-  .bingo-card-grid {
-    gap: 0.15rem 0.3rem;
-    max-width: 98vw;
-    /* height removed - let aspect ratio control dimensions */
+  .player-container .bingo-card-grid {
+    gap: 0 !important;
+    max-width: none;
   }
 
   .bingo-square {

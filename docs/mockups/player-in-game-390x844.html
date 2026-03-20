@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Player in-game mock — 390×844 (CSS px)</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #000;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 16px;
+      -webkit-text-size-adjust: 100%;
+    }
+    #device {
+      width: 390px;
+      height: 844px;
+      margin: 0 auto;
+      background: #0a0a0a;
+      position: relative;
+      overflow: hidden;
+      color: #e0e0e0;
+    }
+    .status-bar {
+      height: 54px;
+      padding: 14px 24px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: #fff;
+    }
+    .status-icons {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      font-size: 13px;
+      opacity: 0.95;
+    }
+    .player-container {
+      height: calc(844px - 54px);
+      padding-top: 60px;
+      padding-bottom: calc(120px + 34px);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .player-header {
+      flex-shrink: 0;
+      margin: 0 8px 4px;
+      padding: 4px 8px;
+      background: rgba(42, 42, 42, 0.92);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(0, 255, 136, 0.2);
+      border-radius: 8px;
+    }
+    .player-header-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .player-icon {
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+      color: #00ff88;
+    }
+    .player-line {
+      font-size: 14.4px;
+      font-weight: 600;
+      color: #ddd;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .player-count {
+      margin-left: auto;
+      font-size: 13.6px;
+      color: #b3b3b3;
+      flex-shrink: 0;
+    }
+    .songs-played {
+      font-size: 12.8px;
+      color: #b3b3b3;
+      padding: 2px 6px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.1);
+      flex-shrink: 0;
+    }
+    .conn-chip {
+      margin-left: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(0, 128, 0, 0.15);
+      flex-shrink: 0;
+    }
+    .conn-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #1db954;
+    }
+    .conn-chip span { font-size: 12.8px; color: #e0e0e0; }
+    .conn-chip .muted { color: #9aa0a6; }
+    .player-controls {
+      flex-shrink: 0;
+      margin: 4px 8px 4px;
+      padding: 8px;
+      background: rgba(42, 42, 42, 0.92);
+      border: 1px solid rgba(0, 255, 136, 0.2);
+      border-radius: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .ctrl-label {
+      font-size: 13.6px;
+      color: #b3b3b3;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 42px;
+      height: 24px;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background: rgba(255,255,255,0.2);
+      border-radius: 999px;
+    }
+    .slider::before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      top: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+    .toggle-switch input:checked + .slider { background: #00ff88; }
+    .toggle-switch input:checked + .slider::before { transform: translateX(18px); }
+    .font-btn {
+      background: rgba(255,255,255,0.1);
+      color: #ddd;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-weight: 600;
+      min-width: 24px;
+      text-align: center;
+      font-size: 14px;
+    }
+    .focus-card-btn {
+      background: rgba(0,255,136,0.15);
+      border: 1px solid rgba(0,255,136,0.3);
+      color: #00ff88;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: default;
+    }
+    .player-content {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 0 8px;
+    }
+    .bingo-card {
+      background: rgba(42, 42, 42, 0.92);
+      border: 1px solid rgba(0, 255, 136, 0.2);
+      border-radius: 12px;
+      padding: 2px;
+      margin: 0 auto;
+      width: min(calc(844px - 200px), calc(390px - 48px));
+      height: min(calc(844px - 200px), calc(390px - 48px));
+      max-width: 100%;
+      aspect-ratio: 1 / 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .bingo-card-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      width: 100%;
+      flex: 1;
+      min-height: 0;
+      aspect-ratio: 1 / 1;
+    }
+    .bingo-square {
+      background: rgba(30, 30, 30, 0.9);
+      border: 1px solid rgba(0, 255, 136, 0.3);
+      border-right-width: 0;
+      border-bottom-width: 0;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 3px;
+      font-weight: 700;
+      font-size: 14px;
+      line-height: 1.05;
+      overflow: hidden;
+    }
+    .bingo-card-grid .bingo-square:nth-child(5n) { border-right-width: 1px; }
+    .bingo-card-grid .bingo-square:nth-last-child(-n+5) { border-bottom-width: 1px; }
+    .bingo-square.marked {
+      background: rgba(0, 255, 136, 0.18);
+      box-shadow: inset 0 0 0 2px rgba(0, 255, 136, 0.65);
+    }
+    .bingo-square.pattern-highlight {
+      box-shadow: inset 0 0 0 2px rgba(255, 193, 7, 0.4), 0 0 8px rgba(255, 193, 7, 0.2);
+      border-color: rgba(255, 193, 7, 0.6);
+    }
+    .bingo-fab {
+      position: absolute;
+      right: 18px;
+      bottom: calc(24px + 34px);
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      border: 2px solid rgba(0,255,136,0.6);
+      background: linear-gradient(180deg, #00ff88 0%, #00cc6d 100%);
+      color: #061a12;
+      font-weight: 800;
+      font-size: 21px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      line-height: 1.05;
+      padding: 6px;
+      box-shadow: 0 12px 26px rgba(0,0,0,0.35), 0 0 24px rgba(0,255,136,0.35);
+      z-index: 10;
+    }
+    .home-indicator {
+      position: absolute;
+      bottom: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 134px;
+      height: 5px;
+      background: rgba(255,255,255,0.35);
+      border-radius: 3px;
+    }
+    .hint {
+      max-width: 390px;
+      margin: 12px auto;
+      padding: 0 16px;
+      font-size: 13px;
+      color: #888;
+      line-height: 1.4;
+      text-align: center;
+    }
+    @media (min-width: 400px) {
+      body { padding: 12px 0 24px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="device" aria-label="390 by 844 CSS pixel mock screenshot">
+    <div class="status-bar">
+      <span>9:41</span>
+      <div class="status-icons">
+        <span>●●●</span>
+        <span>Wi-Fi</span>
+        <span>100%</span>
+      </div>
+    </div>
+    <div class="player-container">
+      <div class="player-header">
+        <div class="player-header-line">
+          <svg class="player-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          <span class="player-line">Jordan</span>
+          <span class="player-count">12 players</span>
+          <span class="songs-played">18 played</span>
+          <span class="conn-chip">
+            <span class="conn-dot"></span>
+            <span>Connected</span>
+            <span class="muted">Resync</span>
+          </span>
+        </div>
+      </div>
+      <div class="player-controls">
+        <div class="row">
+          <span class="ctrl-label">Display</span>
+          <label class="toggle-switch">
+            <input type="checkbox" checked />
+            <span class="slider"></span>
+          </label>
+          <span class="ctrl-label" style="min-width:44px;text-align:right">Artist</span>
+        </div>
+        <div class="row">
+          <span class="ctrl-label">Text</span>
+          <button type="button" class="font-btn">−</button>
+          <span class="ctrl-label" style="min-width:36px;text-align:center">100%</span>
+          <button type="button" class="font-btn">+</button>
+          <button type="button" class="focus-card-btn">Focus Card</button>
+        </div>
+      </div>
+      <div class="player-content">
+        <div class="bingo-card">
+          <div class="bingo-card-grid">
+            <div class="bingo-square marked pattern-highlight">Blinding Lights</div>
+            <div class="bingo-square">As It Was</div>
+            <div class="bingo-square marked">Levitating</div>
+            <div class="bingo-square">About Damn Time</div>
+            <div class="bingo-square">Flowers</div>
+            <div class="bingo-square">Anti-Hero</div>
+            <div class="bingo-square marked pattern-highlight">Heat Waves</div>
+            <div class="bingo-square">Good 4 U</div>
+            <div class="bingo-square">Stay</div>
+            <div class="bingo-square">Shivers</div>
+            <div class="bingo-square">Industry Baby</div>
+            <div class="bingo-square">Peaches</div>
+            <div class="bingo-square marked pattern-highlight">Bad Habits</div>
+            <div class="bingo-square">Kiss Me More</div>
+            <div class="bingo-square">Montero</div>
+            <div class="bingo-square">Save Your Tears</div>
+            <div class="bingo-square marked">Watermelon Sugar</div>
+            <div class="bingo-square">Don’t Start Now</div>
+            <div class="bingo-square">Circles</div>
+            <div class="bingo-square">Positions</div>
+            <div class="bingo-square">Rockstar</div>
+            <div class="bingo-square">drivers license</div>
+            <div class="bingo-square">Butter</div>
+            <div class="bingo-square">Mood</div>
+            <div class="bingo-square">Savage</div>
+            <div class="bingo-square">WAP</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bingo-fab">BINGO<br/>READY!</div>
+    <div class="home-indicator"></div>
+  </div>
+  <p class="hint">
+    <strong>390×844 CSS px</strong> — iPhone 14/15 portrait logical size. Open on a 390&nbsp;pt-wide phone for ~1:1 with this layout. For a PNG: full-screen this page and take a system screenshot.
+  </p>
+</body>
+</html>

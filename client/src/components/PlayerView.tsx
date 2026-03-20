@@ -104,6 +104,10 @@ const PlayerView: React.FC = () => {
   });
   const [songsPlayed, setSongsPlayed] = useState<number>(0);
 
+  /** Measured flex area → square card side (px). Guarantees equal 5×5 cells on all viewports. */
+  const bingoCardAreaRef = useRef<HTMLDivElement>(null);
+  const [bingoCardSidePx, setBingoCardSidePx] = useState<number | null>(null);
+
   // Mark persistence functions
   const getStoredMarks = (): Record<string, boolean> => {
     try {
@@ -558,6 +562,32 @@ const PlayerView: React.FC = () => {
       newSocket.close();
     };
   }, [roomId, playerName]);
+
+  // Bingo card: size from actual flex region (not vh/vmin heuristics) so the grid stays square on every device.
+  useEffect(() => {
+    const el = bingoCardAreaRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      const pad = 8;
+      const raw = Math.floor(Math.min(r.width, r.height) - pad);
+      const side = Math.max(160, Math.min(raw, 4096));
+      setBingoCardSidePx(side);
+    };
+
+    const ro = new ResizeObserver(() => {
+      window.requestAnimationFrame(measure);
+    });
+    ro.observe(el);
+    measure();
+
+    window.addEventListener("orientationchange", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("orientationchange", measure);
+    };
+  }, []);
 
   // Periodic sync during gameplay to ensure state stays in sync with server
   useEffect(() => {
@@ -1221,8 +1251,19 @@ const PlayerView: React.FC = () => {
       );
     }
 
+    const cardBoxStyle: React.CSSProperties | undefined =
+      bingoCardSidePx != null
+        ? {
+            width: bingoCardSidePx,
+            height: bingoCardSidePx,
+            maxWidth: bingoCardSidePx,
+            maxHeight: bingoCardSidePx,
+            flex: "none",
+          }
+        : undefined;
+
     return (
-      <div className="bingo-card">
+      <div className="bingo-card" style={cardBoxStyle}>
         <div className="bingo-card-grid">
           {bingoCard.squares.map((square) => (
             <motion.div
@@ -1457,6 +1498,7 @@ const PlayerView: React.FC = () => {
       <div className="player-content">
         {/* Bingo Card - centered in remaining space */}
         <motion.div 
+          ref={bingoCardAreaRef}
           className="bingo-section"
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
