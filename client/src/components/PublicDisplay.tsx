@@ -1603,6 +1603,20 @@ const PublicDisplay: React.FC = () => {
         });
       } catch {}
     }
+
+    // 5x15: column index for currently playing song (header highlight for audience)
+    const currentSongId = gameState.currentSong?.id;
+    let activeColumnIndex: number | null = null;
+    if (currentSongId) {
+      const mapped = idToColumnRef.current[currentSongId];
+      if (typeof mapped === 'number' && mapped >= 0 && mapped < 5) {
+        activeColumnIndex = mapped;
+      } else if (fiveBy15Columns) {
+        const found = fiveBy15Columns.findIndex((col) => col.includes(currentSongId));
+        if (found >= 0) activeColumnIndex = found;
+      }
+    }
+
     // Helper: Wheel-of-Fortune style masking using per-song baseline
     const renderMaskedText = (text: string, set: Set<string>, highlightChar: string | null) => {
       if (!text) return null;
@@ -1639,9 +1653,37 @@ const PublicDisplay: React.FC = () => {
             const raw = playlistNames[i] || '';
             const name = raw.replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
             const bingoLetter = ['B', 'I', 'N', 'G', 'O'][i];
-            
+            const isActiveColumn = activeColumnIndex === i;
+
             return (
-              <div key={i} className="call-col-title" style={{ textAlign: 'center' }}>
+              <motion.div
+                key={i}
+                className="call-col-title"
+                style={{ textAlign: 'center', borderRadius: 12, padding: '8px 6px' }}
+                initial={false}
+                animate={
+                  isActiveColumn
+                    ? {
+                        backgroundColor: 'rgba(0,255,136,0.16)',
+                        border: '2px solid rgba(0,255,136,0.9)',
+                        boxShadow: [
+                          '0 0 14px rgba(0,255,136,0.35)',
+                          '0 0 26px rgba(0,255,136,0.55)',
+                          '0 0 14px rgba(0,255,136,0.35)',
+                        ],
+                      }
+                    : {
+                        backgroundColor: 'rgba(0,0,0,0)',
+                        border: '2px solid transparent',
+                        boxShadow: '0 0 0 rgba(0,0,0,0)',
+                      }
+                }
+                transition={
+                  isActiveColumn
+                    ? { border: { duration: 0.25 }, backgroundColor: { duration: 0.25 }, boxShadow: { duration: 2.2, repeat: Infinity, ease: 'easeInOut' } }
+                    : { duration: 0.25 }
+                }
+              >
                 {name ? (
                   <div style={{ 
                     fontSize: '2.4rem', // Match single line display size
@@ -1662,7 +1704,7 @@ const PublicDisplay: React.FC = () => {
                     {bingoLetter}
                   </div>
                 )}
-              </div>
+              </motion.div>
             );
           })}
         </div>
