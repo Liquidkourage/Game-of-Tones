@@ -1349,9 +1349,24 @@ button.conn-chip.conn-chip-compact {
   min-height: 0;
   align-self: stretch;
   justify-self: stretch;
+  overflow: hidden;
 }
 
-/* Player cells use .square-text (not .song-name); scale with Text size % + readable floor on phones */
+.player-container .bingo-card .square-content {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 2px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* Px size from PlayerView.fitTextToCell; fallback only */
 .player-container .bingo-card .square-text {
   font-weight: 700;
   color: #fff;
@@ -1360,7 +1375,11 @@ button.conn-chip.conn-chip-compact {
   word-break: break-word;
   hyphens: auto;
   max-width: 100%;
-  font-size: max(clamp(17px, 5.2vmin, 32px), 1.6em);
+  font-size: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: block;
 }
 
 /* Tooltip shown on long-press for alternate text */

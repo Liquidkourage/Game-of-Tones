@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useParams, useSearchParams } from 'react-router-dom';
 import io from 'socket.io-client';
@@ -634,73 +634,97 @@ const PlayerView: React.FC = () => {
     };
   }, []);
 
-  // DYNAMIC FONT SIZING: Apply to all cells when bingo card changes
-  useEffect(() => {
-    if (!bingoCard) return;
-    
-    console.log('🎯 DYNAMIC FONT SIZING: Starting font sizing for', bingoCard.squares.length, 'squares');
-    console.log('🔍 Display mode:', displayMode);
-    
-    // Longer delay to ensure DOM is fully rendered and cells have final dimensions
-    const timer = setTimeout(() => {
-      bingoCard.squares.forEach((square) => {
-        const squareElement = document.querySelector(`[data-position="${square.position}"]`);
-        if (squareElement) {
-          const textElement = squareElement.querySelector('.square-text') as HTMLElement;
-          
-          if (textElement) {
-            const text = displayMode === 'title' ? (square.customSongName || cleanSongTitle(square.songName)) : square.artistName;
-            const isArtist = displayMode === 'artist';
-            console.log(`🔍 Processing cell ${square.position}: "${text}" (${text.length} chars)`);
-            fitTextToCell(textElement, text, isArtist);
-          } else {
-            console.log(`🚫 No .square-text element found for position ${square.position}`);
-          }
-        }
-      });
-    }, 500); // Longer delay to ensure DOM is fully rendered and styled
-    
-    return () => clearTimeout(timer);
-  }, [bingoCard, displayMode]);
+  /**
+   * Size cell text to fit inside the square. User "Text size" is a scale factor (50–200%)
+   * applied on top of a measured fit, so large % stays readable without overlapping neighbors.
+   */
+  const fitTextToCell = useCallback((textElement: HTMLElement, text: string, isArtist: boolean = false) => {
+    const cell = textElement.closest('.bingo-square') as HTMLElement | null;
+    if (!cell) return;
 
-  // DYNAMIC FONT SIZING: Re-calculate on window resize
-  useEffect(() => {
-    const handleResize = () => {
-      if (!bingoCard) return;
-      
-      // Debounce resize events and allow time for layout recalculation
-      setTimeout(() => {
-        bingoCard.squares.forEach((square) => {
-          const squareElement = document.querySelector(`[data-position="${square.position}"]`);
-          if (squareElement) {
-            const textElement = squareElement.querySelector('.square-text') as HTMLElement;
-            
-            if (textElement) {
-              const text = displayMode === 'title' ? (square.customSongName || cleanSongTitle(square.songName)) : square.artistName;
-              const isArtist = displayMode === 'artist';
-              fitTextToCell(textElement, text, isArtist);
-            }
-          }
-        });
-      }, 500); // Longer delay to ensure DOM is fully rendered and styled
+    const scale = Math.max(0.5, Math.min(2, fontSize / 100));
+    const rect = cell.getBoundingClientRect();
+    const cs = window.getComputedStyle(cell);
+    const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) || 0;
+    const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) || 0;
+    const indicator = cell.querySelector('.played-indicator') as HTMLElement | null;
+    const indicatorH = indicator ? indicator.getBoundingClientRect().height + 4 : 0;
+
+    const maxW = Math.max(12, rect.width - padX - 2);
+    const maxH = Math.max(12, rect.height - padY - indicatorH - 2);
+
+    textElement.style.width = `${maxW}px`;
+    textElement.style.maxWidth = `${maxW}px`;
+    textElement.style.maxHeight = `${maxH}px`;
+    textElement.style.overflow = 'hidden';
+    textElement.style.boxSizing = 'border-box';
+    textElement.style.display = 'block';
+    textElement.style.lineHeight = isArtist ? '1.12' : '1.12';
+    textElement.style.wordBreak = 'break-word';
+    textElement.style.overflowWrap = 'anywhere';
+    textElement.style.hyphens = 'auto';
+    textElement.style.whiteSpace = 'normal';
+
+    const baseCap = Math.min(maxW * 0.48, maxH * 0.28);
+    const upper = Math.max(8, Math.min(56, Math.round(baseCap * scale)));
+
+    let low = 6;
+    let high = upper;
+    let best = low;
+
+    const trySize = (px: number) => {
+      textElement.style.fontSize = `${px}px`;
+      const hOk = textElement.scrollHeight <= maxH + 1;
+      const wOk = textElement.scrollWidth <= maxW + 1;
+      return hOk && wOk;
     };
 
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      if (trySize(mid)) {
+        best = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+    textElement.style.fontSize = `${best}px`;
+  }, [fontSize]);
+
+  const refitAllBingoCells = useCallback(() => {
+    if (!bingoCard) return;
+    bingoCard.squares.forEach((square) => {
+      const squareElement = document.querySelector(`[data-position="${square.position}"]`);
+      if (!squareElement) return;
+      const textElement = squareElement.querySelector('.square-text') as HTMLElement | null;
+      if (!textElement) return;
+      const text =
+        displayMode === 'title'
+          ? square.customSongName || cleanSongTitle(square.songName)
+          : square.artistName;
+      fitTextToCell(textElement, text, displayMode === 'artist');
+    });
+  }, [bingoCard, displayMode, fitTextToCell]);
+
+  useEffect(() => {
+    if (!bingoCard) return;
+    const timer = window.setTimeout(() => {
+      refitAllBingoCells();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [bingoCard, displayMode, fontSize, bingoCardSidePx, refitAllBingoCells]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      window.setTimeout(() => refitAllBingoCells(), 100);
+    };
     window.addEventListener('resize', handleResize);
     window.addEventListener('orientationchange', handleResize);
-    
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
     };
-  }, [bingoCard, displayMode]);
-
-  // DISABLED: Dynamic font sizing to allow user font size controls to work
-  // The fitTextToCell function was overriding user's font size preferences
-  const fitTextToCell = (textElement: HTMLElement, text: string, isArtist: boolean = false) => {
-    // Do nothing - let user's fontSize setting control the text size
-    // The parent container already has fontSize: `${fontSize}%` applied
-    return;
-  };
+  }, [refitAllBingoCells]);
 
   const markSquare = (position: string) => {
     if (!bingoCard || !socket) return;
@@ -1280,7 +1304,7 @@ const PlayerView: React.FC = () => {
               draggable={false}
               style={{
                 display: 'flex',
-                alignItems: 'center',
+                alignItems: 'stretch',
                 justifyContent: 'center',
                 textAlign: 'center',
                 padding: 3,
@@ -1292,7 +1316,7 @@ const PlayerView: React.FC = () => {
               <div className="square-content">
                 {/* Display song title or artist based on display mode */}
                 <div className="square-text">
-                  {displayMode === 'title' ? square.songName : square.artistName}
+                  {displayMode === 'title' ? (square.customSongName || cleanSongTitle(square.songName)) : square.artistName}
                 </div>
                 {square.marked && (
                   <motion.div 
@@ -1313,7 +1337,7 @@ const PlayerView: React.FC = () => {
   };
 
   return (
-    <div className={`player-container ${bingoCard ? 'has-card' : ''}`} style={{ minHeight: '100svh', overscrollBehavior: 'contain', paddingBottom: 'calc(120px + env(safe-area-inset-bottom))', fontSize: `${fontSize}%` }}>
+    <div className={`player-container ${bingoCard ? 'has-card' : ''}`} style={{ minHeight: '100svh', overscrollBehavior: 'contain', paddingBottom: 'calc(120px + env(safe-area-inset-bottom))' }}>
       {/* Name prompt overlay if no name provided */}
       {!playerName || !playerName.trim() ? (
         <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
