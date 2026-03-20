@@ -1,0 +1,14 @@
+﻿# Speed: keep heavy / generated trees out of Cursor indexing & context
+node_modules/
+client/node_modules/
+client/build/
+build/
+dist/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+
+package-lock.json
+client/package-lock.json

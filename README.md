@@ -211,4 +211,9 @@ MIT License - see LICENSE file for details
 
 ---
 
-**Game of Tones** - Where Music Meets Bingo! 🎵🎮 
+**Game of Tones** - Where Music Meets Bingo! 🎵🎮
+
+## Dev speed
+
+- **Typecheck only (fast):** `npm run client:typecheck` from repo root, or `cd client && npm run typecheck`.
+- **Assistant conventions:** see [AGENTS.md](./AGENTS.md).

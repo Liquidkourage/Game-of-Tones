@@ -14,7 +14,8 @@
     "install-client": "cd client && npm install",
     "install-server": "npm install",
     "install-all": "npm run install-server && npm run install-client",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "client:typecheck": "cd client && npm run typecheck"
   },
   "keywords": [
     "music",
