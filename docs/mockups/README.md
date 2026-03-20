@@ -18,3 +18,20 @@ Static **in-game** player screen at **390×844 CSS pixels** — the logical reso
 ## App behavior (live player)
 
 The real **`PlayerView`** uses a **single unified chrome**: header (name, players, songs played, connection + Resync) and one controls row (Display / Title–Artist, Text size). There is **no** separate “Focus card” / minimal top bar mode.
+
+## `player-physical-ref-1170x2532.png`
+
+**Exactly 1170×2532 pixels** — native portrait size for **iPhone 14 / 15** (@3× from 390×844 logical).
+
+1. AirDrop or save the PNG to your iPhone **Photos**.
+2. Open the image and **tap to hide chrome** (or use full-screen preview).
+3. **Pinch / zoom** so the picture **fills the screen width** edge-to-edge.
+
+On a **1170×2532** display, image pixels map about **1:1** to screen pixels, so chrome + grid + FAB sizes are a decent **physical** sanity check (illustration, not the live app).
+
+**Other phones:** Same file still shows *relative* scale; your device may letterbox or scale — use pinch-to-fill width to compare.
+
+## `export_physical_ref.py`
+
+Regenerate the reference PNG (needs **Pillow**):  
+`python docs/mockups/export_physical_ref.py`
