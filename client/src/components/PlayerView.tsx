@@ -77,12 +77,6 @@ const PlayerView: React.FC = () => {
     const stored = localStorage.getItem('font_size_percent');
     return stored ? parseInt(stored, 10) : 100;
   });
-  const [focusCard, setFocusCard] = useState<boolean>(() => {
-    const stored = localStorage.getItem('focus_card');
-    if (stored === '1') return true;
-    if (stored === '0') return false;
-    try { return (typeof window !== 'undefined') && window.innerWidth < 640; } catch { return false; }
-  });
   const [bingoHolding, setBingoHolding] = useState<boolean>(false);
   const bingoHoldTimer = useRef<number | null>(null);
   const [holdProgress, setHoldProgress] = useState<number>(0); // 0..1
@@ -865,12 +859,6 @@ const PlayerView: React.FC = () => {
     localStorage.setItem('display_mode', mode);
   };
 
-  const toggleFocusCard = () => {
-    const val = !focusCard;
-    setFocusCard(val);
-    localStorage.setItem('focus_card', val ? '1' : '0');
-  };
-
   const startBingoHold = () => {
     // TEMPORARILY DISABLED: Allow bingo calls even without valid pattern (host will verify)
     // if (!hasValidBingo) {
@@ -1318,7 +1306,7 @@ const PlayerView: React.FC = () => {
   };
 
   return (
-    <div className={`player-container ${bingoCard ? 'has-card' : ''} ${focusCard ? 'focus' : ''}`} style={{ minHeight: '100svh', overscrollBehavior: 'contain', paddingBottom: 'calc(120px + env(safe-area-inset-bottom))', fontSize: `${fontSize}%` }}>
+    <div className={`player-container ${bingoCard ? 'has-card' : ''}`} style={{ minHeight: '100svh', overscrollBehavior: 'contain', paddingBottom: 'calc(120px + env(safe-area-inset-bottom))', fontSize: `${fontSize}%` }}>
       {/* Name prompt overlay if no name provided */}
       {!playerName || !playerName.trim() ? (
         <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
@@ -1359,140 +1347,101 @@ const PlayerView: React.FC = () => {
           </div>
         </div>
       ) : null}
-      {/* Header */}
-      {!focusCard ? (
-        <motion.div 
-          className="player-header"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <div className="player-header-line">
-            <Users className="player-icon" />
-            <span className="player-line">{playerName}</span>
-            <span className="player-count">{gameState.playerCount} players</span>
-            {gameState.isPlaying && (
-              <span className="songs-played" style={{ 
-                fontSize: '0.8rem', 
-                color: '#b3b3b3',
-                padding: '2px 6px',
-                borderRadius: '8px',
-                background: 'rgba(255,255,255,0.1)'
-              }}>
-                {songsPlayed} played
-              </span>
-            )}
-            {gameState.hasBingo && (
-              <span className="player-bingo">BINGO!</span>
-            )}
+      {/* Unified chrome: header + controls (single mode) */}
+      <motion.div 
+        className="player-header"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        <div className="player-header-line">
+          <Users className="player-icon" />
+          <span className="player-line">{playerName}</span>
+          <span className="player-count">{gameState.playerCount} players</span>
+          {gameState.isPlaying && (
+            <span className="songs-played" style={{ 
+              fontSize: '0.8rem', 
+              color: '#b3b3b3',
+              padding: '2px 6px',
+              borderRadius: '8px',
+              background: 'rgba(255,255,255,0.1)'
+            }}>
+              {songsPlayed} played
+            </span>
+          )}
+          {gameState.hasBingo && (
+            <span className="player-bingo">BINGO!</span>
+          )}
+          <span
+            className="conn-chip"
+            onClick={handleResync}
+            style={{
+              marginLeft: 'auto',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              padding: '2px 8px',
+              borderRadius: '12px',
+              cursor: 'pointer',
+              border: '1px solid rgba(255,255,255,0.15)',
+              background: connectionStatus === 'connected' ? 'rgba(0,128,0,0.15)'
+                : connectionStatus === 'reconnecting' ? 'rgba(255,165,0,0.15)'
+                : 'rgba(255,0,0,0.15)'
+            }}
+            title="Tap to resync if you think you missed a call"
+          >
             <span
-              className="conn-chip"
-              onClick={handleResync}
               style={{
-                marginLeft: 'auto',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                padding: '2px 8px',
-                borderRadius: '12px',
-                cursor: 'pointer',
-                border: '1px solid rgba(255,255,255,0.15)',
-                background: connectionStatus === 'connected' ? 'rgba(0,128,0,0.15)'
-                  : connectionStatus === 'reconnecting' ? 'rgba(255,165,0,0.15)'
-                  : 'rgba(255,0,0,0.15)'
+                width: 8,
+                height: 8,
+                borderRadius: 999,
+                background: connectionStatus === 'connected' ? '#1DB954'
+                  : connectionStatus === 'reconnecting' ? '#FFA500'
+                  : '#FF4D4F'
               }}
-              title="Tap to resync if you think you missed a call"
-            >
-              <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 999,
-                  background: connectionStatus === 'connected' ? '#1DB954'
-                    : connectionStatus === 'reconnecting' ? '#FFA500'
-                    : '#FF4D4F'
-                }}
+            />
+            <span style={{ fontSize: '0.8rem', color: '#e0e0e0' }}>
+              {connectionStatus === 'connected' && 'Connected'}
+              {connectionStatus === 'reconnecting' && `Reconnecting… (${reconnectAttempts})`}
+              {connectionStatus === 'disconnected' && 'Disconnected'}
+            </span>
+            <span style={{ fontSize: '0.8rem', color: '#9aa0a6' }}>Resync</span>
+          </span>
+        </div>
+      </motion.div>
+
+      <motion.div 
+        className="player-controls"
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.1 }}
+      >
+        {bingoCard && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>Display</span>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={displayMode === 'artist'}
+                onChange={(e) => handleDisplayModeToggle(e.target.checked)}
               />
-              <span style={{ fontSize: '0.8rem', color: '#e0e0e0' }}>
-                {connectionStatus === 'connected' && 'Connected'}
-                {connectionStatus === 'reconnecting' && `Reconnecting… (${reconnectAttempts})`}
-                {connectionStatus === 'disconnected' && 'Disconnected'}
-              </span>
-              <span style={{ fontSize: '0.8rem', color: '#9aa0a6' }}>Resync</span>
+              <span className="slider" />
+            </label>
+            <span style={{ fontSize: '0.85rem', color: '#b3b3b3', minWidth: 60, textAlign: 'right' }}>
+              {displayMode === 'title' ? 'Title' : 'Artist'}
             </span>
           </div>
-        </motion.div>
-      ) : (
-        <div className="focus-topbar">
-          <div onClick={toggleFocusCard} style={{ cursor: 'pointer' }}>
-            <span className="focus-name">{playerName}</span>
-            {gameState.isPlaying && (
-              <span style={{ 
-                fontSize: '0.7rem', 
-                color: '#b3b3b3',
-                marginLeft: '8px'
-              }}>
-                {songsPlayed} played
-              </span>
-            )}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            {bingoCard && (
-              <label className="toggle-switch" style={{ transform: 'scale(0.8)' }}>
-                <input
-                  type="checkbox"
-                  checked={displayMode === 'artist'}
-                  onChange={(e) => handleDisplayModeToggle(e.target.checked)}
-                />
-                <span className="slider" />
-              </label>
-            )}
-            <div className="font-size-controls" style={{ display: 'flex', alignItems: 'center', gap: '4px', transform: 'scale(0.8)' }}>
-              <button className="font-btn" onClick={decreaseFontSize} disabled={fontSize <= 50}>−</button>
-              <span style={{ fontSize: '0.7rem', minWidth: '32px', textAlign: 'center', color: '#b3b3b3' }}>{fontSize}%</span>
-              <button className="font-btn" onClick={increaseFontSize} disabled={fontSize >= 200}>+</button>
-            </div>
-            <button className="focus-card-btn" onClick={toggleFocusCard} style={{ fontSize: '0.7rem', padding: '4px 8px' }}>Show Chrome</button>
+        )}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>Text size</span>
+          <div className="font-size-controls" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button className="font-btn" onClick={decreaseFontSize} disabled={fontSize <= 50}>−</button>
+            <span style={{ fontSize: '0.8rem', minWidth: '36px', textAlign: 'center', color: '#b3b3b3' }}>{fontSize}%</span>
+            <button className="font-btn" onClick={increaseFontSize} disabled={fontSize >= 200}>+</button>
           </div>
         </div>
-      )}
-
-      {/* Player Controls - positioned below header */}
-      {!focusCard && (
-        <motion.div 
-          className="player-controls"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-        >
-          {bingoCard && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>Display</span>
-              <label className="toggle-switch">
-                <input
-                  type="checkbox"
-                  checked={displayMode === 'artist'}
-                  onChange={(e) => handleDisplayModeToggle(e.target.checked)}
-                />
-                <span className="slider" />
-              </label>
-              <span style={{ fontSize: '0.85rem', color: '#b3b3b3', minWidth: 60, textAlign: 'right' }}>
-                {displayMode === 'title' ? 'Title' : 'Artist'}
-              </span>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>Text</span>
-            <div className="font-size-controls" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <button className="font-btn" onClick={decreaseFontSize} disabled={fontSize <= 50}>−</button>
-              <span style={{ fontSize: '0.8rem', minWidth: '36px', textAlign: 'center', color: '#b3b3b3' }}>{fontSize}%</span>
-              <button className="font-btn" onClick={increaseFontSize} disabled={fontSize >= 200}>+</button>
-            </div>
-            <button className="focus-card-btn" onClick={toggleFocusCard}>Focus Card</button>
-          </div>
-        </motion.div>
-      )}
+      </motion.div>
 
       {/* Main Content */}
       <div className="player-content">

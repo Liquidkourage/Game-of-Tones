@@ -1275,11 +1275,10 @@ body {
   .primary-line { letter-spacing: 0.012em; }
 }
 
-/* Controls for density and focus */
+/* Controls for density */
 .density-toggle { display: inline-flex; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; overflow: hidden; }
 .density-btn { background: transparent; color: #ddd; border: none; padding: 4px 8px; font-weight: 600; cursor: pointer; }
 .density-btn.active { background: rgba(255,255,255,0.12); color: #fff; }
-.focus-card-btn { background: rgba(0,255,136,0.15); border: 1px solid rgba(0,255,136,0.3); color: #00ff88; padding: 6px 10px; border-radius: 8px; font-weight: 600; }
 
 /* Font size controls */
 .font-size-controls { display: inline-flex; align-items: center; gap: 6px; }
@@ -1302,31 +1301,6 @@ body {
   box-shadow: inset 0 0 0 2px rgba(255, 193, 7, 0.4), 0 0 8px rgba(255, 193, 7, 0.2);
   border-color: rgba(255, 193, 7, 0.6);
 }
-
-.player-container.focus .player-header,
-.player-container.focus .current-song-section,
-.player-container.focus .game-status-section,
-.player-container.focus .instructions-section {
-  display: none !important;
-}
-
-.focus-topbar { 
-  position: sticky; 
-  top: 0; 
-  z-index: 50; 
-  display: flex; 
-  justify-content: space-between; 
-  align-items: center;
-  gap: 0.5rem; 
-  padding: 6px 10px; 
-  margin-bottom: 6px; 
-  background: rgba(20,20,20,0.9); 
-  border: 1px solid rgba(0,255,136,0.25); 
-  border-radius: 10px; 
-  color: #b3b3b3; 
-  font-size: 0.85rem; 
-}
-.focus-topbar .focus-name { color: #00ff88; font-weight: 700; }
 
 /* Big Bingo FAB with hold-to-confirm */
 .bingo-fab { 

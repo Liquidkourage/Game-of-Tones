@@ -14,3 +14,7 @@ Static **in-game** player screen at **390×844 CSS pixels** — the logical reso
 3. **Screenshot** — you get a PNG at the device’s native scale (e.g. **1170×2532** @3×), with elements sized like the mock.
 
 **Limitations:** Browser chrome, Dynamic Island, system font/size settings, and `100vh` vs `dvh` can differ slightly from the production Vite app. For the shipped app, run the real client on device; this mock is for layout/scale reference.
+
+## App behavior (live player)
+
+The real **`PlayerView`** uses a **single unified chrome**: header (name, players, songs played, connection + Resync) and one controls row (Display / Title–Artist, Text size). There is **no** separate “Focus card” / minimal top bar mode.
