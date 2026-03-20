@@ -75,7 +75,7 @@ const PlayerView: React.FC = () => {
   const [tooltipText, setTooltipText] = useState<string>('');
   const [fontSize, setFontSize] = useState<number>(() => {
     const stored = localStorage.getItem('font_size_percent');
-    return stored ? parseInt(stored, 10) : 115;
+    return stored ? parseInt(stored, 10) : 130;
   });
   const [bingoHolding, setBingoHolding] = useState<boolean>(false);
   const bingoHoldTimer = useRef<number | null>(null);
@@ -1189,13 +1189,15 @@ const PlayerView: React.FC = () => {
   // Helper function to determine if a square should be highlighted based on pattern
   const isPatternSquare = (position: string): boolean => {
     const pattern = gameState.pattern;
-    
-    if (pattern === 'line') {
-      return false; // No highlighting for line pattern
+
+    // Any row, column, or diagonal can win - every cell can belong to some winning line.
+    // Full card (blackout): every cell is required.
+    if (pattern === 'line' || pattern === 'full_card') {
+      return true;
     }
-    
-    if (pattern === 'full_card') {
-      return true; // All squares are part of the pattern
+
+    if (pattern === 'custom' && gameState.customPattern?.length) {
+      return gameState.customPattern.includes(position);
     }
     
     if (pattern === 'four_corners') {
