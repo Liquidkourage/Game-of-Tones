@@ -1191,16 +1191,27 @@ const PublicDisplay: React.FC = () => {
     };
   }, [gameState.isPlaying, isVerificationPending]);
 
-  // Auto-advance the 15x5 grouped columns carousel
+  // Auto-advance the 15x5 grouped columns carousel (1x75 grouped layout only)
   useEffect(() => {
     const ids = oneBy75IdsRef.current;
     if (!ids) return;
     const interval = setInterval(() => {
-      const effectivePlayed = Math.max(
-        Math.max(0, (currentIndexRef.current ?? -1) + 1),
-        playedOrderRef.current.length
-      );
-      const totalGroups = Math.ceil(Math.min(effectivePlayed, 75) / 5);
+      // 5x15 mode uses vertical column scroll, not this horizontal carousel
+      if (fiveBy15Columns) return;
+
+      // CRITICAL: Match renderOneBy75GroupedColumns — count pool bands (of 5) that have
+      // at least one played song. Using ceil(playedCount/5) is WRONG: 45 songs can occupy
+      // up to 15 groups if spread across bands, but ceil(45/5)=9 would cap carousel and
+      // freeze scroll past ~song 45.
+      const played = new Set(playedOrderRef.current);
+      let totalGroups = 0;
+      for (let g = 0; g < 15; g++) {
+        const slice = ids.slice(g * 5, g * 5 + 5);
+        if (slice.some((id) => !id.startsWith('__placeholder_') && played.has(id))) {
+          totalGroups++;
+        }
+      }
+
       if (totalGroups > visibleCols) {
         setCarouselIndex((prev) => {
           const next = prev + 1;
@@ -1218,7 +1229,7 @@ const PublicDisplay: React.FC = () => {
     // Tick period = shift duration (~1s) + desired pause (5s) ⇒ 6000ms
     }, 6000);
     return () => clearInterval(interval);
-  }, [oneBy75Ids, visibleCols]);
+  }, [oneBy75Ids, visibleCols, fiveBy15Columns]);
 
   // Measure viewport width for pixel-perfect slides (one column per step)
   useEffect(() => {
