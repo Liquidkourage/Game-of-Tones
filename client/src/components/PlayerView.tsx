@@ -708,9 +708,10 @@ const PlayerView: React.FC = () => {
     textElement.style.boxSizing = 'border-box';
     textElement.style.display = 'block';
     textElement.style.lineHeight = isArtist ? '1.12' : '1.12';
-    textElement.style.wordBreak = 'break-word';
-    textElement.style.overflowWrap = 'anywhere';
-    textElement.style.hyphens = 'auto';
+    /* Prefer word wraps; overflow-wrap:anywhere caused mid-word breaks (e.g. Mount/ains). */
+    textElement.style.wordBreak = 'normal';
+    textElement.style.overflowWrap = 'break-word';
+    textElement.style.hyphens = 'none';
     textElement.style.whiteSpace = 'normal';
 
     const baseCap = Math.min(maxW * 0.48, maxH * 0.28);

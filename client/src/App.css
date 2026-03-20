@@ -1401,6 +1401,8 @@ button.conn-chip.conn-chip-compact {
   align-self: stretch;
   justify-self: stretch;
   overflow: hidden;
+  padding: 4px;
+  box-sizing: border-box;
 }
 
 .player-container .bingo-card .square-content {
@@ -1410,7 +1412,7 @@ button.conn-chip.conn-chip-compact {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
+  align-items: center;
   justify-content: center;
   gap: 2px;
   overflow: hidden;
@@ -1422,15 +1424,17 @@ button.conn-chip.conn-chip-compact {
   font-weight: 700;
   color: #fff;
   line-height: 1.12;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  hyphens: auto;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
   max-width: 100%;
   font-size: 12px;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  align-self: center;
   min-height: 0;
   overflow: hidden;
   display: block;
+  text-align: center;
 }
 
 /* Tooltip shown on long-press for alternate text */
@@ -2609,6 +2613,60 @@ button.conn-chip.conn-chip-compact {
   }
 
   .player-line {
+    font-size: 1rem;
+  }
+}
+
+/* Player chrome: larger tap/read targets on phones (above bingo card) */
+@media (max-width: 520px) {
+  .player-header {
+    margin: 0 0.5rem 0.45rem;
+    padding: 0.68rem 0.82rem 0.6rem;
+  }
+
+  .player-line {
+    font-size: 1.06rem;
+  }
+
+  .player-meta-line {
+    font-size: 0.9rem;
+  }
+
+  .player-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+
+  .conn-chip-compact .conn-chip-label {
+    font-size: 0.9rem;
+  }
+
+  button.conn-chip.conn-chip-compact {
+    padding: 0.42rem 0.75rem;
+  }
+
+  .player-controls {
+    padding: 0.72rem 0.82rem;
+    margin: 0 0.5rem 0.3rem;
+    gap: 0.72rem;
+  }
+
+  .player-controls-label,
+  .player-controls-hint {
+    font-size: 0.95rem;
+  }
+
+  .player-controls .font-size-readout {
+    font-size: 0.9rem;
+  }
+
+  .player-font-hint {
+    font-size: 0.74rem;
+  }
+
+  .font-btn {
+    padding: 6px 12px;
+    min-width: 30px;
     font-size: 1rem;
   }
 }
