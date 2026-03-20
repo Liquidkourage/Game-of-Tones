@@ -1323,8 +1323,7 @@ body {
   color: #b3b3b3; 
   font-size: 0.85rem; 
 }
-.focus-topbar .focus-room { color: #00ff88; font-weight: 700; }
-.focus-topbar .focus-name { color: #b3b3b3; }
+.focus-topbar .focus-name { color: #00ff88; font-weight: 700; }
 
 /* Big Bingo FAB with hold-to-confirm */
 .bingo-fab { 

@@ -1328,7 +1328,7 @@ const PlayerView: React.FC = () => {
         >
           <div className="player-header-line">
             <Users className="player-icon" />
-            <span className="player-line">{playerName} — Room {roomId}</span>
+            <span className="player-line">{playerName}</span>
             <span className="player-count">{gameState.playerCount} players</span>
             {gameState.isPlaying && (
               <span className="songs-played" style={{ 
@@ -1384,7 +1384,6 @@ const PlayerView: React.FC = () => {
       ) : (
         <div className="focus-topbar">
           <div onClick={toggleFocusCard} style={{ cursor: 'pointer' }}>
-            <span className="focus-room">Room: {roomId}</span>
             <span className="focus-name">{playerName}</span>
             {gameState.isPlaying && (
               <span style={{ 
@@ -1397,14 +1396,16 @@ const PlayerView: React.FC = () => {
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <label className="toggle-switch" style={{ transform: 'scale(0.8)' }}>
-              <input
-                type="checkbox"
-                checked={displayMode === 'artist'}
-                onChange={(e) => handleDisplayModeToggle(e.target.checked)}
-              />
-              <span className="slider" />
-            </label>
+            {bingoCard && (
+              <label className="toggle-switch" style={{ transform: 'scale(0.8)' }}>
+                <input
+                  type="checkbox"
+                  checked={displayMode === 'artist'}
+                  onChange={(e) => handleDisplayModeToggle(e.target.checked)}
+                />
+                <span className="slider" />
+              </label>
+            )}
             <div className="font-size-controls" style={{ display: 'flex', alignItems: 'center', gap: '4px', transform: 'scale(0.8)' }}>
               <button className="font-btn" onClick={decreaseFontSize} disabled={fontSize <= 50}>−</button>
               <span style={{ fontSize: '0.7rem', minWidth: '32px', textAlign: 'center', color: '#b3b3b3' }}>{fontSize}%</span>
@@ -1423,21 +1424,23 @@ const PlayerView: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.1 }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>Display</span>
-            <label className="toggle-switch">
-              <input
-                type="checkbox"
-                checked={displayMode === 'artist'}
-                onChange={(e) => handleDisplayModeToggle(e.target.checked)}
-              />
-              <span className="slider" />
-            </label>
-            <span style={{ fontSize: '0.85rem', color: '#b3b3b3', minWidth: 60, textAlign: 'right' }}>
-              {displayMode === 'title' ? 'Title' : 'Artist'}
-            </span>
-          </div>
-          
+          {bingoCard && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>Display</span>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={displayMode === 'artist'}
+                  onChange={(e) => handleDisplayModeToggle(e.target.checked)}
+                />
+                <span className="slider" />
+              </label>
+              <span style={{ fontSize: '0.85rem', color: '#b3b3b3', minWidth: 60, textAlign: 'right' }}>
+                {displayMode === 'title' ? 'Title' : 'Artist'}
+              </span>
+            </div>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span style={{ fontSize: '0.85rem', color: '#b3b3b3' }}>Text</span>
             <div className="font-size-controls" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
