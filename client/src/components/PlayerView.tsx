@@ -554,7 +554,7 @@ const PlayerView: React.FC = () => {
     };
   }, [roomId, playerName]);
 
-  // Bingo card: size from actual flex region (not vh/vmin heuristics) so the grid stays square on every device.
+  // Bingo card: size from flex slot, clamped to visual/layout viewport so the card never overflows sideways (mobile / text zoom).
   useEffect(() => {
     const el = bingoCardAreaRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -562,27 +562,45 @@ const PlayerView: React.FC = () => {
     const measure = () => {
       const r = el.getBoundingClientRect();
       const pad = 8;
-      let raw = Math.floor(Math.min(r.width, r.height) - pad);
-      if (raw < 120 && typeof window !== "undefined") {
-        const vv = window.visualViewport;
-        const availH = Math.max(0, (vv?.height ?? window.innerHeight) - 200);
-        const availW = Math.max(0, (vv?.width ?? window.innerWidth) - 16);
+      const vv = typeof window !== "undefined" ? window.visualViewport : null;
+      const docEl = typeof document !== "undefined" ? document.documentElement : null;
+      const clientW = Math.max(1, docEl?.clientWidth ?? window.innerWidth ?? 1);
+      const clientH = Math.max(1, docEl?.clientHeight ?? window.innerHeight ?? 1);
+      const viewW = Math.max(1, Math.min(vv?.width ?? clientW, clientW));
+      const viewH = Math.max(1, vv?.height ?? clientH);
+      const insetX = 24;
+
+      let raw = Math.floor(Math.min(r.width, r.height, viewW - insetX) - pad);
+
+      if (raw < 120) {
+        const availH = Math.max(0, viewH - 200);
+        const availW = Math.max(0, viewW - insetX);
         raw = Math.max(raw, Math.floor(Math.min(availW, availH) - pad));
       }
-      const side = Math.max(200, Math.min(raw, 4096));
+
+      raw = Math.min(raw, Math.floor(viewW - insetX - pad));
+      const side = Math.max(120, Math.min(raw, 4096));
       setBingoCardSidePx(side);
     };
 
-    const ro = new ResizeObserver(() => {
-      window.requestAnimationFrame(measure);
-    });
+    const schedule = () => window.requestAnimationFrame(measure);
+
+    const ro = new ResizeObserver(schedule);
     ro.observe(el);
-    measure();
+    schedule();
 
     window.addEventListener("orientationchange", measure);
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", schedule);
+    vv?.addEventListener("scroll", schedule);
+    window.addEventListener("resize", schedule);
+
     return () => {
       ro.disconnect();
       window.removeEventListener("orientationchange", measure);
+      vv?.removeEventListener("resize", schedule);
+      vv?.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
     };
   }, []);
 

@@ -1002,6 +1002,9 @@ body {
   justify-content: center;
   align-items: center;
   min-height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .section-header {
@@ -1870,7 +1873,9 @@ button.conn-chip.conn-chip-compact {
 /* Player: waiting for host (pre-game) */
 .loading-card {
   margin: 2rem auto;
-  max-width: 420px;
+  width: min(100%, 26rem);
+  max-width: 100%;
+  box-sizing: border-box;
   padding: 2.25rem 1.5rem;
   background: var(--surface-card);
   backdrop-filter: blur(20px);
