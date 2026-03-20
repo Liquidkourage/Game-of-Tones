@@ -1015,14 +1015,14 @@ body {
   aspect-ratio: 1 / 1 !important;
   flex: none !important;
   overflow: hidden;
-  /* Fallback square before JS measures (ResizeObserver assigns width/height in px) */
-  width: min(100%, calc(100vh - 14rem), calc(100vw - 1rem)) !important;
-  width: min(100%, calc(100svh - 14rem), calc(100vw - 1rem)) !important;
-  height: auto !important;
-  max-width: min(calc(100vh - 14rem), calc(100vw - 1rem)) !important;
-  max-width: min(calc(100svh - 14rem), calc(100vw - 1rem)) !important;
-  max-height: min(calc(100vh - 14rem), calc(100vw - 1rem)) !important;
-  max-height: min(calc(100svh - 14rem), calc(100vw - 1rem)) !important;
+  /* Fallback before JS; inline width/height from PlayerView must win (no !important on size) */
+  width: min(100%, calc(100vh - 14rem), calc(100vw - 1rem));
+  width: min(100%, calc(100svh - 14rem), calc(100vw - 1rem));
+  height: auto;
+  max-width: min(calc(100vh - 14rem), calc(100vw - 1rem));
+  max-width: min(calc(100svh - 14rem), calc(100vw - 1rem));
+  max-height: min(calc(100vh - 14rem), calc(100vw - 1rem));
+  max-height: min(calc(100svh - 14rem), calc(100vw - 1rem));
 }
 
 .player-container .bingo-card-grid {
