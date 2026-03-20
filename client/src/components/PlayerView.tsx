@@ -562,8 +562,14 @@ const PlayerView: React.FC = () => {
     const measure = () => {
       const r = el.getBoundingClientRect();
       const pad = 8;
-      const raw = Math.floor(Math.min(r.width, r.height) - pad);
-      const side = Math.max(160, Math.min(raw, 4096));
+      let raw = Math.floor(Math.min(r.width, r.height) - pad);
+      if (raw < 120 && typeof window !== "undefined") {
+        const vv = window.visualViewport;
+        const availH = Math.max(0, (vv?.height ?? window.innerHeight) - 200);
+        const availW = Math.max(0, (vv?.width ?? window.innerWidth) - 16);
+        raw = Math.max(raw, Math.floor(Math.min(availW, availH) - pad));
+      }
+      const side = Math.max(200, Math.min(raw, 4096));
       setBingoCardSidePx(side);
     };
 
