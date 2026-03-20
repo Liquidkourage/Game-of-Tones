@@ -14,6 +14,7 @@ import {
   Crown
 } from 'lucide-react';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
+import { STANDARD_BINGO_POSITIONS, validateBingoCardGrid } from '../patternDefinitions';
 
 interface BingoSquare {
   position: string;
@@ -359,20 +360,16 @@ const PlayerView: React.FC = () => {
     // Listen for pattern updates
     newSocket.on('pattern-updated', (data: any) => {
       console.log('Pattern updated:', data);
-      setGameState(prev => ({
+      setGameState((prev) => ({
         ...prev,
-        pattern: data.pattern || 'line',
-        customPattern: data.customMask || undefined
+        pattern:
+          typeof data?.pattern === 'string' && data.pattern.length > 0 ? data.pattern : prev.pattern,
+        customPattern: Array.isArray(data?.customMask)
+          ? data.customMask.length > 0
+            ? data.customMask
+            : undefined
+          : prev.customPattern,
       }));
-    });
-
-    // Listen for song-playing events (for UI display only)
-    // NOTE: Do NOT update playedSongIds here - server is single source of truth
-    // playedSongIds is only updated via room-state sync events
-    newSocket.on('song-playing', (data: any) => {
-      console.log('Song playing:', data);
-      // Only update UI state, not playedSongIds
-      // Server will send room-state sync with updated playedSongIds
     });
 
     // Handle bingo validation result (for the caller)
@@ -931,9 +928,13 @@ const PlayerView: React.FC = () => {
       return square && square.marked === true;
     };
     
-    // Full card pattern - all squares must be marked
+    // Full card — real 5×5 grid, then every cell marked (fail closed if card is truncated/duplicate)
     if (pattern === 'full_card') {
-      return card.squares.every(square => isSquareMarked(square));
+      if (!validateBingoCardGrid(card)) return false;
+      return STANDARD_BINGO_POSITIONS.every((pos) => {
+        const square = card.squares.find((s) => s.position === pos);
+        return square ? isSquareMarked(square) : false;
+      });
     }
     
     // Four corners pattern - all 4 corners must be marked
@@ -1069,9 +1070,13 @@ const PlayerView: React.FC = () => {
       return isValid;
     };
     
-    // Full card pattern - all squares must be marked AND correspond to played songs
+    // Full card — grid integrity + every cell marked with a played song (matches server 0-0…4-4 loop)
     if (pattern === 'full_card') {
-      return card.squares.every(square => isMarkedSquareValid(square));
+      if (!validateBingoCardGrid(card)) return false;
+      return STANDARD_BINGO_POSITIONS.every((pos) => {
+        const square = card.squares.find((s) => s.position === pos);
+        return square ? isMarkedSquareValid(square) : false;
+      });
     }
     
     // Four corners pattern - all 4 corners must be marked AND correspond to played songs

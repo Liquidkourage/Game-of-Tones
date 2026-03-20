@@ -5022,6 +5022,18 @@ function checkBingoWithPlayedSongs(card, playedSongIds) {
   return { valid: false, type: null };
 }
 
+function validateBingoCardGrid(card) {
+  if (!card?.squares || !Array.isArray(card.squares) || card.squares.length !== 25) return false;
+  const seen = new Set();
+  for (const sq of card.squares) {
+    const pos = sq && sq.position;
+    if (!pos || !/^[0-4]-[0-4]$/.test(pos)) return false;
+    if (seen.has(pos)) return false;
+    seen.add(pos);
+  }
+  return seen.size === 25;
+}
+
 function validateBingoForPattern(card, room) {
   const pattern = room?.pattern || 'line';
   // Make a copy to avoid race conditions during validation
@@ -5073,6 +5085,12 @@ function validateBingoForPattern(card, room) {
   }
   
   if (pattern === 'full_card') {
+    if (!validateBingoCardGrid(card)) {
+      return {
+        valid: false,
+        reason: 'Invalid bingo card (need 25 unique squares with positions 0-0 through 4-4).',
+      };
+    }
     // All squares must be marked AND correspond to played songs
     let invalidCount = 0;
     let invalidSquares = [];

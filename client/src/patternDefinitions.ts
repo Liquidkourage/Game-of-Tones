@@ -75,6 +75,24 @@ export const BINGO_PATTERNS: Record<BingoPattern, PatternDefinition> = {
 
 export const PATTERN_OPTIONS = Object.values(BINGO_PATTERNS);
 
+/** All 25 cell keys for a standard 5×5 card (same set as `full_card`). */
+export const STANDARD_BINGO_POSITIONS: readonly string[] = BINGO_PATTERNS.full_card.positions;
+
+/**
+ * True only if the card has exactly 25 squares, unique `row-col` keys (0–4), covering the full grid.
+ * Prevents false full-card / blackout detection when the payload is truncated, duplicated, or malformed.
+ */
+export function validateBingoCardGrid(card: { squares?: { position: string }[] } | null | undefined): boolean {
+  if (!card?.squares || card.squares.length !== 25) return false;
+  const seen = new Set<string>();
+  for (const sq of card.squares) {
+    if (!sq?.position || !/^[0-4]-[0-4]$/.test(sq.position)) return false;
+    if (seen.has(sq.position)) return false;
+    seen.add(sq.position);
+  }
+  return seen.size === 25;
+}
+
 // Helper function to check if a position is part of a pattern
 export function isPositionInPattern(position: string, pattern: BingoPattern, customPositions?: string[]): boolean {
   if (pattern === 'custom') {
