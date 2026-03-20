@@ -75,7 +75,7 @@ const PlayerView: React.FC = () => {
   const [tooltipText, setTooltipText] = useState<string>('');
   const [fontSize, setFontSize] = useState<number>(() => {
     const stored = localStorage.getItem('font_size_percent');
-    return stored ? parseInt(stored, 10) : 100;
+    return stored ? parseInt(stored, 10) : 115;
   });
   const [bingoHolding, setBingoHolding] = useState<boolean>(false);
   const bingoHoldTimer = useRef<number | null>(null);
@@ -1277,7 +1277,7 @@ const PlayerView: React.FC = () => {
                 justifyContent: 'center',
                 textAlign: 'center',
                 padding: 3,
-                lineHeight: 1.0,
+                lineHeight: 1.12,
                 fontWeight: 700,
                 userSelect: 'none'
               }}

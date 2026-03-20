@@ -106,7 +106,7 @@ def main() -> None:
     f_md = load_font(int(13 * S))
     f_sm = load_font(int(11 * S))
     f_xs = load_font(int(10 * S))
-    f_cell = load_font(max(14, int(7 * S)))  # ~21px — readable in cell
+    f_cell = load_font(max(22, int(10 * S)))  # ~30px @3× — match larger in-app cell type
 
     sb_h = 162
     dr.rectangle([0, 0, W, sb_h], fill="#000")

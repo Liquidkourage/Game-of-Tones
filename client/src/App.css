@@ -1343,6 +1343,18 @@ button.conn-chip.conn-chip-compact {
   justify-self: stretch;
 }
 
+/* Player cells use .square-text (not .song-name); scale with Text size % + readable floor on phones */
+.player-container .bingo-card .square-text {
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
+  max-width: 100%;
+  font-size: max(clamp(15px, 3.9vmin, 24px), 1.35em);
+}
+
 /* Tooltip shown on long-press for alternate text */
 .hover-tooltip {
   position: absolute; /* immediately above the tapped square */
