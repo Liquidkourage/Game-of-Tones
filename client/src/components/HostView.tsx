@@ -17,6 +17,7 @@ import SongTitleEditModal from './SongTitleEditModal';
 import RoundPlanner from './RoundPlanner';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
 import { validateSongTitle, validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
+import './HostView.css';
 
 interface Playlist {
   id: string;
@@ -2694,7 +2695,7 @@ const HostView: React.FC = () => {
                    </div>
                  )}
                  <button
-                   className="spotify-connect-btn"
+                   className="spotify-connect-btn btn"
                    type="button"
                    onClick={() => {
                      setSpotifyError(null);
@@ -2702,7 +2703,7 @@ const HostView: React.FC = () => {
                    }}
                    disabled={isSpotifyConnecting}
                  >
-                   <Music className="btn-icon" />
+                   <Music className="btn-icon spotify-btn-icon" aria-hidden />
                    {isSpotifyConnecting
                      ? 'Connecting...'
                      : spotifyError
@@ -2712,10 +2713,13 @@ const HostView: React.FC = () => {
                </div>
              ) : (
                <div className="spotify-connected">
-                 <Music className="connected-icon" />
-                 <span>Connected to Spotify</span>
-                 <button 
-                   className="disconnect-btn"
+                 <div className="spotify-connected-main">
+                   <Music className="connected-icon" aria-hidden />
+                   <span className="spotify-connected-label">Connected to Spotify</span>
+                 </div>
+                 <button
+                   type="button"
+                   className="disconnect-btn btn"
                    onClick={async () => {
                      try {
                       await fetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST' });
