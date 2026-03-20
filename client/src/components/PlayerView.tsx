@@ -701,10 +701,16 @@ const PlayerView: React.FC = () => {
     const indicatorH = indicator ? indicator.getBoundingClientRect().height + 4 : 0;
 
     /* Extra inset so fitted font is not at the edge (reduces mid-word breaks). */
-    const inset = 8;
+    const inset = 10;
     const maxW = Math.max(12, rect.width - padX - inset);
     const maxH = Math.max(12, rect.height - padY - indicatorH - inset);
 
+    const capDim = Math.min(maxW, maxH);
+    /* Cap by cell size so very short titles do not balloon vs long titles in other cells */
+    const maxFontByCell = Math.max(
+      8,
+      Math.min(34, Math.round(capDim * 0.26) + (isArtist ? -1 : 0))
+    );
 
     textElement.style.width = `${maxW}px`;
     textElement.style.maxWidth = `${maxW}px`;
@@ -719,10 +725,11 @@ const PlayerView: React.FC = () => {
     textElement.style.hyphens = 'none';
     textElement.style.whiteSpace = 'normal';
 
-    const baseCap = Math.min(maxW * 0.38, maxH * 0.2);
+    const baseCap = Math.min(maxW * 0.36, maxH * 0.19);
     const len = text.length;
     const lenFactor = len > 48 ? 0.82 : len > 32 ? 0.9 : len > 20 ? 0.95 : 1;
-    const upper = Math.max(8, Math.min(44, Math.round(baseCap * scale * lenFactor)));
+    let upper = Math.max(8, Math.min(42, Math.round(baseCap * scale * lenFactor)));
+    upper = Math.min(upper, maxFontByCell);
 
     let low = 6;
     let high = upper;
