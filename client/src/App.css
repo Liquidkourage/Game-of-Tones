@@ -120,6 +120,14 @@ body {
   overflow: hidden;
 }
 
+/* Player route: vertical scroll on short phones (e.g. iPhone SE) */
+.app-main:has(.player-container) {
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
 /* Shrink app-main slightly for public display */
 .app-main .public-display {
   margin-top: 52px; /* offset absolute header */
@@ -1136,15 +1144,15 @@ body {
 .player-container {
   min-height: 100vh;
   min-height: 100dvh;
-  height: 100vh;
-  height: 100dvh; /* stable viewport on mobile vs 100vh URL-bar bugs */
-  padding: 0; /* ZERO SCROLL: Remove all padding */
+  height: auto;
+  padding: 0;
   /* Sit first card directly under sticky app header */
   padding-top: calc(52px + env(safe-area-inset-top, 0px));
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  overflow: hidden; /* ZERO SCROLL: Prevent any overflow */
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 
 .player-header {
@@ -2214,11 +2222,14 @@ button.conn-chip.conn-chip-compact {
     height: 1.25rem;
   }
   
-  /* ZERO SCROLL: Mobile container optimization */
+  /* Player: scroll in .app-main when content exceeds viewport */
   .player-container {
-    height: 100vh; /* Force exact viewport height */
+    min-height: 100vh;
+    min-height: 100dvh;
+    height: auto;
     padding-top: calc(52px + env(safe-area-inset-top, 0px));
-    overflow: hidden; /* Prevent scrolling */
+    overflow-x: hidden;
+    overflow-y: visible;
   }
   
   
@@ -2465,12 +2476,15 @@ button.conn-chip.conn-chip-compact {
   
   /* Optimize player container for landscape */
   .player-container {
-    height: 100vh;
+    min-height: 100vh;
+    min-height: 100dvh;
+    height: auto;
     padding: 0;
     padding-top: 45px; /* Account for compact header */
     padding-left: 0.5rem; /* Add horizontal padding */
     padding-right: 0.5rem;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: visible;
   }
   
   .player-controls {
