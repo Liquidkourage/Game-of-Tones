@@ -982,7 +982,7 @@ body {
   flex: 1 1 auto;
   width: 100%;
   position: relative;
-  min-height: min(72svh, calc(100vw - 1.25rem));
+  min-height: 0;
 }
 
 .player-container .bingo-card-measure-layer {
@@ -997,11 +997,12 @@ body {
   inset: 0;
   flex: none;
   z-index: 1;
-  /* Center card in the flex slot (viewport band between chrome and footer FAB) */
+  /* Top-align card so dead space sits below (above FAB), not between chrome and grid */
   display: grid;
-  place-items: center;
+  place-items: start center;
   justify-items: center;
-  align-content: center;
+  align-content: start;
+  padding-top: 0.35rem;
   min-height: 100%;
   width: 100%;
   min-width: 0;
@@ -1148,9 +1149,9 @@ body {
 
 .player-header {
   display: block;
-  margin: 0 0.5rem 0.45rem;
-  padding: 1.05rem 1.15rem 0.92rem;
-  min-height: 4.5rem;
+  margin: 0 0.5rem 0.42rem;
+  padding: 1.35rem 1.25rem 1.15rem;
+  min-height: 6.25rem;
   background: var(--surface-card);
   backdrop-filter: blur(20px);
   border: 1px solid var(--border-accent-soft);
@@ -1186,7 +1187,7 @@ body {
 }
 
 .player-meta-line {
-  font-size: 1.22rem;
+  font-size: 1.52rem;
   color: #9aa0a6;
   line-height: 1.35;
 }
@@ -1196,8 +1197,8 @@ body {
 }
 
 .player-icon {
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 2.05rem;
+  height: 2.05rem;
   flex-shrink: 0;
   color: var(--accent-color);
 }
@@ -1205,7 +1206,7 @@ body {
 .player-line {
   color: #ddd;
   font-weight: 600;
-  font-size: 1.42rem;
+  font-size: 1.78rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1265,8 +1266,8 @@ button.conn-chip.conn-chip-compact {
 /* Player controls — vertical stack, room to breathe */
 .player-controls {
   flex-shrink: 0;
-  padding: 1.12rem 1.18rem;
-  min-height: 5.5rem;
+  padding: 1.45rem 1.35rem;
+  min-height: 7.25rem;
   background: var(--surface-card);
   backdrop-filter: blur(20px);
   border: 1px solid var(--border-accent-soft);
@@ -1288,7 +1289,7 @@ button.conn-chip.conn-chip-compact {
 
 .player-controls-label {
   flex-shrink: 0;
-  font-size: 1.38rem;
+  font-size: 1.68rem;
   color: #b3b3b3;
 }
 
@@ -1302,19 +1303,19 @@ button.conn-chip.conn-chip-compact {
 }
 
 .player-controls-hint {
-  font-size: 1.35rem;
+  font-size: 1.62rem;
   color: #8f96a0;
-  min-width: 3.5rem;
+  min-width: 4rem;
   text-align: right;
 }
 
 .player-controls .font-size-controls {
-  gap: 10px;
+  gap: 14px;
 }
 
 .player-controls .font-size-readout {
-  font-size: 1.35rem;
-  min-width: 3.75rem;
+  font-size: 1.65rem;
+  min-width: 4.25rem;
   text-align: center;
   color: #b3b3b3;
 }
@@ -1331,8 +1332,8 @@ button.conn-chip.conn-chip-compact {
 }
 
 .player-font-hint {
-  font-size: 1.12rem;
-  line-height: 1.4;
+  font-size: 1.32rem;
+  line-height: 1.45;
   color: #8f96a0;
   font-weight: 500;
   max-width: 100%;
@@ -2575,44 +2576,44 @@ button.conn-chip.conn-chip-compact {
   transform: scale(1.3);
 }
 
-/* Narrow cover screens (e.g. Galaxy Z Fold front): same vertical center as wider phones */
+/* Narrow cover screens: top-aligned bingo card + large chrome */
 @media (max-width: 430px) {
   .player-container .bingo-section-slot > .bingo-section {
-    place-items: center;
-    align-content: center;
-    padding-top: 0;
+    place-items: start center;
+    align-content: start;
+    padding-top: 0.3rem;
   }
 
   .player-controls {
-    padding: 1.32rem 1.35rem;
-    margin: 0 0.42rem 0.3rem;
-    gap: 1.22rem;
-    min-height: 6rem;
+    padding: 1.5rem 1.42rem;
+    margin: 0 0.42rem 0.28rem;
+    gap: 1.35rem;
+    min-height: 7.5rem;
   }
 
   .player-controls-label,
   .player-controls-hint {
-    font-size: 1.42rem;
+    font-size: 1.62rem;
   }
 
   .player-font-hint {
-    font-size: 1.18rem;
+    font-size: 1.38rem;
     max-width: 100%;
   }
 
   .player-header {
-    margin: 0 0.42rem 0.38rem;
-    padding: 1.25rem 1.28rem 1.12rem;
-    min-height: 5.2rem;
+    margin: 0 0.42rem 0.36rem;
+    padding: 1.42rem 1.38rem 1.22rem;
+    min-height: 6.5rem;
   }
 
   .player-meta-line,
   .conn-chip-compact .conn-chip-label {
-    font-size: 1.35rem;
+    font-size: 1.52rem;
   }
 
   .player-line {
-    font-size: 1.62rem;
+    font-size: 1.88rem;
   }
 }
 
@@ -2640,23 +2641,23 @@ button.conn-chip.conn-chip-compact {
   }
 
   .player-header {
-    margin: 0 0.4rem 0.38rem;
-    padding: 1.35rem 1.42rem 1.18rem;
+    margin: 0 0.4rem 0.36rem;
+    padding: 1.48rem 1.52rem 1.28rem;
     border-radius: 14px;
-    min-height: 5.5rem;
+    min-height: 6.75rem;
   }
 
   .player-line {
-    font-size: 1.72rem;
+    font-size: 1.92rem;
   }
 
   .player-meta-line {
-    font-size: 1.45rem;
+    font-size: 1.58rem;
   }
 
   .player-icon {
-    width: 2.25rem;
-    height: 2.25rem;
+    width: 2.35rem;
+    height: 2.35rem;
   }
 
   .conn-chip-compact .conn-dot {
@@ -2674,33 +2675,33 @@ button.conn-chip.conn-chip-compact {
   }
 
   .player-controls {
-    padding: 1.42rem 1.48rem;
-    margin: 0 0.4rem 0.32rem;
-    gap: 1.28rem;
+    padding: 1.55rem 1.55rem;
+    margin: 0 0.4rem 0.28rem;
+    gap: 1.38rem;
     border-radius: 14px;
-    min-height: 6.2rem;
+    min-height: 7.75rem;
   }
 
   .player-controls-label,
   .player-controls-hint {
-    font-size: 1.48rem;
+    font-size: 1.68rem;
   }
 
   .player-controls .font-size-readout {
-    font-size: 1.42rem;
-    min-width: 4rem;
+    font-size: 1.62rem;
+    min-width: 4.35rem;
   }
 
   .player-font-hint {
-    font-size: 1.2rem;
+    font-size: 1.38rem;
     max-width: 100%;
   }
 
   .font-btn {
-    padding: 15px 22px;
-    min-width: 52px;
-    min-height: 52px;
-    font-size: 1.28rem;
+    padding: 16px 24px;
+    min-width: 56px;
+    min-height: 56px;
+    font-size: 1.38rem;
     border-radius: 8px;
   }
 
