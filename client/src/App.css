@@ -983,7 +983,8 @@ body {
   width: 100%;
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start; /* Top-align card; extra space goes below (above FAB) */
+  padding-top: 0.5rem;
 }
 
 /* bingo-section: flex area for card (ResizeObserver measures it); centers square card */
