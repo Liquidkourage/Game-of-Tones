@@ -1167,6 +1167,9 @@ body {
   justify-content: center;
   align-items: flex-start;
   box-sizing: border-box;
+  /* Room below scaled stage so hold-to-bingo isn’t clipped by home indicator */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  scroll-padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
 }
 
 .player-canvas-inner {
@@ -1182,8 +1185,8 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  /* Reserve space for absolute FAB so grid doesn’t sit under the button */
-  padding-bottom: 156px;
+  /* Reserve space for absolute FAB (136px + gap + safe area) */
+  padding-bottom: calc(156px + env(safe-area-inset-bottom, 0px));
 }
 
 /* Ensure measure slot gets height so bingoCardSidePx can compute (avoids empty middle). */
@@ -1215,7 +1218,7 @@ body {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 168px;
+  bottom: calc(168px + env(safe-area-inset-bottom, 0px));
   width: min(300px, calc(100% - 16px));
   max-width: min(300px, calc(100% - 16px));
 }

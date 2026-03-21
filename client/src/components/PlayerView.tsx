@@ -1660,7 +1660,7 @@ const PlayerView: React.FC = () => {
             exit={{ opacity: 0, y: 20 }}
             style={{
               position: 'absolute',
-              bottom: 168,
+              bottom: 'calc(168px + env(safe-area-inset-bottom, 0px))',
               left: '50%',
               transform: 'translateX(-50%)',
               padding: '12px 20px',
@@ -1713,7 +1713,9 @@ const PlayerView: React.FC = () => {
 
         {/* bottom sheet removed per request */}
         <button
+          type="button"
           className={`bingo-fab ${bingoHolding ? 'holding' : ''} ${hasValidBingo ? 'ready' : 'disabled'}`}
+          aria-label={hasValidBingo ? 'Hold to call bingo' : 'Complete a winning pattern to call bingo'}
           onPointerDown={startBingoHold}
           onPointerUp={cancelBingoHold}
           onPointerCancel={cancelBingoHold}
@@ -1727,7 +1729,7 @@ const PlayerView: React.FC = () => {
             position: 'absolute',
             left: '50%',
             transform: 'translateX(-50%)',
-            bottom: 20,
+            bottom: 'calc(28px + env(safe-area-inset-bottom, 0px))',
             zIndex: 1100,
             width: 136,
             height: 136,
@@ -1771,12 +1773,15 @@ const PlayerView: React.FC = () => {
             WebkitUserSelect: 'none',
             MozUserSelect: 'none',
             msUserSelect: 'none',
-            pointerEvents: 'none'
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+            textAlign: 'center',
+            maxWidth: 120,
           }}>
             {bingoHolding ? 'Holding…' : 
              bingoStatus === 'checking' ? 'Checking...' :
              bingoStatus === 'success' ? 'WINNER!' :
-             hasValidBingo ? 'BINGO READY!' : 'No Pattern'}
+             hasValidBingo ? 'BINGO READY!' : 'No pattern'}
           </span>
         </button>
       </div>
