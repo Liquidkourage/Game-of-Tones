@@ -49,8 +49,8 @@ interface Song {
  * Canonical player UI (CSS px). Uniformly scaled to fit viewport — same layout on every device.
  */
 const PLAYER_CANVAS_WIDTH = 360;
-/** Height budget for header+controls+card+FAB; chrome is compact to prioritize the grid. */
-const PLAYER_CANVAS_HEIGHT = 780;
+/** Logical height of the scaled stage (px). MUST fit chrome + bingo grid + in-flow FAB row; if too small, the bottom clips. */
+const PLAYER_CANVAS_HEIGHT = 940;
 /** Bingo grid must stay large in logical px — never repeat 120px “minimum” bug. */
 const BINGO_CARD_MIN_SIDE_PX = 280;
 const BINGO_CARD_MAX_SIDE_PX = PLAYER_CANVAS_WIDTH - 16;
@@ -1497,6 +1497,7 @@ const PlayerView: React.FC = () => {
             height: PLAYER_CANVAS_HEIGHT * playerCanvasScale,
             position: 'relative',
             flexShrink: 0,
+            overflow: 'visible',
           }}
         >
           <div
@@ -1508,6 +1509,7 @@ const PlayerView: React.FC = () => {
               width: PLAYER_CANVAS_WIDTH,
               height: PLAYER_CANVAS_HEIGHT,
               boxSizing: 'border-box',
+              overflow: 'visible',
               transform: `scale(${playerCanvasScale})`,
               transformOrigin: 'top left',
               WebkitTextSizeAdjust: '100%',
