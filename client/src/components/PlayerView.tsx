@@ -701,15 +701,15 @@ const PlayerView: React.FC = () => {
     const indicatorH = indicator ? indicator.getBoundingClientRect().height + 4 : 0;
 
     /* Extra inset so fitted font is not at the edge (reduces mid-word breaks). */
-    const inset = 10;
+    const inset = 14;
     const maxW = Math.max(12, rect.width - padX - inset);
     const maxH = Math.max(12, rect.height - padY - indicatorH - inset);
 
     const capDim = Math.min(maxW, maxH);
-    /* Cap by cell size so very short titles do not balloon vs long titles in other cells */
+    /* Cap by cell size for more consistent sizing and fewer mid-word breaks vs long titles in other cells */
     const maxFontByCell = Math.max(
       8,
-      Math.min(34, Math.round(capDim * 0.26) + (isArtist ? -1 : 0))
+      Math.min(30, Math.round(capDim * 0.24) + (isArtist ? -1 : 0))
     );
 
     textElement.style.width = `${maxW}px`;
@@ -751,7 +751,7 @@ const PlayerView: React.FC = () => {
         high = mid - 1;
       }
     }
-    best = Math.max(6, best - 1);
+    best = Math.max(6, best - 2); /* Slightly smaller to avoid mid-word wraps */
     textElement.style.fontSize = best + "px";
   }, [fontSize]);
 
