@@ -57,7 +57,7 @@ body {
   background: rgba(26, 26, 26, 0.95);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border-accent-soft);
-  padding: 1rem 0;
+  padding: 0.5rem 0;
   position: sticky;
   top: 0;
   z-index: 100;
@@ -986,7 +986,7 @@ body {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  padding: 0.25rem 0 0;
+  padding: 0.15rem 0 0;
   align-self: stretch;
 }
 
@@ -1125,7 +1125,7 @@ body {
   flex: 1;
   min-height: 0;
   padding: 0;
-  padding-top: calc(52px + env(safe-area-inset-top, 0px));
+  padding-top: calc(8px + env(safe-area-inset-top, 0px));
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -1150,7 +1150,7 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 6px 0 8px;
+  padding: 10px 0 12px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -1201,7 +1201,7 @@ body {
 
 /* --- Player chrome inside logical canvas: one shell, minimal vertical space, 360px-wide layout --- */
 .player-container .player-chrome {
-  margin: 0 0.2rem 0.3rem;
+  margin: 0 0.2rem 0.2rem;
   padding: 0;
   border-radius: 10px;
   border: 1px solid var(--border-accent-soft);
