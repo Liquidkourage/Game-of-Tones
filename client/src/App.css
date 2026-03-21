@@ -979,14 +979,14 @@ body {
 }
 
 .player-container .bingo-section {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 200px;
   min-width: 0;
   width: 100%;
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  padding: 0.15rem 0 0;
+  padding: 0.4rem 0 0;
   align-self: stretch;
 }
 
@@ -1142,15 +1142,17 @@ body {
   padding: 0 4px;
   width: 100%;
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  --fab-logical-size: 56px;
+  --fab-logical-size: 72px;
 }
 
 .player-container .player-fab-row {
-  flex-shrink: 0;
+  flex: 1 1 auto;
+  min-height: 48px;
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 10px 0 12px;
+  padding: 6px 0 8px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
   width: 100%;
   box-sizing: border-box;
 }
@@ -1161,9 +1163,10 @@ body {
   bottom: auto !important;
   transform: none !important;
   flex-shrink: 0;
-  width: clamp(48px, 14vw, 64px);
-  height: clamp(48px, 14vw, 64px);
-  max-width: 100%;
+  width: auto;
+  height: 100%;
+  max-height: min(96px, 100%);
+  min-height: 48px;
   aspect-ratio: 1;
   border-radius: 50%;
   padding: 0 6px;
