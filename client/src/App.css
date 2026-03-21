@@ -1181,10 +1181,13 @@ body {
 
 .player-canvas-inner .player-content {
   position: relative;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  flex-grow: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  justify-content: flex-start;
+  gap: 0.35rem;
   /* Same width as logical stage → cqw matches grid/chrome scaling */
   container-type: inline-size;
   container-name: player-stage;
@@ -1192,10 +1195,40 @@ body {
   padding-bottom: 0;
 }
 
-/* Ensure measure slot gets height so bingoCardSidePx can compute (avoids empty middle). */
+/*
+ * CRITICAL (short phones / iPhone SE): do NOT flex-grow the bingo slot.
+ * Growing the slot + centering the grid in it pushes the FAB to the bottom of a
+ * tall logical stage -> clipped after scale. Keep slot content-height.
+ */
 .player-canvas-inner .bingo-section-slot {
-  flex: 1 1 auto;
-  min-height: 220px;
+  flex: 0 1 auto;
+  flex-grow: 0;
+  min-height: 0;
+  width: 100%;
+  position: relative;
+}
+
+/* Measure layer was position:absolute;inset:0 - it forces a tall slot when combined with flex:1. */
+.player-canvas-inner .bingo-card-measure-layer {
+  display: none;
+}
+
+/* Flow layout: card sets slot height; top-aligned, not vertically centered in a giant flex area */
+.player-container .player-canvas-inner .bingo-section-slot > .bingo-section {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  flex: 0 0 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 0.25rem;
+  padding-bottom: 0.2rem;
+  box-sizing: border-box;
+  overflow: visible;
 }
 
 /* Do NOT use width: auto !important — it overrides inline px from PlayerView and collapses the grid. */
@@ -1203,12 +1236,6 @@ body {
   max-width: 100% !important;
   max-height: none !important;
   box-sizing: border-box;
-}
-.player-container .player-canvas-inner .bingo-section-slot > .bingo-section {
-  place-items: center;
-  align-content: center;
-  padding-top: 0;
-  justify-items: center;
 }
 
 /* Hold FAB: in document flow so it scales with the transformed canvas (not viewport-fixed). */

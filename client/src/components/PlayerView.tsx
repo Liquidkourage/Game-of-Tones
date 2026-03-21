@@ -583,7 +583,7 @@ const PlayerView: React.FC = () => {
     if (!inner) return;
 
     const measureLogicalHeight = () => {
-      const raw = Math.ceil(inner.scrollHeight);
+      const raw = Math.ceil(Math.max(inner.offsetHeight, inner.scrollHeight));
       const clamped = Math.max(
         PLAYER_CANVAS_LOGICAL_HEIGHT_MIN,
         Math.min(PLAYER_CANVAS_LOGICAL_HEIGHT_MAX, raw),
@@ -610,13 +610,6 @@ const PlayerView: React.FC = () => {
       const r = el.getBoundingClientRect();
       let w = Math.max(1, r.width);
       let h = Math.max(1, r.height);
-      const vv = window.visualViewport;
-      if (vv && vv.height > 0) {
-        const top = Math.max(r.top, vv.offsetTop);
-        const bottom = Math.min(r.bottom, vv.offsetTop + vv.height);
-        const intersect = bottom - top;
-        if (intersect > 8) h = Math.min(h, intersect);
-      }
       let s = Math.min(w / PLAYER_CANVAS_WIDTH, h / H);
       if (!Number.isFinite(s)) s = 1;
       s = Math.max(0.3, Math.min(s, 2.5));
@@ -648,14 +641,17 @@ const PlayerView: React.FC = () => {
       const pad = 12;
       const w = Math.max(0, el.clientWidth);
       const h = Math.max(0, el.clientHeight);
-      const slotMin = w > 0 && h > 0 ? Math.min(w, h) : 0;
+      const cap = BINGO_CARD_MAX_SIDE_PX;
+      const byW = w > pad + 24 ? Math.min(w - pad, cap) : 0;
+      const byH = h > pad + 24 ? Math.min(h - pad, cap) : byW;
+      const slotMin = byW > 0 ? Math.min(byW, byH) : 0;
 
       let side: number;
       if (slotMin <= pad + 24) {
         side = BINGO_CARD_DEFAULT_SIDE_PX;
       } else {
-        side = Math.floor(Math.min(slotMin - pad, BINGO_CARD_MAX_SIDE_PX));
-        side = Math.max(BINGO_CARD_MIN_SIDE_PX, Math.min(side, BINGO_CARD_MAX_SIDE_PX));
+        side = Math.floor(Math.min(slotMin, cap));
+        side = Math.max(BINGO_CARD_MIN_SIDE_PX, Math.min(side, cap));
       }
       if (!Number.isFinite(side)) side = BINGO_CARD_DEFAULT_SIDE_PX;
       setBingoCardSidePx(side);
@@ -1544,7 +1540,8 @@ const PlayerView: React.FC = () => {
               left: 0,
               top: 0,
               width: PLAYER_CANVAS_WIDTH,
-              height: playerCanvasLogicalHeight,
+              height: 'auto',
+              minHeight: PLAYER_CANVAS_LOGICAL_HEIGHT_MIN,
               boxSizing: 'border-box',
               overflow: 'visible',
               transform: `scale(${playerCanvasScale})`,
