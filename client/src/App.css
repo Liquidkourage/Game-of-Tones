@@ -1123,9 +1123,9 @@ body {
     padding: 1px !important;
   }
 
-  /* Player card: generic rule uses !important — keep readable cell insets */
+  /* Player card: match base 12px so text does not touch borders */
   .player-container .bingo-card .bingo-square {
-    padding: 10px !important;
+    padding: 12px !important;
   }
 }
 
@@ -1146,8 +1146,9 @@ body {
 
 .player-header {
   display: block;
-  margin: 0 0.5rem 0.55rem;
-  padding: 0.88rem 1rem 0.78rem;
+  margin: 0 0.5rem 0.4rem;
+  padding: 1.05rem 1.15rem 0.92rem;
+  min-height: 4.5rem;
   background: var(--surface-card);
   backdrop-filter: blur(20px);
   border: 1px solid var(--border-accent-soft);
@@ -1176,8 +1177,8 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-top: 0.55rem;
-  padding-top: 0.55rem;
+  margin-top: 0.68rem;
+  padding-top: 0.68rem;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   min-width: 0;
 }
@@ -1262,16 +1263,17 @@ button.conn-chip.conn-chip-compact {
 /* Player controls — vertical stack, room to breathe */
 .player-controls {
   flex-shrink: 0;
-  padding: 0.95rem 1.05rem;
+  padding: 1.12rem 1.18rem;
+  min-height: 5.5rem;
   background: var(--surface-card);
   backdrop-filter: blur(20px);
   border: 1px solid var(--border-accent-soft);
   border-radius: 14px;
-  margin: 0 0.5rem 0.4rem;
+  margin: 0 0.5rem 0.35rem;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.95rem;
+  gap: 1.08rem;
 }
 
 .player-controls-row {
@@ -1338,14 +1340,12 @@ button.conn-chip.conn-chip-compact {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center; /* Center the bingo card vertically */
+  justify-content: flex-start; /* Card up: fill negative space with top boxes */
   max-width: 100%;
   margin: 0 auto;
-  /* Floor height so the card slot cannot flex-shrink to zero */
-  min-height: min(48svh, 440px);
-  min-height: 36vh;
+  min-height: 0;
   box-sizing: border-box;
-  padding: 0 0.5rem; /* ZERO SCROLL: Add minimal side padding */
+  padding: 0.4rem 0.5rem 0 0.5rem; /* Small top gap below controls */
 }
 
 /* Player card visuals + layout (size: see .player-container .bingo-card above + PlayerView inline px) */
@@ -1407,7 +1407,7 @@ button.conn-chip.conn-chip-compact {
   align-self: stretch;
   justify-self: stretch;
   overflow: hidden;
-  padding: 9px;
+  padding: 12px;
   box-sizing: border-box;
 }
 
@@ -2586,33 +2586,35 @@ button.conn-chip.conn-chip-compact {
   }
 
   .player-controls {
-    padding: 1.18rem 1.22rem;
-    margin: 0 0.42rem 0.35rem;
-    gap: 1.15rem;
+    padding: 1.32rem 1.35rem;
+    margin: 0 0.42rem 0.3rem;
+    gap: 1.22rem;
+    min-height: 6rem;
   }
 
   .player-controls-label,
   .player-controls-hint {
-    font-size: 1.18rem;
+    font-size: 1.24rem;
   }
 
   .player-font-hint {
-    font-size: 1.02rem;
+    font-size: 1.08rem;
     max-width: 100%;
   }
 
   .player-header {
-    margin: 0 0.42rem 0.48rem;
-    padding: 1.12rem 1.15rem 1.02rem;
+    margin: 0 0.42rem 0.38rem;
+    padding: 1.25rem 1.28rem 1.12rem;
+    min-height: 5.2rem;
   }
 
   .player-meta-line,
   .conn-chip-compact .conn-chip-label {
-    font-size: 1.18rem;
+    font-size: 1.22rem;
   }
 
   .player-line {
-    font-size: 1.38rem;
+    font-size: 1.45rem;
   }
 }
 
@@ -2644,65 +2646,67 @@ button.conn-chip.conn-chip-compact {
   }
 
   .player-header {
-    margin: 0 0.4rem 0.55rem;
-    padding: 1.22rem 1.28rem 1.08rem;
+    margin: 0 0.4rem 0.38rem;
+    padding: 1.35rem 1.42rem 1.18rem;
     border-radius: 14px;
+    min-height: 5.5rem;
   }
 
   .player-line {
-    font-size: 1.48rem;
+    font-size: 1.58rem;
   }
 
   .player-meta-line {
-    font-size: 1.22rem;
+    font-size: 1.28rem;
   }
 
   .player-icon {
-    width: 2.1rem;
-    height: 2.1rem;
+    width: 2.25rem;
+    height: 2.25rem;
   }
 
   .conn-chip-compact .conn-dot {
-    width: 11px;
-    height: 11px;
+    width: 12px;
+    height: 12px;
   }
 
   .conn-chip-compact .conn-chip-label {
-    font-size: 1.2rem;
+    font-size: 1.28rem;
   }
 
   button.conn-chip.conn-chip-compact {
-    padding: 0.68rem 1.15rem;
-    min-height: 52px;
+    padding: 0.75rem 1.22rem;
+    min-height: 54px;
   }
 
   .player-controls {
-    padding: 1.28rem 1.32rem;
-    margin: 0 0.4rem 0.42rem;
-    gap: 1.2rem;
+    padding: 1.42rem 1.48rem;
+    margin: 0 0.4rem 0.32rem;
+    gap: 1.28rem;
     border-radius: 14px;
+    min-height: 6.2rem;
   }
 
   .player-controls-label,
   .player-controls-hint {
-    font-size: 1.22rem;
+    font-size: 1.28rem;
   }
 
   .player-controls .font-size-readout {
-    font-size: 1.18rem;
-    min-width: 3.6rem;
+    font-size: 1.22rem;
+    min-width: 3.75rem;
   }
 
   .player-font-hint {
-    font-size: 1.05rem;
+    font-size: 1.1rem;
     max-width: 100%;
   }
 
   .font-btn {
-    padding: 14px 20px;
-    min-width: 50px;
-    min-height: 50px;
-    font-size: 1.24rem;
+    padding: 15px 22px;
+    min-width: 52px;
+    min-height: 52px;
+    font-size: 1.28rem;
     border-radius: 8px;
   }
 
