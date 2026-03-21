@@ -1155,6 +1155,213 @@ body {
   overflow-y: visible;
 }
 
+/* Normalized player stage: fixed logical layout, uniformly scaled (PlayerView PLAYER_CANVAS_*). */
+.player-canvas-viewport {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  box-sizing: border-box;
+}
+
+.player-canvas-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: 0;
+}
+
+.player-canvas-inner .player-content {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.player-canvas-inner .bingo-card {
+  width: auto !important;
+  max-width: 100% !important;
+  max-height: none !important;
+}
+
+.player-canvas-inner .bingo-fab {
+  position: absolute !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+}
+
+.player-canvas-inner .player-longpress-tooltip {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 168px;
+  width: min(300px, calc(100% - 16px));
+  max-width: min(300px, calc(100% - 16px));
+}
+
+/* --- Player chrome inside logical canvas: one shell, minimal vertical space, 360px-wide layout --- */
+.player-canvas-inner .player-chrome {
+  margin: 0 0.2rem 0.3rem;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--border-accent-soft);
+  background: var(--surface-card);
+  backdrop-filter: blur(20px);
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.player-canvas-inner .player-chrome .player-header {
+  margin: 0;
+  padding: 0.35rem 0.45rem 0.3rem;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.player-canvas-inner .player-chrome .player-header-top {
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.player-canvas-inner .player-chrome .player-header-meta {
+  margin-top: 0.22rem;
+  padding-top: 0.22rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.player-canvas-inner .player-chrome .player-line {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.player-canvas-inner .player-chrome .player-meta-line {
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.player-canvas-inner .player-chrome .player-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.player-canvas-inner .player-chrome .player-bingo {
+  font-size: 10px;
+}
+
+.player-canvas-inner .player-chrome .player-bingo-spacer {
+  min-width: 2.25rem;
+}
+
+.player-canvas-inner .player-chrome button.conn-chip.conn-chip-compact {
+  padding: 0.2rem 0.45rem;
+  min-height: 28px;
+  gap: 0.3rem;
+}
+
+.player-canvas-inner .player-chrome .conn-chip-compact .conn-chip-label {
+  font-size: 11px;
+}
+
+.player-canvas-inner .player-chrome .conn-chip-compact .conn-dot {
+  width: 6px;
+  height: 6px;
+}
+
+/* Controls: single horizontal strip (Display | Text) */
+.player-canvas-inner .player-chrome .player-controls.player-controls-strip {
+  margin: 0;
+  padding: 0.28rem 0.4rem 0.32rem;
+  min-height: 0;
+  gap: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  column-gap: 0.35rem;
+}
+
+.player-canvas-inner .player-chrome .player-controls-row {
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.player-canvas-inner .player-chrome .player-controls-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8f96a0;
+}
+
+.player-canvas-inner .player-chrome .player-controls-hint {
+  font-size: 12px;
+  min-width: 0;
+  text-align: right;
+}
+
+.player-canvas-inner .player-chrome .player-controls-slot {
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.player-canvas-inner .player-chrome .player-font-hint-inline {
+  font-size: 10px;
+  color: #7a8088;
+  line-height: 1.2;
+  max-width: 4.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-canvas-inner .player-chrome .font-size-readout {
+  font-size: 12px;
+  min-width: 2.25rem;
+}
+
+.player-canvas-inner .player-chrome .player-controls-slot-textlocked {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.player-canvas-inner .player-chrome .player-controls-row-full {
+  grid-column: 1 / -1;
+}
+
+.player-canvas-inner .toggle-switch--compact {
+  width: 34px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.player-canvas-inner .toggle-switch--compact .slider:before {
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  top: 3px;
+}
+
+.player-canvas-inner .toggle-switch--compact input:checked + .slider:before {
+  transform: translateX(14px);
+}
+
 .player-header {
   display: block;
   margin: 0 0.5rem 0.42rem;
@@ -2588,151 +2795,6 @@ button.conn-chip.conn-chip-compact {
 
 .volume-slider:active::-webkit-slider-thumb {
   transform: scale(1.3);
-}
-
-/* Narrow cover screens: top-aligned bingo card + large chrome */
-@media (max-width: 430px) {
-  .player-container .bingo-section-slot > .bingo-section {
-    place-items: start center;
-    align-content: start;
-    padding-top: 0.3rem;
-  }
-
-  .player-controls {
-    padding: 1.5rem 1.42rem;
-    margin: 0 0.42rem 0.28rem;
-    gap: 1.35rem;
-    min-height: 7.5rem;
-  }
-
-  .player-controls-label,
-  .player-controls-hint {
-    font-size: 1.62rem;
-  }
-
-  .player-font-hint {
-    font-size: 1.38rem;
-    max-width: 100%;
-  }
-
-  .player-header {
-    margin: 0 0.42rem 0.36rem;
-    padding: 1.42rem 1.38rem 1.22rem;
-    min-height: 6.5rem;
-  }
-
-  .player-meta-line,
-  .conn-chip-compact .conn-chip-label {
-    font-size: 1.52rem;
-  }
-
-  .player-line {
-    font-size: 1.88rem;
-  }
-}
-
-/* Player chrome: large read/tap targets (phones & narrow tablets, above bingo card) */
-@media (max-width: 640px) {
-  /* Larger app header when playing */
-  .app-main:has(.player-container) .logo h1 {
-    font-size: 1.95rem;
-    letter-spacing: -0.02em;
-  }
-  .app-main:has(.player-container) .logo span {
-    font-size: 1.02rem !important;
-    max-width: 14rem !important;
-  }
-  .app-main:has(.player-container) .logo-icon {
-    width: 2.85rem;
-    height: 2.85rem;
-  }
-
-  /* Portrait: a touch more offset when logo is huge; landscape stays compact */
-  @media (orientation: landscape) {
-    .player-container {
-      padding-top: calc(48px + env(safe-area-inset-top, 0px));
-    }
-  }
-
-  .player-header {
-    margin: 0 0.4rem 0.36rem;
-    padding: 1.48rem 1.52rem 1.28rem;
-    border-radius: 14px;
-    min-height: 6.75rem;
-  }
-
-  .player-line {
-    font-size: 1.92rem;
-  }
-
-  .player-meta-line {
-    font-size: 1.58rem;
-  }
-
-  .player-icon {
-    width: 2.35rem;
-    height: 2.35rem;
-  }
-
-  .conn-chip-compact .conn-dot {
-    width: 12px;
-    height: 12px;
-  }
-
-  .conn-chip-compact .conn-chip-label {
-    font-size: 1.28rem;
-  }
-
-  button.conn-chip.conn-chip-compact {
-    padding: 0.75rem 1.22rem;
-    min-height: 54px;
-  }
-
-  .player-controls {
-    padding: 1.55rem 1.55rem;
-    margin: 0 0.4rem 0.28rem;
-    gap: 1.38rem;
-    border-radius: 14px;
-    min-height: 7.75rem;
-  }
-
-  .player-controls-label,
-  .player-controls-hint {
-    font-size: 1.68rem;
-  }
-
-  .player-controls .font-size-readout {
-    font-size: 1.62rem;
-    min-width: 4.35rem;
-  }
-
-  .player-font-hint {
-    font-size: 1.38rem;
-    max-width: 100%;
-  }
-
-  .font-btn {
-    padding: 16px 24px;
-    min-width: 56px;
-    min-height: 56px;
-    font-size: 1.38rem;
-    border-radius: 8px;
-  }
-
-  /* Title / Artist toggle — easier to see and tap */
-  .player-container .toggle-switch {
-    width: 58px;
-    height: 32px;
-  }
-  .player-container .toggle-switch .slider:before {
-    height: 24px;
-    width: 24px;
-    left: 4px;
-    top: 4px;
-  }
-  .player-container .toggle-switch input:checked + .slider:before {
-    transform: translateX(26px);
-  }
 }
 
 /* Fixed long-press panel: must not use .hover-tooltip inside cells (card/square overflow:hidden clips it). */

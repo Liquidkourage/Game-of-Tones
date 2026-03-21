@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useParams, useSearchParams } from 'react-router-dom';
 import io from 'socket.io-client';
@@ -45,17 +45,12 @@ interface Song {
   artist: string;
 }
 
-function readStoredFontSizePercent(): number {
-  try {
-    const raw = localStorage.getItem('font_size_percent');
-    if (raw == null || raw === '') return 100;
-    const n = parseInt(raw, 10);
-    if (!Number.isFinite(n)) return 100;
-    return Math.max(50, Math.min(200, n));
-  } catch {
-    return 100;
-  }
-}
+/**
+ * Canonical player UI (CSS px). Uniformly scaled to fit viewport — same layout on every device.
+ */
+const PLAYER_CANVAS_WIDTH = 360;
+/** Height budget for header+controls+card+FAB; chrome is compact to prioritize the grid. */
+const PLAYER_CANVAS_HEIGHT = 780;
 
 const PlayerView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
@@ -88,7 +83,6 @@ const PlayerView: React.FC = () => {
     title: string;
     artist: string;
   } | null>(null);
-  const [fontSize, setFontSize] = useState<number>(() => readStoredFontSizePercent());
   const [bingoHolding, setBingoHolding] = useState<boolean>(false);
   const bingoHoldTimer = useRef<number | null>(null);
   const [holdProgress, setHoldProgress] = useState<number>(0); // 0..1
@@ -113,6 +107,15 @@ const PlayerView: React.FC = () => {
   /** Measured flex area → square card side (px). Guarantees equal 5×5 cells on all viewports. */
   const bingoCardAreaRef = useRef<HTMLDivElement>(null);
   const [bingoCardSidePx, setBingoCardSidePx] = useState<number | null>(null);
+  const bingoCardElementRef = useRef<HTMLDivElement>(null);
+  const playerCanvasViewportRef = useRef<HTMLDivElement>(null);
+  const [playerCanvasScale, setPlayerCanvasScale] = useState(1);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('font_size_percent', '100');
+    } catch {}
+  }, []);
 
   // Mark persistence functions
   const getStoredMarks = (): Record<string, boolean> => {
@@ -565,45 +568,45 @@ const PlayerView: React.FC = () => {
     };
   }, [roomId, playerName]);
 
-  // Bingo card: size from flex slot, clamped to viewport width (never use negative caps — avoids NaN / collapsed card).
+  // Uniform scale-to-fit for the canonical player canvas (logical px below).
+  useLayoutEffect(() => {
+    const el = playerCanvasViewportRef.current;
+    if (!el) return;
+    const update = () => {
+      const r = el.getBoundingClientRect();
+      const w = Math.max(1, r.width);
+      const h = Math.max(1, r.height);
+      let s = Math.min(w / PLAYER_CANVAS_WIDTH, h / PLAYER_CANVAS_HEIGHT);
+      if (!Number.isFinite(s)) s = 1;
+      s = Math.max(0.3, Math.min(s, 2.5));
+      setPlayerCanvasScale(s);
+    };
+    update();
+    const ro = new ResizeObserver(() => window.requestAnimationFrame(update));
+    ro.observe(el);
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", update);
+    vv?.addEventListener("scroll", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      ro.disconnect();
+      vv?.removeEventListener("resize", update);
+      vv?.removeEventListener("scroll", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  }, []);
+
+  // Bingo card: size from flex slot inside the logical canvas (layout px — not post-transform screen px).
   useEffect(() => {
     const el = bingoCardAreaRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
 
     const measure = () => {
       const pad = 8;
-      const insetX = 24;
-      const r = el.getBoundingClientRect();
-      const vv = window.visualViewport;
-      const docEl = document.documentElement;
-
-      const clientW = Math.max(1, docEl?.clientWidth ?? window.innerWidth ?? 1);
-      const clientH = Math.max(1, docEl?.clientHeight ?? window.innerHeight ?? 1);
-      const viewW = Math.max(1, Math.min(vv?.width ?? clientW, clientW));
-      const viewH = Math.max(1, vv?.height ?? clientH);
-
-      const slotW = Math.max(0, r.width);
-      const slotH = Math.max(0, r.height);
+      const slotW = Math.max(0, el.clientWidth);
+      const slotH = Math.max(0, el.clientHeight);
       const slotMin = slotW > 0 && slotH > 0 ? Math.min(slotW, slotH) : 0;
-
-      const maxSideByViewport = Math.max(0, Math.floor(viewW - insetX - pad));
-      const maxSideBySlot = Math.max(0, Math.floor(slotMin - pad));
-
-      let side = maxSideBySlot;
-      if (maxSideByViewport > 0) {
-        const candidate = side > 0 ? Math.min(side, maxSideByViewport) : maxSideByViewport;
-        side = candidate;
-      } else if (side <= 0) {
-        side = maxSideByViewport;
-      }
-
-      if (side < 120) {
-        const availW = Math.max(0, Math.floor(viewW - insetX - pad));
-        const availH = Math.max(0, Math.floor(viewH - 200));
-        const fallback = Math.floor(Math.min(availW, availH));
-        side = Math.max(side, fallback);
-      }
-
+      let side = Math.floor(slotMin - pad);
       side = Math.max(120, Math.min(side, 4096));
       if (!Number.isFinite(side)) side = 280;
       setBingoCardSidePx(side);
@@ -629,6 +632,7 @@ const PlayerView: React.FC = () => {
       window.removeEventListener("resize", schedule);
     };
   }, []);
+
 
   // Periodic sync during gameplay to ensure state stays in sync with server
   useEffect(() => {
@@ -685,28 +689,28 @@ const PlayerView: React.FC = () => {
   }, []);
 
   /**
-   * Size cell text to fit inside the square. User "Text size" is a scale factor (50–200%)
-   * applied on top of a measured fit, so large % stays readable without overlapping neighbors.
+   * Bingo cell typography: layout-box metrics (safe under uniform scale transforms).
+   * One grid font size = min of per-cell fits so every player sees the same card.
    */
-  const fitTextToCell = useCallback((textElement: HTMLElement, text: string, isArtist: boolean = false) => {
+  const measureBestFontPxForCell = useCallback((textElement: HTMLElement, text: string, isArtist: boolean): number => {
     const cell = textElement.closest('.bingo-square') as HTMLElement | null;
-    if (!cell) return;
+    if (!cell) return 12;
 
-    const scale = Math.max(0.5, Math.min(2, fontSize / 100));
-    const rect = cell.getBoundingClientRect();
+    const textScale = 1; /* locked — identical for every device */
+
+    const cw = cell.clientWidth;
+    const ch = cell.clientHeight;
     const cs = window.getComputedStyle(cell);
     const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) || 0;
     const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) || 0;
     const indicator = cell.querySelector('.played-indicator') as HTMLElement | null;
-    const indicatorH = indicator ? indicator.getBoundingClientRect().height + 4 : 0;
+    const indicatorH = indicator ? indicator.offsetHeight + 4 : 0;
 
-    /* Extra inset so fitted font is not at the edge (reduces mid-word breaks). */
     const inset = 14;
-    const maxW = Math.max(12, rect.width - padX - inset);
-    const maxH = Math.max(12, rect.height - padY - indicatorH - inset);
+    const maxW = Math.max(12, cw - padX - inset);
+    const maxH = Math.max(12, ch - padY - indicatorH - inset);
 
     const capDim = Math.min(maxW, maxH);
-    /* Cap by cell size for more consistent sizing and fewer mid-word breaks vs long titles in other cells */
     const maxFontByCell = Math.max(
       8,
       Math.min(30, Math.round(capDim * 0.24) + (isArtist ? -1 : 0))
@@ -718,8 +722,7 @@ const PlayerView: React.FC = () => {
     textElement.style.overflow = 'hidden';
     textElement.style.boxSizing = 'border-box';
     textElement.style.display = 'block';
-    textElement.style.lineHeight = isArtist ? '1.12' : '1.12';
-    /* Prefer word wraps; overflow-wrap:anywhere caused mid-word breaks (e.g. Mount/ains). */
+    textElement.style.lineHeight = '1.12';
     textElement.style.wordBreak = 'normal';
     textElement.style.overflowWrap = 'break-word';
     textElement.style.hyphens = 'none';
@@ -728,7 +731,7 @@ const PlayerView: React.FC = () => {
     const baseCap = Math.min(maxW * 0.36, maxH * 0.19);
     const len = text.length;
     const lenFactor = len > 48 ? 0.82 : len > 32 ? 0.9 : len > 20 ? 0.95 : 1;
-    let upper = Math.max(8, Math.min(42, Math.round(baseCap * scale * lenFactor)));
+    let upper = Math.max(8, Math.min(42, Math.round(baseCap * textScale * lenFactor)));
     upper = Math.min(upper, maxFontByCell);
 
     let low = 6;
@@ -736,7 +739,7 @@ const PlayerView: React.FC = () => {
     let best = low;
 
     const trySize = (px: number) => {
-      textElement.style.fontSize = px + "px";
+      textElement.style.fontSize = px + 'px';
       const hOk = textElement.scrollHeight <= maxH + 2;
       const wOk = textElement.scrollWidth <= maxW + 2;
       return hOk && wOk;
@@ -751,12 +754,43 @@ const PlayerView: React.FC = () => {
         high = mid - 1;
       }
     }
-    best = Math.max(6, best - 2); /* Slightly smaller to avoid mid-word wraps */
-    textElement.style.fontSize = best + "px";
-  }, [fontSize]);
+    return Math.max(6, best - 2);
+  }, []);
+
+  const applyCellTextLayout = useCallback((textElement: HTMLElement, isArtist: boolean, fontPx: number) => {
+    const cell = textElement.closest('.bingo-square') as HTMLElement | null;
+    if (!cell) return;
+
+    const cw = cell.clientWidth;
+    const ch = cell.clientHeight;
+    const cs = window.getComputedStyle(cell);
+    const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) || 0;
+    const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) || 0;
+    const indicator = cell.querySelector('.played-indicator') as HTMLElement | null;
+    const indicatorH = indicator ? indicator.offsetHeight + 4 : 0;
+
+    const inset = 14;
+    const maxW = Math.max(12, cw - padX - inset);
+    const maxH = Math.max(12, ch - padY - indicatorH - inset);
+
+    textElement.style.width = `${maxW}px`;
+    textElement.style.maxWidth = `${maxW}px`;
+    textElement.style.maxHeight = `${maxH}px`;
+    textElement.style.overflow = 'hidden';
+    textElement.style.boxSizing = 'border-box';
+    textElement.style.display = 'block';
+    textElement.style.lineHeight = isArtist ? '1.12' : '1.12';
+    textElement.style.wordBreak = 'normal';
+    textElement.style.overflowWrap = 'break-word';
+    textElement.style.hyphens = 'none';
+    textElement.style.whiteSpace = 'normal';
+    textElement.style.fontSize = Math.max(6, fontPx) + 'px';
+  }, []);
 
   const refitAllBingoCells = useCallback(() => {
     if (!bingoCard) return;
+    type CellItem = { textElement: HTMLElement; text: string; isArtist: boolean };
+    const items: CellItem[] = [];
     bingoCard.squares.forEach((square) => {
       const squareElement = document.querySelector(`[data-position="${square.position}"]`);
       if (!squareElement) return;
@@ -766,9 +800,13 @@ const PlayerView: React.FC = () => {
         displayMode === 'title'
           ? square.customSongName || cleanSongTitle(square.songName)
           : square.artistName;
-      fitTextToCell(textElement, text, displayMode === 'artist');
+      items.push({ textElement, text, isArtist: displayMode === 'artist' });
     });
-  }, [bingoCard, displayMode, fitTextToCell]);
+    if (items.length === 0) return;
+    const bests = items.map((i) => measureBestFontPxForCell(i.textElement, i.text, i.isArtist));
+    const uniform = Math.max(8, Math.min(...bests));
+    items.forEach((i) => applyCellTextLayout(i.textElement, i.isArtist, uniform));
+  }, [bingoCard, displayMode, measureBestFontPxForCell, applyCellTextLayout]);
 
   useEffect(() => {
     if (!bingoCard) return;
@@ -776,7 +814,7 @@ const PlayerView: React.FC = () => {
       refitAllBingoCells();
     }, 50);
     return () => clearTimeout(timer);
-  }, [bingoCard, displayMode, fontSize, bingoCardSidePx, refitAllBingoCells]);
+  }, [bingoCard, displayMode, bingoCardSidePx, playerCanvasScale, refitAllBingoCells]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -928,18 +966,6 @@ const PlayerView: React.FC = () => {
     } catch (error) {
       console.log('Audio not supported');
     }
-  };
-
-  const increaseFontSize = () => {
-    const newSize = Math.min(fontSize + 10, 200); // Max 200%
-    setFontSize(newSize);
-    localStorage.setItem('font_size_percent', newSize.toString());
-  };
-
-  const decreaseFontSize = () => {
-    const newSize = Math.max(fontSize - 10, 50); // Min 50%
-    setFontSize(newSize);
-    localStorage.setItem('font_size_percent', newSize.toString());
   };
 
   const handleDisplayModeToggle = (checked: boolean) => {
@@ -1352,7 +1378,7 @@ const PlayerView: React.FC = () => {
         : undefined;
 
     return (
-      <div className="bingo-card" style={cardBoxStyle}>
+      <div ref={bingoCardElementRef} className="bingo-card" style={cardBoxStyle}>
         <div className="bingo-card-grid">
           {bingoCard.squares.map((square) => (
             <motion.div
@@ -1407,7 +1433,7 @@ const PlayerView: React.FC = () => {
   };
 
   return (
-    <div className={`player-container ${bingoCard ? 'has-card' : ''}`} style={{ minHeight: '100svh', overscrollBehavior: 'contain', paddingBottom: 'calc(152px + env(safe-area-inset-bottom))' }}>
+    <div className={`player-container ${bingoCard ? 'has-card' : ''}`} style={{ minHeight: '100svh', overscrollBehavior: 'contain', paddingBottom: 'env(safe-area-inset-bottom)', display: 'flex', flexDirection: 'column' }}>
       {/* Name prompt overlay if no name provided */}
       {!playerName || !playerName.trim() ? (
         <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
@@ -1448,89 +1474,115 @@ const PlayerView: React.FC = () => {
           </div>
         </div>
       ) : null}
-      {/* Unified chrome: two-line header + stacked controls (less cramped) */}
-      <motion.div 
-        className="player-header"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <div className="player-header-top">
-          <div className="player-header-identity">
-            <Users className="player-icon" aria-hidden />
-            <span className="player-line">{playerName}</span>
-          </div>
-          <button
-            type="button"
-            className={`conn-chip conn-chip-compact conn-status-${connectionStatus}`}
-            onClick={handleResync}
-            title={
-              connectionStatus === 'connected'
-                ? 'Connected — tap to resync if you missed a call'
-                : connectionStatus === 'reconnecting'
-                  ? `Reconnecting (${reconnectAttempts}) — tap to resync`
-                  : 'Disconnected — tap to resync'
-            }
+      <div ref={playerCanvasViewportRef} className="player-canvas-viewport">
+        <div
+          className="player-canvas-scaler"
+          style={{
+            width: PLAYER_CANVAS_WIDTH * playerCanvasScale,
+            height: PLAYER_CANVAS_HEIGHT * playerCanvasScale,
+            position: 'relative',
+            flexShrink: 0,
+          }}
+        >
+          <div
+            className="player-canvas-inner"
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: PLAYER_CANVAS_WIDTH,
+              height: PLAYER_CANVAS_HEIGHT,
+              boxSizing: 'border-box',
+              transform: `scale(${playerCanvasScale})`,
+              transformOrigin: 'top left',
+              WebkitTextSizeAdjust: '100%',
+              textSizeAdjust: '100%',
+            } as React.CSSProperties}
           >
-            <span
-              className="conn-dot"
-              style={{
-                background: connectionStatus === 'connected' ? '#1DB954'
-                  : connectionStatus === 'reconnecting' ? '#FFA500'
-                  : '#FF4D4F'
-              }}
-            />
-            <span className="conn-chip-label">Resync</span>
-          </button>
-        </div>
-        <div className="player-header-meta">
-          <span className="player-meta-line">
-            {gameState.playerCount} players
-            {gameState.isPlaying ? ` · ${songsPlayed} played` : ''}
-          </span>
-          {gameState.hasBingo ? (
-            <span className="player-bingo">BINGO!</span>
-          ) : (
-            <span className="player-bingo-spacer" aria-hidden />
-          )}
-        </div>
-      </motion.div>
+      <div className="player-chrome">
+        <motion.div
+          className="player-header"
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45 }}
+        >
+          <div className="player-header-top">
+            <div className="player-header-identity">
+              <Users className="player-icon" aria-hidden />
+              <span className="player-line">{playerName}</span>
+            </div>
+            <button
+              type="button"
+              className={`conn-chip conn-chip-compact conn-status-${connectionStatus}`}
+              onClick={handleResync}
+              title={
+                connectionStatus === 'connected'
+                  ? 'Connected — tap to resync if you missed a call'
+                  : connectionStatus === 'reconnecting'
+                    ? `Reconnecting (${reconnectAttempts}) — tap to resync`
+                    : 'Disconnected — tap to resync'
+              }
+            >
+              <span
+                className="conn-dot"
+                style={{
+                  background: connectionStatus === 'connected' ? '#1DB954'
+                    : connectionStatus === 'reconnecting' ? '#FFA500'
+                    : '#FF4D4F'
+                }}
+              />
+              <span className="conn-chip-label">Resync</span>
+            </button>
+          </div>
+          <div className="player-header-meta">
+            <span className="player-meta-line">
+              {gameState.playerCount} players
+              {gameState.isPlaying ? ` · ${songsPlayed} played` : ''}
+            </span>
+            {gameState.hasBingo ? (
+              <span className="player-bingo">BINGO!</span>
+            ) : (
+              <span className="player-bingo-spacer" aria-hidden />
+            )}
+          </div>
+        </motion.div>
 
-      <motion.div 
-        className="player-controls"
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.1 }}
-      >
-        {bingoCard && (
-          <div className="player-controls-row">
-            <span className="player-controls-label">Display</span>
-            <div className="player-controls-slot">
-              <span className="player-controls-hint">{displayMode === 'title' ? 'Title' : 'Artist'}</span>
-              <label className="toggle-switch">
-                <input
-                  type="checkbox"
-                  checked={displayMode === 'artist'}
-                  onChange={(e) => handleDisplayModeToggle(e.target.checked)}
-                />
-                <span className="slider" />
-              </label>
+        <motion.div
+          className="player-controls player-controls-strip"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.05 }}
+        >
+          {bingoCard && (
+            <div className="player-controls-row player-controls-row-display">
+              <span className="player-controls-label">Display</span>
+              <div className="player-controls-slot">
+                <span className="player-controls-hint">{displayMode === 'title' ? 'Title' : 'Artist'}</span>
+                <label className="toggle-switch toggle-switch--compact">
+                  <input
+                    type="checkbox"
+                    checked={displayMode === 'artist'}
+                    onChange={(e) => handleDisplayModeToggle(e.target.checked)}
+                  />
+                  <span className="slider" />
+                </label>
+              </div>
+            </div>
+          )}
+
+          <div
+            className={`player-controls-row player-controls-row-textsize${!bingoCard ? ' player-controls-row-full' : ''}`}
+          >
+            <span className="player-controls-label">Text</span>
+            <div className="player-controls-slot player-controls-slot-textlocked">
+              <span className="player-font-hint player-font-hint-inline" title="Same layout on every device">
+                Locked
+              </span>
+              <span className="font-size-readout">100%</span>
             </div>
           </div>
-        )}
-
-        <div className="player-controls-row player-controls-row-textsize">
-          <div className="player-textsize-label-block">
-            <span className="player-controls-label">Text size</span>
-            <span className="player-font-hint">In-app only · saved on this device</span>
-          </div>
-          <div className="font-size-controls">
-            <button type="button" className="font-btn" onClick={decreaseFontSize} disabled={fontSize <= 50}>−</button>
-            <span className="font-size-readout">{fontSize}%</span>
-            <button type="button" className="font-btn" onClick={increaseFontSize} disabled={fontSize >= 200}>+</button>
-          </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      </div>
 
       {/* Main Content */}
       <div className="player-content">
@@ -1556,18 +1608,18 @@ const PlayerView: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             style={{
-              position: 'fixed',
-              top: '80px',
+              position: 'absolute',
+              top: 8,
               left: '50%',
               transform: 'translateX(-50%)',
               padding: '12px 20px',
               borderRadius: '25px',
               fontWeight: 600,
-              fontSize: '0.9rem',
-              zIndex: 1000,
+              fontSize: 14,
+              zIndex: 1200,
               textAlign: 'center',
-              minWidth: '200px',
-              maxWidth: '90vw',
+              minWidth: 200,
+              maxWidth: 312,
               background: connectionToast.includes('missed') 
                 ? 'linear-gradient(135deg, #ffaa00, #ff8800)'
                 : connectionToast.includes('Reconnected')
@@ -1592,18 +1644,18 @@ const PlayerView: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             style={{
-              position: 'fixed',
-              bottom: 'calc(140px + env(safe-area-inset-bottom))',
+              position: 'absolute',
+              bottom: 168,
               left: '50%',
               transform: 'translateX(-50%)',
               padding: '12px 20px',
               borderRadius: '25px',
               fontWeight: 700,
-              fontSize: '1rem',
-              zIndex: 999,
+              fontSize: 15,
+              zIndex: 1150,
               textAlign: 'center',
-              minWidth: '200px',
-              maxWidth: '90vw',
+              minWidth: 200,
+              maxWidth: 312,
               background: 
                 bingoStatus === 'success' ? 'linear-gradient(135deg, #00ff88, #00cc6d)' :
                 bingoStatus === 'failed' ? 'linear-gradient(135deg, #ff4444, #cc3333)' :
@@ -1657,15 +1709,19 @@ const PlayerView: React.FC = () => {
           onMouseDown={(e) => { e.preventDefault(); }}
           title={hasValidBingo ? "Hold to call BINGO!" : "Complete a pattern to call BINGO"}
           style={{
-            position: 'fixed',
-            bottom: 'calc(24px + env(safe-area-inset-bottom))',
-            right: 18,
-            zIndex: 1000,
-            width: 'clamp(90px, 22vw, 140px)',
-            height: 'clamp(90px, 22vw, 140px)',
+            position: 'absolute',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            bottom: 20,
+            zIndex: 1100,
+            width: 136,
+            height: 136,
             borderRadius: '50%',
             fontWeight: 1000,
-            fontSize: 'clamp(18px, 5.4vw, 28px)',
+            fontSize: 26,
+            lineHeight: 1.05,
+            padding: '0 10px',
+            textAlign: 'center',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -1708,6 +1764,9 @@ const PlayerView: React.FC = () => {
              hasValidBingo ? 'BINGO READY!' : 'No Pattern'}
           </span>
         </button>
+      </div>
+          </div>
+        </div>
       </div>
     </div>
   );
