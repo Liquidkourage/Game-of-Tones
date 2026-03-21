@@ -997,9 +997,9 @@ body {
   margin-bottom: 0.5rem;
 }
 
-/* Player bingo card: edge-to-edge, full width, square (aspect-ratio 1:1) */
+/* Player bingo card: edge-to-edge, full width, square. Reserve ~280px for chrome + FAB so button never clips. */
 .player-container .bingo-card {
-  width: min(100vw - 8px, calc(100dvh - 160px)) !important;
+  width: min(100vw - 8px, calc(100dvh - 280px)) !important;
   max-width: 100% !important;
   height: auto !important;
   aspect-ratio: 1 / 1 !important;
@@ -1142,7 +1142,7 @@ body {
   padding: 0 4px;
   width: 100%;
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  --fab-logical-size: 136px;
+  --fab-logical-size: 56px;
 }
 
 .player-container .player-fab-row {
@@ -1150,7 +1150,7 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 8px 0 12px;
+  padding: 6px 0 8px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -1161,14 +1161,14 @@ body {
   bottom: auto !important;
   transform: none !important;
   flex-shrink: 0;
-  width: clamp(100px, 22vw, 136px);
-  height: clamp(100px, 22vw, 136px);
+  width: clamp(48px, 14vw, 64px);
+  height: clamp(48px, 14vw, 64px);
   max-width: 100%;
   aspect-ratio: 1;
   border-radius: 50%;
-  padding: 0 10px;
-  font-weight: 1000;
-  font-size: clamp(14px, 4.2vw, 26px);
+  padding: 0 6px;
+  font-weight: 800;
+  font-size: clamp(10px, 2.8vw, 14px);
   line-height: 1.05;
   text-align: center;
   display: flex;
