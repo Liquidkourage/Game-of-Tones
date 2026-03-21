@@ -41,7 +41,7 @@ interface Song {
  */
 /** Bingo grid must stay large in logical px — never repeat 120px “minimum” bug. */
 const BINGO_CARD_PAD = 16;
-const BINGO_CARD_MIN_SIDE = 140;
+const BINGO_CARD_MIN_SIDE = 180;
 
 const PlayerView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
@@ -563,8 +563,12 @@ const PlayerView: React.FC = () => {
 
     const measure = () => {
       const r = el.getBoundingClientRect();
-      const w = Math.max(0, r.width);
-      const h = Math.max(0, r.height);
+      let w = Math.max(0, r.width);
+      let h = Math.max(0, r.height);
+      if (w < 50 || h < 50) {
+        w = typeof window !== "undefined" ? window.innerWidth : 375;
+        h = typeof window !== "undefined" ? window.innerHeight - 200 : 400;
+      }
       const raw = Math.floor(Math.min(w, h) - BINGO_CARD_PAD);
       const side = Math.max(BINGO_CARD_MIN_SIDE, Math.min(raw, 4096));
       setBingoCardSidePx((prev) => (side !== prev ? side : prev));

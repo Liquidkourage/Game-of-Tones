@@ -120,12 +120,12 @@ body {
   overflow: hidden;
 }
 
-/* Player route: vertical scroll on short phones (e.g. iPhone SE) */
+/* Player route: fit to viewport, no scroll — FAB must stay visible on small phones */
 .app-main:has(.player-container) {
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* Shrink app-main slightly for public display */
@@ -979,11 +979,12 @@ body {
 
 .player-container .bingo-section {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 200px;
+  min-width: 0;
   width: 100%;
   display: flex;
   justify-content: center;
-  align-items: flex-start; /* Top-align card; extra space goes below (above FAB) */
+  align-items: flex-start;
   padding-top: 0.5rem;
 }
 
@@ -1024,7 +1025,7 @@ body {
 }
 
 .bingo-square .square-text {
-  font-size: clamp(9px, min(3vw, 3vh), 14px);
+  font-size: clamp(7px, min(2.5vw, 2.5vh), 11px);
   line-height: 1.12;
   overflow-wrap: break-word;
   word-break: break-word;
@@ -1112,16 +1113,14 @@ body {
 /* Density-responsive font sizes - REMOVED to prevent interference with JavaScript */
 /* .bingo-square[data-density] font sizes removed - JavaScript handles all sizing */
 .player-container {
-  min-height: 100vh;
-  min-height: 100dvh;
-  height: auto;
+  flex: 1;
+  min-height: 0;
   padding: 0;
   padding-top: calc(52px + env(safe-area-inset-top, 0px));
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  overflow-x: hidden;
-  overflow-y: visible;
+  overflow: hidden;
 }
 
 .player-container .player-content {
@@ -1130,9 +1129,7 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
   padding-bottom: env(safe-area-inset-bottom, 0px);
   --fab-logical-size: 136px;
 }
@@ -1197,8 +1194,8 @@ body {
   bottom: auto !important;
   transform: none !important;
   flex-shrink: 0;
-  width: 136px;
-  height: 136px;
+  width: clamp(100px, 22vw, 136px);
+  height: clamp(100px, 22vw, 136px);
   max-width: 100%;
   aspect-ratio: 1;
   border-radius: 50%;
