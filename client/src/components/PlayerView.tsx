@@ -51,6 +51,10 @@ interface Song {
 const PLAYER_CANVAS_WIDTH = 360;
 /** Height budget for header+controls+card+FAB; chrome is compact to prioritize the grid. */
 const PLAYER_CANVAS_HEIGHT = 780;
+/** Bingo grid must stay large in logical px — never repeat 120px “minimum” bug. */
+const BINGO_CARD_MIN_SIDE_PX = 280;
+const BINGO_CARD_MAX_SIDE_PX = PLAYER_CANVAS_WIDTH - 16;
+const BINGO_CARD_DEFAULT_SIDE_PX = Math.min(336, BINGO_CARD_MAX_SIDE_PX);
 
 const PlayerView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
@@ -106,7 +110,8 @@ const PlayerView: React.FC = () => {
 
   /** Measured flex area → square card side (px). Guarantees equal 5×5 cells on all viewports. */
   const bingoCardAreaRef = useRef<HTMLDivElement>(null);
-  const [bingoCardSidePx, setBingoCardSidePx] = useState<number | null>(null);
+  const bingoSectionSlotRef = useRef<HTMLDivElement>(null);
+  const [bingoCardSidePx, setBingoCardSidePx] = useState<number | null>(BINGO_CARD_DEFAULT_SIDE_PX);
   const bingoCardElementRef = useRef<HTMLDivElement>(null);
   const playerCanvasViewportRef = useRef<HTMLDivElement>(null);
   const [playerCanvasScale, setPlayerCanvasScale] = useState(1);
@@ -596,26 +601,38 @@ const PlayerView: React.FC = () => {
     };
   }, []);
 
-  // Bingo card: size from flex slot inside the logical canvas (layout px — not post-transform screen px).
-  useEffect(() => {
-    const el = bingoCardAreaRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-
+  // Bingo card: size from flex slot (layout px). Floor must stay high — 120px logical reads as a postage stamp after scale.
+  useLayoutEffect(() => {
     const measure = () => {
-      const pad = 8;
-      const slotW = Math.max(0, el.clientWidth);
-      const slotH = Math.max(0, el.clientHeight);
-      const slotMin = slotW > 0 && slotH > 0 ? Math.min(slotW, slotH) : 0;
-      let side = Math.floor(slotMin - pad);
-      side = Math.max(120, Math.min(side, 4096));
-      if (!Number.isFinite(side)) side = 280;
+      const layer = bingoCardAreaRef.current;
+      const slot = bingoSectionSlotRef.current;
+      const el = slot ?? layer;
+      if (!el || typeof ResizeObserver === "undefined") return;
+
+      const pad = 12;
+      const w = Math.max(0, el.clientWidth);
+      const h = Math.max(0, el.clientHeight);
+      const slotMin = w > 0 && h > 0 ? Math.min(w, h) : 0;
+
+      let side: number;
+      if (slotMin <= pad + 24) {
+        side = BINGO_CARD_DEFAULT_SIDE_PX;
+      } else {
+        side = Math.floor(Math.min(slotMin - pad, BINGO_CARD_MAX_SIDE_PX));
+        side = Math.max(BINGO_CARD_MIN_SIDE_PX, Math.min(side, BINGO_CARD_MAX_SIDE_PX));
+      }
+      if (!Number.isFinite(side)) side = BINGO_CARD_DEFAULT_SIDE_PX;
       setBingoCardSidePx(side);
     };
 
     const schedule = () => window.requestAnimationFrame(measure);
+    const el = bingoCardAreaRef.current;
+    const slot = bingoSectionSlotRef.current;
+    if (!el && !slot) return;
 
     const ro = new ResizeObserver(schedule);
-    ro.observe(el);
+    if (el) ro.observe(el);
+    if (slot) ro.observe(slot);
     schedule();
 
     window.addEventListener("orientationchange", measure);
@@ -1365,7 +1382,7 @@ const PlayerView: React.FC = () => {
     }
 
     /* Fallback width until ResizeObserver sets bingoCardSidePx — avoids collapsed / invisible grid. */
-    const sidePx = bingoCardSidePx ?? 280;
+    const sidePx = bingoCardSidePx ?? BINGO_CARD_DEFAULT_SIDE_PX;
     const cardBoxStyle: React.CSSProperties = {
       width: sidePx,
       maxWidth: "100%",
@@ -1585,7 +1602,7 @@ const PlayerView: React.FC = () => {
       {/* Main Content */}
       <div className="player-content">
         {/* Measure layer separate from card: avoids ResizeObserver ↔ card px feedback loop */}
-        <div className="bingo-section-slot">
+        <div ref={bingoSectionSlotRef} className="bingo-section-slot">
           <div ref={bingoCardAreaRef} className="bingo-card-measure-layer" aria-hidden />
           <motion.div
             className="bingo-section"

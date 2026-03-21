@@ -1189,7 +1189,7 @@ body {
 /* Ensure measure slot gets height so bingoCardSidePx can compute (avoids empty middle). */
 .player-canvas-inner .bingo-section-slot {
   flex: 1 1 auto;
-  min-height: 200px;
+  min-height: 220px;
 }
 
 /* Do NOT use width: auto !important — it overrides inline px from PlayerView and collapses the grid. */
