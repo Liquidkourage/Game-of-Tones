@@ -49,8 +49,10 @@ interface Song {
  * Canonical player UI (CSS px). Uniformly scaled to fit viewport — same layout on every device.
  */
 const PLAYER_CANVAS_WIDTH = 360;
-/** Logical height of the scaled stage (px). MUST fit chrome + bingo grid + in-flow FAB row; if too small, the bottom clips. */
-const PLAYER_CANVAS_HEIGHT = 940;
+/** Starting logical height; real value comes from measuring .player-canvas-inner scrollHeight (see playerCanvasLogicalHeight). */
+const PLAYER_CANVAS_LOGICAL_HEIGHT_INITIAL = 940;
+const PLAYER_CANVAS_LOGICAL_HEIGHT_MIN = 720;
+const PLAYER_CANVAS_LOGICAL_HEIGHT_MAX = 1400;
 /** Bingo grid must stay large in logical px — never repeat 120px “minimum” bug. */
 const BINGO_CARD_MIN_SIDE_PX = 280;
 const BINGO_CARD_MAX_SIDE_PX = PLAYER_CANVAS_WIDTH - 16;
@@ -114,6 +116,8 @@ const PlayerView: React.FC = () => {
   const [bingoCardSidePx, setBingoCardSidePx] = useState<number | null>(BINGO_CARD_DEFAULT_SIDE_PX);
   const bingoCardElementRef = useRef<HTMLDivElement>(null);
   const playerCanvasViewportRef = useRef<HTMLDivElement>(null);
+  const playerCanvasInnerRef = useRef<HTMLDivElement>(null);
+  const [playerCanvasLogicalHeight, setPlayerCanvasLogicalHeight] = useState(PLAYER_CANVAS_LOGICAL_HEIGHT_INITIAL);
   const [playerCanvasScale, setPlayerCanvasScale] = useState(1);
 
   useEffect(() => {
@@ -573,15 +577,47 @@ const PlayerView: React.FC = () => {
     };
   }, [roomId, playerName]);
 
-  // Uniform scale-to-fit for the canonical player canvas (logical px below).
+  // Logical stage height from real content (chrome + card + FAB). Fixed constants miss overflow → clipped FAB.
+  useLayoutEffect(() => {
+    const inner = playerCanvasInnerRef.current;
+    if (!inner) return;
+
+    const measureLogicalHeight = () => {
+      const raw = Math.ceil(inner.scrollHeight);
+      const clamped = Math.max(
+        PLAYER_CANVAS_LOGICAL_HEIGHT_MIN,
+        Math.min(PLAYER_CANVAS_LOGICAL_HEIGHT_MAX, raw),
+      );
+      setPlayerCanvasLogicalHeight((prev) => (clamped !== prev ? clamped : prev));
+    };
+
+    const run = () => window.requestAnimationFrame(measureLogicalHeight);
+    measureLogicalHeight();
+    const ro = new ResizeObserver(run);
+    ro.observe(inner);
+    const slot = bingoSectionSlotRef.current;
+    if (slot) ro.observe(slot);
+
+    return () => ro.disconnect();
+  }, [bingoCard, displayMode, bingoCardSidePx, bingoStatus, bingoMessage, connectionToast, longPressTooltip, playerName]);
+
+  // Uniform scale-to-fit using measured logical height H (not a guess).
   useLayoutEffect(() => {
     const el = playerCanvasViewportRef.current;
     if (!el) return;
+    const H = playerCanvasLogicalHeight;
     const update = () => {
       const r = el.getBoundingClientRect();
-      const w = Math.max(1, r.width);
-      const h = Math.max(1, r.height);
-      let s = Math.min(w / PLAYER_CANVAS_WIDTH, h / PLAYER_CANVAS_HEIGHT);
+      let w = Math.max(1, r.width);
+      let h = Math.max(1, r.height);
+      const vv = window.visualViewport;
+      if (vv && vv.height > 0) {
+        const top = Math.max(r.top, vv.offsetTop);
+        const bottom = Math.min(r.bottom, vv.offsetTop + vv.height);
+        const intersect = bottom - top;
+        if (intersect > 8) h = Math.min(h, intersect);
+      }
+      let s = Math.min(w / PLAYER_CANVAS_WIDTH, h / H);
       if (!Number.isFinite(s)) s = 1;
       s = Math.max(0.3, Math.min(s, 2.5));
       setPlayerCanvasScale(s);
@@ -599,7 +635,7 @@ const PlayerView: React.FC = () => {
       vv?.removeEventListener("scroll", update);
       window.removeEventListener("orientationchange", update);
     };
-  }, []);
+  }, [playerCanvasLogicalHeight]);
 
   // Bingo card: size from flex slot (layout px). Floor must stay high — 120px logical reads as a postage stamp after scale.
   useLayoutEffect(() => {
@@ -1494,20 +1530,21 @@ const PlayerView: React.FC = () => {
           className="player-canvas-scaler"
           style={{
             width: PLAYER_CANVAS_WIDTH * playerCanvasScale,
-            height: PLAYER_CANVAS_HEIGHT * playerCanvasScale,
+            height: playerCanvasLogicalHeight * playerCanvasScale,
             position: 'relative',
             flexShrink: 0,
             overflow: 'visible',
           }}
         >
           <div
+            ref={playerCanvasInnerRef}
             className="player-canvas-inner"
             style={{
               position: 'absolute',
               left: 0,
               top: 0,
               width: PLAYER_CANVAS_WIDTH,
-              height: PLAYER_CANVAS_HEIGHT,
+              height: playerCanvasLogicalHeight,
               boxSizing: 'border-box',
               overflow: 'visible',
               transform: `scale(${playerCanvasScale})`,
