@@ -1655,12 +1655,12 @@ const PlayerView: React.FC = () => {
         {/* Bingo Status Feedback */}
         {(bingoStatus !== 'idle' || bingoMessage) && (
           <motion.div
+            className="player-bingo-status-toast"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             style={{
               position: 'absolute',
-              bottom: 'calc(168px + env(safe-area-inset-bottom, 0px))',
               left: '50%',
               transform: 'translateX(-50%)',
               padding: '12px 20px',
@@ -1711,10 +1711,11 @@ const PlayerView: React.FC = () => {
           </div>
         )}
 
-        {/* bottom sheet removed per request */}
+        {/* bottom sheet removed per request — FAB in flow so it scales with the logical canvas */}
+        <div className="player-fab-row">
         <button
           type="button"
-          className={`bingo-fab ${bingoHolding ? 'holding' : ''} ${hasValidBingo ? 'ready' : 'disabled'}`}
+          className={`bingo-fab bingo-fab--canvas ${bingoHolding ? 'holding' : ''} ${hasValidBingo ? 'ready' : 'disabled'}`}
           aria-label={hasValidBingo ? 'Hold to call bingo' : 'Complete a winning pattern to call bingo'}
           onPointerDown={startBingoHold}
           onPointerUp={cancelBingoHold}
@@ -1726,22 +1727,7 @@ const PlayerView: React.FC = () => {
           onMouseDown={(e) => { e.preventDefault(); }}
           title={hasValidBingo ? "Hold to call BINGO!" : "Complete a pattern to call BINGO"}
           style={{
-            position: 'absolute',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            bottom: 'calc(28px + env(safe-area-inset-bottom, 0px))',
             zIndex: 1100,
-            width: 136,
-            height: 136,
-            borderRadius: '50%',
-            fontWeight: 1000,
-            fontSize: 26,
-            lineHeight: 1.05,
-            padding: '0 10px',
-            textAlign: 'center',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
             background: hasValidBingo 
               ? 'linear-gradient(180deg, #00ff88 0%, #00cc6d 100%)'
               : 'linear-gradient(180deg, #666666 0%, #444444 100%)',
@@ -1766,7 +1752,7 @@ const PlayerView: React.FC = () => {
             <circle cx="50" cy="50" r="44" stroke="rgba(255,255,255,0.18)" strokeWidth="8" fill="none" />
             <circle cx="50" cy="50" r="44" stroke="#0b3" strokeWidth="8" fill="none" strokeLinecap="round" strokeDasharray={`${Math.max(0.01, holdProgress) * 276} 276`} />
           </svg>
-          <span style={{ 
+          <span className="bingo-fab-label" style={{ 
             position: 'relative', 
             zIndex: 1, 
             userSelect: 'none',
@@ -1774,9 +1760,6 @@ const PlayerView: React.FC = () => {
             MozUserSelect: 'none',
             msUserSelect: 'none',
             pointerEvents: 'none',
-            whiteSpace: 'nowrap',
-            textAlign: 'center',
-            maxWidth: 120,
           }}>
             {bingoHolding ? 'Holding…' : 
              bingoStatus === 'checking' ? 'Checking...' :
@@ -1784,6 +1767,7 @@ const PlayerView: React.FC = () => {
              hasValidBingo ? 'BINGO READY!' : 'No pattern'}
           </span>
         </button>
+        </div>
       </div>
           </div>
         </div>
