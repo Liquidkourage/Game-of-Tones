@@ -1187,6 +1187,27 @@ body {
   text-align: center;
 }
 
+/* Tablet/desktop: fixed FAB size so it never overlaps grid (mobile keeps fill-the-gap behavior) */
+@media (min-width: 769px) {
+  .player-container .player-fab-row {
+    flex: 0 0 auto;
+    flex-shrink: 0;
+    min-height: 0;
+    padding: 10px 0 12px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .player-container .bingo-fab.bingo-fab--canvas {
+    width: clamp(48px, 14vw, 64px);
+    height: clamp(48px, 14vw, 64px);
+    max-height: none;
+    min-height: 0;
+  }
+  /* Reserve more vertical space for card on wide viewports so FAB always has room */
+  .player-container .bingo-card {
+    width: min(100vw - 8px, calc(100dvh - 320px)) !important;
+  }
+}
+
 .player-container .player-content .player-longpress-tooltip {
   position: absolute;
   left: 50%;
