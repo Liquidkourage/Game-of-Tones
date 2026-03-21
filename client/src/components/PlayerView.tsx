@@ -40,9 +40,6 @@ interface Song {
  * Canonical player UI (CSS px). Uniformly scaled to fit viewport — same layout on every device.
  */
 /** Bingo grid must stay large in logical px — never repeat 120px “minimum” bug. */
-const BINGO_CARD_PAD = 16;
-const BINGO_CARD_MIN_SIDE = 180;
-
 const PlayerView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [searchParams] = useSearchParams();
@@ -94,10 +91,6 @@ const PlayerView: React.FC = () => {
     pattern: 'full_card'
   });
   const [songsPlayed, setSongsPlayed] = useState<number>(0);
-
-  /** Measured flex area → square card side (px). Guarantees equal 5×5 cells on all viewports. */
-  const bingoCardAreaRef = useRef<HTMLDivElement>(null);
-  const [bingoCardSidePx, setBingoCardSidePx] = useState<number | null>(null);
 
   useEffect(() => {
     try {
@@ -555,46 +548,6 @@ const PlayerView: React.FC = () => {
       newSocket.close();
     };
   }, [roomId, playerName]);
-
-  // Bingo card: measure flex slot, set square side = min(w,h) - pad for full-width/height square.
-  useEffect(() => {
-    const el = bingoCardAreaRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-
-    const measure = () => {
-      const r = el.getBoundingClientRect();
-      let w = Math.max(0, r.width);
-      let h = Math.max(0, r.height);
-      if (w < 50 || h < 50) {
-        const vw = typeof window !== "undefined" ? window.innerWidth : 375;
-        const vh = typeof window !== "undefined" ? window.innerHeight : 667;
-        w = vw;
-        h = Math.max(200, vh - 220);
-      }
-      const raw = Math.floor(Math.min(w, h) - BINGO_CARD_PAD);
-      const side = Math.max(BINGO_CARD_MIN_SIDE, Math.min(raw, 4096));
-      setBingoCardSidePx((prev) => (side !== prev ? side : prev));
-    };
-
-    const schedule = () => window.requestAnimationFrame(measure);
-    measure();
-    const ro = new ResizeObserver(schedule);
-    ro.observe(el);
-    window.addEventListener("orientationchange", schedule);
-    window.addEventListener("resize", schedule);
-    const vv = window.visualViewport;
-    vv?.addEventListener("resize", schedule);
-    vv?.addEventListener("scroll", schedule);
-
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("orientationchange", schedule);
-      window.removeEventListener("resize", schedule);
-      vv?.removeEventListener("resize", schedule);
-      vv?.removeEventListener("scroll", schedule);
-    };
-  }, []);
-
 
   // Periodic sync during gameplay to ensure state stays in sync with server
   useEffect(() => {
@@ -1186,18 +1139,8 @@ const PlayerView: React.FC = () => {
       );
     }
 
-    /* Fallback width until ResizeObserver sets bingoCardSidePx — avoids collapsed / invisible grid. */
-    const sidePx = bingoCardSidePx ?? 280;
-    const cardBoxStyle: React.CSSProperties = {
-      width: sidePx,
-      height: sidePx,
-      flex: "none",
-      boxSizing: "border-box",
-      marginInline: "auto",
-    };
-
     return (
-      <div className="bingo-card" style={cardBoxStyle}>
+      <div className="bingo-card">
         <div className="bingo-card-grid">
           {bingoCard.squares.map((square) => (
             <motion.div
@@ -1381,7 +1324,6 @@ const PlayerView: React.FC = () => {
       {/* Main Content */}
       <div className="player-content">
         <motion.div
-          ref={bingoCardAreaRef}
           className="bingo-section"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

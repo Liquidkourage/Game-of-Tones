@@ -986,7 +986,8 @@ body {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  padding-top: 0.5rem;
+  padding: 0.25rem 0 0;
+  align-self: stretch;
 }
 
 /* bingo-section: flex area for card (ResizeObserver measures it); centers square card */
@@ -996,13 +997,16 @@ body {
   margin-bottom: 0.5rem;
 }
 
-/* Player bingo card: width/height from PlayerView ResizeObserver; perfect square, maximizes screen use */
+/* Player bingo card: edge-to-edge, full width, square (aspect-ratio 1:1) */
 .player-container .bingo-card {
-  margin: 0 auto !important;
+  width: min(100vw - 8px, calc(100dvh - 160px)) !important;
+  max-width: 100% !important;
+  height: auto !important;
   aspect-ratio: 1 / 1 !important;
   flex: none !important;
   overflow: hidden;
   box-sizing: border-box;
+  margin: 0 auto !important;
 }
 
 .player-container .bingo-card-grid {
@@ -1135,6 +1139,8 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding: 0 4px;
+  width: 100%;
   padding-bottom: env(safe-area-inset-bottom, 0px);
   --fab-logical-size: 136px;
 }
