@@ -977,66 +977,29 @@ body {
   flex-shrink: 0;
 }
 
-.bingo-section {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center; /* Center the bingo card */
-  align-items: center; /* Center horizontally too */
-  min-height: 0;
-}
-
-.player-container .bingo-section-slot {
+.player-container .bingo-section {
   flex: 1 1 auto;
-  width: 100%;
-  position: relative;
   min-height: 0;
-}
-
-.player-container .bingo-card-measure-layer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.player-container .bingo-section-slot > .bingo-section {
-  position: absolute;
-  inset: 0;
-  flex: none;
-  z-index: 1;
-  /* Top-align card so dead space sits below (above FAB), not between chrome and grid */
-  display: grid;
-  place-items: start center;
-  justify-items: center;
-  align-content: start;
-  padding-top: 0.35rem;
-  min-height: 100%;
   width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-  overflow: visible;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
+
+/* bingo-section: flex area for card (ResizeObserver measures it); centers square card */
 
 .section-header {
   flex-shrink: 0;
   margin-bottom: 0.5rem;
 }
 
-/* Player bingo card: pixel size from PlayerView ResizeObserver; square 5×5 grid below */
+/* Player bingo card: width/height from PlayerView ResizeObserver; perfect square, maximizes screen use */
 .player-container .bingo-card {
   margin: 0 auto !important;
   aspect-ratio: 1 / 1 !important;
   flex: none !important;
   overflow: hidden;
-  /* Fallback before JS; inline width/height from PlayerView must win (no !important on size) */
-  width: min(100%, calc(100vh - 14rem), calc(100vw - 1rem));
-  width: min(100%, calc(100svh - 14rem), calc(100vw - 1rem));
-  height: auto;
-  max-width: min(calc(100vh - 14rem), calc(100vw - 1rem));
-  max-width: min(calc(100svh - 14rem), calc(100vw - 1rem));
-  max-height: min(calc(100vh - 14rem), calc(100vw - 1rem));
-  max-height: min(calc(100svh - 14rem), calc(100vw - 1rem));
+  box-sizing: border-box;
 }
 
 .player-container .bingo-card-grid {
@@ -1059,9 +1022,15 @@ body {
   /* padding removed - let individual media queries handle it */
 }
 
+.bingo-square .square-text {
+  font-size: clamp(9px, min(3vw, 3vh), 14px);
+  line-height: 1.12;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
 .bingo-square .song-name {
-  /* DYNAMIC SIZING: Font size controlled by JavaScript */
-  font-size: 14px; /* Fallback only */
+  font-size: inherit;
   line-height: 1.1 !important;
   margin-bottom: 0.2rem !important;
   /* REMOVED: text truncation - allow natural wrapping like screenshot */
@@ -1146,13 +1115,25 @@ body {
   min-height: 100dvh;
   height: auto;
   padding: 0;
-  /* Sit first card directly under sticky app header */
   padding-top: calc(52px + env(safe-area-inset-top, 0px));
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
   overflow-x: hidden;
   overflow-y: visible;
+}
+
+.player-container .player-content {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  --fab-logical-size: 136px;
 }
 
 /* Normalized player stage: fixed logical layout, uniformly scaled (PlayerView PLAYER_CANVAS_*). */
@@ -1199,21 +1180,7 @@ body {
   min-height: 220px;
 }
 
-/* Do NOT use width: auto !important — it overrides inline px from PlayerView and collapses the grid. */
-.player-canvas-inner .bingo-card {
-  max-width: 100% !important;
-  max-height: none !important;
-  box-sizing: border-box;
-}
-.player-container .player-canvas-inner .bingo-section-slot > .bingo-section {
-  place-items: center;
-  align-content: center;
-  padding-top: 0;
-  justify-items: center;
-}
-
-/* Hold FAB: in document flow so it scales with the transformed canvas (not viewport-fixed). */
-.player-canvas-inner .player-fab-row {
+.player-container .player-fab-row {
   flex-shrink: 0;
   display: flex;
   justify-content: center;
@@ -1223,7 +1190,7 @@ body {
   box-sizing: border-box;
 }
 
-.player-canvas-inner .bingo-fab.bingo-fab--canvas {
+.player-container .bingo-fab.bingo-fab--canvas {
   position: relative !important;
   left: auto !important;
   bottom: auto !important;
@@ -1246,13 +1213,13 @@ body {
   letter-spacing: normal;
 }
 
-.player-canvas-inner .bingo-fab.bingo-fab--canvas .bingo-fab-label {
+.player-container .bingo-fab.bingo-fab--canvas .bingo-fab-label {
   max-width: 90%;
   white-space: nowrap;
   text-align: center;
 }
 
-.player-canvas-inner .player-longpress-tooltip {
+.player-container .player-content .player-longpress-tooltip {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -1262,13 +1229,13 @@ body {
 }
 
 /* Bingo status toast: same vertical reference as long-press (above FAB) */
-.player-canvas-inner .player-bingo-status-toast {
+.player-container .player-content .player-bingo-status-toast {
   bottom: calc(12px + var(--fab-logical-size, 136px) + 28px) !important;
 }
 
 
 /* --- Player chrome inside logical canvas: one shell, minimal vertical space, 360px-wide layout --- */
-.player-canvas-inner .player-chrome {
+.player-container .player-chrome {
   margin: 0 0.2rem 0.3rem;
   padding: 0;
   border-radius: 10px;
@@ -1282,7 +1249,7 @@ body {
   min-width: 0;
 }
 
-.player-canvas-inner .player-chrome .player-header {
+.player-container .player-chrome .player-header {
   margin: 0;
   padding: 0.35rem 0.45rem 0.3rem;
   min-height: 0;
@@ -1291,58 +1258,58 @@ body {
   background: transparent;
 }
 
-.player-canvas-inner .player-chrome .player-header-top {
+.player-container .player-chrome .player-header-top {
   gap: 0.35rem;
   align-items: center;
 }
 
-.player-canvas-inner .player-chrome .player-header-meta {
+.player-container .player-chrome .player-header-meta {
   margin-top: 0.22rem;
   padding-top: 0.22rem;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
-.player-canvas-inner .player-chrome .player-line {
+.player-container .player-chrome .player-line {
   font-size: 14px;
   font-weight: 600;
   line-height: 1.2;
 }
 
-.player-canvas-inner .player-chrome .player-meta-line {
+.player-container .player-chrome .player-meta-line {
   font-size: 11px;
   line-height: 1.25;
 }
 
-.player-canvas-inner .player-chrome .player-icon {
+.player-container .player-chrome .player-icon {
   width: 16px;
   height: 16px;
 }
 
-.player-canvas-inner .player-chrome .player-bingo {
+.player-container .player-chrome .player-bingo {
   font-size: 10px;
 }
 
-.player-canvas-inner .player-chrome .player-bingo-spacer {
+.player-container .player-chrome .player-bingo-spacer {
   min-width: 2.25rem;
 }
 
-.player-canvas-inner .player-chrome button.conn-chip.conn-chip-compact {
+.player-container .player-chrome button.conn-chip.conn-chip-compact {
   padding: 0.2rem 0.45rem;
   min-height: 28px;
   gap: 0.3rem;
 }
 
-.player-canvas-inner .player-chrome .conn-chip-compact .conn-chip-label {
+.player-container .player-chrome .conn-chip-compact .conn-chip-label {
   font-size: 11px;
 }
 
-.player-canvas-inner .player-chrome .conn-chip-compact .conn-dot {
+.player-container .player-chrome .conn-chip-compact .conn-dot {
   width: 6px;
   height: 6px;
 }
 
 /* Controls: single horizontal strip (Display | Text) */
-.player-canvas-inner .player-chrome .player-controls.player-controls-strip {
+.player-container .player-chrome .player-controls.player-controls-strip {
   margin: 0;
   padding: 0.28rem 0.4rem 0.32rem;
   min-height: 0;
@@ -1357,12 +1324,12 @@ body {
   column-gap: 0.35rem;
 }
 
-.player-canvas-inner .player-chrome .player-controls-row {
+.player-container .player-chrome .player-controls-row {
   gap: 0.25rem;
   min-width: 0;
 }
 
-.player-canvas-inner .player-chrome .player-controls-label {
+.player-container .player-chrome .player-controls-label {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -1370,18 +1337,18 @@ body {
   color: #8f96a0;
 }
 
-.player-canvas-inner .player-chrome .player-controls-hint {
+.player-container .player-chrome .player-controls-hint {
   font-size: 12px;
   min-width: 0;
   text-align: right;
 }
 
-.player-canvas-inner .player-chrome .player-controls-slot {
+.player-container .player-chrome .player-controls-slot {
   gap: 0.35rem;
   justify-content: flex-end;
 }
 
-.player-canvas-inner .player-chrome .player-font-hint-inline {
+.player-container .player-chrome .player-font-hint-inline {
   font-size: 10px;
   color: #7a8088;
   line-height: 1.2;
@@ -1391,19 +1358,19 @@ body {
   text-overflow: ellipsis;
 }
 
-.player-canvas-inner .player-chrome .font-size-readout {
+.player-container .player-chrome .font-size-readout {
   font-size: 12px;
   min-width: 2.25rem;
 }
 
-.player-canvas-inner .player-chrome .player-controls-slot-textlocked {
+.player-container .player-chrome .player-controls-slot-textlocked {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 0.35rem;
 }
 
-.player-canvas-inner .player-chrome .player-controls-row-full {
+.player-container .player-chrome .player-controls-row-full {
   grid-column: 1 / -1;
 }
 

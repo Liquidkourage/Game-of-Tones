@@ -1,18 +1,9 @@
-import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useParams, useSearchParams } from 'react-router-dom';
 import io from 'socket.io-client';
 import { SOCKET_URL } from '../config';
-import { 
-  Music, 
-  CheckCircle, 
-  Circle, 
-  Trophy,
-  Users,
-  Volume2,
-  Timer,
-  Crown
-} from 'lucide-react';
+import { Music, Users } from 'lucide-react';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
 import { STANDARD_BINGO_POSITIONS, validateBingoCardGrid } from '../patternDefinitions';
 
@@ -48,15 +39,9 @@ interface Song {
 /**
  * Canonical player UI (CSS px). Uniformly scaled to fit viewport — same layout on every device.
  */
-const PLAYER_CANVAS_WIDTH = 360;
-/** Starting logical height; real value comes from measuring .player-canvas-inner scrollHeight (see playerCanvasLogicalHeight). */
-const PLAYER_CANVAS_LOGICAL_HEIGHT_INITIAL = 940;
-const PLAYER_CANVAS_LOGICAL_HEIGHT_MIN = 720;
-const PLAYER_CANVAS_LOGICAL_HEIGHT_MAX = 1400;
 /** Bingo grid must stay large in logical px — never repeat 120px “minimum” bug. */
-const BINGO_CARD_MIN_SIDE_PX = 280;
-const BINGO_CARD_MAX_SIDE_PX = PLAYER_CANVAS_WIDTH - 16;
-const BINGO_CARD_DEFAULT_SIDE_PX = Math.min(336, BINGO_CARD_MAX_SIDE_PX);
+const BINGO_CARD_PAD = 16;
+const BINGO_CARD_MIN_SIDE = 140;
 
 const PlayerView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
@@ -112,13 +97,7 @@ const PlayerView: React.FC = () => {
 
   /** Measured flex area → square card side (px). Guarantees equal 5×5 cells on all viewports. */
   const bingoCardAreaRef = useRef<HTMLDivElement>(null);
-  const bingoSectionSlotRef = useRef<HTMLDivElement>(null);
-  const [bingoCardSidePx, setBingoCardSidePx] = useState<number | null>(BINGO_CARD_DEFAULT_SIDE_PX);
-  const bingoCardElementRef = useRef<HTMLDivElement>(null);
-  const playerCanvasViewportRef = useRef<HTMLDivElement>(null);
-  const playerCanvasInnerRef = useRef<HTMLDivElement>(null);
-  const [playerCanvasLogicalHeight, setPlayerCanvasLogicalHeight] = useState(PLAYER_CANVAS_LOGICAL_HEIGHT_INITIAL);
-  const [playerCanvasScale, setPlayerCanvasScale] = useState(1);
+  const [bingoCardSidePx, setBingoCardSidePx] = useState<number | null>(null);
 
   useEffect(() => {
     try {
@@ -577,105 +556,36 @@ const PlayerView: React.FC = () => {
     };
   }, [roomId, playerName]);
 
-  // Logical stage height from real content (chrome + card + FAB). Fixed constants miss overflow → clipped FAB.
-  useLayoutEffect(() => {
-    const inner = playerCanvasInnerRef.current;
-    if (!inner) return;
+  // Bingo card: measure flex slot, set square side = min(w,h) - pad for full-width/height square.
+  useEffect(() => {
+    const el = bingoCardAreaRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
 
-    const measureLogicalHeight = () => {
-      const raw = Math.ceil(inner.scrollHeight);
-      const clamped = Math.max(
-        PLAYER_CANVAS_LOGICAL_HEIGHT_MIN,
-        Math.min(PLAYER_CANVAS_LOGICAL_HEIGHT_MAX, raw),
-      );
-      setPlayerCanvasLogicalHeight((prev) => (clamped !== prev ? clamped : prev));
-    };
-
-    const run = () => window.requestAnimationFrame(measureLogicalHeight);
-    measureLogicalHeight();
-    const ro = new ResizeObserver(run);
-    ro.observe(inner);
-    const slot = bingoSectionSlotRef.current;
-    if (slot) ro.observe(slot);
-
-    return () => ro.disconnect();
-  }, [bingoCard, displayMode, bingoCardSidePx, bingoStatus, bingoMessage, connectionToast, longPressTooltip, playerName]);
-
-  // Uniform scale-to-fit using measured logical height H (not a guess).
-  useLayoutEffect(() => {
-    const el = playerCanvasViewportRef.current;
-    if (!el) return;
-    const H = playerCanvasLogicalHeight;
-    const update = () => {
-      const r = el.getBoundingClientRect();
-      let w = Math.max(1, r.width);
-      let h = Math.max(1, r.height);
-      let s = Math.min(w / PLAYER_CANVAS_WIDTH, h / H);
-      if (!Number.isFinite(s)) s = 1;
-      s = Math.max(0.3, Math.min(s, 2.5));
-      setPlayerCanvasScale(s);
-    };
-    update();
-    const ro = new ResizeObserver(() => window.requestAnimationFrame(update));
-    ro.observe(el);
-    const vv = window.visualViewport;
-    vv?.addEventListener("resize", update);
-    vv?.addEventListener("scroll", update);
-    window.addEventListener("orientationchange", update);
-    return () => {
-      ro.disconnect();
-      vv?.removeEventListener("resize", update);
-      vv?.removeEventListener("scroll", update);
-      window.removeEventListener("orientationchange", update);
-    };
-  }, [playerCanvasLogicalHeight]);
-
-  // Bingo card: size from flex slot (layout px). Floor must stay high — 120px logical reads as a postage stamp after scale.
-  useLayoutEffect(() => {
     const measure = () => {
-      const layer = bingoCardAreaRef.current;
-      const slot = bingoSectionSlotRef.current;
-      const el = slot ?? layer;
-      if (!el || typeof ResizeObserver === "undefined") return;
-
-      const pad = 12;
-      const w = Math.max(0, el.clientWidth);
-      const h = Math.max(0, el.clientHeight);
-      const slotMin = w > 0 && h > 0 ? Math.min(w, h) : 0;
-
-      let side: number;
-      if (slotMin <= pad + 24) {
-        side = BINGO_CARD_DEFAULT_SIDE_PX;
-      } else {
-        side = Math.floor(Math.min(slotMin - pad, BINGO_CARD_MAX_SIDE_PX));
-        side = Math.max(BINGO_CARD_MIN_SIDE_PX, Math.min(side, BINGO_CARD_MAX_SIDE_PX));
-      }
-      if (!Number.isFinite(side)) side = BINGO_CARD_DEFAULT_SIDE_PX;
-      setBingoCardSidePx(side);
+      const r = el.getBoundingClientRect();
+      const w = Math.max(0, r.width);
+      const h = Math.max(0, r.height);
+      const raw = Math.floor(Math.min(w, h) - BINGO_CARD_PAD);
+      const side = Math.max(BINGO_CARD_MIN_SIDE, Math.min(raw, 4096));
+      setBingoCardSidePx((prev) => (side !== prev ? side : prev));
     };
 
     const schedule = () => window.requestAnimationFrame(measure);
-    const el = bingoCardAreaRef.current;
-    const slot = bingoSectionSlotRef.current;
-    if (!el && !slot) return;
-
+    measure();
     const ro = new ResizeObserver(schedule);
-    if (el) ro.observe(el);
-    if (slot) ro.observe(slot);
-    schedule();
-
-    window.addEventListener("orientationchange", measure);
+    ro.observe(el);
+    window.addEventListener("orientationchange", schedule);
+    window.addEventListener("resize", schedule);
     const vv = window.visualViewport;
     vv?.addEventListener("resize", schedule);
     vv?.addEventListener("scroll", schedule);
-    window.addEventListener("resize", schedule);
 
     return () => {
       ro.disconnect();
-      window.removeEventListener("orientationchange", measure);
+      window.removeEventListener("orientationchange", schedule);
+      window.removeEventListener("resize", schedule);
       vv?.removeEventListener("resize", schedule);
       vv?.removeEventListener("scroll", schedule);
-      window.removeEventListener("resize", schedule);
     };
   }, []);
 
@@ -733,146 +643,6 @@ const PlayerView: React.FC = () => {
       try { if (wakeLock && wakeLock.release) wakeLock.release(); } catch {}
     };
   }, []);
-
-  /**
-   * Bingo cell typography: layout-box metrics (safe under uniform scale transforms).
-   * One grid font size = min of per-cell fits so every player sees the same card.
-   */
-  const measureBestFontPxForCell = useCallback((textElement: HTMLElement, text: string, isArtist: boolean): number => {
-    const cell = textElement.closest('.bingo-square') as HTMLElement | null;
-    if (!cell) return 12;
-
-    const textScale = 1; /* locked — identical for every device */
-
-    const cw = cell.clientWidth;
-    const ch = cell.clientHeight;
-    const cs = window.getComputedStyle(cell);
-    const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) || 0;
-    const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) || 0;
-    const indicator = cell.querySelector('.played-indicator') as HTMLElement | null;
-    const indicatorH = indicator ? indicator.offsetHeight + 4 : 0;
-
-    const inset = 14;
-    const maxW = Math.max(12, cw - padX - inset);
-    const maxH = Math.max(12, ch - padY - indicatorH - inset);
-
-    const capDim = Math.min(maxW, maxH);
-    const maxFontByCell = Math.max(
-      8,
-      Math.min(30, Math.round(capDim * 0.24) + (isArtist ? -1 : 0))
-    );
-
-    textElement.style.width = `${maxW}px`;
-    textElement.style.maxWidth = `${maxW}px`;
-    textElement.style.maxHeight = `${maxH}px`;
-    textElement.style.overflow = 'hidden';
-    textElement.style.boxSizing = 'border-box';
-    textElement.style.display = 'block';
-    textElement.style.lineHeight = '1.12';
-    textElement.style.wordBreak = 'normal';
-    textElement.style.overflowWrap = 'break-word';
-    textElement.style.hyphens = 'none';
-    textElement.style.whiteSpace = 'normal';
-
-    const baseCap = Math.min(maxW * 0.36, maxH * 0.19);
-    const len = text.length;
-    const lenFactor = len > 48 ? 0.82 : len > 32 ? 0.9 : len > 20 ? 0.95 : 1;
-    let upper = Math.max(8, Math.min(42, Math.round(baseCap * textScale * lenFactor)));
-    upper = Math.min(upper, maxFontByCell);
-
-    let low = 6;
-    let high = upper;
-    let best = low;
-
-    const trySize = (px: number) => {
-      textElement.style.fontSize = px + 'px';
-      const hOk = textElement.scrollHeight <= maxH + 2;
-      const wOk = textElement.scrollWidth <= maxW + 2;
-      return hOk && wOk;
-    };
-
-    while (low <= high) {
-      const mid = Math.floor((low + high) / 2);
-      if (trySize(mid)) {
-        best = mid;
-        low = mid + 1;
-      } else {
-        high = mid - 1;
-      }
-    }
-    return Math.max(6, best - 2);
-  }, []);
-
-  const applyCellTextLayout = useCallback((textElement: HTMLElement, isArtist: boolean, fontPx: number) => {
-    const cell = textElement.closest('.bingo-square') as HTMLElement | null;
-    if (!cell) return;
-
-    const cw = cell.clientWidth;
-    const ch = cell.clientHeight;
-    const cs = window.getComputedStyle(cell);
-    const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) || 0;
-    const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) || 0;
-    const indicator = cell.querySelector('.played-indicator') as HTMLElement | null;
-    const indicatorH = indicator ? indicator.offsetHeight + 4 : 0;
-
-    const inset = 14;
-    const maxW = Math.max(12, cw - padX - inset);
-    const maxH = Math.max(12, ch - padY - indicatorH - inset);
-
-    textElement.style.width = `${maxW}px`;
-    textElement.style.maxWidth = `${maxW}px`;
-    textElement.style.maxHeight = `${maxH}px`;
-    textElement.style.overflow = 'hidden';
-    textElement.style.boxSizing = 'border-box';
-    textElement.style.display = 'block';
-    textElement.style.lineHeight = isArtist ? '1.12' : '1.12';
-    textElement.style.wordBreak = 'normal';
-    textElement.style.overflowWrap = 'break-word';
-    textElement.style.hyphens = 'none';
-    textElement.style.whiteSpace = 'normal';
-    textElement.style.fontSize = Math.max(6, fontPx) + 'px';
-  }, []);
-
-  const refitAllBingoCells = useCallback(() => {
-    if (!bingoCard) return;
-    type CellItem = { textElement: HTMLElement; text: string; isArtist: boolean };
-    const items: CellItem[] = [];
-    bingoCard.squares.forEach((square) => {
-      const squareElement = document.querySelector(`[data-position="${square.position}"]`);
-      if (!squareElement) return;
-      const textElement = squareElement.querySelector('.square-text') as HTMLElement | null;
-      if (!textElement) return;
-      const text =
-        displayMode === 'title'
-          ? square.customSongName || cleanSongTitle(square.songName)
-          : square.artistName;
-      items.push({ textElement, text, isArtist: displayMode === 'artist' });
-    });
-    if (items.length === 0) return;
-    const bests = items.map((i) => measureBestFontPxForCell(i.textElement, i.text, i.isArtist));
-    const uniform = Math.max(8, Math.min(...bests));
-    items.forEach((i) => applyCellTextLayout(i.textElement, i.isArtist, uniform));
-  }, [bingoCard, displayMode, measureBestFontPxForCell, applyCellTextLayout]);
-
-  useEffect(() => {
-    if (!bingoCard) return;
-    const timer = window.setTimeout(() => {
-      refitAllBingoCells();
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [bingoCard, displayMode, bingoCardSidePx, playerCanvasScale, refitAllBingoCells]);
-
-  useEffect(() => {
-    const handleResize = () => {
-      window.setTimeout(() => refitAllBingoCells(), 100);
-    };
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleResize);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleResize);
-    };
-  }, [refitAllBingoCells]);
 
   const markSquare = (position: string) => {
     if (!bingoCard || !socket) return;
@@ -1411,18 +1181,17 @@ const PlayerView: React.FC = () => {
     }
 
     /* Fallback width until ResizeObserver sets bingoCardSidePx — avoids collapsed / invisible grid. */
-    const sidePx = bingoCardSidePx ?? BINGO_CARD_DEFAULT_SIDE_PX;
+    const sidePx = bingoCardSidePx ?? 280;
     const cardBoxStyle: React.CSSProperties = {
       width: sidePx,
-      maxWidth: "100%",
-      height: "auto",
+      height: sidePx,
       flex: "none",
       boxSizing: "border-box",
       marginInline: "auto",
     };
 
     return (
-      <div ref={bingoCardElementRef} className="bingo-card" style={cardBoxStyle}>
+      <div className="bingo-card" style={cardBoxStyle}>
         <div className="bingo-card-grid">
           {bingoCard.squares.map((square) => (
             <motion.div
@@ -1518,34 +1287,6 @@ const PlayerView: React.FC = () => {
           </div>
         </div>
       ) : null}
-      <div ref={playerCanvasViewportRef} className="player-canvas-viewport">
-        <div
-          className="player-canvas-scaler"
-          style={{
-            width: PLAYER_CANVAS_WIDTH * playerCanvasScale,
-            height: playerCanvasLogicalHeight * playerCanvasScale,
-            position: 'relative',
-            flexShrink: 0,
-            overflow: 'visible',
-          }}
-        >
-          <div
-            ref={playerCanvasInnerRef}
-            className="player-canvas-inner"
-            style={{
-              position: 'absolute',
-              left: 0,
-              top: 0,
-              width: PLAYER_CANVAS_WIDTH,
-              height: playerCanvasLogicalHeight,
-              boxSizing: 'border-box',
-              overflow: 'visible',
-              transform: `scale(${playerCanvasScale})`,
-              transformOrigin: 'top left',
-              WebkitTextSizeAdjust: '100%',
-              textSizeAdjust: '100%',
-            } as React.CSSProperties}
-          >
       <div className="player-chrome">
         <motion.div
           className="player-header"
@@ -1633,18 +1374,15 @@ const PlayerView: React.FC = () => {
 
       {/* Main Content */}
       <div className="player-content">
-        {/* Measure layer separate from card: avoids ResizeObserver ↔ card px feedback loop */}
-        <div ref={bingoSectionSlotRef} className="bingo-section-slot">
-          <div ref={bingoCardAreaRef} className="bingo-card-measure-layer" aria-hidden />
-          <motion.div
-            className="bingo-section"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.45, delay: 0.15 }}
-          >
-            {renderBingoCard()}
-          </motion.div>
-        </div>
+        <motion.div
+          ref={bingoCardAreaRef}
+          className="bingo-section"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.45, delay: 0.15 }}
+        >
+          {renderBingoCard()}
+        </motion.div>
 
         {/* Game Status and Instructions removed per request */}
 
@@ -1799,9 +1537,6 @@ const PlayerView: React.FC = () => {
              hasValidBingo ? 'BINGO READY!' : 'No pattern'}
           </span>
         </button>
-        </div>
-      </div>
-          </div>
         </div>
       </div>
     </div>
