@@ -566,8 +566,10 @@ const PlayerView: React.FC = () => {
       let w = Math.max(0, r.width);
       let h = Math.max(0, r.height);
       if (w < 50 || h < 50) {
-        w = typeof window !== "undefined" ? window.innerWidth : 375;
-        h = typeof window !== "undefined" ? window.innerHeight - 200 : 400;
+        const vw = typeof window !== "undefined" ? window.innerWidth : 375;
+        const vh = typeof window !== "undefined" ? window.innerHeight : 667;
+        w = vw;
+        h = Math.max(200, vh - 220);
       }
       const raw = Math.floor(Math.min(w, h) - BINGO_CARD_PAD);
       const side = Math.max(BINGO_CARD_MIN_SIDE, Math.min(raw, 4096));
@@ -1250,7 +1252,7 @@ const PlayerView: React.FC = () => {
   };
 
   return (
-    <div className={`player-container ${bingoCard ? 'has-card' : ''}`} style={{ minHeight: '100svh', overscrollBehavior: 'contain', paddingBottom: 'env(safe-area-inset-bottom)', display: 'flex', flexDirection: 'column' }}>
+    <div className={`player-container ${bingoCard ? 'has-card' : ''}`}>
       {/* Name prompt overlay if no name provided */}
       {!playerName || !playerName.trim() ? (
         <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>

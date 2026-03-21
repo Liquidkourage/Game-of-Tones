@@ -3,7 +3,7 @@
 :root {
   /* Readable + modern tech UI (tune via --font-sans + index.html font link) */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  /* Slightly lifted charcoal — pre-game / lobby reads clearer than pure black */
+  /* Slightly lifted charcoal â€” pre-game / lobby reads clearer than pure black */
   --primary-bg: #0f1218;
   --secondary-bg: #1a1f28;
   --accent-bg: #343a48;
@@ -49,6 +49,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh; /* iOS: adapt when browser UI shows/hides */
 }
 
 /* Header Styles */
@@ -120,7 +121,7 @@ body {
   overflow: hidden;
 }
 
-/* Player route: fit to viewport, no scroll — FAB must stay visible on small phones */
+/* Player route: fit to viewport, no scroll â€” FAB must stay visible on small phones */
 .app-main:has(.player-container) {
   overflow: hidden;
   display: flex;
@@ -203,7 +204,7 @@ body {
 .App .call-list-content { height: 100%; }
 .App .call-list { height: 100%; }
 
-/* 15×5 grouped columns carousel (display only) */
+/* 15Ã—5 grouped columns carousel (display only) */
 .App .call-carousel-viewport {
   position: relative;
   overflow: hidden;
@@ -454,7 +455,7 @@ body {
 .home-container {
   min-height: 100vh;
   padding: 2rem 0;
-  /* Subtle lift so landing / join cards don’t sit on flat void */
+  /* Subtle lift so landing / join cards donâ€™t sit on flat void */
   background: radial-gradient(ellipse 130% 65% at 50% -20%, rgba(0, 255, 136, 0.07), transparent 52%);
 }
 
@@ -1025,7 +1026,7 @@ body {
 }
 
 .bingo-square .square-text {
-  font-size: clamp(7px, min(2.5vw, 2.5vh), 11px);
+  font-size: clamp(6px, min(2.2vw, 2.2vh), 10px);
   line-height: 1.12;
   overflow-wrap: break-word;
   word-break: break-word;
@@ -1055,7 +1056,7 @@ body {
 
 /* Responsive breakpoints for different screen sizes */
 @media (max-width: 768px) {
-  /* Player card size: PlayerView ResizeObserver — do not force vw here */
+  /* Player card size: PlayerView ResizeObserver â€” do not force vw here */
   .bingo-card-grid { gap: 0 !important; }
   
   .bingo-square { padding: 0 !important; }
@@ -1082,6 +1083,10 @@ body {
     min-width: 0 !important;
     width: 100% !important;
   }
+
+  .player-container .bingo-card .bingo-square {
+    padding: 6px !important;
+  }
   
   .bingo-square .song-name {
     font-size: 13px; /* Base fallback - JavaScript will override */
@@ -1104,9 +1109,9 @@ body {
     padding: 1px !important;
   }
 
-  /* Player card: match base 12px so text does not touch borders */
+  /* Player: less padding on tiny screens so more room for text */
   .player-container .bingo-card .bingo-square {
-    padding: 12px !important;
+    padding: 6px !important;
   }
 }
 
@@ -1132,50 +1137,6 @@ body {
   overflow: hidden;
   padding-bottom: env(safe-area-inset-bottom, 0px);
   --fab-logical-size: 136px;
-}
-
-/* Normalized player stage: fixed logical layout, uniformly scaled (PlayerView PLAYER_CANVAS_*). */
-.player-canvas-viewport {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  box-sizing: border-box;
-  /* Room below scaled stage so hold-to-bingo isn’t clipped by home indicator */
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  scroll-padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
-}
-
-.player-canvas-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  min-height: 0;
-}
-
-.player-canvas-inner .player-content {
-  position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  /* Same width as logical stage (container queries for future use) */
-  container-type: inline-size;
-  container-name: player-stage;
-  /* Fixed logical px — cqw inside transformed canvas can compute to 0 in some browsers */
-  --fab-logical-size: 136px;
-  padding-bottom: 0;
-}
-
-/* Measure slot needs height for bingoCardSidePx ResizeObserver */
-.player-canvas-inner .bingo-section-slot {
-  flex: 1 1 auto;
-  min-height: 220px;
 }
 
 .player-container .player-fab-row {
@@ -1505,7 +1466,7 @@ button.conn-chip.conn-chip-compact {
   font-weight: 700;
 }
 
-/* Player controls — vertical stack, room to breathe */
+/* Player controls â€” vertical stack, room to breathe */
 .player-controls {
   flex-shrink: 0;
   padding: 1.45rem 1.35rem;
@@ -1642,7 +1603,7 @@ button.conn-chip.conn-chip-compact {
 .bingo-card-grid .bingo-square:nth-child(5n) { border-right-width: 1px; }
 .bingo-card-grid .bingo-square:nth-last-child(-n+5) { border-bottom-width: 1px; }
 
-/* In player view, grid cell size comes from 5 equal rows/cols in a square card — drop per-cell aspect-ratio. */
+/* In player view, grid cell size comes from 5 equal rows/cols in a square card â€” drop per-cell aspect-ratio. */
 .player-container .bingo-card .bingo-square {
   aspect-ratio: unset;
   width: 100%;
@@ -1670,7 +1631,7 @@ button.conn-chip.conn-chip-compact {
   box-sizing: border-box;
 }
 
-/* Px size from PlayerView.fitTextToCell; fallback only */
+/* Font from .bingo-square .square-text clamp â€” do NOT override font-size */
 .player-container .bingo-card .square-text {
   font-weight: 700;
   color: #fff;
@@ -1679,7 +1640,6 @@ button.conn-chip.conn-chip-compact {
   word-break: normal;
   hyphens: none;
   max-width: 100%;
-  font-size: 12px;
   flex: 0 1 auto;
   align-self: center;
   min-height: 0;
@@ -1922,7 +1882,7 @@ button.conn-chip.conn-chip-compact {
 }
 
 .instructions-card li::before {
-  content: "🎵";
+  content: "ðŸŽµ";
   position: absolute;
   left: 0;
 }
@@ -2456,17 +2416,7 @@ button.conn-chip.conn-chip-compact {
     height: 1.25rem;
   }
   
-  /* Player: scroll in .app-main when content exceeds viewport */
-  .player-container {
-    min-height: 100vh;
-    min-height: 100dvh;
-    height: auto;
-    padding-top: calc(52px + env(safe-area-inset-top, 0px));
-    overflow-x: hidden;
-    overflow-y: visible;
-  }
-  
-  
+  /* Player: keep flex fit â€” do NOT add overflow-y: visible or height: auto */
   .app-main {
     padding: 1rem;
   }
@@ -2676,7 +2626,7 @@ button.conn-chip.conn-chip-compact {
   font-family: 'Courier New', monospace;
 }
 
-/* 📱🔄 LANDSCAPE MOBILE OPTIMIZATION */
+/* ðŸ“±ðŸ”„ LANDSCAPE MOBILE OPTIMIZATION */
 @media (max-width: 768px) and (orientation: landscape) {
   /* Compact header for landscape */
   .header {
@@ -2708,17 +2658,10 @@ button.conn-chip.conn-chip-compact {
     height: 1rem;
   }
   
-  /* Optimize player container for landscape */
+  /* Player: keep flex fit; only add horizontal padding */
   .player-container {
-    min-height: 100vh;
-    min-height: 100dvh;
-    height: auto;
-    padding: 0;
-    padding-top: 45px; /* Account for compact header */
-    padding-left: 0.5rem; /* Add horizontal padding */
+    padding-left: 0.5rem;
     padding-right: 0.5rem;
-    overflow-x: hidden;
-    overflow-y: visible;
   }
   
   .player-controls {
