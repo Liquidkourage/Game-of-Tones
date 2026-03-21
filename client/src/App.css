@@ -1181,54 +1181,22 @@ body {
 
 .player-canvas-inner .player-content {
   position: relative;
-  flex: 0 1 auto;
-  flex-grow: 0;
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
-  gap: 0.35rem;
-  /* Same width as logical stage → cqw matches grid/chrome scaling */
+  /* Same width as logical stage (container queries for future use) */
   container-type: inline-size;
   container-name: player-stage;
-  --fab-logical-size: min(38cqw, 140px);
+  /* Fixed logical px — cqw inside transformed canvas can compute to 0 in some browsers */
+  --fab-logical-size: 136px;
   padding-bottom: 0;
 }
 
-/*
- * CRITICAL (short phones / iPhone SE): do NOT flex-grow the bingo slot.
- * Growing the slot + centering the grid in it pushes the FAB to the bottom of a
- * tall logical stage -> clipped after scale. Keep slot content-height.
- */
+/* Measure slot needs height for bingoCardSidePx ResizeObserver */
 .player-canvas-inner .bingo-section-slot {
-  flex: 0 1 auto;
-  flex-grow: 0;
-  min-height: 0;
-  width: 100%;
-  position: relative;
-}
-
-/* Measure layer was position:absolute;inset:0 - it forces a tall slot when combined with flex:1. */
-.player-canvas-inner .bingo-card-measure-layer {
-  display: none;
-}
-
-/* Flow layout: card sets slot height; top-aligned, not vertically centered in a giant flex area */
-.player-container .player-canvas-inner .bingo-section-slot > .bingo-section {
-  position: relative;
-  inset: auto;
-  width: 100%;
-  flex: 0 0 auto;
-  min-height: 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  padding-top: 0.25rem;
-  padding-bottom: 0.2rem;
-  box-sizing: border-box;
-  overflow: visible;
+  flex: 1 1 auto;
+  min-height: 220px;
 }
 
 /* Do NOT use width: auto !important — it overrides inline px from PlayerView and collapses the grid. */
@@ -1236,6 +1204,12 @@ body {
   max-width: 100% !important;
   max-height: none !important;
   box-sizing: border-box;
+}
+.player-container .player-canvas-inner .bingo-section-slot > .bingo-section {
+  place-items: center;
+  align-content: center;
+  padding-top: 0;
+  justify-items: center;
 }
 
 /* Hold FAB: in document flow so it scales with the transformed canvas (not viewport-fixed). */
@@ -1255,14 +1229,14 @@ body {
   bottom: auto !important;
   transform: none !important;
   flex-shrink: 0;
-  width: var(--fab-logical-size, min(38cqw, 140px));
-  height: var(--fab-logical-size, min(38cqw, 140px));
+  width: 136px;
+  height: 136px;
   max-width: 100%;
   aspect-ratio: 1;
   border-radius: 50%;
   padding: 0 10px;
   font-weight: 1000;
-  font-size: clamp(12px, 7.2cqw, 26px);
+  font-size: clamp(14px, 4.2vw, 26px);
   line-height: 1.05;
   text-align: center;
   display: flex;
@@ -1282,16 +1256,16 @@ body {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  /* Above FAB row: FAB diameter + row padding (matches --fab-logical-size) */
-  bottom: calc(12px + var(--fab-logical-size, min(38cqw, 140px)) + 20px);
+  bottom: calc(12px + var(--fab-logical-size, 136px) + 20px);
   width: min(300px, calc(100% - 16px));
   max-width: min(300px, calc(100% - 16px));
 }
 
 /* Bingo status toast: same vertical reference as long-press (above FAB) */
 .player-canvas-inner .player-bingo-status-toast {
-  bottom: calc(12px + var(--fab-logical-size, min(38cqw, 140px)) + 28px) !important;
+  bottom: calc(12px + var(--fab-logical-size, 136px) + 28px) !important;
 }
+
 
 /* --- Player chrome inside logical canvas: one shell, minimal vertical space, 360px-wide layout --- */
 .player-canvas-inner .player-chrome {

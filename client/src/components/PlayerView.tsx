@@ -583,7 +583,7 @@ const PlayerView: React.FC = () => {
     if (!inner) return;
 
     const measureLogicalHeight = () => {
-      const raw = Math.ceil(Math.max(inner.offsetHeight, inner.scrollHeight));
+      const raw = Math.ceil(inner.scrollHeight);
       const clamped = Math.max(
         PLAYER_CANVAS_LOGICAL_HEIGHT_MIN,
         Math.min(PLAYER_CANVAS_LOGICAL_HEIGHT_MAX, raw),
@@ -641,17 +641,14 @@ const PlayerView: React.FC = () => {
       const pad = 12;
       const w = Math.max(0, el.clientWidth);
       const h = Math.max(0, el.clientHeight);
-      const cap = BINGO_CARD_MAX_SIDE_PX;
-      const byW = w > pad + 24 ? Math.min(w - pad, cap) : 0;
-      const byH = h > pad + 24 ? Math.min(h - pad, cap) : byW;
-      const slotMin = byW > 0 ? Math.min(byW, byH) : 0;
+      const slotMin = w > 0 && h > 0 ? Math.min(w, h) : 0;
 
       let side: number;
       if (slotMin <= pad + 24) {
         side = BINGO_CARD_DEFAULT_SIDE_PX;
       } else {
-        side = Math.floor(Math.min(slotMin, cap));
-        side = Math.max(BINGO_CARD_MIN_SIDE_PX, Math.min(side, cap));
+        side = Math.floor(Math.min(slotMin - pad, BINGO_CARD_MAX_SIDE_PX));
+        side = Math.max(BINGO_CARD_MIN_SIDE_PX, Math.min(side, BINGO_CARD_MAX_SIDE_PX));
       }
       if (!Number.isFinite(side)) side = BINGO_CARD_DEFAULT_SIDE_PX;
       setBingoCardSidePx(side);
@@ -1540,8 +1537,7 @@ const PlayerView: React.FC = () => {
               left: 0,
               top: 0,
               width: PLAYER_CANVAS_WIDTH,
-              height: 'auto',
-              minHeight: PLAYER_CANVAS_LOGICAL_HEIGHT_MIN,
+              height: playerCanvasLogicalHeight,
               boxSizing: 'border-box',
               overflow: 'visible',
               transform: `scale(${playerCanvasScale})`,
