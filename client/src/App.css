@@ -1182,12 +1182,27 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* Reserve space for absolute FAB so grid doesn’t sit under the button */
+  padding-bottom: 156px;
 }
 
+/* Ensure measure slot gets height so bingoCardSidePx can compute (avoids empty middle). */
+.player-canvas-inner .bingo-section-slot {
+  flex: 1 1 auto;
+  min-height: 200px;
+}
+
+/* Do NOT use width: auto !important — it overrides inline px from PlayerView and collapses the grid. */
 .player-canvas-inner .bingo-card {
-  width: auto !important;
   max-width: 100% !important;
   max-height: none !important;
+  box-sizing: border-box;
+}
+.player-container .player-canvas-inner .bingo-section-slot > .bingo-section {
+  place-items: center;
+  align-content: center;
+  padding-top: 0;
+  justify-items: center;
 }
 
 .player-canvas-inner .bingo-fab {

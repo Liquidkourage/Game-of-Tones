@@ -1364,18 +1364,16 @@ const PlayerView: React.FC = () => {
       );
     }
 
-    const cardBoxStyle: React.CSSProperties | undefined =
-      bingoCardSidePx != null
-        ? {
-            // Shrink to slot width; height follows aspect-ratio (fixed px w+h caused off-center overflow on narrow viewports).
-            width: bingoCardSidePx,
-            maxWidth: "100%",
-            height: "auto",
-            flex: "none",
-            boxSizing: "border-box",
-            marginInline: "auto",
-          }
-        : undefined;
+    /* Fallback width until ResizeObserver sets bingoCardSidePx — avoids collapsed / invisible grid. */
+    const sidePx = bingoCardSidePx ?? 280;
+    const cardBoxStyle: React.CSSProperties = {
+      width: sidePx,
+      maxWidth: "100%",
+      height: "auto",
+      flex: "none",
+      boxSizing: "border-box",
+      marginInline: "auto",
+    };
 
     return (
       <div ref={bingoCardElementRef} className="bingo-card" style={cardBoxStyle}>
