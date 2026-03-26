@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -128,6 +128,8 @@ const HostView: React.FC = () => {
   const [preQueueEnabled, setPreQueueEnabled] = useState<boolean>(false);
   const [preQueueWindow, setPreQueueWindow] = useState<number>(5);
   const [isProcessingVerification, setIsProcessingVerification] = useState<boolean>(false);
+  /** Clears stuck "Processing..." if server never responds (e.g. silent verify-bingo failure) */
+  const verificationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [roundComplete, setRoundComplete] = useState<any>(null);
   const [roundWinners, setRoundWinners] = useState<Array<any>>([]);
   const [stripGoTPrefix, setStripGoTPrefix] = useState<boolean>(true);
@@ -640,10 +642,17 @@ const HostView: React.FC = () => {
     });
 
     newSocket.on('bingo-verified', (data: any) => {
+      if (verificationTimeoutRef.current) {
+        clearTimeout(verificationTimeoutRef.current);
+        verificationTimeoutRef.current = null;
+      }
       console.log('✅ Bingo verified:', data);
       setPendingVerification(null);
       setIsProcessingVerification(false);
-      if (data.approved) {
+      if (data.error === 'player_not_found') {
+        addLog(data.reason || 'Could not complete approval (player may have reconnected).', 'error');
+        setGamePaused(false);
+      } else if (data.approved) {
         addLog(`✅ Bingo approved for ${data.playerName}`, 'info');
       } else {
         addLog(`❌ Bingo rejected for ${data.playerName}: ${data.reason}`, 'warn');
@@ -741,10 +750,19 @@ const HostView: React.FC = () => {
 
     // Verification completed
     newSocket.on('bingo-verified', (data: any) => {
+      if (verificationTimeoutRef.current) {
+        clearTimeout(verificationTimeoutRef.current);
+        verificationTimeoutRef.current = null;
+      }
       console.log('Bingo verified:', data);
       setPendingVerification(null);
       setIsProcessingVerification(false);
       
+      if (data.error === 'player_not_found') {
+        addLog(data.reason || 'Could not complete approval (player may have reconnected).', 'error');
+        setGamePaused(false);
+        return;
+      }
       if (data.approved) {
         if (data.roundComplete) {
           // NEW: Round complete - show multi-round options
@@ -1796,23 +1814,25 @@ const HostView: React.FC = () => {
     
     setIsProcessingVerification(true);
     
+    if (verificationTimeoutRef.current) {
+      clearTimeout(verificationTimeoutRef.current);
+      verificationTimeoutRef.current = null;
+    }
     socket.emit('verify-bingo', {
       roomId,
       playerId: pendingVerification.playerId,
+      playerName: pendingVerification.playerName,
       approved,
       reason: reason || (approved ? 'Valid pattern' : 'Invalid pattern')
     });
-    
-    // Add timeout fallback to prevent eternal freeze
-    setTimeout(() => {
-      if (isProcessingVerification) {
-        console.warn('Verification response timeout - clearing modal');
-        addLog('Verification response timeout - modal cleared', 'warn');
-        setPendingVerification(null);
-        setGamePaused(false);
-        setIsProcessingVerification(false);
-      }
-    }, 10000); // 10 second timeout
+    verificationTimeoutRef.current = setTimeout(() => {
+      verificationTimeoutRef.current = null;
+      console.warn('Verification response timeout - clearing modal');
+      addLog('Verification response timeout - modal cleared', 'warn');
+      setPendingVerification(null);
+      setGamePaused(false);
+      setIsProcessingVerification(false);
+    }, 15000);
   };
 
   // Removed handleContinueOrEnd - games now end automatically on first verified bingo
@@ -2205,26 +2225,48 @@ const HostView: React.FC = () => {
   // Bingo verification functions
   const approveBingo = useCallback(async () => {
     if (!socket || !pendingVerification) return;
-    
+    if (verificationTimeoutRef.current) {
+      clearTimeout(verificationTimeoutRef.current);
+      verificationTimeoutRef.current = null;
+    }
     setIsProcessingVerification(true);
     socket.emit('verify-bingo', {
       roomId,
       playerId: pendingVerification.playerId,
+      playerName: pendingVerification.playerName,
       approved: true
     });
-  }, [socket, roomId, pendingVerification]);
+    verificationTimeoutRef.current = setTimeout(() => {
+      verificationTimeoutRef.current = null;
+      addLog('Approve timed out — clearing verification modal', 'warn');
+      setPendingVerification(null);
+      setGamePaused(false);
+      setIsProcessingVerification(false);
+    }, 15000);
+  }, [socket, roomId, pendingVerification, addLog]);
 
   const rejectBingo = useCallback(async (reason: string) => {
     if (!socket || !pendingVerification) return;
-    
+    if (verificationTimeoutRef.current) {
+      clearTimeout(verificationTimeoutRef.current);
+      verificationTimeoutRef.current = null;
+    }
     setIsProcessingVerification(true);
     socket.emit('verify-bingo', {
       roomId,
       playerId: pendingVerification.playerId,
+      playerName: pendingVerification.playerName,
       approved: false,
       reason: reason || 'Invalid bingo pattern'
     });
-  }, [socket, roomId, pendingVerification]);
+    verificationTimeoutRef.current = setTimeout(() => {
+      verificationTimeoutRef.current = null;
+      addLog('Reject timed out — clearing verification modal', 'warn');
+      setPendingVerification(null);
+      setGamePaused(false);
+      setIsProcessingVerification(false);
+    }, 15000);
+  }, [socket, roomId, pendingVerification, addLog]);
 
   // Create output playlist
   const createOutputPlaylist = useCallback(async () => {

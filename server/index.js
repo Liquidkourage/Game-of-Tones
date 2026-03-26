@@ -1978,7 +1978,7 @@ io.on('connection', (socket) => {
 
   // Host approves or rejects bingo verification
   socket.on('verify-bingo', (data) => {
-    const { roomId, playerId, approved, reason } = data || {};
+    const { roomId, playerId, approved, reason, playerName: bodyPlayerName } = data || {};
     const room = rooms.get(roomId);
     if (!room) return;
     
@@ -1986,8 +1986,29 @@ io.on('connection', (socket) => {
     const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
     if (!isHost) return;
     
-    const player = room.players.get(playerId);
-    if (!player) return;
+    let resolvedPlayerId = playerId;
+    let player = room.players.get(playerId);
+    // If caller reconnected, socket id in verification payload may be stale — resolve by display name
+    if (!player && bodyPlayerName) {
+      for (const [pid, p] of room.players) {
+        if (p.name === bodyPlayerName && !p.isHost) {
+          player = p;
+          resolvedPlayerId = pid;
+          console.log(`verify-bingo: resolved "${bodyPlayerName}" by name → socket ${pid}`);
+          break;
+        }
+      }
+    }
+    if (!player) {
+      console.warn(`verify-bingo: player not found (id=${playerId}, name=${bodyPlayerName || 'n/a'}) — host UI was waiting forever`);
+      socket.emit('bingo-verified', {
+        approved: false,
+        error: 'player_not_found',
+        reason: 'That player disconnected or reconnected before approval. Dismiss and continue.',
+        playerName: bodyPlayerName || 'Unknown'
+      });
+      return;
+    }
     
     if (approved) {
       // APPROVED: Confirm the win and resume/end game
@@ -1995,8 +2016,8 @@ io.on('connection', (socket) => {
       
       // Current song already marked as played during bingo call
       
-      // Notify the winner
-      io.to(playerId).emit('bingo-result', {
+      // Notify the winner (use resolved socket id — may differ after player reconnect)
+      io.to(resolvedPlayerId).emit('bingo-result', {
         success: true,
         message: 'BINGO CONFIRMED! You win!',
         isWinner: true,
@@ -2005,14 +2026,14 @@ io.on('connection', (socket) => {
       
       // Notify all players of confirmed win
       io.to(roomId).emit('bingo-confirmed', {
-        playerId: playerId,
+        playerId: resolvedPlayerId,
         playerName: player.name,
         verified: true
       });
       
       // NOW emit the actual winner event for public display
       io.to(roomId).emit('bingo-called', { 
-        playerId: playerId, 
+        playerId: resolvedPlayerId, 
         playerName: player.name, 
         winners: room.winners,
         totalWinners: room.winners.length,
@@ -2046,16 +2067,16 @@ io.on('connection', (socket) => {
       room.roundWinners.push({
         roundNumber: (room.roundWinners.length || 0) + 1,
         playerName: player.name,
-        playerId: playerId,
+        playerId: resolvedPlayerId,
         timestamp: new Date().toISOString()
       });
       
       // Notify ALL hosts with next round options (not just the approving host)
       // This ensures modal appears even if host reconnected or multiple hosts exist
       let hostsNotified = 0;
-      room.players.forEach((playerData, playerId) => {
+      room.players.forEach((playerData, hostSocketId) => {
         if (playerData.isHost) {
-          const hostSocket = io.sockets.sockets.get(playerId);
+          const hostSocket = io.sockets.sockets.get(hostSocketId);
           if (hostSocket) {
             hostSocket.emit('bingo-verified', { 
               approved: true, 
@@ -2072,7 +2093,7 @@ io.on('connection', (socket) => {
               }
             });
             hostsNotified++;
-            console.log(`📤 Sent round-complete notification to host: ${playerData.name} (${playerId})`);
+            console.log(`📤 Sent round-complete notification to host: ${playerData.name} (${hostSocketId})`);
           }
         }
       });
@@ -2129,13 +2150,13 @@ io.on('connection', (socket) => {
       // REJECTED: Remove from winners, notify player, resume game
       console.log(`❌ Host rejected bingo for ${player.name}: ${reason}`);
       
-      // Remove from winners list
-      room.winners = room.winners.filter(w => w.playerId !== playerId);
+      // Remove from winners list (drop both stale and resolved ids after reconnect)
+      room.winners = room.winners.filter(w => w.playerId !== playerId && w.playerId !== resolvedPlayerId);
       player.hasBingo = false;
       player.patternComplete = false; // Allow them to call again
       
       // Notify the player
-      io.to(playerId).emit('bingo-result', {
+      io.to(resolvedPlayerId).emit('bingo-result', {
         success: false,
         message: `Bingo rejected: ${reason || 'Invalid pattern'}`,
         rejected: true
