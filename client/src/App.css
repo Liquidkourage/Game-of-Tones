@@ -1114,9 +1114,9 @@ body {
   margin-bottom: 0.5rem;
 }
 
-/* Player bingo card: square. dvh budget must include app header + player chrome + FAB + safe areas (was 280; too tight). */
+/* Player bingo card: square. Subtract --player-nav-bottom so grid+FAB stay above Android nav / home indicator. */
 .player-container .bingo-card {
-  width: min(100vw - 8px, calc(100dvh - 340px)) !important;
+  width: min(100vw - 8px, calc(100dvh - 340px - var(--player-nav-bottom, 0px))) !important;
   max-width: 100% !important;
   height: auto !important;
   aspect-ratio: 1 / 1 !important;
@@ -1243,11 +1243,21 @@ body {
   min-height: 0;
   padding: 0;
   padding-top: calc(8px + env(safe-area-inset-top, 0px));
+  /* Android 3-button / gesture bar: env() is often 0 in Chrome; min clears OS nav overlay */
+  --player-nav-bottom: max(env(safe-area-inset-bottom, 0px), 48px);
+  padding-bottom: var(--player-nav-bottom);
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
   overflow: hidden;
   --player-card-font-scale: 1;
+}
+
+/* Wide screens: OS insets usually suffice; avoid huge bottom gap */
+@media (min-width: 769px) {
+  .player-container {
+    --player-nav-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
+  }
 }
 
 .player-container .player-content {
@@ -1259,7 +1269,7 @@ body {
   overflow: hidden;
   padding: 0 4px;
   width: 100%;
-  padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 0;
   --fab-logical-size: 72px;
 }
 
@@ -1271,8 +1281,7 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 6px 0 4px;
-  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  padding: 6px 0 8px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -1314,8 +1323,7 @@ body {
     flex: 0 0 auto;
     flex-shrink: 0;
     min-height: 0;
-    padding: 8px 0 6px;
-    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+    padding: 8px 0 10px;
   }
   .player-container .bingo-fab.bingo-fab--canvas {
     width: clamp(56px, 18vw, 80px);
@@ -1324,9 +1332,9 @@ body {
     min-height: 0;
     font-size: clamp(11px, 3vw, 16px);
   }
-  /* Reserve vertical space for header + chrome + FAB */
+  /* Reserve vertical space for header + chrome + FAB + nav bottom */
   .player-container .bingo-card {
-    width: min(100vw - 8px, calc(100dvh - 360px)) !important;
+    width: min(100vw - 8px, calc(100dvh - 360px - var(--player-nav-bottom, 0px))) !important;
   }
 }
 
