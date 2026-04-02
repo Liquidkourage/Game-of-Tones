@@ -124,6 +124,36 @@ const PlayerView: React.FC = () => {
     });
   };
 
+  /** Extra bottom inset when browser UI (e.g. Safari toolbar) overlaps the layout viewport — not covered by safe-area alone. */
+  const [visualBottomGapPx, setVisualBottomGapPx] = useState(0);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return undefined;
+
+    const measure = () => {
+      const v = window.visualViewport;
+      if (!v) return;
+      const gap = Math.max(0, window.innerHeight - v.height - v.offsetTop);
+      setVisualBottomGapPx((prev) => {
+        const next = Math.round(gap * 10) / 10;
+        return Math.abs(prev - next) < 0.5 ? prev : next;
+      });
+    };
+
+    measure();
+    vv.addEventListener('resize', measure);
+    vv.addEventListener('scroll', measure);
+    window.addEventListener('resize', measure);
+    window.addEventListener('orientationchange', measure);
+    return () => {
+      vv.removeEventListener('resize', measure);
+      vv.removeEventListener('scroll', measure);
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('orientationchange', measure);
+    };
+  }, []);
+
   // Mark persistence functions
   const getStoredMarks = (): Record<string, boolean> => {
     try {
@@ -1230,7 +1260,10 @@ const PlayerView: React.FC = () => {
   return (
     <div
       className={`player-container ${bingoCard ? 'has-card' : ''}`}
-      style={{ '--player-card-font-scale': cardFontPercent / 100 } as React.CSSProperties}
+      style={{
+        '--player-card-font-scale': cardFontPercent / 100,
+        '--player-visual-bottom-gap': `${visualBottomGapPx}px`,
+      } as React.CSSProperties}
     >
       {/* Name prompt overlay if no name provided */}
       {!playerName || !playerName.trim() ? (

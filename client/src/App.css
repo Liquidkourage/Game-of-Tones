@@ -1174,7 +1174,7 @@ body {
   max-height: min(
     calc(100vw - 8px),
     calc(
-      100dvh - env(safe-area-inset-top, 0px) - var(--player-app-header-offset) - var(--player-nav-bottom) - 6px
+      100dvh - env(safe-area-inset-top, 0px) - var(--player-app-header-offset) - var(--player-nav-bottom) - var(--player-visual-bottom-gap, 0px) - 6px
     )
   ) !important;
   height: auto !important;
@@ -1311,12 +1311,14 @@ body {
   padding-top: calc(8px + env(safe-area-inset-top, 0px));
   /* Thumb clearance above OS home indicator / gesture bar; 96px was overly conservative and left a huge void under the FAB. */
   --player-nav-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 12px), 72px);
-  padding-bottom: var(--player-nav-bottom);
+  padding-bottom: calc(var(--player-nav-bottom) + var(--player-visual-bottom-gap, 0px));
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
   overflow: hidden;
   --player-card-font-scale: 1;
+  /* Set from PlayerView when visualViewport shows browser UI overlapping the page (e.g. Safari bottom bar). */
+  --player-visual-bottom-gap: 0px;
   /* Narrow viewports need a smaller subtract than 430px or the grid stays tiny; wide keeps ~430–480px headroom. */
   /* Bottom FAB row removed — call control is in chrome; slightly lower reserve. */
   /* Reserve ≈ player chrome (controls + bingo row + meta); tune up on short phones so h-budget matches real chrome height. */
@@ -1327,7 +1329,7 @@ body {
   --player-vh-budget: 100dvh;
   --player-card-w-budget: calc(100vw - 8px);
   --player-card-h-budget: calc(
-    var(--player-vh-budget) - var(--player-layout-reserve) - var(--player-nav-bottom, 0px) - var(--player-app-header-offset) - 10px
+    var(--player-vh-budget) - var(--player-layout-reserve) - var(--player-nav-bottom, 0px) - var(--player-visual-bottom-gap, 0px) - var(--player-app-header-offset) - 10px
   );
 }
 
@@ -1373,7 +1375,7 @@ body {
     max-height: min(
       calc(100vw - 8px),
       calc(
-        100dvh - env(safe-area-inset-top, 0px) - var(--player-app-header-offset) - var(--player-nav-bottom) - min(118px, 26vmin) - 4px
+        100dvh - env(safe-area-inset-top, 0px) - var(--player-app-header-offset) - var(--player-nav-bottom) - var(--player-visual-bottom-gap, 0px) - min(118px, 26vmin) - 4px
       )
     ) !important;
   }
@@ -1416,7 +1418,7 @@ body {
     max-height: min(
       min(var(--player-card-col-max), 92vw),
       calc(
-        100dvh - env(safe-area-inset-top, 0px) - var(--player-app-header-offset) - var(--player-nav-bottom) - 12px
+        100dvh - env(safe-area-inset-top, 0px) - var(--player-app-header-offset) - var(--player-nav-bottom) - var(--player-visual-bottom-gap, 0px) - 12px
       )
     ) !important;
   }
