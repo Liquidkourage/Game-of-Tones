@@ -127,8 +127,6 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  flex: 1 1 auto;
-  align-items: stretch;
 }
 
 /* Shrink app-main slightly for public display */
@@ -1096,49 +1094,35 @@ body {
   flex-shrink: 0;
 }
 
-/* Fills space between chrome and FAB; centers the card vertically. */
 .player-container .bingo-section {
-  flex: 1 1 0;
-  min-height: 0;
+  flex: 0 1 auto;
+  min-height: 200px;
   min-width: 0;
   width: 100%;
   display: flex;
   justify-content: center;
-  align-items: center;
-  padding: 0.2rem 4px 0;
+  align-items: flex-start;
+  padding: 0.65rem 0 0;
   align-self: stretch;
-  overflow: hidden;
 }
 
-/* bingo-section: flex area for card; centers square card */
+/* bingo-section: flex area for card (ResizeObserver measures it); centers square card */
 
 .section-header {
   flex-shrink: 0;
   margin-bottom: 0.5rem;
 }
 
-/* Player bingo card: base = viewport-based square (fallback when cqmin unavailable). */
+/* Player bingo card: edge-to-edge, full width, square. Reserve ~280px for chrome + FAB so button never clips. */
 .player-container .bingo-card {
-  width: min(calc(100vw - 16px), calc(100dvh - 200px));
-  max-width: 100%;
-  height: auto;
-  aspect-ratio: 1 / 1;
-  flex: none;
+  width: min(100vw - 8px, calc(100dvh - 280px)) !important;
+  max-width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 1 / 1 !important;
+  flex: none !important;
   overflow: hidden;
   box-sizing: border-box;
-  margin: 0 auto;
-}
-
-/* Modern: largest square that fits the bingo-section (uses real flex height, not a fixed dvh offset). */
-@supports (container-type: size) {
-  .player-container .bingo-section {
-    container-type: size;
-    container-name: player-bingo;
-  }
-
-  .player-container .bingo-card {
-    width: min(100cqmin, 100%);
-  }
+  margin: 0 auto !important;
 }
 
 .player-container .bingo-card-grid {
@@ -1278,15 +1262,14 @@ body {
   --fab-logical-size: 72px;
 }
 
-/* Do not grow: otherwise empty flex space sits between grid and FAB */
 .player-container .player-fab-row {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   min-height: 48px;
   display: flex;
   justify-content: center;
   align-items: flex-end;
-  padding: 4px 0 2px;
-  padding-bottom: calc(2px + env(safe-area-inset-bottom, 0px));
+  padding: 6px 0 4px;
+  padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px));
   width: 100%;
   box-sizing: border-box;
 }
@@ -1337,6 +1320,10 @@ body {
     min-height: 0;
     font-size: clamp(11px, 3vw, 16px);
   }
+  /* Reserve more vertical space for card on wide viewports so FAB always has room */
+  .player-container .bingo-card {
+    width: min(100vw - 8px, calc(100dvh - 320px)) !important;
+  }
 }
 
 .player-container .player-content .player-longpress-tooltip {
@@ -1356,7 +1343,7 @@ body {
 
 /* --- Player chrome inside logical canvas: one shell, minimal vertical space, 360px-wide layout --- */
 .player-container .player-chrome {
-  margin: 0 0.12rem 0.12rem;
+  margin: 0 0.2rem 0.2rem;
   padding: 0;
   border-radius: 10px;
   border: 1px solid var(--border-accent-soft);
