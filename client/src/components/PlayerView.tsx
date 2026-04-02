@@ -641,7 +641,33 @@ const PlayerView: React.FC = () => {
       const w = t.clientWidth;
       const h = t.clientHeight;
       if (w < 8 || h < 8) return;
-      const side = Math.floor(Math.min(w, h) - 2);
+      let measuredSide = Math.floor(Math.min(w, h) - 2);
+
+      const container = t.closest('.player-container');
+      let fallbackSide = 0;
+      if (container) {
+        const cs = getComputedStyle(container);
+        const parsePx = (raw: string) => {
+          const m = /^([\d.]+)px\s*$/i.exec((raw || '').trim());
+          return m ? parseFloat(m[1]) : NaN;
+        };
+        const wB = parsePx(cs.getPropertyValue('--player-card-w-budget'));
+        const hB = parsePx(cs.getPropertyValue('--player-card-h-budget'));
+        if (Number.isFinite(wB) && Number.isFinite(hB)) {
+          fallbackSide = Math.max(0, Math.floor(Math.min(wB, hB) - 2));
+        }
+      }
+
+      const smallViewport =
+        typeof window !== 'undefined' &&
+        window.matchMedia('(max-width: 520px) and (max-height: 740px)').matches;
+      const side =
+        smallViewport &&
+        fallbackSide > 0 &&
+        measuredSide < fallbackSide * 0.82
+          ? Math.max(measuredSide, fallbackSide)
+          : measuredSide;
+
       setCardSidePx((prev) => (prev === side ? prev : side));
     });
     ro.observe(el);
