@@ -1303,15 +1303,30 @@ const HostView: React.FC = () => {
       const data = await response.json();
       
       if (data.authUrl) {
+        if (!roomId) {
+          setSpotifyError('Missing room code. Go back to home and start hosting again.');
+          setIsSpotifyConnecting(false);
+          return;
+        }
         console.log('Redirecting to Spotify authorization...');
         
         // Store the current URL to return to after Spotify auth
         const returnUrl = `/host/${roomId}`;
         console.log('�� Storing return URL in localStorage:', returnUrl);
         localStorage.setItem('spotify_return_url', returnUrl);
+        try {
+          sessionStorage.setItem('spotify_return_url', returnUrl);
+        } catch {
+          /* ignore */
+        }
         if (roomId) {
           console.log('�� Storing room ID in localStorage:', roomId);
           localStorage.setItem('spotify_room_id', roomId);
+          try {
+            sessionStorage.setItem('spotify_room_id', roomId);
+          } catch {
+            /* ignore */
+          }
         }
         
         // Add room ID to the auth URL as a state parameter
