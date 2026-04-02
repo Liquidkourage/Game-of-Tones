@@ -1114,9 +1114,9 @@ body {
   margin-bottom: 0.5rem;
 }
 
-/* Player bingo card: square. Subtract --player-nav-bottom so grid+FAB stay above Android nav / home indicator. */
+/* Player bingo card: square. Reserve includes app header + chrome + FAB; subtract nav so column does not overflow (clips FAB). */
 .player-container .bingo-card {
-  width: min(100vw - 8px, calc(100dvh - 340px - var(--player-nav-bottom, 0px))) !important;
+  width: min(100vw - 8px, calc(100dvh - 400px - var(--player-nav-bottom, 0px))) !important;
   max-width: 100% !important;
   height: auto !important;
   aspect-ratio: 1 / 1 !important;
@@ -1243,8 +1243,8 @@ body {
   min-height: 0;
   padding: 0;
   padding-top: calc(8px + env(safe-area-inset-top, 0px));
-  /* Android 3-button / gesture bar: env() is often 0 in Chrome; min clears OS nav overlay */
-  --player-nav-bottom: max(env(safe-area-inset-bottom, 0px), 48px);
+  /* Android nav bar: env() often 0; need enough for 3-button bar + half of FAB (~52px radius) */
+  --player-nav-bottom: max(env(safe-area-inset-bottom, 0px), 72px);
   padding-bottom: var(--player-nav-bottom);
   display: flex;
   flex-direction: column;
@@ -1334,7 +1334,7 @@ body {
   }
   /* Reserve vertical space for header + chrome + FAB + nav bottom */
   .player-container .bingo-card {
-    width: min(100vw - 8px, calc(100dvh - 360px - var(--player-nav-bottom, 0px))) !important;
+    width: min(100vw - 8px, calc(100dvh - 420px - var(--player-nav-bottom, 0px))) !important;
   }
 }
 
@@ -1933,12 +1933,12 @@ button.conn-chip.conn-chip-compact {
   letter-spacing: 0.04em;
 }
 
-/* Big Bingo FAB with hold-to-confirm */
-.bingo-fab { 
-  position: fixed; 
-  left: 50%; 
-  transform: translateX(-50%); 
-  bottom: calc(12px + env(safe-area-inset-bottom)); 
+/* Big Bingo FAB with hold-to-confirm (player uses .bingo-fab--canvas in document flow — never fixed) */
+.bingo-fab:not(.bingo-fab--canvas) {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(12px + env(safe-area-inset-bottom));
   background: linear-gradient(135deg, #00ff88, #00ccff); 
   color: #001b12; 
   border: none; 
