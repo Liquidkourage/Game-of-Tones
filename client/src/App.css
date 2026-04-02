@@ -1114,7 +1114,28 @@ body {
   flex-shrink: 0;
 }
 
-/* Card first: width-led square; name/chrome below fills space above OS insets (see .player-rest). */
+/* Card + chrome as one block: vertically centered in tall viewports (see .player-main-column). */
+.player-container .player-main-column {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+}
+
+@media (max-height: 640px) {
+  .player-container .player-main-column {
+    justify-content: flex-start;
+  }
+}
+
+/* Card first: width-led square; chrome sits below in the same column (see .player-main-column). */
 .player-container .player-bingo-stage {
   position: relative;
   flex: 0 0 auto;
@@ -1411,10 +1432,10 @@ body {
   }
 }
 
-/* Below the card: absorbs vertical flex; chrome stays only as tall as its content (not stretched). */
+/* Below the card: height follows chrome/toasts; vertical distribution is handled by .player-main-column. */
 .player-container .player-rest {
   position: relative;
-  flex: 1 1 0;
+  flex: 0 0 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -1563,7 +1584,6 @@ body {
   --chrome-gap: clamp(0.18rem, min(2.4vw, 2.2vmin), 0.42rem);
   --chrome-row-tight: clamp(0.06rem, 1.4vmin, 0.18rem);
   margin: clamp(0.1rem, 2vmin, 0.22rem) clamp(0.12rem, 2.5vmin, 0.22rem) clamp(0.06rem, 1.2vmin, 0.12rem);
-  margin-top: auto;
   padding: 0;
   border-radius: clamp(8px, 2vmin, 12px);
   border: 1px solid var(--border-accent-soft);
@@ -2099,6 +2119,19 @@ button.conn-chip.conn-chip-compact {
   text-align: center;
 }
 
+/* Large viewports: raise the clamp ceiling so 100% card text matches the bigger grid. */
+@media (min-width: 600px) and (min-height: 560px) {
+  .player-container .bingo-card .square-text {
+    font-size: calc(var(--player-card-font-scale, 1) * clamp(7px, min(2.5vw, 2.4vh), 13px));
+  }
+}
+
+@media (min-width: 900px) and (min-height: 640px) {
+  .player-container .bingo-card .square-text {
+    font-size: calc(var(--player-card-font-scale, 1) * clamp(8px, min(2.2vw, 2.1vh), 16px));
+  }
+}
+
 /* Tooltip shown on long-press for alternate text */
 .hover-tooltip {
   position: absolute; /* immediately above the tapped square */
@@ -2563,10 +2596,10 @@ button.conn-chip.conn-chip-compact {
   color: var(--secondary-text);
 }
 
-/* Player: full-width waiting panel (not shrink-to-fit text column) */
+/* Player: full-width waiting panel (fluid width + type on large screens) */
 .player-container .bingo-section .loading-card {
-  width: 100%;
-  max-width: min(32rem, 100%);
+  width: min(100%, clamp(26rem, 88vw, 42rem));
+  max-width: 100%;
   margin-left: auto;
   margin-right: auto;
   justify-self: center;
@@ -2575,15 +2608,15 @@ button.conn-chip.conn-chip-compact {
 
 /* Player: waiting for host (pre-game) */
 .loading-card {
-  margin: 2rem auto;
+  margin: clamp(1rem, 4vmin, 2rem) auto;
   width: min(100%, 26rem);
   max-width: 100%;
   box-sizing: border-box;
-  padding: 2.25rem 1.5rem;
+  padding: clamp(1.75rem, 4.5vmin, 3.5rem) clamp(1.25rem, 4vw, 2.75rem);
   background: var(--surface-card);
   backdrop-filter: blur(20px);
   border: 1px solid var(--border-accent-soft);
-  border-radius: 16px;
+  border-radius: clamp(14px, 2.5vmin, 22px);
   text-align: center;
   color: var(--secondary-text);
   line-height: 1.55;
@@ -2592,7 +2625,8 @@ button.conn-chip.conn-chip-compact {
 
 .loading-card p {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: clamp(1.05rem, min(2.8vw, 2.6vmin), 1.75rem);
+  line-height: 1.45;
   color: var(--secondary-text);
 }
 

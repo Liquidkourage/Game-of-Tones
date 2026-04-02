@@ -1272,17 +1272,18 @@ const PlayerView: React.FC = () => {
         </div>
       ) : null}
 
-      {/* 1) Card first: width-led square (CSS). 2) Name / controls fill space above OS insets (scroll if needed). */}
-      <motion.div
-        className="bingo-section player-bingo-stage"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.45, delay: 0.08 }}
-      >
-        <div className="bingo-section-measure">{renderBingoCard()}</div>
-      </motion.div>
+      {/* 1) Card first: width-led square (CSS). 2) Chrome below — grouped in .player-main-column for vertical centering on tall viewports. */}
+      <div className="player-main-column">
+        <motion.div
+          className="bingo-section player-bingo-stage"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.45, delay: 0.08 }}
+        >
+          <div className="bingo-section-measure">{renderBingoCard()}</div>
+        </motion.div>
 
-      <div className="player-rest">
+        <div className="player-rest">
         <div className="player-chrome">
           <motion.div
             className="player-header"
@@ -1512,6 +1513,7 @@ const PlayerView: React.FC = () => {
             <div className="player-longpress-tooltip-line">{longPressTooltip.artist}</div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );
