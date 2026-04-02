@@ -1246,6 +1246,7 @@ body {
   flex-direction: column;
   box-sizing: border-box;
   overflow: hidden;
+  --player-card-font-scale: 1;
 }
 
 .player-container .player-content {
@@ -1474,6 +1475,40 @@ body {
   align-items: center;
   justify-content: flex-end;
   gap: 0.35rem;
+}
+
+.player-container .player-chrome .player-font-size-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  flex-wrap: nowrap;
+}
+
+.player-container .player-chrome .player-font-size-controls .player-font-btn {
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.5rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.player-container .player-chrome .player-font-size-controls .player-font-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.player-container .player-chrome .player-font-size-controls .player-font-btn:active:not(:disabled) {
+  background: rgba(0, 255, 136, 0.2);
+  border-color: rgba(0, 255, 136, 0.45);
+  color: #00ff88;
 }
 
 .player-container .player-chrome .player-controls-row-full {
@@ -1778,8 +1813,9 @@ button.conn-chip.conn-chip-compact {
   box-sizing: border-box;
 }
 
-/* Font from .bingo-square .square-text clamp â€” do NOT override font-size */
+/* Player card: scale clamp by user preference (--player-card-font-scale on .player-container) */
 .player-container .bingo-card .square-text {
+  font-size: calc(var(--player-card-font-scale, 1) * clamp(6px, min(2.2vw, 2.2vh), 10px));
   font-weight: 700;
   color: #fff;
   line-height: 1.12;

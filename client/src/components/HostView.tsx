@@ -76,6 +76,11 @@ interface PlaybackState {
   currentQueueIndex: number;
 }
 
+/** Center free space is never in the played-song list but counts as valid for verification UI. */
+function isBingoFreeSpaceSquare(square: { isFreeSpace?: boolean; songId?: string } | null | undefined): boolean {
+  return !!(square && (square.isFreeSpace || square.songId === '__FREE_SPACE__'));
+}
+
 const HostView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -4447,7 +4452,9 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                 }}>
                   {pendingVerification.playerCard.squares?.map((square: any) => {
                     const isInWinningPattern = pendingVerification.winningPatternPositions?.includes(square.position);
-                    const wasPlayed = pendingVerification.playedSongs?.some((song: any) => song.id === square.songId);
+                    const wasPlayed =
+                      isBingoFreeSpaceSquare(square) ||
+                      (pendingVerification.playedSongs?.some((song: any) => song.id === square.songId) ?? false);
                     const isMarked = square.marked === true; // Explicit check for true
                     const isInvalid = isMarked && !wasPlayed;
                     
@@ -4540,7 +4547,9 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   const square = pendingVerification.playerCard?.squares?.find((s: any) => s.position === position);
                   if (!square) return null;
                   
-                  const wasPlayed = pendingVerification.playedSongs?.some((song: any) => song.id === square.songId);
+                  const wasPlayed =
+                    isBingoFreeSpaceSquare(square) ||
+                    (pendingVerification.playedSongs?.some((song: any) => song.id === square.songId) ?? false);
                   const isMarked = square.marked;
                   const isInvalid = isMarked && !wasPlayed;
                   

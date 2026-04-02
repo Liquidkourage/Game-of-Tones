@@ -94,11 +94,34 @@ const PlayerView: React.FC = () => {
   });
   const [songsPlayed, setSongsPlayed] = useState<number>(0);
 
-  useEffect(() => {
+  const CARD_FONT_STORAGE_KEY = 'player_card_font_percent';
+  const CARD_FONT_MIN = 70;
+  const CARD_FONT_MAX = 150;
+  const CARD_FONT_STEP = 5;
+
+  const [cardFontPercent, setCardFontPercent] = useState<number>(() => {
     try {
-      localStorage.setItem('font_size_percent', '100');
-    } catch {}
-  }, []);
+      const raw = localStorage.getItem(CARD_FONT_STORAGE_KEY);
+      if (raw == null) return 100;
+      const n = parseInt(raw, 10);
+      if (!Number.isFinite(n)) return 100;
+      return Math.min(CARD_FONT_MAX, Math.max(CARD_FONT_MIN, n));
+    } catch {
+      return 100;
+    }
+  });
+
+  const bumpCardFont = (delta: number) => {
+    setCardFontPercent((prev) => {
+      const next = Math.min(CARD_FONT_MAX, Math.max(CARD_FONT_MIN, prev + delta));
+      try {
+        localStorage.setItem(CARD_FONT_STORAGE_KEY, String(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   // Mark persistence functions
   const getStoredMarks = (): Record<string, boolean> => {
@@ -1204,7 +1227,14 @@ const PlayerView: React.FC = () => {
   };
 
   return (
-    <div className={`player-container ${bingoCard ? 'has-card' : ''}`}>
+    <div
+      className={`player-container ${bingoCard ? 'has-card' : ''}`}
+      style={
+        {
+          '--player-card-font-scale': cardFontPercent / 100,
+        } as React.CSSProperties
+      }
+    >
       {/* Name prompt overlay if no name provided */}
       {!playerName || !playerName.trim() ? (
         <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
@@ -1319,12 +1349,31 @@ const PlayerView: React.FC = () => {
           <div
             className={`player-controls-row player-controls-row-textsize${!bingoCard ? ' player-controls-row-full' : ''}`}
           >
-            <span className="player-controls-label">Text</span>
-            <div className="player-controls-slot player-controls-slot-textlocked">
-              <span className="player-font-hint player-font-hint-inline" title="Same layout on every device">
-                Locked
+            <span className="player-controls-label">Card text</span>
+            <div className="player-controls-slot player-font-size-controls">
+              <button
+                type="button"
+                className="player-font-btn"
+                onClick={() => bumpCardFont(-CARD_FONT_STEP)}
+                disabled={cardFontPercent <= CARD_FONT_MIN}
+                aria-label="Smaller card text"
+                title="Smaller"
+              >
+                −
+              </button>
+              <span className="font-size-readout" title="Bingo square text size">
+                {cardFontPercent}%
               </span>
-              <span className="font-size-readout">100%</span>
+              <button
+                type="button"
+                className="player-font-btn"
+                onClick={() => bumpCardFont(CARD_FONT_STEP)}
+                disabled={cardFontPercent >= CARD_FONT_MAX}
+                aria-label="Larger card text"
+                title="Larger"
+              >
+                +
+              </button>
             </div>
           </div>
         </motion.div>
