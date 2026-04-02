@@ -14,6 +14,8 @@ interface BingoSquare {
   customSongName?: string;
   artistName: string;
   marked: boolean;
+  /** Server: center square pre-marked for classic bingo */
+  isFreeSpace?: boolean;
 }
 
 interface BingoCard {
@@ -608,6 +610,7 @@ const PlayerView: React.FC = () => {
 
     const square = bingoCard.squares.find(s => s.position === position);
     if (!square) return;
+    if (square.isFreeSpace || square.songId === '__FREE_SPACE__') return;
 
     // Emit mark-square event to server
     socket.emit('mark-square', {
@@ -638,9 +641,10 @@ const PlayerView: React.FC = () => {
     const title = square.customSongName || cleanSongTitle(square.songName);
     const artist = square.artistName;
     longPressTimer.current = window.setTimeout(() => {
+      const free = square.isFreeSpace || square.songId === '__FREE_SPACE__';
       setLongPressTooltip({
-        title,
-        artist,
+        title: free ? 'Free space' : title,
+        artist: free ? '' : artist,
       });
       try {
         if (navigator.vibrate) navigator.vibrate(12);
@@ -954,9 +958,10 @@ const PlayerView: React.FC = () => {
       markedSquares: card.squares.filter(s => s.marked).length
     });
     
-    // Helper function to check if a marked square corresponds to a played song
+    // Helper function to check if a marked square corresponds to a played song (or free space)
     const isMarkedSquareValid = (square: BingoSquare): boolean => {
-      const isValid = square.marked && playedSongIds.includes(square.songId);
+      const isFree = !!(square.isFreeSpace || square.songId === '__FREE_SPACE__');
+      const isValid = square.marked && (isFree || playedSongIds.includes(square.songId));
       if (square.marked && !isValid) {
         console.log('❌ Invalid mark:', square.position, square.songId, 'not in played list');
       }
@@ -1145,7 +1150,7 @@ const PlayerView: React.FC = () => {
           {bingoCard.squares.map((square) => (
             <motion.div
               key={square.position}
-              className={`bingo-square ${square.marked ? 'marked' : ''} ${isPatternSquare(square.position) ? 'pattern-highlight' : ''}`}
+              className={`bingo-square ${square.marked ? 'marked' : ''} ${isPatternSquare(square.position) ? 'pattern-highlight' : ''} ${square.isFreeSpace || square.songId === '__FREE_SPACE__' ? 'free-space' : ''}`}
               data-position={square.position}
               onClick={() => markSquare(square.position)}
               onPointerDown={(e) => handlePointerDown(square, e)}
@@ -1174,7 +1179,11 @@ const PlayerView: React.FC = () => {
               <div className="square-content">
                 {/* Display song title or artist based on display mode */}
                 <div className="square-text">
-                  {displayMode === 'title' ? (square.customSongName || cleanSongTitle(square.songName)) : square.artistName}
+                  {square.isFreeSpace || square.songId === '__FREE_SPACE__'
+                    ? 'FREE'
+                    : displayMode === 'title'
+                      ? (square.customSongName || cleanSongTitle(square.songName))
+                      : square.artistName}
                 </div>
                 {square.marked && (
                   <motion.div 

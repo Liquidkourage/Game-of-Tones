@@ -1566,7 +1566,7 @@ io.on('connection', (socket) => {
 
   // Start game
   socket.on('finalize-mix', async (data) => {
-    const { roomId, playlists, songList } = data;
+    const { roomId, playlists, songList, freeSpace } = data;
     console.log('🎵 Finalizing mix for room:', roomId);
     
     const room = rooms.get(roomId);
@@ -1602,6 +1602,7 @@ io.on('connection', (socket) => {
       // Persist finalized data, including host-ordered song list if provided
       room.finalizedPlaylists = playlists;
       room.finalizedSongOrder = Array.isArray(songList) ? songList : null;
+      room.freeSpaceEnabled = !!freeSpace;
       
       // Store the full song objects for song replacement functionality
       if (Array.isArray(songList) && songList.length > 0) {
@@ -2375,23 +2376,14 @@ io.on('connection', (socket) => {
     room.players.forEach((player) => {
       player.hasBingo = false;
       player.patternComplete = false; // Reset pattern completion flag
-      // Reset card marked state
-      if (player.bingoCard && player.bingoCard.squares) {
-        player.bingoCard.squares.forEach(square => {
-          square.marked = false;
-        });
-      }
+      if (player.bingoCard) resetBingoCardMarks(player.bingoCard);
     });
     
-    // Reset bingo cards marked state
     if (room.bingoCards) {
-      room.bingoCards.forEach((card) => {
-        if (card && card.squares) {
-          card.squares.forEach(square => {
-            square.marked = false;
-          });
-        }
-      });
+      room.bingoCards.forEach((card) => resetBingoCardMarks(card));
+    }
+    if (room.clientCards) {
+      room.clientCards.forEach((card) => resetBingoCardMarks(card));
     }
     
     // Notify all clients of the restart
@@ -2766,7 +2758,7 @@ io.on('connection', (socket) => {
 
   socket.on('start-game', async (data) => {
     console.log('🎮 Start game event received:', data);
-    const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = 'none', pattern: incomingPattern } = data;
+    const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = 'none', pattern: incomingPattern, freeSpace } = data;
     const room = rooms.get(roomId);
     
     console.log('🔍 Room found:', !!room);
@@ -2803,6 +2795,9 @@ io.on('connection', (socket) => {
         console.log('🎵 Generating bingo cards...');
         // If mix is already finalized and cards exist, do NOT regenerate to avoid reshuffle
         if (!room.mixFinalized || !room.bingoCards || room.bingoCards.size === 0) {
+          if (freeSpace !== undefined) {
+            room.freeSpaceEnabled = !!freeSpace;
+          }
           // Clear old cards before generating new ones to ensure fresh start
           if (room.bingoCards) {
             room.bingoCards.clear();
@@ -3435,6 +3430,9 @@ io.on('connection', (socket) => {
         // Mark the square
         const card = player.bingoCard;
         const square = card.squares.find(s => s.position === position);
+        if (square && (square.isFreeSpace || square.songId === FREE_SPACE_SONG_ID)) {
+          return;
+        }
         if (square && square.songId === songId) {
           // Toggle mark state to support unmarking
           square.marked = !square.marked;
@@ -3618,6 +3616,29 @@ function properShuffle(array) {
   return shuffled;
 }
 
+/** Center square (2-2): pre-marked, counts toward patterns without a played song */
+const FREE_SPACE_SONG_ID = '__FREE_SPACE__';
+
+function makeFreeSpaceSquare() {
+  return {
+    position: '2-2',
+    songId: FREE_SPACE_SONG_ID,
+    songName: 'FREE',
+    customSongName: 'FREE',
+    artistName: '',
+    marked: true,
+    isFreeSpace: true,
+  };
+}
+
+function resetBingoCardMarks(card) {
+  if (!card?.squares) return;
+  for (const square of card.squares) {
+    if (square.isFreeSpace || square.songId === FREE_SPACE_SONG_ID) square.marked = true;
+    else square.marked = false;
+  }
+}
+
 async function generateBingoCards(roomId, playlists, songOrder = null) {
   console.log('🎲 Generating bingo cards for room:', roomId);
   const room = rooms.get(roomId);
@@ -3650,7 +3671,11 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       }
     }
 
-    const songsNeededPerCard = 25;
+    const useFreeSpace = !!room.freeSpaceEnabled;
+    const songsNeededPerCard = useFreeSpace ? 24 : 25;
+    if (useFreeSpace) {
+      console.log('🆓 Free space enabled: center square (2-2) is FREE (24 song squares per card)');
+    }
 
     // Helper: dedup by ID preserving order
     const dedup = (arr) => {
@@ -3904,22 +3929,24 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
         }
         chosen25 = properShuffle(base).slice(0, songsNeededPerCard);
       } else if (mode === '5x15') {
-        // For each of 5 playlists, sample 5 unique tracks from globally deduplicated pools
+        // For each of 5 playlists, sample unique tracks from globally deduplicated pools
+        // With free space: middle column (2) has 4 songs; center cell (2-2) is FREE
         // Note: Cross-playlist duplicates are already removed, so we only need cross-column uniqueness within this card
         // CRITICAL: Use perListGloballyUnique in the SAME ORDER as display columns to ensure alignment
         const used = new Set();
         const columns = [];
         let ok = true;
         for (let col = 0; col < 5; col++) {
+          const need = useFreeSpace && col === 2 ? 4 : 5;
           // Use perListGloballyUnique[col] which matches display column col
           const playlistName = perListGloballyUnique[col].name || `Column ${col}`;
           const pool = properShuffle(perListGloballyUnique[col].songs);
           const colPicks = [];
           for (const s of pool) {
             if (!used.has(s.id)) { colPicks.push(s); used.add(s.id); }
-            if (colPicks.length === 5) break;
+            if (colPicks.length === need) break;
           }
-          if (colPicks.length < 5) { ok = false; break; }
+          if (colPicks.length < need) { ok = false; break; }
           columns.push(colPicks);
           console.log(`🎯 Card for ${player.name}: Column ${col} (${playlistName}) - ${colPicks.length} songs selected`);
         }
@@ -3928,11 +3955,17 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           console.error(`❌ This should not happen if playlists have enough songs. Skipping player.`);
           continue; // Skip this player - don't use fallback that creates different card types
         } else {
-          // Flatten column-major into row-major 5x5
+          // Flatten column-major into row-major 5x5 (skip center when free space)
           // This ensures column 0 songs go to card column 0, column 1 to card column 1, etc.
           for (let row = 0; row < 5; row++) {
             for (let col = 0; col < 5; col++) {
-              chosen25.push(columns[col][row]);
+              if (useFreeSpace && row === 2 && col === 2) continue;
+              if (useFreeSpace && col === 2) {
+                const idxInCol = row < 2 ? row : row - 1;
+                chosen25.push(columns[2][idxInCol]);
+              } else {
+                chosen25.push(columns[col][row]);
+              }
             }
           }
           console.log(`✅ Card for ${player.name}: Built with columns in order: ${columns.map((_, idx) => perListGloballyUnique[idx].name).join(', ')}`);
@@ -3951,24 +3984,28 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
 
       // Build card
       const card = { id: playerId, squares: [] };
-    let idx = 0;
-    for (let row = 0; row < 5; row++) {
-      for (let col = 0; col < 5; col++) {
+      let idx = 0;
+      for (let row = 0; row < 5; row++) {
+        for (let col = 0; col < 5; col++) {
+          if (useFreeSpace && row === 2 && col === 2) {
+            card.squares.push(makeFreeSpaceSquare());
+            continue;
+          }
           const s = chosen25[idx++];
           if (!s || !s.id) {
             console.error(`❌ Invalid song at position ${row}-${col} for player ${player.name}`);
             continue;
           }
-        card.squares.push({
-          position: `${row}-${col}`,
-          songId: s.id,
-          songName: s.name,
-          customSongName: customSongTitles.get(s.id) || cleanSongTitle(s.name),
-          artistName: s.artist,
-          marked: false
-        });
+          card.squares.push({
+            position: `${row}-${col}`,
+            songId: s.id,
+            songName: s.name,
+            customSongName: customSongTitles.get(s.id) || cleanSongTitle(s.name),
+            artistName: s.artist,
+            marked: false
+          });
+        }
       }
-    }
 
       if (card.squares.length < 25) {
         console.error(`❌ Card incomplete for player ${player.name}: only ${card.squares.length}/25 squares`);
@@ -4030,7 +4067,8 @@ async function generateBingoCardForPlayer(roomId, playerId) {
       }
     }
 
-    const songsNeededPerCard = 25;
+    const useFreeSpace = !!room.freeSpaceEnabled;
+    const songsNeededPerCard = useFreeSpace ? 24 : 25;
     const dedup = (arr) => {
       const seen = new Set();
       const out = [];
@@ -4146,14 +4184,15 @@ async function generateBingoCardForPlayer(roomId, playerId) {
       const columns = [];
       let ok = true;
       for (let col = 0; col < 5; col++) {
+        const need = useFreeSpace && col === 2 ? 4 : 5;
         // Use globally deduplicated pools for late-join cards
         const pool = properShuffle(perListGloballyUnique[col].songs);
         const colPicks = [];
         for (const s of pool) {
           if (!used.has(s.id)) { colPicks.push(s); used.add(s.id); }
-          if (colPicks.length === 5) break;
+          if (colPicks.length === need) break;
         }
-        if (colPicks.length < 5) { ok = false; break; }
+        if (colPicks.length < need) { ok = false; break; }
         columns.push(colPicks);
       }
       if (!ok) {
@@ -4163,7 +4202,13 @@ async function generateBingoCardForPlayer(roomId, playerId) {
       } else {
         for (let row = 0; row < 5; row++) {
           for (let col = 0; col < 5; col++) {
-            chosen25.push(columns[col][row]);
+            if (useFreeSpace && row === 2 && col === 2) continue;
+            if (useFreeSpace && col === 2) {
+              const idxInCol = row < 2 ? row : row - 1;
+              chosen25.push(columns[2][idxInCol]);
+            } else {
+              chosen25.push(columns[col][row]);
+            }
           }
         }
       }
@@ -4179,6 +4224,10 @@ async function generateBingoCardForPlayer(roomId, playerId) {
     let idx = 0;
     for (let row = 0; row < 5; row++) {
       for (let col = 0; col < 5; col++) {
+        if (useFreeSpace && row === 2 && col === 2) {
+          card.squares.push(makeFreeSpaceSquare());
+          continue;
+        }
         const s = chosen25[idx++];
         card.squares.push({
           position: `${row}-${col}`,
@@ -5034,9 +5083,9 @@ function checkBingo(card) {
 }
 
 function checkBingoWithPlayedSongs(card, playedSongIds) {
-  // Helper function to check if a marked square corresponds to a played song
+  // Helper function to check if a marked square corresponds to a played song (or free space)
   const isMarkedSquareValid = (square) => {
-    return square && square.marked && playedSongIds.includes(square.songId);
+    return square && square.marked && (square.isFreeSpace || playedSongIds.includes(square.songId));
   };
   
   // Check rows
@@ -5117,9 +5166,9 @@ function validateBingoForPattern(card, room) {
   console.log(`🎯 Card song IDs (first 10):`, cardSongIds.slice(0, 10));
   console.log(`🎯 Marked card song IDs (first 10):`, markedCardSongIds.slice(0, 10));
   
-  // Helper function to check if a marked square corresponds to a played song
+  // Helper function to check if a marked square corresponds to a played song (or free space)
   const isMarkedSquareValid = (square) => {
-    const isValid = square && square.marked && playedSongIds.includes(square.songId);
+    const isValid = square && square.marked && (square.isFreeSpace || playedSongIds.includes(square.songId));
     if (!isValid && square && square.marked) {
       console.log(`🎯 Invalid marked square: ${square.position} - songId: ${square.songId}, marked: ${square.marked}, inPlayedList: ${playedSongIds.includes(square.songId)}`);
     }
@@ -5301,7 +5350,7 @@ function getWinningPatternPositions(card, room, validationResult) {
   }
   
   const isMarkedSquareValid = (square) => {
-    return square && square.marked && playedSongIds.includes(square.songId);
+    return square && square.marked && (square.isFreeSpace || playedSongIds.includes(square.songId));
   };
   
   if (pattern === 'custom' && room?.customPattern && room.customPattern.size > 0) {

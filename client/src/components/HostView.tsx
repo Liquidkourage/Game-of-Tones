@@ -127,6 +127,13 @@ const HostView: React.FC = () => {
   const [playedSoFar, setPlayedSoFar] = useState<Array<{ id: string; name: string; artist: string }>>([]);
   const [revealMode, setRevealMode] = useState<'off' | 'artist' | 'title' | 'full'>('off');
   const [pattern, setPattern] = useState<BingoPattern>('line');
+  const [freeSpaceEnabled, setFreeSpaceEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('bingo-free-space') === '1';
+    } catch {
+      return false;
+    }
+  });
   const [publicDisplayFontSize, setPublicDisplayFontSize] = useState<number>(1.0); // Multiplier for public display font sizes
 
   // Handler to update public display font size
@@ -1430,7 +1437,8 @@ const HostView: React.FC = () => {
         socket.emit('finalize-mix', {
           roomId: roomId,
           playlists: selectedPlaylists,
-          songList
+          songList,
+          freeSpace: freeSpaceEnabled
         });
       });
     } catch (error) {
@@ -1489,7 +1497,8 @@ const HostView: React.FC = () => {
         songList: songList, // Send the shuffled song list to ensure server uses same order
         randomStarts,
         pattern,
-        customMask
+        customMask,
+        freeSpace: freeSpaceEnabled
       });
       
       // Safety timeout in case no response comes back
@@ -1532,7 +1541,7 @@ const HostView: React.FC = () => {
     squares.forEach((square: any) => {
       if (square.marked) {
         markedCount++;
-        if (playedSongs.includes(square.songId)) {
+        if (square.isFreeSpace || square.songId === '__FREE_SPACE__' || playedSongs.includes(square.songId)) {
           legitimateMarkedCount++;
         }
       }
@@ -1540,7 +1549,9 @@ const HostView: React.FC = () => {
     
     // Helper function to check if a square is legitimately marked
     const isLegitimatelyMarked = (square: any) => {
-      return square.marked && playedSongs.includes(square.songId);
+      if (!square?.marked) return false;
+      if (square.isFreeSpace || square.songId === '__FREE_SPACE__') return true;
+      return playedSongs.includes(square.songId);
     };
     
     // Calculate pattern-specific progress
@@ -2978,6 +2989,36 @@ const HostView: React.FC = () => {
                   </button>
                 </div>
 
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px',
+                    marginBottom: '16px',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    color: '#e0e0e0'
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={freeSpaceEnabled}
+                    onChange={(e) => {
+                      const v = e.target.checked;
+                      setFreeSpaceEnabled(v);
+                      try {
+                        localStorage.setItem('bingo-free-space', v ? '1' : '0');
+                      } catch {
+                        /* ignore */
+                      }
+                    }}
+                  />
+                  <span>
+                    Free space (center square counts without that song playing; set before Finalize Mix)
+                  </span>
+                </label>
+
                 {/* Custom Pattern Section */}
                 <div className="custom-pattern-section" style={{ textAlign: 'center' }}>
                   <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
@@ -4164,20 +4205,22 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                             margin: '0 auto'
                           }}>
                             {playerData.card.squares.map((square: any) => {
+                              const isFree = !!(square.isFreeSpace || square.songId === '__FREE_SPACE__');
                               const isPlayed = (playerData.playedSongs || []).includes(square.songId);
                               const isMarked = square.marked;
+                              const isLegitimate = isMarked && (isFree || isPlayed);
                               
                               // Determine square status and styling
                               let bgColor, borderColor, textColor, icon, statusText;
                               
-                              if (isMarked && isPlayed) {
-                                // ✅ Legitimate mark (played and marked)
+                              if (isLegitimate) {
+                                // ✅ Legitimate mark (played and marked, or free space)
                                 bgColor = 'linear-gradient(135deg, #00ff88, #00cc6d)';
                                 borderColor = '#00ff88';
                                 textColor = '#001a0d';
                                 icon = '✓';
-                                statusText = 'Legitimate';
-                              } else if (isMarked && !isPlayed) {
+                                statusText = isFree ? 'Free space' : 'Legitimate';
+                              } else if (isMarked && !isFree && !isPlayed) {
                                 // ⚠️ Invalid mark (marked but not played - cheating!)
                                 bgColor = 'linear-gradient(135deg, #ff6b6b, #ff4757)';
                                 borderColor = '#ff4757';
@@ -4218,11 +4261,14 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                                     lineHeight: 1.1,
                                     overflow: 'hidden'
                                   }}
-                                  title={`${square.songName} — ${square.artistName}\nStatus: ${statusText}`}
+                                  title={`${isFree ? 'FREE' : square.songName} — ${isFree ? '' : square.artistName}\nStatus: ${statusText}`}
                                 >
                                 {icon && <span style={{ marginRight: 2 }}>{icon}</span>}
                                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {square.songName.length > 12 ? square.songName.substring(0, 12) + '...' : square.songName}
+                                  {(() => {
+                                    const label = isFree ? 'FREE' : square.songName;
+                                    return label.length > 12 ? label.substring(0, 12) + '...' : label;
+                                  })()}
                     </span>
                               </div>
                               );

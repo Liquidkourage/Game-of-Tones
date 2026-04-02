@@ -1880,6 +1880,11 @@ button.conn-chip.conn-chip-compact {
   border-color: rgba(255, 193, 7, 0.6);
 }
 
+.player-container .bingo-card .bingo-square.free-space .square-text {
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+}
+
 /* Big Bingo FAB with hold-to-confirm */
 .bingo-fab { 
   position: fixed; 
