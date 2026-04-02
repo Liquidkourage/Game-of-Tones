@@ -1282,11 +1282,35 @@ const PlayerView: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45 }}
         >
-          <div className="player-header-top">
+          <div className="player-header-bar">
             <div className="player-header-identity">
               <Users className="player-icon" aria-hidden />
               <span className="player-line">{playerName}</span>
             </div>
+            <button
+              type="button"
+              className={`conn-chip conn-chip-compact conn-status-${connectionStatus}`}
+              onClick={handleResync}
+              title={
+                connectionStatus === 'connected'
+                  ? 'Connected — tap to resync if you missed a call'
+                  : connectionStatus === 'reconnecting'
+                    ? `Reconnecting (${reconnectAttempts}) — tap to resync`
+                    : 'Disconnected — tap to resync'
+              }
+            >
+              <span
+                className="conn-dot"
+                style={{
+                  background: connectionStatus === 'connected' ? '#1DB954'
+                    : connectionStatus === 'reconnecting' ? '#FFA500'
+                    : '#FF4D4F'
+                }}
+              />
+              <span className="conn-chip-label">Resync</span>
+            </button>
+          </div>
+          <div className="player-header-bingo-row">
             <div className="player-header-bingo-slot">
               <button
                 type="button"
@@ -1336,28 +1360,6 @@ const PlayerView: React.FC = () => {
                 </span>
               </button>
             </div>
-            <button
-              type="button"
-              className={`conn-chip conn-chip-compact conn-status-${connectionStatus}`}
-              onClick={handleResync}
-              title={
-                connectionStatus === 'connected'
-                  ? 'Connected — tap to resync if you missed a call'
-                  : connectionStatus === 'reconnecting'
-                    ? `Reconnecting (${reconnectAttempts}) — tap to resync`
-                    : 'Disconnected — tap to resync'
-              }
-            >
-              <span
-                className="conn-dot"
-                style={{
-                  background: connectionStatus === 'connected' ? '#1DB954'
-                    : connectionStatus === 'reconnecting' ? '#FFA500'
-                    : '#FF4D4F'
-                }}
-              />
-              <span className="conn-chip-label">Resync</span>
-            </button>
           </div>
           <div className="player-header-meta">
             <span className="player-meta-line">
