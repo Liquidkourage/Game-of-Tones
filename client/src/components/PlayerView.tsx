@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useParams, useSearchParams } from 'react-router-dom';
 import io from 'socket.io-client';
@@ -85,6 +85,9 @@ const PlayerView: React.FC = () => {
   const [connectionToast, setConnectionToast] = useState<string>('');
   const previousPlayedSongIdsRef = useRef<string[]>([]); // Track previous state for missed songs calculation
   const wasReconnectingRef = useRef<boolean>(false); // Track if we're in a reconnection state
+  /** Flex region below chrome; ResizeObserver → largest square that actually fits (replaces vh guesswork). */
+  const bingoMeasureRef = useRef<HTMLDivElement>(null);
+  const [cardSidePx, setCardSidePx] = useState<number | null>(null);
   const [gameState, setGameState] = useState<GameState>({
     isPlaying: false,
     currentSong: null,
@@ -628,6 +631,23 @@ const PlayerView: React.FC = () => {
     };
   }, []);
 
+  useLayoutEffect(() => {
+    const el = bingoMeasureRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const t = entry.target as HTMLElement;
+      const w = t.clientWidth;
+      const h = t.clientHeight;
+      if (w < 8 || h < 8) return;
+      const side = Math.floor(Math.min(w, h) - 2);
+      setCardSidePx((prev) => (prev === side ? prev : side));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const markSquare = (position: string) => {
     if (!bingoCard || !socket) return;
 
@@ -1161,14 +1181,28 @@ const PlayerView: React.FC = () => {
   const renderBingoCard = () => {
     if (!bingoCard) {
       return (
-        <div className="loading-card">
+        <div
+          className="loading-card"
+          style={
+            cardSidePx != null && cardSidePx > 0
+              ? { maxWidth: cardSidePx, width: '100%', boxSizing: 'border-box' }
+              : undefined
+          }
+        >
           <p>Waiting for host to start the game...</p>
         </div>
       );
     }
 
     return (
-      <div className="bingo-card">
+      <div
+        className="bingo-card"
+        style={
+          cardSidePx != null && cardSidePx > 0
+            ? { width: cardSidePx, height: cardSidePx, boxSizing: 'border-box' }
+            : undefined
+        }
+      >
         <div className="bingo-card-grid">
           {bingoCard.squares.map((square) => (
             <motion.div
@@ -1228,10 +1262,15 @@ const PlayerView: React.FC = () => {
 
   return (
     <div
-      className={`player-container ${bingoCard ? 'has-card' : ''}`}
+      className={`player-container ${bingoCard ? 'has-card' : ''}${
+        cardSidePx != null && cardSidePx > 0 ? ' player-container--card-measured' : ''
+      }`}
       style={
         {
           '--player-card-font-scale': cardFontPercent / 100,
+          ...(cardSidePx != null && cardSidePx > 0
+            ? ({ '--player-card-side': `${cardSidePx}px` } as React.CSSProperties)
+            : {}),
         } as React.CSSProperties
       }
     >
@@ -1457,7 +1496,9 @@ const PlayerView: React.FC = () => {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.45, delay: 0.15 }}
         >
-          {renderBingoCard()}
+          <div className="bingo-section-measure" ref={bingoMeasureRef}>
+            {renderBingoCard()}
+          </div>
         </motion.div>
 
         {/* Game Status and Instructions removed per request */}
