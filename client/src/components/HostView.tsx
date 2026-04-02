@@ -4238,7 +4238,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
 
           {/* Legacy sections removed - now in tabbed interface */}
                   
-          {/* Now Playing Interface - Always visible when active, inside scrollable content */}
+          {/* Now Playing — normal document flow (no sticky) so it never covers Manager / round buckets */}
           {currentSong && (
             <motion.div 
               className="now-playing-section"
@@ -4246,16 +4246,13 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
               style={{
-                position: 'sticky',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                zIndex: 100,
-                margin: '20px 0 0 0',
-                borderRadius: '15px 15px 0 0',
-                boxShadow: '0 -10px 30px rgba(0, 0, 0, 0.3)',
+                position: 'relative',
+                zIndex: 1,
+                marginTop: 20,
+                borderRadius: 14,
+                boxShadow: '0 8px 28px rgba(0, 0, 0, 0.35)',
                 background: 'rgba(26, 26, 46, 0.98)',
-                backdropFilter: 'blur(10px)'
+                backdropFilter: 'blur(10px)',
               }}
             >
                <h2>🎵 Now Playing</h2>
