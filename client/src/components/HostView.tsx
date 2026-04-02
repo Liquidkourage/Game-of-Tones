@@ -484,7 +484,8 @@ const HostView: React.FC = () => {
     }
   }, [eventRounds, playlists, showAllPlaylists]); // Re-run when rounds, playlists, or filter mode change
 
-  // Auto-switch tabs based on game state
+  // Auto-switch tabs based on game state (do not depend on eventRounds — round-bucket updates
+  // should not yank the host back to Manager; see handleStartRound → Game tab).
   useEffect(() => {
     if (gameState === 'playing') {
       setActiveTab('play');
@@ -493,7 +494,7 @@ const HostView: React.FC = () => {
     } else {
       setActiveTab('setup');
     }
-  }, [gameState, mixFinalized, eventRounds]);
+  }, [gameState, mixFinalized]);
 
   const refreshRooms = useCallback(async () => {
     try {
@@ -2590,6 +2591,9 @@ const HostView: React.FC = () => {
     } catch (error) {
       console.warn('Failed to save rounds to localStorage:', error);
     }
+
+    // Next step is Finalize mix / Start game on the Game tab
+    setActiveTab('play');
   }, [eventRounds, currentRoundIndex, playlists, roomId]);
 
   // Advanced round management functions
