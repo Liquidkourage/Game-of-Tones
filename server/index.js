@@ -1330,8 +1330,22 @@ io.on('connection', (socket) => {
 
   // Join room
   socket.on('join-room', (data) => {
-    const { roomId, playerName, isHost = false, clientId, licenseKey } = data;
-    logger.info(`Player ${playerName} (${isHost ? 'host' : 'player'}) joining room: ${roomId}`, 'player-join');
+    const { roomId, playerName, isHost = false, clientId, licenseKey, hostSecret } = data;
+    const hostSecretEnv = (process.env.TEMPO_HOST_SECRET || '').trim();
+    /** If TEMPO_HOST_SECRET is set, only callers who send the same value may host */
+    let wantsHost = isHost;
+    if (isHost && hostSecretEnv) {
+      if ((hostSecret || '').trim() !== hostSecretEnv) {
+        wantsHost = false;
+        console.warn(`Host join rejected: invalid or missing host secret for ${playerName} room ${roomId}`);
+        socket.emit('host-join-denied', {
+          roomId,
+          reason: 'invalid_host_secret',
+          message: 'Invalid host access code. Hosting is restricted.'
+        });
+      }
+    }
+    logger.info(`Player ${playerName} (${wantsHost ? 'host' : 'player'}) joining room: ${roomId}`, 'player-join');
     
     // TEMPORARILY DISABLED: Multi-tenant license validation
     // Everyone uses the same Spotify account for now
@@ -1345,7 +1359,8 @@ io.on('connection', (socket) => {
         id: roomId,
         organizationId: organizationId, // Add organization support
         licenseKey: licenseKey || null, // Store license key
-        host: isHost ? socket.id : null,
+        host: wantsHost ? socket.id : null,
+        hostClientId: wantsHost && clientId ? clientId : null,
         players: new Map(),
         gameState: 'waiting',
         snippetLength: 30,
@@ -1373,42 +1388,60 @@ io.on('connection', (socket) => {
     // Join the socket room
     socket.join(roomId);
     
-    // Add player to room
+    /** Only one active host; reconnect allowed if clientId matches room.hostClientId; takeover if old host socket disconnected */
+    let effectiveIsHost = wantsHost;
+    if (wantsHost) {
+      if (!room.host) {
+        room.host = socket.id;
+        if (clientId) room.hostClientId = clientId;
+        effectiveIsHost = true;
+        console.log(`Set ${playerName} as host for room: ${roomId}`);
+      } else if (room.host === socket.id) {
+        effectiveIsHost = true;
+      } else {
+        const oldHostSocket = io.sockets.sockets.get(room.host);
+        const oldHostConnected = !!(oldHostSocket && oldHostSocket.connected);
+        const sameClientReconnect = clientId && room.hostClientId && clientId === room.hostClientId;
+        if (sameClientReconnect) {
+          if (room.players.has(room.host)) {
+            const op = room.players.get(room.host);
+            if (op) op.isHost = false;
+          }
+          room.host = socket.id;
+          effectiveIsHost = true;
+          console.log(`Host reconnected (clientId) for room ${roomId}`);
+        } else if (!oldHostConnected) {
+          room.host = socket.id;
+          if (clientId) room.hostClientId = clientId;
+          effectiveIsHost = true;
+          console.log(`New host claimed room ${roomId} (previous host disconnected)`);
+        } else {
+          effectiveIsHost = false;
+          console.warn(`Host claim rejected for ${playerName} — room ${roomId} already has an active host`);
+          socket.emit('host-join-denied', {
+            roomId,
+            reason: 'room_has_host',
+            message: 'This room already has a host. Use the player link to join, or wait for the host to leave.'
+          });
+        }
+      }
+    }
+    
     const player = {
       id: socket.id,
       name: playerName,
-      isHost: isHost,
+      isHost: effectiveIsHost,
       hasBingo: false,
       clientId: clientId || null
     };
     
     room.players.set(socket.id, player);
     
-    // If this is the host and no host is set, set this player as host
-    if (isHost && !room.host) {
-      room.host = socket.id;
-      console.log(`Set ${playerName} as host for room: ${roomId}`);
-    }
-    
-    // If this is the host and there's already a host, update the host (for reconnections)
-    if (isHost && room.host && room.host !== socket.id) {
-      console.log(`Updating host from ${room.host} to ${socket.id} for ${playerName}`);
-      room.host = socket.id;
-    }
-    
-    // If this is the host and no host is set, set this player as host
-    if (isHost && !room.host) {
-      room.host = socket.id;
-      console.log(`Set ${playerName} as host for room: ${roomId}`);
-    }
-    
-    // Clean up old host entries if there are multiple hosts
-    if (isHost) {
-      // Remove any other players marked as host
-      for (const [playerId, player] of room.players) {
-        if (playerId !== socket.id && player.isHost) {
-          console.log(`Removing old host entry for ${player.name} (${playerId})`);
-          player.isHost = false;
+    if (effectiveIsHost) {
+      for (const [pid, p] of room.players) {
+        if (pid !== socket.id && p.isHost) {
+          console.log(`Removing old host entry for ${p.name} (${pid})`);
+          p.isHost = false;
         }
       }
     }
@@ -1420,7 +1453,7 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('player-joined', {
       playerId: socket.id,
       playerName: playerName,
-      isHost: isHost,
+      isHost: effectiveIsHost,
       playerCount: getNonHostPlayerCount(room)
     });
 
@@ -1429,7 +1462,7 @@ io.on('connection', (socket) => {
       roomId: roomId,
       organizationId: organizationId,
       playerName: playerName,
-      isHost: isHost,
+      isHost: effectiveIsHost,
       playerCount: getNonHostPlayerCount(room)
     });
 
@@ -1440,7 +1473,7 @@ io.on('connection', (socket) => {
     (async () => {
       try {
         // HOST RECONNECTION: Send comprehensive state sync
-        if (isHost) {
+        if (effectiveIsHost) {
           console.log(`🔄 Host reconnecting - sending full state sync for ${playerName}`);
           
           // Send current game state
@@ -1518,7 +1551,7 @@ io.on('connection', (socket) => {
           io.to(socket.id).emit('bingo-card', existingCard);
         } else if (room.playlistSongs?.length || room.playlists?.length || room.finalizedPlaylists?.length) {
           // Generate card for any player (host or not) if playlists exist
-          console.log(`🎲 Generating bingo card for ${isHost ? 'host' : 'player'} ${playerName}`);
+          console.log(`🎲 Generating bingo card for ${effectiveIsHost ? 'host' : 'player'} ${playerName}`);
           const card = await generateBingoCardForPlayer(roomId, socket.id);
           if (card && clientId) {
             if (!room.clientCards) room.clientCards = new Map();

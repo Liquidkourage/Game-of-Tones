@@ -19,6 +19,14 @@ const Home: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [playerName, setPlayerName] = useState('');
   const [roomId, setRoomId] = useState('');
+  /** Sent with host join; must match server TEMPO_HOST_SECRET when set */
+  const [hostAccessCode, setHostAccessCode] = useState(() => {
+    try {
+      return sessionStorage.getItem('tempo_host_secret') || '';
+    } catch {
+      return '';
+    }
+  });
 
   /** Player / QR links: ?join, ?mode=player, ?player=1 — hide host path unless explicitly opened */
   const joinOnly = useMemo(() => {
@@ -41,6 +49,11 @@ const Home: React.FC = () => {
     else if (joinOnly) setHomeMode('join');
   }, [searchParams, joinOnly]);
 
+  useEffect(() => {
+    const pre = searchParams.get('prefillRoom')?.trim();
+    if (pre) setRoomId((r) => r || pre.toUpperCase());
+  }, [searchParams]);
+
   const showHostSetup = () => {
     setHomeMode('host');
     const next = new URLSearchParams(searchParams);
@@ -59,6 +72,11 @@ const Home: React.FC = () => {
     if (!playerName.trim()) {
       alert('Please enter your name!');
       return;
+    }
+    try {
+      sessionStorage.setItem('tempo_host_secret', hostAccessCode.trim());
+    } catch {
+      /* ignore */
     }
     const id = roomId || Math.random().toString(36).substring(2, 8).toUpperCase();
     navigate(`/host/${id}?name=${encodeURIComponent(playerName)}`);
@@ -244,6 +262,22 @@ const Home: React.FC = () => {
               >
                 Generate
               </button>
+            </div>
+
+            <div className="input-group" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.35rem' }}>
+              <label htmlFor="host-access-code" className="home-host-code-label">
+                Host access code
+              </label>
+              <input
+                id="host-access-code"
+                type="password"
+                placeholder="Required on server"
+                value={hostAccessCode}
+                onChange={(e) => setHostAccessCode(e.target.value)}
+                className="input"
+                autoComplete="off"
+              />
+              <span className="home-host-code-hint">Only hosts with this code can open the host screen when the server is configured.</span>
             </div>
 
             <button 

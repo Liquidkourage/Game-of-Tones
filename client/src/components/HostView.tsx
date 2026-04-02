@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   Play, 
@@ -78,6 +78,27 @@ interface PlaybackState {
 
 const HostView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const hostPlayerName = searchParams.get('name')?.trim() || 'Host';
+  const [clientId] = useState<string>(() => {
+    try {
+      const existing = localStorage.getItem('client_id');
+      if (existing) return existing;
+      const next = Math.random().toString(36).slice(2);
+      localStorage.setItem('client_id', next);
+      return next;
+    } catch {
+      return Math.random().toString(36).slice(2);
+    }
+  });
+  const getHostSecret = useCallback(() => {
+    try {
+      return sessionStorage.getItem('tempo_host_secret')?.trim() || '';
+    } catch {
+      return '';
+    }
+  }, []);
   const [socket, setSocket] = useState<any>(null);
   const [gameState, setGameState] = useState<'waiting' | 'playing' | 'ended'>('waiting');
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
@@ -243,7 +264,14 @@ const HostView: React.FC = () => {
       console.log('Attempting to join room with license key:', newLicenseKey.trim());
       setIsJoiningRoom(true);
       setLicenseError(null);
-      socket.emit('join-room', { roomId, playerName: 'Host', isHost: true, licenseKey: newLicenseKey.trim() });
+      socket.emit('join-room', {
+        roomId,
+        playerName: hostPlayerName,
+        isHost: true,
+        licenseKey: newLicenseKey.trim(),
+        clientId,
+        hostSecret: getHostSecret()
+      });
       
       // Add timeout fallback in case server doesn't respond
       setTimeout(() => {
@@ -254,7 +282,7 @@ const HostView: React.FC = () => {
         }
       }, 10000); // 10 second timeout
     }
-  }, [socket, roomId, isJoiningRoom, licenseKey]);
+  }, [socket, roomId, isJoiningRoom, licenseKey, hostPlayerName, clientId, getHostSecret]);
 
   // Advanced playback states
   const [playbackState, setPlaybackState] = useState<PlaybackState>({
@@ -1148,6 +1176,19 @@ const HostView: React.FC = () => {
       setIsJoiningRoom(false);
     });
 
+    newSocket.on('host-join-denied', (data: any) => {
+      console.warn('host-join-denied:', data);
+      setIsJoiningRoom(false);
+      addLog(data.message || 'This room already has a host.', 'error');
+      if (data.reason === 'invalid_host_secret') {
+        navigate(`/?mode=host&prefillRoom=${encodeURIComponent(roomId || '')}`);
+        return;
+      }
+      if (roomId) {
+        navigate(`/player/${roomId}?name=${encodeURIComponent(hostPlayerName)}`);
+      }
+    });
+
     // Handle successful room join
     newSocket.on('room-joined', (data: any) => {
       console.log('Successfully joined room:', data);
@@ -1180,7 +1221,13 @@ const HostView: React.FC = () => {
     // Join room as host (license validation temporarily disabled)
     if (roomId) {
       console.log('🔓 License validation disabled - joining room directly');
-      newSocket.emit('join-room', { roomId, playerName: 'Host', isHost: true });
+      newSocket.emit('join-room', {
+        roomId,
+        playerName: hostPlayerName,
+        isHost: true,
+        clientId,
+        hostSecret: getHostSecret()
+      });
     }
 
     // Check Spotify status and load playlists if connected
@@ -1228,7 +1275,7 @@ const HostView: React.FC = () => {
         clearTimeout(volumeTimeout);
       }
     };
-  }, [roomId, loadPlaylists, loadDevices]);
+  }, [roomId, loadPlaylists, loadDevices, hostPlayerName, clientId, navigate, getHostSecret]);
 
 
 
