@@ -1338,6 +1338,19 @@ body {
   }
 }
 
+/* Short portrait viewports (old/small phones, e.g. Galaxy S5): large dvh subtract made the grid tiny — smaller layout reserve. */
+@media (max-height: 740px) and (orientation: portrait) {
+  .player-container .bingo-card {
+    width: min(100vw - 8px, calc(100dvh - 280px - var(--player-nav-bottom, 0px))) !important;
+  }
+}
+
+@media (max-height: 640px) and (orientation: portrait) {
+  .player-container .bingo-card {
+    width: min(100vw - 8px, calc(100dvh - 210px - var(--player-nav-bottom, 0px))) !important;
+  }
+}
+
 .player-container .player-content .player-longpress-tooltip {
   position: absolute;
   left: 50%;
