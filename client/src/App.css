@@ -1338,6 +1338,26 @@ body {
   }
 }
 
+/* iPhone SE–class: narrow + short; card must leave air for chrome above home indicator */
+@media (max-width: 420px) and (max-height: 700px) {
+  .player-container {
+    --player-nav-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 8px), 52px);
+  }
+
+  .player-container .player-bingo-stage {
+    padding: 0.2rem 4px 0;
+  }
+
+  .player-container .bingo-card {
+    max-height: min(
+      calc(100vw - 8px),
+      calc(
+        100dvh - env(safe-area-inset-top, 0px) - var(--player-app-header-offset) - var(--player-nav-bottom) - min(118px, 26vmin) - 4px
+      )
+    ) !important;
+  }
+}
+
 /* Wide screens: OS insets usually suffice; avoid huge bottom gap */
 @media (min-width: 769px) {
   .player-container {
@@ -1350,6 +1370,44 @@ body {
 @media (min-width: 769px) and (max-height: 900px) {
   .player-container {
     --player-layout-reserve: clamp(300px, 30vw, 460px);
+  }
+}
+
+/* iPad / iPad mini class widths: cap card + chrome so the square doesn’t dominate; center the control deck */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .player-container {
+    --player-nav-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
+  }
+
+  .player-container .player-rest {
+    align-items: center;
+  }
+
+  .player-container .player-bingo-stage {
+    max-width: min(560px, 100%);
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+  }
+
+  .player-container .bingo-card {
+    width: min(100%, min(560px, calc(100vw - 24px))) !important;
+    max-width: min(560px, 92vw) !important;
+    max-height: min(
+      min(560px, 92vw),
+      calc(
+        100dvh - env(safe-area-inset-top, 0px) - var(--player-app-header-offset) - var(--player-nav-bottom) - 12px
+      )
+    ) !important;
+  }
+
+  .player-container .player-chrome {
+    width: 100%;
+    max-width: 520px;
+    margin-left: auto;
+    margin-right: auto;
   }
 }
 
@@ -1374,11 +1432,11 @@ body {
   flex-shrink: 0;
   width: 100%;
   box-sizing: border-box;
-  margin: 4px 0 0;
-  padding: 6px 10px;
-  border-radius: 8px;
+  margin: clamp(3px, 1vmin, 8px) 0 0;
+  padding: clamp(5px, 1.4vmin, 9px) clamp(8px, min(2.8vw, 2.5vmin), 14px);
+  border-radius: clamp(6px, 1.5vmin, 10px);
   font-weight: 600;
-  font-size: 13px;
+  font-size: clamp(11px, min(2.8vw, 2.4vmin), 14px);
   line-height: 1.25;
   text-align: center;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -1392,14 +1450,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.4rem;
+  gap: clamp(0.22rem, min(2.5vw, 2.2vmin), 0.45rem);
   min-width: 0;
 }
 
 .player-container .player-chrome .player-header-bar .player-header-identity {
   display: flex;
   align-items: center;
-  gap: 0.32rem;
+  gap: clamp(0.2rem, min(2vw, 1.8vmin), 0.36rem);
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -1412,7 +1470,7 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 0.16rem 0 0.12rem;
+  padding: var(--chrome-row-tight) 0 var(--chrome-pad-y);
   min-height: 0;
 }
 
@@ -1429,15 +1487,15 @@ body {
   bottom: auto !important;
   transform: none !important;
   flex-shrink: 0;
-  width: clamp(40px, 10vw, 52px);
-  height: clamp(40px, 10vw, 52px);
+  width: clamp(36px, min(11vw, 9vmin), 54px);
+  height: clamp(36px, min(11vw, 9vmin), 54px);
   max-height: none;
   min-height: 0;
   aspect-ratio: 1;
   border-radius: 50%;
-  padding: 0 4px;
+  padding: 0 clamp(2px, 0.8vmin, 6px);
   font-weight: 800;
-  font-size: clamp(7px, 2.1vw, 10px);
+  font-size: clamp(6px, min(2.1vw, 1.85vmin), 10px);
   line-height: 1.05;
   text-align: center;
   display: flex;
@@ -1474,13 +1532,13 @@ body {
 
 @media (min-width: 769px) {
   .player-container .player-chrome .player-header-bingo-row {
-    padding: 0.22rem 0 0.16rem;
+    padding: clamp(0.14rem, 2vmin, 0.26rem) 0 clamp(0.12rem, 1.6vmin, 0.22rem);
   }
 
   .player-container .player-chrome .bingo-fab.bingo-fab--canvas {
-    width: clamp(44px, 9vw, 60px);
-    height: clamp(44px, 9vw, 60px);
-    font-size: clamp(8px, 2vw, 11px);
+    width: clamp(42px, min(9vw, 8vmin), 60px);
+    height: clamp(42px, min(9vw, 8vmin), 60px);
+    font-size: clamp(8px, min(2vw, 1.75vmin), 11px);
   }
 }
 
@@ -1498,17 +1556,21 @@ body {
 }
 
 
-/* --- Player chrome: compact height; margin-top auto pins it toward the thumb zone without stretching --- */
+/* --- Player chrome: compact height; fluid min–max spacing (vw + vmin, no fragile cqi in vars) --- */
 .player-container .player-chrome {
-  margin: 0.2rem 0.2rem 0.1rem;
+  --chrome-pad-x: clamp(0.3rem, min(3.4vw, 3.2vmin), 0.62rem);
+  --chrome-pad-y: clamp(0.12rem, 2vmin, 0.34rem);
+  --chrome-gap: clamp(0.18rem, min(2.4vw, 2.2vmin), 0.42rem);
+  --chrome-row-tight: clamp(0.06rem, 1.4vmin, 0.18rem);
+  margin: clamp(0.1rem, 2vmin, 0.22rem) clamp(0.12rem, 2.5vmin, 0.22rem) clamp(0.06rem, 1.2vmin, 0.12rem);
   margin-top: auto;
   padding: 0;
-  border-radius: 10px;
+  border-radius: clamp(8px, 2vmin, 12px);
   border: 1px solid var(--border-accent-soft);
   background: var(--surface-card);
   backdrop-filter: blur(20px);
   flex: 0 0 auto;
-  max-height: min(52vh, calc(100% - 4px));
+  max-height: min(52vh, 58dvh, calc(100% - 4px));
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -1520,7 +1582,7 @@ body {
 
 .player-container .player-chrome .player-header {
   margin: 0;
-  padding: 0.28rem 0.4rem 0.28rem;
+  padding: var(--chrome-pad-y) var(--chrome-pad-x) var(--chrome-pad-y);
   min-height: 0;
   border: none;
   border-radius: 0;
@@ -1528,46 +1590,46 @@ body {
 }
 
 .player-container .player-chrome .player-header-meta {
-  margin-top: 0.1rem;
-  padding-top: 0.14rem;
+  margin-top: var(--chrome-row-tight);
+  padding-top: clamp(0.08rem, 1.6vmin, 0.16rem);
   border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .player-container .player-chrome .player-line {
-  font-size: clamp(12px, 3.4vw, 14px);
+  font-size: clamp(11px, min(3.4vw, 2.8vmin), 15px);
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.15;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .player-container .player-chrome .player-meta-line {
-  font-size: 11px;
-  line-height: 1.15;
+  font-size: clamp(10px, min(2.6vw, 2.2vmin), 12px);
+  line-height: 1.12;
 }
 
 .player-container .player-chrome .player-icon {
-  width: 16px;
-  height: 16px;
+  width: clamp(14px, min(3.8vw, 3.2vmin), 18px);
+  height: clamp(14px, min(3.8vw, 3.2vmin), 18px);
 }
 
 .player-container .player-chrome .player-bingo {
-  font-size: 10px;
+  font-size: clamp(9px, min(2.2vw, 2vmin), 11px);
 }
 
 .player-container .player-chrome .player-bingo-spacer {
-  min-width: 2.25rem;
+  min-width: clamp(1.75rem, min(14vw, 12vmin), 2.5rem);
 }
 
 .player-container .player-chrome button.conn-chip.conn-chip-compact {
-  padding: 0.14rem 0.4rem;
-  min-height: 32px;
-  gap: 0.28rem;
+  padding: clamp(0.08rem, 1.2vmin, 0.16rem) clamp(0.28rem, min(3vw, 2.8vmin), 0.48rem);
+  min-height: clamp(28px, min(8.5vmin, 10vw), 38px);
+  gap: clamp(0.18rem, 2vmin, 0.32rem);
 }
 
 .player-container .player-chrome .conn-chip-compact .conn-chip-label {
-  font-size: 11px;
+  font-size: clamp(10px, min(2.6vw, 2.2vmin), 12px);
 }
 
 .player-container .player-chrome .conn-chip-compact .conn-dot {
@@ -1578,7 +1640,7 @@ body {
 /* Controls: single horizontal strip (Display | Text) */
 .player-container .player-chrome .player-controls.player-controls-strip {
   margin: 0;
-  padding: 0.2rem 0.35rem 0.22rem;
+  padding: var(--chrome-pad-y) var(--chrome-pad-x) calc(var(--chrome-pad-y) + 0.02rem);
   min-height: 0;
   gap: 0;
   border: none;
@@ -1588,16 +1650,16 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   align-items: center;
-  column-gap: 0.35rem;
+  column-gap: var(--chrome-gap);
 }
 
 .player-container .player-chrome .player-controls-row {
-  gap: 0.25rem;
+  gap: clamp(0.18rem, 2vmin, 0.32rem);
   min-width: 0;
 }
 
 .player-container .player-chrome .player-controls-label {
-  font-size: 11px;
+  font-size: clamp(9px, min(2.4vw, 2.1vmin), 11px);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1605,54 +1667,54 @@ body {
 }
 
 .player-container .player-chrome .player-controls-hint {
-  font-size: 12px;
+  font-size: clamp(11px, min(2.9vw, 2.5vmin), 13px);
   min-width: 0;
   text-align: right;
 }
 
 .player-container .player-chrome .player-controls-slot {
-  gap: 0.35rem;
+  gap: var(--chrome-gap);
   justify-content: flex-end;
 }
 
 .player-container .player-chrome .player-font-hint-inline {
-  font-size: 10px;
+  font-size: clamp(9px, min(2.1vw, 1.9vmin), 11px);
   color: #7a8088;
-  line-height: 1.2;
-  max-width: 4.5rem;
+  line-height: 1.15;
+  max-width: min(4.5rem, 42vw);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .player-container .player-chrome .font-size-readout {
-  font-size: 12px;
-  min-width: 2.25rem;
+  font-size: clamp(11px, min(2.7vw, 2.3vmin), 13px);
+  min-width: clamp(1.75rem, min(18vw, 16vmin), 2.5rem);
 }
 
 .player-container .player-chrome .player-controls-slot-textlocked {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.35rem;
+  gap: var(--chrome-gap);
 }
 
 .player-container .player-chrome .player-font-size-controls {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.35rem;
+  gap: var(--chrome-gap);
   flex-wrap: nowrap;
 }
 
 .player-container .player-chrome .player-font-size-controls .player-font-btn {
   box-sizing: border-box;
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
-  min-height: 40px;
+  width: clamp(36px, min(11vmin, 12vw), 44px);
+  height: clamp(36px, min(11vmin, 12vw), 44px);
+  min-width: clamp(36px, min(11vmin, 12vw), 44px);
+  min-height: clamp(36px, min(11vmin, 12vw), 44px);
   padding: 0;
-  border-radius: 8px;
+  border-radius: clamp(6px, 1.8vmin, 10px);
   border: 1px solid rgba(255, 255, 255, 0.22);
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
@@ -1672,6 +1734,48 @@ body {
   background: rgba(0, 255, 136, 0.2);
   border-color: rgba(0, 255, 136, 0.45);
   color: #00ff88;
+}
+
+/* SE chrome overrides after fluid base (same breakpoint as card reserve above) */
+@media (max-width: 420px) and (max-height: 700px) {
+  .player-container .player-chrome {
+    margin: 0.12rem 0.18rem 0.06rem;
+  }
+
+  .player-container .player-chrome .player-header {
+    padding: 0.2rem 0.32rem 0.18rem;
+  }
+
+  .player-container .player-chrome .player-header-bingo-row {
+    padding: 0.08rem 0 0.06rem;
+  }
+
+  .player-container .player-chrome .bingo-fab.bingo-fab--canvas {
+    width: clamp(34px, 10vw, 44px);
+    height: clamp(34px, 10vw, 44px);
+    font-size: clamp(6px, 2vw, 9px);
+  }
+
+  .player-container .player-chrome .player-header-meta {
+    margin-top: 0.05rem;
+    padding-top: 0.08rem;
+  }
+
+  .player-container .player-chrome .player-controls.player-controls-strip {
+    padding: 0.12rem 0.28rem 0.14rem;
+  }
+
+  .player-container .player-chrome .player-font-size-controls .player-font-btn {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .player-container .player-chrome button.conn-chip.conn-chip-compact {
+    min-height: 28px;
+    padding: 0.1rem 0.32rem;
+  }
 }
 
 .player-container .player-chrome .player-controls-row-full {
