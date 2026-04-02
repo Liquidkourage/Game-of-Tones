@@ -1353,7 +1353,7 @@ body {
   }
 }
 
-/* Below the card: name, BINGO, controls — grows into space above OS home indicator; scrolls if needed */
+/* Below the card: absorbs vertical flex; chrome stays only as tall as its content (not stretched). */
 .player-container .player-rest {
   position: relative;
   flex: 1 1 0;
@@ -1374,8 +1374,8 @@ body {
   flex-shrink: 0;
   width: 100%;
   box-sizing: border-box;
-  margin: 6px 0 0;
-  padding: 8px 12px;
+  margin: 4px 0 0;
+  padding: 6px 10px;
   border-radius: 8px;
   font-weight: 600;
   font-size: 13px;
@@ -1412,7 +1412,7 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 0.3rem 0 0.2rem;
+  padding: 0.16rem 0 0.12rem;
   min-height: 0;
 }
 
@@ -1429,8 +1429,8 @@ body {
   bottom: auto !important;
   transform: none !important;
   flex-shrink: 0;
-  width: clamp(42px, 11vw, 56px);
-  height: clamp(42px, 11vw, 56px);
+  width: clamp(40px, 10vw, 52px);
+  height: clamp(40px, 10vw, 52px);
   max-height: none;
   min-height: 0;
   aspect-ratio: 1;
@@ -1474,13 +1474,13 @@ body {
 
 @media (min-width: 769px) {
   .player-container .player-chrome .player-header-bingo-row {
-    padding: 0.4rem 0 0.25rem;
+    padding: 0.22rem 0 0.16rem;
   }
 
   .player-container .player-chrome .bingo-fab.bingo-fab--canvas {
-    width: clamp(48px, 10vw, 68px);
-    height: clamp(48px, 10vw, 68px);
-    font-size: clamp(9px, 2.2vw, 12px);
+    width: clamp(44px, 9vw, 60px);
+    height: clamp(44px, 9vw, 60px);
+    font-size: clamp(8px, 2vw, 11px);
   }
 }
 
@@ -1498,15 +1498,17 @@ body {
 }
 
 
-/* --- Player chrome: under the card; fills remaining column above safe-area padding --- */
+/* --- Player chrome: compact height; margin-top auto pins it toward the thumb zone without stretching --- */
 .player-container .player-chrome {
-  margin: 0.35rem 0.2rem 0.15rem;
+  margin: 0.2rem 0.2rem 0.1rem;
+  margin-top: auto;
   padding: 0;
   border-radius: 10px;
   border: 1px solid var(--border-accent-soft);
   background: var(--surface-card);
   backdrop-filter: blur(20px);
-  flex: 1 1 0;
+  flex: 0 0 auto;
+  max-height: min(52vh, calc(100% - 4px));
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -1518,7 +1520,7 @@ body {
 
 .player-container .player-chrome .player-header {
   margin: 0;
-  padding: 0.4rem 0.45rem 0.35rem;
+  padding: 0.28rem 0.4rem 0.28rem;
   min-height: 0;
   border: none;
   border-radius: 0;
@@ -1526,8 +1528,8 @@ body {
 }
 
 .player-container .player-chrome .player-header-meta {
-  margin-top: 0.18rem;
-  padding-top: 0.2rem;
+  margin-top: 0.1rem;
+  padding-top: 0.14rem;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
@@ -1542,7 +1544,7 @@ body {
 
 .player-container .player-chrome .player-meta-line {
   font-size: 11px;
-  line-height: 1.25;
+  line-height: 1.15;
 }
 
 .player-container .player-chrome .player-icon {
@@ -1559,9 +1561,9 @@ body {
 }
 
 .player-container .player-chrome button.conn-chip.conn-chip-compact {
-  padding: 0.2rem 0.45rem;
-  min-height: 28px;
-  gap: 0.3rem;
+  padding: 0.14rem 0.4rem;
+  min-height: 32px;
+  gap: 0.28rem;
 }
 
 .player-container .player-chrome .conn-chip-compact .conn-chip-label {
@@ -1576,7 +1578,7 @@ body {
 /* Controls: single horizontal strip (Display | Text) */
 .player-container .player-chrome .player-controls.player-controls-strip {
   margin: 0;
-  padding: 0.28rem 0.4rem 0.32rem;
+  padding: 0.2rem 0.35rem 0.22rem;
   min-height: 0;
   gap: 0;
   border: none;
@@ -1644,9 +1646,12 @@ body {
 }
 
 .player-container .player-chrome .player-font-size-controls .player-font-btn {
-  min-width: 2rem;
-  height: 2rem;
-  padding: 0 0.5rem;
+  box-sizing: border-box;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.22);
   background: rgba(255, 255, 255, 0.08);
