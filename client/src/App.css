@@ -1119,7 +1119,7 @@ body {
 .player-container .bingo-card {
   width: min(
     var(--player-card-w-budget),
-    max(var(--player-card-h-budget), calc(var(--player-card-w-budget) * 0.92))
+    max(var(--player-card-h-budget), calc(var(--player-card-w-budget) * var(--player-card-width-floor, 0.92)))
   ) !important;
   max-width: 100% !important;
   height: auto !important;
@@ -1257,15 +1257,38 @@ body {
   --player-card-font-scale: 1;
   /* Narrow viewports need a smaller subtract than 430px or the grid stays tiny; wide keeps ~430–480px headroom. */
   /* Bottom FAB row removed — call control is in chrome; slightly lower reserve. */
-  --player-layout-reserve: clamp(200px, 36vw, 400px);
+  --player-layout-reserve: clamp(220px, 36vw, 400px);
+  /* App header (TEMPO bar) sits outside .player-container; must subtract or the card overflows main. */
+  --player-app-header-offset: 56px;
+  /* Prefer small/dynamic viewport min; @supports upgrades when svh exists. */
+  --player-vh-budget: 100dvh;
   --player-card-w-budget: calc(100vw - 8px);
-  --player-card-h-budget: calc(100dvh - var(--player-layout-reserve) - var(--player-nav-bottom, 0px));
+  --player-card-width-floor: 0.92;
+  --player-card-h-budget: calc(
+    var(--player-vh-budget) - var(--player-layout-reserve) - var(--player-nav-bottom, 0px) - var(--player-app-header-offset) - 6px
+  );
+}
+
+@supports (height: 100svh) {
+  .player-container {
+    --player-vh-budget: min(100svh, 100dvh);
+  }
 }
 
 /* Short + narrow phones (e.g. Galaxy S5 class): vmin tightens reserve when vw-only leaves the grid too small. */
 @media (max-width: 480px) and (max-height: 720px) {
   .player-container {
-    --player-layout-reserve: clamp(200px, 38vmin, 380px);
+    --player-layout-reserve: clamp(220px, 38vmin, 380px);
+    /* Let height budget win a bit more over the width floor on cramped screens */
+    --player-card-width-floor: 0.88;
+  }
+}
+
+/* Short viewports (iPhone SE, many Android browsers with toolbars): extra breathing room */
+@media (max-height: 700px) {
+  .player-container {
+    --player-app-header-offset: 60px;
+    --player-card-width-floor: 0.88;
   }
 }
 
@@ -1274,6 +1297,14 @@ body {
   .player-container {
     --player-nav-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
     --player-layout-reserve: clamp(280px, 32vw, 480px);
+  }
+}
+
+/* Tablet / small-height landscape: grid slightly tight at bottom */
+@media (min-width: 769px) and (max-height: 900px) {
+  .player-container {
+    --player-layout-reserve: clamp(300px, 30vw, 460px);
+    --player-card-width-floor: 0.9;
   }
 }
 
