@@ -1247,8 +1247,8 @@ body {
   min-height: 0;
   padding: 0;
   padding-top: calc(8px + env(safe-area-inset-top, 0px));
-  /* Android nav + optional Chrome toolbar: env() often 0; err high so FAB clears overlap */
-  --player-nav-bottom: max(env(safe-area-inset-bottom, 0px), 96px);
+  /* Thumb clearance above OS home indicator / gesture bar; 96px was overly conservative and left a huge void under the FAB. */
+  --player-nav-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 12px), 72px);
   padding-bottom: var(--player-nav-bottom);
   display: flex;
   flex-direction: column;
@@ -1282,6 +1282,9 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  gap: 0;
   overflow: hidden;
   padding: 0 4px;
   width: 100%;
@@ -1311,11 +1314,12 @@ body {
 .player-container .player-fab-row {
   flex: 0 0 auto;
   flex-shrink: 0;
+  margin-top: 0;
   min-height: 48px;
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 6px 0 12px;
+  padding: 8px 0 4px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -1349,6 +1353,25 @@ body {
   max-width: 90%;
   white-space: nowrap;
   text-align: center;
+}
+
+/* Ready vs idle: moved from inline styles for contrast + consistent tap targets */
+.player-container .bingo-fab.bingo-fab--canvas.ready {
+  background: linear-gradient(180deg, #00ff88 0%, #00cc6d 100%) !important;
+  color: #061a12 !important;
+  border: 2px solid rgba(0, 255, 136, 0.55) !important;
+  box-shadow:
+    0 12px 26px rgba(0, 0, 0, 0.35),
+    0 0 24px rgba(0, 255, 136, 0.32) !important;
+}
+
+.player-container .bingo-fab.bingo-fab--canvas.disabled {
+  background: linear-gradient(180deg, #4a5568 0%, #2d3748 100%) !important;
+  color: #f0f4f8 !important;
+  border: 2px solid rgba(255, 255, 255, 0.22) !important;
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
 }
 
 /* Tablet/desktop: fixed FAB size so it never overlaps grid (mobile keeps fill-the-gap behavior) */

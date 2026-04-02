@@ -1487,16 +1487,6 @@ const PlayerView: React.FC = () => {
           title={hasValidBingo ? "Hold to call BINGO!" : "Complete a pattern to call BINGO"}
           style={{
             zIndex: 1100,
-            background: hasValidBingo 
-              ? 'linear-gradient(180deg, #00ff88 0%, #00cc6d 100%)'
-              : 'linear-gradient(180deg, #666666 0%, #444444 100%)',
-            color: hasValidBingo ? '#061a12' : '#cccccc',
-            border: hasValidBingo 
-              ? '2px solid rgba(0,255,136,0.6)'
-              : '2px solid rgba(102,102,102,0.6)',
-            boxShadow: hasValidBingo 
-              ? '0 12px 26px rgba(0,0,0,0.35), 0 0 24px rgba(0,255,136,0.35)'
-              : '0 8px 16px rgba(0,0,0,0.25)',
             userSelect: 'none',
             WebkitUserSelect: 'none',
             MozUserSelect: 'none',
