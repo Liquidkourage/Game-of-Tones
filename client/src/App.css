@@ -1788,45 +1788,104 @@ body {
   color: #00ff88;
 }
 
-/* SE chrome overrides after fluid base (same breakpoint as card reserve above) */
-@media (max-width: 420px) and (max-height: 700px) {
+/* Small / short viewports: shrink chrome vertical footprint (clear Safari UI, fit SE-class phones) */
+@media (max-width: 430px) and (max-height: 720px),
+       (max-height: 620px) {
+  .player-container {
+    /* Tighter chrome → slightly lower reserve so card math matches real chrome height */
+    --player-layout-reserve: clamp(218px, 34vmin, 292px);
+  }
+
   .player-container .player-chrome {
-    margin: 0.12rem 0.18rem 0.06rem;
+    --chrome-pad-x: clamp(0.22rem, 2.8vw, 0.48rem);
+    --chrome-pad-y: clamp(0.05rem, 1vmin, 0.12rem);
+    --chrome-gap: clamp(0.1rem, 1.6vmin, 0.28rem);
+    --chrome-row-tight: clamp(0.03rem, 1vmin, 0.08rem);
+    margin: 0.06rem 0.12rem 0.04rem;
+    max-height: min(46vh, 50dvh, calc(100% - 2px));
   }
 
   .player-container .player-chrome .player-header {
-    padding: 0.2rem 0.32rem 0.18rem;
+    padding: 0.14rem 0.28rem 0.12rem;
   }
 
   .player-container .player-chrome .player-header-bingo-row {
-    padding: 0.08rem 0 0.06rem;
+    padding: 0.06rem 0 0.05rem;
   }
 
   .player-container .player-chrome .bingo-fab.bingo-fab--canvas {
-    min-height: 44px;
-    padding: 8px 12px 12px;
-    font-size: clamp(11px, min(3vw, 2.6vmin), 14px);
+    min-height: 40px;
+    padding: 6px 10px 9px;
+    font-size: clamp(10px, min(2.8vw, 2.4vmin), 13px);
+    line-height: 1.12;
+  }
+
+  .player-container .player-chrome .bingo-fab-hold-track {
+    height: 4px !important;
   }
 
   .player-container .player-chrome .player-header-meta {
-    margin-top: 0.05rem;
-    padding-top: 0.08rem;
+    margin-top: 0.04rem;
+    padding-top: 0.06rem;
+  }
+
+  .player-container .player-chrome .player-line {
+    font-size: clamp(12px, min(3.2vw, 2.6vmin), 15px);
+  }
+
+  .player-container .player-chrome .player-meta-line {
+    font-size: clamp(11px, min(2.6vw, 2.2vmin), 13px);
   }
 
   .player-container .player-chrome .player-controls.player-controls-strip {
-    padding: 0.12rem 0.28rem 0.14rem;
+    padding: 0.1rem 0.22rem 0.12rem;
+    gap: 0.28rem;
+  }
+
+  .player-container .player-chrome .player-controls-label {
+    font-size: clamp(9px, min(2.3vw, 2vmin), 11px);
+  }
+
+  .player-container .player-chrome .player-controls-hint {
+    font-size: clamp(11px, min(2.7vw, 2.3vmin), 14px);
+  }
+
+  .player-container .player-chrome .font-size-readout {
+    font-size: clamp(12px, min(2.8vw, 2.4vmin), 14px);
+    min-width: 2.5rem;
   }
 
   .player-container .player-chrome .player-font-size-controls .player-font-btn {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
-    min-height: 36px;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    font-size: 0.88rem;
   }
 
   .player-container .player-chrome button.conn-chip.conn-chip-compact {
-    min-height: 28px;
-    padding: 0.1rem 0.32rem;
+    min-height: 26px;
+    padding: 0.06rem 0.26rem;
+  }
+
+  .player-container .player-chrome .player-controls.player-controls-strip .player-controls-row {
+    gap: 0.28rem;
+  }
+
+  .player-container .player-chrome .toggle-switch--compact {
+    width: 30px;
+    height: 18px;
+  }
+
+  .player-container .player-chrome .toggle-switch--compact .slider:before {
+    height: 12px;
+    width: 12px;
+    left: 3px;
+    top: 3px;
+  }
+
+  .player-container .player-chrome .toggle-switch--compact input:checked + .slider:before {
+    transform: translateX(12px);
   }
 }
 

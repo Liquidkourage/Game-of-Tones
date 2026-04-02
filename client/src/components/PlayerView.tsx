@@ -1422,6 +1422,7 @@ const PlayerView: React.FC = () => {
                     }}
                   />
                   <span
+                    className="bingo-fab-hold-track"
                     aria-hidden
                     style={{
                       position: 'absolute',
