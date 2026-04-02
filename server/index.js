@@ -1980,11 +1980,25 @@ io.on('connection', (socket) => {
   socket.on('verify-bingo', (data) => {
     const { roomId, playerId, approved, reason, playerName: bodyPlayerName } = data || {};
     const room = rooms.get(roomId);
-    if (!room) return;
-    
-    // Verify this is the host
+    if (!room) {
+      socket.emit('bingo-verified', {
+        approved: false,
+        error: 'no_room',
+        reason: 'Room not found — refresh and try again.',
+        playerName: bodyPlayerName || 'Unknown'
+      });
+      return;
+    }
     const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
-    if (!isHost) return;
+    if (!isHost) {
+      socket.emit('bingo-verified', {
+        approved: false,
+        error: 'not_host',
+        reason: 'Only the host can approve or reject bingo.',
+        playerName: bodyPlayerName || 'Unknown'
+      });
+      return;
+    }
     
     let resolvedPlayerId = playerId;
     let player = room.players.get(playerId);

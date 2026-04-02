@@ -629,15 +629,13 @@ const HostView: React.FC = () => {
       addLog(`Pre-queue ${data?.enabled ? 'enabled' : 'disabled'} (window=${data?.window ?? preQueueWindow})`, 'info');
     });
 
-    // Bingo verification handlers
+    // Bingo verification: single handler (avoid duplicate listeners / double state updates)
     newSocket.on('bingo-verification-needed', (data: any) => {
-      console.log('🔔 Bingo verification needed:', data);
-      console.log('🔔 Player card data:', data.playerCard);
-      console.log('🔔 Player card squares:', data.playerCard?.squares);
-      console.log('🔔 Marked squares count:', data.playerCard?.squares?.filter((s: any) => s.marked)?.length || 0);
-      console.log('🔔 Sample square:', data.playerCard?.squares?.[0]);
+      console.log('🔔 Bingo verification needed:', data?.playerName);
       setPendingVerification(data);
+      setGamePaused(true);
       addLog(`🎯 ${data.playerName} called BINGO - verification needed!`, 'warn');
+      playHostAlertSound();
       schedulePlayerCardsRefresh(120);
     });
 
@@ -646,16 +644,34 @@ const HostView: React.FC = () => {
         clearTimeout(verificationTimeoutRef.current);
         verificationTimeoutRef.current = null;
       }
-      console.log('✅ Bingo verified:', data);
+      console.log('Bingo verified:', data);
       setPendingVerification(null);
       setIsProcessingVerification(false);
-      if (data.error === 'player_not_found') {
-        addLog(data.reason || 'Could not complete approval (player may have reconnected).', 'error');
+
+      if (data.error === 'player_not_found' || data.error === 'no_room' || data.error === 'not_host') {
+        addLog(data.reason || 'Could not complete verification.', 'error');
         setGamePaused(false);
-      } else if (data.approved) {
-        addLog(`✅ Bingo approved for ${data.playerName}`, 'info');
+        return;
+      }
+      if (data.approved) {
+        if (data.roundComplete) {
+          setRoundComplete(data);
+          setGamePaused(true);
+          setIsPlaying(false);
+          setCurrentSong(null);
+          addLog(`Round ${data.roundNumber} complete - ${data.playerName} wins!`, 'info');
+          console.log('Round complete, showing options to host');
+        } else if (data.gameEnded) {
+          addLog(`Game ended - ${data.playerName} wins!`, 'info');
+          setGameState('ended');
+          setIsPlaying(false);
+          setGamePaused(false);
+        } else {
+          addLog(`✅ Bingo approved for ${data.playerName}`, 'info');
+        }
       } else {
-        addLog(`❌ Bingo rejected for ${data.playerName}: ${data.reason}`, 'warn');
+        addLog(`❌ Bingo rejected for ${data.playerName}: ${data.reason || 'Invalid pattern'}`, 'warn');
+        setGamePaused(false);
       }
     });
 
@@ -735,53 +751,6 @@ const HostView: React.FC = () => {
       if (data.verified && !data.awaitingVerification) {
         setWinners(prev => [...prev, data]);
         console.log('Bingo confirmed for:', data.playerName);
-      }
-    });
-
-    // Host verification needed
-    newSocket.on('bingo-verification-needed', (data: any) => {
-      console.log('Bingo verification needed:', data);
-      setPendingVerification(data);
-      setGamePaused(true);
-      // Play urgent alert sound
-      playHostAlertSound();
-      schedulePlayerCardsRefresh(120);
-    });
-
-    // Verification completed
-    newSocket.on('bingo-verified', (data: any) => {
-      if (verificationTimeoutRef.current) {
-        clearTimeout(verificationTimeoutRef.current);
-        verificationTimeoutRef.current = null;
-      }
-      console.log('Bingo verified:', data);
-      setPendingVerification(null);
-      setIsProcessingVerification(false);
-      
-      if (data.error === 'player_not_found') {
-        addLog(data.reason || 'Could not complete approval (player may have reconnected).', 'error');
-        setGamePaused(false);
-        return;
-      }
-      if (data.approved) {
-        if (data.roundComplete) {
-          // NEW: Round complete - show multi-round options
-          setRoundComplete(data);
-          setGamePaused(true); // Keep paused until host decides
-          setIsPlaying(false);
-          setCurrentSong(null);
-          addLog(`Round ${data.roundNumber} complete - ${data.playerName} wins!`, 'info');
-          console.log('Round complete, showing options to host');
-        } else if (data.gameEnded) {
-          // OLD: Game automatically ended with verified bingo
-          addLog(`Game ended - ${data.playerName} wins!`, 'info');
-          setGameState('ended');
-          setIsPlaying(false);
-          setGamePaused(false);
-        }
-      } else {
-        // Rejected - resume game
-        setGamePaused(false);
       }
     });
 
