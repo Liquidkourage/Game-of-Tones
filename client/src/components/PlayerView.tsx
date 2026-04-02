@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useParams, useSearchParams } from 'react-router-dom';
 import io from 'socket.io-client';
@@ -127,14 +127,28 @@ const PlayerView: React.FC = () => {
   /** Extra bottom inset when browser UI (e.g. Safari toolbar) overlaps the layout viewport — not covered by safe-area alone. */
   const [visualBottomGapPx, setVisualBottomGapPx] = useState(0);
 
-  useEffect(() => {
+  /**
+   * Real visible viewport height (px). 100dvh on iOS Safari is often larger than the visual viewport,
+   * which oversized the card and clipped the bottom grid row. We drive --player-vh-budget from visualViewport.height.
+   */
+  const [visualViewportHeightPx, setVisualViewportHeightPx] = useState(() => {
+    if (typeof window === 'undefined') return 0;
     const vv = window.visualViewport;
-    if (!vv) return undefined;
+    if (vv) return Math.round(vv.height * 10) / 10;
+    return window.innerHeight;
+  });
+
+  useLayoutEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) {
+      setVisualViewportHeightPx(Math.round(window.innerHeight * 10) / 10);
+      return undefined;
+    }
 
     /** Raw layout-vs-visual gap; on iOS Safari this is often ~0 even when the bottom bar covers content. */
     const RAW_GAP_NEAR_ZERO_PX = 8;
-    /** Used only when raw gap is unreliable (see above) and we're in on-device Mobile Safari. */
-    const IOS_MOBILE_SAFARI_FALLBACK_PX = 48;
+    /** Used when raw gap is unreliable — must clear the Safari bottom bar + tab strip. */
+    const IOS_MOBILE_SAFARI_FALLBACK_PX = 64;
 
     const isIosTouchDevice = (): boolean => {
       if (typeof navigator === 'undefined') return false;
@@ -156,13 +170,16 @@ const PlayerView: React.FC = () => {
         applied = Math.max(rawGap, IOS_MOBILE_SAFARI_FALLBACK_PX);
       }
 
+      const vh = Math.round(v.height * 10) / 10;
+      setVisualViewportHeightPx((prev) => (Math.abs(prev - vh) < 0.5 ? prev : vh));
+
       if (process.env.NODE_ENV === 'development') {
-        console.debug('[PlayerView] bottom inset', {
+        console.debug('[PlayerView] visualViewport', {
+          vvHeightPx: vh,
           rawGap,
           applied,
           usedFallback: applied > rawGap,
           innerH,
-          vvHeight: v.height,
           vvOffsetTop: v.offsetTop,
         });
       }
@@ -1295,6 +1312,9 @@ const PlayerView: React.FC = () => {
       style={{
         '--player-card-font-scale': cardFontPercent / 100,
         '--player-visual-bottom-gap': `${visualBottomGapPx}px`,
+        ...(visualViewportHeightPx > 0
+          ? { '--player-vh-budget': `${visualViewportHeightPx}px` }
+          : {}),
       } as React.CSSProperties}
     >
       {/* Name prompt overlay if no name provided */}

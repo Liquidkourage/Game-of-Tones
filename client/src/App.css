@@ -1174,7 +1174,7 @@ body {
   max-height: min(
     calc(100vw - 8px),
     calc(
-      100dvh - env(safe-area-inset-top, 0px) - var(--player-app-header-offset) - var(--player-nav-bottom) - var(--player-visual-bottom-gap, 0px) - 6px
+      var(--player-vh-budget) - env(safe-area-inset-top, 0px) - var(--player-app-header-offset) - var(--player-nav-bottom) - var(--player-visual-bottom-gap, 0px) - 6px
     )
   ) !important;
   height: auto !important;
@@ -1325,7 +1325,7 @@ body {
   --player-layout-reserve: clamp(240px, 36vw, 400px);
   /* App header (TEMPO bar) sits outside .player-container; compact header on player route. */
   --player-app-header-offset: 44px;
-  /* Prefer small/dynamic viewport min; @supports upgrades when svh exists. */
+  /* Prefer small/dynamic viewport min; @supports upgrades when svh exists. PlayerView sets px from visualViewport.height (authoritative on iOS Safari). */
   --player-vh-budget: 100dvh;
   --player-card-w-budget: calc(100vw - 8px);
   --player-card-h-budget: calc(
@@ -1375,7 +1375,7 @@ body {
     max-height: min(
       calc(100vw - 8px),
       calc(
-        100dvh - env(safe-area-inset-top, 0px) - var(--player-app-header-offset) - var(--player-nav-bottom) - var(--player-visual-bottom-gap, 0px) - min(118px, 26vmin) - 4px
+        var(--player-vh-budget) - env(safe-area-inset-top, 0px) - var(--player-app-header-offset) - var(--player-nav-bottom) - var(--player-visual-bottom-gap, 0px) - min(118px, 26vmin) - 4px
       )
     ) !important;
   }
@@ -1418,7 +1418,7 @@ body {
     max-height: min(
       min(var(--player-card-col-max), 92vw),
       calc(
-        100dvh - env(safe-area-inset-top, 0px) - var(--player-app-header-offset) - var(--player-nav-bottom) - var(--player-visual-bottom-gap, 0px) - 12px
+        var(--player-vh-budget) - env(safe-area-inset-top, 0px) - var(--player-app-header-offset) - var(--player-nav-bottom) - var(--player-visual-bottom-gap, 0px) - 12px
       )
     ) !important;
   }
