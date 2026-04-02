@@ -275,6 +275,36 @@ body {
   box-shadow: var(--neon-glow);
 }
 
+/* Destructive / rare actions — outline on dark, matches host “End session” pattern */
+.btn-danger-outline {
+  background: rgba(255, 68, 68, 0.12);
+  color: #ff8a8a;
+  border: 2px solid rgba(255, 100, 100, 0.55);
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+
+.btn-danger-outline:hover:not(:disabled) {
+  background: rgba(255, 68, 68, 0.22);
+  border-color: rgba(255, 130, 130, 0.85);
+  color: #ffb4b4;
+  box-shadow: 0 0 18px rgba(255, 68, 68, 0.28);
+}
+
+.btn-danger-outline:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .btn-pink {
   background: var(--gradient-secondary);
   color: var(--primary-text);

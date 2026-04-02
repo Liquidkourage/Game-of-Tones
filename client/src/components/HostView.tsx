@@ -3181,14 +3181,20 @@ const HostView: React.FC = () => {
                         ) : null;
                       })()}
                       
-                      {/* Reset Event Button - Always available */}
-                      <button
-                        onClick={resetEvent}
-                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                        title="Reset entire event back to the beginning"
-                      >
-                        🔄 Reset Event
-                      </button>
+                      {/* Reset Event — themed outline + hint (matches Display Controls / neon UI) */}
+                      <div className="flex flex-col gap-1.5">
+                        <button
+                          type="button"
+                          onClick={resetEvent}
+                          className="btn-danger-outline"
+                          title="Reset entire event back to the beginning"
+                        >
+                          🔄 Reset Event
+                        </button>
+                        <span className="text-xs text-gray-400 max-w-[14rem] leading-snug">
+                          Clears scores and round state for this room. Cannot be undone.
+                        </span>
+                      </div>
                       </div>
                   </div>
                 </motion.div>
@@ -4632,24 +4638,6 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
-        }
-        .btn-danger {
-          background: #dc2626;
-          border: 1px solid #ef4444;
-          color: white;
-          padding: 8px 16px;
-          border-radius: 6px;
-          cursor: pointer;
-          font-weight: 600;
-          transition: all 0.2s ease;
-        }
-        .btn-danger:hover:not(:disabled) {
-          background: #b91c1c;
-          border-color: #dc2626;
-        }
-        .btn-danger:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
         }
       `}</style>
 
