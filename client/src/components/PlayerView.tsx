@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useParams, useSearchParams } from 'react-router-dom';
 import io from 'socket.io-client';
@@ -85,9 +85,6 @@ const PlayerView: React.FC = () => {
   const [connectionToast, setConnectionToast] = useState<string>('');
   const previousPlayedSongIdsRef = useRef<string[]>([]); // Track previous state for missed songs calculation
   const wasReconnectingRef = useRef<boolean>(false); // Track if we're in a reconnection state
-  /** Flex region below chrome; ResizeObserver → largest square that actually fits (replaces vh guesswork). */
-  const bingoMeasureRef = useRef<HTMLDivElement>(null);
-  const [cardSidePx, setCardSidePx] = useState<number | null>(null);
   const [gameState, setGameState] = useState<GameState>({
     isPlaying: false,
     currentSong: null,
@@ -631,49 +628,6 @@ const PlayerView: React.FC = () => {
     };
   }, []);
 
-  useLayoutEffect(() => {
-    const el = bingoMeasureRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      const t = entry.target as HTMLElement;
-      const w = t.clientWidth;
-      const h = t.clientHeight;
-      if (w < 8 || h < 8) return;
-      let measuredSide = Math.floor(Math.min(w, h) - 2);
-
-      const container = t.closest('.player-container');
-      let fallbackSide = 0;
-      if (container) {
-        const cs = getComputedStyle(container);
-        const parsePx = (raw: string) => {
-          const m = /^([\d.]+)px\s*$/i.exec((raw || '').trim());
-          return m ? parseFloat(m[1]) : NaN;
-        };
-        const wB = parsePx(cs.getPropertyValue('--player-card-w-budget'));
-        const hB = parsePx(cs.getPropertyValue('--player-card-h-budget'));
-        if (Number.isFinite(wB) && Number.isFinite(hB)) {
-          fallbackSide = Math.max(0, Math.floor(Math.min(wB, hB) - 2));
-        }
-      }
-
-      const smallViewport =
-        typeof window !== 'undefined' &&
-        window.matchMedia('(max-width: 520px) and (max-height: 740px)').matches;
-      const side =
-        smallViewport &&
-        fallbackSide > 0 &&
-        measuredSide < fallbackSide * 0.82
-          ? Math.max(measuredSide, fallbackSide)
-          : measuredSide;
-
-      setCardSidePx((prev) => (prev === side ? prev : side));
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
   const markSquare = (position: string) => {
     if (!bingoCard || !socket) return;
 
@@ -1207,28 +1161,14 @@ const PlayerView: React.FC = () => {
   const renderBingoCard = () => {
     if (!bingoCard) {
       return (
-        <div
-          className="loading-card"
-          style={
-            cardSidePx != null && cardSidePx > 0
-              ? { maxWidth: cardSidePx, width: '100%', boxSizing: 'border-box' }
-              : undefined
-          }
-        >
+        <div className="loading-card">
           <p>Waiting for host to start the game...</p>
         </div>
       );
     }
 
     return (
-      <div
-        className="bingo-card"
-        style={
-          cardSidePx != null && cardSidePx > 0
-            ? { width: cardSidePx, height: cardSidePx, boxSizing: 'border-box' }
-            : undefined
-        }
-      >
+      <div className="bingo-card">
         <div className="bingo-card-grid">
           {bingoCard.squares.map((square) => (
             <motion.div
@@ -1288,17 +1228,8 @@ const PlayerView: React.FC = () => {
 
   return (
     <div
-      className={`player-container ${bingoCard ? 'has-card' : ''}${
-        cardSidePx != null && cardSidePx > 0 ? ' player-container--card-measured' : ''
-      }`}
-      style={
-        {
-          '--player-card-font-scale': cardFontPercent / 100,
-          ...(cardSidePx != null && cardSidePx > 0
-            ? ({ '--player-card-side': `${cardSidePx}px` } as React.CSSProperties)
-            : {}),
-        } as React.CSSProperties
-      }
+      className={`player-container ${bingoCard ? 'has-card' : ''}`}
+      style={{ '--player-card-font-scale': cardFontPercent / 100 } as React.CSSProperties}
     >
       {/* Name prompt overlay if no name provided */}
       {!playerName || !playerName.trim() ? (
@@ -1340,196 +1271,191 @@ const PlayerView: React.FC = () => {
           </div>
         </div>
       ) : null}
-      <div className="player-chrome">
-        <motion.div
-          className="player-header"
-          initial={{ opacity: 0, y: -12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45 }}
-        >
-          <div className="player-header-bar">
-            <div className="player-header-identity">
-              <Users className="player-icon" aria-hidden />
-              <span className="player-line">{playerName}</span>
-            </div>
-            <button
-              type="button"
-              className={`conn-chip conn-chip-compact conn-status-${connectionStatus}`}
-              onClick={handleResync}
-              title={
-                connectionStatus === 'connected'
-                  ? 'Connected — tap to resync if you missed a call'
-                  : connectionStatus === 'reconnecting'
-                    ? `Reconnecting (${reconnectAttempts}) — tap to resync`
-                    : 'Disconnected — tap to resync'
-              }
-            >
-              <span
-                className="conn-dot"
-                style={{
-                  background: connectionStatus === 'connected' ? '#1DB954'
-                    : connectionStatus === 'reconnecting' ? '#FFA500'
-                    : '#FF4D4F'
-                }}
-              />
-              <span className="conn-chip-label">Resync</span>
-            </button>
-          </div>
-          <div className="player-header-bingo-row">
-            <div className="player-header-bingo-slot">
+
+      {/* 1) Card first: width-led square (CSS). 2) Name / controls fill space above OS insets (scroll if needed). */}
+      <motion.div
+        className="bingo-section player-bingo-stage"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.45, delay: 0.08 }}
+      >
+        <div className="bingo-section-measure">{renderBingoCard()}</div>
+      </motion.div>
+
+      <div className="player-rest">
+        <div className="player-chrome">
+          <motion.div
+            className="player-header"
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45 }}
+          >
+            <div className="player-header-bar">
+              <div className="player-header-identity">
+                <Users className="player-icon" aria-hidden />
+                <span className="player-line">{playerName}</span>
+              </div>
               <button
                 type="button"
-                className={`bingo-fab bingo-fab--canvas bingo-fab--chrome ${bingoHolding ? 'holding' : ''} ${hasValidBingo ? 'ready' : 'disabled'}`}
-                aria-label={hasValidBingo ? 'Hold to call bingo' : 'Complete a winning pattern to call bingo'}
-                onPointerDown={startBingoHold}
-                onPointerUp={cancelBingoHold}
-                onPointerCancel={cancelBingoHold}
-                onTouchStart={(e) => { e.preventDefault(); startBingoHold(); }}
-                onTouchEnd={(e) => { e.preventDefault(); cancelBingoHold(); }}
-                onTouchCancel={(e) => { e.preventDefault(); cancelBingoHold(); }}
-                onContextMenu={(e) => { e.preventDefault(); return false; }}
-                onMouseDown={(e) => { e.preventDefault(); }}
-                title={hasValidBingo ? 'Hold to call BINGO!' : 'Complete a pattern to call BINGO'}
-                style={{
-                  zIndex: 2,
-                  userSelect: 'none',
-                  WebkitUserSelect: 'none',
-                  MozUserSelect: 'none',
-                  msUserSelect: 'none',
-                  WebkitTouchCallout: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                  touchAction: 'none',
-                }}
+                className={`conn-chip conn-chip-compact conn-status-${connectionStatus}`}
+                onClick={handleResync}
+                title={
+                  connectionStatus === 'connected'
+                    ? 'Connected — tap to resync if you missed a call'
+                    : connectionStatus === 'reconnecting'
+                      ? `Reconnecting (${reconnectAttempts}) — tap to resync`
+                      : 'Disconnected — tap to resync'
+                }
               >
-                <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '4px solid rgba(255,255,255,0.12)' }} />
-                <svg width="100%" height="100%" viewBox="0 0 100 100" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
-                  <circle cx="50" cy="50" r="44" stroke="rgba(255,255,255,0.18)" strokeWidth="8" fill="none" />
-                  <circle cx="50" cy="50" r="44" stroke="#0b3" strokeWidth="8" fill="none" strokeLinecap="round" strokeDasharray={`${Math.max(0.01, holdProgress) * 276} 276`} />
-                </svg>
                 <span
-                  className="bingo-fab-label"
+                  className="conn-dot"
                   style={{
-                    position: 'relative',
-                    zIndex: 1,
+                    background: connectionStatus === 'connected' ? '#1DB954'
+                      : connectionStatus === 'reconnecting' ? '#FFA500'
+                      : '#FF4D4F'
+                  }}
+                />
+                <span className="conn-chip-label">Resync</span>
+              </button>
+            </div>
+            <div className="player-header-bingo-row">
+              <div className="player-header-bingo-slot">
+                <button
+                  type="button"
+                  className={`bingo-fab bingo-fab--canvas bingo-fab--chrome ${bingoHolding ? 'holding' : ''} ${hasValidBingo ? 'ready' : 'disabled'}`}
+                  aria-label={hasValidBingo ? 'Hold to call bingo' : 'Complete a winning pattern to call bingo'}
+                  onPointerDown={startBingoHold}
+                  onPointerUp={cancelBingoHold}
+                  onPointerCancel={cancelBingoHold}
+                  onTouchStart={(e) => { e.preventDefault(); startBingoHold(); }}
+                  onTouchEnd={(e) => { e.preventDefault(); cancelBingoHold(); }}
+                  onTouchCancel={(e) => { e.preventDefault(); cancelBingoHold(); }}
+                  onContextMenu={(e) => { e.preventDefault(); return false; }}
+                  onMouseDown={(e) => { e.preventDefault(); }}
+                  title={hasValidBingo ? 'Hold to call BINGO!' : 'Complete a pattern to call BINGO'}
+                  style={{
+                    zIndex: 2,
                     userSelect: 'none',
                     WebkitUserSelect: 'none',
                     MozUserSelect: 'none',
                     msUserSelect: 'none',
-                    pointerEvents: 'none',
+                    WebkitTouchCallout: 'none',
+                    WebkitTapHighlightColor: 'transparent',
+                    touchAction: 'none',
                   }}
                 >
-                  {bingoHolding ? 'Holding…' :
-                    bingoStatus === 'checking' ? 'Checking...' :
-                    bingoStatus === 'success' ? 'WINNER!' :
-                    hasValidBingo ? 'BINGO READY!' : 'No pattern'}
-                </span>
-              </button>
-            </div>
-          </div>
-          <div className="player-header-meta">
-            <span className="player-meta-line">
-              {gameState.playerCount} players
-              {gameState.isPlaying ? ` · ${songsPlayed} played` : ''}
-            </span>
-            {gameState.hasBingo ? (
-              <span className="player-bingo">BINGO!</span>
-            ) : (
-              <span className="player-bingo-spacer" aria-hidden />
-            )}
-          </div>
-        </motion.div>
-
-        <motion.div
-          className="player-controls player-controls-strip"
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.05 }}
-        >
-          {bingoCard && (
-            <div className="player-controls-row player-controls-row-display">
-              <span className="player-controls-label">Display</span>
-              <div className="player-controls-slot">
-                <span className="player-controls-hint">{displayMode === 'title' ? 'Title' : 'Artist'}</span>
-                <label className="toggle-switch toggle-switch--compact">
-                  <input
-                    type="checkbox"
-                    checked={displayMode === 'artist'}
-                    onChange={(e) => handleDisplayModeToggle(e.target.checked)}
-                  />
-                  <span className="slider" />
-                </label>
+                  <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '4px solid rgba(255,255,255,0.12)' }} />
+                  <svg width="100%" height="100%" viewBox="0 0 100 100" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
+                    <circle cx="50" cy="50" r="44" stroke="rgba(255,255,255,0.18)" strokeWidth="8" fill="none" />
+                    <circle cx="50" cy="50" r="44" stroke="#0b3" strokeWidth="8" fill="none" strokeLinecap="round" strokeDasharray={`${Math.max(0.01, holdProgress) * 276} 276`} />
+                  </svg>
+                  <span
+                    className="bingo-fab-label"
+                    style={{
+                      position: 'relative',
+                      zIndex: 1,
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      MozUserSelect: 'none',
+                      msUserSelect: 'none',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    {bingoHolding ? 'Holding…' :
+                      bingoStatus === 'checking' ? 'Checking...' :
+                      bingoStatus === 'success' ? 'WINNER!' :
+                      hasValidBingo ? 'BINGO READY!' : 'No pattern'}
+                  </span>
+                </button>
               </div>
             </div>
-          )}
-
-          <div
-            className={`player-controls-row player-controls-row-textsize${!bingoCard ? ' player-controls-row-full' : ''}`}
-          >
-            <span className="player-controls-label">Card text</span>
-            <div className="player-controls-slot player-font-size-controls">
-              <button
-                type="button"
-                className="player-font-btn"
-                onClick={() => bumpCardFont(-CARD_FONT_STEP)}
-                disabled={cardFontPercent <= CARD_FONT_MIN}
-                aria-label="Smaller card text"
-                title="Smaller"
-              >
-                −
-              </button>
-              <span className="font-size-readout" title="Bingo square text size">
-                {cardFontPercent}%
+            <div className="player-header-meta">
+              <span className="player-meta-line">
+                {gameState.playerCount} players
+                {gameState.isPlaying ? ` · ${songsPlayed} played` : ''}
               </span>
-              <button
-                type="button"
-                className="player-font-btn"
-                onClick={() => bumpCardFont(CARD_FONT_STEP)}
-                disabled={cardFontPercent >= CARD_FONT_MAX}
-                aria-label="Larger card text"
-                title="Larger"
-              >
-                +
-              </button>
+              {gameState.hasBingo ? (
+                <span className="player-bingo">BINGO!</span>
+              ) : (
+                <span className="player-bingo-spacer" aria-hidden />
+              )}
             </div>
-          </div>
-        </motion.div>
-
-        {/* Connection toast lives in chrome (below controls) so it never stacks over the bingo grid */}
-        {connectionToast && (
-          <motion.div
-            className="player-connection-toast"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            style={{
-              background: connectionToast.includes('missed')
-                ? 'linear-gradient(135deg, #ffaa00, #ff8800)'
-                : connectionToast.includes('Reconnected')
-                  ? 'linear-gradient(135deg, #00ff88, #00cc6d)'
-                  : 'rgba(255,255,255,0.15)',
-            }}
-          >
-            {connectionToast}
           </motion.div>
-        )}
-      </div>
 
-      {/* Main Content */}
-      <div className="player-content">
-        <motion.div
-          className="bingo-section"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.45, delay: 0.15 }}
-        >
-          <div className="bingo-section-measure" ref={bingoMeasureRef}>
-            {renderBingoCard()}
-          </div>
-        </motion.div>
+          <motion.div
+            className="player-controls player-controls-strip"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: 0.05 }}
+          >
+            {bingoCard && (
+              <div className="player-controls-row player-controls-row-display">
+                <span className="player-controls-label">Display</span>
+                <div className="player-controls-slot">
+                  <span className="player-controls-hint">{displayMode === 'title' ? 'Title' : 'Artist'}</span>
+                  <label className="toggle-switch toggle-switch--compact">
+                    <input
+                      type="checkbox"
+                      checked={displayMode === 'artist'}
+                      onChange={(e) => handleDisplayModeToggle(e.target.checked)}
+                    />
+                    <span className="slider" />
+                  </label>
+                </div>
+              </div>
+            )}
 
-        {/* Game Status and Instructions removed per request */}
+            <div
+              className={`player-controls-row player-controls-row-textsize${!bingoCard ? ' player-controls-row-full' : ''}`}
+            >
+              <span className="player-controls-label">Card text</span>
+              <div className="player-controls-slot player-font-size-controls">
+                <button
+                  type="button"
+                  className="player-font-btn"
+                  onClick={() => bumpCardFont(-CARD_FONT_STEP)}
+                  disabled={cardFontPercent <= CARD_FONT_MIN}
+                  aria-label="Smaller card text"
+                  title="Smaller"
+                >
+                  −
+                </button>
+                <span className="font-size-readout" title="Bingo square text size">
+                  {cardFontPercent}%
+                </span>
+                <button
+                  type="button"
+                  className="player-font-btn"
+                  onClick={() => bumpCardFont(CARD_FONT_STEP)}
+                  disabled={cardFontPercent >= CARD_FONT_MAX}
+                  aria-label="Larger card text"
+                  title="Larger"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          </motion.div>
 
-        {/* Bingo Status Feedback */}
+          {connectionToast && (
+            <motion.div
+              className="player-connection-toast"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              style={{
+                background: connectionToast.includes('missed')
+                  ? 'linear-gradient(135deg, #ffaa00, #ff8800)'
+                  : connectionToast.includes('Reconnected')
+                    ? 'linear-gradient(135deg, #00ff88, #00cc6d)'
+                    : 'rgba(255,255,255,0.15)',
+              }}
+            >
+              {connectionToast}
+            </motion.div>
+          )}
+        </div>
+
         {(bingoStatus !== 'idle' || bingoMessage) && (
           <motion.div
             className="player-bingo-status-toast"
@@ -1578,7 +1504,6 @@ const PlayerView: React.FC = () => {
           </motion.div>
         )}
 
-        {/* Long-press: title + artist (fixed; avoids overflow clip) */}
         {longPressTooltip && (
           <div className="player-longpress-tooltip" role="status" aria-live="polite">
             <div className="player-longpress-tooltip-heading">Title</div>

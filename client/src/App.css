@@ -94,6 +94,26 @@ body {
   text-shadow: var(--neon-glow);
 }
 
+/* Player route: TEMPO bar stays full width but uses less vertical space — more room for card + controls */
+.app-container:has(.player-container) .app-header {
+  padding: 0.22rem 0;
+}
+.app-container:has(.player-container) .logo {
+  gap: 0.35rem;
+}
+.app-container:has(.player-container) .logo-icon {
+  width: 2rem;
+  height: 2rem;
+}
+.app-container:has(.player-container) .logo h1 {
+  font-size: clamp(1.15rem, 4.2vw, 1.65rem);
+  line-height: 1.15;
+}
+
+.app-container:has(.player-container) .logo > span {
+  display: none;
+}
+
 .header-icons {
   display: flex;
   gap: 1rem;
@@ -1094,31 +1114,30 @@ body {
   flex-shrink: 0;
 }
 
-.player-container .bingo-section {
+/* Card first: width-led square; name/chrome below fills space above OS insets (see .player-rest). */
+.player-container .player-bingo-stage {
   position: relative;
-  flex: 1 1 0;
-  min-height: 0;
+  flex: 0 0 auto;
   min-width: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: stretch;
   align-items: stretch;
-  padding: 0.65rem 0 0;
+  padding: 0.35rem 4px 0;
+  box-sizing: border-box;
   align-self: stretch;
-  overflow: hidden;
 }
 
-/* Fills the flex region below chrome; absolute avoids WebKit flex min-content collapse (SE-class). */
+.player-container .player-bingo-stage.bingo-section {
+  overflow: visible;
+}
+
 .player-container .bingo-section-measure {
-  position: absolute;
-  inset: 0;
   box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
-  min-height: 0;
+  width: 100%;
   min-width: 0;
 }
 
@@ -1127,19 +1146,16 @@ body {
   margin-bottom: 0.5rem;
 }
 
-/* Player bingo card: square. Primary size from ResizeObserver (player-container--card-measured); fallback before first measure uses vh budget. */
-.player-container:not(.player-container--card-measured) .bingo-card {
-  width: min(var(--player-card-w-budget), max(0px, var(--player-card-h-budget))) !important;
-}
-
-.player-container.player-container--card-measured .bingo-card {
-  width: var(--player-card-side) !important;
-  height: var(--player-card-side) !important;
-  max-width: 100% !important;
-}
-
+/* Primary: screen width drives the square; cap height so card + chrome fit in viewport. */
 .player-container .bingo-card {
+  width: min(100%, calc(100vw - 8px)) !important;
   max-width: 100% !important;
+  max-height: min(
+    calc(100vw - 8px),
+    calc(
+      100dvh - env(safe-area-inset-top, 0px) - var(--player-app-header-offset) - var(--player-nav-bottom) - 6px
+    )
+  ) !important;
   height: auto !important;
   aspect-ratio: 1 / 1 !important;
   flex: none !important;
@@ -1148,8 +1164,11 @@ body {
   margin: 0 auto !important;
 }
 
-.player-container.player-container--card-measured .bingo-card {
-  aspect-ratio: unset !important;
+@supports not (max-height: min(1px, 2px)) {
+  .player-container .bingo-card {
+    width: min(var(--player-card-w-budget), max(0px, var(--player-card-h-budget))) !important;
+    max-height: none !important;
+  }
 }
 
 .player-container .bingo-card-grid {
@@ -1203,7 +1222,7 @@ body {
 
 /* Responsive breakpoints for different screen sizes */
 @media (max-width: 768px) {
-  /* Player card size: PlayerView ResizeObserver â€” do not force vw here */
+  /* Player card size: container queries + --player-card-*-budget — do not force vw here */
   .bingo-card-grid { gap: 0 !important; }
   
   .bingo-square { padding: 0 !important; }
@@ -1281,8 +1300,8 @@ body {
   /* Bottom FAB row removed — call control is in chrome; slightly lower reserve. */
   /* Reserve ≈ player chrome (controls + bingo row + meta); tune up on short phones so h-budget matches real chrome height. */
   --player-layout-reserve: clamp(240px, 36vw, 400px);
-  /* App header (TEMPO bar) sits outside .player-container; must subtract or the card overflows main. */
-  --player-app-header-offset: 56px;
+  /* App header (TEMPO bar) sits outside .player-container; compact header on player route. */
+  --player-app-header-offset: 44px;
   /* Prefer small/dynamic viewport min; @supports upgrades when svh exists. */
   --player-vh-budget: 100dvh;
   --player-card-w-budget: calc(100vw - 8px);
@@ -1334,7 +1353,8 @@ body {
   }
 }
 
-.player-container .player-content {
+/* Below the card: name, BINGO, controls — grows into space above OS home indicator; scrolls if needed */
+.player-container .player-rest {
   position: relative;
   flex: 1 1 0;
   min-height: 0;
@@ -1464,7 +1484,7 @@ body {
   }
 }
 
-.player-container .player-content .player-longpress-tooltip {
+.player-container .player-rest .player-longpress-tooltip {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -1473,21 +1493,24 @@ body {
   max-width: min(300px, calc(100% - 16px));
 }
 
-.player-container .player-content .player-bingo-status-toast {
+.player-container .player-rest .player-bingo-status-toast {
   bottom: calc(12px + 28px) !important;
 }
 
 
-/* --- Player chrome inside logical canvas: one shell, minimal vertical space, 360px-wide layout --- */
+/* --- Player chrome: under the card; fills remaining column above safe-area padding --- */
 .player-container .player-chrome {
-  margin: 0 0.2rem 0.2rem;
+  margin: 0.35rem 0.2rem 0.15rem;
   padding: 0;
   border-radius: 10px;
   border: 1px solid var(--border-accent-soft);
   background: var(--surface-card);
   backdrop-filter: blur(20px);
-  flex-shrink: 0;
-  overflow: hidden;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -1859,11 +1882,12 @@ button.conn-chip.conn-chip-compact {
   max-width: 100%;
 }
 
-.player-content {
+.player-content,
+.player-rest {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start; /* slot flex:1 fills space; card centered inside grid */
+  justify-content: flex-start;
   max-width: 100%;
   margin: 0 auto;
   min-height: 0;
@@ -1871,7 +1895,7 @@ button.conn-chip.conn-chip-compact {
   padding: 0 0.5rem 0 0.5rem;
 }
 
-/* Player card visuals + layout (size: see .player-container .bingo-card above + PlayerView inline px) */
+/* Player card visuals + layout (size: width-led square + dvh cap in .player-container .bingo-card) */
 .player-container .bingo-card {
   background: var(--surface-card);
   backdrop-filter: blur(20px);
@@ -2995,7 +3019,7 @@ button.conn-chip.conn-chip-compact {
     gap: 0.45rem;
   }
   
-  /* Player bingo card only (only PlayerView uses .bingo-card); keep JS sizing, avoid fighting centering */
+  /* Player bingo card only (only PlayerView uses .bingo-card) */
   .player-container .bingo-card {
     max-width: 100%;
     margin-inline: auto;
