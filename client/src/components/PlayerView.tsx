@@ -1287,6 +1287,55 @@ const PlayerView: React.FC = () => {
               <Users className="player-icon" aria-hidden />
               <span className="player-line">{playerName}</span>
             </div>
+            <div className="player-header-bingo-slot">
+              <button
+                type="button"
+                className={`bingo-fab bingo-fab--canvas bingo-fab--chrome ${bingoHolding ? 'holding' : ''} ${hasValidBingo ? 'ready' : 'disabled'}`}
+                aria-label={hasValidBingo ? 'Hold to call bingo' : 'Complete a winning pattern to call bingo'}
+                onPointerDown={startBingoHold}
+                onPointerUp={cancelBingoHold}
+                onPointerCancel={cancelBingoHold}
+                onTouchStart={(e) => { e.preventDefault(); startBingoHold(); }}
+                onTouchEnd={(e) => { e.preventDefault(); cancelBingoHold(); }}
+                onTouchCancel={(e) => { e.preventDefault(); cancelBingoHold(); }}
+                onContextMenu={(e) => { e.preventDefault(); return false; }}
+                onMouseDown={(e) => { e.preventDefault(); }}
+                title={hasValidBingo ? 'Hold to call BINGO!' : 'Complete a pattern to call BINGO'}
+                style={{
+                  zIndex: 2,
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
+                  MozUserSelect: 'none',
+                  msUserSelect: 'none',
+                  WebkitTouchCallout: 'none',
+                  WebkitTapHighlightColor: 'transparent',
+                  touchAction: 'none',
+                }}
+              >
+                <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '4px solid rgba(255,255,255,0.12)' }} />
+                <svg width="100%" height="100%" viewBox="0 0 100 100" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
+                  <circle cx="50" cy="50" r="44" stroke="rgba(255,255,255,0.18)" strokeWidth="8" fill="none" />
+                  <circle cx="50" cy="50" r="44" stroke="#0b3" strokeWidth="8" fill="none" strokeLinecap="round" strokeDasharray={`${Math.max(0.01, holdProgress) * 276} 276`} />
+                </svg>
+                <span
+                  className="bingo-fab-label"
+                  style={{
+                    position: 'relative',
+                    zIndex: 1,
+                    userSelect: 'none',
+                    WebkitUserSelect: 'none',
+                    MozUserSelect: 'none',
+                    msUserSelect: 'none',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  {bingoHolding ? 'Holding…' :
+                    bingoStatus === 'checking' ? 'Checking...' :
+                    bingoStatus === 'success' ? 'WINNER!' :
+                    hasValidBingo ? 'BINGO READY!' : 'No pattern'}
+                </span>
+              </button>
+            </div>
             <button
               type="button"
               className={`conn-chip conn-chip-compact conn-status-${connectionStatus}`}
@@ -1469,54 +1518,6 @@ const PlayerView: React.FC = () => {
             <div className="player-longpress-tooltip-line">{longPressTooltip.artist}</div>
           </div>
         )}
-
-        {/* bottom sheet removed per request — FAB in flow so it scales with the logical canvas */}
-        <div className="player-fab-row">
-        <button
-          type="button"
-          className={`bingo-fab bingo-fab--canvas ${bingoHolding ? 'holding' : ''} ${hasValidBingo ? 'ready' : 'disabled'}`}
-          aria-label={hasValidBingo ? 'Hold to call bingo' : 'Complete a winning pattern to call bingo'}
-          onPointerDown={startBingoHold}
-          onPointerUp={cancelBingoHold}
-          onPointerCancel={cancelBingoHold}
-          onTouchStart={(e) => { e.preventDefault(); startBingoHold(); }}
-          onTouchEnd={(e) => { e.preventDefault(); cancelBingoHold(); }}
-          onTouchCancel={(e) => { e.preventDefault(); cancelBingoHold(); }}
-          onContextMenu={(e) => { e.preventDefault(); return false; }}
-          onMouseDown={(e) => { e.preventDefault(); }}
-          title={hasValidBingo ? "Hold to call BINGO!" : "Complete a pattern to call BINGO"}
-          style={{
-            zIndex: 1100,
-            userSelect: 'none',
-            WebkitUserSelect: 'none',
-            MozUserSelect: 'none',
-            msUserSelect: 'none',
-            WebkitTouchCallout: 'none',
-            WebkitTapHighlightColor: 'transparent',
-            touchAction: 'none'
-          }}
-        >
-          <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '6px solid rgba(255,255,255,0.15)' }} />
-          <svg width="100%" height="100%" viewBox="0 0 100 100" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
-            <circle cx="50" cy="50" r="44" stroke="rgba(255,255,255,0.18)" strokeWidth="8" fill="none" />
-            <circle cx="50" cy="50" r="44" stroke="#0b3" strokeWidth="8" fill="none" strokeLinecap="round" strokeDasharray={`${Math.max(0.01, holdProgress) * 276} 276`} />
-          </svg>
-          <span className="bingo-fab-label" style={{ 
-            position: 'relative', 
-            zIndex: 1, 
-            userSelect: 'none',
-            WebkitUserSelect: 'none',
-            MozUserSelect: 'none',
-            msUserSelect: 'none',
-            pointerEvents: 'none',
-          }}>
-            {bingoHolding ? 'Holding…' : 
-             bingoStatus === 'checking' ? 'Checking...' :
-             bingoStatus === 'success' ? 'WINNER!' :
-             hasValidBingo ? 'BINGO READY!' : 'No pattern'}
-          </span>
-        </button>
-        </div>
       </div>
     </div>
   );
