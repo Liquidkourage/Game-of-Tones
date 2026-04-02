@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Music, 
   Users, 
@@ -16,8 +16,39 @@ import {
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [playerName, setPlayerName] = useState('');
   const [roomId, setRoomId] = useState('');
+
+  /** Player / QR links: ?join, ?mode=player, ?player=1 — hide host path unless explicitly opened */
+  const joinOnly = useMemo(() => {
+    if (searchParams.has('join')) return true;
+    const m = searchParams.get('mode');
+    if (m === 'player' || m === 'join') return true;
+    if (searchParams.get('player') === '1') return true;
+    return false;
+  }, [searchParams]);
+
+  const [homeMode, setHomeMode] = useState<'join' | 'host'>(() => {
+    const m = searchParams.get('mode');
+    if (m === 'host' || searchParams.get('host') === '1') return 'host';
+    return 'join';
+  });
+
+  useEffect(() => {
+    const m = searchParams.get('mode');
+    if (m === 'host' || searchParams.get('host') === '1') setHomeMode('host');
+    else if (joinOnly) setHomeMode('join');
+  }, [searchParams, joinOnly]);
+
+  const showHostSetup = () => {
+    setHomeMode('host');
+    const next = new URLSearchParams(searchParams);
+    next.delete('join');
+    next.set('mode', 'host');
+    next.delete('player');
+    setSearchParams(next, { replace: true });
+  };
 
   const generateRoomId = () => {
     const id = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -84,25 +115,56 @@ const Home: React.FC = () => {
         </div>
       </motion.div>
 
-      {/* Game Options */}
+      {/* Game Options — join-first; host is a second tab or behind link when ?join / player link */}
       <motion.div 
         className="game-options"
         initial={{ opacity: 0, y: 50 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, delay: 0.6 }}
       >
-        <div className="options-grid">
-          {/* Host Game */}
+        {!joinOnly && (
+          <div className="home-mode-tabs" role="tablist" aria-label="How are you joining?">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={homeMode === 'join'}
+              className={`home-mode-tab ${homeMode === 'join' ? 'home-mode-tab--active' : ''}`}
+              onClick={() => setHomeMode('join')}
+            >
+              <UserPlus className="home-mode-tab-icon" aria-hidden />
+              Join a game
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={homeMode === 'host'}
+              className={`home-mode-tab ${homeMode === 'host' ? 'home-mode-tab--active' : ''}`}
+              onClick={() => setHomeMode('host')}
+            >
+              <Crown className="home-mode-tab-icon" aria-hidden />
+              Host a game
+            </button>
+          </div>
+        )}
+
+        {joinOnly && (
+          <p className="home-join-only-hint">
+            Enter your name and the room code from your host to play.
+          </p>
+        )}
+
+        <div className="options-grid options-grid--single">
+          {(joinOnly || homeMode === 'join') && (
           <motion.div 
-            className="option-card host-card"
-            whileHover={{ scale: 1.05, y: -10 }}
-            whileTap={{ scale: 0.95 }}
+            className="option-card join-card"
+            whileHover={{ scale: 1.02, y: -6 }}
+            whileTap={{ scale: 0.98 }}
           >
             <div className="card-header">
-              <Crown className="card-icon" />
-              <h3>Host a Game</h3>
+              <UserPlus className="card-icon" />
+              <h3>Join a Game</h3>
             </div>
-            <p>Create a new music bingo session and control the playlist</p>
+            <p>Join an existing game with the room code your host shared.</p>
             
             <div className="input-group">
               <input
@@ -111,6 +173,58 @@ const Home: React.FC = () => {
                 value={playerName}
                 onChange={(e) => setPlayerName(e.target.value)}
                 className="input"
+                autoComplete="nickname"
+              />
+            </div>
+
+            <div className="input-group">
+              <input
+                type="text"
+                placeholder="Room code"
+                value={roomId}
+                onChange={(e) => setRoomId(e.target.value.toUpperCase())}
+                className="input"
+                autoCapitalize="characters"
+                autoCorrect="off"
+              />
+            </div>
+
+            <button 
+              onClick={joinGame}
+              className="btn btn-pink"
+            >
+              <UserPlus className="btn-icon" />
+              Join Game
+            </button>
+
+            {joinOnly && (
+              <button type="button" className="home-host-reveal" onClick={showHostSetup}>
+                I'm hosting — open host setup
+              </button>
+            )}
+          </motion.div>
+          )}
+
+          {!joinOnly && homeMode === 'host' && (
+          <motion.div 
+            className="option-card host-card"
+            whileHover={{ scale: 1.02, y: -6 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <div className="card-header">
+              <Crown className="card-icon" />
+              <h3>Host a Game</h3>
+            </div>
+            <p>Create a new music bingo session and control the playlist.</p>
+            
+            <div className="input-group">
+              <input
+                type="text"
+                placeholder="Your name"
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                className="input"
+                autoComplete="nickname"
               />
             </div>
 
@@ -121,6 +235,8 @@ const Home: React.FC = () => {
                 value={roomId}
                 onChange={(e) => setRoomId(e.target.value.toUpperCase())}
                 className="input"
+                autoCapitalize="characters"
+                autoCorrect="off"
               />
               <button 
                 onClick={generateRoomId}
@@ -138,47 +254,7 @@ const Home: React.FC = () => {
               Start Hosting
             </button>
           </motion.div>
-
-          {/* Join Game */}
-          <motion.div 
-            className="option-card join-card"
-            whileHover={{ scale: 1.05, y: -10 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <div className="card-header">
-              <UserPlus className="card-icon" />
-              <h3>Join a Game</h3>
-            </div>
-            <p>Join an existing game with the room code</p>
-            
-            <div className="input-group">
-              <input
-                type="text"
-                placeholder="Your name"
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
-                className="input"
-              />
-            </div>
-
-            <div className="input-group">
-              <input
-                type="text"
-                placeholder="Room ID"
-                value={roomId}
-                onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-                className="input"
-              />
-            </div>
-
-            <button 
-              onClick={joinGame}
-              className="btn btn-pink"
-            >
-              <UserPlus className="btn-icon" />
-              Join Game
-            </button>
-          </motion.div>
+          )}
         </div>
       </motion.div>
 
