@@ -1377,17 +1377,14 @@ const PlayerView: React.FC = () => {
             </div>
           </div>
         </motion.div>
-      </div>
 
-      {/* Main Content */}
-      <div className="player-content">
-        {/* Connection toast in document flow so it does not overlay the card grid */}
+        {/* Connection toast lives in chrome (below controls) so it never stacks over the bingo grid */}
         {connectionToast && (
           <motion.div
             className="player-connection-toast"
-            initial={{ opacity: 0, y: 12 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 12 }}
+            exit={{ opacity: 0, y: 8 }}
             style={{
               background: connectionToast.includes('missed')
                 ? 'linear-gradient(135deg, #ffaa00, #ff8800)'
@@ -1399,7 +1396,10 @@ const PlayerView: React.FC = () => {
             {connectionToast}
           </motion.div>
         )}
+      </div>
 
+      {/* Main Content */}
+      <div className="player-content">
         <motion.div
           className="bingo-section"
           initial={{ opacity: 0 }}

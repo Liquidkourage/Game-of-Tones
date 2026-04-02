@@ -1255,6 +1255,13 @@ body {
   --player-layout-reserve: clamp(220px, 36vw, 430px);
 }
 
+/* Short + narrow phones (e.g. Galaxy S5 class): vmin tightens reserve when vw-only leaves the grid too small. */
+@media (max-width: 480px) and (max-height: 720px) {
+  .player-container {
+    --player-layout-reserve: clamp(200px, 38vmin, 380px);
+  }
+}
+
 /* Wide screens: OS insets usually suffice; avoid huge bottom gap */
 @media (min-width: 769px) {
   .player-container {
@@ -1276,21 +1283,21 @@ body {
   --fab-logical-size: 72px;
 }
 
-/* In flow so it does not cover the bingo grid (was position:absolute; top:8). */
-.player-container .player-content .player-connection-toast {
+/* In chrome, below controls — never overlaps the bingo card (see PlayerView). */
+.player-container .player-chrome .player-connection-toast {
   flex-shrink: 0;
-  align-self: center;
-  margin: 0 auto 6px;
-  padding: 10px 18px;
-  border-radius: 25px;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 1.25;
   text-align: center;
-  min-width: min(200px, 100%);
-  max-width: min(312px, calc(100% - 16px));
-  border: 2px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(10px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
   color: #ffffff;
 }
 

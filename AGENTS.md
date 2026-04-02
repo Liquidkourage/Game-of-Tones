@@ -1,4 +1,4 @@
-﻿# Agent / assistant conventions (Game of Tones)
+# Agent / assistant conventions (Game of Tones)
 
 ## Speed vs. safety
 
@@ -7,7 +7,7 @@
   - `package.json` / deps changed, or
   - you changed build config / env handling, or
   - the user explicitly wants a production build verified.
-- **Commit + push** when the user asked to ship changes (batch logical fixes into one commit when possible).
+- **Commit + push** after completing work unless the user says not to (batch logical fixes into one commit when possible).
 
 ## Repo layout
 
