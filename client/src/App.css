@@ -1095,7 +1095,7 @@ body {
 }
 
 .player-container .bingo-section {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-height: 0;
   min-width: 0;
   width: 100%;
@@ -1116,7 +1116,7 @@ body {
 
 /* Player bingo card: square. Reserve includes app header + chrome + FAB; subtract nav so column does not overflow (clips FAB). */
 .player-container .bingo-card {
-  width: min(100vw - 8px, calc(100dvh - 430px - var(--player-nav-bottom, 0px))) !important;
+  width: min(100vw - 8px, calc(100dvh - var(--player-layout-reserve, 430px) - var(--player-nav-bottom, 0px))) !important;
   max-width: 100% !important;
   height: auto !important;
   aspect-ratio: 1 / 1 !important;
@@ -1251,12 +1251,15 @@ body {
   box-sizing: border-box;
   overflow: hidden;
   --player-card-font-scale: 1;
+  /* Narrow viewports need a smaller subtract than 430px or the grid stays tiny; wide keeps ~430–480px headroom. */
+  --player-layout-reserve: clamp(220px, 36vw, 430px);
 }
 
 /* Wide screens: OS insets usually suffice; avoid huge bottom gap */
 @media (min-width: 769px) {
   .player-container {
     --player-nav-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
+    --player-layout-reserve: clamp(280px, 32vw, 480px);
   }
 }
 
@@ -1271,6 +1274,24 @@ body {
   width: 100%;
   padding-bottom: 0;
   --fab-logical-size: 72px;
+}
+
+/* In flow so it does not cover the bingo grid (was position:absolute; top:8). */
+.player-container .player-content .player-connection-toast {
+  flex-shrink: 0;
+  align-self: center;
+  margin: 0 auto 6px;
+  padding: 10px 18px;
+  border-radius: 25px;
+  font-weight: 600;
+  font-size: 14px;
+  text-align: center;
+  min-width: min(200px, 100%);
+  max-width: min(312px, calc(100% - 16px));
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  color: #ffffff;
 }
 
 /* Do not flex-grow: keeps the bingo button in the viewport (no clip under overflow:hidden). */
@@ -1331,23 +1352,6 @@ body {
     max-height: none;
     min-height: 0;
     font-size: clamp(11px, 3vw, 16px);
-  }
-  /* Reserve vertical space for header + chrome + FAB + nav bottom */
-  .player-container .bingo-card {
-    width: min(100vw - 8px, calc(100dvh - 450px - var(--player-nav-bottom, 0px))) !important;
-  }
-}
-
-/* Short portrait viewports (old/small phones, e.g. Galaxy S5): large dvh subtract made the grid tiny — smaller layout reserve. */
-@media (max-height: 740px) and (orientation: portrait) {
-  .player-container .bingo-card {
-    width: min(100vw - 8px, calc(100dvh - 280px - var(--player-nav-bottom, 0px))) !important;
-  }
-}
-
-@media (max-height: 640px) and (orientation: portrait) {
-  .player-container .bingo-card {
-    width: min(100vw - 8px, calc(100dvh - 210px - var(--player-nav-bottom, 0px))) !important;
   }
 }
 

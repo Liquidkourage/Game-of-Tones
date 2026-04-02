@@ -1381,6 +1381,25 @@ const PlayerView: React.FC = () => {
 
       {/* Main Content */}
       <div className="player-content">
+        {/* Connection toast in document flow so it does not overlay the card grid */}
+        {connectionToast && (
+          <motion.div
+            className="player-connection-toast"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            style={{
+              background: connectionToast.includes('missed')
+                ? 'linear-gradient(135deg, #ffaa00, #ff8800)'
+                : connectionToast.includes('Reconnected')
+                  ? 'linear-gradient(135deg, #00ff88, #00cc6d)'
+                  : 'rgba(255,255,255,0.15)',
+            }}
+          >
+            {connectionToast}
+          </motion.div>
+        )}
+
         <motion.div
           className="bingo-section"
           initial={{ opacity: 0 }}
@@ -1391,42 +1410,6 @@ const PlayerView: React.FC = () => {
         </motion.div>
 
         {/* Game Status and Instructions removed per request */}
-
-        {/* Connection Status Toast */}
-        {connectionToast && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            style={{
-              position: 'absolute',
-              top: 8,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              padding: '12px 20px',
-              borderRadius: '25px',
-              fontWeight: 600,
-              fontSize: 14,
-              zIndex: 1200,
-              textAlign: 'center',
-              minWidth: 200,
-              maxWidth: 312,
-              background: connectionToast.includes('missed') 
-                ? 'linear-gradient(135deg, #ffaa00, #ff8800)'
-                : connectionToast.includes('Reconnected')
-                ? 'linear-gradient(135deg, #00ff88, #00cc6d)'
-                : 'rgba(255,255,255,0.15)',
-              color: connectionToast.includes('missed') || connectionToast.includes('Reconnected')
-                ? '#ffffff'
-                : '#ffffff',
-              border: '2px solid rgba(255,255,255,0.2)',
-              backdropFilter: 'blur(10px)',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
-            }}
-          >
-            {connectionToast}
-          </motion.div>
-        )}
 
         {/* Bingo Status Feedback */}
         {(bingoStatus !== 'idle' || bingoMessage) && (
