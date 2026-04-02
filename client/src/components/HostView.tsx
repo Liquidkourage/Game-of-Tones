@@ -2659,6 +2659,11 @@ const HostView: React.FC = () => {
     }
   }, [roomId]);
 
+  /** True when the host has a built pool to show (matches visibility of Finalized Playlist block). */
+  const hasFinalizedSongPool =
+    songList.length > 0 ||
+    (finalizedOrder?.length ?? 0) > 0 ||
+    mixFinalized;
 
   return (
     <div className="host-view">
@@ -3598,24 +3603,36 @@ const HostView: React.FC = () => {
              </div>
            </motion.div>
 
-                {/* Debug Info */}
-                <div style={{ 
-                  background: 'rgba(255,0,0,0.1)', 
-                  border: '1px solid rgba(255,0,0,0.3)', 
-                  padding: '10px', 
-                  margin: '10px 0',
-                  fontSize: '0.8rem',
-                  color: '#ff6666'
-                }}>
-                  DEBUG: songList.length = {songList.length}, finalizedOrder?.length = {finalizedOrder?.length}
-                  <br />
-                  Condition: {(songList.length > 0 || (finalizedOrder?.length ?? 0) > 0) ? 'TRUE' : 'FALSE'}
-                  <br />
-                  mixFinalized = {mixFinalized ? 'true' : 'false'}
-                </div>
+                {gameState === 'waiting' && !currentSong && !hasFinalizedSongPool && (
+                  <div
+                    style={{
+                      marginTop: 16,
+                      padding: '14px 16px',
+                      borderRadius: 10,
+                      background: 'rgba(0, 255, 136, 0.06)',
+                      border: '1px solid rgba(0, 255, 136, 0.22)',
+                      borderLeft: '4px solid #00ff88',
+                    }}
+                  >
+                    <p style={{ margin: 0, fontSize: '0.92rem', color: '#e8fff4', fontWeight: 600 }}>
+                      No song mix yet
+                    </p>
+                    <p style={{
+                      margin: '8px 0 0',
+                      fontSize: '0.82rem',
+                      color: 'rgba(255,255,255,0.72)',
+                      lineHeight: 1.45,
+                      maxWidth: 520,
+                    }}>
+                      {selectedPlaylists.length === 0
+                        ? 'Open the Manager tab, connect Spotify if needed, and select playlists for this round. Then return here to finalize or start the game.'
+                        : 'Tap Finalize Mix or Start Game to build the bingo song pool from your selected playlists.'}
+                    </p>
+                  </div>
+                )}
 
                 {/* Finalized Playlist Display */}
-                {(songList.length > 0 || (finalizedOrder?.length ?? 0) > 0 || mixFinalized) && (
+                {hasFinalizedSongPool && (
                   <motion.div
                     className="finalized-playlist-section"
                     initial={{ opacity: 0 }}
