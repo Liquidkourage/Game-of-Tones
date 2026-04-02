@@ -147,8 +147,8 @@ const PlayerView: React.FC = () => {
 
     /** Raw layout-vs-visual gap; on iOS Safari this is often ~0 even when the bottom bar covers content. */
     const RAW_GAP_NEAR_ZERO_PX = 8;
-    /** Used when raw gap is unreliable — must clear the Safari bottom bar + tab strip. */
-    const IOS_MOBILE_SAFARI_FALLBACK_PX = 64;
+    /** Used when raw gap is unreliable — balance clearing Safari UI vs excess empty band */
+    const IOS_MOBILE_SAFARI_FALLBACK_PX = 48;
 
     const isIosTouchDevice = (): boolean => {
       if (typeof navigator === 'undefined') return false;
