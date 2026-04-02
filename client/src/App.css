@@ -1095,8 +1095,8 @@ body {
 }
 
 .player-container .bingo-section {
-  flex: 0 1 auto;
-  min-height: 200px;
+  flex: 1 1 auto;
+  min-height: 0;
   min-width: 0;
   width: 100%;
   display: flex;
@@ -1104,6 +1104,7 @@ body {
   align-items: flex-start;
   padding: 0.65rem 0 0;
   align-self: stretch;
+  overflow: hidden;
 }
 
 /* bingo-section: flex area for card (ResizeObserver measures it); centers square card */
@@ -1113,9 +1114,9 @@ body {
   margin-bottom: 0.5rem;
 }
 
-/* Player bingo card: edge-to-edge, full width, square. Reserve ~280px for chrome + FAB so button never clips. */
+/* Player bingo card: square. dvh budget must include app header + player chrome + FAB + safe areas (was 280; too tight). */
 .player-container .bingo-card {
-  width: min(100vw - 8px, calc(100dvh - 280px)) !important;
+  width: min(100vw - 8px, calc(100dvh - 340px)) !important;
   max-width: 100% !important;
   height: auto !important;
   aspect-ratio: 1 / 1 !important;
@@ -1258,32 +1259,35 @@ body {
   overflow: hidden;
   padding: 0 4px;
   width: 100%;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px));
   --fab-logical-size: 72px;
 }
 
+/* Do not flex-grow: keeps the bingo button in the viewport (no clip under overflow:hidden). */
 .player-container .player-fab-row {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  flex-shrink: 0;
   min-height: 48px;
   display: flex;
   justify-content: center;
-  align-items: flex-end;
+  align-items: center;
   padding: 6px 0 4px;
-  padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
   width: 100%;
   box-sizing: border-box;
 }
 
+/* Mobile: explicit circle size — height:100% inside a tall flex row pushed the FAB off-screen. */
 .player-container .bingo-fab.bingo-fab--canvas {
   position: relative !important;
   left: auto !important;
   bottom: auto !important;
   transform: none !important;
   flex-shrink: 0;
-  width: auto;
-  height: 100%;
-  max-height: min(120px, 100%);
-  min-height: 56px;
+  width: clamp(56px, 24vw, 104px);
+  height: clamp(56px, 24vw, 104px);
+  max-height: none;
+  min-height: 0;
   aspect-ratio: 1;
   border-radius: 50%;
   padding: 0 6px;
@@ -1320,9 +1324,9 @@ body {
     min-height: 0;
     font-size: clamp(11px, 3vw, 16px);
   }
-  /* Reserve more vertical space for card on wide viewports so FAB always has room */
+  /* Reserve vertical space for header + chrome + FAB */
   .player-container .bingo-card {
-    width: min(100vw - 8px, calc(100dvh - 320px)) !important;
+    width: min(100vw - 8px, calc(100dvh - 360px)) !important;
   }
 }
 
