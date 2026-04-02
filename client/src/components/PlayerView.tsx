@@ -1324,7 +1324,7 @@ const PlayerView: React.FC = () => {
                 <button
                   type="button"
                   className={`bingo-fab bingo-fab--canvas bingo-fab--chrome ${bingoHolding ? 'holding' : ''} ${hasValidBingo ? 'ready' : 'disabled'}`}
-                  aria-label={hasValidBingo ? 'Hold to call bingo' : 'Complete a winning pattern to call bingo'}
+                  aria-label={hasValidBingo ? 'Hold to call BINGO' : 'Complete a winning pattern, then hold to call BINGO'}
                   onPointerDown={startBingoHold}
                   onPointerUp={cancelBingoHold}
                   onPointerCancel={cancelBingoHold}
@@ -1333,7 +1333,7 @@ const PlayerView: React.FC = () => {
                   onTouchCancel={(e) => { e.preventDefault(); cancelBingoHold(); }}
                   onContextMenu={(e) => { e.preventDefault(); return false; }}
                   onMouseDown={(e) => { e.preventDefault(); }}
-                  title={hasValidBingo ? 'Hold to call BINGO!' : 'Complete a pattern to call BINGO'}
+                  title={hasValidBingo ? 'Hold to call BINGO' : 'Complete a winning pattern to call BINGO'}
                   style={{
                     zIndex: 2,
                     userSelect: 'none',
@@ -1345,11 +1345,40 @@ const PlayerView: React.FC = () => {
                     touchAction: 'none',
                   }}
                 >
-                  <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '4px solid rgba(255,255,255,0.12)' }} />
-                  <svg width="100%" height="100%" viewBox="0 0 100 100" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
-                    <circle cx="50" cy="50" r="44" stroke="rgba(255,255,255,0.18)" strokeWidth="8" fill="none" />
-                    <circle cx="50" cy="50" r="44" stroke="#0b3" strokeWidth="8" fill="none" strokeLinecap="round" strokeDasharray={`${Math.max(0.01, holdProgress) * 276} 276`} />
-                  </svg>
+                  <span
+                    aria-hidden
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      borderRadius: 'inherit',
+                      border: '2px solid rgba(255,255,255,0.12)',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                  <span
+                    aria-hidden
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      height: 6,
+                      borderRadius: '0 0 999px 999px',
+                      overflow: 'hidden',
+                      pointerEvents: 'none',
+                      background: 'rgba(0,0,0,0.25)',
+                    }}
+                  >
+                    <span
+                      style={{
+                        display: 'block',
+                        height: '100%',
+                        width: `${Math.max(0, holdProgress) * 100}%`,
+                        background: 'linear-gradient(90deg, #0b3, #1aff8c)',
+                        borderRadius: '0 2px 0 0',
+                      }}
+                    />
+                  </span>
                   <span
                     className="bingo-fab-label"
                     style={{
@@ -1362,10 +1391,7 @@ const PlayerView: React.FC = () => {
                       pointerEvents: 'none',
                     }}
                   >
-                    {bingoHolding ? 'Holding…' :
-                      bingoStatus === 'checking' ? 'Checking...' :
-                      bingoStatus === 'success' ? 'WINNER!' :
-                      hasValidBingo ? 'BINGO READY!' : 'No pattern'}
+                    Hold to call BINGO
                   </span>
                 </button>
               </div>
