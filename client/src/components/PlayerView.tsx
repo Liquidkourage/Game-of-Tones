@@ -94,6 +94,7 @@ const PlayerView: React.FC = () => {
   });
   const [songsPlayed, setSongsPlayed] = useState<number>(0);
 
+  /** User multiplier (70–150) on the automatic square text size (CSS: --player-card-font-scale). */
   const CARD_FONT_STORAGE_KEY = 'player_card_font_percent';
   const CARD_FONT_MIN = 70;
   const CARD_FONT_MAX = 150;
@@ -1435,19 +1436,23 @@ const PlayerView: React.FC = () => {
             <div
               className={`player-controls-row player-controls-row-textsize${!bingoCard ? ' player-controls-row-full' : ''}`}
             >
-              <span className="player-controls-label">Card text</span>
+              <span className="player-controls-label">Text scale</span>
               <div className="player-controls-slot player-font-size-controls">
                 <button
                   type="button"
                   className="player-font-btn"
                   onClick={() => bumpCardFont(-CARD_FONT_STEP)}
                   disabled={cardFontPercent <= CARD_FONT_MIN}
-                  aria-label="Smaller card text"
+                  aria-label="Decrease text scale"
                   title="Smaller"
                 >
                   −
                 </button>
-                <span className="font-size-readout" title="Bingo square text size">
+                <span
+                  className="font-size-readout"
+                  title="Relative to the automatic size for this bingo card (70–150%)"
+                  aria-label={`Text scale ${cardFontPercent} percent`}
+                >
                   {cardFontPercent}%
                 </span>
                 <button
@@ -1455,7 +1460,7 @@ const PlayerView: React.FC = () => {
                   className="player-font-btn"
                   onClick={() => bumpCardFont(CARD_FONT_STEP)}
                   disabled={cardFontPercent >= CARD_FONT_MAX}
-                  aria-label="Larger card text"
+                  aria-label="Increase text scale"
                   title="Larger"
                 >
                   +
