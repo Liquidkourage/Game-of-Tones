@@ -1116,7 +1116,7 @@ body {
 
 /* Player bingo card: square. Reserve includes app header + chrome + FAB; subtract nav so column does not overflow (clips FAB). */
 .player-container .bingo-card {
-  width: min(100vw - 8px, calc(100dvh - 400px - var(--player-nav-bottom, 0px))) !important;
+  width: min(100vw - 8px, calc(100dvh - 430px - var(--player-nav-bottom, 0px))) !important;
   max-width: 100% !important;
   height: auto !important;
   aspect-ratio: 1 / 1 !important;
@@ -1243,8 +1243,8 @@ body {
   min-height: 0;
   padding: 0;
   padding-top: calc(8px + env(safe-area-inset-top, 0px));
-  /* Android nav bar: env() often 0; need enough for 3-button bar + half of FAB (~52px radius) */
-  --player-nav-bottom: max(env(safe-area-inset-bottom, 0px), 72px);
+  /* Android nav + optional Chrome toolbar: env() often 0; err high so FAB clears overlap */
+  --player-nav-bottom: max(env(safe-area-inset-bottom, 0px), 96px);
   padding-bottom: var(--player-nav-bottom);
   display: flex;
   flex-direction: column;
@@ -1281,7 +1281,7 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 6px 0 8px;
+  padding: 6px 0 12px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -1334,7 +1334,7 @@ body {
   }
   /* Reserve vertical space for header + chrome + FAB + nav bottom */
   .player-container .bingo-card {
-    width: min(100vw - 8px, calc(100dvh - 420px - var(--player-nav-bottom, 0px))) !important;
+    width: min(100vw - 8px, calc(100dvh - 450px - var(--player-nav-bottom, 0px))) !important;
   }
 }
 
