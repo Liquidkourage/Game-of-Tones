@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { API_BASE } from '../config';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Music, CheckCircle, AlertCircle } from 'lucide-react';
+import { Music, AlertCircle } from 'lucide-react';
 
 /** Where to send the host after Spotify OAuth (localStorage can be empty on callback if origin changed). */
 function resolveSpotifyReturnDestination(searchParams: URLSearchParams): string {
@@ -36,11 +35,16 @@ function cleanupSpotifyReturnMarkers() {
   }
 }
 
+/**
+ * Exchanges OAuth code via API then redirects to the host (no success “confirmation” step).
+ * For zero intermediate UI, set SPOTIFY_REDIRECT_URI to your API /api/spotify/callback and PUBLIC_APP_URL
+ * so Spotify hits the server and receives an HTTP redirect to /host/:room.
+ */
 const SpotifyCallback: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
-  const [message, setMessage] = useState('Connecting to Spotify...');
+  const [status, setStatus] = useState<'loading' | 'error'>('loading');
+  const [message, setMessage] = useState('Connecting Spotify…');
 
   useEffect(() => {
     const code = searchParams.get('code');
@@ -55,7 +59,7 @@ const SpotifyCallback: React.FC = () => {
           const dest =
             sessionStorage.getItem(`spotify_oauth_dest_${code}`) ||
             resolveSpotifyReturnDestination(searchParams);
-          navigate(dest);
+          navigate(dest, { replace: true });
         }
       }, 40);
       const timeout = window.setTimeout(() => window.clearInterval(tid), 20000);
@@ -76,7 +80,7 @@ const SpotifyCallback: React.FC = () => {
         const dest = resolveSpotifyReturnDestination(searchParams);
         cleanupSpotifyReturnMarkers();
         console.warn('Spotify auth error param:', oauthError, '→', dest);
-        window.setTimeout(() => navigate(dest), 2000);
+        window.setTimeout(() => navigate(dest, { replace: true }), 1800);
         return;
       }
 
@@ -87,7 +91,7 @@ const SpotifyCallback: React.FC = () => {
         }
         const dest = resolveSpotifyReturnDestination(searchParams);
         cleanupSpotifyReturnMarkers();
-        window.setTimeout(() => navigate(dest), 2000);
+        window.setTimeout(() => navigate(dest, { replace: true }), 1800);
         return;
       }
 
@@ -128,9 +132,7 @@ const SpotifyCallback: React.FC = () => {
           cleanupSpotifyReturnMarkers();
 
           if (!cancelled) {
-            setStatus('success');
-            setMessage('Spotify connected successfully!');
-            window.setTimeout(() => navigate(dest), 800);
+            navigate(dest, { replace: true });
           }
         } else {
           const dest =
@@ -142,7 +144,7 @@ const SpotifyCallback: React.FC = () => {
             setStatus('error');
             setMessage('Failed to connect to Spotify. Please try again.');
           }
-          window.setTimeout(() => navigate(dest), 2000);
+          window.setTimeout(() => navigate(dest, { replace: true }), 2000);
         }
       } catch (error) {
         console.error('Error handling Spotify callback:', error);
@@ -155,7 +157,7 @@ const SpotifyCallback: React.FC = () => {
           setStatus('error');
           setMessage('An error occurred while connecting to Spotify.');
         }
-        window.setTimeout(() => navigate(dest), 2000);
+        window.setTimeout(() => navigate(dest, { replace: true }), 2000);
       }
     };
 
@@ -166,65 +168,28 @@ const SpotifyCallback: React.FC = () => {
     };
   }, [searchParams, navigate]);
 
-  return (
-    <div className="spotify-callback">
-      <motion.div
-        className="callback-container"
-        initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5 }}
-      >
-        <div className="callback-content">
-          {status === 'loading' && (
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-            >
-              <Music className="callback-icon loading" />
-            </motion.div>
-          )}
-
-          {status === 'success' && <CheckCircle className="callback-icon success" />}
-
-          {status === 'error' && <AlertCircle className="callback-icon error" />}
-
-          <h2>Spotify Connection</h2>
-          <p>{message}</p>
-
-          {status === 'success' && (
-            <div className="success-actions">
-              <button type="button" onClick={() => navigate('/')} className="btn-primary">
-                Go to Home
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const roomId =
-                    searchParams.get('state')?.trim() ||
-                    localStorage.getItem('spotify_room_id') ||
-                    sessionStorage.getItem('spotify_room_id');
-                  if (roomId) {
-                    navigate(`/host/${roomId}`);
-                  } else {
-                    navigate('/');
-                  }
-                }}
-                className="btn-secondary"
-              >
-                Go to Host View
-              </button>
-            </div>
-          )}
-
-          {status === 'loading' && (
-            <div className="loading-dots">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-          )}
+  if (status === 'error') {
+    return (
+      <div className="spotify-callback spotify-callback--minimal">
+        <div className="callback-container">
+          <div className="callback-content">
+            <AlertCircle className="callback-icon error" aria-hidden />
+            <h2>Spotify connection</h2>
+            <p>{message}</p>
+          </div>
         </div>
-      </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="spotify-callback spotify-callback--minimal" aria-busy="true" aria-live="polite">
+      <div className="callback-container">
+        <div className="callback-content">
+          <Music className="callback-icon loading" aria-hidden />
+          <p className="spotify-callback-hint">Connecting Spotify…</p>
+        </div>
+      </div>
     </div>
   );
 };

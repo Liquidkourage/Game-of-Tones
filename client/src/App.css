@@ -2957,3 +2957,29 @@ button.conn-chip.conn-chip-compact {
 .player-longpress-tooltip-primary {
   font-size: 1.02rem;
 }
+
+/* Spotify OAuth bridge (/callback): minimal loading, no “success confirmation” step */
+.spotify-callback--minimal {
+  min-height: 40vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.spotify-callback--minimal .callback-container {
+  text-align: center;
+}
+
+.spotify-callback--minimal .callback-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.spotify-callback-hint {
+  margin: 0;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.75);
+}

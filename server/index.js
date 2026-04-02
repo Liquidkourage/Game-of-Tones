@@ -5636,12 +5636,19 @@ app.post('/api/spotify/clear', (req, res) => {
 
 app.get('/api/spotify/callback', async (req, res) => {
   const { code, state } = req.query;
-  
+
+  const appBase = (process.env.PUBLIC_APP_URL || process.env.CLIENT_APP_URL || '').replace(/\/$/, '');
+  /** Browser top-level navigation from Spotify (vs fetch from our /callback SPA exchanging the code). */
+  const isBrowserTopNavigation = req.get('Sec-Fetch-Mode') === 'navigate';
+
   console.log('🚨 EMERGENCY SPOTIFY CALLBACK - Bypassing multi-tenant system');
   console.log('Spotify callback received with code:', code ? code.substring(0, 20) + '...' : 'NO CODE');
-  
+
   if (!code) {
     console.error('No authorization code provided');
+    if (isBrowserTopNavigation && appBase) {
+      return res.redirect(302, `${appBase}/?spotify_error=missing_code`);
+    }
     return res.status(400).json({ error: 'Authorization code required' });
   }
 
@@ -5649,19 +5656,27 @@ app.get('/api/spotify/callback', async (req, res) => {
     console.log('🔧 Using direct spotifyService.handleCallback...');
     const tokens = await spotifyService.handleCallback(code);
     console.log('✅ Got tokens from Spotify, saving directly...');
-    
-    // Save tokens directly to global variables AND file
+
     spotifyTokens = tokens;
     saveTokens(tokens);
-    
+
     console.log('✅ Tokens saved directly - Emergency fix active');
-    res.json({ 
-      success: true, 
+
+    if (isBrowserTopNavigation && appBase && state) {
+      const room = String(state);
+      return res.redirect(302, `${appBase}/host/${encodeURIComponent(room)}?spotify=connected=1`);
+    }
+
+    res.json({
+      success: true,
       message: 'Spotify connected successfully (emergency mode)',
       tokens
     });
   } catch (error) {
     console.error('❌ Emergency callback failed:', error);
+    if (isBrowserTopNavigation && appBase) {
+      return res.redirect(302, `${appBase}/?spotify_error=1`);
+    }
     res.status(500).json({ error: 'Failed to connect Spotify' });
   }
 });

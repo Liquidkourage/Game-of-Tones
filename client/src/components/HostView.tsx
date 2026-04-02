@@ -79,7 +79,7 @@ interface PlaybackState {
 const HostView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const hostPlayerName = searchParams.get('name')?.trim() || 'Host';
   const [clientId] = useState<string>(() => {
     try {
@@ -556,6 +556,30 @@ const HostView: React.FC = () => {
       setIsLoadingDevices(false);
     }
   }, []);
+
+  /** After server-side Spotify OAuth redirect (?spotify=connected), refresh status and clean URL. */
+  useEffect(() => {
+    if (searchParams.get('spotify') !== 'connected') return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('spotify');
+    setSearchParams(next, { replace: true });
+    const refresh = async () => {
+      try {
+        const cacheBuster = Date.now();
+        const response = await fetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
+        const data = await response.json();
+        if (data.connected) {
+          setIsSpotifyConnected(true);
+          setIsSpotifyConnecting(false);
+          await loadPlaylists();
+          await loadDevices();
+        }
+      } catch (e) {
+        console.error('Post-Spotify OAuth refresh failed:', e);
+      }
+    };
+    void refresh();
+  }, [searchParams, setSearchParams, loadPlaylists, loadDevices]);
 
   const fetchPlaybackState = useCallback(async () => {
     try {
