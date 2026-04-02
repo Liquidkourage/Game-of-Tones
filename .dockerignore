@@ -1,0 +1,31 @@
+# Smaller Docker context = faster Railway upload + fewer cache invalidations
+.git
+.github
+**/.DS_Store
+**/*.md
+!README.md
+
+node_modules
+client/node_modules
+client/build
+build
+dist
+.cache
+.parcel-cache
+.turbo
+.vercel
+.next
+
+# Tests / tooling not needed for image
+**/coverage
+**/__tests__
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+
+# Env (never bake into image)
+.env
+.env.*
+client/.env
+client/.env.*

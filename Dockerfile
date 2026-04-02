@@ -20,6 +20,9 @@ RUN cd client && npm install --no-audit --no-fund --no-optional --ignore-scripts
 
 # Copy full source and build client
 COPY . .
+# CRA: skip source maps + ESLint plugin during webpack (lint locally / CI with npm run client:typecheck + eslint)
+ENV GENERATE_SOURCEMAP=false \
+    DISABLE_ESLINT_PLUGIN=true
 RUN cd client && npm run build
 
 # Prune dev dependencies to production only
