@@ -1446,7 +1446,9 @@ const HostView: React.FC = () => {
     }
 
     if (!selectedDevice) {
-      alert('Please select a Spotify playback device first (Playback Device section).');
+      alert(
+        'Please select a Spotify playback device first.\n\nUse the green "Playback device" section on the Manager or Game tab: pick a device from the list, or open Spotify on your target device and tap Refresh devices.'
+      );
       return;
     }
 
@@ -2708,6 +2710,92 @@ const HostView: React.FC = () => {
     (finalizedOrder?.length ?? 0) > 0 ||
     mixFinalized;
 
+  const playbackDevicePanel =
+    isSpotifyConnected ? (
+      <motion.div
+        className="playback-device-section"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.05 }}
+        style={{
+          background: 'rgba(255,255,255,0.05)',
+          border: '1px solid rgba(0, 255, 136, 0.25)',
+          borderRadius: 12,
+          padding: '16px',
+          marginBottom: 16,
+        }}
+      >
+        <h3
+          style={{
+            fontSize: '1.05rem',
+            color: '#00ff88',
+            marginBottom: 10,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <Music className="w-5 h-5" aria-hidden />
+          Playback device
+        </h3>
+        <p style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)', marginBottom: 12, lineHeight: 1.4 }}>
+          Choose where Spotify should play. Open Spotify on your computer, phone, or speaker so it appears in the list. Use{' '}
+          <strong style={{ color: '#cfcfcf' }}>Refresh devices</strong> if the list is empty.
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+          <select
+            aria-label="Spotify playback device"
+            value={selectedDevice?.id ?? ''}
+            onChange={(e) => {
+              const id = e.target.value;
+              const d = devices.find((x) => x.id === id);
+              setSelectedDevice(d ?? null);
+            }}
+            style={{
+              flex: '1 1 220px',
+              minWidth: 200,
+              padding: '10px 12px',
+              borderRadius: 8,
+              border: '1px solid rgba(255,255,255,0.25)',
+              background: 'rgba(0,0,0,0.35)',
+              color: '#fff',
+              fontSize: '0.95rem',
+            }}
+          >
+            <option value="">— Select a device —</option>
+            {devices.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+                {d.is_active ? ' (active)' : ''}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => void loadDevices()}
+            disabled={isLoadingDevices}
+          >
+            {isLoadingDevices ? 'Refreshing…' : 'Refresh devices'}
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => saveSelectedDevice()}
+            disabled={!selectedDevice}
+            title="Remember this device for next time"
+          >
+            Save as default
+          </button>
+        </div>
+        {devices.length === 0 && !isLoadingDevices && (
+          <p style={{ marginTop: 10, fontSize: '0.8rem', color: '#ffb347' }}>
+            No devices found. Open the Spotify app on the target device, then tap Refresh devices.
+          </p>
+        )}
+      </motion.div>
+    ) : null;
+
   return (
     <div className="host-view">
       <motion.div 
@@ -2832,6 +2920,8 @@ const HostView: React.FC = () => {
                </div>
              )}
           </motion.div>
+
+          {playbackDevicePanel}
 
           {/* Pattern Selection */}
           {isSpotifyConnected && (
@@ -3389,6 +3479,8 @@ const HostView: React.FC = () => {
                   transition={{ delay: 0.2 }}
           >
             <h2>🎮 Game Controls</h2>
+
+            {playbackDevicePanel}
                   
                   {/* Game Settings */}
                   <div style={{ 
