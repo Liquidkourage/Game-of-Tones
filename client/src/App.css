@@ -1114,9 +1114,13 @@ body {
   margin-bottom: 0.5rem;
 }
 
-/* Player bingo card: square. Reserve includes app header + chrome + FAB; subtract nav so column does not overflow (clips FAB). */
+/* Player bingo card: square. Reserve includes app header + chrome + FAB; subtract nav so column does not overflow (clips FAB).
+   Height-budget alone can bind on iOS Safari (short dvh with browser UI), forcing a tiny square; floor with % of width so the grid uses horizontal space unless truly constrained. */
 .player-container .bingo-card {
-  width: min(100vw - 8px, calc(100dvh - var(--player-layout-reserve, 430px) - var(--player-nav-bottom, 0px))) !important;
+  width: min(
+    var(--player-card-w-budget),
+    max(var(--player-card-h-budget), calc(var(--player-card-w-budget) * 0.92))
+  ) !important;
   max-width: 100% !important;
   height: auto !important;
   aspect-ratio: 1 / 1 !important;
@@ -1253,6 +1257,8 @@ body {
   --player-card-font-scale: 1;
   /* Narrow viewports need a smaller subtract than 430px or the grid stays tiny; wide keeps ~430–480px headroom. */
   --player-layout-reserve: clamp(220px, 36vw, 430px);
+  --player-card-w-budget: calc(100vw - 8px);
+  --player-card-h-budget: calc(100dvh - var(--player-layout-reserve) - var(--player-nav-bottom, 0px));
 }
 
 /* Short + narrow phones (e.g. Galaxy S5 class): vmin tightens reserve when vw-only leaves the grid too small. */
