@@ -1394,14 +1394,15 @@ body {
   }
 }
 
-/* Tablet + desktop: cap card + chrome so the grid never fills the whole viewport; center the column */
+/* Tablet + desktop: cap card + chrome (responsive max, not a tiny fixed px); center column contents */
 @media (min-width: 768px) {
-  .player-container .player-rest {
-    align-items: center;
+  .player-container {
+    /* Larger than 560px on big screens, still bounded so the grid never owns the full viewport */
+    --player-card-col-max: min(680px, min(92vw, 72vmin));
   }
 
   .player-container .player-bingo-stage {
-    max-width: min(560px, 100%);
+    max-width: min(var(--player-card-col-max), 100%);
     margin-left: auto;
     margin-right: auto;
     width: 100%;
@@ -1410,10 +1411,10 @@ body {
   }
 
   .player-container .bingo-card {
-    width: min(100%, min(560px, calc(100vw - 24px))) !important;
-    max-width: min(560px, 92vw) !important;
+    width: min(100%, min(var(--player-card-col-max), calc(100vw - 24px))) !important;
+    max-width: min(var(--player-card-col-max), 92vw) !important;
     max-height: min(
-      min(560px, 92vw),
+      min(var(--player-card-col-max), 92vw),
       calc(
         100dvh - env(safe-area-inset-top, 0px) - var(--player-app-header-offset) - var(--player-nav-bottom) - 12px
       )
@@ -1421,10 +1422,11 @@ body {
   }
 
   .player-container .player-chrome {
-    width: 100%;
-    max-width: 560px;
+    width: min(100%, var(--player-card-col-max));
+    max-width: var(--player-card-col-max);
     margin-left: auto;
     margin-right: auto;
+    box-sizing: border-box;
   }
 }
 
@@ -1442,6 +1444,13 @@ body {
   padding: 0 4px;
   width: 100%;
   padding-bottom: 0;
+}
+
+/* Must follow .player-rest base: center chrome (flex cross-axis) on wide layouts; otherwise stretch pins chrome to the left */
+@media (min-width: 768px) {
+  .player-container .player-rest {
+    align-items: center;
+  }
 }
 
 /* In chrome, below controls — never overlaps the bingo card (see PlayerView). */
