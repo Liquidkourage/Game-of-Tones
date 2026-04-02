@@ -131,12 +131,44 @@ const PlayerView: React.FC = () => {
     const vv = window.visualViewport;
     if (!vv) return undefined;
 
+    /** Raw layout-vs-visual gap; on iOS Safari this is often ~0 even when the bottom bar covers content. */
+    const RAW_GAP_NEAR_ZERO_PX = 8;
+    /** Used only when raw gap is unreliable (see above) and we're in on-device Mobile Safari. */
+    const IOS_MOBILE_SAFARI_FALLBACK_PX = 48;
+
+    const isIosTouchDevice = (): boolean => {
+      if (typeof navigator === 'undefined') return false;
+      const ua = navigator.userAgent;
+      return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    };
+
+    const isHomeScreenPwa = (): boolean =>
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+
     const measure = () => {
       const v = window.visualViewport;
       if (!v) return;
-      const gap = Math.max(0, window.innerHeight - v.height - v.offsetTop);
+      const innerH = window.innerHeight;
+      const rawGap = Math.max(0, innerH - v.height - v.offsetTop);
+
+      let applied = rawGap;
+      if (rawGap < RAW_GAP_NEAR_ZERO_PX && isIosTouchDevice() && !isHomeScreenPwa()) {
+        applied = Math.max(rawGap, IOS_MOBILE_SAFARI_FALLBACK_PX);
+      }
+
+      if (process.env.NODE_ENV === 'development') {
+        console.debug('[PlayerView] bottom inset', {
+          rawGap,
+          applied,
+          usedFallback: applied > rawGap,
+          innerH,
+          vvHeight: v.height,
+          vvOffsetTop: v.offsetTop,
+        });
+      }
+
       setVisualBottomGapPx((prev) => {
-        const next = Math.round(gap * 10) / 10;
+        const next = Math.round(applied * 10) / 10;
         return Math.abs(prev - next) < 0.5 ? prev : next;
       });
     };
