@@ -260,6 +260,14 @@ const PublicDisplay: React.FC = () => {
     });
     setSocket(newSocket);
 
+    /** Clears played-song refs so a new round/game cannot show the previous session's call list. */
+    const resetPlayedTrackingRefs = () => {
+      playedOrderRef.current = [];
+      playedSeqRef.current = {} as Record<string, number>;
+      playedSeqCounterRef.current = 0;
+      currentIndexRef.current = -1;
+    };
+
     // Connection event handlers
     newSocket.on('connect', () => {
       console.log('🖥️ PublicDisplay: Connected to server');
@@ -312,6 +320,12 @@ const PublicDisplay: React.FC = () => {
       console.log('🖥️ PublicDisplay: Received room state sync:', payload);
       try {
         if (payload) {
+          const serverSaysNoPlays =
+            (typeof payload.totalPlayedCount === 'number' && payload.totalPlayedCount === 0) ||
+            (Array.isArray(payload.playedSongIds) && payload.playedSongIds.length === 0);
+          const shouldClearPlayedList =
+            !payload.isPlaying && serverSaysNoPlays;
+
           setGameState(prev => ({
             ...prev,
             isPlaying: !!payload.isPlaying,
@@ -319,7 +333,38 @@ const PublicDisplay: React.FC = () => {
             playerCount: payload.playerCount || 0,
             snippetLength: payload.snippetLength || 30,
             winners: payload.winners || prev.winners,
-            playedSongs: payload.playedSongs || prev.playedSongs
+            playedSongs: (() => {
+              if (Array.isArray(payload.playedSongs)) {
+                payload.playedSongs.forEach((song: any) => {
+                  if (song && typeof song === 'object' && song.id && song.name) {
+                    idMetaRef.current[song.id] = {
+                      name: song.name,
+                      artist: song.artist || ''
+                    };
+                  }
+                });
+                return payload.playedSongs
+                  .map((song: any) => {
+                    const id = typeof song === 'string' ? song : song?.id;
+                    if (!id) return null;
+                    const meta = idMetaRef.current[id];
+                    const name =
+                      typeof song === 'object' && song.name
+                        ? song.name
+                        : meta?.name || 'Unknown';
+                    const artist =
+                      typeof song === 'object' && song.artist
+                        ? song.artist
+                        : meta?.artist || '';
+                    return { id, name, artist };
+                  })
+                  .filter(Boolean) as Song[];
+              }
+              if (shouldClearPlayedList) {
+                return [];
+              }
+              return prev.playedSongs;
+            })()
           }));
           
           if (payload.pattern) {
@@ -349,7 +394,9 @@ const PublicDisplay: React.FC = () => {
           // CRITICAL: Sync played songs to internal tracking from server (single source of truth)
           // This is the ONLY place where playedOrderRef should be updated
           if (Array.isArray(payload.playedSongs)) {
-            const playedIds = payload.playedSongs.map((song: any) => song.id);
+            const playedIds = payload.playedSongs
+              .map((song: any) => (typeof song === 'string' ? song : song?.id))
+              .filter(Boolean);
             // Validate sync: compare local vs server state
             const serverCount = playedIds.length;
             const localCount = playedOrderRef.current.length;
@@ -377,8 +424,9 @@ const PublicDisplay: React.FC = () => {
             
             // Update metadata cache
             payload.playedSongs.forEach((song: any) => {
-              if (song.id && song.name) {
-                idMetaRef.current[song.id] = {
+              const sid = typeof song === 'string' ? song : song?.id;
+              if (sid && typeof song === 'object' && song.name) {
+                idMetaRef.current[sid] = {
                   name: song.name,
                   artist: song.artist || ''
                 };
@@ -426,6 +474,8 @@ const PublicDisplay: React.FC = () => {
               // Persist the current state
               persistRevealedLetters();
             }
+          } else if (shouldClearPlayedList) {
+            resetPlayedTrackingRefs();
           }
           
           // Use server timestamp if available, otherwise current time
@@ -477,10 +527,11 @@ const PublicDisplay: React.FC = () => {
         // Restore revealed letters from localStorage if available (persists across refresh)
         const storedLetters = getStoredRevealedLetters();
         const storedBaselines = getStoredBaselines();
-        const hasPlayedSongs = playedOrderRef.current.length > 0;
         const hasStoredState = storedLetters.length > 0 || Object.keys(storedBaselines).length > 0;
         
-        if (hasStoredState || hasPlayedSongs) {
+        // Only treat as mid-game reconnect when we have persisted letter state from this room.
+        // Stale playedOrderRef from a previous game must not block clearing (hasPlayedSongs alone is not reconnect).
+        if (hasStoredState) {
           // Reconnecting - restore revealed letters and baselines from localStorage
           if (storedLetters.length > 0) {
             console.log(`🔄 Reconnecting: Restoring ${storedLetters.length} revealed letters from storage`);
@@ -493,10 +544,10 @@ const PublicDisplay: React.FC = () => {
             songBaselineRef.current = storedBaselines;
           }
         } else {
-          // New game - clear everything
+          // New pool / new game - clear played tracking and letter persistence
+          resetPlayedTrackingRefs();
           revealSequenceRef.current = [];
           songBaselineRef.current = {};
-          // Clear persisted state for new game
           try {
             localStorage.removeItem(`display_revealed_letters_${roomId}`);
             localStorage.removeItem(`display_baselines_${roomId}`);
@@ -530,10 +581,9 @@ const PublicDisplay: React.FC = () => {
           // Restore revealed letters from localStorage if available (persists across refresh)
           const storedLetters = getStoredRevealedLetters();
           const storedBaselines = getStoredBaselines();
-          const hasPlayedSongs = playedOrderRef.current.length > 0;
           const hasStoredState = storedLetters.length > 0 || Object.keys(storedBaselines).length > 0;
           
-          if (hasStoredState || hasPlayedSongs) {
+          if (hasStoredState) {
             // Reconnecting - restore revealed letters and baselines from localStorage
             if (storedLetters.length > 0) {
               console.log(`🔄 Reconnecting: Restoring ${storedLetters.length} revealed letters from storage`);
@@ -546,10 +596,9 @@ const PublicDisplay: React.FC = () => {
               songBaselineRef.current = storedBaselines;
             }
           } else {
-            // New game - clear everything
+            resetPlayedTrackingRefs();
             revealSequenceRef.current = [];
             songBaselineRef.current = {};
-            // Clear persisted state for new game
             try {
               localStorage.removeItem(`display_revealed_letters_${roomId}`);
               localStorage.removeItem(`display_baselines_${roomId}`);
@@ -752,7 +801,8 @@ const PublicDisplay: React.FC = () => {
       setGameState(prev => ({ 
         ...prev, 
         isPlaying: true,
-        snippetLength: data?.snippetLength || prev.snippetLength || 30
+        snippetLength: data?.snippetLength || prev.snippetLength || 30,
+        playedSongs: []
       }));
       // Hide splash when a game starts
       setShowSplash(false);
@@ -916,7 +966,14 @@ const PublicDisplay: React.FC = () => {
     });
 
     newSocket.on('game-ended', () => {
-      setGameState(prev => ({ ...prev, isPlaying: false }));
+      setGameState(prev => ({
+        ...prev,
+        isPlaying: false,
+        currentSong: null,
+        playedSongs: []
+      }));
+      resetPlayedTrackingRefs();
+      setTotalPlayedCount(0);
       setIsVerificationPending(false);
       console.log('🛑 Game ended (display)');
     });
@@ -938,12 +995,18 @@ const PublicDisplay: React.FC = () => {
         playedSongs: [],
         bingoCard: { squares: [], size: 5 }
       });
+      setTotalPlayedCount(0);
+      resetPlayedTrackingRefs();
       setShowWinnerBanner(false);
       setWinnerName('');
       
       // Clear reveal state
       revealSequenceRef.current = [];
       songBaselineRef.current = {};
+      try {
+        localStorage.removeItem(`display_revealed_letters_${roomId}`);
+        localStorage.removeItem(`display_baselines_${roomId}`);
+      } catch {}
       
       // Show restart notification briefly
       if (data.clearCard || data.resetToSetup) {
@@ -971,6 +1034,8 @@ const PublicDisplay: React.FC = () => {
         playedSongs: [],
         bingoCard: { squares: [], size: 5 }
       });
+      setTotalPlayedCount(0);
+      resetPlayedTrackingRefs();
       setShowWinnerBanner(false);
       setWinnerName('');
       setIsVerificationPending(false);
@@ -978,6 +1043,10 @@ const PublicDisplay: React.FC = () => {
       // Clear all reveal state
       revealSequenceRef.current = [];
       songBaselineRef.current = {};
+      try {
+        localStorage.removeItem(`display_revealed_letters_${roomId}`);
+        localStorage.removeItem(`display_baselines_${roomId}`);
+      } catch {}
       
       // Show new round notification
       setWinnerName(`🔄 Round ${data.roundNumber} - Waiting for Setup...`);
@@ -998,6 +1067,8 @@ const PublicDisplay: React.FC = () => {
         playedSongs: [],
         bingoCard: { squares: [], size: 5 }
       });
+      setTotalPlayedCount(0);
+      resetPlayedTrackingRefs();
       ensureGrid();
       console.log('🔁 Game reset (display)');
       revealSequenceRef.current = [];
@@ -2017,31 +2088,78 @@ const PublicDisplay: React.FC = () => {
     <div ref={displayRef} className="public-display">
 
       <AnimatePresence>
-        {showWinnerBanner && (
+        {showWinnerBanner && (() => {
+          const isBigWinCelebration = winnerName && !winnerName.startsWith('🔄');
+          return (
           <motion.div
             key="winner-banner"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
+            initial={{ opacity: 0, scale: isBigWinCelebration ? 0.88 : 0.96, y: isBigWinCelebration ? 28 : 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: isBigWinCelebration ? 0.95 : 0.98, y: -12 }}
+            transition={isBigWinCelebration
+              ? { type: 'spring', damping: 20, stiffness: 260, mass: 0.85 }
+              : { duration: 0.25 }}
             style={{
               position: 'fixed',
-              top: 80,
+              top: isBigWinCelebration ? 'max(64px, 5vh)' : 80,
               left: '50%',
               transform: 'translateX(-50%)',
-              background: 'linear-gradient(180deg, rgba(0,255,136,0.25), rgba(0,255,136,0.1))',
-              border: '1px solid rgba(0,255,136,0.5)',
-              color: '#eafff5',
-              padding: '12px 18px',
-              borderRadius: 12,
+              width: isBigWinCelebration ? 'min(96vw, 1500px)' : 'auto',
+              maxWidth: isBigWinCelebration ? 'min(96vw, 1500px)' : 'min(92vw, 720px)',
+              background: isBigWinCelebration
+                ? 'linear-gradient(165deg, rgba(0,255,180,0.42) 0%, rgba(0,200,120,0.18) 45%, rgba(0,80,60,0.22) 100%)'
+                : 'linear-gradient(180deg, rgba(0,255,136,0.25), rgba(0,255,136,0.1))',
+              border: isBigWinCelebration ? '2px solid rgba(0,255,200,0.7)' : '1px solid rgba(0,255,136,0.5)',
+              boxShadow: isBigWinCelebration
+                ? '0 0 0 1px rgba(255,255,255,0.1) inset, 0 0 80px rgba(0,255,170,0.45), 0 16px 48px rgba(0,0,0,0.5)'
+                : undefined,
+              backdropFilter: isBigWinCelebration ? 'blur(8px)' : undefined,
+              color: '#f6fffc',
+              padding: isBigWinCelebration
+                ? 'clamp(22px, 3.8vw, 48px) clamp(28px, 5.5vw, 72px)'
+                : '12px 18px',
+              borderRadius: isBigWinCelebration ? 22 : 12,
               fontWeight: 900,
-              letterSpacing: '0.03em',
+              letterSpacing: isBigWinCelebration ? '0.04em' : '0.03em',
+              textAlign: 'center',
+              textShadow: isBigWinCelebration
+                ? '0 2px 0 rgba(0,0,0,0.35), 0 0 40px rgba(0,255,170,0.55), 0 0 90px rgba(0,255,200,0.25)'
+                : undefined,
+              fontSize: isBigWinCelebration
+                ? 'clamp(1.85rem, 1.1rem + 4.2vw, 5.25rem)'
+                : 'clamp(1rem, 2vw + 0.4rem, 1.65rem)',
+              lineHeight: isBigWinCelebration ? 1.1 : 1.25,
               zIndex: 2200
             }}
           >
-            🏆 Winner: {winnerName}
+            {isBigWinCelebration && (
+              <div
+                style={{
+                  fontSize: 'clamp(0.75rem, 0.35rem + 1.5vw, 1.35rem)',
+                  letterSpacing: '0.28em',
+                  textTransform: 'uppercase',
+                  opacity: 0.92,
+                  marginBottom: '0.35em',
+                  fontWeight: 800,
+                  textShadow: '0 1px 12px rgba(0,0,0,0.4)'
+                }}
+              >
+                Congratulations
+              </div>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35em', flexWrap: 'wrap' }}>
+              {isBigWinCelebration && (
+                <Trophy
+                  strokeWidth={2.2}
+                  style={{ flexShrink: 0, filter: 'drop-shadow(0 0 12px rgba(0,255,170,0.8))', width: 'clamp(36px, 8vw, 64px)', height: 'clamp(36px, 8vw, 64px)' }}
+                  aria-hidden
+                />
+              )}
+              <span>{winnerName}</span>
+            </div>
           </motion.div>
-        )}
+          );
+        })()}
         {revealToast && (
           <motion.div
             key={`toast-${revealToast}-${totalPlayedCount}`}
@@ -2327,18 +2445,18 @@ const PublicDisplay: React.FC = () => {
       </AnimatePresence>
       
       
-      {/* Subtle confetti when winner banner shows */}
+      {/* Confetti when winner banner shows (heavier for verified BINGO wins) */}
       <AnimatePresence>
         {showWinnerBanner && (
           <motion.div
             key="confetti"
             initial={{ opacity: 0 }}
-            animate={{ opacity: 0.8 }}
+            animate={{ opacity: winnerName.startsWith('🔄') ? 0.55 : 0.92 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
             style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 2100 }}
           >
-            {Array.from({ length: 60 }).map((_, i) => (
+            {Array.from({ length: winnerName.startsWith('🔄') ? 48 : 110 }).map((_, i) => (
               <motion.div
                 key={i}
                 initial={{ x: Math.random() * window.innerWidth, y: -20, rotate: 0, opacity: 0.9 }}

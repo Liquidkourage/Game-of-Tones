@@ -2370,6 +2370,7 @@ io.on('connection', (socket) => {
     room.currentSongStartMs = 0;
     room.winners = [];
     room.playedSongs = [];
+    room.calledSongIds = [];
     room.roundWinners = []; // Reset round winners
     
     // Reset all player bingo status but keep their cards
