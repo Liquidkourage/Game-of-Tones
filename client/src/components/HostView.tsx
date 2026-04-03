@@ -176,6 +176,7 @@ const HostView: React.FC = () => {
   const [showPlayerCards, setShowPlayerCards] = useState<boolean>(true);
   const [playerCards, setPlayerCards] = useState<Map<string, any>>(new Map());
   const [playerCardsVersion, setPlayerCardsVersion] = useState<number>(0); // Force re-render trigger
+  const [playerCardsFullscreen, setPlayerCardsFullscreen] = useState<boolean>(false);
   const [showRoundManager, setShowRoundManager] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'setup' | 'play'>('setup');
   
@@ -1653,6 +1654,236 @@ const HostView: React.FC = () => {
       totalNeeded
     };
   };
+
+  /** Shared player-card grid for inline host view and full-screen overlay (compact = inline strip). */
+  const renderHostPlayerCardsGrid = (compact: boolean) => {
+    const cellFont = compact ? '0.7rem' : '0.88rem';
+    const innerMax = compact ? '300px' : 'min(400px, 38vw)';
+    const labelMax = compact ? 12 : 20;
+    const outerGridCols = compact
+      ? 'repeat(auto-fit, minmax(320px, 1fr))'
+      : 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))';
+
+    return (
+      <div
+        key={`host-pc-grid-${playerCardsVersion}-${compact ? 'c' : 'fs'}`}
+        style={{
+          display: 'grid',
+          gridTemplateColumns: outerGridCols,
+          gap: compact ? 16 : 22
+        }}
+      >
+        {Array.from(playerCards.entries()).map(([playerId, playerData]) => (
+          <div
+            key={playerId}
+            style={{
+              background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
+              border: '1px solid rgba(0,255,136,0.3)',
+              borderRadius: '12px',
+              padding: compact ? '16px' : '18px',
+              boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
+            }}
+          >
+            <div
+              style={{
+                fontWeight: 'bold',
+                marginBottom: '8px',
+                color: '#00ff88',
+                fontSize: compact ? '1rem' : '1.15rem',
+                textAlign: 'center'
+              }}
+            >
+              {playerData.playerName}
+            </div>
+
+            {(() => {
+              const progress = calculateWinProgress(playerData.card, pattern, playerData.playedSongs || []);
+              const progressColor =
+                progress.needed === 0
+                  ? '#00ff88'
+                  : progress.needed <= 2
+                    ? '#ffaa00'
+                    : progress.progress >= 50
+                      ? '#66ccff'
+                      : '#888';
+              const progressText =
+                progress.needed === 0
+                  ? '🎉 BINGO!'
+                  : progress.needed === 1
+                    ? '1 more needed!'
+                    : `${progress.needed} more needed`;
+              const cheatingCount = progress.marked - progress.legitimate;
+              const patternText = `${progress.patternProgress}/${progress.totalNeeded} in pattern (${progress.progress}%)`;
+
+              return (
+                <div
+                  style={{
+                    marginBottom: '12px',
+                    textAlign: 'center',
+                    fontSize: compact ? '0.85rem' : '0.95rem'
+                  }}
+                >
+                  <div
+                    style={{
+                      color: progressColor,
+                      fontWeight: 600,
+                      marginBottom: '4px'
+                    }}
+                  >
+                    {progressText}
+                  </div>
+                  {cheatingCount > 0 && (
+                    <div
+                      style={{
+                        color: '#ff4444',
+                        fontSize: '0.75rem',
+                        fontWeight: 'bold',
+                        marginBottom: '4px'
+                      }}
+                    >
+                      ⚠️ {cheatingCount} invalid mark{cheatingCount > 1 ? 's' : ''}
+                    </div>
+                  )}
+                  <div
+                    style={{
+                      background: 'rgba(255,255,255,0.1)',
+                      borderRadius: '8px',
+                      height: '6px',
+                      overflow: 'hidden',
+                      margin: '0 auto',
+                      maxWidth: compact ? '200px' : '260px'
+                    }}
+                  >
+                    <div
+                      style={{
+                        background: progressColor,
+                        height: '100%',
+                        width: `${progress.progress}%`,
+                        transition: 'width 0.3s ease'
+                      }}
+                    />
+                  </div>
+                  <div
+                    style={{
+                      fontSize: compact ? '0.75rem' : '0.8rem',
+                      color: '#b3b3b3',
+                      marginTop: '2px'
+                    }}
+                  >
+                    {patternText}
+                    {progress.marked !== progress.legitimate && (
+                      <span style={{ color: '#ff8888', marginLeft: '4px' }}>
+                        ({progress.marked} total marked)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(5, 1fr)',
+                gap: '4px',
+                maxWidth: innerMax,
+                aspectRatio: '1/1',
+                margin: '0 auto'
+              }}
+            >
+              {playerData.card.squares.map((square: any) => {
+                const isFree = !!(square.isFreeSpace || square.songId === '__FREE_SPACE__');
+                const isPlayed = (playerData.playedSongs || []).includes(square.songId);
+                const isMarked = square.marked;
+                const isLegitimate = isMarked && (isFree || isPlayed);
+
+                let bgColor: string;
+                let borderColor: string;
+                let textColor: string;
+                let icon: string;
+                let statusText: string;
+
+                if (isLegitimate) {
+                  bgColor = 'linear-gradient(135deg, #00ff88, #00cc6d)';
+                  borderColor = '#00ff88';
+                  textColor = '#001a0d';
+                  icon = '✓';
+                  statusText = isFree ? 'Free space' : 'Legitimate';
+                } else if (isMarked && !isFree && !isPlayed) {
+                  bgColor = 'linear-gradient(135deg, #ff6b6b, #ff4757)';
+                  borderColor = '#ff4757';
+                  textColor = '#ffffff';
+                  icon = '⚠';
+                  statusText = 'Invalid - Not played yet!';
+                } else if (!isMarked && isPlayed) {
+                  bgColor = 'linear-gradient(135deg, #4dabf7, #339af0)';
+                  borderColor = '#339af0';
+                  textColor = '#ffffff';
+                  icon = '○';
+                  statusText = 'Played but not marked';
+                } else {
+                  bgColor = 'rgba(255,255,255,0.1)';
+                  borderColor = 'rgba(255,255,255,0.3)';
+                  textColor = '#ffffff';
+                  icon = '';
+                  statusText = 'Not played';
+                }
+
+                return (
+                  <div
+                    key={square.position}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: bgColor,
+                      border: `2px solid ${borderColor}`,
+                      borderRadius: '8px',
+                      padding: '4px',
+                      fontSize: cellFont,
+                      fontWeight: isMarked ? 700 : 400,
+                      color: textColor,
+                      textAlign: 'center',
+                      lineHeight: 1.1,
+                      overflow: 'hidden'
+                    }}
+                    title={`${isFree ? 'FREE' : square.songName} — ${isFree ? '' : square.artistName}\nStatus: ${statusText}`}
+                  >
+                    {icon && <span style={{ marginRight: 2 }}>{icon}</span>}
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {(() => {
+                        const label = isFree ? 'FREE' : square.songName;
+                        return label.length > labelMax ? label.substring(0, labelMax) + '...' : label;
+                      })()}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  useEffect(() => {
+    if (!showPlayerCards) {
+      setPlayerCardsFullscreen(false);
+    }
+  }, [showPlayerCards]);
+
+  useEffect(() => {
+    if (!playerCardsFullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPlayerCardsFullscreen(false);
+    };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [playerCardsFullscreen]);
 
   const resetDisplayLetters = () => {
     if (!socket || !roomId) return;
@@ -3761,6 +3992,7 @@ const HostView: React.FC = () => {
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                     {playerCards.size > 0 && (
+                      <>
                       <button 
                         className="btn-secondary" 
                         onClick={() => setShowPlayerCards(!showPlayerCards)}
@@ -3774,6 +4006,18 @@ const HostView: React.FC = () => {
                       >
                         {showPlayerCards ? "👥 Hide Player Cards" : "👥 Show Player Cards"}
                       </button>
+                      {showPlayerCards && !playerCardsFullscreen && (
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => setPlayerCardsFullscreen(true)}
+                          title="Open player cards full screen"
+                          style={{ fontWeight: 800, borderColor: '#00ffa3', color: '#00ffa3' }}
+                        >
+                          ⛶ Full screen cards
+                        </button>
+                      )}
+                      </>
                     )}
                     <span style={{ fontSize: '0.75rem', color: '#888', maxWidth: 340 }}>
                       Player cards refresh automatically when the game starts, players join, songs play, or bingo verification opens.
@@ -4094,8 +4338,8 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
               </div>
             )}
 
-                {/* Player Cards (visible on all host tabs when enabled) */}
-                {showPlayerCards && playerCards.size > 0 && (
+                {/* Player Cards (visible on all host tabs when enabled; full-screen overlay is mutually exclusive) */}
+                {showPlayerCards && playerCards.size > 0 && !playerCardsFullscreen && (
              <motion.div 
                key={`player-cards-${playerCardsVersion}`}
                initial={{ opacity: 0 }}
@@ -4110,178 +4354,19 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                       marginTop: '20px'
                     }}
              >
-                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: 10 }}>
                       <h2 style={{ color: '#00ffa3', fontSize: '1.2rem', fontWeight: 600, margin: 0 }}>👥 Player Cards & Progress</h2>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => setPlayerCardsFullscreen(true)}
+                        style={{ fontWeight: 800, borderColor: '#00ffa3', color: '#00ffa3' }}
+                        title="Open player cards full screen (Escape to close)"
+                      >
+                        ⛶ Full screen
+                      </button>
                </div>
-                    <div style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', 
-                      gap: 16 
-                    }}>
-                      {Array.from(playerCards.entries()).map(([playerId, playerData]) => (
-                        <div key={playerId} style={{ 
-                          background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
-                          border: '1px solid rgba(0,255,136,0.3)', 
-                          borderRadius: '12px', 
-                          padding: '16px',
-                          boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
-                        }}>
-                          <div style={{ 
-                            fontWeight: 'bold', 
-                            marginBottom: '8px', 
-                            color: '#00ff88',
-                            fontSize: '1rem',
-                            textAlign: 'center'
-                          }}>
-                            {playerData.playerName}
-                         </div>
-                          
-                          {/* Win Progress Indicator */}
-                          {(() => {
-                            const progress = calculateWinProgress(playerData.card, pattern, playerData.playedSongs || []);
-                            const progressColor = progress.needed === 0 ? '#00ff88' : 
-                                                progress.needed <= 2 ? '#ffaa00' : 
-                                                progress.progress >= 50 ? '#66ccff' : '#888';
-                            const progressText = progress.needed === 0 ? '🎉 BINGO!' : 
-                                               progress.needed === 1 ? '1 more needed!' :
-                                               `${progress.needed} more needed`;
-                            const cheatingCount = progress.marked - progress.legitimate;
-                            const patternText = `${progress.patternProgress}/${progress.totalNeeded} in pattern (${progress.progress}%)`;
-                            
-                            return (
-                              <div style={{ 
-                                marginBottom: '12px', 
-                                textAlign: 'center',
-                                fontSize: '0.85rem'
-                              }}>
-                                <div style={{ 
-                                  color: progressColor,
-                                  fontWeight: 600,
-                                  marginBottom: '4px'
-                                }}>
-                                  {progressText}
-                       </div>
-                                {cheatingCount > 0 && (
-                                  <div style={{
-                                    color: '#ff4444',
-                                    fontSize: '0.75rem',
-                                    fontWeight: 'bold',
-                                    marginBottom: '4px'
-                                  }}>
-                                    ⚠️ {cheatingCount} invalid mark{cheatingCount > 1 ? 's' : ''}
-                   </div>
-                                )}
-                                <div style={{ 
-                                  background: 'rgba(255,255,255,0.1)',
-                                  borderRadius: '8px',
-                                  height: '6px',
-                                  overflow: 'hidden',
-                                  margin: '0 auto',
-                                  maxWidth: '200px'
-                                }}>
-                                  <div style={{
-                                    background: progressColor,
-                                    height: '100%',
-                                    width: `${progress.progress}%`,
-                                    transition: 'width 0.3s ease'
-                                  }} />
-                                </div>
-                                <div style={{ 
-                                  fontSize: '0.75rem',
-                                  color: '#b3b3b3',
-                                  marginTop: '2px'
-                                }}>
-                                  {patternText}
-                                  {progress.marked !== progress.legitimate && (
-                                    <span style={{ color: '#ff8888', marginLeft: '4px' }}>
-                                      ({progress.marked} total marked)
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })()}
-                          <div style={{ 
-                            display: 'grid', 
-                            gridTemplateColumns: 'repeat(5, 1fr)', 
-                            gap: '4px', 
-                            maxWidth: '300px',
-                            aspectRatio: '1/1',
-                            margin: '0 auto'
-                          }}>
-                            {playerData.card.squares.map((square: any) => {
-                              const isFree = !!(square.isFreeSpace || square.songId === '__FREE_SPACE__');
-                              const isPlayed = (playerData.playedSongs || []).includes(square.songId);
-                              const isMarked = square.marked;
-                              const isLegitimate = isMarked && (isFree || isPlayed);
-                              
-                              // Determine square status and styling
-                              let bgColor, borderColor, textColor, icon, statusText;
-                              
-                              if (isLegitimate) {
-                                // ✅ Legitimate mark (played and marked, or free space)
-                                bgColor = 'linear-gradient(135deg, #00ff88, #00cc6d)';
-                                borderColor = '#00ff88';
-                                textColor = '#001a0d';
-                                icon = '✓';
-                                statusText = isFree ? 'Free space' : 'Legitimate';
-                              } else if (isMarked && !isFree && !isPlayed) {
-                                // ⚠️ Invalid mark (marked but not played - cheating!)
-                                bgColor = 'linear-gradient(135deg, #ff6b6b, #ff4757)';
-                                borderColor = '#ff4757';
-                                textColor = '#ffffff';
-                                icon = 'âš ';
-                                statusText = 'Invalid - Not played yet!';
-                              } else if (!isMarked && isPlayed) {
-                                // 🔵 Missed opportunity (played but not marked)
-                                bgColor = 'linear-gradient(135deg, #4dabf7, #339af0)';
-                                borderColor = '#339af0';
-                                textColor = '#ffffff';
-                                icon = 'â—‹';
-                                statusText = 'Played but not marked';
-                              } else {
-                                // ⚪ Not played and not marked
-                                bgColor = 'rgba(255,255,255,0.1)';
-                                borderColor = 'rgba(255,255,255,0.3)';
-                                textColor = '#ffffff';
-                                icon = '';
-                                statusText = 'Not played';
-                              }
-                              
-                              return (
-                                <div 
-                                  key={square.position}
-                                  style={{ 
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    background: bgColor,
-                                    border: `2px solid ${borderColor}`,
-                                    borderRadius: '8px',
-                                    padding: '4px',
-                                    fontSize: '0.7rem',
-                                    fontWeight: isMarked ? 700 : 400,
-                                    color: textColor,
-                                    textAlign: 'center',
-                                    lineHeight: 1.1,
-                                    overflow: 'hidden'
-                                  }}
-                                  title={`${isFree ? 'FREE' : square.songName} — ${isFree ? '' : square.artistName}\nStatus: ${statusText}`}
-                                >
-                                {icon && <span style={{ marginRight: 2 }}>{icon}</span>}
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {(() => {
-                                    const label = isFree ? 'FREE' : square.songName;
-                                    return label.length > 12 ? label.substring(0, 12) + '...' : label;
-                                  })()}
-                    </span>
-                              </div>
-                              );
-                            })}
-                         </div>
-                  </div>
-                ))}
-               </div>
+                    {renderHostPlayerCardsGrid(true)}
              </motion.div>
            )}
           </div>
@@ -4391,6 +4476,60 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
           </div> {/* Close host-content */}
 
       </motion.div>
+
+      {/* Full-screen in-tab panel for player cards (below verification modal z-index) */}
+      {showPlayerCards && playerCards.size > 0 && playerCardsFullscreen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Player cards full screen"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 8500,
+            background: 'linear-gradient(180deg, #0d1117 0%, #0a0e14 100%)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}
+        >
+          <div
+            style={{
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '14px 18px',
+              borderBottom: '1px solid rgba(0,255,163,0.25)',
+              background: 'rgba(0,0,0,0.45)',
+              backdropFilter: 'blur(8px)'
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div style={{ color: '#00ffa3', fontWeight: 800, fontSize: 'clamp(1.1rem, 2vw, 1.45rem)', margin: 0 }}>
+                👥 Player Cards & Progress
+              </div>
+              <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
+                Pattern: <strong style={{ color: '#c5d4e0' }}>{getPatternDisplayName(pattern)}</strong>
+                {' · '}
+                <span>Press Escape to close</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setPlayerCardsFullscreen(false)}
+              style={{ fontWeight: 800, flexShrink: 0 }}
+            >
+              ✕ Close
+            </button>
+          </div>
+          <div style={{ flex: 1, overflow: 'auto', padding: '20px 18px 28px' }}>
+            {renderHostPlayerCardsGrid(false)}
+          </div>
+        </div>
+      )}
 
         
 

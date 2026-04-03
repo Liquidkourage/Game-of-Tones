@@ -57,6 +57,22 @@ interface BingoSquare {
   position: { row: number; col: number };
 }
 
+/**
+ * How many of the 15 fixed 5-song bands in the 1×75 pool have at least one played song.
+ * Must stay in sync with renderOneBy75GroupedColumns (carousel auto-advance used to read a stale pool from closure).
+ */
+function countOccupiedBandsInPool(ids: string[] | null | undefined, playedIds: ReadonlySet<string>): number {
+  if (!ids?.length) return 0;
+  let n = 0;
+  for (let g = 0; g < 15; g++) {
+    const slice = ids.slice(g * 5, g * 5 + 5);
+    if (slice.some((id) => !id.startsWith('__placeholder_') && playedIds.has(id))) {
+      n++;
+    }
+  }
+  return n;
+}
+
 const PublicDisplay: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [fontSizeMultiplier, setFontSizeMultiplier] = useState<number>(1.0);
@@ -1264,24 +1280,19 @@ const PublicDisplay: React.FC = () => {
 
   // Auto-advance the 15x5 grouped columns carousel (1x75 grouped layout only)
   useEffect(() => {
-    const ids = oneBy75IdsRef.current;
-    if (!ids) return;
     const interval = setInterval(() => {
       // 5x15 mode uses vertical column scroll, not this horizontal carousel
       if (fiveBy15Columns) return;
 
-      // CRITICAL: Match renderOneBy75GroupedColumns — count pool bands (of 5) that have
-      // at least one played song. Using ceil(playedCount/5) is WRONG: 45 songs can occupy
-      // up to 15 groups if spread across bands, but ceil(45/5)=9 would cap carousel and
-      // freeze scroll past ~song 45.
+      // Always read the latest pool from the ref — the previous code captured `ids` once when
+      // the effect ran, so the interval could keep slicing an old/partial array (e.g. before
+      // the full 75 loaded). That under-counted bands, caused premature wrap (next > totalGroups),
+      // and skipped later columns — often visible around ~45 songs / 9 bands.
+      const ids = oneBy75IdsRef.current;
+      if (!ids?.length) return;
+
       const played = new Set(playedOrderRef.current);
-      let totalGroups = 0;
-      for (let g = 0; g < 15; g++) {
-        const slice = ids.slice(g * 5, g * 5 + 5);
-        if (slice.some((id) => !id.startsWith('__placeholder_') && played.has(id))) {
-          totalGroups++;
-        }
-      }
+      const totalGroups = countOccupiedBandsInPool(ids, played);
 
       if (totalGroups > visibleCols) {
         setCarouselIndex((prev) => {
@@ -1301,6 +1312,17 @@ const PublicDisplay: React.FC = () => {
     }, 6000);
     return () => clearInterval(interval);
   }, [oneBy75Ids, visibleCols, fiveBy15Columns]);
+
+  // Keep carousel index in range when band count drops (pool / play state changes)
+  useEffect(() => {
+    if (fiveBy15Columns) return;
+    const ids = oneBy75IdsRef.current;
+    if (!ids?.length) return;
+    const played = new Set(playedOrderRef.current);
+    const totalGroups = countOccupiedBandsInPool(ids, played);
+    if (totalGroups <= visibleCols) return;
+    setCarouselIndex((prev) => Math.min(prev, totalGroups));
+  }, [oneBy75Ids, totalPlayedCount, visibleCols, fiveBy15Columns]);
 
   // Measure viewport width for pixel-perfect slides (one column per step)
   useEffect(() => {
@@ -1699,6 +1721,9 @@ const PublicDisplay: React.FC = () => {
       }
     }
 
+    /** Full-card (blackout) mode: show full song titles without line-clamp truncation. */
+    const isFullCardPattern = pattern === 'full_card';
+
     // Helper: Wheel-of-Fortune style masking using per-song baseline
     const renderMaskedText = (text: string, set: Set<string>, highlightChar: string | null) => {
       if (!text) return null;
@@ -1795,11 +1820,16 @@ const PublicDisplay: React.FC = () => {
             <div
               key={ci}
               className="call-col"
-              style={{ position: 'relative', overflow: 'hidden', height: '100%' }}
+              style={{
+                position: 'relative',
+                overflow: isFullCardPattern ? 'auto' : 'hidden',
+                height: '100%',
+                WebkitOverflowScrolling: 'touch'
+              }}
               {...(ci === 0 ? { ref: vertViewportRef as any } : {})}
             >
               {(() => {
-                const shouldScroll = col.length > 5 && rowHeightPx > 0;
+                const shouldScroll = !isFullCardPattern && col.length > 5 && rowHeightPx > 0;
                 // Build display items duplicated for seamless wrap
                 const displayItems = shouldScroll ? [...col, ...col] : col;
                 // Determine how many rows we need to offset to ensure no gap
@@ -1816,7 +1846,14 @@ const PublicDisplay: React.FC = () => {
                 return (
                   <div
                     className="call-vert-track"
-                    style={{ position: 'absolute', left: 0, right: 0, top: 0, willChange: 'transform', transform: `translateY(${-yPx}px)` }}
+                    style={{
+                      position: isFullCardPattern ? 'relative' : 'absolute',
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      willChange: isFullCardPattern ? undefined : 'transform',
+                      transform: isFullCardPattern ? undefined : `translateY(${-yPx}px)`
+                    }}
                   >
                 {displayItems.map((id, ri) => {
                   const poolIdx = Array.isArray(oneBy75Ids) ? oneBy75Ids.indexOf(id) : -1;
@@ -1837,10 +1874,22 @@ const PublicDisplay: React.FC = () => {
                         borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)'
                       }}
                       transition={{ duration: 0.25 }}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, height: rowHeightPx ? `${rowHeightPx}px` : undefined, overflow: 'hidden', background: 'rgba(255,255,255,0.08)', boxSizing: 'border-box' }}
+                      style={{
+                        display: 'flex',
+                        alignItems: isFullCardPattern ? 'flex-start' : 'center',
+                        gap: 10,
+                        padding: '10px 12px',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        borderRadius: 12,
+                        height: isFullCardPattern ? 'auto' : (rowHeightPx ? `${rowHeightPx}px` : undefined),
+                        minHeight: isFullCardPattern && rowHeightPx ? rowHeightPx : undefined,
+                        overflow: isFullCardPattern ? 'visible' : 'hidden',
+                        background: 'rgba(255,255,255,0.08)',
+                        boxSizing: 'border-box'
+                      }}
                     >
                       {/* Numeric badge: play order index */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%' }}>
                         <div
                           className="call-number"
                           style={{
@@ -1853,7 +1902,8 @@ const PublicDisplay: React.FC = () => {
                             alignItems: 'center',
                             justifyContent: 'center',
                             fontWeight: 900,
-                            color: '#e6e6e6'
+                            color: '#e6e6e6',
+                            flexShrink: 0
                           }}
                         >
                           {(() => {
@@ -1861,7 +1911,7 @@ const PublicDisplay: React.FC = () => {
                             return idx >= 0 ? (idx + 1) : '';
                           })()}
                         </div>
-                        <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                        <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}>
                           <AnimatePresence mode="popLayout" initial={false}>
                           <motion.div
                             key={(meta?.name || '') + '-' + ri}
@@ -1870,7 +1920,33 @@ const PublicDisplay: React.FC = () => {
                             exit={{ opacity: 0, y: -6, scale: 0.98 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-name"
-                            style={{ fontWeight: 900, lineHeight: 1.12, fontSize: `${32 * fontSizeMultiplier}px`, color: '#ffffff', textShadow: '0 2px 4px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            style={
+                              isFullCardPattern
+                                ? {
+                                    fontWeight: 900,
+                                    lineHeight: 1.2,
+                                    fontSize: `${32 * fontSizeMultiplier}px`,
+                                    color: '#ffffff',
+                                    textShadow: '0 2px 4px rgba(0,0,0,0.8)',
+                                    whiteSpace: 'normal',
+                                    wordBreak: 'break-word',
+                                    display: 'block',
+                                    overflow: 'visible'
+                                  }
+                                : {
+                                    fontWeight: 900,
+                                    lineHeight: 1.12,
+                                    fontSize: `${32 * fontSizeMultiplier}px`,
+                                    color: '#ffffff',
+                                    textShadow: '0 2px 4px rgba(0,0,0,0.8)',
+                                    whiteSpace: 'normal',
+                                    wordBreak: 'keep-all',
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 3,
+                                    WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden'
+                                  }
+                            }
                           >
                             {title}
                           </motion.div>
@@ -1881,7 +1957,34 @@ const PublicDisplay: React.FC = () => {
                             exit={{ opacity: 0, y: -4 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-artist"
-                            style={{ fontSize: `${26 * fontSizeMultiplier}px`, color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 2px 4px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            style={
+                              isFullCardPattern
+                                ? {
+                                    fontSize: `${26 * fontSizeMultiplier}px`,
+                                    color: '#e0e0e0',
+                                    lineHeight: 1.2,
+                                    fontWeight: 800,
+                                    textShadow: '0 2px 4px rgba(0,0,0,0.6)',
+                                    whiteSpace: 'normal',
+                                    wordBreak: 'break-word',
+                                    display: 'block',
+                                    overflow: 'visible',
+                                    marginTop: 6
+                                  }
+                                : {
+                                    fontSize: `${26 * fontSizeMultiplier}px`,
+                                    color: '#e0e0e0',
+                                    lineHeight: 1.14,
+                                    fontWeight: 800,
+                                    textShadow: '0 2px 4px rgba(0,0,0,0.6)',
+                                    whiteSpace: 'normal',
+                                    wordBreak: 'keep-all',
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden'
+                                  }
+                            }
                           >
                             {artist}
                           </motion.div>
@@ -1906,6 +2009,7 @@ const PublicDisplay: React.FC = () => {
     // Use state if available, otherwise fallback to ref (for fallback mode)
     const idsToUse = oneBy75Ids || oneBy75IdsRef.current;
     if (!idsToUse) return null;
+    const isFullCardPattern = pattern === 'full_card';
     // CRITICAL: Use playedOrderRef as source of truth for played songs (not currentIndexRef)
     // This ensures all played songs are shown, not just up to currentIndex
     // CRITICAL FIX: Use playedOrderRef directly instead of slicing idsToUse
@@ -1999,10 +2103,20 @@ const PublicDisplay: React.FC = () => {
                           borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)'
                         }}
                         transition={{ duration: 0.25 }}
-                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px 14px 12px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, height: '100%', overflow: 'hidden', background: 'rgba(255,255,255,0.08)' }}
+                        style={{
+                          display: 'flex',
+                          alignItems: isFullCardPattern ? 'flex-start' : 'center',
+                          gap: 10,
+                          padding: '12px 12px 14px 12px',
+                          border: '1px solid rgba(255,255,255,0.15)',
+                          borderRadius: 12,
+                          height: isFullCardPattern ? 'auto' : '100%',
+                          overflow: isFullCardPattern ? 'visible' : 'hidden',
+                          background: 'rgba(255,255,255,0.08)'
+                        }}
                       >
-                        <div className="call-number" style={{ fontSize: '1.6rem', minWidth: 38, fontWeight: 900, lineHeight: 1 }}>{poolIdx + 1}</div>
-                        <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                        <div className="call-number" style={{ fontSize: '1.6rem', minWidth: 38, fontWeight: 900, lineHeight: 1, flexShrink: 0 }}>{poolIdx + 1}</div>
+                        <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: isFullCardPattern ? 'flex-start' : 'center' }}>
                           <AnimatePresence mode="popLayout" initial={false}>
                             <motion.div
                               key={(meta?.name || '')}
@@ -2011,7 +2125,33 @@ const PublicDisplay: React.FC = () => {
                               exit={{ opacity: 0, y: -6, scale: 0.98 }}
                               transition={{ duration: 0.25 }}
                               className="call-song-name"
-                              style={{ fontWeight: 900, lineHeight: 1.25, fontSize: `${32 * fontSizeMultiplier}px`, color: '#ffffff', textShadow: '0 2px 6px rgba(0,0,0,0.8)', whiteSpace: 'normal', wordBreak: 'keep-all', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                              style={
+                                isFullCardPattern
+                                  ? {
+                                      fontWeight: 900,
+                                      lineHeight: 1.25,
+                                      fontSize: `${32 * fontSizeMultiplier}px`,
+                                      color: '#ffffff',
+                                      textShadow: '0 2px 6px rgba(0,0,0,0.8)',
+                                      whiteSpace: 'normal',
+                                      wordBreak: 'break-word',
+                                      display: 'block',
+                                      overflow: 'visible'
+                                    }
+                                  : {
+                                      fontWeight: 900,
+                                      lineHeight: 1.25,
+                                      fontSize: `${32 * fontSizeMultiplier}px`,
+                                      color: '#ffffff',
+                                      textShadow: '0 2px 6px rgba(0,0,0,0.8)',
+                                      whiteSpace: 'normal',
+                                      wordBreak: 'keep-all',
+                                      display: '-webkit-box',
+                                      WebkitLineClamp: 2,
+                                      WebkitBoxOrient: 'vertical',
+                                      overflow: 'hidden'
+                                    }
+                              }
                             >
                               {title}
                             </motion.div>
@@ -2022,7 +2162,34 @@ const PublicDisplay: React.FC = () => {
                               exit={{ opacity: 0, y: -4 }}
                               transition={{ duration: 0.25 }}
                               className="call-song-artist"
-                              style={{ fontSize: `${26 * fontSizeMultiplier}px`, color: '#e0e0e0', lineHeight: 1.14, fontWeight: 800, textShadow: '0 2px 4px rgba(0,0,0,0.6)', whiteSpace: 'normal', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                              style={
+                                isFullCardPattern
+                                  ? {
+                                      fontSize: `${26 * fontSizeMultiplier}px`,
+                                      color: '#e0e0e0',
+                                      lineHeight: 1.2,
+                                      fontWeight: 800,
+                                      textShadow: '0 2px 4px rgba(0,0,0,0.6)',
+                                      whiteSpace: 'normal',
+                                      wordBreak: 'break-word',
+                                      display: 'block',
+                                      overflow: 'visible',
+                                      marginTop: 6
+                                    }
+                                  : {
+                                      fontSize: `${26 * fontSizeMultiplier}px`,
+                                      color: '#e0e0e0',
+                                      lineHeight: 1.14,
+                                      fontWeight: 800,
+                                      textShadow: '0 2px 4px rgba(0,0,0,0.6)',
+                                      whiteSpace: 'normal',
+                                      wordBreak: 'break-word',
+                                      display: '-webkit-box',
+                                      WebkitLineClamp: 1,
+                                      WebkitBoxOrient: 'vertical',
+                                      overflow: 'hidden'
+                                    }
+                              }
                             >
                               {artist}
                             </motion.div>
