@@ -3177,37 +3177,42 @@ const HostView: React.FC = () => {
           >
             <div className="host-spotify-playback-unified__grid">
               <div className="spotify-section spotify-section--unified">
-                <h2>🎵 Spotify Connection</h2>
                 {!isSpotifyConnected ? (
-                  <div className="spotify-connection-section">
-                    {spotifyError && (
-                      <div className="spotify-error">
-                        <p>{spotifyError}</p>
-                      </div>
-                    )}
-                    <button
-                      className="spotify-connect-btn btn"
-                      type="button"
-                      onClick={() => {
-                        setSpotifyError(null);
-                        connectSpotify();
-                      }}
-                      disabled={isSpotifyConnecting}
-                    >
-                      <Music className="btn-icon spotify-btn-icon" aria-hidden />
-                      {isSpotifyConnecting
-                        ? 'Connecting...'
-                        : spotifyError
-                          ? 'Try again'
-                          : 'Connect Spotify'}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="spotify-connected spotify-connected--status-only">
-                    <div className="spotify-connected-main">
-                      <Music className="connected-icon" aria-hidden />
-                      <span className="spotify-connected-label">Connected to Spotify</span>
+                  <>
+                    <h2>🎵 Spotify Connection</h2>
+                    <div className="spotify-connection-section">
+                      {spotifyError && (
+                        <div className="spotify-error">
+                          <p>{spotifyError}</p>
+                        </div>
+                      )}
+                      <button
+                        className="spotify-connect-btn btn"
+                        type="button"
+                        onClick={() => {
+                          setSpotifyError(null);
+                          connectSpotify();
+                        }}
+                        disabled={isSpotifyConnecting}
+                      >
+                        <Music className="btn-icon spotify-btn-icon" aria-hidden />
+                        {isSpotifyConnecting
+                          ? 'Connecting...'
+                          : spotifyError
+                            ? 'Try again'
+                            : 'Connect Spotify'}
+                      </button>
                     </div>
+                  </>
+                ) : (
+                  <div
+                    className="spotify-connection-led"
+                    role="status"
+                    title="Spotify connected"
+                    aria-label="Spotify connected"
+                  >
+                    <span className="spotify-connection-led__dot" aria-hidden />
+                    <span className="spotify-connection-led__label">Connection</span>
                   </div>
                 )}
               </div>

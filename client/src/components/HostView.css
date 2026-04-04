@@ -468,6 +468,53 @@
   padding-top: 1rem;
 }
 
+/* Compact “panel LED” when Spotify is connected (Manager tab) */
+.host-view .spotify-connection-led {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0;
+}
+
+.host-view .spotify-connection-led__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: radial-gradient(circle at 30% 30%, #b8ffd9 0%, #00ff88 45%, #00a85c 100%);
+  box-shadow:
+    0 0 6px 1px rgba(0, 255, 136, 0.85),
+    0 0 14px 2px rgba(0, 255, 136, 0.35),
+    inset 0 1px 1px rgba(255, 255, 255, 0.45);
+  animation: spotify-led-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes spotify-led-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  50% {
+    opacity: 0.92;
+    filter: brightness(1.08);
+  }
+}
+
+.host-view .spotify-connection-led__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(0, 255, 136, 0.85);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .host-view .spotify-connection-led__dot {
+    animation: none;
+  }
+}
+
 .host-view .spotify-connection-section {
   display: flex;
   flex-direction: column;
@@ -514,38 +561,6 @@
   height: 1.2rem;
 }
 
-.host-view .spotify-connected {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.85rem 1rem;
-}
-
-.host-view .spotify-connected--status-only {
-  justify-content: flex-start;
-}
-
-.host-view .spotify-connected-main {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  min-width: 0;
-}
-
-.host-view .spotify-connected-label {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--secondary-text, #c4cad6);
-}
-
-.host-view .spotify-connected .connected-icon {
-  width: 1.35rem;
-  height: 1.35rem;
-  color: var(--accent-color, #00ff88);
-  filter: drop-shadow(0 0 10px rgba(0, 255, 136, 0.35));
-}
-
 .host-view .disconnect-btn {
   background: rgba(0, 0, 0, 0.25) !important;
   color: #ffb3b3 !important;
@@ -571,11 +586,6 @@
 }
 
 @media (max-width: 520px) {
-  .host-view .spotify-connected {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
   .host-view .disconnect-btn {
     width: 100%;
     justify-content: center;
