@@ -119,7 +119,7 @@ body {
   height: 2rem;
 }
 .app-container:has(.player-container) .logo h1 {
-  font-size: clamp(1.15rem, 4.2vw, 1.65rem);
+  font-size: clamp(1.28rem, 4.6vw, 1.8rem);
   line-height: 1.15;
 }
 
@@ -1214,16 +1214,16 @@ body {
   flex-direction: column !important;
   align-items: center !important;
   justify-content: flex-start !important;
-  gap: 2px !important;
+  gap: 4px !important;
   text-align: center !important;
   min-width: 0 !important;
   user-select: none !important;
 }
 
 .player-container .bingo-column-headers__letter {
-  font-size: clamp(7px, min(1.75vw, 1.75vh), 11px) !important;
+  font-size: clamp(11px, max(2.8vw, 2.6vmin), 15px) !important;
   font-weight: 800 !important;
-  letter-spacing: 0.08em !important;
+  letter-spacing: 0.06em !important;
   color: rgba(0, 255, 163, 0.95) !important;
   line-height: 1.1 !important;
   text-shadow: 0 0 12px rgba(0, 255, 136, 0.25) !important;
@@ -1236,11 +1236,11 @@ body {
   overflow: hidden !important;
   width: 100% !important;
   max-width: 100% !important;
-  font-size: clamp(5px, min(1.35vw, 1.35vh), 8px) !important;
+  font-size: clamp(9px, max(2.6vw, 2.4vmin), 12px) !important;
   font-weight: 600 !important;
-  line-height: 1.12 !important;
+  line-height: 1.18 !important;
   letter-spacing: 0.01em !important;
-  color: rgba(220, 230, 240, 0.88) !important;
+  color: rgba(232, 240, 248, 0.92) !important;
   word-break: break-word !important;
 }
 
@@ -1692,7 +1692,7 @@ body {
 }
 
 .player-container .player-chrome .player-line {
-  font-size: clamp(13px, min(3.6vw, 3vmin), 17px);
+  font-size: clamp(14px, min(3.8vw, 3.2vmin), 18px);
   font-weight: 600;
   line-height: 1.15;
   overflow: hidden;
@@ -1701,8 +1701,9 @@ body {
 }
 
 .player-container .player-chrome .player-meta-line {
-  font-size: clamp(12px, min(2.9vw, 2.5vmin), 14px);
-  line-height: 1.12;
+  font-size: clamp(13px, min(3.5vw, 3.1vmin), 17px);
+  line-height: 1.2;
+  color: rgba(210, 218, 228, 0.95);
 }
 
 .player-container .player-chrome .player-icon {
@@ -1725,7 +1726,7 @@ body {
 }
 
 .player-container .player-chrome .conn-chip-compact .conn-chip-label {
-  font-size: clamp(12px, min(2.9vw, 2.5vmin), 14px);
+  font-size: clamp(13px, min(3.2vw, 2.8vmin), 16px);
 }
 
 .player-container .player-chrome .conn-chip-compact .conn-dot {
@@ -1766,17 +1767,19 @@ body {
 .player-container .player-chrome .player-controls-label {
   flex: 0 1 auto;
   min-width: 0;
-  font-size: clamp(10px, min(2.6vw, 2.3vmin), 12px);
+  font-size: clamp(12px, min(3.2vw, 2.85vmin), 15px);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #8f96a0;
+  color: #a8b0bc;
 }
 
 .player-container .player-chrome .player-controls-hint {
-  font-size: clamp(12px, min(3.1vw, 2.7vmin), 15px);
+  font-size: clamp(13px, min(3.4vw, 3vmin), 16px);
   min-width: 0;
   text-align: right;
+  font-weight: 600;
+  color: rgba(235, 240, 246, 0.95);
 }
 
 .player-container .player-chrome .player-controls-slot {
@@ -1785,9 +1788,9 @@ body {
 }
 
 .player-container .player-chrome .player-font-hint-inline {
-  font-size: clamp(9px, min(2.1vw, 1.9vmin), 11px);
-  color: #7a8088;
-  line-height: 1.15;
+  font-size: clamp(11px, min(2.6vw, 2.3vmin), 13px);
+  color: #9ba3ad;
+  line-height: 1.2;
   max-width: min(4.5rem, 42vw);
   white-space: nowrap;
   overflow: hidden;
@@ -1873,10 +1876,10 @@ body {
   }
 
   .player-container .player-chrome .bingo-fab.bingo-fab--canvas {
-    min-height: 40px;
-    padding: 6px 10px 9px;
-    font-size: clamp(10px, min(2.8vw, 2.4vmin), 13px);
-    line-height: 1.12;
+    min-height: 44px;
+    padding: 8px 12px 10px;
+    font-size: clamp(12px, min(3.2vw, 2.8vmin), 15px);
+    line-height: 1.2;
   }
 
   .player-container .player-chrome .bingo-fab-hold-track {
@@ -1889,11 +1892,11 @@ body {
   }
 
   .player-container .player-chrome .player-line {
-    font-size: clamp(12px, min(3.2vw, 2.6vmin), 15px);
+    font-size: clamp(13px, min(3.4vw, 2.9vmin), 16px);
   }
 
   .player-container .player-chrome .player-meta-line {
-    font-size: clamp(11px, min(2.6vw, 2.2vmin), 13px);
+    font-size: clamp(12px, min(3.1vw, 2.7vmin), 15px);
   }
 
   .player-container .player-chrome .player-controls.player-controls-strip {
@@ -1902,15 +1905,15 @@ body {
   }
 
   .player-container .player-chrome .player-controls-label {
-    font-size: clamp(9px, min(2.3vw, 2vmin), 11px);
+    font-size: clamp(11px, min(2.9vw, 2.6vmin), 14px);
   }
 
   .player-container .player-chrome .player-controls-hint {
-    font-size: clamp(11px, min(2.7vw, 2.3vmin), 14px);
+    font-size: clamp(12px, min(3.1vw, 2.7vmin), 15px);
   }
 
   .player-container .player-chrome .font-size-readout {
-    font-size: clamp(12px, min(2.8vw, 2.4vmin), 14px);
+    font-size: clamp(13px, min(3vw, 2.7vmin), 16px);
     min-width: 2.5rem;
   }
 
