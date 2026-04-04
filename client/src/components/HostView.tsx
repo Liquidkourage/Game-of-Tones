@@ -3296,39 +3296,19 @@ const HostView: React.FC = () => {
         {/* Main Content */}
         <div className="host-content" style={{ paddingBottom: '20px' }}>
           {/* Tab Navigation */}
-          <div className="tab-navigation" style={{
-            display: 'flex',
-            gap: 2,
-            marginBottom: 20,
-            borderBottom: '1px solid rgba(255,255,255,0.1)',
-            paddingBottom: 0
-          }}>
+          <div className="tab-navigation host-tab-navigation">
             {[
               { id: 'setup', label: '🎯 Manager', desc: 'Setup & Management' },
               { id: 'play', label: '🎮 Game', desc: 'Live Game Controls' }
             ].map(tab => (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
-                style={{
-                  flex: 1,
-                  padding: '12px 16px',
-                  border: 'none',
-                  borderRadius: '8px 8px 0 0',
-                  background: activeTab === tab.id 
-                    ? 'linear-gradient(135deg, rgba(0,255,136,0.2), rgba(0,255,136,0.1))'
-                    : 'rgba(255,255,255,0.05)',
-                  color: activeTab === tab.id ? '#00ff88' : '#b3b3b3',
-                  borderBottom: activeTab === tab.id ? '2px solid #00ff88' : '2px solid transparent',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  fontSize: '0.9rem',
-                  fontWeight: activeTab === tab.id ? 600 : 400
-                }}
+                className={`host-tab-button ${activeTab === tab.id ? 'active' : ''}`}
               >
                 <div>{tab.label}</div>
-                <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>{tab.desc}</div>
+                <div className="host-tab-button__desc">{tab.desc}</div>
               </button>
             ))}
           </div>
@@ -3361,6 +3341,7 @@ const HostView: React.FC = () => {
                 >
                   <input
                     type="checkbox"
+                    className="host-control-checkbox"
                     checked={hybridInPersonPlusOnline}
                     onChange={(e) => {
                       const v = e.target.checked;
@@ -4017,12 +3998,7 @@ const HostView: React.FC = () => {
             <h2>🎮 Game Controls</h2>
 
                   {/* Game Settings */}
-                  <div style={{ 
-                    background: 'rgba(255,255,255,0.05)', 
-                    padding: 16, 
-                    borderRadius: 8, 
-                    marginBottom: 16 
-                  }}>
+                  <div className="host-game-settings-panel">
                     {/* Track Length Control */}
                     <div style={{ marginBottom: 16 }}>
                       <h4 style={{ fontSize: '0.9rem', color: '#00ff88', marginBottom: 8, fontWeight: 600 }}>
@@ -4033,6 +4009,7 @@ const HostView: React.FC = () => {
                           <span style={{ opacity: 0.85, minWidth: '80px' }}>Track Length:</span>
                 <input
                   type="range"
+                  className="host-range host-range--snippet"
                   min="5"
                   max="60"
                   value={snippetLength}
@@ -4041,7 +4018,6 @@ const HostView: React.FC = () => {
                               setSnippetLength(newLength);
                               localStorage.setItem('game-snippet-length', newLength.toString());
                             }}
-                            style={{ width: '120px' }}
                           />
                           <span style={{ width: 40, textAlign: 'right', color: '#00ff88', fontWeight: 'bold' }}>
                             {snippetLength}s
@@ -4050,11 +4026,12 @@ const HostView: React.FC = () => {
                       </div>
                       
                       {/* Start Position Control */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                      <div className="host-radio-row">
                         <span style={{ opacity: 0.85, minWidth: '80px' }}>Start Position:</span>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input
                             type="radio"
+                            className="host-control-radio"
                             name="startPosition"
                             checked={randomStarts === 'none'}
                             onChange={() => {
@@ -4067,6 +4044,7 @@ const HostView: React.FC = () => {
                         <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <input
                             type="radio"
+                            className="host-control-radio"
                             name="startPosition"
                             checked={randomStarts === 'early'}
                             onChange={() => {
@@ -4079,6 +4057,7 @@ const HostView: React.FC = () => {
                         <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <input
                             type="radio"
+                            className="host-control-radio"
                             name="startPosition"
                             checked={randomStarts === 'random'}
                             onChange={() => {
@@ -4114,6 +4093,7 @@ const HostView: React.FC = () => {
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8 }} title="Polls Spotify playback more often and tightens recovery after context glitches. Uses more API traffic; use if you fight hijacked playback.">
                   <input
                     type="checkbox"
+                    className="host-control-checkbox"
                     checked={superStrict}
                     onChange={(e) => {
                       const val = !!e.target.checked;
@@ -4222,11 +4202,6 @@ const HostView: React.FC = () => {
                             className="btn-accent"
                             onClick={() => setShowRoundManager(!showRoundManager)}
                             aria-pressed={showRoundManager}
-                            style={
-                              showRoundManager
-                                ? { boxShadow: '0 0 0 2px #00ff88, 0 0 18px rgba(0,255,136,0.35)' }
-                                : undefined
-                            }
                           >
                             {showRoundManager ? '🎯 Round Manager (on)' : '🎯 Round Manager'}
                           </button>
@@ -4234,14 +4209,9 @@ const HostView: React.FC = () => {
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <span style={{ opacity: 0.9 }}>Public display:</span>
                     <button 
-                      className="btn-secondary" 
+                      type="button"
+                      className="btn-secondary btn-host-warn" 
                       onClick={resetDisplayLetters}
-                      style={{ 
-                        backgroundColor: '#ffaa00', 
-                        borderColor: '#ffaa00',
-                        color: '#000',
-                        fontWeight: 'bold'
-                      }}
                       title="Reset revealed letters on public display (fixes stuck letters)"
                     >
                       🔤 Reset Letters
@@ -4251,25 +4221,19 @@ const HostView: React.FC = () => {
                     {playerCards.size > 0 && (
                       <>
                       <button 
-                        className="btn-secondary" 
+                        type="button"
+                        className={`btn-secondary btn-host-cards-toggle ${showPlayerCards ? 'btn-host-cards-toggle--on' : 'btn-host-cards-toggle--off'}`}
                         onClick={() => setShowPlayerCards(!showPlayerCards)}
                         title={showPlayerCards ? "Hide player bingo cards" : "Show player bingo cards and progress"}
-                        style={{ 
-                          backgroundColor: showPlayerCards ? '#ff6b35' : '#00ffa3', 
-                          borderColor: showPlayerCards ? '#ff6b35' : '#00ffa3',
-                          color: showPlayerCards ? 'white' : 'black',
-                          fontWeight: 'bold'
-                        }}
                       >
                         {showPlayerCards ? "👥 Hide Player Cards" : "👥 Show Player Cards"}
                       </button>
                       {showPlayerCards && !playerCardsFullscreen && (
                         <button
                           type="button"
-                          className="btn-secondary"
+                          className="btn-secondary btn-host-emphasis"
                           onClick={openPlayerCardsModal}
                           title="Open player cards in a window (expand to full screen inside, or Escape to close)"
-                          style={{ fontWeight: 800, borderColor: '#00ffa3', color: '#00ffa3' }}
                         >
                           👁 View player cards
                         </button>
@@ -4691,12 +4655,9 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                 justifyContent: 'center'
               }}>
                    <button
-                  className="btn-secondary"
+                  type="button"
+                  className="btn-secondary btn-host-icon"
                      onClick={handleMuteToggle}
-                     style={{ 
-                    minWidth: '60px',
-                    fontSize: '0.9rem'
-                     }}
                    >
                      {isMuted ? '🔇' : '🔊'}
                    </button>
@@ -4719,16 +4680,9 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                     }}
                     style={{
                       flex: 1,
-                      height: '6px',
-                      borderRadius: '3px',
                       background: `linear-gradient(to right, #00ff88 0%, #00ff88 ${isMuted ? 0 : playbackState.volume}%, #333 ${isMuted ? 0 : playbackState.volume}%, #333 100%)`,
-                      outline: 'none',
-                      cursor: 'pointer',
-                      WebkitAppearance: 'none',
-                      MozAppearance: 'none',
-                      border: 'none'
                     }}
-                     className="volume-slider"
+                     className="volume-slider host-range host-range--volume"
                    />
                   <span style={{ fontSize: '0.8rem', color: '#666', minWidth: '40px' }}>100%</span>
                  </div>

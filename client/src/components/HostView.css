@@ -1026,3 +1026,302 @@
   color: rgba(180, 186, 195, 0.95);
   word-break: break-word;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Host: unified buttons, tabs, sliders, radios (matches navy + neon theme) */
+/* -------------------------------------------------------------------------- */
+.host-view {
+  --host-btn-radius: 10px;
+  --host-border-mint: rgba(0, 255, 163, 0.42);
+  --host-border-mint-soft: rgba(0, 255, 136, 0.22);
+}
+
+.host-view .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem;
+  min-height: 42px;
+  border-radius: var(--host-btn-radius);
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: inherit;
+  line-height: 1.2;
+  background: rgba(0, 255, 136, 0.06);
+  border: 1px solid var(--host-border-mint);
+  color: #c8f7e4;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.18s ease,
+    transform 0.1s ease;
+}
+
+.host-view .btn-secondary:hover:not(:disabled) {
+  background: rgba(0, 255, 136, 0.13);
+  border-color: rgba(0, 255, 180, 0.55);
+  color: #f0fff8;
+  box-shadow: 0 0 22px rgba(0, 255, 136, 0.12);
+}
+
+.host-view .btn-secondary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.host-view .btn-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.host-view .btn-accent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem;
+  min-height: 42px;
+  border-radius: var(--host-btn-radius);
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: rgba(255, 255, 255, 0.92);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.2s ease;
+}
+
+.host-view .btn-accent:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.42);
+}
+
+.host-view .btn-accent[aria-pressed='true'] {
+  background: rgba(0, 255, 136, 0.12);
+  border-color: rgba(0, 255, 163, 0.55);
+  color: #00ffa3;
+  box-shadow:
+    0 0 0 2px rgba(0, 255, 136, 0.35),
+    0 0 22px rgba(0, 255, 136, 0.2);
+}
+
+.host-view .btn-danger-outline {
+  border-radius: var(--host-btn-radius);
+  min-height: 42px;
+  border-color: rgba(255, 120, 120, 0.45);
+  color: #ffb8b8;
+  background: rgba(255, 60, 60, 0.1);
+}
+
+.host-view .btn-danger-outline:hover:not(:disabled) {
+  border-color: rgba(255, 160, 160, 0.65);
+  color: #ffd6d6;
+  background: rgba(255, 60, 60, 0.16);
+}
+
+/* Amber “utility” actions (e.g. reset letters) */
+.host-view .btn-host-warn {
+  background: linear-gradient(180deg, #f0a020 0%, #d9870a 100%);
+  border: 1px solid rgba(255, 210, 120, 0.45);
+  color: #1a1204;
+  font-weight: 700;
+}
+
+.host-view .btn-host-warn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffc040 0%, #e89410 100%);
+  border-color: rgba(255, 220, 140, 0.65);
+  color: #140e04;
+  box-shadow: 0 0 20px rgba(255, 180, 60, 0.25);
+}
+
+/* Player cards visibility toggle */
+.host-view .btn-host-cards-toggle--off {
+  background: rgba(0, 255, 163, 0.12);
+  border-color: rgba(0, 255, 180, 0.55);
+  color: #062a1c;
+  font-weight: 700;
+}
+
+.host-view .btn-host-cards-toggle--off:hover:not(:disabled) {
+  background: rgba(0, 255, 163, 0.2);
+  color: #021810;
+}
+
+.host-view .btn-host-cards-toggle--on {
+  background: linear-gradient(180deg, #ff7a45 0%, #e85d2a 100%);
+  border: 1px solid rgba(255, 150, 100, 0.55);
+  color: #fff;
+  font-weight: 700;
+}
+
+.host-view .btn-host-cards-toggle--on:hover:not(:disabled) {
+  filter: brightness(1.05);
+  box-shadow: 0 0 18px rgba(255, 120, 80, 0.25);
+}
+
+.host-view .btn-host-emphasis {
+  border-color: #00ffa3;
+  color: #00ffa3;
+  font-weight: 700;
+  background: rgba(0, 255, 163, 0.08);
+}
+
+.host-view .btn-host-emphasis:hover:not(:disabled) {
+  background: rgba(0, 255, 163, 0.16);
+  box-shadow: 0 0 20px rgba(0, 255, 163, 0.2);
+}
+
+.host-view .btn-host-icon {
+  min-width: 52px;
+  padding-left: 0.65rem;
+  padding-right: 0.65rem;
+  font-size: 1.05rem;
+}
+
+/* Tab bar */
+.host-view .host-tab-navigation {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 0;
+}
+
+.host-view .host-tab-button {
+  flex: 1;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 10px 10px 0 0;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(200, 206, 214, 0.85);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease;
+  font-family: inherit;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.host-view .host-tab-button:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #e8ecf0;
+}
+
+.host-view .host-tab-button.active {
+  background: linear-gradient(180deg, rgba(0, 255, 136, 0.16) 0%, rgba(0, 255, 136, 0.06) 100%);
+  color: #00ffa3;
+  font-weight: 600;
+  border-bottom-color: #00ffa3;
+}
+
+.host-view .host-tab-button__desc {
+  font-size: 0.75rem;
+  opacity: 0.82;
+  margin-top: 2px;
+  font-weight: 400;
+  color: inherit;
+}
+
+/* Settings card */
+.host-view .host-game-settings-panel {
+  background: rgba(255, 255, 255, 0.04);
+  padding: 16px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  border: 1px solid var(--host-border-mint-soft);
+}
+
+/* Range inputs */
+.host-view .host-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+  border: none;
+}
+
+.host-view .host-range--snippet {
+  width: 140px;
+  max-width: 100%;
+  background: linear-gradient(
+    90deg,
+    rgba(0, 255, 136, 0.35) 0%,
+    rgba(0, 200, 255, 0.25) 100%
+  );
+  box-shadow: 0 0 0 1px rgba(0, 255, 136, 0.2) inset;
+}
+
+.host-view .host-range--volume {
+  height: 6px;
+  border-radius: 4px;
+}
+
+.host-view .host-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #f5fff9 0%, #00ffa3 45%, #00b86b 100%);
+  box-shadow:
+    0 0 0 2px rgba(0, 40, 30, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  border: none;
+}
+
+.host-view .host-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #f5fff9 0%, #00ffa3 45%, #00b86b 100%);
+  box-shadow: 0 0 0 2px rgba(0, 40, 30, 0.35);
+  cursor: pointer;
+  border: none;
+}
+
+.host-view .host-range--volume::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+}
+
+.host-view .host-range--volume::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+}
+
+/* Radios & checkboxes */
+.host-view .host-radio-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.host-view .host-control-radio {
+  accent-color: #00ffa3;
+  width: 1.05rem;
+  height: 1.05rem;
+  cursor: pointer;
+}
+
+.host-view .host-control-checkbox {
+  accent-color: #00ffa3;
+  width: 1.05rem;
+  height: 1.05rem;
+  cursor: pointer;
+}
