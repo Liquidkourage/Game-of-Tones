@@ -82,6 +82,11 @@ function isBingoFreeSpaceSquare(square: { isFreeSpace?: boolean; songId?: string
   return !!(square && (square.isFreeSpace || square.songId === '__FREE_SPACE__'));
 }
 
+/** Spotify may return HTML in playlist descriptions; strip tags for display. */
+function stripPlaylistDescriptionHtml(raw: string): string {
+  return raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 const HostView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -3796,7 +3801,7 @@ const HostView: React.FC = () => {
                               }}
                               style={{ 
                                 display: 'flex',
-                                alignItems: 'center',
+                                alignItems: 'flex-start',
                                 gap: 10, 
                                 padding: '6px 8px', 
                                 borderBottom: '1px solid rgba(255,255,255,0.08)',
@@ -3821,39 +3826,59 @@ const HostView: React.FC = () => {
                                     setSelectedPlaylists(selectedPlaylists.filter(sp => sp.id !== p.id));
                                   }
                                 }}
+                                style={{ marginTop: 3 }}
                               />
                               <span style={{ 
                                 flex: 1, 
-                                fontSize: '0.9rem',
-                                color: isAcceptable ? '#00ff88' : '#fff',
+                                minWidth: 0,
                                 display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px'
+                                flexDirection: 'column',
+                                gap: 5,
+                                alignItems: 'flex-start',
                               }}>
-                                {stripGoTPrefix ? p.name.replace(/^GoT\s*[-–:]*\s*/i, '') : p.name}
-                                {/* Show GoT badge when filtering is active and prefix is stripped */}
-                                {!showAllPlaylists && stripGoTPrefix && (/^got\s*[-–:]*\s*/i.test(p.name) || p.name.toLowerCase().includes('game of tones') || p.name.toLowerCase().includes('gameoftones')) && (
-                                  <span style={{
-                                    fontSize: '0.7rem',
-                                    padding: '2px 6px',
-                                    borderRadius: '4px',
-                                    background: 'rgba(0, 255, 136, 0.2)',
-                                    color: '#00ff88',
-                                    border: '1px solid rgba(0, 255, 136, 0.3)'
-                                  }}>
-                                    GoT
-                                  </span>
-                                )}
+                                <span style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  flexWrap: 'wrap',
+                                  gap: 8,
+                                  fontSize: '0.9rem',
+                                  color: isAcceptable ? '#00ff88' : '#fff',
+                                }}>
+                                  {stripGoTPrefix ? p.name.replace(/^GoT\s*[-–:]*\s*/i, '') : p.name}
+                                  {!showAllPlaylists && stripGoTPrefix && (/^got\s*[-–:]*\s*/i.test(p.name) || p.name.toLowerCase().includes('game of tones') || p.name.toLowerCase().includes('gameoftones')) && (
+                                    <span style={{
+                                      fontSize: '0.7rem',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      background: 'rgba(0, 255, 136, 0.2)',
+                                      color: '#00ff88',
+                                      border: '1px solid rgba(0, 255, 136, 0.3)'
+                                    }}>
+                                      GoT
+                                    </span>
+                                  )}
+                                </span>
+                                {(() => {
+                                  const plain = p.description ? stripPlaylistDescriptionHtml(p.description) : '';
+                                  if (!plain) return null;
+                                  return (
+                                    <span className="host-playlist-desc" title={plain}>
+                                      {plain}
+                                    </span>
+                                  );
+                                })()}
                               </span>
                               <span style={{ 
                                 fontSize: '0.8rem', 
                                 opacity: 0.7,
-                                color: isAcceptable ? '#00ff88' : '#b3b3b3'
+                                color: isAcceptable ? '#00ff88' : '#b3b3b3',
+                                flexShrink: 0,
+                                paddingTop: 2,
                               }}>
                                 {p.tracks} songs
                               </span>
                               {isInsufficient && (
-                                <span style={{ fontSize: '0.72rem', color: '#ffb347', whiteSpace: 'nowrap', padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,179,71,0.35)', background: 'rgba(255,179,71,0.08)' }} title="Need at least 15 tracks for a standard round; add songs in Spotify">Need 15+</span>
+                                <span style={{ fontSize: '0.72rem', color: '#ffb347', whiteSpace: 'nowrap', padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,179,71,0.35)', background: 'rgba(255,179,71,0.08)', flexShrink: 0, paddingTop: 6 }} title="Need at least 15 tracks for a standard round; add songs in Spotify">Need 15+</span>
                               )}
                             </div>
                           );
