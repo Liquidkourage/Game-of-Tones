@@ -22,7 +22,7 @@ const Home: React.FC = () => {
   /** Sent with host join; must match server TEMPO_HOST_SECRET when set */
   const [hostAccessCode, setHostAccessCode] = useState(() => {
     try {
-      return sessionStorage.getItem('tempo_host_secret') || '';
+      return sessionStorage.getItem('tempo_host_secret') || localStorage.getItem('tempo_host_secret') || '';
     } catch {
       return '';
     }
@@ -74,7 +74,9 @@ const Home: React.FC = () => {
       return;
     }
     try {
-      sessionStorage.setItem('tempo_host_secret', hostAccessCode.trim());
+      const secret = hostAccessCode.trim();
+      sessionStorage.setItem('tempo_host_secret', secret);
+      localStorage.setItem('tempo_host_secret', secret);
     } catch {
       /* ignore */
     }

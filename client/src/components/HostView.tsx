@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -99,7 +99,10 @@ const HostView: React.FC = () => {
   });
   const getHostSecret = useCallback(() => {
     try {
-      return sessionStorage.getItem('tempo_host_secret')?.trim() || '';
+      const fromSession = sessionStorage.getItem('tempo_host_secret')?.trim() || '';
+      if (fromSession) return fromSession;
+      // Survives new tab / sessionStorage loss (same origin); required when TEMPO_HOST_SECRET is set on server
+      return localStorage.getItem('tempo_host_secret')?.trim() || '';
     } catch {
       return '';
     }
