@@ -1,18 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { 
-  Music, 
-  Users, 
-  Gamepad2, 
-  Sparkles, 
-  Play, 
-  UserPlus, 
-  Volume2,
-  Crown,
-  Trophy,
-  Zap
-} from 'lucide-react';
+import { Sparkles, Play, UserPlus, Crown } from 'lucide-react';
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
@@ -99,53 +88,22 @@ const Home: React.FC = () => {
 
   return (
     <div className="home-container">
-      {/* Hero Section */}
-      <motion.div 
-        className="hero-section"
-        initial={{ opacity: 0, y: 50 }}
+      <motion.header
+        className="home-hero"
+        initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8 }}
+        transition={{ duration: 0.45 }}
       >
-        <div className="hero-content">
-          <motion.div 
-            className="hero-title"
-            initial={{ scale: 0.8 }}
-            animate={{ scale: 1 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-          >
-            <Sparkles className="hero-icon" />
-            <h1>TEMPO - Music Bingo</h1>
-            <p className="hero-subtitle">Where Music Meets Bingo</p>
-          </motion.div>
+        <Sparkles className="home-hero__mark" aria-hidden />
+        <h1 className="home-hero__title">TEMPO</h1>
+        <p className="home-hero__tagline">Music bingo</p>
+      </motion.header>
 
-          <motion.div 
-            className="hero-features"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.8, delay: 0.4 }}
-          >
-            <div className="feature">
-              <Music className="feature-icon" />
-              <span>Spotify Integration</span>
-            </div>
-            <div className="feature">
-              <Users className="feature-icon" />
-              <span>Multiplayer</span>
-            </div>
-            <div className="feature">
-              <Gamepad2 className="feature-icon" />
-              <span>Real-time Gaming</span>
-            </div>
-          </motion.div>
-        </div>
-      </motion.div>
-
-      {/* Game Options — join-first; host is a second tab or behind link when ?join / player link */}
-      <motion.div 
-        className="game-options"
-        initial={{ opacity: 0, y: 50 }}
+      <motion.main
+        className="home-main"
+        initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8, delay: 0.6 }}
+        transition={{ duration: 0.45, delay: 0.08 }}
       >
         {!joinOnly && (
           <div className="home-mode-tabs" role="tablist" aria-label="How are you joining?">
@@ -157,7 +115,7 @@ const Home: React.FC = () => {
               onClick={() => setHomeMode('join')}
             >
               <UserPlus className="home-mode-tab-icon" aria-hidden />
-              Join a game
+              Join
             </button>
             <button
               type="button"
@@ -167,29 +125,25 @@ const Home: React.FC = () => {
               onClick={() => setHomeMode('host')}
             >
               <Crown className="home-mode-tab-icon" aria-hidden />
-              Host a game
+              Host
             </button>
           </div>
         )}
 
-        {joinOnly && (
-          <p className="home-join-only-hint">
-            Enter your name and the room code from your host to play.
-          </p>
-        )}
+        {joinOnly && <p className="home-join-only-hint">Name and room code from your host.</p>}
 
         <div className="options-grid options-grid--single">
           {(joinOnly || homeMode === 'join') && (
           <motion.div 
             className="option-card join-card"
-            whileHover={{ scale: 1.02, y: -6 }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: 1.01, y: -2 }}
+            whileTap={{ scale: 0.99 }}
           >
             <div className="card-header">
               <UserPlus className="card-icon" />
-              <h3>Join a Game</h3>
+              <h3>Join</h3>
             </div>
-            <p>Join an existing game with the room code your host shared.</p>
+            <p className="home-card-lead">Room code from the host.</p>
             
             <div className="input-group">
               <input
@@ -214,15 +168,14 @@ const Home: React.FC = () => {
               />
             </div>
 
-            <label className="input-group" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', fontSize: '0.9rem', color: 'rgba(255,255,255,0.85)', lineHeight: 1.4 }}>
+            <label className="home-remote-opt">
               <input
                 type="checkbox"
                 checked={joinAsRemote}
                 onChange={(e) => setJoinAsRemote(e.target.checked)}
-                style={{ marginTop: 3 }}
               />
               <span>
-                I&apos;m playing <strong>online</strong> (not in the room). Use when the host runs a hybrid event — the official prize waits for an in-person winner.
+                Playing <strong>online</strong> (hybrid events: prize goes to in-person winner first)
               </span>
             </label>
 
@@ -245,14 +198,14 @@ const Home: React.FC = () => {
           {!joinOnly && homeMode === 'host' && (
           <motion.div 
             className="option-card host-card"
-            whileHover={{ scale: 1.02, y: -6 }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: 1.01, y: -2 }}
+            whileTap={{ scale: 0.99 }}
           >
             <div className="card-header">
               <Crown className="card-icon" />
-              <h3>Host a Game</h3>
+              <h3>Host</h3>
             </div>
-            <p>Create a new music bingo session and control the playlist.</p>
+            <p className="home-card-lead">Spotify + room controls.</p>
             
             <div className="input-group">
               <input
@@ -309,66 +262,17 @@ const Home: React.FC = () => {
           </motion.div>
           )}
         </div>
-      </motion.div>
+      </motion.main>
 
-      {/* Features Section */}
-      <motion.div 
-        className="features-section"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.8, delay: 0.8 }}
-      >
-        <h2>Game Features</h2>
-        <div className="features-grid">
-          <div className="feature-card">
-            <Volume2 className="feature-card-icon" />
-            <h4>Spotify Premium</h4>
-            <p>Connect your Spotify Premium account for seamless music playback</p>
-          </div>
-          <div className="feature-card">
-            <Trophy className="feature-card-icon" />
-            <h4>Smart Bingo</h4>
-            <p>Automatic bingo detection with manual host verification</p>
-          </div>
-          <div className="feature-card">
-            <Zap className="feature-card-icon" />
-            <h4>Real-time Updates</h4>
-            <p>Live game updates and player synchronization</p>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* How to Play */}
-      <motion.div 
-        className="how-to-play"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.8, delay: 1.0 }}
-      >
-        <h2>How to Play</h2>
-        <div className="steps-grid">
-          <div className="step">
-            <div className="step-number">1</div>
-            <h4>Host Creates Game</h4>
-            <p>Host selects 5 playlists with 15+ songs each or 1 playlist with 75+ songs</p>
-          </div>
-          <div className="step">
-            <div className="step-number">2</div>
-            <h4>Players Join</h4>
-            <p>Players join with room code and get unique bingo cards</p>
-          </div>
-          <div className="step">
-            <div className="step-number">3</div>
-            <h4>Music Plays</h4>
-            <p>Host plays random song snippets from the selected playlists</p>
-          </div>
-          <div className="step">
-            <div className="step-number">4</div>
-            <h4>Mark & Win</h4>
-            <p>Players mark matching songs on their cards and call BINGO!</p>
-          </div>
-        </div>
-      </motion.div>
+      <footer className="home-playbook" aria-label="How it works">
+        <p className="home-playbook__title">How it works</p>
+        <ol className="home-playbook__flow">
+          <li><span className="home-playbook__n">1</span> Host builds playlists & room</li>
+          <li><span className="home-playbook__n">2</span> Players join with the code</li>
+          <li><span className="home-playbook__n">3</span> Snippets play — mark your card</li>
+          <li><span className="home-playbook__n">4</span> Call bingo — host verifies</li>
+        </ol>
+      </footer>
     </div>
   );
 };
