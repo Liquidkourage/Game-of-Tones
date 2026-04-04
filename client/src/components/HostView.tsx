@@ -82,6 +82,16 @@ function isBingoFreeSpaceSquare(square: { isFreeSpace?: boolean; songId?: string
   return !!(square && (square.isFreeSpace || square.songId === '__FREE_SPACE__'));
 }
 
+/** Stable fingerprint for host player-card payloads so we detect mark changes, not only played-song count. */
+function hostPlayerCardSnapshot(cardData: { card?: { squares?: Array<{ position?: string; marked?: boolean }> }; playedSongs?: string[] }) {
+  const played = [...(cardData.playedSongs || [])].sort().join(',');
+  const marks = (cardData.card?.squares || [])
+    .map((s) => `${s.position ?? ''}:${s.marked ? 1 : 0}`)
+    .sort()
+    .join('|');
+  return `${played}#${marks}`;
+}
+
 /** Spotify may return HTML in playlist descriptions; strip tags for display. */
 function stripPlaylistDescriptionHtml(raw: string): string {
   return raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -199,6 +209,8 @@ const HostView: React.FC = () => {
   const [playerCards, setPlayerCards] = useState<Map<string, any>>(new Map());
   const [playerCardsVersion, setPlayerCardsVersion] = useState<number>(0); // Force re-render trigger
   const [playerCardsFullscreen, setPlayerCardsFullscreen] = useState<boolean>(false);
+  /** When overlay is open: false = centered modal, true = viewport-filling panel */
+  const [playerCardsMaximized, setPlayerCardsMaximized] = useState<boolean>(false);
   const [showRoundManager, setShowRoundManager] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'setup' | 'play'>('setup');
   /** In-person + online: only in-person verified bingos end the round / prize */
@@ -1103,22 +1115,26 @@ const HostView: React.FC = () => {
             }
           });
           setPlayerCards((prev) => {
-            const hasChanged =
+            let hasChanged =
               prev.size !== newPlayerCards.size ||
               Array.from(newPlayerCards.keys()).some((id) => {
                 const old = prev.get(id);
                 const updated = newPlayerCards.get(id);
-                if (!old) return true;
-                return (old.playedSongs?.length || 0) !== (updated?.playedSongs?.length || 0);
+                if (!old || !updated) return true;
+                return hostPlayerCardSnapshot(old) !== hostPlayerCardSnapshot(updated);
               });
+            if (!hasChanged) {
+              const removed = Array.from(prev.keys()).some((id) => !newPlayerCards.has(id));
+              if (removed) hasChanged = true;
+            }
             if (!hasChanged) return prev;
             console.log('📋 Updating playerCards map:', newPlayerCards.size, 'cards (was', prev.size, ')');
+            if (prev.size === 0 && newPlayerCards.size > 0) {
+              showToast(`Player cards loaded: ${newPlayerCards.size} players`, 'success');
+            }
+            setPlayerCardsVersion((v) => v + 1);
             return newPlayerCards;
           });
-
-          if (newPlayerCards.size > 0) {
-            showToast(`Player cards loaded: ${newPlayerCards.size} players`, 'success');
-          }
 
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
@@ -1995,7 +2011,10 @@ const HostView: React.FC = () => {
   }, [showPlayerCards]);
 
   useEffect(() => {
-    if (!playerCardsFullscreen) return;
+    if (!playerCardsFullscreen) {
+      setPlayerCardsMaximized(false);
+      return;
+    }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setPlayerCardsFullscreen(false);
     };
@@ -2007,6 +2026,21 @@ const HostView: React.FC = () => {
       window.removeEventListener('keydown', onKey);
     };
   }, [playerCardsFullscreen]);
+
+  const openPlayerCardsModal = () => {
+    setPlayerCardsMaximized(false);
+    setPlayerCardsFullscreen(true);
+  };
+
+  const openPlayerCardsFullscreen = () => {
+    setPlayerCardsMaximized(true);
+    setPlayerCardsFullscreen(true);
+  };
+
+  const closePlayerCardsOverlay = () => {
+    setPlayerCardsFullscreen(false);
+    setPlayerCardsMaximized(false);
+  };
 
   const resetDisplayLetters = () => {
     if (!socket || !roomId) return;
@@ -4233,11 +4267,11 @@ const HostView: React.FC = () => {
                         <button
                           type="button"
                           className="btn-secondary"
-                          onClick={() => setPlayerCardsFullscreen(true)}
-                          title="Open player cards full screen"
+                          onClick={openPlayerCardsModal}
+                          title="Open player cards in a window (expand to full screen inside, or Escape to close)"
                           style={{ fontWeight: 800, borderColor: '#00ffa3', color: '#00ffa3' }}
                         >
-                          ⛶ Full screen cards
+                          👁 View player cards
                         </button>
                       )}
                       </>
@@ -4549,7 +4583,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
               </div>
             )}
 
-                {/* Player Cards (visible on all host tabs when enabled; full-screen overlay is mutually exclusive) */}
+                {/* Player cards: compact strip — open modal or full screen to inspect grids */}
                 {showPlayerCards && playerCards.size > 0 && !playerCardsFullscreen && (
              <motion.div 
                key={`player-cards-${playerCardsVersion}`}
@@ -4561,23 +4595,41 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                       background: 'rgba(255,255,255,0.05)',
                       border: '1px solid rgba(255,255,255,0.1)',
                       borderRadius: '12px',
-                      padding: '20px',
-                      marginTop: '20px'
+                      padding: '12px 16px',
+                      marginTop: '16px'
                     }}
              >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: 10 }}>
-                      <h2 style={{ color: '#00ffa3', fontSize: '1.2rem', fontWeight: 600, margin: 0 }}>👥 Player Cards & Progress</h2>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ color: '#00ffa3', fontSize: '1rem', fontWeight: 700, margin: 0 }}>
+                          👥 Player cards
+                        </div>
+                        <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
+                          {playerCards.size} player{playerCards.size !== 1 ? 's' : ''} · Pattern:{' '}
+                          <strong style={{ color: '#c5d4e0' }}>{getPatternDisplayName(pattern)}</strong>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                       <button
                         type="button"
                         className="btn-secondary"
-                        onClick={() => setPlayerCardsFullscreen(true)}
+                        onClick={openPlayerCardsModal}
                         style={{ fontWeight: 800, borderColor: '#00ffa3', color: '#00ffa3' }}
-                        title="Open player cards full screen (Escape to close)"
+                        title="Open player cards in a window (Escape to close)"
+                      >
+                        View cards
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={openPlayerCardsFullscreen}
+                        style={{ fontWeight: 700 }}
+                        title="Use the full screen for player cards"
                       >
                         ⛶ Full screen
                       </button>
+                      </div>
                </div>
-                    {renderHostPlayerCardsGrid(true)}
              </motion.div>
            )}
           </div>
@@ -4717,8 +4769,9 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
         </div>
       )}
 
-      {/* Full-screen in-tab panel for player cards (below verification modal z-index) */}
+      {/* Player cards: centered modal (default) or expanded full-screen panel (z-index below bingo verification) */}
       {showPlayerCards && playerCards.size > 0 && playerCardsFullscreen && (
+        playerCardsMaximized ? (
         <div
           role="dialog"
           aria-modal="true"
@@ -4756,19 +4809,113 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                 <span>Press Escape to close</span>
               </div>
             </div>
+            <div style={{ display: 'flex', flexShrink: 0, gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <button
               type="button"
               className="btn-secondary"
-              onClick={() => setPlayerCardsFullscreen(false)}
-              style={{ fontWeight: 800, flexShrink: 0 }}
+              onClick={() => setPlayerCardsMaximized(false)}
+              style={{ fontWeight: 700 }}
+              title="Return to windowed view"
+            >
+              ⊟ Window
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={closePlayerCardsOverlay}
+              style={{ fontWeight: 800 }}
             >
               ✕ Close
             </button>
+            </div>
           </div>
           <div style={{ flex: 1, overflow: 'auto', padding: '20px 18px 28px' }}>
             {renderHostPlayerCardsGrid(false)}
           </div>
         </div>
+        ) : (
+        <div
+          role="presentation"
+          onClick={closePlayerCardsOverlay}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 8500,
+            background: 'rgba(0,0,0,0.76)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            overflow: 'auto',
+            WebkitOverflowScrolling: 'touch',
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="host-player-cards-modal-title"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(1200px, 100%)',
+              maxHeight: 'min(88vh, 920px)',
+              display: 'flex',
+              flexDirection: 'column',
+              background: 'linear-gradient(180deg, #0d1117 0%, #0a0e14 100%)',
+              border: '1px solid rgba(0,255,163,0.35)',
+              borderRadius: 14,
+              overflow: 'hidden',
+              boxShadow: '0 24px 80px rgba(0,0,0,0.55)',
+            }}
+          >
+          <div
+            style={{
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '14px 18px',
+              borderBottom: '1px solid rgba(0,255,163,0.25)',
+              background: 'rgba(0,0,0,0.45)',
+              backdropFilter: 'blur(8px)'
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div id="host-player-cards-modal-title" style={{ color: '#00ffa3', fontWeight: 800, fontSize: 'clamp(1.05rem, 2vw, 1.35rem)', margin: 0 }}>
+                👥 Player Cards & Progress
+              </div>
+              <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
+                Pattern: <strong style={{ color: '#c5d4e0' }}>{getPatternDisplayName(pattern)}</strong>
+                {' · '}
+                <span>Click outside or press Escape to close</span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexShrink: 0, gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setPlayerCardsMaximized(true)}
+              style={{ fontWeight: 800, borderColor: '#00ffa3', color: '#00ffa3' }}
+              title="Expand to use the full screen"
+            >
+              ⛶ Full screen
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={closePlayerCardsOverlay}
+              style={{ fontWeight: 800 }}
+            >
+              ✕ Close
+            </button>
+            </div>
+          </div>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '16px 18px 20px' }}>
+            {renderHostPlayerCardsGrid(false)}
+          </div>
+          </div>
+        </div>
+        )
       )}
 
         

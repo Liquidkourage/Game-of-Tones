@@ -3522,8 +3522,8 @@ io.on('connection', (socket) => {
             marked: square.marked
           });
           
-          // Send real-time player card updates to host (debounced for rapid marks)
-          sendPlayerCardUpdates(roomId);
+          // Send real-time player card updates to host (immediate so marks show without delay)
+          sendPlayerCardUpdates(roomId, true);
           
           // Check for bingo pattern completion (but don't auto-announce)
           // Use the same validation logic as the actual bingo call for consistency
@@ -5041,7 +5041,7 @@ function sendPlayerCardUpdates(roomId, immediate = false) {
     const timerId = setTimeout(() => {
       sendPlayerCardUpdatesNow(roomId);
       playerCardUpdateTimers.delete(roomId);
-    }, 400); // 400ms debounce - balances responsiveness with network efficiency
+    }, 120); // debounce for batched updates (marks use immediate path)
     playerCardUpdateTimers.set(roomId, timerId);
   } catch (e) {
     console.error('❌ Error scheduling player card updates:', e?.message || e);
