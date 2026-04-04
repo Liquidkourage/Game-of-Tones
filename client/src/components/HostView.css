@@ -433,7 +433,7 @@
   letter-spacing: 0.02em;
 }
 
-/* Manager tab: Spotify + playback in one card, side-by-side when connected */
+/* Manager tab: Spotify + playback in one stacked card (Disconnect lives in playback block) */
 .host-view .host-spotify-playback-unified {
   margin: 0 0 1.25rem;
   padding: 1.2rem 1.35rem;
@@ -445,9 +445,9 @@
 
 .host-view .host-spotify-playback-unified__grid {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 1.25rem 1.75rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1rem;
 }
 
 .host-view .host-spotify-playback-unified .spotify-section--unified {
@@ -456,8 +456,6 @@
   border: none;
   box-shadow: none;
   background: transparent;
-  flex: 1 1 100%;
-  min-width: 0;
 }
 
 .host-view .host-spotify-playback-unified .playback-device-section--unified {
@@ -466,31 +464,8 @@
   border: none;
   box-shadow: none;
   background: transparent;
-  flex: 1 1 100%;
-  min-width: 0;
-}
-
-@media (min-width: 768px) {
-  .host-view .host-spotify-playback-unified__grid {
-    flex-wrap: nowrap;
-  }
-
-  .host-view .host-spotify-playback-unified .spotify-section--unified {
-    flex: 1 1 0;
-  }
-
-  .host-view .host-spotify-playback-unified .playback-device-section--unified {
-    flex: 1.35 1 0;
-    border-left: 1px solid rgba(0, 255, 136, 0.22);
-    padding-left: 1.35rem;
-  }
-}
-
-@media (max-width: 767px) {
-  .host-view .host-spotify-playback-unified .playback-device-section--unified {
-    border-top: 1px solid rgba(0, 255, 136, 0.22);
-    padding-top: 1rem;
-  }
+  border-top: 1px solid rgba(0, 255, 136, 0.22);
+  padding-top: 1rem;
 }
 
 .host-view .spotify-connection-section {
@@ -545,6 +520,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.85rem 1rem;
+}
+
+.host-view .spotify-connected--status-only {
+  justify-content: flex-start;
 }
 
 .host-view .spotify-connected-main {

@@ -2977,6 +2977,17 @@ const HostView: React.FC = () => {
     }
   }, [roomId]);
 
+  const disconnectSpotify = useCallback(async () => {
+    try {
+      await fetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST' });
+      setIsSpotifyConnected(false);
+      setPlaylists([]);
+      setSpotifyError(null);
+    } catch (error) {
+      console.error('Error disconnecting Spotify:', error);
+    }
+  }, []);
+
   /** True when the host has a built pool to show (matches visibility of Finalized Playlist block). */
   const hasFinalizedSongPool =
     songList.length > 0 ||
@@ -2985,19 +2996,33 @@ const HostView: React.FC = () => {
 
   const playbackDeviceContent = isSpotifyConnected ? (
     <>
-      <h3
+      <div
         style={{
-          fontSize: '1.05rem',
-          color: '#00ff88',
-          marginBottom: 10,
           display: 'flex',
+          flexWrap: 'wrap',
           alignItems: 'center',
-          gap: 8,
+          justifyContent: 'space-between',
+          gap: 10,
+          marginBottom: 10,
         }}
       >
-        <Music className="w-5 h-5" aria-hidden />
-        Playback device
-      </h3>
+        <h3
+          style={{
+            fontSize: '1.05rem',
+            color: '#00ff88',
+            margin: 0,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <Music className="w-5 h-5" aria-hidden />
+          Playback device
+        </h3>
+        <button type="button" className="disconnect-btn btn" onClick={() => void disconnectSpotify()}>
+          Disconnect
+        </button>
+      </div>
       <p style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)', marginBottom: 12, lineHeight: 1.4 }}>
         Choose where Spotify should play. Open Spotify on your computer, phone, or speaker so it appears in the list. Use{' '}
         <strong style={{ color: '#cfcfcf' }}>Refresh devices</strong> if the list is empty.
@@ -3056,7 +3081,7 @@ const HostView: React.FC = () => {
     </>
   ) : null;
 
-  /** Standalone card (e.g. Game tab) — Manager tab uses unified row with Spotify instead. */
+  /** Standalone card (e.g. Game tab) — same playback content as Manager (includes Disconnect). */
   const playbackDevicePanel =
     isSpotifyConnected ? (
       <motion.div
@@ -3143,7 +3168,7 @@ const HostView: React.FC = () => {
                   <div style={{ display: 'none' }}>License validation disabled for tonight</div>
                 )}
 
-          {/* Spotify + playback device (one card; side-by-side when connected) */}
+          {/* Spotify + playback device (one card; Disconnect in playback block) */}
           <motion.div
             className="host-spotify-playback-unified"
             initial={{ opacity: 0 }}
@@ -3178,27 +3203,11 @@ const HostView: React.FC = () => {
                     </button>
                   </div>
                 ) : (
-                  <div className="spotify-connected">
+                  <div className="spotify-connected spotify-connected--status-only">
                     <div className="spotify-connected-main">
                       <Music className="connected-icon" aria-hidden />
                       <span className="spotify-connected-label">Connected to Spotify</span>
                     </div>
-                    <button
-                      type="button"
-                      className="disconnect-btn btn"
-                      onClick={async () => {
-                        try {
-                          await fetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST' });
-                          setIsSpotifyConnected(false);
-                          setPlaylists([]);
-                          setSpotifyError(null);
-                        } catch (error) {
-                          console.error('Error disconnecting Spotify:', error);
-                        }
-                      }}
-                    >
-                      Disconnect
-                    </button>
                   </div>
                 )}
               </div>
