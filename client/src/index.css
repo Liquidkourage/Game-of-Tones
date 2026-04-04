@@ -485,9 +485,13 @@ code {
   background: rgba(255, 255, 255, 0.3);
 }
 
-/* Host View Styles */
+/* Host View Styles — fill main below header; scroll lives in .host-container (no double viewport scroll) */
 .host-view {
-  min-height: 100vh;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
 }
 

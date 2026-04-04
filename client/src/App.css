@@ -44,12 +44,25 @@ body {
   flex-direction: column;
 }
 
+/* Prevent a second (document) scrollbar on host — content scrolls inside .host-container */
+.App:has(.host-view) {
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .app-container {
   flex: 1;
   display: flex;
   flex-direction: column;
   height: 100vh;
   height: 100dvh; /* iOS: adapt when browser UI shows/hides */
+  min-height: 0;
+}
+
+.app-container:has(.host-view) {
+  overflow: hidden;
 }
 
 /* Header Styles */
@@ -139,6 +152,13 @@ body {
   width: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+/* Host: one scroll region (.host-container), not body + host */
+.app-main:has(.host-view) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* Player route: fit to viewport, no scroll â€” FAB must stay visible on small phones */
@@ -830,15 +850,16 @@ body {
   height: 1.2rem;
 }
 
-/* Host View Styles */
+/* Host View Styles — flex fill of .host-view; sole vertical scroll for host UI */
 .host-container {
-  height: calc(100vh - 160px);
+  flex: 1;
+  min-height: 0;
   padding: 1rem 0;
   overflow-x: hidden;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  -webkit-overflow-scrolling: touch;
 }
 
 .host-header {
