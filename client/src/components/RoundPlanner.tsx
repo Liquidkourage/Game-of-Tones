@@ -38,6 +38,12 @@ interface RoundPlannerProps {
   gameState: 'waiting' | 'playing' | 'ended';
 }
 
+/**
+ * Max round buckets in the planner. This is a UI cap so the grid stays manageable;
+ * game logic stores rounds as an array and does not require exactly 6.
+ */
+const MAX_ROUND_BUCKETS = 12;
+
 // Add shimmer and pulse animation styles
 const animationStyles = `
   @keyframes shimmer {
@@ -98,6 +104,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
   }, [rounds, onUpdateRounds]);
 
   const addRound = () => {
+    if (rounds.length >= MAX_ROUND_BUCKETS) return;
     const newRound: EventRound = {
       id: `round-${Date.now()}`,
       name: `Round ${rounds.length + 1}`,
@@ -252,7 +259,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
           <div className="min-w-0">
             <h3 className="text-xl font-semibold text-white leading-tight">Round buckets</h3>
             <p className="text-sm text-gray-400 mt-1">
-              Drag playlists from the list above into each column. Up to 6 rounds.
+              Drag playlists from the list above into each bucket. Up to {MAX_ROUND_BUCKETS} rounds.
             </p>
           </div>
         </div>
@@ -313,9 +320,9 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
               column or <strong className="text-white">Start next round</strong> in the header between rounds.</span>
           </div>
 
-          {/* Round Buckets */}
-          <div className="flex gap-2 w-full min-w-0" style={{ width: '100vw', marginLeft: 'calc(-50vw + 50%)', marginRight: 'calc(-50vw + 50%)', paddingLeft: '2rem', paddingRight: '2rem' }}>
-            {rounds.slice(0, 6).map((round, index) => {
+          {/* Round Buckets — grid wraps to multiple rows (see round-planner-buckets-wrap in HostView.css) */}
+          <div className="round-planner-buckets-wrap">
+            {rounds.slice(0, MAX_ROUND_BUCKETS).map((round, index) => {
               const isActive = index === currentRound && gameState === 'playing';
               const minRequired = round.songCount >= 60 ? 75 : 15;
               const isInsufficient = round.songCount > 0 && round.songCount < minRequired;
@@ -330,7 +337,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                   className={`relative transition-all duration-200 ${
                     isDragOver ? 'scale-105' : ''
                   }`}
-                  style={{ flex: '2 1 0%', minWidth: '300px' }}
+                  style={{ minWidth: 0 }}
                 >
                   {/* Bucket Container */}
                   <div 
@@ -595,8 +602,8 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
             })}
             
                   {/* Add Round Button */}
-                  {rounds.length < 6 && (
-                    <div style={{ flex: '2 1 0%', minWidth: '300px' }}>
+                  {rounds.length < MAX_ROUND_BUCKETS && (
+                    <div style={{ minWidth: 0 }}>
                       <button
                         type="button"
                         onClick={addRound}
@@ -630,7 +637,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                         </div>
                         <span className="font-bold text-base text-white" style={{ color: '#ffffff' }}>+ Add round</span>
                         <span className="text-xs opacity-90 text-white" style={{ color: '#ffffff' }}>
-                          {6 - rounds.length} slot{6 - rounds.length !== 1 ? 's' : ''} left (max 6)
+                          {MAX_ROUND_BUCKETS - rounds.length} slot{MAX_ROUND_BUCKETS - rounds.length !== 1 ? 's' : ''} left (max {MAX_ROUND_BUCKETS})
                         </span>
                       </button>
                     </div>
