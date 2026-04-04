@@ -196,6 +196,8 @@ const HostView: React.FC = () => {
   const [playerCardsFullscreen, setPlayerCardsFullscreen] = useState<boolean>(false);
   const [showRoundManager, setShowRoundManager] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'setup' | 'play'>('setup');
+  /** In-person + online: only in-person verified bingos end the round / prize */
+  const [hybridInPersonPlusOnline, setHybridInPersonPlusOnline] = useState(false);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
   const [spotifyInitialCheckDone, setSpotifyInitialCheckDone] = useState(false);
   const initialConnectionPromptRef = useRef(false);
@@ -304,7 +306,8 @@ const HostView: React.FC = () => {
         isHost: true,
         licenseKey: newLicenseKey.trim(),
         clientId,
-        hostSecret: getHostSecret()
+        hostSecret: getHostSecret(),
+        inPerson: true
       });
       
       // Add timeout fallback in case server doesn't respond
@@ -1021,6 +1024,12 @@ const HostView: React.FC = () => {
       addLog(`Super-Strict Lock ${data?.enabled ? 'enabled' : 'disabled'}`, 'warn');
     });
 
+    newSocket.on('hybrid-mode-updated', (data: any) => {
+      if (typeof data?.hybridInPersonPlusOnline === 'boolean') {
+        setHybridInPersonPlusOnline(data.hybridInPersonPlusOnline);
+      }
+    });
+
     // Listen for pattern updates
     newSocket.on('pattern-updated', (data: any) => {
       if (data?.pattern) {
@@ -1293,6 +1302,9 @@ const HostView: React.FC = () => {
       setIsJoiningRoom(false);
       setLicenseError(null);
       setIsLicenseValidated(true);
+      if (typeof data?.hybridInPersonPlusOnline === 'boolean') {
+        setHybridInPersonPlusOnline(data.hybridInPersonPlusOnline);
+      }
       addLog(`Joined room ${roomId} successfully`, 'info');
       
       // Force check Spotify status after joining room
@@ -1324,7 +1336,8 @@ const HostView: React.FC = () => {
         playerName: hostPlayerName,
         isHost: true,
         clientId,
-        hostSecret: getHostSecret()
+        hostSecret: getHostSecret(),
+        inPerson: true
       });
     }
 
@@ -3843,6 +3856,43 @@ const HostView: React.FC = () => {
                   transition={{ delay: 0.2 }}
           >
             <h2>🎮 Game Controls</h2>
+
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 12,
+                      marginBottom: 16,
+                      padding: '12px 14px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(0, 255, 136, 0.25)',
+                      background: 'rgba(0, 255, 136, 0.06)',
+                      cursor: 'pointer',
+                      maxWidth: 640,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={hybridInPersonPlusOnline}
+                      onChange={(e) => {
+                        const v = e.target.checked;
+                        setHybridInPersonPlusOnline(v);
+                        try {
+                          socket?.emit('set-hybrid-mode', { roomId, hybridInPersonPlusOnline: v });
+                        } catch {
+                          /* ignore */
+                        }
+                      }}
+                      style={{ marginTop: 4 }}
+                    />
+                    <span style={{ fontSize: '0.88rem', lineHeight: 1.45, color: 'rgba(255,255,255,0.9)' }}>
+                      <strong style={{ color: '#00ff88' }}>Hybrid in-person + online</strong>
+                      <br />
+                      Remote players who join with &quot;online&quot; can play, but a valid bingo from them does{' '}
+                      <strong>not</strong> pause the game or award the round — only an <strong>in-person</strong> player&apos;s
+                      bingo does. They still see when they complete the pattern.
+                    </span>
+                  </label>
 
                   {/* Game Settings */}
                   <div style={{ 

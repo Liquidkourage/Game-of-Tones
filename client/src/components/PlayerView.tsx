@@ -45,6 +45,8 @@ interface Song {
 const PlayerView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [searchParams] = useSearchParams();
+  /** false when joined with ?remote=1 — server treats as online-only for hybrid prize rules */
+  const inPersonJoin = searchParams.get('remote') !== '1';
   const [playerName, setPlayerName] = useState<string>(() => {
     const fromStorage = (() => { try { return localStorage.getItem('player_name') || ''; } catch { return ''; } })();
     const fromQuery = searchParams.get('name') || '';
@@ -83,6 +85,7 @@ const PlayerView: React.FC = () => {
   const [hasValidBingo, setHasValidBingo] = useState<boolean>(false);
   const [playedSongIds, setPlayedSongIds] = useState<string[]>([]);
   const [connectionToast, setConnectionToast] = useState<string>('');
+  const [hybridPrizeInPersonOnly, setHybridPrizeInPersonOnly] = useState(false);
   const previousPlayedSongIdsRef = useRef<string[]>([]); // Track previous state for missed songs calculation
   const wasReconnectingRef = useRef<boolean>(false); // Track if we're in a reconnection state
   const [gameState, setGameState] = useState<GameState>({
@@ -272,7 +275,7 @@ const PlayerView: React.FC = () => {
       setReconnectAttempts(0);
       // Join only if we have a name; otherwise wait for user input
       if (playerName && playerName.trim()) {
-        newSocket.emit('join-room', { roomId, playerName, isHost: false, clientId });
+        newSocket.emit('join-room', { roomId, playerName, isHost: false, clientId, inPerson: inPersonJoin });
       }
       // Ask server for state in case game already started
       // This will trigger room-state which will calculate missed songs
@@ -341,6 +344,9 @@ const PlayerView: React.FC = () => {
 
     newSocket.on('room-state', (payload: any) => {
       try {
+        if (typeof payload?.hybridInPersonPlusOnline === 'boolean') {
+          setHybridPrizeInPersonOnly(payload.hybridInPersonPlusOnline);
+        }
         // CRITICAL: Sync playedSongIds from server (single source of truth)
         // This is the ONLY place where playedSongIds should be updated
         if (Array.isArray(payload?.playedSongIds)) {
@@ -458,6 +464,12 @@ const PlayerView: React.FC = () => {
     });
 
     // Listen for pattern updates
+    newSocket.on('hybrid-mode-updated', (data: any) => {
+      if (typeof data?.hybridInPersonPlusOnline === 'boolean') {
+        setHybridPrizeInPersonOnly(data.hybridInPersonPlusOnline);
+      }
+    });
+
     newSocket.on('pattern-updated', (data: any) => {
       console.log('Pattern updated:', data);
       setGameState((prev) => ({
@@ -477,7 +489,11 @@ const PlayerView: React.FC = () => {
       console.log('Bingo result:', data);
       if (data.success) {
         setBingoStatus('success');
-        setBingoMessage(data.message || 'BINGO! You win!');
+        setBingoMessage(
+          data.hybridUnofficial
+            ? data.message || 'Pattern complete! (Online — round continues for in-person prize.)'
+            : data.message || 'BINGO! You win!'
+        );
         setGameState(prev => ({ ...prev, hasBingo: true }));
         // Play success sound
         playSuccessSound();
@@ -652,7 +668,7 @@ const PlayerView: React.FC = () => {
     return () => {
       newSocket.close();
     };
-  }, [roomId, playerName]);
+  }, [roomId, playerName, inPersonJoin]);
 
   // Periodic sync during gameplay to ensure state stays in sync with server
   useEffect(() => {
@@ -672,14 +688,14 @@ const PlayerView: React.FC = () => {
   // If name becomes available after initial connect, join the room
   useEffect(() => {
     if (socket && socket.connected && playerName && playerName.trim()) {
-      try { socket.emit('join-room', { roomId, playerName, isHost: false, clientId }); } catch {}
+      try { socket.emit('join-room', { roomId, playerName, isHost: false, clientId, inPerson: inPersonJoin }); } catch {}
     }
-  }, [socket, playerName, roomId, clientId]);
+  }, [socket, playerName, roomId, clientId, inPersonJoin]);
 
   const handleResync = () => {
     if (!socket) return;
     try {
-      socket.emit('join-room', { roomId, playerName, isHost: false, clientId });
+      socket.emit('join-room', { roomId, playerName, isHost: false, clientId, inPerson: inPersonJoin });
     } catch (_e) {}
   };
 
@@ -1337,7 +1353,7 @@ const PlayerView: React.FC = () => {
                   window.history.replaceState({}, '', url.toString());
                 } catch {}
                 if (socket && socket.connected) {
-                  try { socket.emit('join-room', { roomId, playerName: name, isHost: false, clientId }); } catch {}
+                  try { socket.emit('join-room', { roomId, playerName: name, isHost: false, clientId, inPerson: inPersonJoin }); } catch {}
                 }
               }}
               autoFocus
@@ -1554,6 +1570,26 @@ const PlayerView: React.FC = () => {
               </div>
             </div>
           </motion.div>
+
+          {hybridPrizeInPersonOnly && !inPersonJoin && (
+            <div
+              className="player-hybrid-hint"
+              style={{
+                margin: '0 auto 10px',
+                maxWidth: 520,
+                padding: '10px 14px',
+                borderRadius: 10,
+                fontSize: '0.82rem',
+                lineHeight: 1.45,
+                color: 'rgba(230,240,255,0.92)',
+                background: 'rgba(0, 180, 255, 0.12)',
+                border: '1px solid rgba(0, 200, 255, 0.35)',
+                textAlign: 'center',
+              }}
+            >
+              <strong>Online player:</strong> you can play along; when the host enables hybrid mode, the prize and round only finish when an <strong>in-person</strong> player wins.
+            </div>
+          )}
 
           {connectionToast && (
             <motion.div

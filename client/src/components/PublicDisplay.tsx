@@ -181,6 +181,7 @@ const PublicDisplay: React.FC = () => {
   const revealToastTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [showWinnerBanner, setShowWinnerBanner] = useState<boolean>(false);
   const [winnerName, setWinnerName] = useState<string>('');
+  const [remoteHybridNotice, setRemoteHybridNotice] = useState<string>('');
   // Connection status and sync management
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
   const [reconnectAttempts, setReconnectAttempts] = useState<number>(0);
@@ -926,6 +927,16 @@ const PublicDisplay: React.FC = () => {
           setCustomMask(new Set<string>(data.customMask as string[]));
         } else {
           setCustomMask(new Set());
+        }
+      } catch {}
+    });
+
+    newSocket.on('bingo-remote-unofficial', (data: any) => {
+      try {
+        const n = data?.playerName ? String(data.playerName) : '';
+        if (n) {
+          setRemoteHybridNotice(`${n} completed the pattern online — round continues until an in-person win`);
+          setTimeout(() => setRemoteHybridNotice(''), 6000);
         }
       } catch {}
     });
@@ -2327,6 +2338,33 @@ const PublicDisplay: React.FC = () => {
           </motion.div>
           );
         })()}
+        {remoteHybridNotice && (
+          <motion.div
+            key="remote-hybrid-notice"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            style={{
+              position: 'fixed',
+              top: 'max(120px, 10vh)',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              maxWidth: 'min(92vw, 720px)',
+              zIndex: 2100,
+              padding: '14px 20px',
+              borderRadius: 14,
+              background: 'linear-gradient(180deg, rgba(0,160,255,0.38), rgba(0,60,100,0.25))',
+              border: '1px solid rgba(0,200,255,0.5)',
+              color: '#e8f8ff',
+              fontWeight: 700,
+              fontSize: 'clamp(0.95rem, 2vw, 1.25rem)',
+              textAlign: 'center',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+            }}
+          >
+            {remoteHybridNotice}
+          </motion.div>
+        )}
         {revealToast && (
           <motion.div
             key={`toast-${revealToast}-${totalPlayedCount}`}

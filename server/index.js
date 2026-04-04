@@ -1367,6 +1367,8 @@ io.on('connection', (socket) => {
         winners: [],
         repeatMode: false,
         volume: 100,
+        /** When true, only in-person players can pause/end the round with a verified bingo; online players get unofficial bingo. */
+        hybridInPersonPlusOnline: false,
         playlistSongs: [],
         currentSongIndex: 0,
         // Pre-queue system removed for deterministic playback
@@ -1427,12 +1429,15 @@ io.on('connection', (socket) => {
       }
     }
     
+    const inPerson = data.inPerson !== false;
     const player = {
       id: socket.id,
       name: playerName,
       isHost: effectiveIsHost,
       hasBingo: false,
-      clientId: clientId || null
+      clientId: clientId || null,
+      /** false = joined as remote/online when host enables hybrid mode */
+      inPerson
     };
     
     room.players.set(socket.id, player);
@@ -1454,7 +1459,8 @@ io.on('connection', (socket) => {
       playerId: socket.id,
       playerName: playerName,
       isHost: effectiveIsHost,
-      playerCount: getNonHostPlayerCount(room)
+      playerCount: getNonHostPlayerCount(room),
+      inPerson
     });
 
     // Emit successful room join confirmation to the joining socket
@@ -1463,7 +1469,8 @@ io.on('connection', (socket) => {
       organizationId: organizationId,
       playerName: playerName,
       isHost: effectiveIsHost,
-      playerCount: getNonHostPlayerCount(room)
+      playerCount: getNonHostPlayerCount(room),
+      hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline
     });
 
     // Log available devices for debugging
@@ -1495,7 +1502,8 @@ io.on('connection', (socket) => {
             roundWinners: room.roundWinners || [],
             mixFinalized: room.mixFinalized || false,
             playlists: room.finalizedPlaylists || room.playlists || [],
-            selectedDeviceId: room.selectedDeviceId || null
+            selectedDeviceId: room.selectedDeviceId || null,
+            hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline
           });
           
           // Send current song info if playing
@@ -1661,6 +1669,22 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Hybrid in-person + online: only in-person verified bingos end the round / prize
+  socket.on('set-hybrid-mode', (data = {}) => {
+    try {
+      const { roomId, hybridInPersonPlusOnline } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+      if (!isCurrentHost) return;
+      room.hybridInPersonPlusOnline = !!hybridInPersonPlusOnline;
+      io.to(roomId).emit('hybrid-mode-updated', { hybridInPersonPlusOnline: room.hybridInPersonPlusOnline });
+      console.log(`🌐 Hybrid in-person+online for room ${roomId}: ${room.hybridInPersonPlusOnline}`);
+    } catch (e) {
+      console.error('❌ Error setting hybrid mode:', e?.message || e);
+    }
+  });
+
   // Set public display font size multiplier
   socket.on('set-public-display-font-size', (data = {}) => {
     try {
@@ -1697,6 +1721,7 @@ io.on('connection', (socket) => {
       socket.emit('bingo-result', { success: false, reason: 'Player not found in room' });
       return;
     }
+    if (player.inPerson === undefined) player.inPerson = true;
     if (!player.bingoCard) {
       console.error(`❌ Player ${player.name} (${socket.id}) has no bingo card`);
       console.log(`Room bingo cards:`, Array.from(room.bingoCards?.keys() || []));
@@ -1725,7 +1750,37 @@ io.on('connection', (socket) => {
     }
     
     const validationResult = validateBingoForPattern(player.bingoCard, room);
-    
+
+    const hybridMode = !!room.hybridInPersonPlusOnline;
+    const isRemotePlayer = hybridMode && player.inPerson === false;
+
+    if (isRemotePlayer) {
+      if (validationResult.valid) {
+        player.hasBingo = true;
+        socket.emit('bingo-result', {
+          success: true,
+          hybridUnofficial: true,
+          message: 'You completed the pattern! (Online — the round continues until an in-person player wins.)',
+          awaitingVerification: false,
+          isWinner: false
+        });
+        io.to(roomId).emit('bingo-remote-unofficial', {
+          playerId: socket.id,
+          playerName: player.name,
+          patternType: validationResult.type || room.pattern,
+          timestamp: Date.now()
+        });
+        console.log(`🌐 Remote hybrid bingo (unofficial) for ${player.name}`);
+      } else {
+        socket.emit('bingo-result', {
+          success: false,
+          reason: validationResult.reason || 'Pattern not complete or invalid marks',
+          hybridUnofficial: true
+        });
+      }
+      return;
+    }
+
     // Get winning pattern positions for verification display
     const winningPatternPositions = getWinningPatternPositions(player.bingoCard, room, validationResult);
     
@@ -2637,7 +2692,8 @@ io.on('connection', (socket) => {
         currentSongIndex: room.currentSongIndex || 0,
         totalSongs: room.playlistSongs?.length || 0,
         // Sync timestamp for client reference
-        syncTimestamp: Date.now()
+        syncTimestamp: Date.now(),
+        hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline
       };
       
       // Include fiveby15 columns if available (for public display)

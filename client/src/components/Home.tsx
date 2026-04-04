@@ -19,6 +19,8 @@ const Home: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [playerName, setPlayerName] = useState('');
   const [roomId, setRoomId] = useState('');
+  /** Join as remote/online (host can enable hybrid mode so prize waits for in-person bingo) */
+  const [joinAsRemote, setJoinAsRemote] = useState(() => searchParams.get('remote') === '1');
   /** Sent with host join; must match server TEMPO_HOST_SECRET when set */
   const [hostAccessCode, setHostAccessCode] = useState(() => {
     try {
@@ -89,7 +91,10 @@ const Home: React.FC = () => {
       alert('Please enter both your name and room ID!');
       return;
     }
-    navigate(`/player/${roomId}?name=${encodeURIComponent(playerName)}`);
+    const q = new URLSearchParams();
+    q.set('name', playerName.trim());
+    if (joinAsRemote) q.set('remote', '1');
+    navigate(`/player/${roomId}?${q.toString()}`);
   };
 
   return (
@@ -208,6 +213,18 @@ const Home: React.FC = () => {
                 autoCorrect="off"
               />
             </div>
+
+            <label className="input-group" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', fontSize: '0.9rem', color: 'rgba(255,255,255,0.85)', lineHeight: 1.4 }}>
+              <input
+                type="checkbox"
+                checked={joinAsRemote}
+                onChange={(e) => setJoinAsRemote(e.target.checked)}
+                style={{ marginTop: 3 }}
+              />
+              <span>
+                I&apos;m playing <strong>online</strong> (not in the room). Use when the host runs a hybrid event — the official prize waits for an in-person winner.
+              </span>
+            </label>
 
             <button 
               onClick={joinGame}
