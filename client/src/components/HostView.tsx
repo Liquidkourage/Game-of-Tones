@@ -3264,24 +3264,27 @@ const HostView: React.FC = () => {
           {/* Tab Content */}
           <div className="tab-content">
             {activeTab === 'setup' && (
-              <div className="setup-tab">
+              <div className="setup-tab host-manager">
                 {/* License Status - TEMPORARILY HIDDEN */}
                 {showRoundManager && (
                   <div style={{ display: 'none' }}>License validation disabled for tonight</div>
                 )}
 
+                <div className="host-manager-grid">
+                  <div className="host-manager-grid__primary">
+                    <section className="host-manager-section">
                 <label
                   style={{
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: 12,
-                    marginBottom: 20,
+                    marginBottom: 0,
                     padding: '12px 14px',
                     borderRadius: 10,
                     border: '1px solid rgba(0, 255, 136, 0.25)',
                     background: 'rgba(0, 255, 136, 0.06)',
                     cursor: 'pointer',
-                    maxWidth: 640,
+                    maxWidth: '100%',
                   }}
                 >
                   <input
@@ -3306,11 +3309,12 @@ const HostView: React.FC = () => {
                     bingo does. They still see when they complete the pattern.
                   </span>
                 </label>
+                    </section>
 
           {/* Pattern Selection */}
           {isSpotifyConnected && (
             <motion.div 
-              className="pattern-section"
+              className="pattern-section host-manager-section"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.3 }}
@@ -3460,22 +3464,19 @@ const HostView: React.FC = () => {
               </div>
             </motion.div>
           )}
-
-          {/* Public Display Font Size Controls */}
-          <motion.div 
-            className="font-size-section"
+                  </div>
+                  <div className="host-manager-grid__secondary">
+          <motion.div
+            className="host-manager-section host-manager-section--display font-size-section"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4 }}
-            style={{
-              background: 'rgba(0,0,0,0.3)',
-              borderRadius: '12px',
-              padding: '20px',
-              marginBottom: '20px',
-              border: '1px solid rgba(255,255,255,0.1)'
-            }}
           >
-            <h2 style={{ marginBottom: '16px', fontSize: '1.2rem', fontWeight: 'bold' }}>📺 Public Display Font Size</h2>
+            <h2 className="host-manager-section__title">🖥️ Public display</h2>
+            <p className="host-manager-section__lead">
+              Text size and what appears on the projector or TV for players.
+            </p>
+            <p className="host-manager-display__sub">Title &amp; artist size</p>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
               <button
                 onClick={() => updatePublicDisplayFontSize(publicDisplayFontSize - 0.1)}
@@ -3529,13 +3530,60 @@ const HostView: React.FC = () => {
                 +
               </button>
             </div>
-            <div style={{ marginTop: '12px', fontSize: '0.85rem', color: '#b3b3b3', textAlign: 'center' }}>
-              Adjusts song and artist name font sizes on the public display
+            <div style={{ marginTop: '10px', fontSize: '0.82rem', color: '#b3b3b3', textAlign: 'center' }}>
+              Song and artist names on the public display
+            </div>
+            <div className="host-manager-display__divider" />
+            <p className="host-manager-display__sub">Screen modes</p>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              <button 
+                className="btn-secondary" 
+                onClick={() => socket?.emit('display-show-rules', { roomId })}
+                style={{ 
+                  fontSize: '0.9rem', 
+                  padding: '10px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                📋 Rules
+              </button>
+              <button 
+                className="btn-secondary" 
+                onClick={() => socket?.emit('display-show-splash', { roomId })}
+                style={{ 
+                  fontSize: '0.9rem', 
+                  padding: '10px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                🎬 Splash
+              </button>
+              <button 
+                className="btn-secondary" 
+                onClick={() => socket?.emit('display-show-call-list', { roomId })}
+                style={{ 
+                  fontSize: '0.9rem', 
+                  padding: '10px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                🎵 Call List
+              </button>
             </div>
           </motion.div>
+                  </div>
+                </div>
 
-          {/* Round Planner */}
+          {/* Music & rounds: planner + playlists */}
           {isSpotifyConnected && (
+            <div className="host-manager-music host-manager-section">
+              <h2 className="host-manager-music__title">Music &amp; rounds</h2>
             <RoundPlanner
               rounds={eventRounds}
               onUpdateRounds={handleUpdateRounds}
@@ -3544,17 +3592,14 @@ const HostView: React.FC = () => {
               onStartRound={handleStartRound}
               gameState={gameState}
             />
-          )}
 
-                {/* Playlists Section */}
-                {isSpotifyConnected && (
           <motion.div 
                     className="playlists-section"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
                     transition={{ delay: 0.4 }}
                   >
-                    <h2 style={{ marginBottom: 6 }}>📚 Playlists</h2>
+                    <h3 style={{ marginBottom: 6, fontSize: '1.05rem', fontWeight: 700 }}>📚 Playlist library</h3>
                     <p style={{ fontSize: '0.85rem', color: '#a8a8a8', marginBottom: 12, lineHeight: 1.45, maxWidth: 720 }}>
                       <strong style={{ color: '#fff' }}>In mix</strong> — playlists checked here are included when you{' '}
                       <strong style={{ color: '#fff' }}>finalize the bingo pool</strong> (song source for the game). You can still{' '}
@@ -3690,34 +3735,58 @@ const HostView: React.FC = () => {
                       })()}
                         </div>
                   </motion.div>
-                )}
 
-                {/* Round Management Controls - Moved from Monitor Tab */}
+                    <div className="host-manager-playlist-export">
+                      <p>
+                        Export a Spotify playlist from the songs used in this session (after you have a finalized mix or have played).
+                      </p>
+                      <button
+                        type="button"
+                        onClick={createOutputPlaylist}
+                        disabled={!songList || songList.length === 0 || isSpotifyConnecting}
+                        className="btn-secondary"
+                        style={{
+                          backgroundColor: '#6b46c1',
+                          borderColor: '#8b5cf6',
+                          color: 'white',
+                          fontSize: '0.9rem',
+                          padding: '10px 16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}
+                      >
+                        📁 Create output playlist
+                      </button>
+                    </div>
+            </div>
+          )}
+
+                {/* Round & event actions (during or between rounds) */}
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.4 }}
-                  className="bg-rgba(42, 42, 42, 0.95) backdrop-blur-[20px] border border-rgba(0, 255, 136, 0.3) rounded-2xl p-6 mb-6"
+                  className="host-manager-round"
                 >
-                  <h2>🎯 Round Management Controls</h2>
-                  
-                  {/* Quick Actions */}
-                  <div className="mb-6">
-                    <h4 className="text-lg font-semibold text-white mb-3">Quick Actions</h4>
-                    <div className="flex gap-3 flex-wrap">
+                  <h2>🎯 Round &amp; event</h2>
+                  <p className="host-manager-round__actions-head">Quick actions</p>
+                  <div className="host-manager-round__row">
                       {gameState === 'playing' && (
                         <>
                           <button 
+                            type="button"
                             onClick={completeCurrentRound}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                            className="host-manager-round__btn host-manager-round__btn--green"
                           >
-                            ✅ Complete Current Round
+                            ✅ Complete current round
                           </button>
                           <button 
+                            type="button"
                             onClick={resetCurrentRound}
-                            className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+                            className="host-manager-round__btn host-manager-round__btn--yellow"
                           >
-                            🔄 Reset Current Round
+                            🔄 Reset current round
                           </button>
                         </>
                       )}
@@ -3725,159 +3794,27 @@ const HostView: React.FC = () => {
                         const nextRound = getNextPlannedRound();
                         return nextRound >= 0 ? (
                           <button 
+                            type="button"
                             onClick={() => jumpToRound(nextRound)}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                            className="host-manager-round__btn host-manager-round__btn--blue"
                           >
-                            ⏭️ Start Next Planned Round
+                            ⏭️ Start next planned round
                           </button>
                         ) : null;
                       })()}
-                      
-                      {/* Reset Event — themed outline + hint (matches Display Controls / neon UI) */}
-                      <div className="flex flex-col gap-1.5">
+                      <div className="host-manager-round__reset-wrap">
                         <button
                           type="button"
                           onClick={resetEvent}
                           className="btn-danger-outline"
                           title="Reset entire event back to the beginning"
                         >
-                          🔄 Reset Event
+                          🔄 Reset event
                         </button>
-                        <span className="text-xs text-gray-400 max-w-[14rem] leading-snug">
+                        <span className="host-manager-round__reset-hint">
                           Clears scores and round state for this room. Cannot be undone.
                         </span>
                       </div>
-                      </div>
-                  </div>
-                </motion.div>
-
-                {/* Display Controls */}
-                <motion.div
-                  className="display-controls-section"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.4 }}
-                  style={{
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: '12px',
-                    padding: '20px',
-                    marginTop: '20px'
-                  }}
-                >
-                  <h3 style={{ 
-                    color: '#00ffa3', 
-                    fontSize: '1.2rem', 
-                    fontWeight: '600', 
-                    marginBottom: '16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}>
-                    🖥️ Display Controls
-                  </h3>
-                  <p style={{ 
-                    color: 'rgba(255,255,255,0.7)', 
-                    fontSize: '0.9rem', 
-                    marginBottom: '16px',
-                    lineHeight: '1.4'
-                  }}>
-                    Control what's displayed on the public screen for players.
-                  </p>
-                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                    <button 
-                      className="btn-secondary" 
-                      onClick={() => socket?.emit('display-show-rules', { roomId })}
-                      style={{ 
-                        fontSize: '0.9rem', 
-                        padding: '10px 16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                      }}
-                    >
-                      📋 Rules
-                    </button>
-                    <button 
-                      className="btn-secondary" 
-                      onClick={() => socket?.emit('display-show-splash', { roomId })}
-                      style={{ 
-                        fontSize: '0.9rem', 
-                        padding: '10px 16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                      }}
-                    >
-                      🎬 Splash
-                    </button>
-                    <button 
-                      className="btn-secondary" 
-                      onClick={() => socket?.emit('display-show-call-list', { roomId })}
-                      style={{ 
-                        fontSize: '0.9rem', 
-                        padding: '10px 16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                      }}
-                    >
-                      🎵 Call List
-                    </button>
-                  </div>
-                </motion.div>
-
-                {/* Playlist Management */}
-                <motion.div
-                  className="playlist-management-section"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.5 }}
-                  style={{
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: '12px',
-                    padding: '20px',
-                    marginTop: '20px'
-                  }}
-                >
-                  <h3 style={{ 
-                    color: '#00ffa3', 
-                    fontSize: '1.2rem', 
-                    fontWeight: '600', 
-                    marginBottom: '16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}>
-                    🎵 Playlist Management
-                  </h3>
-                  <p style={{ 
-                    color: 'rgba(255,255,255,0.7)', 
-                    fontSize: '0.9rem', 
-                    marginBottom: '16px',
-                    lineHeight: '1.4'
-                  }}>
-                    Manage playlists and create output playlists from your game sessions.
-                  </p>
-                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                    <button
-                      onClick={createOutputPlaylist}
-                      disabled={!songList || songList.length === 0 || isSpotifyConnecting}
-                      className="btn-secondary"
-                      style={{
-                        backgroundColor: '#6b46c1',
-                        borderColor: '#8b5cf6',
-                        color: 'white',
-                        fontSize: '0.9rem',
-                        padding: '10px 16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                      }}
-                    >
-                      📁 Create Output Playlist
-                    </button>
                   </div>
                 </motion.div>
               </div>
@@ -4366,38 +4303,36 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
 
             {showRoundManager && (
               <div className="manage-tab">
-                {/* Round Manager */}
                 <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
                   transition={{ delay: 0.2 }}
-                  className="bg-rgba(42, 42, 42, 0.95) backdrop-blur-[20px] border border-rgba(0, 255, 136, 0.3) rounded-2xl p-6 mb-6"
+                  className="host-round-manager-panel"
                 >
-                  <h2>🎯 Round & Event Management</h2>
-                  
-                  {/* Round Status Summary */}
-                  <div className="mb-6 p-4 bg-rgba(255, 255, 255, 0.05) rounded-xl">
-                    <h4 className="text-lg font-semibold text-white mb-3">Event Overview</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <h2>🎯 Round &amp; event management</h2>
+
+                  <div className="host-round-manager-overview">
+                    <h4>Event overview</h4>
+                    <div className="host-round-manager-stats">
                       {(() => {
                         const summary = getRoundStatusSummary();
                         return (
                           <>
-                            <div className="text-center">
-                              <div className="text-2xl font-bold text-green-400">{summary.completed}</div>
-                              <div className="text-sm text-gray-400">Completed</div>
-                  </div>
-                            <div className="text-center">
-                              <div className="text-2xl font-bold text-blue-400">{summary.active}</div>
-                              <div className="text-sm text-gray-400">Active</div>
-                  </div>
-                            <div className="text-center">
-                              <div className="text-2xl font-bold text-yellow-400">{summary.planned}</div>
-                              <div className="text-sm text-gray-400">Planned</div>
-                </div>
-                            <div className="text-center">
-                              <div className="text-2xl font-bold text-gray-400">{summary.unplanned}</div>
-                              <div className="text-sm text-gray-400">Unplanned</div>
+                            <div className="host-round-manager-stat">
+                              <div className="host-round-manager-stat__val host-round-manager-stat__val--green">{summary.completed}</div>
+                              <div className="host-round-manager-stat__label">Completed</div>
+                            </div>
+                            <div className="host-round-manager-stat">
+                              <div className="host-round-manager-stat__val host-round-manager-stat__val--blue">{summary.active}</div>
+                              <div className="host-round-manager-stat__label">Active</div>
+                            </div>
+                            <div className="host-round-manager-stat">
+                              <div className="host-round-manager-stat__val host-round-manager-stat__val--yellow">{summary.planned}</div>
+                              <div className="host-round-manager-stat__label">Planned</div>
+                            </div>
+                            <div className="host-round-manager-stat">
+                              <div className="host-round-manager-stat__val host-round-manager-stat__val--gray">{summary.unplanned}</div>
+                              <div className="host-round-manager-stat__label">Unplanned</div>
                             </div>
                           </>
                         );
@@ -4405,71 +4340,61 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                     </div>
                   </div>
 
-                  {/* Quick Actions - Moved to Manager Tab */}
-
-                  {/* Round List */}
                   <div>
-                    <h4 className="text-lg font-semibold text-white mb-3">All Rounds</h4>
-                    <div className="space-y-3 max-h-64 overflow-y-auto">
+                    <h4 style={{ margin: '0 0 12px', fontSize: '1rem', fontWeight: 600, color: '#fff' }}>All rounds</h4>
+                    <div className="host-round-manager-rounds">
                       {eventRounds.map((round, index) => {
                         const isCurrentRound = index === currentRoundIndex;
                         const canStart = round.status !== 'completed' && (round.playlistIds || []).length > 0;
-                        
+                        const roundClass =
+                          isCurrentRound
+                            ? 'host-round-manager-round host-round-manager-round--current'
+                            : round.status === 'completed'
+                              ? 'host-round-manager-round host-round-manager-round--done'
+                              : canStart
+                                ? 'host-round-manager-round host-round-manager-round--ready'
+                                : 'host-round-manager-round host-round-manager-round--blocked';
+
                         return (
-                          <div
-                            key={round.id}
-                            className={`p-4 rounded-xl border-2 ${
-                              isCurrentRound
-                                ? 'border-green-400 bg-green-400/10'
-                                : round.status === 'completed'
-                                ? 'border-gray-600 bg-gray-600/10'
-                                : canStart
-                                ? 'border-blue-400 bg-blue-400/10'
-                                : 'border-yellow-600 bg-yellow-600/10'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
+                          <div key={round.id} className={roundClass}>
+                            <div className="host-round-manager-round__top">
                               <div>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-semibold text-white">{round.name}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                  <span className="host-round-manager-round__name">{round.name}</span>
                                   {isCurrentRound && (
-                                    <span className="px-2 py-1 bg-green-400 text-black text-xs font-bold rounded-full">
-                                      CURRENT
-                                    </span>
+                                    <span className="host-round-manager-badge host-round-manager-badge--current">CURRENT</span>
                                   )}
                                   {round.status === 'completed' && (
-                                    <span className="px-2 py-1 bg-gray-600 text-white text-xs font-bold rounded-full">
-                                      DONE
-                                    </span>
+                                    <span className="host-round-manager-badge host-round-manager-badge--done">DONE</span>
                                   )}
-              </div>
-                                <div className="text-sm text-gray-400 mt-1">
+                                </div>
+                                <div className="host-round-manager-round__meta">
                                   {(round.playlistIds || []).length} playlist{(round.playlistIds || []).length !== 1 ? 's' : ''} • {round.songCount} songs
                                   {round.status === 'completed' && round.completedAt && (
-                                    <span className="ml-2">
+                                    <span style={{ marginLeft: 8 }}>
                                       • Completed {new Date(round.completedAt).toLocaleTimeString()}
                                     </span>
                                   )}
                                 </div>
                               </div>
-                              <div className="flex gap-2">
+                              <div className="host-round-manager-round__actions">
                                 {canStart && !isCurrentRound && (
-                          <button
+                                  <button
+                                    type="button"
                                     onClick={() => jumpToRound(index)}
-                                    className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+                                    className="host-round-manager-start-btn"
                                   >
                                     Start
-                          </button>
+                                  </button>
                                 )}
-                    </div>
-                  </div>
-                </div>
+                              </div>
+                            </div>
+                          </div>
                         );
                       })}
                     </div>
-            </div>
-                     </motion.div>
-
+                  </div>
+                </motion.div>
               </div>
             )}
 
