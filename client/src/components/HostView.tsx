@@ -734,6 +734,57 @@ const HostView: React.FC = () => {
     }
   }, []);
 
+  const disconnectSpotify = useCallback(async () => {
+    try {
+      await fetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST' });
+      setIsSpotifyConnected(false);
+      setPlaylists([]);
+      setSpotifyError(null);
+    } catch (error) {
+      console.error('Error disconnecting Spotify:', error);
+    }
+  }, []);
+
+  /** Mirrors connection state for unload handlers (avoid stale closures). */
+  const isSpotifyConnectedRef = useRef(false);
+  useEffect(() => {
+    isSpotifyConnectedRef.current = isSpotifyConnected;
+  }, [isSpotifyConnected]);
+
+  /**
+   * Tab close / full page navigation: socket handlers do not run, so clear tokens best-effort.
+   * Uses keepalive so the request can finish after the page tears down.
+   */
+  useEffect(() => {
+    const onPageHide = () => {
+      if (!isSpotifyConnectedRef.current) return;
+      try {
+        void fetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST', keepalive: true });
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener('pagehide', onPageHide);
+    return () => window.removeEventListener('pagehide', onPageHide);
+  }, []);
+
+  /**
+   * SPA navigation away from host (e.g. back to home): pagehide may not run.
+   * Skip cleanup if unmount happens within ~50ms of mount so React StrictMode dev remount does not clear tokens.
+   */
+  useEffect(() => {
+    const enteredAt = Date.now();
+    return () => {
+      if (Date.now() - enteredAt < 50) return;
+      if (!isSpotifyConnectedRef.current) return;
+      try {
+        void fetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST', keepalive: true });
+      } catch {
+        /* ignore */
+      }
+    };
+  }, []);
+
   const saveSelectedDevice = useCallback(async () => {
     if (!selectedDevice) {
       alert('Please select a device first');
@@ -973,6 +1024,8 @@ const HostView: React.FC = () => {
     newSocket.on('game-ended', () => {
       setGamePaused(false);
       setIsPlaying(false);
+      setGameState('ended');
+      void disconnectSpotify();
     });
 
     newSocket.on('game-restarted', (data: any) => {
@@ -1053,6 +1106,7 @@ const HostView: React.FC = () => {
       setRoundComplete(null);
       setGameState('ended');
       setIsPlaying(false);
+      void disconnectSpotify();
       if (data.roundWinners) {
         setRoundWinners(data.roundWinners);
       }
@@ -1228,11 +1282,6 @@ const HostView: React.FC = () => {
     });
     newSocket.io.on('reconnect_error', (err: any) => {
       console.warn('Reconnection error:', err?.message || err);
-    });
-
-    newSocket.on('game-ended', () => {
-      setGameState('ended');
-      console.log('�� Game ended');
     });
 
     newSocket.on('game-reset', () => {
@@ -1456,7 +1505,7 @@ const HostView: React.FC = () => {
         clearTimeout(volumeTimeout);
       }
     };
-  }, [roomId, loadPlaylists, loadDevices, hostPlayerName, clientId, navigate, getHostSecret]);
+  }, [roomId, loadPlaylists, loadDevices, hostPlayerName, clientId, navigate, getHostSecret, disconnectSpotify]);
 
 
 
@@ -3186,17 +3235,6 @@ const HostView: React.FC = () => {
       console.warn('Failed to load rounds from localStorage:', error);
     }
   }, [roomId]);
-
-  const disconnectSpotify = useCallback(async () => {
-    try {
-      await fetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST' });
-      setIsSpotifyConnected(false);
-      setPlaylists([]);
-      setSpotifyError(null);
-    } catch (error) {
-      console.error('Error disconnecting Spotify:', error);
-    }
-  }, []);
 
   /** True when the host has a built pool to show (matches visibility of Finalized Playlist block). */
   const hasFinalizedSongPool =
