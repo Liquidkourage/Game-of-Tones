@@ -1180,6 +1180,8 @@ body {
 
 /* Primary: screen width drives the square; cap height so card + chrome fit in viewport. */
 .player-container .bingo-card {
+  display: flex !important;
+  flex-direction: column !important;
   width: min(100%, calc(100vw - 8px)) !important;
   max-width: 100% !important;
   max-height: min(
@@ -1196,6 +1198,52 @@ body {
   margin: 0 auto !important;
 }
 
+.player-container .bingo-column-headers {
+  display: grid !important;
+  grid-template-columns: repeat(5, 1fr) !important;
+  flex-shrink: 0 !important;
+  width: 100% !important;
+  padding: 0 4px 4px !important;
+  box-sizing: border-box !important;
+  gap: 0 !important;
+  align-items: start !important;
+}
+
+.player-container .bingo-column-headers__cell {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 2px !important;
+  text-align: center !important;
+  min-width: 0 !important;
+  user-select: none !important;
+}
+
+.player-container .bingo-column-headers__letter {
+  font-size: clamp(7px, min(1.75vw, 1.75vh), 11px) !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em !important;
+  color: rgba(0, 255, 163, 0.95) !important;
+  line-height: 1.1 !important;
+  text-shadow: 0 0 12px rgba(0, 255, 136, 0.25) !important;
+}
+
+.player-container .bingo-column-headers__playlist {
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  font-size: clamp(5px, min(1.35vw, 1.35vh), 8px) !important;
+  font-weight: 600 !important;
+  line-height: 1.12 !important;
+  letter-spacing: 0.01em !important;
+  color: rgba(220, 230, 240, 0.88) !important;
+  word-break: break-word !important;
+}
+
 @supports not (max-height: min(1px, 2px)) {
   .player-container .bingo-card {
     width: min(var(--player-card-w-budget), max(0px, var(--player-card-h-budget))) !important;
@@ -1208,10 +1256,10 @@ body {
   grid-template-columns: repeat(5, 1fr) !important;
   grid-template-rows: repeat(5, 1fr) !important;
   width: 100% !important;
-  height: 100% !important;
-  flex: 1 1 auto !important;
+  flex: 1 1 0% !important;
   min-width: 0 !important;
   min-height: 0 !important;
+  height: auto !important;
   gap: 0 !important;
   aspect-ratio: unset !important;
   margin: 0 !important;

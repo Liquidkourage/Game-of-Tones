@@ -97,6 +97,11 @@ function stripPlaylistDescriptionHtml(raw: string): string {
   return raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+/** Match public display: trim optional "GoT" playlist prefix for column headers. */
+function stripGotPlaylistPrefix(raw: string): string {
+  return raw.replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
+}
+
 const HostView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -211,6 +216,8 @@ const HostView: React.FC = () => {
   const [playerCardsFullscreen, setPlayerCardsFullscreen] = useState<boolean>(false);
   /** When overlay is open: false = centered modal, true = viewport-filling panel */
   const [playerCardsMaximized, setPlayerCardsMaximized] = useState<boolean>(false);
+  /** 5×15 mode: playlist title per column (from `fiveby15-pool`, else five selected playlists). */
+  const [bingoColumnPlaylistNames, setBingoColumnPlaylistNames] = useState<string[]>([]);
   const [showRoundManager, setShowRoundManager] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'setup' | 'play'>('setup');
   /** In-person + online: only in-person verified bingos end the round / prize */
@@ -859,6 +866,7 @@ const HostView: React.FC = () => {
       setGameState('playing');
       console.log('?? SET GAME STATE TO PLAYING');
       setIsStartingGame(false);
+      setBingoColumnPlaylistNames([]);
       addLog('Game started - state set to playing', 'info');
       // Auto-collapse lists during gameplay
       setShowSongList(false);
@@ -1091,6 +1099,12 @@ const HostView: React.FC = () => {
     newSocket.on('public-display-font-size-updated', (data: any) => {
       if (typeof data?.fontSize === 'number') {
         setPublicDisplayFontSize(data.fontSize);
+      }
+    });
+
+    newSocket.on('fiveby15-pool', (data: any) => {
+      if (Array.isArray(data?.names) && data.names.length === 5) {
+        setBingoColumnPlaylistNames(data.names);
       }
     });
 
@@ -1794,6 +1808,12 @@ const HostView: React.FC = () => {
     };
   };
 
+  const hostBingoColumnHeaders = useMemo(() => {
+    if (bingoColumnPlaylistNames.length === 5) return bingoColumnPlaylistNames;
+    if (selectedPlaylists.length === 5) return selectedPlaylists.map((p) => p.name);
+    return [];
+  }, [bingoColumnPlaylistNames, selectedPlaylists]);
+
   /** Shared player-card grid for inline host view and full-screen overlay (compact = inline strip). */
   const renderHostPlayerCardsGrid = (compact: boolean) => {
     const cellFont = compact ? '0.7rem' : '0.88rem';
@@ -1919,16 +1939,74 @@ const HostView: React.FC = () => {
                 </div>
               );
             })()}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(5, 1fr)',
-                gap: '4px',
-                maxWidth: innerMax,
-                aspectRatio: '1/1',
-                margin: '0 auto'
-              }}
-            >
+            <div style={{ maxWidth: innerMax, margin: '0 auto', width: '100%' }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(5, 1fr)',
+                  gap: '4px',
+                  marginBottom: compact ? 3 : 4,
+                }}
+                aria-hidden
+              >
+                {(['B', 'I', 'N', 'G', 'O'] as const).map((letter, colIdx) => {
+                  const raw = hostBingoColumnHeaders[colIdx] || '';
+                  const playlistLabel = stripGotPlaylistPrefix(raw);
+                  return (
+                    <div
+                      key={letter}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        textAlign: 'center',
+                        gap: compact ? 2 : 3,
+                        minWidth: 0,
+                        userSelect: 'none',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: compact ? '0.58rem' : '0.7rem',
+                          fontWeight: 800,
+                          letterSpacing: '0.06em',
+                          color: 'rgba(0, 255, 163, 0.95)',
+                          lineHeight: 1.1,
+                        }}
+                      >
+                        {letter}
+                      </span>
+                      {playlistLabel ? (
+                        <span
+                          title={playlistLabel}
+                          style={{
+                            fontSize: compact ? '0.5rem' : '0.6rem',
+                            fontWeight: 600,
+                            lineHeight: 1.15,
+                            color: 'rgba(220, 230, 240, 0.9)',
+                            wordBreak: 'break-word',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical' as const,
+                            overflow: 'hidden',
+                            width: '100%',
+                          }}
+                        >
+                          {playlistLabel}
+                        </span>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(5, 1fr)',
+                  gap: '4px',
+                  aspectRatio: '1/1',
+                }}
+              >
               {playerData.card.squares.map((square: any) => {
                 const isFree = !!(square.isFreeSpace || square.songId === '__FREE_SPACE__');
                 const isPlayed = (playerData.playedSongs || []).includes(square.songId);
@@ -1997,6 +2075,7 @@ const HostView: React.FC = () => {
                   </div>
                 );
               })}
+              </div>
             </div>
           </div>
         ))}
@@ -4930,6 +5009,55 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   padding: '8px',
                   borderRadius: '8px'
                 }}>
+                  {(['B', 'I', 'N', 'G', 'O'] as const).map((letter, colIdx) => {
+                    const raw = hostBingoColumnHeaders[colIdx] || '';
+                    const playlistLabel = stripGotPlaylistPrefix(raw);
+                    return (
+                      <div
+                        key={`hdr-${letter}`}
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          textAlign: 'center',
+                          gap: 3,
+                          minWidth: 0,
+                          userSelect: 'none',
+                          paddingBottom: 2,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            letterSpacing: '0.06em',
+                            color: 'rgba(0, 255, 163, 0.95)',
+                          }}
+                        >
+                          {letter}
+                        </span>
+                        {playlistLabel ? (
+                          <span
+                            title={playlistLabel}
+                            style={{
+                              fontSize: '0.55rem',
+                              fontWeight: 600,
+                              lineHeight: 1.15,
+                              color: 'rgba(220, 230, 240, 0.9)',
+                              wordBreak: 'break-word',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical' as const,
+                              overflow: 'hidden',
+                              width: '100%',
+                            }}
+                          >
+                            {playlistLabel}
+                          </span>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                   {pendingVerification.playerCard.squares?.map((square: any) => {
                     const isInWinningPattern = pendingVerification.winningPatternPositions?.includes(square.position);
                     const wasPlayed =

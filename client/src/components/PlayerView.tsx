@@ -38,6 +38,11 @@ interface Song {
   artist: string;
 }
 
+/** Match public display: trim optional "GoT" playlist prefix for column headers. */
+function stripGotPlaylistPrefix(raw: string): string {
+  return raw.replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
+}
+
 /**
  * Canonical player UI (CSS px). Uniformly scaled to fit viewport — same layout on every device.
  */
@@ -96,6 +101,8 @@ const PlayerView: React.FC = () => {
     pattern: 'full_card'
   });
   const [songsPlayed, setSongsPlayed] = useState<number>(0);
+  /** 5×15 mode: playlist name per column (from server `fiveby15-pool`). */
+  const [bingoColumnPlaylistNames, setBingoColumnPlaylistNames] = useState<string[]>([]);
 
   /** User multiplier (70–150) on the automatic square text size (CSS: --player-card-font-scale). */
   const CARD_FONT_STORAGE_KEY = 'player_card_font_percent';
@@ -326,8 +333,15 @@ const PlayerView: React.FC = () => {
       }));
     });
 
+    newSocket.on('fiveby15-pool', (data: any) => {
+      if (Array.isArray(data?.names) && data.names.length === 5) {
+        setBingoColumnPlaylistNames(data.names);
+      }
+    });
+
     newSocket.on('game-started', (data: any) => {
       console.log('Game started:', data);
+      setBingoColumnPlaylistNames([]);
       setGameState(prev => ({
         ...prev,
         isPlaying: true,
@@ -1265,6 +1279,22 @@ const PlayerView: React.FC = () => {
 
     return (
       <div className="bingo-card">
+        <div className="bingo-column-headers" aria-hidden="true">
+          {(['B', 'I', 'N', 'G', 'O'] as const).map((letter, colIdx) => {
+            const raw = bingoColumnPlaylistNames[colIdx] || '';
+            const playlistLabel = stripGotPlaylistPrefix(raw);
+            return (
+              <div key={letter} className="bingo-column-headers__cell">
+                <span className="bingo-column-headers__letter">{letter}</span>
+                {playlistLabel ? (
+                  <span className="bingo-column-headers__playlist" title={playlistLabel}>
+                    {playlistLabel}
+                  </span>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
         <div className="bingo-card-grid">
           {bingoCard.squares.map((square) => (
             <motion.div
