@@ -2134,6 +2134,30 @@ io.on('connection', (socket) => {
         verified: true
       });
       
+      // Serialize winning card + pattern positions for public display modal
+      const sourceCard = room.bingoCards?.get(resolvedPlayerId) || player.bingoCard;
+      let winningCardPayload = null;
+      let winningPositions = [];
+      if (sourceCard && Array.isArray(sourceCard.squares)) {
+        const validationResult = validateBingoForPattern(sourceCard, room);
+        winningPositions = getWinningPatternPositions(sourceCard, room, validationResult);
+        if (!winningPositions.length) {
+          winningPositions = sourceCard.squares.filter((s) => s.marked).map((s) => s.position);
+        }
+        winningCardPayload = {
+          size: sourceCard.size || 5,
+          squares: sourceCard.squares.map((s) => ({
+            position: s.position,
+            songId: s.songId,
+            songName: s.songName,
+            customSongName: s.customSongName,
+            artistName: s.artistName,
+            marked: !!s.marked,
+            isFreeSpace: !!s.isFreeSpace,
+          })),
+        };
+      }
+
       // NOW emit the actual winner event for public display
       io.to(roomId).emit('bingo-called', { 
         playerId: resolvedPlayerId, 
@@ -2142,7 +2166,10 @@ io.on('connection', (socket) => {
         totalWinners: room.winners.length,
         isFirstWinner: room.winners.length === 1,
         awaitingVerification: false,
-        verified: true
+        verified: true,
+        pattern: room.pattern || 'line',
+        winningCard: winningCardPayload,
+        winningPositions,
       });
       
       // PAUSE GAME for host to decide: next round or end completely

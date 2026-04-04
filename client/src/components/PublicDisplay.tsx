@@ -181,6 +181,22 @@ const PublicDisplay: React.FC = () => {
   const revealToastTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [showWinnerBanner, setShowWinnerBanner] = useState<boolean>(false);
   const [winnerName, setWinnerName] = useState<string>('');
+  /** Verified winner card (shown full-screen after host accepts bingo). */
+  const [winnerCardModal, setWinnerCardModal] = useState<{
+    playerName: string;
+    squares: Array<{
+      position: string;
+      songId: string;
+      songName?: string;
+      customSongName?: string;
+      artistName?: string;
+      marked?: boolean;
+      isFreeSpace?: boolean;
+    }>;
+    winningPositions: string[];
+    pattern: string;
+  } | null>(null);
+  const winnerModalTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [remoteHybridNotice, setRemoteHybridNotice] = useState<string>('');
   // Connection status and sync management
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
@@ -956,24 +972,45 @@ const PublicDisplay: React.FC = () => {
         setGameState(prev => ({ ...prev, winners: data.winners || prev.winners }));
         try {
           if (data.playerName) {
-            // Enhanced winner announcement
             const isFirstWinner = data.isFirstWinner;
             const totalWinners = data.totalWinners || 1;
-            
-            if (isFirstWinner) {
-              setWinnerName(`🏆 BINGO! ${data.playerName} WINS!`);
+            const wc = data.winningCard;
+            const hasWinningCard =
+              wc &&
+              typeof wc === 'object' &&
+              Array.isArray(wc.squares) &&
+              wc.squares.length > 0;
+
+            if (hasWinningCard) {
+              if (winnerModalTimerRef.current) {
+                clearTimeout(winnerModalTimerRef.current);
+                winnerModalTimerRef.current = null;
+              }
+              setShowWinnerBanner(false);
+              setWinnerName('');
+              setWinnerCardModal({
+                playerName: String(data.playerName),
+                squares: wc.squares,
+                winningPositions: Array.isArray(data.winningPositions) ? data.winningPositions : [],
+                pattern: typeof data.pattern === 'string' ? data.pattern : 'line',
+              });
+              playPublicCelebrationSound();
+              const celebrationTime = isFirstWinner ? 12000 : 9000;
+              winnerModalTimerRef.current = setTimeout(() => {
+                setWinnerCardModal(null);
+                winnerModalTimerRef.current = null;
+              }, celebrationTime);
             } else {
-              setWinnerName(`🎉 Another BINGO! ${data.playerName} also wins! (${totalWinners} total)`);
+              if (isFirstWinner) {
+                setWinnerName(`🏆 BINGO! ${data.playerName} WINS!`);
+              } else {
+                setWinnerName(`🎉 Another BINGO! ${data.playerName} also wins! (${totalWinners} total)`);
+              }
+              setShowWinnerBanner(true);
+              playPublicCelebrationSound();
+              const celebrationTime = isFirstWinner ? 6000 : 4000;
+              setTimeout(() => setShowWinnerBanner(false), celebrationTime);
             }
-            
-            setShowWinnerBanner(true);
-            
-            // Play celebration sound
-            playPublicCelebrationSound();
-            
-            // Longer celebration for first winner, shorter for additional winners
-            const celebrationTime = isFirstWinner ? 6000 : 4000;
-            setTimeout(() => setShowWinnerBanner(false), celebrationTime);
           }
         } catch {}
       }
@@ -993,6 +1030,7 @@ const PublicDisplay: React.FC = () => {
     });
 
     newSocket.on('game-ended', () => {
+      setWinnerCardModal(null);
       setGameState(prev => ({
         ...prev,
         isPlaying: false,
@@ -1007,11 +1045,13 @@ const PublicDisplay: React.FC = () => {
 
     newSocket.on('game-resumed', () => {
       setIsVerificationPending(false);
+      setWinnerCardModal(null);
       console.log('▶️ Game resumed (display)');
     });
 
     newSocket.on('game-restarted', (data: any) => {
       console.log('Game restarted:', data);
+      setWinnerCardModal(null);
       // Reset display state
       setGameState({
         isPlaying: false,
@@ -1051,6 +1091,7 @@ const PublicDisplay: React.FC = () => {
     // Handle next-round-reset event (full reset to setup)
     newSocket.on('next-round-reset', (data: any) => {
       console.log('Next round reset (public display):', data);
+      setWinnerCardModal(null);
       // Reset display state completely
       setGameState({
         isPlaying: false,
@@ -1085,6 +1126,7 @@ const PublicDisplay: React.FC = () => {
     });
 
     newSocket.on('game-reset', () => {
+      setWinnerCardModal(null);
       setGameState({
         isPlaying: false,
         currentSong: null,
@@ -1195,6 +1237,10 @@ const PublicDisplay: React.FC = () => {
         clearInterval(countdownRef.current);
         countdownRef.current = null;
       }
+      if (winnerModalTimerRef.current) {
+        clearTimeout(winnerModalTimerRef.current);
+        winnerModalTimerRef.current = null;
+      }
       newSocket.close();
     };
   }, [roomId]);
@@ -1213,6 +1259,15 @@ const PublicDisplay: React.FC = () => {
     
     return () => clearInterval(syncInterval);
   }, [socket, gameState.isPlaying, roomId]);
+
+  useEffect(() => {
+    if (!winnerCardModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setWinnerCardModal(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [winnerCardModal]);
 
   // Time-based letter reveal every 10 seconds (weighted by unrevealed frequency across played songs)
   useEffect(() => {
@@ -1529,6 +1584,30 @@ const PublicDisplay: React.FC = () => {
       case 'line':
       default:
     return 'Pattern: Single Line (any direction)';
+    }
+  };
+
+  const patternLabelForWinnerModal = (p: string) => {
+    switch (p) {
+      case 'full_card':
+        return 'Full card';
+      case 'four_corners':
+        return 'Four corners';
+      case 'x':
+        return 'X';
+      case 't':
+        return 'T';
+      case 'l':
+        return 'L';
+      case 'u':
+        return 'U';
+      case 'plus':
+        return 'Plus';
+      case 'custom':
+        return 'Custom';
+      case 'line':
+      default:
+        return 'Single line';
     }
   };
 
@@ -2264,6 +2343,163 @@ const PublicDisplay: React.FC = () => {
 
   return (
     <div ref={displayRef} className="public-display">
+
+      <AnimatePresence>
+        {winnerCardModal && (
+          <motion.div
+            key={`winner-card-${winnerCardModal.playerName}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="winner-card-title"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.22 }}
+            onClick={() => setWinnerCardModal(null)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 2600,
+              background: 'rgba(0,0,0,0.82)',
+              backdropFilter: 'blur(10px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 'clamp(12px, 3vw, 32px)',
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              transition={{ type: 'spring', damping: 22, stiffness: 280 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: 'min(96vw, 980px)',
+                maxHeight: 'min(92vh, 900px)',
+                overflow: 'auto',
+                background: 'linear-gradient(165deg, rgba(0,40,32,0.96) 0%, rgba(10,20,28,0.98) 100%)',
+                border: '2px solid rgba(0,255,200,0.45)',
+                borderRadius: 20,
+                boxShadow: '0 0 80px rgba(0,255,170,0.22), 0 24px 64px rgba(0,0,0,0.6)',
+                padding: 'clamp(16px, 2.5vw, 28px)',
+              }}
+            >
+              <div id="winner-card-title" style={{ textAlign: 'center', marginBottom: 14 }}>
+                <div
+                  style={{
+                    fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)',
+                    letterSpacing: '0.22em',
+                    textTransform: 'uppercase',
+                    opacity: 0.88,
+                    marginBottom: 8,
+                  }}
+                >
+                  Verified winner
+                </div>
+                <div
+                  style={{
+                    fontSize: 'clamp(1.6rem, 3.6vw, 2.75rem)',
+                    fontWeight: 900,
+                    color: '#eafff8',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 12,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <Trophy style={{ width: 'clamp(32px, 6vw, 48px)', height: 'clamp(32px, 6vw, 48px)', flexShrink: 0 }} strokeWidth={2} />
+                  {winnerCardModal.playerName}
+                </div>
+                <div style={{ fontSize: 'clamp(0.85rem, 1.4vw, 1.1rem)', marginTop: 6, opacity: 0.82 }}>
+                  {patternLabelForWinnerModal(winnerCardModal.pattern)}
+                </div>
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(5, 1fr)',
+                  gap: 'clamp(4px, 1vw, 8px)',
+                  width: 'min(88vw, 720px)',
+                  margin: '0 auto',
+                  aspectRatio: '1 / 1',
+                }}
+              >
+                {Array.from({ length: 25 }, (_, i) => {
+                  const pos = `${Math.floor(i / 5)}-${i % 5}`;
+                  const sq = winnerCardModal.squares.find((s) => s.position === pos);
+                  const isPattern = winnerCardModal.winningPositions.includes(pos);
+                  const title = sq?.isFreeSpace
+                    ? 'FREE'
+                    : cleanSongTitle(sq?.customSongName || sq?.songName || '');
+                  const artist = sq?.artistName || '';
+                  return (
+                    <div
+                      key={pos}
+                      style={{
+                        borderRadius: 8,
+                        padding: 'clamp(4px, 1vw, 8px)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        textAlign: 'center',
+                        overflow: 'hidden',
+                        background: sq?.marked ? 'rgba(0,255,136,0.12)' : 'rgba(255,255,255,0.04)',
+                        border: isPattern
+                          ? '3px solid rgba(0,255,200,0.95)'
+                          : '1px solid rgba(255,255,255,0.12)',
+                        boxShadow: isPattern ? '0 0 24px rgba(0,255,180,0.35)' : undefined,
+                        minHeight: 0,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 'clamp(0.55rem, 1.1vw, 0.85rem)',
+                          fontWeight: 900,
+                          lineHeight: 1.15,
+                          color: '#f0fff8',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 3,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          wordBreak: 'break-word',
+                        }}
+                      >
+                        {sq?.isFreeSpace ? (
+                          <span style={{ fontSize: 'clamp(0.75rem, 1.8vw, 1.1rem)', letterSpacing: '0.08em' }}>FREE</span>
+                        ) : (
+                          title
+                        )}
+                      </div>
+                      {!sq?.isFreeSpace && artist ? (
+                        <div
+                          style={{
+                            fontSize: 'clamp(0.45rem, 0.85vw, 0.65rem)',
+                            opacity: 0.75,
+                            marginTop: 4,
+                            lineHeight: 1.1,
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          {artist}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ textAlign: 'center', marginTop: 14, opacity: 0.55, fontSize: 'clamp(0.75rem, 1.2vw, 0.95rem)' }}>
+                Tap outside or press Esc to dismiss
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showWinnerBanner && (() => {
