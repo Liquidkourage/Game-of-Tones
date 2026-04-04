@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
+﻿import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -107,6 +107,19 @@ const HostView: React.FC = () => {
       return '';
     }
   }, []);
+
+  /** Before socket join: mirror host secret so OAuth round-trip (same tab) always sees it in both stores. */
+  useLayoutEffect(() => {
+    try {
+      const s = sessionStorage.getItem('tempo_host_secret')?.trim();
+      const l = localStorage.getItem('tempo_host_secret')?.trim();
+      if (s && !l) localStorage.setItem('tempo_host_secret', s);
+      if (l && !s) sessionStorage.setItem('tempo_host_secret', l);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const [socket, setSocket] = useState<any>(null);
   const [gameState, setGameState] = useState<'waiting' | 'playing' | 'ended'>('waiting');
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
@@ -1373,7 +1386,17 @@ const HostView: React.FC = () => {
         // Add room ID to the auth URL as a state parameter
         const authUrlWithState = `${data.authUrl}&state=${encodeURIComponent(roomId || '')}`;
         console.log('�� Redirecting to Spotify with room ID in state parameter');
-        
+
+        const hs = getHostSecret();
+        if (hs) {
+          try {
+            localStorage.setItem('tempo_host_secret', hs);
+            sessionStorage.setItem('tempo_host_secret', hs);
+          } catch {
+            /* ignore */
+          }
+        }
+
         // Redirect to Spotify
         window.location.href = authUrlWithState;
       } else {
@@ -1386,7 +1409,7 @@ const HostView: React.FC = () => {
       setSpotifyError('Failed to connect to Spotify. Please check your internet connection and try again.');
       setIsSpotifyConnecting(false);
     }
-  }, [roomId]); // Remove loadPlaylists from dependencies
+  }, [roomId, getHostSecret]); // Remove loadPlaylists from dependencies
 
 
 
@@ -2960,6 +2983,80 @@ const HostView: React.FC = () => {
     (finalizedOrder?.length ?? 0) > 0 ||
     mixFinalized;
 
+  const playbackDeviceContent = isSpotifyConnected ? (
+    <>
+      <h3
+        style={{
+          fontSize: '1.05rem',
+          color: '#00ff88',
+          marginBottom: 10,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}
+      >
+        <Music className="w-5 h-5" aria-hidden />
+        Playback device
+      </h3>
+      <p style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)', marginBottom: 12, lineHeight: 1.4 }}>
+        Choose where Spotify should play. Open Spotify on your computer, phone, or speaker so it appears in the list. Use{' '}
+        <strong style={{ color: '#cfcfcf' }}>Refresh devices</strong> if the list is empty.
+      </p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+        <select
+          aria-label="Spotify playback device"
+          value={selectedDevice?.id ?? ''}
+          onChange={(e) => {
+            const id = e.target.value;
+            const d = devices.find((x) => x.id === id);
+            setSelectedDevice(d ?? null);
+          }}
+          style={{
+            flex: '1 1 220px',
+            minWidth: 200,
+            padding: '10px 12px',
+            borderRadius: 8,
+            border: '1px solid rgba(255,255,255,0.25)',
+            background: 'rgba(0,0,0,0.35)',
+            color: '#fff',
+            fontSize: '0.95rem',
+          }}
+        >
+          <option value="">— Select a device —</option>
+          {devices.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+              {d.is_active ? ' (active)' : ''}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => void loadDevices()}
+          disabled={isLoadingDevices}
+        >
+          {isLoadingDevices ? 'Refreshing…' : 'Refresh devices'}
+        </button>
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => saveSelectedDevice()}
+          disabled={!selectedDevice}
+          title="Remember this device for next time"
+        >
+          Save as default
+        </button>
+      </div>
+      {devices.length === 0 && !isLoadingDevices && (
+        <p style={{ marginTop: 10, fontSize: '0.8rem', color: '#ffb347' }}>
+          No devices found. Open the Spotify app on the target device, then tap Refresh devices.
+        </p>
+      )}
+    </>
+  ) : null;
+
+  /** Standalone card (e.g. Game tab) — Manager tab uses unified row with Spotify instead. */
   const playbackDevicePanel =
     isSpotifyConnected ? (
       <motion.div
@@ -2975,74 +3072,7 @@ const HostView: React.FC = () => {
           marginBottom: 16,
         }}
       >
-        <h3
-          style={{
-            fontSize: '1.05rem',
-            color: '#00ff88',
-            marginBottom: 10,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-          }}
-        >
-          <Music className="w-5 h-5" aria-hidden />
-          Playback device
-        </h3>
-        <p style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)', marginBottom: 12, lineHeight: 1.4 }}>
-          Choose where Spotify should play. Open Spotify on your computer, phone, or speaker so it appears in the list. Use{' '}
-          <strong style={{ color: '#cfcfcf' }}>Refresh devices</strong> if the list is empty.
-        </p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-          <select
-            aria-label="Spotify playback device"
-            value={selectedDevice?.id ?? ''}
-            onChange={(e) => {
-              const id = e.target.value;
-              const d = devices.find((x) => x.id === id);
-              setSelectedDevice(d ?? null);
-            }}
-            style={{
-              flex: '1 1 220px',
-              minWidth: 200,
-              padding: '10px 12px',
-              borderRadius: 8,
-              border: '1px solid rgba(255,255,255,0.25)',
-              background: 'rgba(0,0,0,0.35)',
-              color: '#fff',
-              fontSize: '0.95rem',
-            }}
-          >
-            <option value="">— Select a device —</option>
-            {devices.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-                {d.is_active ? ' (active)' : ''}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => void loadDevices()}
-            disabled={isLoadingDevices}
-          >
-            {isLoadingDevices ? 'Refreshing…' : 'Refresh devices'}
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => saveSelectedDevice()}
-            disabled={!selectedDevice}
-            title="Remember this device for next time"
-          >
-            Save as default
-          </button>
-        </div>
-        {devices.length === 0 && !isLoadingDevices && (
-          <p style={{ marginTop: 10, fontSize: '0.8rem', color: '#ffb347' }}>
-            No devices found. Open the Spotify app on the target device, then tap Refresh devices.
-          </p>
-        )}
+        {playbackDeviceContent}
       </motion.div>
     ) : null;
 
@@ -3113,65 +3143,70 @@ const HostView: React.FC = () => {
                   <div style={{ display: 'none' }}>License validation disabled for tonight</div>
                 )}
 
-          {/* Spotify Connection */}
-          <motion.div 
-            className="spotify-section"
+          {/* Spotify + playback device (one card; side-by-side when connected) */}
+          <motion.div
+            className="host-spotify-playback-unified"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
           >
-                         <h2>🎵 Spotify Connection</h2>
-             {!isSpotifyConnected ? (
-               <div className="spotify-connection-section">
-                 {spotifyError && (
-                   <div className="spotify-error">
-                     <p>{spotifyError}</p>
-                   </div>
-                 )}
-                 <button
-                   className="spotify-connect-btn btn"
-                   type="button"
-                   onClick={() => {
-                     setSpotifyError(null);
-                     connectSpotify();
-                   }}
-                   disabled={isSpotifyConnecting}
-                 >
-                   <Music className="btn-icon spotify-btn-icon" aria-hidden />
-                   {isSpotifyConnecting
-                     ? 'Connecting...'
-                     : spotifyError
-                       ? 'Try again'
-                       : 'Connect Spotify'}
-                 </button>
-               </div>
-             ) : (
-               <div className="spotify-connected">
-                 <div className="spotify-connected-main">
-                   <Music className="connected-icon" aria-hidden />
-                   <span className="spotify-connected-label">Connected to Spotify</span>
-                 </div>
-                 <button
-                   type="button"
-                   className="disconnect-btn btn"
-                   onClick={async () => {
-                     try {
-                      await fetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST' });
-                       setIsSpotifyConnected(false);
-                       setPlaylists([]);
-                       setSpotifyError(null);
-                     } catch (error) {
-                       console.error('Error disconnecting Spotify:', error);
-                     }
-                   }}
-                 >
-                   Disconnect
-                 </button>
-               </div>
-             )}
+            <div className="host-spotify-playback-unified__grid">
+              <div className="spotify-section spotify-section--unified">
+                <h2>🎵 Spotify Connection</h2>
+                {!isSpotifyConnected ? (
+                  <div className="spotify-connection-section">
+                    {spotifyError && (
+                      <div className="spotify-error">
+                        <p>{spotifyError}</p>
+                      </div>
+                    )}
+                    <button
+                      className="spotify-connect-btn btn"
+                      type="button"
+                      onClick={() => {
+                        setSpotifyError(null);
+                        connectSpotify();
+                      }}
+                      disabled={isSpotifyConnecting}
+                    >
+                      <Music className="btn-icon spotify-btn-icon" aria-hidden />
+                      {isSpotifyConnecting
+                        ? 'Connecting...'
+                        : spotifyError
+                          ? 'Try again'
+                          : 'Connect Spotify'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="spotify-connected">
+                    <div className="spotify-connected-main">
+                      <Music className="connected-icon" aria-hidden />
+                      <span className="spotify-connected-label">Connected to Spotify</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="disconnect-btn btn"
+                      onClick={async () => {
+                        try {
+                          await fetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST' });
+                          setIsSpotifyConnected(false);
+                          setPlaylists([]);
+                          setSpotifyError(null);
+                        } catch (error) {
+                          console.error('Error disconnecting Spotify:', error);
+                        }
+                      }}
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                )}
+              </div>
+              {isSpotifyConnected && (
+                <div className="playback-device-section playback-device-section--unified">{playbackDeviceContent}</div>
+              )}
+            </div>
           </motion.div>
-
-          {playbackDevicePanel}
 
           {/* Pattern Selection */}
           {isSpotifyConnected && (

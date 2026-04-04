@@ -5714,7 +5714,8 @@ app.get('/api/spotify/callback', async (req, res) => {
 
     if (isBrowserTopNavigation && appBase && state) {
       const room = String(state);
-      return res.redirect(302, `${appBase}/host/${encodeURIComponent(room)}?spotify=connected=1`);
+      // Must be ?spotify=connected (HostView checks searchParams.get('spotify') === 'connected')
+      return res.redirect(302, `${appBase}/host/${encodeURIComponent(room)}?spotify=connected`);
     }
 
     res.json({
