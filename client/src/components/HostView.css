@@ -433,7 +433,7 @@
   letter-spacing: 0.02em;
 }
 
-/* Manager tab: Spotify + playback in one stacked card (Disconnect lives in playback block) */
+/* Connection tab: Spotify + playback in one stacked card (Disconnect lives in playback block) */
 .host-view .host-spotify-playback-unified {
   margin: 0 0 1.25rem;
   padding: 1.2rem 1.35rem;

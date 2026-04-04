@@ -194,7 +194,7 @@ const HostView: React.FC = () => {
   const [playerCardsVersion, setPlayerCardsVersion] = useState<number>(0); // Force re-render trigger
   const [playerCardsFullscreen, setPlayerCardsFullscreen] = useState<boolean>(false);
   const [showRoundManager, setShowRoundManager] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'setup' | 'play'>('setup');
+  const [activeTab, setActiveTab] = useState<'setup' | 'connection' | 'play'>('setup');
   
   // Pause position tracking
   const [pausePosition, setPausePosition] = useState<number>(0);
@@ -389,7 +389,7 @@ const HostView: React.FC = () => {
         console.warn('Spotify not connected (401) while loading playlists');
         // Don't override isSpotifyConnected here - let status endpoint be authoritative
         console.log('�� loadPlaylists got 401, but not overriding connection state');
-        setSpotifyError('Spotify is not connected. Click Connect Spotify.');
+        setSpotifyError('Spotify is not connected. Use the Connection tab to connect.');
         setPlaylists([]);
         return;
       }
@@ -521,7 +521,7 @@ const HostView: React.FC = () => {
     } else if (gameState === 'waiting' && mixFinalized) {
       setActiveTab('play');
     } else {
-      setActiveTab('setup');
+      setActiveTab((prev) => (prev === 'connection' ? 'connection' : 'setup'));
     }
   }, [gameState, mixFinalized]);
 
@@ -544,7 +544,7 @@ const HostView: React.FC = () => {
         console.warn('Spotify not connected (401) while loading devices');
         setIsSpotifyConnected(false);
         setIsSpotifyConnecting(false);
-        setSpotifyError('Spotify is not connected. Click Connect Spotify.');
+        setSpotifyError('Spotify is not connected. Use the Connection tab to connect.');
         setDevices([]);
         return;
       }
@@ -1487,7 +1487,7 @@ const HostView: React.FC = () => {
 
     if (!selectedDevice) {
       alert(
-        'Please select a Spotify playback device first.\n\nUse the green "Playback device" section on the Manager or Game tab: pick a device from the list, or open Spotify on your target device and tap Refresh devices.'
+        'Please select a Spotify playback device first.\n\nOpen the Connection tab, pick a device in Playback device (or open Spotify on your target device and tap Refresh devices).'
       );
       return;
     }
@@ -1498,7 +1498,7 @@ const HostView: React.FC = () => {
     }
 
     if (!isSpotifyConnected) {
-      alert('Spotify is not connected. Click Connect Spotify first.');
+      alert('Spotify is not connected. Open the Connection tab and connect Spotify first.');
       return;
     }
 
@@ -3081,25 +3081,61 @@ const HostView: React.FC = () => {
     </>
   ) : null;
 
-  /** Standalone card (e.g. Game tab) — same playback content as Manager (includes Disconnect). */
-  const playbackDevicePanel =
-    isSpotifyConnected ? (
-      <motion.div
-        className="playback-device-section"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.05 }}
-        style={{
-          background: 'rgba(255,255,255,0.05)',
-          border: '1px solid rgba(0, 255, 136, 0.25)',
-          borderRadius: 12,
-          padding: '16px',
-          marginBottom: 16,
-        }}
-      >
-        {playbackDeviceContent}
-      </motion.div>
-    ) : null;
+  /** Spotify connect + LED + playback / Disconnect — Connection tab only. */
+  const hostConnectionPanel = (
+    <motion.div
+      className="host-spotify-playback-unified"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay: 0.2 }}
+    >
+      <div className="host-spotify-playback-unified__grid">
+        <div className="spotify-section spotify-section--unified">
+          {!isSpotifyConnected ? (
+            <>
+              <h2>🎵 Spotify Connection</h2>
+              <div className="spotify-connection-section">
+                {spotifyError && (
+                  <div className="spotify-error">
+                    <p>{spotifyError}</p>
+                  </div>
+                )}
+                <button
+                  className="spotify-connect-btn btn"
+                  type="button"
+                  onClick={() => {
+                    setSpotifyError(null);
+                    connectSpotify();
+                  }}
+                  disabled={isSpotifyConnecting}
+                >
+                  <Music className="btn-icon spotify-btn-icon" aria-hidden />
+                  {isSpotifyConnecting
+                    ? 'Connecting...'
+                    : spotifyError
+                      ? 'Try again'
+                      : 'Connect Spotify'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <div
+              className="spotify-connection-led"
+              role="status"
+              title="Spotify connected"
+              aria-label="Spotify connected"
+            >
+              <span className="spotify-connection-led__dot" aria-hidden />
+              <span className="spotify-connection-led__label">Connection</span>
+            </div>
+          )}
+        </div>
+        {isSpotifyConnected && (
+          <div className="playback-device-section playback-device-section--unified">{playbackDeviceContent}</div>
+        )}
+      </div>
+    </motion.div>
+  );
 
   return (
     <div className="host-view">
@@ -3131,6 +3167,7 @@ const HostView: React.FC = () => {
           }}>
             {[
               { id: 'setup', label: '🎯 Manager', desc: 'Setup & Management' },
+              { id: 'connection', label: '🔌 Connection', desc: 'Spotify & device' },
               { id: 'play', label: '🎮 Game', desc: 'Live Game Controls' }
             ].map(tab => (
               <button
@@ -3167,60 +3204,6 @@ const HostView: React.FC = () => {
                 {showRoundManager && (
                   <div style={{ display: 'none' }}>License validation disabled for tonight</div>
                 )}
-
-          {/* Spotify + playback device (one card; Disconnect in playback block) */}
-          <motion.div
-            className="host-spotify-playback-unified"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-          >
-            <div className="host-spotify-playback-unified__grid">
-              <div className="spotify-section spotify-section--unified">
-                {!isSpotifyConnected ? (
-                  <>
-                    <h2>🎵 Spotify Connection</h2>
-                    <div className="spotify-connection-section">
-                      {spotifyError && (
-                        <div className="spotify-error">
-                          <p>{spotifyError}</p>
-                        </div>
-                      )}
-                      <button
-                        className="spotify-connect-btn btn"
-                        type="button"
-                        onClick={() => {
-                          setSpotifyError(null);
-                          connectSpotify();
-                        }}
-                        disabled={isSpotifyConnecting}
-                      >
-                        <Music className="btn-icon spotify-btn-icon" aria-hidden />
-                        {isSpotifyConnecting
-                          ? 'Connecting...'
-                          : spotifyError
-                            ? 'Try again'
-                            : 'Connect Spotify'}
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <div
-                    className="spotify-connection-led"
-                    role="status"
-                    title="Spotify connected"
-                    aria-label="Spotify connected"
-                  >
-                    <span className="spotify-connection-led__dot" aria-hidden />
-                    <span className="spotify-connection-led__label">Connection</span>
-                  </div>
-                )}
-              </div>
-              {isSpotifyConnected && (
-                <div className="playback-device-section playback-device-section--unified">{playbackDeviceContent}</div>
-              )}
-            </div>
-          </motion.div>
 
           {/* Pattern Selection */}
           {isSpotifyConnected && (
@@ -3798,6 +3781,10 @@ const HostView: React.FC = () => {
               </div>
             )}
 
+            {activeTab === 'connection' && (
+              <div className="connection-tab">{hostConnectionPanel}</div>
+            )}
+
             {activeTab === 'play' && (
               <div className="play-tab">
           {/* Game Controls */}
@@ -3809,8 +3796,6 @@ const HostView: React.FC = () => {
           >
             <h2>🎮 Game Controls</h2>
 
-            {playbackDevicePanel}
-                  
                   {/* Game Settings */}
                   <div style={{ 
                     background: 'rgba(255,255,255,0.05)', 
@@ -4102,7 +4087,7 @@ const HostView: React.FC = () => {
                       maxWidth: 520,
                     }}>
                       {selectedPlaylists.length === 0
-                        ? 'Open the Manager tab, connect Spotify if needed, and select playlists for this round. Then return here to finalize or start the game.'
+                        ? 'Use the Connection tab for Spotify, then the Manager tab to select playlists for this round. Return here to finalize or start the game.'
                         : 'Tap Finalize Mix or Start Game to build the bingo song pool from your selected playlists.'}
                     </p>
                   </div>
