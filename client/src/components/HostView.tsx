@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
+﻿import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -343,6 +343,11 @@ const HostView: React.FC = () => {
   const [playlistQuery, setPlaylistQuery] = useState('');
   /** false = GoT-oriented picks only; true = full Spotify library list */
   const [showAllPlaylists, setShowAllPlaylists] = useState<boolean>(false);
+  /** Playlist table: Spotify order until user sorts by name or track count */
+  const [playlistSort, setPlaylistSort] = useState<{
+    key: 'none' | 'name' | 'tracks';
+    dir: 'asc' | 'desc';
+  }>({ key: 'none', dir: 'asc' });
   // const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]); // duplicate removed
   
   // Pause position tracking (duplicates removed below)
@@ -474,15 +479,43 @@ const HostView: React.FC = () => {
   );
 
   // Filter playlists by query and exclude already assigned playlists
-  const filteredPlaylists = (playlistQuery ? visiblePlaylists.filter(p => {
-    const q = playlistQuery.toLowerCase();
-    return (
-      !assignedPlaylistIds.has(p.id) && // Exclude assigned playlists
-      ((p.name || '').toLowerCase().includes(q) ||
-      (p.owner || '').toLowerCase().includes(q) ||
-      (p.description || '').toLowerCase().includes(q))
+  const filteredPlaylists = useMemo(() => {
+    const assigned = new Set(
+      eventRounds.flatMap((round) => round.playlistIds || [])
     );
-  }) : visiblePlaylists.filter(p => !assignedPlaylistIds.has(p.id))); // Exclude assigned playlists even without query
+    if (playlistQuery) {
+      const q = playlistQuery.toLowerCase();
+      return visiblePlaylists.filter((p) => {
+        return (
+          !assigned.has(p.id) &&
+          ((p.name || '').toLowerCase().includes(q) ||
+            (p.owner || '').toLowerCase().includes(q) ||
+            (p.description || '').toLowerCase().includes(q))
+        );
+      });
+    }
+    return visiblePlaylists.filter((p) => !assigned.has(p.id));
+  }, [visiblePlaylists, playlistQuery, eventRounds]);
+
+  const sortedFilteredPlaylists = useMemo(() => {
+    const rows = [...filteredPlaylists];
+    if (playlistSort.key === 'none') return rows;
+    const m = playlistSort.dir === 'asc' ? 1 : -1;
+    rows.sort((a, b) => {
+      if (playlistSort.key === 'tracks') {
+        return (a.tracks - b.tracks) * m;
+      }
+      return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }) * m;
+    });
+    return rows;
+  }, [filteredPlaylists, playlistSort]);
+
+  const togglePlaylistSort = useCallback((key: 'name' | 'tracks') => {
+    setPlaylistSort((prev) => {
+      if (prev.key !== key) return { key, dir: 'asc' };
+      return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
+    });
+  }, []);
 
   // Update visible playlists when rounds change to exclude newly assigned playlists, or when filter mode changes
   useEffect(() => {
@@ -3627,31 +3660,125 @@ const HostView: React.FC = () => {
                       borderRadius: 8, 
                       padding: 8 
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px 8px', fontSize: '0.68rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid rgba(255,255,255,0.08)', marginBottom: 4 }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          padding: '6px 8px 8px',
+                          fontSize: '0.68rem',
+                          color: '#888',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                          borderBottom: '1px solid rgba(255,255,255,0.08)',
+                          marginBottom: 4,
+                        }}
+                      >
                         <span style={{ width: 18, textAlign: 'center' }} title="Include in game mix">Mix</span>
-                        <span style={{ flex: 1 }}>Playlist</span>
-                        <span style={{ minWidth: 72, textAlign: 'right' }}>Tracks</span>
-                        <span style={{ minWidth: 72, textAlign: 'right' }} />
+                        <button
+                          type="button"
+                          className="host-playlist-sort-btn"
+                          onClick={() => togglePlaylistSort('name')}
+                          aria-sort={
+                            playlistSort.key === 'name'
+                              ? playlistSort.dir === 'asc'
+                                ? 'ascending'
+                                : 'descending'
+                              : 'none'
+                          }
+                          title="Sort by playlist name"
+                          style={{
+                            flex: 1,
+                            textAlign: 'left',
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            color: 'inherit',
+                            font: 'inherit',
+                            letterSpacing: 'inherit',
+                            textTransform: 'inherit',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          Playlist
+                          {playlistSort.key === 'name' && (
+                            <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
+                              {playlistSort.dir === 'asc' ? '↑' : '↓'}
+                            </span>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          className="host-playlist-sort-btn"
+                          onClick={() => togglePlaylistSort('tracks')}
+                          aria-sort={
+                            playlistSort.key === 'tracks'
+                              ? playlistSort.dir === 'asc'
+                                ? 'ascending'
+                                : 'descending'
+                              : 'none'
+                          }
+                          title="Sort by track count"
+                          style={{
+                            minWidth: 72,
+                            textAlign: 'right',
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            color: 'inherit',
+                            font: 'inherit',
+                            letterSpacing: 'inherit',
+                            textTransform: 'inherit',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'flex-end',
+                            gap: 4,
+                          }}
+                        >
+                          Tracks
+                          {playlistSort.key === 'tracks' && (
+                            <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
+                              {playlistSort.dir === 'asc' ? '↑' : '↓'}
+                            </span>
+                          )}
+                        </button>
+                        <span style={{ minWidth: 72, textAlign: 'right' }}>
+                          {playlistSort.key !== 'none' && (
+                            <button
+                              type="button"
+                              onClick={() => setPlaylistSort({ key: 'none', dir: 'asc' })}
+                              className="host-playlist-sort-reset"
+                              title="Restore Spotify library order"
+                              style={{
+                                fontSize: '0.62rem',
+                                textTransform: 'none',
+                                letterSpacing: '0.02em',
+                                background: 'rgba(255,255,255,0.08)',
+                                border: '1px solid rgba(255,255,255,0.15)',
+                                borderRadius: 6,
+                                padding: '3px 8px',
+                                cursor: 'pointer',
+                                color: '#c8c8c8',
+                              }}
+                            >
+                              Default order
+                            </button>
+                          )}
+                        </span>
                       </div>
-                      {(() => {
-                        // Get all playlist IDs that are already assigned to rounds
-                        const assignedPlaylistIds = new Set(
-                          eventRounds.flatMap(round => round.playlistIds || [])
-                        );
-
-                        // Filter playlists by query and exclude already assigned playlists
-                        // Use the filteredPlaylists computed above (which uses visiblePlaylists, not all playlists)
-                        // This ensures the GoT filter is applied correctly
-
-                        return filteredPlaylists.length === 0 ? (
+                      {sortedFilteredPlaylists.length === 0 ? (
                           <div style={{ padding: 20, textAlign: 'center', opacity: 0.7 }}>
                             {playlistQuery ? 'No playlists match your search.' : 'No available playlists.'}
                         </div>
                         ) : (
-                          filteredPlaylists.map((p) => {
+                          sortedFilteredPlaylists.map((p) => {
                             // Debug: log playlists being rendered (first 10 only)
-                            if (filteredPlaylists.indexOf(p) < 10) {
-                              console.log(`🎨 Rendering playlist ${filteredPlaylists.indexOf(p) + 1}: "${p.name}" (display: "${stripGoTPrefix ? p.name.replace(/^GoT\s*[-–:]*\s*/i, '') : p.name}")`);
+                            if (sortedFilteredPlaylists.indexOf(p) < 10) {
+                              console.log(`🎨 Rendering playlist ${sortedFilteredPlaylists.indexOf(p) + 1}: "${p.name}" (display: "${stripGoTPrefix ? p.name.replace(/^GoT\s*[-–:]*\s*/i, '') : p.name}")`);
                             }
                           const isSelected = selectedPlaylists.some(sp => sp.id === p.id);
                           // Insufficient: < 15 songs (not enough for any mode)
@@ -3731,8 +3858,7 @@ const HostView: React.FC = () => {
                             </div>
                           );
                         })
-                        );
-                      })()}
+                        )}
                         </div>
                   </motion.div>
 

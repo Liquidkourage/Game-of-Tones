@@ -1003,3 +1003,13 @@
     grid-template-columns: 1fr;
   }
 }
+
+.host-playlist-sort-btn:hover {
+  color: #c8c8c8 !important;
+}
+
+.host-playlist-sort-reset:hover {
+  background: rgba(0, 255, 136, 0.12) !important;
+  border-color: rgba(0, 255, 136, 0.35) !important;
+  color: #00ff88 !important;
+}
