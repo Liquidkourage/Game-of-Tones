@@ -7,7 +7,8 @@ import {
   SkipForward, 
   Music, 
   Trophy,
-  Plus
+  Plus,
+  X
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL } from '../config';
@@ -194,7 +195,11 @@ const HostView: React.FC = () => {
   const [playerCardsVersion, setPlayerCardsVersion] = useState<number>(0); // Force re-render trigger
   const [playerCardsFullscreen, setPlayerCardsFullscreen] = useState<boolean>(false);
   const [showRoundManager, setShowRoundManager] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'setup' | 'connection' | 'play'>('setup');
+  const [activeTab, setActiveTab] = useState<'setup' | 'play'>('setup');
+  const [showConnectionModal, setShowConnectionModal] = useState(false);
+  const [spotifyInitialCheckDone, setSpotifyInitialCheckDone] = useState(false);
+  const initialConnectionPromptRef = useRef(false);
+  const prevSpotifyConnectedRef = useRef<boolean | undefined>(undefined);
   
   // Pause position tracking
   const [pausePosition, setPausePosition] = useState<number>(0);
@@ -389,7 +394,7 @@ const HostView: React.FC = () => {
         console.warn('Spotify not connected (401) while loading playlists');
         // Don't override isSpotifyConnected here - let status endpoint be authoritative
         console.log('�� loadPlaylists got 401, but not overriding connection state');
-        setSpotifyError('Spotify is not connected. Use the Connection tab to connect.');
+        setSpotifyError('Spotify is not connected. Open Connection in the header to connect.');
         setPlaylists([]);
         return;
       }
@@ -521,9 +526,48 @@ const HostView: React.FC = () => {
     } else if (gameState === 'waiting' && mixFinalized) {
       setActiveTab('play');
     } else {
-      setActiveTab((prev) => (prev === 'connection' ? 'connection' : 'setup'));
+      setActiveTab('setup');
     }
   }, [gameState, mixFinalized]);
+
+  /** After first Spotify status check: prompt once if not connected. */
+  useEffect(() => {
+    if (!spotifyInitialCheckDone || isSpotifyConnected) return;
+    if (!initialConnectionPromptRef.current) {
+      initialConnectionPromptRef.current = true;
+      setShowConnectionModal(true);
+    }
+  }, [spotifyInitialCheckDone, isSpotifyConnected]);
+
+  /** Spotify disconnected → reopen modal; reconnected → close. */
+  useEffect(() => {
+    const prev = prevSpotifyConnectedRef.current;
+    if (prev === true && isSpotifyConnected === false) {
+      setShowConnectionModal(true);
+    }
+    if (prev === false && isSpotifyConnected === true) {
+      setShowConnectionModal(false);
+    }
+    prevSpotifyConnectedRef.current = isSpotifyConnected;
+  }, [isSpotifyConnected]);
+
+  useEffect(() => {
+    if (!showConnectionModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowConnectionModal(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showConnectionModal]);
+
+  useEffect(() => {
+    if (!showConnectionModal) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [showConnectionModal]);
 
   const refreshRooms = useCallback(async () => {
     try {
@@ -544,7 +588,7 @@ const HostView: React.FC = () => {
         console.warn('Spotify not connected (401) while loading devices');
         setIsSpotifyConnected(false);
         setIsSpotifyConnecting(false);
-        setSpotifyError('Spotify is not connected. Use the Connection tab to connect.');
+        setSpotifyError('Spotify is not connected. Open Connection in the header to connect.');
         setDevices([]);
         return;
       }
@@ -1315,6 +1359,8 @@ const HostView: React.FC = () => {
         console.error('Error checking Spotify status:', error);
         setIsSpotifyConnected(false);
         setIsSpotifyConnecting(false);
+      } finally {
+        setSpotifyInitialCheckDone(true);
       }
     };
 
@@ -1487,7 +1533,7 @@ const HostView: React.FC = () => {
 
     if (!selectedDevice) {
       alert(
-        'Please select a Spotify playback device first.\n\nOpen the Connection tab, pick a device in Playback device (or open Spotify on your target device and tap Refresh devices).'
+        'Please select a Spotify playback device first.\n\nOpen Connection (header button), pick a device in Playback device, or open Spotify on your target device and tap Refresh devices.'
       );
       return;
     }
@@ -1498,7 +1544,7 @@ const HostView: React.FC = () => {
     }
 
     if (!isSpotifyConnected) {
-      alert('Spotify is not connected. Open the Connection tab and connect Spotify first.');
+      alert('Spotify is not connected. Open Connection in the header and connect Spotify first.');
       return;
     }
 
@@ -3081,7 +3127,7 @@ const HostView: React.FC = () => {
     </>
   ) : null;
 
-  /** Spotify connect + LED + playback / Disconnect — Connection tab only. */
+  /** Spotify connect + LED + playback / Disconnect — shown in connection modal. */
   const hostConnectionPanel = (
     <motion.div
       className="host-spotify-playback-unified"
@@ -3149,7 +3195,14 @@ const HostView: React.FC = () => {
         {/* Header */}
         <div className="host-header">
           <h1>🎮 Game Host</h1>
-          <div className="room-info" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="room-info" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn-secondary host-connection-toolbar-btn"
+              onClick={() => setShowConnectionModal(true)}
+            >
+              🔌 Connection
+            </button>
             <span className="room-code">Room: {roomId}</span>
           </div>
         </div>
@@ -3167,7 +3220,6 @@ const HostView: React.FC = () => {
           }}>
             {[
               { id: 'setup', label: '🎯 Manager', desc: 'Setup & Management' },
-              { id: 'connection', label: '🔌 Connection', desc: 'Spotify & device' },
               { id: 'play', label: '🎮 Game', desc: 'Live Game Controls' }
             ].map(tab => (
               <button
@@ -3781,10 +3833,6 @@ const HostView: React.FC = () => {
               </div>
             )}
 
-            {activeTab === 'connection' && (
-              <div className="connection-tab">{hostConnectionPanel}</div>
-            )}
-
             {activeTab === 'play' && (
               <div className="play-tab">
           {/* Game Controls */}
@@ -4087,7 +4135,7 @@ const HostView: React.FC = () => {
                       maxWidth: 520,
                     }}>
                       {selectedPlaylists.length === 0
-                        ? 'Use the Connection tab for Spotify, then the Manager tab to select playlists for this round. Return here to finalize or start the game.'
+                        ? 'Use Connection in the header for Spotify, then the Manager tab to select playlists for this round. Return here to finalize or start the game.'
                         : 'Tap Finalize Mix or Start Game to build the bingo song pool from your selected playlists.'}
                     </p>
                   </div>
@@ -4513,6 +4561,35 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
           </div> {/* Close host-content */}
 
       </motion.div>
+
+      {showConnectionModal && (
+        <div
+          className="host-connection-modal-backdrop"
+          onClick={() => setShowConnectionModal(false)}
+          role="presentation"
+        >
+          <div
+            className="host-connection-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="host-connection-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="host-connection-modal__header">
+              <h2 id="host-connection-modal-title">Spotify & device</h2>
+              <button
+                type="button"
+                className="host-connection-modal__close"
+                aria-label="Close"
+                onClick={() => setShowConnectionModal(false)}
+              >
+                <X className="w-5 h-5" aria-hidden />
+              </button>
+            </div>
+            <div className="host-connection-modal__body">{hostConnectionPanel}</div>
+          </div>
+        </div>
+      )}
 
       {/* Full-screen in-tab panel for player cards (below verification modal z-index) */}
       {showPlayerCards && playerCards.size > 0 && playerCardsFullscreen && (

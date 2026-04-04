@@ -433,7 +433,7 @@
   letter-spacing: 0.02em;
 }
 
-/* Connection tab: Spotify + playback in one stacked card (Disconnect lives in playback block) */
+/* Connection modal: Spotify + playback in one stacked card (Disconnect lives in playback block) */
 .host-view .host-spotify-playback-unified {
   margin: 0 0 1.25rem;
   padding: 1.2rem 1.35rem;
@@ -590,4 +590,72 @@
     width: 100%;
     justify-content: center;
   }
+}
+
+/* Connection modal (Spotify + device) */
+.host-connection-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.host-connection-modal {
+  width: min(100%, 520px);
+  max-height: min(92vh, 900px);
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 255, 136, 0.28);
+  background: linear-gradient(165deg, rgba(18, 22, 30, 0.98) 0%, rgba(10, 12, 18, 0.99) 100%);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.host-connection-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(0, 255, 136, 0.15);
+}
+
+.host-connection-modal__header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--accent-color, #00ff88);
+  letter-spacing: 0.02em;
+}
+
+.host-connection-modal__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.host-connection-modal__close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.host-connection-modal__body {
+  padding: 16px 18px 20px;
+}
+
+.host-view .host-connection-toolbar-btn {
+  font-size: 0.82rem;
+  padding: 8px 12px;
+  border-radius: 10px;
 }
