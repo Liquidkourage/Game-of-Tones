@@ -2450,14 +2450,19 @@ const PublicDisplay: React.FC = () => {
                 style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(5, 1fr)',
-                  gap: 'clamp(10px, 2vmin, 28px)',
-                  /* Largest readable square: scales with the smaller screen dimension (wall TVs). */
-                  width: 'min(96vmin, 94vw)',
+                  gridTemplateRows: 'repeat(5, 1fr)',
+                  gap: 'clamp(8px, 1.4vmin, 20px)',
+                  /*
+                    Fixed square that fits in the viewport (header + footer reserve).
+                    Without an explicit height cap, flex + aspect-ratio can squash cells vertically.
+                  */
+                  width: 'min(96vmin, 94vw, calc(100vh - 200px), calc(100vw - 32px))',
+                  height: 'min(96vmin, 94vw, calc(100vh - 200px), calc(100vw - 32px))',
                   maxWidth: '100%',
                   margin: '0 auto',
-                  flex: '1 1 auto',
+                  flexShrink: 0,
+                  alignSelf: 'center',
                   minHeight: 0,
-                  aspectRatio: '1 / 1',
                 }}
               >
                 {Array.from({ length: 25 }, (_, i) => {
@@ -2472,8 +2477,8 @@ const PublicDisplay: React.FC = () => {
                     <div
                       key={pos}
                       style={{
-                        borderRadius: 'clamp(10px, 1.4vmin, 20px)',
-                        padding: 'clamp(8px, 1.8vmin, 20px)',
+                        borderRadius: 'clamp(8px, 1.1vmin, 16px)',
+                        padding: 'clamp(4px, 0.9vmin, 10px)',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
@@ -2488,27 +2493,31 @@ const PublicDisplay: React.FC = () => {
                           ? '0 0 40px rgba(0,255,180,0.45), inset 0 0 20px rgba(0,255,200,0.08)'
                           : undefined,
                         minHeight: 0,
+                        minWidth: 0,
                       }}
                     >
                       <div
                         style={{
-                          fontSize: 'clamp(1rem, 3.8vmin, 3.5rem)',
+                          /* Caps keep text inside ~1/5 of the grid; min() avoids oversized type on huge TVs */
+                          fontSize: 'min(1.55rem, clamp(0.65rem, 2.1vmin, 1.85rem))',
                           fontWeight: 900,
-                          lineHeight: 1.12,
+                          lineHeight: 1.1,
                           color: '#f6fffc',
                           display: '-webkit-box',
-                          WebkitLineClamp: 4,
+                          WebkitLineClamp: 3,
                           WebkitBoxOrient: 'vertical',
                           overflow: 'hidden',
                           wordBreak: 'break-word',
+                          hyphens: 'auto',
                           textShadow: '0 2px 8px rgba(0,0,0,0.35)',
+                          width: '100%',
                         }}
                       >
                         {sq?.isFreeSpace ? (
                           <span
                             style={{
-                              fontSize: 'clamp(1.4rem, 5.5vmin, 4.5rem)',
-                              letterSpacing: '0.12em',
+                              fontSize: 'min(2.4rem, clamp(1rem, 3.2vmin, 2.2rem))',
+                              letterSpacing: '0.1em',
                             }}
                           >
                             FREE
@@ -2520,15 +2529,16 @@ const PublicDisplay: React.FC = () => {
                       {!sq?.isFreeSpace && artist ? (
                         <div
                           style={{
-                            fontSize: 'clamp(0.85rem, 2.8vmin, 2.4rem)',
-                            opacity: 0.88,
-                            marginTop: 'clamp(4px, 1vmin, 10px)',
-                            lineHeight: 1.15,
+                            fontSize: 'min(1.2rem, clamp(0.55rem, 1.65vmin, 1.35rem))',
+                            opacity: 0.9,
+                            marginTop: 'clamp(2px, 0.5vmin, 6px)',
+                            lineHeight: 1.1,
                             fontWeight: 700,
                             display: '-webkit-box',
-                            WebkitLineClamp: 3,
+                            WebkitLineClamp: 2,
                             WebkitBoxOrient: 'vertical',
                             overflow: 'hidden',
+                            width: '100%',
                           }}
                         >
                           {artist}
