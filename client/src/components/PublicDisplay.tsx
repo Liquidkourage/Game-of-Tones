@@ -2393,28 +2393,31 @@ const PublicDisplay: React.FC = () => {
                 boxSizing: 'border-box',
               }}
             >
-              {/* Left: winner header — frees vertical space for the card */}
+              {/* Left: winner header — wide column, large type; card sizing unchanged (center flex + min(100%, 92vh)) */}
               <div
                 id="winner-card-title"
                 style={{
                   flex: '0 0 auto',
-                  width: 'clamp(112px, 16vw, 260px)',
+                  width: 'clamp(168px, 24vw, 400px)',
                   minWidth: 0,
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
                   textAlign: 'center',
-                  gap: 'clamp(6px, 1.2vmin, 14px)',
-                  padding: 'clamp(4px, 1vmin, 12px)',
+                  gap: 'clamp(14px, 2.5vmin, 28px)',
+                  padding: 'clamp(12px, 2vmin, 28px) clamp(10px, 1.5vmin, 20px)',
+                  borderRight: '1px solid rgba(255,255,255,0.12)',
+                  background: 'linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,40,32,0.12) 100%)',
+                  borderRadius: 'clamp(10px, 1.2vmin, 16px)',
                 }}
               >
                 <div
                   style={{
-                    fontSize: 'clamp(0.75rem, 1.6vmin, 1.35rem)',
-                    letterSpacing: '0.16em',
+                    fontSize: 'clamp(1rem, 2.4vmin, 1.75rem)',
+                    letterSpacing: '0.22em',
                     textTransform: 'uppercase',
-                    opacity: 0.9,
+                    opacity: 0.92,
                     fontWeight: 800,
                   }}
                 >
@@ -2422,34 +2425,35 @@ const PublicDisplay: React.FC = () => {
                 </div>
                 <div
                   style={{
-                    fontSize: 'clamp(1.25rem, 4vmin, 3.25rem)',
+                    fontSize: 'clamp(1.75rem, 5.5vmin, 4.25rem)',
                     fontWeight: 900,
                     color: '#eafff8',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: 'clamp(6px, 1.2vmin, 14px)',
-                    lineHeight: 1.05,
-                    textShadow: '0 4px 24px rgba(0,0,0,0.45)',
+                    gap: 'clamp(10px, 2vmin, 22px)',
+                    lineHeight: 1.08,
+                    textShadow: '0 4px 28px rgba(0,0,0,0.5)',
                   }}
                 >
                   <Trophy
                     style={{
-                      width: 'clamp(36px, 9vmin, 88px)',
-                      height: 'clamp(36px, 9vmin, 88px)',
+                      width: 'clamp(52px, 12vmin, 128px)',
+                      height: 'clamp(52px, 12vmin, 128px)',
                       flexShrink: 0,
-                      filter: 'drop-shadow(0 0 20px rgba(0,255,170,0.6))',
+                      filter: 'drop-shadow(0 0 24px rgba(0,255,170,0.65))',
                     }}
                     strokeWidth={2}
                   />
-                  <span>{winnerCardModal.playerName}</span>
+                  <span style={{ maxWidth: '100%', wordBreak: 'break-word' }}>{winnerCardModal.playerName}</span>
                 </div>
                 <div
                   style={{
-                    fontSize: 'clamp(0.85rem, 2.2vmin, 1.65rem)',
-                    opacity: 0.88,
+                    fontSize: 'clamp(1.05rem, 2.8vmin, 2.1rem)',
+                    opacity: 0.9,
                     fontWeight: 800,
+                    lineHeight: 1.2,
                   }}
                 >
                   {patternLabelForWinnerModal(winnerCardModal.pattern)}
@@ -2569,26 +2573,6 @@ const PublicDisplay: React.FC = () => {
                   );
                 })}
               </div>
-              </div>
-
-              {/* Right: dismiss hint */}
-              <div
-                style={{
-                  flex: '0 0 auto',
-                  width: 'clamp(100px, 12vw, 200px)',
-                  minWidth: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  textAlign: 'center',
-                  opacity: 0.65,
-                  fontSize: 'clamp(0.75rem, 1.65vmin, 1.2rem)',
-                  fontWeight: 700,
-                  lineHeight: 1.35,
-                  padding: 'clamp(4px, 1vmin, 12px)',
-                }}
-              >
-                Tap outside or press Esc to dismiss
               </div>
             </motion.div>
           </motion.div>
