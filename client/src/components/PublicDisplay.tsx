@@ -196,7 +196,6 @@ const PublicDisplay: React.FC = () => {
     winningPositions: string[];
     pattern: string;
   } | null>(null);
-  const winnerModalTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [remoteHybridNotice, setRemoteHybridNotice] = useState<string>('');
   // Connection status and sync management
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
@@ -831,6 +830,7 @@ const PublicDisplay: React.FC = () => {
     });
 
     newSocket.on('game-started', (data: any) => {
+      setWinnerCardModal(null);
       setGameState(prev => ({ 
         ...prev, 
         isPlaying: true,
@@ -959,7 +959,6 @@ const PublicDisplay: React.FC = () => {
 
     // Handle bingo verification pending (someone called bingo, awaiting host verification)
     newSocket.on('bingo-verification-pending', (data: any) => {
-      // Don't show winner banner yet, just acknowledge the call
       setIsVerificationPending(true);
       console.log(`${data.playerName} called BINGO - awaiting verification`);
     });
@@ -982,10 +981,6 @@ const PublicDisplay: React.FC = () => {
               wc.squares.length > 0;
 
             if (hasWinningCard) {
-              if (winnerModalTimerRef.current) {
-                clearTimeout(winnerModalTimerRef.current);
-                winnerModalTimerRef.current = null;
-              }
               setShowWinnerBanner(false);
               setWinnerName('');
               setWinnerCardModal({
@@ -995,11 +990,6 @@ const PublicDisplay: React.FC = () => {
                 pattern: typeof data.pattern === 'string' ? data.pattern : 'line',
               });
               playPublicCelebrationSound();
-              const celebrationTime = isFirstWinner ? 12000 : 9000;
-              winnerModalTimerRef.current = setTimeout(() => {
-                setWinnerCardModal(null);
-                winnerModalTimerRef.current = null;
-              }, celebrationTime);
             } else {
               if (isFirstWinner) {
                 setWinnerName(`🏆 BINGO! ${data.playerName} WINS!`);
@@ -1017,6 +1007,7 @@ const PublicDisplay: React.FC = () => {
     });
 
     newSocket.on('mix-finalized', (payload: any) => {
+      setWinnerCardModal(null);
       try {
         const names = Array.isArray(payload?.playlists) ? payload.playlists.map((p: any) => String(p?.name || '')) : [];
         setPlaylistNames(names);
@@ -1027,6 +1018,16 @@ const PublicDisplay: React.FC = () => {
         setShowRules(false);
       } catch {}
       ensureGrid();
+    });
+
+    newSocket.on('game-session-ended', () => {
+      setWinnerCardModal(null);
+      setGameState((prev) => ({
+        ...prev,
+        isPlaying: false,
+        currentSong: null,
+      }));
+      setIsVerificationPending(false);
     });
 
     newSocket.on('game-ended', () => {
@@ -1237,10 +1238,6 @@ const PublicDisplay: React.FC = () => {
         clearInterval(countdownRef.current);
         countdownRef.current = null;
       }
-      if (winnerModalTimerRef.current) {
-        clearTimeout(winnerModalTimerRef.current);
-        winnerModalTimerRef.current = null;
-      }
       newSocket.close();
     };
   }, [roomId]);
@@ -1259,15 +1256,6 @@ const PublicDisplay: React.FC = () => {
     
     return () => clearInterval(syncInterval);
   }, [socket, gameState.isPlaying, roomId]);
-
-  useEffect(() => {
-    if (!winnerCardModal) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setWinnerCardModal(null);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [winnerCardModal]);
 
   // Time-based letter reveal every 10 seconds (weighted by unrevealed frequency across played songs)
   useEffect(() => {
@@ -2355,7 +2343,6 @@ const PublicDisplay: React.FC = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.22 }}
-            onClick={() => setWinnerCardModal(null)}
             style={{
               position: 'fixed',
               inset: 0,
