@@ -3038,7 +3038,7 @@ const PublicDisplay: React.FC = () => {
                   flex: '1 1 min(440px, 100%)',
                   maxWidth: 960,
                   textAlign: 'center',
-                  padding: 'clamp(16px, 2.5vmin, 40px) clamp(14px, 2.2vmin, 28px)',
+                  padding: 'clamp(22px, 3vmin, 48px) clamp(22px, 3.5vmin, 44px)',
                   borderRadius: 'clamp(18px, 2.5vmin, 26px)',
                   background: 'linear-gradient(145deg, rgba(130,100,255,0.18) 0%, rgba(15,25,45,0.55) 100%)',
                   border: 'max(2px, 0.25vmin) solid rgba(160,140,255,0.45)',
@@ -3048,7 +3048,7 @@ const PublicDisplay: React.FC = () => {
                   flexDirection: 'column',
                   alignItems: 'stretch',
                   justifyContent: 'center',
-                  gap: 'clamp(12px, 2vmin, 26px)',
+                  gap: 'clamp(16px, 2.6vmin, 34px)',
                   boxSizing: 'border-box',
                   /* Lets URL use cqw so one line scales to card width */
                   containerType: 'inline-size',
@@ -3056,12 +3056,13 @@ const PublicDisplay: React.FC = () => {
               >
                 <div
                   style={{
-                    fontSize: 'clamp(1.65rem, min(4.2vmin, 3.4vh), 3.15rem)',
+                    fontSize: 'clamp(2rem, min(5vmin, 4vh), 3.65rem)',
                     fontWeight: 800,
-                    color: 'rgba(230,240,255,0.9)',
-                    letterSpacing: '0.16em',
+                    color: 'rgba(230,240,255,0.94)',
+                    letterSpacing: '0.18em',
                     textTransform: 'uppercase',
                     textAlign: 'center',
+                    lineHeight: 1.15,
                   }}
                 >
                   OR
@@ -3073,14 +3074,14 @@ const PublicDisplay: React.FC = () => {
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'stretch',
-                    gap: 'clamp(10px, 1.5vmin, 18px)',
+                    gap: 'clamp(12px, 2vmin, 22px)',
                   }}
                 >
                   <span
                     style={{
-                      fontSize: 'clamp(1.75rem, min(4.8vmin, 3.9vh), 3.5rem)',
+                      fontSize: 'clamp(2.1rem, min(5.2vmin, 4.2vh), 3.85rem)',
                       fontWeight: 700,
-                      color: 'rgba(240,248,255,0.96)',
+                      color: 'rgba(240,248,255,0.98)',
                       lineHeight: 1.2,
                       textAlign: 'center',
                     }}
@@ -3091,6 +3092,9 @@ const PublicDisplay: React.FC = () => {
                     role="group"
                     aria-label="Join URL"
                     spellCheck={false}
+                    data-gramm="false"
+                    data-gramm_editor="false"
+                    data-enable-grammarly="false"
                     style={{
                       width: '100%',
                       minWidth: 0,
@@ -3099,23 +3103,33 @@ const PublicDisplay: React.FC = () => {
                       overflowY: 'hidden',
                       WebkitOverflowScrolling: 'touch',
                       textAlign: 'center',
-                      paddingBottom: 6,
+                      paddingLeft: 'clamp(4px, 1vmin, 12px)',
+                      paddingRight: 'clamp(4px, 1vmin, 12px)',
+                      paddingBottom: 8,
                       scrollbarGutter: 'stable',
                       touchAction: 'pan-x',
                     }}
                   >
                     <span
                       spellCheck={false}
+                      data-gramm="false"
+                      data-gramm_editor="false"
+                      data-enable-grammarly="false"
+                      lang="en"
                       style={{
                         display: 'inline-block',
-                        /* cqw: font scales so hostname fits one line inside this card (container on parent) */
-                        fontSize: 'clamp(1.15rem, calc(100cqw / 13), 4.75rem)',
+                        /* Slightly smaller divisor = URL breathes inside padding */
+                        fontSize: 'clamp(1.15rem, calc(100cqw / 14.5), 4.5rem)',
                         fontWeight: 900,
-                        lineHeight: 1.12,
+                        lineHeight: 1.15,
                         textShadow: '0 8px 32px rgba(0,0,0,0.45), 0 0 40px rgba(180,210,255,0.12)',
                         color: '#f6faff',
                         letterSpacing: '0.03em',
                         whiteSpace: 'nowrap',
+                        textDecoration: 'none',
+                        textDecorationLine: 'none',
+                        textUnderlineOffset: 0,
+                        borderBottom: 'none',
                       }}
                     >
                       tempo.liquidkourage.com
@@ -3124,12 +3138,14 @@ const PublicDisplay: React.FC = () => {
                 </div>
                 <div
                   style={{
-                    fontSize: 'clamp(1.45rem, min(4vmin, 3.2vh), 3.15rem)',
+                    fontSize: 'clamp(1.85rem, min(4.8vmin, 3.8vh), 3.45rem)',
                     fontWeight: 700,
-                    opacity: 0.94,
+                    opacity: 0.96,
                     letterSpacing: '0.02em',
-                    color: 'rgba(230,240,255,0.96)',
+                    color: 'rgba(230,240,255,0.98)',
                     textAlign: 'center',
+                    lineHeight: 1.25,
+                    marginTop: 'clamp(4px, 0.8vmin, 12px)',
                   }}
                 >
                   And enter room code
