@@ -2769,6 +2769,7 @@ const PublicDisplay: React.FC = () => {
                 zIndex: 1,
                 width: '100%',
                 maxWidth: 'min(98vw, 1800px)',
+                minWidth: 0,
                 margin: '0 auto',
               }}
             >
@@ -3049,6 +3050,8 @@ const PublicDisplay: React.FC = () => {
                   justifyContent: 'center',
                   gap: 'clamp(12px, 2vmin, 26px)',
                   boxSizing: 'border-box',
+                  /* Lets URL use cqw so one line scales to card width */
+                  containerType: 'inline-size',
                 }}
               >
                 <div
@@ -3098,13 +3101,15 @@ const PublicDisplay: React.FC = () => {
                       textAlign: 'center',
                       paddingBottom: 6,
                       scrollbarGutter: 'stable',
+                      touchAction: 'pan-x',
                     }}
                   >
                     <span
                       spellCheck={false}
                       style={{
                         display: 'inline-block',
-                        fontSize: 'clamp(1.35rem, min(calc(4vw + 1rem), 5rem), 5rem)',
+                        /* cqw: font scales so hostname fits one line inside this card (container on parent) */
+                        fontSize: 'clamp(1.15rem, calc(100cqw / 13), 4.75rem)',
                         fontWeight: 900,
                         lineHeight: 1.12,
                         textShadow: '0 8px 32px rgba(0,0,0,0.45), 0 0 40px rgba(180,210,255,0.12)',
