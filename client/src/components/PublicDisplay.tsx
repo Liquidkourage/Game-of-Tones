@@ -3024,11 +3024,11 @@ const PublicDisplay: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.45, delay: 0.28 }}
                 style={{
-                  minWidth: 'min(100%, 320px)',
-                  flex: '1 1 280px',
-                  maxWidth: 520,
+                  minWidth: 'min(100%, 300px)',
+                  flex: '1 1 300px',
+                  maxWidth: 560,
                   textAlign: 'center',
-                  padding: 'clamp(20px, 3.5vmin, 40px) clamp(18px, 3vmin, 36px)',
+                  padding: 'clamp(24px, 4vmin, 44px) clamp(20px, 3.2vmin, 40px)',
                   borderRadius: 'clamp(18px, 2.5vmin, 26px)',
                   background: 'linear-gradient(145deg, rgba(130,100,255,0.18) 0%, rgba(15,25,45,0.55) 100%)',
                   border: 'max(2px, 0.25vmin) solid rgba(160,140,255,0.45)',
@@ -3038,10 +3038,17 @@ const PublicDisplay: React.FC = () => {
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 'clamp(6px, 1.5vmin, 14px)',
+                  gap: 'clamp(12px, 2.2vmin, 22px)',
                 }}
               >
-                <div style={{ fontSize: 'clamp(1.5rem, 3.5vmin, 2.5rem)', fontWeight: 800, color: 'rgba(230,240,255,0.95)' }}>
+                <div
+                  style={{
+                    fontSize: 'clamp(1.5rem, 3.5vmin, 2.5rem)',
+                    fontWeight: 800,
+                    color: 'rgba(230,240,255,0.95)',
+                    letterSpacing: '0.04em',
+                  }}
+                >
                   Room
                 </div>
                 <div
@@ -3051,23 +3058,36 @@ const PublicDisplay: React.FC = () => {
                     color: '#00ffb0',
                     textShadow: '0 10px 40px rgba(0,255,170,0.65)',
                     lineHeight: 1,
+                    marginBottom: 'clamp(2px, 0.5vmin, 8px)',
                   }}
                 >
                   {roomInfo?.id || roomId || '—'}
                 </div>
-                <div style={{ fontSize: 'clamp(1.4rem, 3vmin, 2.2rem)', fontWeight: 700, opacity: 0.92, marginTop: 8 }}>
+                <div
+                  style={{
+                    fontSize: 'clamp(1.35rem, 2.9vmin, 2.1rem)',
+                    fontWeight: 700,
+                    opacity: 0.92,
+                    letterSpacing: '0.03em',
+                  }}
+                >
                   Go to
                 </div>
                 <div
                   style={{
-                    fontSize: 'clamp(1.75rem, 4vmin, 3rem)',
+                    fontSize: 'clamp(1.15rem, 2.65vmin, 2rem)',
                     fontWeight: 900,
                     textShadow: '0 6px 24px rgba(0,0,0,0.4)',
                     color: '#f2f8ff',
-                    wordBreak: 'break-word',
+                    lineHeight: 1.35,
+                    maxWidth: '100%',
+                    overflowWrap: 'anywhere',
+                    wordBreak: 'normal',
+                    hyphens: 'none',
                   }}
                 >
-                  tempo.liquidkourage.com
+                  {/* Optional breaks after dot / mid-label so the hostname does not split mid-token */}
+                  <>tempo.<wbr />liquid<wbr />kourage.com</>
                 </div>
               </motion.div>
             </div>
