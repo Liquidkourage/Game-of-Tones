@@ -3049,13 +3049,53 @@ const PublicDisplay: React.FC = () => {
               >
                 <div
                   style={{
-                    fontSize: 'clamp(1.65rem, min(4.5vmin, 3.5vh), 3.75rem)',
+                    fontSize: 'clamp(1.25rem, min(3.2vmin, 2.5vh), 2.25rem)',
                     fontWeight: 800,
-                    color: 'rgba(230,240,255,0.95)',
-                    letterSpacing: '0.06em',
+                    color: 'rgba(230,240,255,0.88)',
+                    letterSpacing: '0.14em',
+                    textTransform: 'uppercase',
                   }}
                 >
-                  Room
+                  OR
+                </div>
+                <div
+                  style={{
+                    fontSize: 'clamp(1.15rem, min(3.2vmin, 2.5vh), 2.65rem)',
+                    fontWeight: 700,
+                    color: 'rgba(240,248,255,0.95)',
+                    lineHeight: 1.35,
+                    maxWidth: '100%',
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    justifyContent: 'center',
+                    alignItems: 'baseline',
+                    gap: '0.35em 0.5em',
+                  }}
+                >
+                  <span>Go to</span>
+                  <span
+                    style={{
+                      fontWeight: 900,
+                      textShadow: '0 6px 24px rgba(0,0,0,0.4)',
+                      color: '#f2f8ff',
+                      overflowWrap: 'anywhere',
+                      wordBreak: 'normal',
+                      hyphens: 'none',
+                    }}
+                  >
+                    tempo.<wbr />liquid<wbr />kourage.com
+                  </span>
+                </div>
+                <div
+                  style={{
+                    fontSize: 'clamp(1.35rem, min(3.8vmin, 3vh), 3rem)',
+                    fontWeight: 700,
+                    opacity: 0.92,
+                    letterSpacing: '0.02em',
+                    color: 'rgba(230,240,255,0.95)',
+                  }}
+                >
+                  And enter room code
                 </div>
                 <div
                   style={{
@@ -3064,36 +3104,9 @@ const PublicDisplay: React.FC = () => {
                     color: '#00ffb0',
                     textShadow: '0 10px 40px rgba(0,255,170,0.65)',
                     lineHeight: 1,
-                    marginBottom: 'clamp(2px, 0.5vmin, 10px)',
                   }}
                 >
                   {roomInfo?.id || roomId || '—'}
-                </div>
-                <div
-                  style={{
-                    fontSize: 'clamp(1.45rem, min(3.8vmin, 3vh), 3.1rem)',
-                    fontWeight: 700,
-                    opacity: 0.92,
-                    letterSpacing: '0.04em',
-                  }}
-                >
-                  Go to
-                </div>
-                <div
-                  style={{
-                    fontSize: 'clamp(1.2rem, min(3.5vmin, 2.6vh), 2.85rem)',
-                    fontWeight: 900,
-                    textShadow: '0 6px 24px rgba(0,0,0,0.4)',
-                    color: '#f2f8ff',
-                    lineHeight: 1.3,
-                    maxWidth: '100%',
-                    overflowWrap: 'anywhere',
-                    wordBreak: 'normal',
-                    hyphens: 'none',
-                  }}
-                >
-                  {/* Optional breaks after dot / mid-label so the hostname does not split mid-token */}
-                  <>tempo.<wbr />liquid<wbr />kourage.com</>
                 </div>
               </motion.div>
             </div>
