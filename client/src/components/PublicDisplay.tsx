@@ -2360,12 +2360,12 @@ const PublicDisplay: React.FC = () => {
               position: 'fixed',
               inset: 0,
               zIndex: 2600,
-              background: 'rgba(0,0,0,0.82)',
-              backdropFilter: 'blur(10px)',
+              background: 'rgba(0,0,0,0.88)',
+              backdropFilter: 'blur(12px)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: 'clamp(12px, 3vw, 32px)',
+              padding: 'clamp(8px, 1.2vmin, 20px)',
             }}
           >
             <motion.div
@@ -2375,44 +2375,74 @@ const PublicDisplay: React.FC = () => {
               transition={{ type: 'spring', damping: 22, stiffness: 280 }}
               onClick={(e) => e.stopPropagation()}
               style={{
-                width: 'min(96vw, 980px)',
-                maxHeight: 'min(92vh, 900px)',
+                width: 'min(99vw, calc(100vw - 16px))',
+                maxWidth: 'min(99vw, 2400px)',
+                maxHeight: 'min(98vh, calc(100vh - 16px))',
+                height: 'auto',
                 overflow: 'auto',
-                background: 'linear-gradient(165deg, rgba(0,40,32,0.96) 0%, rgba(10,20,28,0.98) 100%)',
-                border: '2px solid rgba(0,255,200,0.45)',
-                borderRadius: 20,
-                boxShadow: '0 0 80px rgba(0,255,170,0.22), 0 24px 64px rgba(0,0,0,0.6)',
-                padding: 'clamp(16px, 2.5vw, 28px)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'stretch',
+                background: 'linear-gradient(165deg, rgba(0,40,32,0.97) 0%, rgba(10,20,28,0.99) 100%)',
+                border: 'max(3px, 0.35vmin) solid rgba(0,255,200,0.55)',
+                borderRadius: 'clamp(16px, 2vmin, 28px)',
+                boxShadow: '0 0 100px rgba(0,255,170,0.28), 0 32px 80px rgba(0,0,0,0.65)',
+                padding: 'clamp(20px, 3.5vmin, 48px) clamp(16px, 3vmin, 40px)',
               }}
             >
-              <div id="winner-card-title" style={{ textAlign: 'center', marginBottom: 14 }}>
+              <div
+                id="winner-card-title"
+                style={{
+                  textAlign: 'center',
+                  marginBottom: 'clamp(12px, 2.5vmin, 32px)',
+                  flexShrink: 0,
+                }}
+              >
                 <div
                   style={{
-                    fontSize: 'clamp(0.7rem, 1.1vw, 0.9rem)',
-                    letterSpacing: '0.22em',
+                    fontSize: 'clamp(1.1rem, 2.8vmin, 2.4rem)',
+                    letterSpacing: '0.2em',
                     textTransform: 'uppercase',
-                    opacity: 0.88,
-                    marginBottom: 8,
+                    opacity: 0.9,
+                    marginBottom: 'clamp(6px, 1vmin, 14px)',
+                    fontWeight: 800,
                   }}
                 >
                   Verified winner
                 </div>
                 <div
                   style={{
-                    fontSize: 'clamp(1.6rem, 3.6vw, 2.75rem)',
+                    fontSize: 'clamp(2.2rem, 7.5vmin, 6rem)',
                     fontWeight: 900,
                     color: '#eafff8',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: 12,
+                    gap: 'clamp(12px, 3vmin, 28px)',
                     flexWrap: 'wrap',
+                    lineHeight: 1.05,
+                    textShadow: '0 4px 24px rgba(0,0,0,0.45)',
                   }}
                 >
-                  <Trophy style={{ width: 'clamp(32px, 6vw, 48px)', height: 'clamp(32px, 6vw, 48px)', flexShrink: 0 }} strokeWidth={2} />
+                  <Trophy
+                    style={{
+                      width: 'clamp(56px, 14vmin, 140px)',
+                      height: 'clamp(56px, 14vmin, 140px)',
+                      flexShrink: 0,
+                      filter: 'drop-shadow(0 0 20px rgba(0,255,170,0.6))',
+                    }}
+                    strokeWidth={2}
+                  />
                   {winnerCardModal.playerName}
                 </div>
-                <div style={{ fontSize: 'clamp(0.85rem, 1.4vw, 1.1rem)', marginTop: 6, opacity: 0.82 }}>
+                <div
+                  style={{
+                    fontSize: 'clamp(1.25rem, 4vmin, 3rem)',
+                    marginTop: 'clamp(8px, 1.5vmin, 16px)',
+                    opacity: 0.88,
+                    fontWeight: 800,
+                  }}
+                >
                   {patternLabelForWinnerModal(winnerCardModal.pattern)}
                 </div>
               </div>
@@ -2420,9 +2450,13 @@ const PublicDisplay: React.FC = () => {
                 style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(5, 1fr)',
-                  gap: 'clamp(4px, 1vw, 8px)',
-                  width: 'min(88vw, 720px)',
+                  gap: 'clamp(10px, 2vmin, 28px)',
+                  /* Largest readable square: scales with the smaller screen dimension (wall TVs). */
+                  width: 'min(96vmin, 94vw)',
+                  maxWidth: '100%',
                   margin: '0 auto',
+                  flex: '1 1 auto',
+                  minHeight: 0,
                   aspectRatio: '1 / 1',
                 }}
               >
@@ -2438,37 +2472,47 @@ const PublicDisplay: React.FC = () => {
                     <div
                       key={pos}
                       style={{
-                        borderRadius: 8,
-                        padding: 'clamp(4px, 1vw, 8px)',
+                        borderRadius: 'clamp(10px, 1.4vmin, 20px)',
+                        padding: 'clamp(8px, 1.8vmin, 20px)',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
                         justifyContent: 'center',
                         textAlign: 'center',
                         overflow: 'hidden',
-                        background: sq?.marked ? 'rgba(0,255,136,0.12)' : 'rgba(255,255,255,0.04)',
+                        background: sq?.marked ? 'rgba(0,255,136,0.14)' : 'rgba(255,255,255,0.05)',
                         border: isPattern
-                          ? '3px solid rgba(0,255,200,0.95)'
-                          : '1px solid rgba(255,255,255,0.12)',
-                        boxShadow: isPattern ? '0 0 24px rgba(0,255,180,0.35)' : undefined,
+                          ? 'max(4px, 0.5vmin) solid rgba(0,255,220,0.98)'
+                          : 'max(2px, 0.25vmin) solid rgba(255,255,255,0.14)',
+                        boxShadow: isPattern
+                          ? '0 0 40px rgba(0,255,180,0.45), inset 0 0 20px rgba(0,255,200,0.08)'
+                          : undefined,
                         minHeight: 0,
                       }}
                     >
                       <div
                         style={{
-                          fontSize: 'clamp(0.55rem, 1.1vw, 0.85rem)',
+                          fontSize: 'clamp(1rem, 3.8vmin, 3.5rem)',
                           fontWeight: 900,
-                          lineHeight: 1.15,
-                          color: '#f0fff8',
+                          lineHeight: 1.12,
+                          color: '#f6fffc',
                           display: '-webkit-box',
-                          WebkitLineClamp: 3,
+                          WebkitLineClamp: 4,
                           WebkitBoxOrient: 'vertical',
                           overflow: 'hidden',
                           wordBreak: 'break-word',
+                          textShadow: '0 2px 8px rgba(0,0,0,0.35)',
                         }}
                       >
                         {sq?.isFreeSpace ? (
-                          <span style={{ fontSize: 'clamp(0.75rem, 1.8vw, 1.1rem)', letterSpacing: '0.08em' }}>FREE</span>
+                          <span
+                            style={{
+                              fontSize: 'clamp(1.4rem, 5.5vmin, 4.5rem)',
+                              letterSpacing: '0.12em',
+                            }}
+                          >
+                            FREE
+                          </span>
                         ) : (
                           title
                         )}
@@ -2476,12 +2520,13 @@ const PublicDisplay: React.FC = () => {
                       {!sq?.isFreeSpace && artist ? (
                         <div
                           style={{
-                            fontSize: 'clamp(0.45rem, 0.85vw, 0.65rem)',
-                            opacity: 0.75,
-                            marginTop: 4,
-                            lineHeight: 1.1,
+                            fontSize: 'clamp(0.85rem, 2.8vmin, 2.4rem)',
+                            opacity: 0.88,
+                            marginTop: 'clamp(4px, 1vmin, 10px)',
+                            lineHeight: 1.15,
+                            fontWeight: 700,
                             display: '-webkit-box',
-                            WebkitLineClamp: 2,
+                            WebkitLineClamp: 3,
                             WebkitBoxOrient: 'vertical',
                             overflow: 'hidden',
                           }}
@@ -2493,7 +2538,16 @@ const PublicDisplay: React.FC = () => {
                   );
                 })}
               </div>
-              <div style={{ textAlign: 'center', marginTop: 14, opacity: 0.55, fontSize: 'clamp(0.75rem, 1.2vw, 0.95rem)' }}>
+              <div
+                style={{
+                  textAlign: 'center',
+                  marginTop: 'clamp(14px, 2.5vmin, 28px)',
+                  opacity: 0.6,
+                  fontSize: 'clamp(1rem, 2.4vmin, 1.75rem)',
+                  fontWeight: 700,
+                  flexShrink: 0,
+                }}
+              >
                 Tap outside or press Esc to dismiss
               </div>
             </motion.div>
