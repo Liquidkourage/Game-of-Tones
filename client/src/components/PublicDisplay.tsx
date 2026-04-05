@@ -2673,21 +2673,21 @@ const PublicDisplay: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 12 }}
             transition={{ duration: 0.25 }}
-            style={{ 
-              position: 'absolute', 
-              bottom: 20, 
-              left: '50%', 
-              transform: 'translateX(-50%)', 
-              background: 'rgba(0,0,0,0.8)', 
-              color: '#00ff88', 
-              padding: '14px 18px', 
-              borderRadius: 12, 
-              fontWeight: 900, 
-              letterSpacing: '0.06em', 
-              fontSize: '2.0rem', 
-              boxShadow: '0 8px 28px rgba(0,0,0,0.5)', 
-              zIndex: 1000, 
-              border: '1px solid rgba(0,255,136,0.35)' 
+            style={{
+              position: 'fixed',
+              bottom: 20,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'rgba(0,0,0,0.8)',
+              color: '#00ff88',
+              padding: '14px 18px',
+              borderRadius: 12,
+              fontWeight: 900,
+              letterSpacing: '0.06em',
+              fontSize: '2.0rem',
+              boxShadow: '0 8px 28px rgba(0,0,0,0.5)',
+              zIndex: 1900,
+              border: '1px solid rgba(0,255,136,0.35)',
             }}
           >
             Revealed: {revealToast}
@@ -2713,7 +2713,7 @@ const PublicDisplay: React.FC = () => {
               alignItems: 'center',
               justifyContent: 'center',
               padding: 'clamp(12px, 2.5vmin, 40px)',
-              overflow: 'auto',
+              overflow: 'hidden',
               boxSizing: 'border-box',
             }}
           >
@@ -2957,7 +2957,12 @@ const PublicDisplay: React.FC = () => {
               <motion.div
                 initial={{ x: '-40%' }}
                 animate={{ x: ['-40%', '140%'] }}
-                transition={{ duration: 4.5, repeat: Infinity, ease: 'linear' }}
+                transition={{
+                  duration: 4.5,
+                  repeat: Infinity,
+                  ease: 'linear',
+                  repeatType: 'mirror',
+                }}
                 style={{
                   height: 'max(3px, 0.35vmin)',
                   width: 'min(70%, 720px)',
@@ -3424,20 +3429,7 @@ const PublicDisplay: React.FC = () => {
       </AnimatePresence>
       {/* Main Content - 16:10 Layout */}
       <div className="display-content">
-        <AnimatePresence>
-          {revealToast && (
-            <motion.div
-              key={`toast-${revealToast}-${totalPlayedCount}`}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 12 }}
-              transition={{ duration: 0.25 }}
-              style={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.8)', color: '#00ff88', padding: '14px 18px', borderRadius: 12, fontWeight: 900, letterSpacing: '0.06em', fontSize: '2.0rem', boxShadow: '0 8px 28px rgba(0,0,0,0.5)', zIndex: 1000, border: '1px solid rgba(0,255,136,0.35)' }}
-            >
-              Revealed: {revealToast}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Reveal toast: single instance (fixed) lives in AnimatePresence above */}
         {/* Two Column Layout: Left (pattern + info/winners), Right (call list) */}
         <div className="bottom-row">
           <div className="left-col">
