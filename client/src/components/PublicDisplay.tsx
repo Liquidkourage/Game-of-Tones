@@ -2712,8 +2712,9 @@ const PublicDisplay: React.FC = () => {
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: 'clamp(12px, 2.5vmin, 40px)',
-              overflow: 'hidden',
+              padding: 'clamp(8px, 1.2vmin, 28px)',
+              overflowX: 'hidden',
+              overflowY: 'auto',
               boxSizing: 'border-box',
             }}
           >
@@ -2771,7 +2772,7 @@ const PublicDisplay: React.FC = () => {
                 margin: '0 auto',
               }}
             >
-            <div style={{ textAlign: 'center', marginBottom: 'clamp(24px, 4vmin, 48px)' }}>
+            <div style={{ textAlign: 'center', marginBottom: 'clamp(10px, 2vmin, 28px)' }}>
               <div
                 style={{
                   fontSize: 'clamp(5rem, 11vw, 9rem)',
@@ -2789,7 +2790,7 @@ const PublicDisplay: React.FC = () => {
               </div>
               <div style={{ fontSize: 'clamp(1.8rem, 3.8vw, 2.6rem)', opacity: 0.98, marginTop: 18, display: 'none' }}>The game is on, the volume is up, the win is yours.</div>
               {/* TEMPO balls — size scales with vmin for wall displays */}
-              <div style={{ display: 'flex', gap: 'clamp(12px, 3vmin, 36px)', justifyContent: 'center', marginTop: 'clamp(8px, 2vmin, 20px)', perspective: '1200px', position: 'relative', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 'clamp(8px, 2vmin, 28px)', justifyContent: 'center', marginTop: 'clamp(4px, 1vmin, 12px)', perspective: '1200px', position: 'relative', flexWrap: 'wrap' }}>
                 {['T','E','M','P','O'].map((ch, i) => {
                   const glow = ['rgba(0,255,163,0.45)','rgba(0,215,255,0.45)','rgba(158,123,255,0.45)','rgba(255,110,199,0.45)','rgba(255,209,102,0.45)'][i];
                   const rimInner = ['rgba(0,255,170,0.28)','rgba(0,215,255,0.28)','rgba(158,123,255,0.28)','rgba(255,110,199,0.28)','rgba(255,209,102,0.28)'][i];
@@ -2828,8 +2829,8 @@ const PublicDisplay: React.FC = () => {
                       }}
                       transition={{ duration: dur, delay, repeat: Infinity, ease: 'easeInOut' }}
                       style={{
-                        width: 'clamp(96px, 19vmin, 260px)',
-                        height: 'clamp(96px, 19vmin, 260px)',
+                        width: 'clamp(72px, min(18vmin, 14vh), 220px)',
+                        height: 'clamp(72px, min(18vmin, 14vh), 220px)',
                         borderRadius: '50%',
                         position: 'relative',
                         transformStyle: 'preserve-3d',
@@ -2847,7 +2848,7 @@ const PublicDisplay: React.FC = () => {
                         justifyContent: 'center',
                         color: '#102436',
                         fontWeight: 1000,
-                        fontSize: 'clamp(2.75rem, 10vmin, 6.25rem)',
+                        fontSize: 'clamp(2rem, min(8vmin, 6vh), 5.25rem)',
                       }}
                     >
                       {/* colored glow rim */}
@@ -2899,18 +2900,18 @@ const PublicDisplay: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: 0.1 }}
                 style={{
-                  marginTop: 'clamp(14px, 3vmin, 28px)',
+                  marginTop: 'clamp(6px, 1.5vmin, 18px)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 'clamp(10px, 2vmin, 22px)',
+                  gap: 'clamp(8px, 1.8vmin, 18px)',
                   flexWrap: 'wrap',
                 }}
               >
                 <Sparkles
                   style={{
-                    width: 'clamp(32px, 5.5vmin, 64px)',
-                    height: 'clamp(32px, 5.5vmin, 64px)',
+                    width: 'clamp(26px, 4.5vmin, 52px)',
+                    height: 'clamp(26px, 4.5vmin, 52px)',
                     color: '#7bffd9',
                     filter: 'drop-shadow(0 0 16px rgba(0,255,200,0.65))',
                   }}
@@ -2919,7 +2920,7 @@ const PublicDisplay: React.FC = () => {
                 />
                 <div
                   style={{
-                    fontSize: 'clamp(4.25rem, 12.5vmin, 9.5rem)',
+                    fontSize: 'clamp(2.5rem, min(12vmin, 10vh), 9.5rem)',
                     fontWeight: 1000,
                     letterSpacing: '0.02em',
                     backgroundImage: 'linear-gradient(90deg,#7bffd9 0%, #ffffff 50%, #7bffd9 100%)',
@@ -2933,8 +2934,8 @@ const PublicDisplay: React.FC = () => {
                 </div>
                 <Sparkles
                   style={{
-                    width: 'clamp(32px, 5.5vmin, 64px)',
-                    height: 'clamp(32px, 5.5vmin, 64px)',
+                    width: 'clamp(26px, 4.5vmin, 52px)',
+                    height: 'clamp(26px, 4.5vmin, 52px)',
                     color: '#7bffd9',
                     filter: 'drop-shadow(0 0 16px rgba(0,255,200,0.65))',
                   }}
@@ -2944,9 +2945,9 @@ const PublicDisplay: React.FC = () => {
               </motion.div>
               <div
                 style={{
-                  fontSize: 'clamp(1.85rem, 5.25vmin, 4.25rem)',
+                  fontSize: 'clamp(1.35rem, min(4.5vmin, 3.2vh), 4rem)',
                   opacity: 0.94,
-                  marginTop: 'clamp(10px, 2vmin, 20px)',
+                  marginTop: 'clamp(6px, 1.2vmin, 14px)',
                   fontWeight: 700,
                   color: 'rgba(240,252,255,0.95)',
                   textShadow: '0 2px 20px rgba(0,0,0,0.35)',
@@ -2964,9 +2965,9 @@ const PublicDisplay: React.FC = () => {
                   repeatType: 'mirror',
                 }}
                 style={{
-                  height: 'max(4px, 0.45vmin)',
+                  height: 'max(3px, 0.4vmin)',
                   width: 'min(78%, 900px)',
-                  margin: 'clamp(12px, 2vmin, 22px) auto 0',
+                  margin: 'clamp(6px, 1.2vmin, 16px) auto 0',
                   background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.65), transparent)',
                   borderRadius: 4,
                   opacity: 0.85,
@@ -2976,7 +2977,7 @@ const PublicDisplay: React.FC = () => {
             <div
               style={{
                 display: 'flex',
-                gap: 'clamp(24px, 5vmin, 56px)',
+                gap: 'clamp(12px, 2.5vmin, 40px)',
                 alignItems: 'stretch',
                 justifyContent: 'center',
                 flexWrap: 'wrap',
@@ -2991,8 +2992,8 @@ const PublicDisplay: React.FC = () => {
                     background: 'linear-gradient(145deg, rgba(0,255,180,0.14) 0%, rgba(20,40,55,0.45) 100%)',
                     border: 'max(2px, 0.25vmin) solid rgba(0,255,200,0.4)',
                     borderRadius: 'clamp(18px, 2.5vmin, 26px)',
-                    padding: 'clamp(18px, 3.2vmin, 36px)',
-                    width: 'clamp(320px, 52vw, 720px)',
+                    padding: 'clamp(12px, 2.5vmin, 28px)',
+                    width: 'min(720px, 92vw, 46vh)',
                     maxWidth: '100%',
                     textAlign: 'center',
                     boxShadow:
@@ -3013,9 +3014,9 @@ const PublicDisplay: React.FC = () => {
                   />
                   <div
                     style={{
-                      fontSize: 'clamp(1.65rem, 3.6vmin, 2.85rem)',
+                      fontSize: 'clamp(1.35rem, min(3.4vmin, 2.8vh), 2.85rem)',
                       fontWeight: 900,
-                      marginTop: 'clamp(12px, 2vmin, 20px)',
+                      marginTop: 'clamp(8px, 1.5vmin, 16px)',
                       color: '#eafff8',
                       letterSpacing: '0.06em',
                     }}
@@ -3033,7 +3034,7 @@ const PublicDisplay: React.FC = () => {
                   flex: '1 1 420px',
                   maxWidth: 800,
                   textAlign: 'center',
-                  padding: 'clamp(28px, 4.5vmin, 56px) clamp(22px, 3.5vmin, 48px)',
+                  padding: 'clamp(14px, 2.5vmin, 40px) clamp(18px, 3vmin, 40px)',
                   borderRadius: 'clamp(18px, 2.5vmin, 26px)',
                   background: 'linear-gradient(145deg, rgba(130,100,255,0.18) 0%, rgba(15,25,45,0.55) 100%)',
                   border: 'max(2px, 0.25vmin) solid rgba(160,140,255,0.45)',
@@ -3043,12 +3044,12 @@ const PublicDisplay: React.FC = () => {
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 'clamp(18px, 3vmin, 36px)',
+                  gap: 'clamp(10px, 2vmin, 28px)',
                 }}
               >
                 <div
                   style={{
-                    fontSize: 'clamp(2rem, 4.75vmin, 3.75rem)',
+                    fontSize: 'clamp(1.65rem, min(4.5vmin, 3.5vh), 3.75rem)',
                     fontWeight: 800,
                     color: 'rgba(230,240,255,0.95)',
                     letterSpacing: '0.06em',
@@ -3058,19 +3059,19 @@ const PublicDisplay: React.FC = () => {
                 </div>
                 <div
                   style={{
-                    fontSize: 'clamp(4.5rem, 13vmin, 10rem)',
+                    fontSize: 'clamp(3rem, min(12vmin, 11vh), 10rem)',
                     fontWeight: 1000,
                     color: '#00ffb0',
                     textShadow: '0 10px 40px rgba(0,255,170,0.65)',
                     lineHeight: 1,
-                    marginBottom: 'clamp(4px, 0.75vmin, 12px)',
+                    marginBottom: 'clamp(2px, 0.5vmin, 10px)',
                   }}
                 >
                   {roomInfo?.id || roomId || '—'}
                 </div>
                 <div
                   style={{
-                    fontSize: 'clamp(1.85rem, 4vmin, 3.1rem)',
+                    fontSize: 'clamp(1.45rem, min(3.8vmin, 3vh), 3.1rem)',
                     fontWeight: 700,
                     opacity: 0.92,
                     letterSpacing: '0.04em',
@@ -3080,7 +3081,7 @@ const PublicDisplay: React.FC = () => {
                 </div>
                 <div
                   style={{
-                    fontSize: 'clamp(1.5rem, 3.75vmin, 2.85rem)',
+                    fontSize: 'clamp(1.2rem, min(3.5vmin, 2.6vh), 2.85rem)',
                     fontWeight: 900,
                     textShadow: '0 6px 24px rgba(0,0,0,0.4)',
                     color: '#f2f8ff',
