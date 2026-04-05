@@ -73,8 +73,12 @@ function countOccupiedBandsInPool(ids: string[] | null | undefined, playedIds: R
   return n;
 }
 
-/** Align public-display toasts with the App header row (TEMPO – Music Bingo by Liquid Kourage): `App.tsx` uses a 73px spacer below the absolute header. */
-const DISPLAY_HEADER_TOAST_TOP = 'calc(env(safe-area-inset-top, 0px) + 78px)';
+/**
+ * Same vertical band as the App display header (`App.tsx`: absolute header at `top: 8`).
+ * We align to that strip (not the 73px spacer below it) so toasts read with “TEMPO – Music Bingo”.
+ * z-index on these toasts is above the header (200) so they paint over that row when shown.
+ */
+const DISPLAY_HEADER_TOAST_TOP = 'calc(env(safe-area-inset-top, 0px) + 10px)';
 
 const PublicDisplay: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
