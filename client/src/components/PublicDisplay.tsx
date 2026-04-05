@@ -3029,9 +3029,9 @@ const PublicDisplay: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.45, delay: 0.28 }}
                 style={{
-                  minWidth: 'min(100%, 300px)',
-                  flex: '1 1 300px',
-                  maxWidth: 560,
+                  minWidth: 'min(100%, 340px)',
+                  flex: '1 1 400px',
+                  maxWidth: 720,
                   textAlign: 'center',
                   padding: 'clamp(24px, 4vmin, 44px) clamp(20px, 3.2vmin, 40px)',
                   borderRadius: 'clamp(18px, 2.5vmin, 26px)',
