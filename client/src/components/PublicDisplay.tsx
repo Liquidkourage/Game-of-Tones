@@ -2875,7 +2875,7 @@ const PublicDisplay: React.FC = () => {
         )}
       </AnimatePresence>
       
-      {/* Rules/Instructions Screen — large type for wall / venue displays */}
+      {/* Rules/Instructions — wall-scale type + layered visuals */}
       <AnimatePresence>
         {showRules && (
           <motion.div
@@ -2888,143 +2888,280 @@ const PublicDisplay: React.FC = () => {
               position: 'fixed',
               inset: 0,
               zIndex: 2000,
-              background: 'linear-gradient(135deg, #1d1b3a 0%, #10283a 60%, #0b1e2d 100%)',
+              background:
+                'linear-gradient(155deg, #0f0c24 0%, #152a3d 38%, #0a1628 72%, #06121c 100%)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: 'clamp(16px, 3vmin, 40px)',
+              padding: 'clamp(12px, 2.5vmin, 36px)',
               overflow: 'auto',
               boxSizing: 'border-box',
             }}
           >
             <div
+              aria-hidden
               style={{
-                textAlign: 'center',
-                maxWidth: 'min(96vw, 1400px)',
-                width: '100%',
+                position: 'absolute',
+                inset: 0,
+                pointerEvents: 'none',
+                overflow: 'hidden',
+                zIndex: 0,
               }}
             >
               <div
                 style={{
-                  fontSize: 'clamp(2.4rem, 7vmin, 5rem)',
-                  fontWeight: 1000,
-                  letterSpacing: '0.04em',
+                  position: 'absolute',
+                  bottom: '-15%',
+                  left: '-8%',
+                  width: 'min(70vmin, 90vw)',
+                  height: 'min(70vmin, 90vw)',
+                  borderRadius: '50%',
+                  background: 'radial-gradient(circle, rgba(0,255,180,0.18) 0%, transparent 68%)',
+                  filter: 'blur(48px)',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '-10%',
+                  right: '-5%',
+                  width: 'min(55vmin, 70vw)',
+                  height: 'min(55vmin, 70vw)',
+                  borderRadius: '50%',
+                  background: 'radial-gradient(circle, rgba(120,90,255,0.2) 0%, transparent 65%)',
+                  filter: 'blur(40px)',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  opacity: 0.07,
                   backgroundImage:
-                    'linear-gradient(90deg,#00ffa3 0%, #7bffd9 35%, #ffffff 50%, #7bffd9 65%, #00ffa3 100%)',
-                  WebkitBackgroundClip: 'text',
-                  backgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  textShadow: '0 10px 36px rgba(0,255,170,0.55), 0 0 28px rgba(0,255,170,0.3)',
-                  marginBottom: 'clamp(1rem, 3vmin, 2rem)',
-                  lineHeight: 1.1,
+                    'repeating-linear-gradient(-12deg, transparent, transparent 2px, rgba(255,255,255,0.06) 2px, rgba(255,255,255,0.06) 3px)',
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                position: 'relative',
+                zIndex: 1,
+                textAlign: 'center',
+                maxWidth: 'min(98vw, 1600px)',
+                width: '100%',
+              }}
+            >
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, ease: 'easeOut' }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 'clamp(10px, 2vmin, 20px)',
+                  marginBottom: 'clamp(1rem, 2.5vmin, 2rem)',
+                  flexWrap: 'wrap',
                 }}
               >
-                How to Play
-              </div>
+                <Sparkles
+                  style={{
+                    width: 'clamp(36px, 7vmin, 72px)',
+                    height: 'clamp(36px, 7vmin, 72px)',
+                    color: '#7bffd9',
+                    filter: 'drop-shadow(0 0 20px rgba(0,255,200,0.7))',
+                  }}
+                  strokeWidth={2.2}
+                  aria-hidden
+                />
+                <div
+                  style={{
+                    fontSize: 'clamp(3rem, 10vmin, 7.5rem)',
+                    fontWeight: 1000,
+                    letterSpacing: '0.03em',
+                    backgroundImage:
+                      'linear-gradient(95deg, #00ffa3 0%, #7bffd9 28%, #ffffff 50%, #7bffd9 72%, #00ffa3 100%)',
+                    WebkitBackgroundClip: 'text',
+                    backgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    filter: 'drop-shadow(0 6px 28px rgba(0,255,170,0.45))',
+                    lineHeight: 1.05,
+                  }}
+                >
+                  How to Play
+                </div>
+                <Sparkles
+                  style={{
+                    width: 'clamp(36px, 7vmin, 72px)',
+                    height: 'clamp(36px, 7vmin, 72px)',
+                    color: '#7bffd9',
+                    filter: 'drop-shadow(0 0 20px rgba(0,255,200,0.7))',
+                  }}
+                  strokeWidth={2.2}
+                  aria-hidden
+                />
+              </motion.div>
 
               <div
                 style={{
-                  background: 'rgba(255,255,255,0.1)',
-                  border: 'max(2px, 0.2vmin) solid rgba(255,255,255,0.28)',
-                  borderRadius: 'clamp(14px, 2vmin, 22px)',
-                  padding: 'clamp(20px, 4vmin, 48px) clamp(18px, 3.5vmin, 44px)',
-                  margin: '0 auto clamp(1.25rem, 3vmin, 2.5rem)',
-                  textAlign: 'left',
-                  boxShadow: '0 24px 64px rgba(0,0,0,0.35)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 'clamp(14px, 2.5vmin, 28px)',
+                  marginBottom: 'clamp(1rem, 2.5vmin, 2rem)',
                 }}
               >
                 {[
                   {
-                    title: '🎵 Step 1: Listen & Mark',
+                    n: 1,
+                    accent: 'linear-gradient(135deg, rgba(0,255,180,0.35) 0%, rgba(0,120,90,0.15) 100%)',
+                    borderGlow: 'rgba(0,255,200,0.55)',
+                    title: '🎵 Listen & mark',
                     body: (
                       <>
-                        Songs will play for <strong style={{ color: '#cfffec' }}>{gameState.snippetLength || 30}</strong>{' '}
-                        seconds. When you recognize a song that matches a square on your bingo card, tap that square to mark
-                        it. Each square shows the song title and artist name.
+                        Songs play for <strong style={{ color: '#e8fff8' }}>{gameState.snippetLength || 30}</strong> seconds.
+                        When you know the tune, tap the matching square on your card. Each square shows title and artist.
                       </>
                     ),
                   },
                   {
-                    title: '🎯 Step 2: Complete the Pattern',
+                    n: 2,
+                    accent: 'linear-gradient(135deg, rgba(130,110,255,0.35) 0%, rgba(40,30,90,0.2) 100%)',
+                    borderGlow: 'rgba(160,140,255,0.55)',
+                    title: '🎯 Complete the pattern',
                     body: (
                       <>
-                        Mark squares to complete the winning pattern: <strong style={{ color: '#cfffec' }}>{getPatternName()}</strong>.
-                        You can mark squares in any order — make sure every square in the pattern is marked with songs that
-                        have actually played.
+                        Finish the winning pattern: <strong style={{ color: '#e8fff8' }}>{getPatternName()}</strong>. Mark in
+                        any order — every square in the pattern must be a song that has played.
                       </>
                     ),
                   },
                   {
-                    title: '🏆 Step 3: Call BINGO!',
+                    n: 3,
+                    accent: 'linear-gradient(135deg, rgba(255,200,120,0.28) 0%, rgba(120,70,20,0.18) 100%)',
+                    borderGlow: 'rgba(255,200,100,0.45)',
+                    title: '🏆 Call BINGO',
                     body: (
                       <>
-                        When your pattern is complete, hold the <strong style={{ color: '#cfffec' }}>BINGO</strong> button on
-                        your device. The host will verify your card — only mark songs you know have played.
+                        Hold <strong style={{ color: '#e8fff8' }}>BINGO</strong> when your pattern is complete. The host
+                        checks your card — only mark what you&apos;re sure about.
                       </>
                     ),
                   },
                 ].map((step, i) => (
-                  <div
-                    key={step.title}
+                  <motion.div
+                    key={step.n}
+                    initial={{ opacity: 0, x: -24 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.4, delay: 0.06 + i * 0.07, ease: 'easeOut' }}
                     style={{
-                      marginBottom: i < 2 ? 'clamp(1.25rem, 3vmin, 2.25rem)' : 0,
-                      paddingLeft: 'clamp(8px, 1.5vmin, 16px)',
-                      borderLeft: 'max(4px, 0.45vmin) solid rgba(0,255,170,0.65)',
+                      display: 'grid',
+                      gridTemplateColumns: 'auto 1fr',
+                      alignItems: 'stretch',
+                      gap: 'clamp(12px, 2.5vmin, 24px)',
+                      padding: 'clamp(16px, 3vmin, 36px) clamp(14px, 2.8vmin, 32px)',
+                      borderRadius: 'clamp(18px, 2.5vmin, 28px)',
+                      background: step.accent,
+                      border: `max(2px, 0.25vmin) solid ${step.borderGlow}`,
+                      boxShadow:
+                        '0 0 0 1px rgba(255,255,255,0.08) inset, 0 22px 56px rgba(0,0,0,0.4), 0 0 60px rgba(0,255,200,0.12)',
+                      textAlign: 'left',
                     }}
                   >
                     <div
                       style={{
-                        fontSize: 'clamp(1.35rem, 3.2vmin, 2.5rem)',
-                        fontWeight: 900,
-                        color: '#7bffd9',
-                        marginBottom: 'clamp(0.5rem, 1.2vmin, 0.85rem)',
-                        lineHeight: 1.15,
-                        textShadow: '0 2px 12px rgba(0,0,0,0.35)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minWidth: 'clamp(52px, 10vmin, 96px)',
+                        width: 'clamp(52px, 10vmin, 96px)',
+                        borderRadius: 'clamp(14px, 2vmin, 22px)',
+                        background: 'linear-gradient(160deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.04) 100%)',
+                        border: '1px solid rgba(255,255,255,0.25)',
+                        fontSize: 'clamp(1.75rem, 5vmin, 3.5rem)',
+                        fontWeight: 1000,
+                        color: '#fff',
+                        textShadow: '0 4px 20px rgba(0,0,0,0.4)',
+                        flexShrink: 0,
                       }}
                     >
-                      {step.title}
+                      {step.n}
                     </div>
-                    <div
-                      style={{
-                        fontSize: 'clamp(1.05rem, 2.4vmin, 1.75rem)',
-                        lineHeight: 1.55,
-                        color: 'rgba(246,255,252,0.96)',
-                        fontWeight: 500,
-                      }}
-                    >
-                      {step.body}
+                    <div>
+                      <div
+                        style={{
+                          fontSize: 'clamp(1.5rem, 4.2vmin, 3rem)',
+                          fontWeight: 900,
+                          color: '#f2fffb',
+                          marginBottom: 'clamp(0.4rem, 1vmin, 0.75rem)',
+                          lineHeight: 1.12,
+                          textShadow: '0 2px 16px rgba(0,0,0,0.35)',
+                        }}
+                      >
+                        {step.title}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 'clamp(1.15rem, 2.9vmin, 2.15rem)',
+                          lineHeight: 1.55,
+                          color: 'rgba(250,255,253,0.96)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {step.body}
+                      </div>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
-
-                <div
-                  style={{
-                    marginTop: 'clamp(1.25rem, 3vmin, 2rem)',
-                    paddingTop: 'clamp(1rem, 2.5vmin, 1.75rem)',
-                    borderTop: 'max(2px, 0.2vmin) solid rgba(255,255,255,0.18)',
-                    fontSize: 'clamp(1rem, 2.2vmin, 1.55rem)',
-                    lineHeight: 1.5,
-                    color: 'rgba(255,230,200,0.98)',
-                    fontWeight: 700,
-                    fontStyle: 'normal',
-                  }}
-                >
-                  ⚠️ Important: Only mark songs you&apos;re sure have played. The host verifies every winning card — wrong
-                  marks can disqualify your bingo.
-                </div>
               </div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.35 }}
+                style={{
+                  padding: 'clamp(16px, 2.8vmin, 28px) clamp(18px, 3vmin, 32px)',
+                  borderRadius: 'clamp(14px, 2vmin, 22px)',
+                  background:
+                    'linear-gradient(135deg, rgba(255,160,60,0.22) 0%, rgba(80,40,10,0.35) 100%)',
+                  border: 'max(2px, 0.2vmin) solid rgba(255,200,120,0.45)',
+                  boxShadow: '0 12px 40px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
+                  fontSize: 'clamp(1.1rem, 2.7vmin, 1.95rem)',
+                  lineHeight: 1.5,
+                  color: 'rgba(255,245,220,0.98)',
+                  fontWeight: 800,
+                  textAlign: 'center',
+                  maxWidth: 'min(92vw, 1100px)',
+                  margin: '0 auto clamp(1rem, 2.5vmin, 2rem)',
+                }}
+              >
+                ⚠️ Important: only mark songs you&apos;re sure have played. Wrong marks can disqualify your bingo.
+              </motion.div>
 
               <div
                 style={{
-                  fontSize: 'clamp(1.15rem, 2.6vmin, 2rem)',
-                  opacity: 0.92,
+                  fontSize: 'clamp(1.35rem, 3.5vmin, 2.6rem)',
                   textAlign: 'center',
-                  fontWeight: 700,
-                  color: 'rgba(255,255,255,0.92)',
+                  fontWeight: 800,
+                  color: 'rgba(255,255,255,0.94)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 'clamp(8px, 1.5vmin, 16px)',
+                  flexWrap: 'wrap',
+                  textShadow: '0 2px 20px rgba(0,255,170,0.25)',
                 }}
               >
-                Good luck and have fun! 🎉
+                <Music
+                  style={{ width: 'clamp(28px, 5vmin, 48px)', height: 'clamp(28px, 5vmin, 48px)', opacity: 0.95 }}
+                  aria-hidden
+                />
+                Good luck & have fun
+                <Music
+                  style={{ width: 'clamp(28px, 5vmin, 48px)', height: 'clamp(28px, 5vmin, 48px)', opacity: 0.95 }}
+                  aria-hidden
+                />
               </div>
             </div>
           </motion.div>
