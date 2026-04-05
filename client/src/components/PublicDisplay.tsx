@@ -2669,25 +2669,35 @@ const PublicDisplay: React.FC = () => {
         {revealToast && (
           <motion.div
             key={`toast-${revealToast}-${totalPlayedCount}`}
-            initial={{ opacity: 0, y: 12 }}
+            role="status"
+            aria-live="polite"
+            initial={{ opacity: 0, y: -14 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 12 }}
+            exit={{ opacity: 0, y: -14 }}
             transition={{ duration: 0.25 }}
             style={{
               position: 'fixed',
-              bottom: 20,
+              /* Top band: stays clear of bingo grid + bottom stats on 720p / bar TVs */
+              top: 'clamp(52px, calc(env(safe-area-inset-top, 0px) + 5.5vh), 120px)',
+              bottom: 'auto',
               left: '50%',
               transform: 'translateX(-50%)',
-              background: 'rgba(0,0,0,0.8)',
+              width: 'min(96vw, 56rem)',
+              maxWidth: '96vw',
+              boxSizing: 'border-box',
+              background: 'rgba(0,0,0,0.88)',
               color: '#00ff88',
-              padding: '14px 18px',
-              borderRadius: 12,
+              padding: 'clamp(14px, 2.2vmin, 24px) clamp(18px, 3vmin, 40px)',
+              borderRadius: 'clamp(12px, 1.5vmin, 18px)',
               fontWeight: 900,
-              letterSpacing: '0.06em',
-              fontSize: '2.0rem',
-              boxShadow: '0 8px 28px rgba(0,0,0,0.5)',
+              letterSpacing: '0.05em',
+              fontSize: 'clamp(1.75rem, min(5.5vmin, 4.5vh), 3.75rem)',
+              lineHeight: 1.2,
+              textAlign: 'center',
+              wordBreak: 'break-word',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,255,136,0.25) inset',
               zIndex: 1900,
-              border: '1px solid rgba(0,255,136,0.35)',
+              border: 'max(2px, 0.2vmin) solid rgba(0,255,136,0.45)',
             }}
           >
             Revealed: {revealToast}
