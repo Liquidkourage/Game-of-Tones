@@ -3030,11 +3030,11 @@ const PublicDisplay: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.45, delay: 0.28 }}
                 style={{
-                  minWidth: 'min(100%, 360px)',
-                  flex: '1 1 420px',
-                  maxWidth: 800,
+                  minWidth: 'min(100%, 380px)',
+                  flex: '1 1 440px',
+                  maxWidth: 960,
                   textAlign: 'center',
-                  padding: 'clamp(14px, 2.5vmin, 40px) clamp(18px, 3vmin, 40px)',
+                  padding: 'clamp(18px, 3vmin, 48px) clamp(20px, 3.5vmin, 48px)',
                   borderRadius: 'clamp(18px, 2.5vmin, 26px)',
                   background: 'linear-gradient(145deg, rgba(130,100,255,0.18) 0%, rgba(15,25,45,0.55) 100%)',
                   border: 'max(2px, 0.25vmin) solid rgba(160,140,255,0.45)',
@@ -3044,12 +3044,12 @@ const PublicDisplay: React.FC = () => {
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 'clamp(10px, 2vmin, 28px)',
+                  gap: 'clamp(14px, 2.5vmin, 32px)',
                 }}
               >
                 <div
                   style={{
-                    fontSize: 'clamp(1.25rem, min(3.2vmin, 2.5vh), 2.25rem)',
+                    fontSize: 'clamp(1.5rem, min(3.8vmin, 3vh), 2.85rem)',
                     fontWeight: 800,
                     color: 'rgba(230,240,255,0.88)',
                     letterSpacing: '0.14em',
@@ -3060,24 +3060,31 @@ const PublicDisplay: React.FC = () => {
                 </div>
                 <div
                   style={{
-                    fontSize: 'clamp(1.15rem, min(3.2vmin, 2.5vh), 2.65rem)',
-                    fontWeight: 700,
-                    color: 'rgba(240,248,255,0.95)',
-                    lineHeight: 1.35,
                     maxWidth: '100%',
                     display: 'flex',
-                    flexWrap: 'wrap',
-                    justifyContent: 'center',
-                    alignItems: 'baseline',
-                    gap: '0.35em 0.5em',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 'clamp(6px, 1vmin, 12px)',
                   }}
                 >
-                  <span>Go to</span>
                   <span
                     style={{
+                      fontSize: 'clamp(1.45rem, min(4vmin, 3.2vh), 3rem)',
+                      fontWeight: 700,
+                      color: 'rgba(240,248,255,0.95)',
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    Go to
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 'clamp(2.25rem, min(8vmin, 7vh), 5.75rem)',
                       fontWeight: 900,
-                      textShadow: '0 6px 24px rgba(0,0,0,0.4)',
-                      color: '#f2f8ff',
+                      lineHeight: 1.15,
+                      textShadow: '0 8px 32px rgba(0,0,0,0.45), 0 0 40px rgba(180,210,255,0.12)',
+                      color: '#f6faff',
+                      letterSpacing: '0.02em',
                       overflowWrap: 'anywhere',
                       wordBreak: 'normal',
                       hyphens: 'none',
@@ -3088,7 +3095,7 @@ const PublicDisplay: React.FC = () => {
                 </div>
                 <div
                   style={{
-                    fontSize: 'clamp(1.35rem, min(3.8vmin, 3vh), 3rem)',
+                    fontSize: 'clamp(1.55rem, min(4.5vmin, 3.6vh), 3.5rem)',
                     fontWeight: 700,
                     opacity: 0.92,
                     letterSpacing: '0.02em',
@@ -3099,7 +3106,7 @@ const PublicDisplay: React.FC = () => {
                 </div>
                 <div
                   style={{
-                    fontSize: 'clamp(3rem, min(12vmin, 11vh), 10rem)',
+                    fontSize: 'clamp(3.25rem, min(13vmin, 12vh), 10rem)',
                     fontWeight: 1000,
                     color: '#00ffb0',
                     textShadow: '0 10px 40px rgba(0,255,170,0.65)',
