@@ -73,6 +73,9 @@ function countOccupiedBandsInPool(ids: string[] | null | undefined, playedIds: R
   return n;
 }
 
+/** Align public-display toasts with the App header row (TEMPO – Music Bingo by Liquid Kourage): `App.tsx` uses a 73px spacer below the absolute header. */
+const DISPLAY_HEADER_TOAST_TOP = 'calc(env(safe-area-inset-top, 0px) + 78px)';
+
 const PublicDisplay: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [fontSizeMultiplier, setFontSizeMultiplier] = useState<number>(1.0);
@@ -2580,7 +2583,7 @@ const PublicDisplay: React.FC = () => {
               : { duration: 0.25 }}
             style={{
               position: 'fixed',
-              top: isBigWinCelebration ? 'max(64px, 5vh)' : 80,
+              top: DISPLAY_HEADER_TOAST_TOP,
               left: '50%',
               transform: 'translateX(-50%)',
               width: isBigWinCelebration ? 'min(96vw, 1500px)' : 'auto',
@@ -2647,7 +2650,7 @@ const PublicDisplay: React.FC = () => {
             exit={{ opacity: 0, y: 10 }}
             style={{
               position: 'fixed',
-              top: 'max(120px, 10vh)',
+              top: DISPLAY_HEADER_TOAST_TOP,
               left: '50%',
               transform: 'translateX(-50%)',
               maxWidth: 'min(92vw, 720px)',
@@ -2677,8 +2680,7 @@ const PublicDisplay: React.FC = () => {
             transition={{ duration: 0.25 }}
             style={{
               position: 'fixed',
-              /* Top band: stays clear of bingo grid + bottom stats on 720p / bar TVs */
-              top: 'clamp(52px, calc(env(safe-area-inset-top, 0px) + 5.5vh), 120px)',
+              top: DISPLAY_HEADER_TOAST_TOP,
               bottom: 'auto',
               left: '50%',
               transform: 'translateX(-50%)',
