@@ -2387,14 +2387,14 @@ const PublicDisplay: React.FC = () => {
                 border: 'max(3px, 0.35vmin) solid rgba(0,255,200,0.55)',
                 borderRadius: 'clamp(16px, 2vmin, 28px)',
                 boxShadow: '0 0 100px rgba(0,255,170,0.28), 0 32px 80px rgba(0,0,0,0.65)',
-                padding: 'clamp(20px, 3.5vmin, 48px) clamp(16px, 3vmin, 40px)',
+                padding: 'clamp(12px, 2vmin, 28px) clamp(12px, 2.5vmin, 32px)',
               }}
             >
               <div
                 id="winner-card-title"
                 style={{
                   textAlign: 'center',
-                  marginBottom: 'clamp(12px, 2.5vmin, 32px)',
+                  marginBottom: 'clamp(8px, 1.5vmin, 20px)',
                   flexShrink: 0,
                 }}
               >
@@ -2412,13 +2412,13 @@ const PublicDisplay: React.FC = () => {
                 </div>
                 <div
                   style={{
-                    fontSize: 'clamp(2.2rem, 7.5vmin, 6rem)',
+                    fontSize: 'clamp(1.6rem, 5.5vmin, 4.5rem)',
                     fontWeight: 900,
                     color: '#eafff8',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: 'clamp(12px, 3vmin, 28px)',
+                    gap: 'clamp(10px, 2.2vmin, 22px)',
                     flexWrap: 'wrap',
                     lineHeight: 1.05,
                     textShadow: '0 4px 24px rgba(0,0,0,0.45)',
@@ -2426,8 +2426,8 @@ const PublicDisplay: React.FC = () => {
                 >
                   <Trophy
                     style={{
-                      width: 'clamp(56px, 14vmin, 140px)',
-                      height: 'clamp(56px, 14vmin, 140px)',
+                      width: 'clamp(44px, 11vmin, 100px)',
+                      height: 'clamp(44px, 11vmin, 100px)',
                       flexShrink: 0,
                       filter: 'drop-shadow(0 0 20px rgba(0,255,170,0.6))',
                     }}
@@ -2437,8 +2437,8 @@ const PublicDisplay: React.FC = () => {
                 </div>
                 <div
                   style={{
-                    fontSize: 'clamp(1.25rem, 4vmin, 3rem)',
-                    marginTop: 'clamp(8px, 1.5vmin, 16px)',
+                    fontSize: 'clamp(1rem, 3vmin, 2.25rem)',
+                    marginTop: 'clamp(4px, 1vmin, 12px)',
                     opacity: 0.88,
                     fontWeight: 800,
                   }}
@@ -2451,13 +2451,15 @@ const PublicDisplay: React.FC = () => {
                   display: 'grid',
                   gridTemplateColumns: 'repeat(5, 1fr)',
                   gridTemplateRows: 'repeat(5, 1fr)',
-                  gap: 'clamp(8px, 1.4vmin, 20px)',
+                  gap: 'clamp(5px, 0.9vmin, 14px)',
                   /*
-                    Fixed square that fits in the viewport (header + footer reserve).
-                    Without an explicit height cap, flex + aspect-ratio can squash cells vertically.
+                    Square board: cap height (62vh) so header + grid + footer fit on one screen.
+                    Slightly smaller board than before; cell type scales with vmin below.
                   */
-                  width: 'min(96vmin, 94vw, calc(100vh - 200px), calc(100vw - 32px))',
-                  height: 'min(96vmin, 94vw, calc(100vh - 200px), calc(100vw - 32px))',
+                  width:
+                    'min(82vmin, 88vw, calc(100vh - 300px), 62vh, calc(100vw - 40px))',
+                  height:
+                    'min(82vmin, 88vw, calc(100vh - 300px), 62vh, calc(100vw - 40px))',
                   maxWidth: '100%',
                   margin: '0 auto',
                   flexShrink: 0,
@@ -2477,8 +2479,8 @@ const PublicDisplay: React.FC = () => {
                     <div
                       key={pos}
                       style={{
-                        borderRadius: 'clamp(8px, 1.1vmin, 16px)',
-                        padding: 'clamp(4px, 0.9vmin, 10px)',
+                        borderRadius: 'clamp(6px, 0.9vmin, 12px)',
+                        padding: 'clamp(2px, 0.35vmin, 6px)',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
@@ -2498,10 +2500,10 @@ const PublicDisplay: React.FC = () => {
                     >
                       <div
                         style={{
-                          /* Caps keep text inside ~1/5 of the grid; min() avoids oversized type on huge TVs */
-                          fontSize: 'min(1.55rem, clamp(0.65rem, 2.1vmin, 1.85rem))',
+                          /* Larger wall-readable type; scales with vmin inside each cell */
+                          fontSize: 'clamp(0.85rem, 2.65vmin, 2.2rem)',
                           fontWeight: 900,
-                          lineHeight: 1.1,
+                          lineHeight: 1.08,
                           color: '#f6fffc',
                           display: '-webkit-box',
                           WebkitLineClamp: 3,
@@ -2516,8 +2518,8 @@ const PublicDisplay: React.FC = () => {
                         {sq?.isFreeSpace ? (
                           <span
                             style={{
-                              fontSize: 'min(2.4rem, clamp(1rem, 3.2vmin, 2.2rem))',
-                              letterSpacing: '0.1em',
+                              fontSize: 'clamp(1.15rem, 3.8vmin, 3rem)',
+                              letterSpacing: '0.08em',
                             }}
                           >
                             FREE
@@ -2529,10 +2531,10 @@ const PublicDisplay: React.FC = () => {
                       {!sq?.isFreeSpace && artist ? (
                         <div
                           style={{
-                            fontSize: 'min(1.2rem, clamp(0.55rem, 1.65vmin, 1.35rem))',
-                            opacity: 0.9,
-                            marginTop: 'clamp(2px, 0.5vmin, 6px)',
-                            lineHeight: 1.1,
+                            fontSize: 'clamp(0.72rem, 2.05vmin, 1.75rem)',
+                            opacity: 0.92,
+                            marginTop: 'clamp(2px, 0.35vmin, 5px)',
+                            lineHeight: 1.08,
                             fontWeight: 700,
                             display: '-webkit-box',
                             WebkitLineClamp: 2,
@@ -2551,9 +2553,9 @@ const PublicDisplay: React.FC = () => {
               <div
                 style={{
                   textAlign: 'center',
-                  marginTop: 'clamp(14px, 2.5vmin, 28px)',
+                  marginTop: 'clamp(8px, 1.5vmin, 18px)',
                   opacity: 0.6,
-                  fontSize: 'clamp(1rem, 2.4vmin, 1.75rem)',
+                  fontSize: 'clamp(0.85rem, 1.8vmin, 1.35rem)',
                   fontWeight: 700,
                   flexShrink: 0,
                 }}
