@@ -2875,7 +2875,7 @@ const PublicDisplay: React.FC = () => {
         )}
       </AnimatePresence>
       
-      {/* Rules/Instructions Screen */}
+      {/* Rules/Instructions Screen — large type for wall / venue displays */}
       <AnimatePresence>
         {showRules && (
           <motion.div
@@ -2885,64 +2885,145 @@ const PublicDisplay: React.FC = () => {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.35 }}
             style={{
-              position: 'fixed', inset: 0, zIndex: 2000,
+              position: 'fixed',
+              inset: 0,
+              zIndex: 2000,
               background: 'linear-gradient(135deg, #1d1b3a 0%, #10283a 60%, #0b1e2d 100%)',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              padding: 40, overflow: 'auto'
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 'clamp(16px, 3vmin, 40px)',
+              overflow: 'auto',
+              boxSizing: 'border-box',
             }}
           >
-            <div style={{ textAlign: 'center', maxWidth: '1200px', width: '100%' }}>
-              <div style={{
-                fontSize: 'clamp(3rem, 6vw, 4.5rem)',
-                fontWeight: 1000,
-                letterSpacing: '0.05em',
-                backgroundImage: 'linear-gradient(90deg,#00ffa3 0%, #7bffd9 35%, #ffffff 50%, #7bffd9 65%, #00ffa3 100%)',
-                WebkitBackgroundClip: 'text',
-                backgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                textShadow: '0 10px 36px rgba(0,255,170,0.55), 0 0 28px rgba(0,255,170,0.3)',
-                marginBottom: '2rem'
-              }}>
+            <div
+              style={{
+                textAlign: 'center',
+                maxWidth: 'min(96vw, 1400px)',
+                width: '100%',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 'clamp(2.4rem, 7vmin, 5rem)',
+                  fontWeight: 1000,
+                  letterSpacing: '0.04em',
+                  backgroundImage:
+                    'linear-gradient(90deg,#00ffa3 0%, #7bffd9 35%, #ffffff 50%, #7bffd9 65%, #00ffa3 100%)',
+                  WebkitBackgroundClip: 'text',
+                  backgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  textShadow: '0 10px 36px rgba(0,255,170,0.55), 0 0 28px rgba(0,255,170,0.3)',
+                  marginBottom: 'clamp(1rem, 3vmin, 2rem)',
+                  lineHeight: 1.1,
+                }}
+              >
                 How to Play
               </div>
-              
-              <div style={{
-                background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.22)',
-                borderRadius: '16px',
-                padding: '2.5rem',
-                marginBottom: '2rem',
-                maxWidth: '900px',
-                margin: '0 auto 2rem'
-              }}>
-                <div style={{ fontSize: '1.15rem', lineHeight: 1.8, opacity: 0.95 }}>
-                  <p style={{ marginBottom: '1.5rem' }}>
-                    <strong style={{ color: '#00ffa3', fontSize: '1.2rem' }}>🎵 Step 1: Listen & Mark</strong><br />
-                    Songs will play for {gameState.snippetLength || 30} seconds. When you recognize a song that matches a square on your bingo card, tap that square to mark it. Each square shows the song title and artist name.
-                  </p>
-                  
-                  <p style={{ marginBottom: '1.5rem' }}>
-                    <strong style={{ color: '#00ffa3', fontSize: '1.2rem' }}>🎯 Step 2: Complete the Pattern</strong><br />
-                    Mark squares to complete the winning pattern: <strong>{getPatternName()}</strong>. You can mark squares in any order - just make sure all required squares for the pattern are marked with songs that have actually played.
-                  </p>
-                  
-                  <p style={{ marginBottom: '1.5rem' }}>
-                    <strong style={{ color: '#00ffa3', fontSize: '1.2rem' }}>🏆 Step 3: Call BINGO!</strong><br />
-                    Once you've completed the pattern, hold down the BINGO button on your device to call it out. The host will verify your card - make sure you only marked songs that have actually played!
-                  </p>
-                  
-                  <p style={{ marginBottom: '0', fontSize: '1rem', opacity: 0.85, fontStyle: 'italic', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1.5rem', marginTop: '1.5rem' }}>
-                    ⚠️ Important: Only mark songs you're certain have played. The host verifies all winning cards, and incorrectly marked squares will disqualify your bingo.
-                  </p>
+
+              <div
+                style={{
+                  background: 'rgba(255,255,255,0.1)',
+                  border: 'max(2px, 0.2vmin) solid rgba(255,255,255,0.28)',
+                  borderRadius: 'clamp(14px, 2vmin, 22px)',
+                  padding: 'clamp(20px, 4vmin, 48px) clamp(18px, 3.5vmin, 44px)',
+                  margin: '0 auto clamp(1.25rem, 3vmin, 2.5rem)',
+                  textAlign: 'left',
+                  boxShadow: '0 24px 64px rgba(0,0,0,0.35)',
+                }}
+              >
+                {[
+                  {
+                    title: '🎵 Step 1: Listen & Mark',
+                    body: (
+                      <>
+                        Songs will play for <strong style={{ color: '#cfffec' }}>{gameState.snippetLength || 30}</strong>{' '}
+                        seconds. When you recognize a song that matches a square on your bingo card, tap that square to mark
+                        it. Each square shows the song title and artist name.
+                      </>
+                    ),
+                  },
+                  {
+                    title: '🎯 Step 2: Complete the Pattern',
+                    body: (
+                      <>
+                        Mark squares to complete the winning pattern: <strong style={{ color: '#cfffec' }}>{getPatternName()}</strong>.
+                        You can mark squares in any order — make sure every square in the pattern is marked with songs that
+                        have actually played.
+                      </>
+                    ),
+                  },
+                  {
+                    title: '🏆 Step 3: Call BINGO!',
+                    body: (
+                      <>
+                        When your pattern is complete, hold the <strong style={{ color: '#cfffec' }}>BINGO</strong> button on
+                        your device. The host will verify your card — only mark songs you know have played.
+                      </>
+                    ),
+                  },
+                ].map((step, i) => (
+                  <div
+                    key={step.title}
+                    style={{
+                      marginBottom: i < 2 ? 'clamp(1.25rem, 3vmin, 2.25rem)' : 0,
+                      paddingLeft: 'clamp(8px, 1.5vmin, 16px)',
+                      borderLeft: 'max(4px, 0.45vmin) solid rgba(0,255,170,0.65)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 'clamp(1.35rem, 3.2vmin, 2.5rem)',
+                        fontWeight: 900,
+                        color: '#7bffd9',
+                        marginBottom: 'clamp(0.5rem, 1.2vmin, 0.85rem)',
+                        lineHeight: 1.15,
+                        textShadow: '0 2px 12px rgba(0,0,0,0.35)',
+                      }}
+                    >
+                      {step.title}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 'clamp(1.05rem, 2.4vmin, 1.75rem)',
+                        lineHeight: 1.55,
+                        color: 'rgba(246,255,252,0.96)',
+                        fontWeight: 500,
+                      }}
+                    >
+                      {step.body}
+                    </div>
+                  </div>
+                ))}
+
+                <div
+                  style={{
+                    marginTop: 'clamp(1.25rem, 3vmin, 2rem)',
+                    paddingTop: 'clamp(1rem, 2.5vmin, 1.75rem)',
+                    borderTop: 'max(2px, 0.2vmin) solid rgba(255,255,255,0.18)',
+                    fontSize: 'clamp(1rem, 2.2vmin, 1.55rem)',
+                    lineHeight: 1.5,
+                    color: 'rgba(255,230,200,0.98)',
+                    fontWeight: 700,
+                    fontStyle: 'normal',
+                  }}
+                >
+                  ⚠️ Important: Only mark songs you&apos;re sure have played. The host verifies every winning card — wrong
+                  marks can disqualify your bingo.
                 </div>
               </div>
-              
-              <div style={{
-                fontSize: '1.2rem',
-                opacity: 0.8,
-                textAlign: 'center',
-                fontStyle: 'italic'
-              }}>
+
+              <div
+                style={{
+                  fontSize: 'clamp(1.15rem, 2.6vmin, 2rem)',
+                  opacity: 0.92,
+                  textAlign: 'center',
+                  fontWeight: 700,
+                  color: 'rgba(255,255,255,0.92)',
+                }}
+              >
                 Good luck and have fun! 🎉
               </div>
             </div>
