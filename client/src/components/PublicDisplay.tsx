@@ -2703,13 +2703,75 @@ const PublicDisplay: React.FC = () => {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.35 }}
             style={{
-              position: 'fixed', inset: 0, zIndex: 2000,
-              background: 'linear-gradient(135deg, #1d1b3a 0%, #10283a 60%, #0b1e2d 100%)',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              padding: 40
+              position: 'fixed',
+              inset: 0,
+              zIndex: 2000,
+              background:
+                'linear-gradient(155deg, #0f0c24 0%, #152a3d 38%, #0a1628 72%, #06121c 100%)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 'clamp(12px, 2.5vmin, 40px)',
+              overflow: 'auto',
+              boxSizing: 'border-box',
             }}
           >
-            <div style={{ textAlign: 'center', marginBottom: 44 }}>
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute',
+                inset: 0,
+                pointerEvents: 'none',
+                overflow: 'hidden',
+                zIndex: 0,
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '-12%',
+                  left: '-6%',
+                  width: 'min(75vmin, 95vw)',
+                  height: 'min(75vmin, 95vw)',
+                  borderRadius: '50%',
+                  background: 'radial-gradient(circle, rgba(0,255,180,0.2) 0%, transparent 68%)',
+                  filter: 'blur(52px)',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '-8%',
+                  right: '-4%',
+                  width: 'min(50vmin, 65vw)',
+                  height: 'min(50vmin, 65vw)',
+                  borderRadius: '50%',
+                  background: 'radial-gradient(circle, rgba(130,100,255,0.22) 0%, transparent 64%)',
+                  filter: 'blur(44px)',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  opacity: 0.06,
+                  backgroundImage:
+                    'repeating-linear-gradient(-12deg, transparent, transparent 2px, rgba(255,255,255,0.06) 2px, rgba(255,255,255,0.06) 3px)',
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                position: 'relative',
+                zIndex: 1,
+                width: '100%',
+                maxWidth: 'min(98vw, 1800px)',
+                margin: '0 auto',
+              }}
+            >
+            <div style={{ textAlign: 'center', marginBottom: 'clamp(24px, 4vmin, 48px)' }}>
               <div
                 style={{
                   fontSize: 'clamp(5rem, 11vw, 9rem)',
@@ -2726,8 +2788,8 @@ const PublicDisplay: React.FC = () => {
                 Tempo - Music Bingo
               </div>
               <div style={{ fontSize: 'clamp(1.8rem, 3.8vw, 2.6rem)', opacity: 0.98, marginTop: 18, display: 'none' }}>The game is on, the volume is up, the win is yours.</div>
-              {/* TEMPO balls row with enhanced 3D floating animation (colored, angular motion) */}
-              <div style={{ display: 'flex', gap: 32, justifyContent: 'center', marginTop: 16, perspective: '1200px', position: 'relative' }}>
+              {/* TEMPO balls — size scales with vmin for wall displays */}
+              <div style={{ display: 'flex', gap: 'clamp(12px, 3vmin, 36px)', justifyContent: 'center', marginTop: 'clamp(8px, 2vmin, 20px)', perspective: '1200px', position: 'relative', flexWrap: 'wrap' }}>
                 {['T','E','M','P','O'].map((ch, i) => {
                   const glow = ['rgba(0,255,163,0.45)','rgba(0,215,255,0.45)','rgba(158,123,255,0.45)','rgba(255,110,199,0.45)','rgba(255,209,102,0.45)'][i];
                   const rimInner = ['rgba(0,255,170,0.28)','rgba(0,215,255,0.28)','rgba(158,123,255,0.28)','rgba(255,110,199,0.28)','rgba(255,209,102,0.28)'][i];
@@ -2766,7 +2828,11 @@ const PublicDisplay: React.FC = () => {
                       }}
                       transition={{ duration: dur, delay, repeat: Infinity, ease: 'easeInOut' }}
                       style={{
-                        width: 256, height: 256, borderRadius: '50%', position: 'relative', transformStyle: 'preserve-3d',
+                        width: 'clamp(88px, 17vmin, 220px)',
+                        height: 'clamp(88px, 17vmin, 220px)',
+                        borderRadius: '50%',
+                        position: 'relative',
+                        transformStyle: 'preserve-3d',
                         background: (() => {
                           const base = tintGradients[i] || 'radial-gradient(circle at 35% 30%, #ffffff, #eef4fb 38%, #d2deea 62%, #b0c4d8 100%)';
                           const highlight = 'radial-gradient(120% 120% at 30% 28%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.55) 18%, rgba(255,255,255,0.08) 40%, rgba(0,0,0,0) 42%)';
@@ -2776,8 +2842,12 @@ const PublicDisplay: React.FC = () => {
                         })(),
                         boxShadow: `0 28px 44px rgba(0,0,0,0.35), inset 0 -18px 24px rgba(0,0,0,0.22), inset 0 20px 26px rgba(255,255,255,0.55), 0 0 44px ${glow}`,
                         border: '1px solid rgba(0,0,0,0.06)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: '#102436', fontWeight: 1000, fontSize: '6rem'
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#102436',
+                        fontWeight: 1000,
+                        fontSize: 'clamp(2.4rem, 9vmin, 5.5rem)',
                       }}
                     >
                       {/* colored glow rim */}
@@ -2824,52 +2894,183 @@ const PublicDisplay: React.FC = () => {
                   );
                 })}
               </div>
-              {/* Music Bingo subtitle and byline under hero TEMPO */}
-              <div style={{
-                marginTop: 18,
-                fontSize: 'clamp(3.6rem, 9vw, 7rem)',
-                fontWeight: 1000,
-                letterSpacing: '0.02em',
-                backgroundImage: 'linear-gradient(90deg,#7bffd9 0%, #ffffff 50%, #7bffd9 100%)',
-                WebkitBackgroundClip: 'text',
-                backgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                textShadow: '0 6px 22px rgba(123,255,217,0.45), 0 0 16px rgba(255,255,255,0.18)'
-              }}>Music Bingo</div>
-              <div style={{ fontSize: 'clamp(2.2rem, 5vw, 3.6rem)', opacity: 0.96, marginTop: 12 }}>The game is on, the volume is up, the win is yours.</div>
+              <motion.div
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.1 }}
+                style={{
+                  marginTop: 'clamp(14px, 3vmin, 28px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 'clamp(10px, 2vmin, 22px)',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <Sparkles
+                  style={{
+                    width: 'clamp(28px, 5vmin, 56px)',
+                    height: 'clamp(28px, 5vmin, 56px)',
+                    color: '#7bffd9',
+                    filter: 'drop-shadow(0 0 16px rgba(0,255,200,0.65))',
+                  }}
+                  strokeWidth={2.2}
+                  aria-hidden
+                />
+                <div
+                  style={{
+                    fontSize: 'clamp(3.8rem, 11vmin, 8.5rem)',
+                    fontWeight: 1000,
+                    letterSpacing: '0.02em',
+                    backgroundImage: 'linear-gradient(90deg,#7bffd9 0%, #ffffff 50%, #7bffd9 100%)',
+                    WebkitBackgroundClip: 'text',
+                    backgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    filter: 'drop-shadow(0 8px 28px rgba(123,255,217,0.4))',
+                  }}
+                >
+                  Music Bingo
+                </div>
+                <Sparkles
+                  style={{
+                    width: 'clamp(28px, 5vmin, 56px)',
+                    height: 'clamp(28px, 5vmin, 56px)',
+                    color: '#7bffd9',
+                    filter: 'drop-shadow(0 0 16px rgba(0,255,200,0.65))',
+                  }}
+                  strokeWidth={2.2}
+                  aria-hidden
+                />
+              </motion.div>
+              <div
+                style={{
+                  fontSize: 'clamp(1.5rem, 4.5vmin, 3.5rem)',
+                  opacity: 0.94,
+                  marginTop: 'clamp(10px, 2vmin, 20px)',
+                  fontWeight: 700,
+                  color: 'rgba(240,252,255,0.95)',
+                  textShadow: '0 2px 20px rgba(0,0,0,0.35)',
+                }}
+              >
+                The game is on, the volume is up, the win is yours.
+              </div>
               <motion.div
                 initial={{ x: '-40%' }}
                 animate={{ x: ['-40%', '140%'] }}
                 transition={{ duration: 4.5, repeat: Infinity, ease: 'linear' }}
-                style={{ height: 3, width: '60%', margin: '12px auto 0', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent)', borderRadius: 2, opacity: 0.8 }}
+                style={{
+                  height: 'max(3px, 0.35vmin)',
+                  width: 'min(70%, 720px)',
+                  margin: 'clamp(12px, 2vmin, 22px) auto 0',
+                  background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.65), transparent)',
+                  borderRadius: 4,
+                  opacity: 0.85,
+                }}
               />
             </div>
-            <div style={{ display: 'flex', gap: 56, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: 'clamp(24px, 5vmin, 56px)',
+                alignItems: 'stretch',
+                justifyContent: 'center',
+                flexWrap: 'wrap',
+              }}
+            >
               {roomId && (
-                <div style={{
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(255,255,255,0.22)',
-                  borderRadius: 18,
-                  padding: 26,
-                  width: 'clamp(410px, 56vw, 720px)',
-                  textAlign: 'center'
-                }}>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.45, delay: 0.2 }}
+                  style={{
+                    background: 'linear-gradient(145deg, rgba(0,255,180,0.14) 0%, rgba(20,40,55,0.45) 100%)',
+                    border: 'max(2px, 0.25vmin) solid rgba(0,255,200,0.4)',
+                    borderRadius: 'clamp(18px, 2.5vmin, 26px)',
+                    padding: 'clamp(16px, 3vmin, 32px)',
+                    width: 'clamp(300px, 52vw, 680px)',
+                    maxWidth: '100%',
+                    textAlign: 'center',
+                    boxShadow:
+                      '0 0 0 1px rgba(255,255,255,0.08) inset, 0 24px 56px rgba(0,0,0,0.4), 0 0 50px rgba(0,255,200,0.1)',
+                  }}
+                >
                   <img
                     alt="Join QR"
-                    style={{ width: '100%', aspectRatio: '1/1', objectFit: 'contain', borderRadius: 14, border: '1px solid rgba(255,255,255,0.22)', boxShadow: '0 16px 40px rgba(0,0,0,0.45)' }}
+                    style={{
+                      width: '100%',
+                      aspectRatio: '1/1',
+                      objectFit: 'contain',
+                      borderRadius: 'clamp(12px, 2vmin, 18px)',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      boxShadow: '0 16px 44px rgba(0,0,0,0.5)',
+                    }}
                     src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
                   />
-                  <div style={{ fontSize: 'clamp(1.2rem, 2.2vw, 1.6rem)', fontWeight: 1000, marginTop: 16, opacity: 1 }}>Scan to Join</div>
-                </div>
+                  <div
+                    style={{
+                      fontSize: 'clamp(1.35rem, 3vmin, 2.25rem)',
+                      fontWeight: 900,
+                      marginTop: 'clamp(12px, 2vmin, 20px)',
+                      color: '#eafff8',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    Scan to join
+                  </div>
+                </motion.div>
               )}
-              <div style={{ minWidth: 260, textAlign: 'center' }}>
-                <div style={{ fontSize: 'clamp(1.8rem, 3.6vw, 2.6rem)', opacity: 0.98 }}>Room</div>
-                <div style={{ fontSize: 'clamp(5rem, 9vw, 7.2rem)', fontWeight: 1000, color: '#00ffb0', textShadow: '0 9px 36px rgba(0,255,170,0.7)' }}>{roomInfo?.id || roomId || '—'}</div>
-                <div style={{ fontSize: 'clamp(1.8rem, 3.6vw, 2.6rem)', opacity: 0.98, marginTop: 24 }}>Go to</div>
-                <div style={{ fontSize: 'clamp(2.6rem, 6vw, 4rem)', fontWeight: 1000, textShadow: '0 6px 24px rgba(0,0,0,0.35)' }}>tempo.liquidkourage.com</div>
-                {/* Removed equalizer bars to reduce motion */}
-                {/* Ticker removed per request */}
-              </div>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, delay: 0.28 }}
+                style={{
+                  minWidth: 'min(100%, 320px)',
+                  flex: '1 1 280px',
+                  maxWidth: 520,
+                  textAlign: 'center',
+                  padding: 'clamp(20px, 3.5vmin, 40px) clamp(18px, 3vmin, 36px)',
+                  borderRadius: 'clamp(18px, 2.5vmin, 26px)',
+                  background: 'linear-gradient(145deg, rgba(130,100,255,0.18) 0%, rgba(15,25,45,0.55) 100%)',
+                  border: 'max(2px, 0.25vmin) solid rgba(160,140,255,0.45)',
+                  boxShadow:
+                    '0 0 0 1px rgba(255,255,255,0.07) inset, 0 24px 56px rgba(0,0,0,0.38), 0 0 48px rgba(130,100,255,0.12)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 'clamp(6px, 1.5vmin, 14px)',
+                }}
+              >
+                <div style={{ fontSize: 'clamp(1.5rem, 3.5vmin, 2.5rem)', fontWeight: 800, color: 'rgba(230,240,255,0.95)' }}>
+                  Room
+                </div>
+                <div
+                  style={{
+                    fontSize: 'clamp(4rem, 11vmin, 8rem)',
+                    fontWeight: 1000,
+                    color: '#00ffb0',
+                    textShadow: '0 10px 40px rgba(0,255,170,0.65)',
+                    lineHeight: 1,
+                  }}
+                >
+                  {roomInfo?.id || roomId || '—'}
+                </div>
+                <div style={{ fontSize: 'clamp(1.4rem, 3vmin, 2.2rem)', fontWeight: 700, opacity: 0.92, marginTop: 8 }}>
+                  Go to
+                </div>
+                <div
+                  style={{
+                    fontSize: 'clamp(1.75rem, 4vmin, 3rem)',
+                    fontWeight: 900,
+                    textShadow: '0 6px 24px rgba(0,0,0,0.4)',
+                    color: '#f2f8ff',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  tempo.liquidkourage.com
+                </div>
+              </motion.div>
+            </div>
             </div>
           </motion.div>
         )}
