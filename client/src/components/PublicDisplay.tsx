@@ -3049,7 +3049,7 @@ const PublicDisplay: React.FC = () => {
               >
                 <div
                   style={{
-                    fontSize: 'clamp(1.5rem, min(3.8vmin, 3vh), 2.85rem)',
+                    fontSize: 'clamp(1.85rem, min(4.6vmin, 3.8vh), 3.5rem)',
                     fontWeight: 800,
                     color: 'rgba(230,240,255,0.88)',
                     letterSpacing: '0.14em',
@@ -3064,12 +3064,12 @@ const PublicDisplay: React.FC = () => {
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
-                    gap: 'clamp(6px, 1vmin, 12px)',
+                    gap: 'clamp(8px, 1.2vmin, 16px)',
                   }}
                 >
                   <span
                     style={{
-                      fontSize: 'clamp(1.45rem, min(4vmin, 3.2vh), 3rem)',
+                      fontSize: 'clamp(1.85rem, min(5.2vmin, 4.2vh), 3.85rem)',
                       fontWeight: 700,
                       color: 'rgba(240,248,255,0.95)',
                       lineHeight: 1.2,
@@ -3077,21 +3077,31 @@ const PublicDisplay: React.FC = () => {
                   >
                     Go to
                   </span>
-                  <span
+                  <div
                     style={{
-                      fontSize: 'clamp(2.25rem, min(8vmin, 7vh), 5.75rem)',
-                      fontWeight: 900,
-                      lineHeight: 1.15,
-                      textShadow: '0 8px 32px rgba(0,0,0,0.45), 0 0 40px rgba(180,210,255,0.12)',
-                      color: '#f6faff',
-                      letterSpacing: '0.02em',
-                      overflowWrap: 'anywhere',
-                      wordBreak: 'normal',
-                      hyphens: 'none',
+                      width: '100%',
+                      maxWidth: '100%',
+                      overflowX: 'auto',
+                      overflowY: 'hidden',
+                      WebkitOverflowScrolling: 'touch',
+                      textAlign: 'center',
                     }}
                   >
-                    tempo.<wbr />liquid<wbr />kourage.com
-                  </span>
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        fontSize: 'clamp(2.25rem, min(8vmin, 7vh), 5.75rem)',
+                        fontWeight: 900,
+                        lineHeight: 1.15,
+                        textShadow: '0 8px 32px rgba(0,0,0,0.45), 0 0 40px rgba(180,210,255,0.12)',
+                        color: '#f6faff',
+                        letterSpacing: '0.02em',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      tempo.liquidkourage.com
+                    </span>
+                  </div>
                 </div>
                 <div
                   style={{
