@@ -665,6 +665,69 @@ body {
   width: 100%;
 }
 
+.home-host-account {
+  margin: 0.35rem 0 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 255, 170, 0.28);
+  background: rgba(0, 40, 32, 0.45);
+  text-align: left;
+}
+
+.home-host-account__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 1rem;
+  color: #b8ffe8;
+  margin: 0 0 0.4rem;
+}
+
+.home-host-account__check {
+  width: 1.15rem;
+  height: 1.15rem;
+  color: #3ee6a8;
+  flex-shrink: 0;
+}
+
+.home-host-account__blurb {
+  margin: 0 0 0.65rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: rgba(230, 245, 240, 0.82);
+  opacity: 0.95;
+}
+
+.home-host-account__meta {
+  margin: 0;
+  display: grid;
+  gap: 0.4rem 1rem;
+}
+
+.home-host-account__meta > div {
+  display: grid;
+  grid-template-columns: 5rem 1fr;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-size: 0.88rem;
+}
+
+.home-host-account__meta dt {
+  margin: 0;
+  font-weight: 600;
+  color: rgba(180, 210, 200, 0.75);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.home-host-account__meta dd {
+  margin: 0;
+  color: #f0fff8;
+  word-break: break-word;
+}
+
 .home-host-code-hint {
   font-size: 0.75rem;
   color: #7a8088;
@@ -872,6 +935,27 @@ body {
   backdrop-filter: blur(20px);
   border: 1px solid var(--border-accent-soft);
   border-radius: 16px;
+}
+
+.host-account-chip {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(180, 255, 220, 0.95);
+  background: rgba(0, 80, 60, 0.45);
+  border: 1px solid rgba(0, 255, 170, 0.28);
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  max-width: min(380px, 46vw);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.host-account-chip--muted {
+  color: rgba(200, 200, 210, 0.88);
+  background: rgba(40, 40, 50, 0.4);
+  border-color: rgba(255, 255, 255, 0.12);
+  font-weight: 500;
 }
 
 .host-info {

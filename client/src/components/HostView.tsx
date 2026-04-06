@@ -227,7 +227,13 @@ const HostView: React.FC = () => {
   const [spotifyInitialCheckDone, setSpotifyInitialCheckDone] = useState(false);
   const initialConnectionPromptRef = useRef(false);
   const prevSpotifyConnectedRef = useRef<boolean | undefined>(undefined);
-  
+  /** Google-linked host profile from server (`users` table via /api/auth/me). */
+  const [hostAccount, setHostAccount] = useState<{
+    id: number;
+    email?: string | null;
+    displayName?: string | null;
+  } | null | undefined>(undefined);
+
   // Pause position tracking
   const [pausePosition, setPausePosition] = useState<number>(0);
   const [isPausedByInterface, setIsPausedByInterface] = useState(false);
@@ -541,6 +547,27 @@ const HostView: React.FC = () => {
       if (prev.key !== key) return { key, dir: 'asc' };
       return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
     });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await hostFetch(`${API_BASE || ''}/api/auth/me`);
+        if (cancelled) return;
+        if (!res.ok) {
+          setHostAccount(null);
+          return;
+        }
+        const data = (await res.json()) as { user?: { id: number; email?: string | null; displayName?: string | null } | null };
+        setHostAccount(data.user ?? null);
+      } catch {
+        if (!cancelled) setHostAccount(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Update visible playlists when rounds change to exclude newly assigned playlists, or when filter mode changes
@@ -3431,6 +3458,22 @@ const HostView: React.FC = () => {
             >
               ?? Connection
             </button>
+            {hostAccount ? (
+              <span
+                className="host-account-chip"
+                title={
+                  [hostAccount.displayName, hostAccount.email].filter(Boolean).join(' · ') ||
+                  `Host account #${hostAccount.id}`
+                }
+              >
+                Tempo account · #{hostAccount.id}
+                {hostAccount.displayName ? ` · ${hostAccount.displayName}` : ''}
+              </span>
+            ) : hostAccount === null ? (
+              <span className="host-account-chip host-account-chip--muted" title="Sign in from home (Google) to link a host account.">
+                No Tempo account linked
+              </span>
+            ) : null}
             <span className="room-code">Room: {roomId}</span>
           </div>
         </div>

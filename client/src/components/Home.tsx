@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Sparkles, Play, UserPlus, Crown } from 'lucide-react';
+import { Sparkles, Play, UserPlus, Crown, CheckCircle2 } from 'lucide-react';
 import { API_BASE } from '../config';
 import { hostFetch, apiOrigin } from '../utils/hostFetch';
 
@@ -272,10 +272,33 @@ const Home: React.FC = () => {
             {hostSession === undefined ? (
               <p className="home-card-lead" style={{ opacity: 0.75 }}>Checking sign-in…</p>
             ) : hostSession ? (
-              <p className="home-card-lead" style={{ opacity: 0.9 }}>
-                Signed in as host #{hostSession.id}
-                {hostSession.displayName ? ` (${hostSession.displayName})` : ''}
-              </p>
+              <div className="home-host-account" role="status" aria-live="polite">
+                <div className="home-host-account__title">
+                  <CheckCircle2 className="home-host-account__check" aria-hidden />
+                  <span>Tempo host account active</span>
+                </div>
+                <p className="home-host-account__blurb">
+                  Your Google sign-in is linked on this server. Host ID and Spotify tokens are tied to this account.
+                </p>
+                <dl className="home-host-account__meta">
+                  <div>
+                    <dt>Host ID</dt>
+                    <dd>#{hostSession.id}</dd>
+                  </div>
+                  {hostSession.displayName ? (
+                    <div>
+                      <dt>Name</dt>
+                      <dd>{hostSession.displayName}</dd>
+                    </div>
+                  ) : null}
+                  {hostSession.email ? (
+                    <div>
+                      <dt>Email</dt>
+                      <dd>{hostSession.email}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              </div>
             ) : (
               <p className="home-card-lead" style={{ opacity: 0.9 }}>
                 <a className="btn btn-secondary" href={`${apiOrigin()}/api/auth/google`} style={{ display: 'inline-block', textDecoration: 'none' }}>
