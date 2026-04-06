@@ -220,18 +220,34 @@ const allowedOrigins = allowedOriginsEnv && allowedOriginsEnv !== '*'
   ? allowedOriginsEnv.split(',').map(s => s.trim()).filter(Boolean)
   : ["http://127.0.0.1:7094", "http://localhost:7094", "http://127.0.0.1:3002", "http://localhost:3002"];
 
+/** Same origin as publicAppOrigin() below — merged into CORS so production works when CORS_ORIGINS is unset. */
+function getPublicAppOriginForCors() {
+  const raw = (process.env.PUBLIC_APP_URL || process.env.CLIENT_APP_URL || '').trim();
+  if (!raw) return '';
+  let s = raw;
+  if (!/^https?:\/\//i.test(s)) s = `https://${s}`;
+  try {
+    return new URL(s).origin;
+  } catch {
+    return '';
+  }
+}
+
+const publicAppOriginForCors = getPublicAppOriginForCors();
+const corsAllowedOrigins = [...new Set([...allowedOrigins, publicAppOriginForCors].filter(Boolean))];
+
 // Log CORS configuration for debugging
 if (isProduction) {
   if (allowAllCors) {
     console.log('🔓 CORS: Allowing ALL origins (*)');
   } else {
-    console.log('🔒 CORS: Restricting to origins:', allowedOrigins);
+    console.log('🔒 CORS: Restricting to origins:', corsAllowedOrigins);
   }
 }
 
 const io = socketIo(server, {
   cors: {
-    origin: allowAllCors ? '*' : allowedOrigins,
+    origin: allowAllCors ? '*' : corsAllowedOrigins,
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -246,7 +262,7 @@ app.use(cors({
       return callback(null, true);
     }
     // Allow no origin (same-origin) or any in allowlist
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin || corsAllowedOrigins.includes(origin)) {
       return callback(null, true);
     }
     callback(new Error('Not allowed by CORS'));
