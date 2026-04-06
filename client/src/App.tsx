@@ -10,6 +10,7 @@ import HostView from './components/HostView';
 import PlayerView from './components/PlayerView';
 import PublicDisplay from './components/PublicDisplay';
 import SpotifyCallback from './components/SpotifyCallback';
+import CallbackGoogle from './components/CallbackGoogle';
 import DisplayHeaderInfo from './components/DisplayHeaderInfo';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -102,6 +103,7 @@ function App() {
               <Route path="/display" element={<PublicDisplay />} />
               <Route path="/display/:roomId" element={<PublicDisplay />} />
               <Route path="/callback" element={<SpotifyCallback />} />
+              <Route path="/callback-google" element={<CallbackGoogle />} />
             </Routes>
           </ErrorBoundary>
         </main>

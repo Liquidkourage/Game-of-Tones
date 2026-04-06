@@ -5,9 +5,13 @@ const socketIo = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
+const cookieParser = require('cookie-parser');
+const { OAuth2Client } = require('google-auth-library');
 const SpotifyService = require('./spotify');
 const fs = require('fs');
 const path = require('path');
+const hostAuth = require('./hostAuth');
+const usersStore = require('./users');
 
 // Song title cleaning utility
 function cleanSongTitle(title) {
@@ -250,6 +254,7 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+app.use(cookieParser());
 app.use(express.static('public'));
 
 // Note: production static serving is registered after API routes below
@@ -420,7 +425,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     }
 
     try {
-      await spotifyService.withRetries('transferPlayback(initial)', () => spotifyService.transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
+      await spotifyFor(roomId).withRetries('transferPlayback(initial)', () => spotifyFor(roomId).transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
     } catch (e) {
       console.warn('⚠️ Transfer playback failed (will still try play):', e?.message || e);
     }
@@ -430,8 +435,8 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       const startTime = Date.now();
       console.log(`🎵 Starting playback at ${startTime} - Song: ${song.name} by ${song.artist}`);
       // Enforce deterministic playback mode for direct index plays
-      try { await spotifyService.setShuffleState(false, targetDeviceId); } catch (_) {}
-      try { await spotifyService.setRepeatState('off', targetDeviceId); } catch (_) {}
+      try { await spotifyFor(roomId).setShuffleState(false, targetDeviceId); } catch (_) {}
+      try { await spotifyFor(roomId).setRepeatState('off', targetDeviceId); } catch (_) {}
       // Determine randomized start when enabled and safe
       let startMs = 0;
       if (room.randomStarts && room.randomStarts !== 'none' && Number.isFinite(song.duration)) {
@@ -454,7 +459,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
           }
         }
       }
-      await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${song.id}`], startMs);
+      await spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${song.id}`], startMs);
       const endTime = Date.now();
       console.log(`✅ Successfully started playback on device: ${targetDeviceId} (took ${endTime - startTime}ms)`);
       
@@ -464,7 +469,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       // Set initial volume to 100% (or room's saved volume) with single retry
         try {
           const initialVolume = room.volume || 100;
-        await spotifyService.withRetries('setVolume(index)', () => spotifyService.setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
+        await spotifyFor(roomId).withRetries('setVolume(index)', () => spotifyFor(roomId).setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
         console.log(`🔊 Set initial volume to ${initialVolume}%`);
         } catch (volumeError) {
         console.warn('⚠️ Volume setting failed, continuing anyway:', volumeError?.message || volumeError);
@@ -714,6 +719,7 @@ async function initializeDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await usersStore.ensureUsersTable(db);
     console.log('✅ Database tables initialized');
     return true;
   } catch (error) {
@@ -797,14 +803,32 @@ const multiTenantSpotify = new MultiTenantSpotifyManager();
   }
 })();
 
-// Legacy support - keep these for backward compatibility
-const spotifyService = multiTenantSpotify.getService('DEFAULT');
+// Legacy support - DEFAULT org (no host user on room)
+const spotifyServiceDefault = multiTenantSpotify.getService('DEFAULT');
 let spotifyTokens = multiTenantSpotify.getTokens('DEFAULT');
+
+function spotifyOrgForRoom(room) {
+  if (!room) return 'DEFAULT';
+  if (room.ownerUserId != null && Number.isFinite(Number(room.ownerUserId))) return `user_${room.ownerUserId}`;
+  return room.organizationId || 'DEFAULT';
+}
+
+function spotifyFor(roomId) {
+  const room = rooms.get(roomId);
+  return multiTenantSpotify.getService(spotifyOrgForRoom(room));
+}
 
 // Helper function to get organization from room
 function getOrganizationFromRoom(roomId) {
-  const room = rooms[roomId];
-  return room && room.organizationId ? room.organizationId : 'DEFAULT';
+  const room = rooms.get(roomId);
+  return room ? spotifyOrgForRoom(room) : 'DEFAULT';
+}
+
+/** Spotify API routes: use logged-in host's tokens when present, else DEFAULT. */
+function spotifyForRequest(req) {
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  if (uid != null) return multiTenantSpotify.getService(`user_${uid}`);
+  return spotifyServiceDefault;
 }
 
 // Timer management to prevent conflicts
@@ -845,7 +869,7 @@ function startSimpleContextMonitor(roomId, deviceId) {
       }
       
       // Get current playback state to check device
-      const state = await spotifyService.getCurrentPlaybackState();
+      const state = await spotifyFor(roomId).getCurrentPlaybackState();
       const currentDeviceId = state?.device?.id;
       
       // CRITICAL: Check if playback has switched to a different device
@@ -854,12 +878,12 @@ function startSimpleContextMonitor(roomId, deviceId) {
         
         try {
           // Immediately transfer playback back to the correct device
-          await spotifyService.transferPlayback(targetDeviceId, false);
+          await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
           console.log(`✅ Transferred playback back to locked device: ${targetDeviceId}`);
           
           // Small delay then verify it worked
           await new Promise(resolve => setTimeout(resolve, 500));
-          const verifyState = await spotifyService.getCurrentPlaybackState();
+          const verifyState = await spotifyFor(roomId).getCurrentPlaybackState();
           if (verifyState?.device?.id === targetDeviceId) {
             console.log(`✅ Device lock restored successfully`);
           } else {
@@ -886,13 +910,13 @@ function startSimpleContextMonitor(roomId, deviceId) {
         try {
           // Ensure we're on the correct device first
           if (targetDeviceId && currentDeviceId !== targetDeviceId) {
-            await spotifyService.transferPlayback(targetDeviceId, false);
+            await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
           }
           
           // Restore playlist context with original start position
           const originalStartMs = room.currentSongStartMs || 0;
           if (room.currentSongIndex !== undefined) {
-            await spotifyService.startPlaybackFromPlaylist(targetDeviceId || deviceId, room.temporaryPlaylistId, room.currentSongIndex, originalStartMs);
+            await spotifyFor(roomId).startPlaybackFromPlaylist(targetDeviceId || deviceId, room.temporaryPlaylistId, room.currentSongIndex, originalStartMs);
           }
         } catch (e) {
           console.warn('⚠️ Context restore failed:', e?.message);
@@ -905,11 +929,11 @@ function startSimpleContextMonitor(roomId, deviceId) {
         try {
           // Ensure we're on the correct device first
           if (targetDeviceId && currentDeviceId !== targetDeviceId) {
-            await spotifyService.transferPlayback(targetDeviceId, false);
+            await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
           }
           
           // Restore original start position for this track
-          await spotifyService.seekToPosition(room.currentSongStartMs, targetDeviceId || deviceId);
+          await spotifyFor(roomId).seekToPosition(room.currentSongStartMs, targetDeviceId || deviceId);
         } catch (e) {
           console.warn('⚠️ Failed to restore original start position:', e?.message);
         }
@@ -963,7 +987,7 @@ async function playNextSongSimple(roomId, deviceId) {
     
     // Clean up temporary playlist
     if (room.temporaryPlaylistId) {
-      spotifyService.deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
+      spotifyFor(roomId).deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
         console.warn('⚠️ Failed to delete temporary playlist:', err)
       );
       room.temporaryPlaylistId = null;
@@ -1028,10 +1052,10 @@ async function playNextSongSimple(roomId, deviceId) {
     // Simple playlist playback with enhanced logging
     if (room.temporaryPlaylistId) {
       console.log(`🎼 Using playlist context: ${room.temporaryPlaylistId}, track ${room.currentSongIndex}`);
-      await spotifyService.startPlaybackFromPlaylist(deviceId, room.temporaryPlaylistId, room.currentSongIndex, startMs);
+      await spotifyFor(roomId).startPlaybackFromPlaylist(deviceId, room.temporaryPlaylistId, room.currentSongIndex, startMs);
     } else {
       console.log(`🎵 Using individual track: ${nextSong.id}`);
-      await spotifyService.startPlayback(deviceId, [`spotify:track:${nextSong.id}`], startMs);
+      await spotifyFor(roomId).startPlayback(deviceId, [`spotify:track:${nextSong.id}`], startMs);
     }
 
     console.log(`✅ Playback started successfully for: ${nextSong.name}`);
@@ -1099,7 +1123,7 @@ async function playNextSongSimple(roomId, deviceId) {
     // Try to resume playback if it got stuck in paused state
     try {
       console.log('🔄 Attempting to resume playback after song advance failure...');
-      await spotifyService.resumePlayback(deviceId);
+      await spotifyFor(roomId).resumePlayback(deviceId);
       console.log('✅ Resume attempt completed');
     } catch (resumeError) {
       console.warn('⚠️ Failed to resume playback:', resumeError?.message);
@@ -1120,7 +1144,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
     try {
       const room = rooms.get(roomId);
       if (!room || room.gameState !== 'playing') { clearPlaybackWatcher(roomId); return; }
-      const state = await spotifyService.getCurrentPlaybackState();
+      const state = await spotifyFor(roomId).getCurrentPlaybackState();
       const isPlaying = !!state?.is_playing;
       const currentId = state?.item?.id;
       const progress = Number(state?.progress_ms || 0);
@@ -1171,9 +1195,9 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           }
           
           // Ensure control on target device without autoplaying a random context
-          try { await spotifyService.transferPlayback(deviceId, false); } catch {}
+          try { await spotifyFor(roomId).transferPlayback(deviceId, false); } catch {}
           // Hard pause to stop any stray context audio before restart
-          try { await spotifyService.pausePlayback(deviceId); } catch {}
+          try { await spotifyFor(roomId).pausePlayback(deviceId); } catch {}
           // Restart intended track (position 0 to avoid drift); timers already handle overrun
           // Try to calculate expected progress from when song started
           let expectedProgress = 0;
@@ -1184,28 +1208,28 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           // Use playlist context for correction if available
           if (room.temporaryPlaylistId && room.currentSongIndex !== undefined) {
             console.log(`🎼 Watchdog correcting via playlist context at index ${room.currentSongIndex}`);
-            await spotifyService.startPlaybackFromPlaylist(deviceId, room.temporaryPlaylistId, room.currentSongIndex, expectedProgress);
+            await spotifyFor(roomId).startPlaybackFromPlaylist(deviceId, room.temporaryPlaylistId, room.currentSongIndex, expectedProgress);
           } else {
-            await spotifyService.startPlayback(deviceId, [`spotify:track:${expectedId}`], expectedProgress);
+            await spotifyFor(roomId).startPlayback(deviceId, [`spotify:track:${expectedId}`], expectedProgress);
           }
           // Double-seek to clamp exact resume position and avoid restart sputter
           try {
             await new Promise(r => setTimeout(r, 150));
-            await spotifyService.seekToPosition(expectedProgress, deviceId);
+            await spotifyFor(roomId).seekToPosition(expectedProgress, deviceId);
             await new Promise(r => setTimeout(r, 120));
-            await spotifyService.seekToPosition(expectedProgress, deviceId);
+            await spotifyFor(roomId).seekToPosition(expectedProgress, deviceId);
           } catch {}
           // Verify and seek precisely if needed
           try {
-            const verify = await spotifyService.getCurrentPlaybackState();
+            const verify = await spotifyFor(roomId).getCurrentPlaybackState();
             const vid = verify?.item?.id;
             const vprog = Number(verify?.progress_ms || 0);
             if (vid === expectedId && Math.abs(vprog - expectedProgress) > 1200) {
-              try { await spotifyService.seekToPosition(expectedProgress, deviceId); } catch {}
+              try { await spotifyFor(roomId).seekToPosition(expectedProgress, deviceId); } catch {}
             }
           } catch {}
           // Enforce deterministic playback settings after correction
-          try { await spotifyService.setShuffleState(false, deviceId); } catch {}
+          try { await spotifyFor(roomId).setShuffleState(false, deviceId); } catch {}
           // Note: Do NOT set repeat to 'off' here - we want 'track' mode to prevent auto-advance
           try { const r = rooms.get(roomId); if (r) { r.songStartAtMs = now - expectedProgress; } } catch {}
           // Clear any queued items that might cause future hijacks
@@ -1223,8 +1247,8 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
         attempts = 0;
         // Surface a warning with context info to host
         try {
-          const ctx = await spotifyService.getCurrentPlaybackState();
-          const devices = await spotifyService.getUserDevices();
+          const ctx = await spotifyFor(roomId).getCurrentPlaybackState();
+          const devices = await spotifyFor(roomId).getUserDevices();
           const ctxUri = ctx?.context?.uri || '(none)';
           const ctxName = ctx?.item?.name || '(unknown track)';
           const ctxArtist = ctx?.item?.artists?.map?.((a) => a?.name).filter(Boolean).join(', ') || '';
@@ -1255,7 +1279,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
       if (isPlaying && (!expectedId || currentId === expectedId)) { attempts = 0; return; }
       attempts += 1;
       if (attempts === 1) {
-        try { await spotifyService.resumePlayback(deviceId); } catch {}
+        try { await spotifyFor(roomId).resumePlayback(deviceId); } catch {}
       } else if (attempts >= 2) {
         io.to(roomId).emit('playback-warning', { message: 'Playback stalled; restarting current track.' });
         // Try to restart the intended current track at expected progress
@@ -1268,10 +1292,10 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
             try {
               if (r?.songStartAtMs) expectedProgress = Math.max(0, Date.now() - r.songStartAtMs);
             } catch {}
-            try { await spotifyService.transferPlayback(deviceId, false); } catch {}
-            try { await spotifyService.pausePlayback(deviceId); } catch {}
-            await spotifyService.startPlayback(deviceId, [`spotify:track:${currentExpectedId}`], expectedProgress);
-            try { await new Promise(res => setTimeout(res, 150)); await spotifyService.seekToPosition(expectedProgress, deviceId); } catch {}
+            try { await spotifyFor(roomId).transferPlayback(deviceId, false); } catch {}
+            try { await spotifyFor(roomId).pausePlayback(deviceId); } catch {}
+            await spotifyFor(roomId).startPlayback(deviceId, [`spotify:track:${currentExpectedId}`], expectedProgress);
+            try { await new Promise(res => setTimeout(res, 150)); await spotifyFor(roomId).seekToPosition(expectedProgress, deviceId); } catch {}
             attempts = 0; // reset attempts after restart
           } else {
             // Fallback if no track id known: advance
@@ -1292,7 +1316,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
       if (room.temporaryPlaylistId && isPlaying && progress > snippetLimitMs) {
         try {
           console.log(`⏸️ AGGRESSIVE PAUSE: Progress ${progress}ms exceeds snippet limit ${snippetLimitMs}ms. Pausing to prevent auto-advance.`);
-          await spotifyService.pausePlayback(deviceId);
+          await spotifyFor(roomId).pausePlayback(deviceId);
           // Let timer handle the next song transition
         } catch (e) {
           console.warn('⚠️ Failed to pause at snippet limit:', e?.message);
@@ -1303,7 +1327,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
       if (room.temporaryPlaylistId && state?.repeat_state !== 'track') {
         try {
           console.log(`🔄 Enforcing repeat 'track' mode (was: ${state?.repeat_state})`);
-          await spotifyService.setRepeatState('track', deviceId);
+          await spotifyFor(roomId).setRepeatState('track', deviceId);
         } catch (e) {
           console.warn('⚠️ Failed to enforce repeat mode:', e?.message);
         }
@@ -1324,13 +1348,24 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
   roomPlaybackWatchers.set(roomId, intervalId);
 }
 
+io.use((socket, next) => {
+  try {
+    const t = socket.handshake.auth && socket.handshake.auth.token;
+    if (typeof t === 'string' && t.length > 0) {
+      const uid = hostAuth.verifyHostJwt(t);
+      if (uid != null) socket.hostUserId = uid;
+    }
+  } catch (_) {}
+  next();
+});
+
 // Socket.io connection handling
 io.on('connection', (socket) => {
   logger.log('User connected:', 'user-connect', 20);
 
   // Join room
   socket.on('join-room', (data) => {
-    const { roomId, playerName, isHost = false, clientId, licenseKey, hostSecret } = data;
+    const { roomId, playerName, isHost = false, clientId, licenseKey, hostSecret, hostToken } = data;
     const hostSecretEnv = (process.env.TEMPO_HOST_SECRET || '').trim();
     /** If TEMPO_HOST_SECRET is set, only callers who send the same value may host */
     let wantsHost = isHost;
@@ -1346,12 +1381,9 @@ io.on('connection', (socket) => {
       }
     }
     logger.info(`Player ${playerName} (${wantsHost ? 'host' : 'player'}) joining room: ${roomId}`, 'player-join');
-    
-    // TEMPORARILY DISABLED: Multi-tenant license validation
-    // Everyone uses the same Spotify account for now
+
     let organizationId = 'DEFAULT';
-    console.log(`🔓 License validation disabled - using DEFAULT organization for all users`);
-    
+
     // Create room if it doesn't exist
     if (!rooms.has(roomId)) {
       logger.info(`Creating new room: ${roomId} for organization: ${organizationId}`, 'room-create');
@@ -1386,6 +1418,22 @@ io.on('connection', (socket) => {
     }
 
     const room = rooms.get(roomId);
+
+    /** Host-owned rooms: only the signed-in host may take the host role. */
+    if (wantsHost && room.ownerUserId != null) {
+      let claimUid = socket.hostUserId ?? null;
+      if (claimUid == null && typeof hostToken === 'string' && hostToken.length > 0) {
+        claimUid = hostAuth.verifyHostJwt(hostToken);
+      }
+      if (claimUid == null || Number(claimUid) !== Number(room.ownerUserId)) {
+        socket.emit('host-join-denied', {
+          roomId,
+          reason: 'not_room_owner',
+          message: 'Sign in as the host who created this room to run the host controls.',
+        });
+        return;
+      }
+    }
     
     // Join the socket room
     socket.join(roomId);
@@ -1795,7 +1843,7 @@ io.on('connection', (socket) => {
           try {
             const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
             if (deviceId) {
-              await spotifyService.pausePlayback(deviceId);
+              await spotifyFor(roomId).pausePlayback(deviceId);
               console.log(`⏸️ Spotify paused for bingo verification by ${player.name}`);
             } else {
               console.log(`⚠️ No device ID available for pausing during bingo verification`);
@@ -1962,7 +2010,7 @@ io.on('connection', (socket) => {
           try {
             const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
             if (deviceId) {
-              await spotifyService.pausePlayback(deviceId);
+              await spotifyFor(roomId).pausePlayback(deviceId);
               console.log(`⏸️ Spotify paused for invalid bingo verification by ${player.name}`);
             }
           } catch (error) {
@@ -2182,7 +2230,7 @@ io.on('connection', (socket) => {
         try {
           const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
           if (deviceId) {
-            await spotifyService.pausePlayback(deviceId);
+            await spotifyFor(roomId).pausePlayback(deviceId);
             console.log(`⏸️ Spotify paused - round complete`);
           }
         } catch (error) {
@@ -2309,7 +2357,7 @@ io.on('connection', (socket) => {
           try {
             const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
             if (deviceId) {
-              await spotifyService.resumePlayback(deviceId);
+              await spotifyFor(roomId).resumePlayback(deviceId);
               console.log(`▶️ Spotify resumed after rejecting ${player.name}'s bingo`);
             } else {
               console.log(`⚠️ No device ID available for resuming after bingo rejection`);
@@ -2350,7 +2398,7 @@ io.on('connection', (socket) => {
         try {
           const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
           if (deviceId) {
-            await spotifyService.resumePlayback(deviceId);
+            await spotifyFor(roomId).resumePlayback(deviceId);
             console.log(`▶️ Spotify resumed after manual resume`);
           }
           // Start progression timer for the remainder of the current song
@@ -2524,7 +2572,7 @@ io.on('connection', (socket) => {
       try {
         const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
         if (deviceId) {
-          await spotifyService.pausePlayback(deviceId);
+          await spotifyFor(roomId).pausePlayback(deviceId);
           console.log(`⏸️ Spotify paused before round reset`);
         }
       } catch (error) {
@@ -2588,7 +2636,7 @@ io.on('connection', (socket) => {
     
     // CRITICAL: Clean up temporary playlist if it exists
     if (room.temporaryPlaylistId) {
-      spotifyService.deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
+      spotifyFor(roomId).deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
         console.warn('⚠️ Failed to delete temporary playlist during reset:', err)
       );
       room.temporaryPlaylistId = null;
@@ -2648,13 +2696,13 @@ io.on('connection', (socket) => {
     try {
       const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
       if (deviceId) {
-        spotifyService.pausePlayback(deviceId).catch(() => {});
+        spotifyFor(roomId).pausePlayback(deviceId).catch(() => {});
       }
     } catch (e) {}
     
     // Clean up temporary playlist
     if (room.temporaryPlaylistId) {
-      spotifyService.deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
+      spotifyFor(roomId).deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
         console.warn('⚠️ Failed to delete temporary playlist:', err)
       );
       room.temporaryPlaylistId = null;
@@ -3042,8 +3090,8 @@ io.on('connection', (socket) => {
         try {
           const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
           if (deviceId) {
-            try { await spotifyService.transferPlayback(deviceId, false); } catch {}
-            await spotifyService.pausePlayback(deviceId);
+            try { await spotifyFor(roomId).transferPlayback(deviceId, false); } catch {}
+            await spotifyFor(roomId).pausePlayback(deviceId);
           }
         } catch (e) {
           console.warn('⚠️ Pause on end-game failed:', e?.message || e);
@@ -3053,7 +3101,7 @@ io.on('connection', (socket) => {
       
       // Clean up temporary playlist
       if (room.temporaryPlaylistId) {
-        spotifyService.deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
+        spotifyFor(roomId).deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
           console.warn('⚠️ Failed to delete temporary playlist:', err)
         );
         room.temporaryPlaylistId = null;
@@ -3078,8 +3126,8 @@ io.on('connection', (socket) => {
         try {
           const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
           if (deviceId) {
-            try { await spotifyService.transferPlayback(deviceId, false); } catch {}
-            await spotifyService.pausePlayback(deviceId);
+            try { await spotifyFor(roomId).transferPlayback(deviceId, false); } catch {}
+            await spotifyFor(roomId).pausePlayback(deviceId);
           }
         } catch (e) {
           console.warn('⚠️ Pause on reset-game failed:', e?.message || e);
@@ -3141,14 +3189,14 @@ io.on('connection', (socket) => {
         }
         try {
           // Ensure control on the locked device (do not auto-play)
-          await spotifyService.transferPlayback(deviceId, false);
+          await spotifyFor(roomId).transferPlayback(deviceId, false);
         } catch (e) {
           console.warn('⚠️ Transfer before pause failed:', e?.message || e);
         }
 
         // If already paused, treat as success
         try {
-          const state = await spotifyService.getCurrentPlaybackState();
+          const state = await spotifyFor(roomId).getCurrentPlaybackState();
           const isPlaying = !!state?.is_playing;
           if (!isPlaying) {
             console.log('⏸️ Already paused according to playback state — treating as success');
@@ -3160,7 +3208,7 @@ io.on('connection', (socket) => {
 
         // Attempt to pause; add fallbacks for restriction errors
         try {
-          await spotifyService.pausePlayback(deviceId);
+          await spotifyFor(roomId).pausePlayback(deviceId);
         } catch (pauseErr) {
           const msg = pauseErr?.body?.error?.message || pauseErr?.message || String(pauseErr);
           const status = pauseErr?.body?.error?.status || pauseErr?.statusCode;
@@ -3168,9 +3216,9 @@ io.on('connection', (socket) => {
           if (isRestriction) {
             console.warn('⚠️ Pause restricted; attempting device activation then retry');
             try {
-              await spotifyService.activateDevice(deviceId);
+              await spotifyFor(roomId).activateDevice(deviceId);
               await new Promise(r => setTimeout(r, 200));
-              await spotifyService.pausePlayback(deviceId);
+              await spotifyFor(roomId).pausePlayback(deviceId);
             } catch (retryErr) {
               console.warn('⚠️ Pause retry failed:', retryErr?.message || retryErr);
               // Don't mute as fallback - let the user handle this manually
@@ -3222,25 +3270,25 @@ io.on('connection', (socket) => {
 
         // Ensure playback is locked to the device before resuming
         try {
-          await spotifyService.transferPlayback(deviceId, false);
+          await spotifyFor(roomId).transferPlayback(deviceId, false);
           } catch (e) {
             console.warn('⚠️ Transfer playback failed before resume:', e?.message || e);
           }
 
           if (resumePosition !== undefined) {
             console.log(`🎯 Resuming from position: ${resumePosition}ms`);
-          await spotifyService.resumePlayback(deviceId);
-          await spotifyService.seekToPosition(resumePosition, deviceId);
+          await spotifyFor(roomId).resumePlayback(deviceId);
+          await spotifyFor(roomId).seekToPosition(resumePosition, deviceId);
             console.log(`✅ Resumed and seeked to position: ${resumePosition}ms`);
           } else {
-          await spotifyService.resumePlayback(deviceId);
+          await spotifyFor(roomId).resumePlayback(deviceId);
             console.log('✅ Playback resumed successfully');
           }
           
           // Restore volume to match room's saved volume or default to 100%
           try {
             const targetVolume = room.volume || 100;
-            await spotifyService.setVolume(targetVolume, deviceId);
+            await spotifyFor(roomId).setVolume(targetVolume, deviceId);
             console.log(`🔊 Restored volume to ${targetVolume}% on resume`);
           } catch (volumeError) {
             console.warn('⚠️ Failed to restore volume on resume:', volumeError?.message || volumeError);
@@ -3746,7 +3794,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       const playlist = playlists[i];
       try {
         console.log(`📋 [${i + 1}/${playlists.length}] Fetching songs for playlist: ${playlist.name}`);
-        const songs = await spotifyService.getPlaylistTracks(playlist.id, playlist);
+        const songs = await spotifyFor(roomId).getPlaylistTracks(playlist.id, playlist);
         console.log(`✅ Found ${songs.length} songs in playlist: ${playlist.name}`);
         playlistsWithSongs.push({ ...playlist, songs, originalIndex: i });
       } catch (error) {
@@ -4143,7 +4191,7 @@ async function generateBingoCardForPlayer(roomId, playerId) {
     const playlistsWithSongs = [];
     for (const playlist of playlists) {
       try {
-        const songs = await spotifyService.getPlaylistTracks(playlist.id, playlist);
+        const songs = await spotifyFor(roomId).getPlaylistTracks(playlist.id, playlist);
         playlistsWithSongs.push({ ...playlist, songs });
       } catch (error) {
         console.error(`❌ Error fetching songs for playlist ${playlist.id}:`, error);
@@ -4352,7 +4400,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
 
   try {
     // Ensure token is valid before proceeding
-    await spotifyService.ensureValidToken();
+    await spotifyFor(roomId).ensureValidToken();
     
     let allSongs = [];
     const perListFetched = [];
@@ -4390,7 +4438,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       for (const playlist of playlists) {
         try {
           console.log(`📋 Fetching songs for playlist: ${playlist.name}`);
-          const songs = await spotifyService.getPlaylistTracks(playlist.id, playlist);
+          const songs = await spotifyFor(roomId).getPlaylistTracks(playlist.id, playlist);
           console.log(`✅ Found ${songs.length} songs in playlist: ${playlist.name}`);
           perListFetched.push({ id: playlist.id, name: playlist.name, songs });
           allSongs.push(...songs);
@@ -4561,7 +4609,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     // Create temporary playlist for context-based playback to prevent hijacks
     try {
       try {
-        await spotifyService.deleteAllGameOfTonesOutputPlaylists();
+        await spotifyFor(roomId).deleteAllGameOfTonesOutputPlaylists();
       } catch (clearErr) {
         console.warn(
           '⚠️ Could not auto-clear prior GOT output playlists (non-fatal):',
@@ -4570,7 +4618,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       }
       const trackUris = allSongs.map(song => `spotify:track:${song.id}`);
       const playlistName = `TEMPO Bingo Room ${roomId} - ${new Date().toISOString().slice(0,16)}`;
-      room.temporaryPlaylistId = await spotifyService.createTemporaryPlaylist(playlistName, trackUris);
+      room.temporaryPlaylistId = await spotifyFor(roomId).createTemporaryPlaylist(playlistName, trackUris);
       console.log(`🎼 Created temporary playlist for context: ${room.temporaryPlaylistId}`);
       console.log(`📋 Playlist track order (first 5): ${trackUris.slice(0, 5).join(', ')}`);
     } catch (error) {
@@ -4602,17 +4650,17 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
 
     try {
       // Ensure device reports in current devices list; try to activate if needed
-      const devices = await spotifyService.getUserDevices();
+      const devices = await spotifyFor(roomId).getUserDevices();
       const deviceInList = devices.find(d => d.id === targetDeviceId);
       if (!deviceInList) {
         console.log('⚠️ Locked device not in list; attempting activation...');
-        await spotifyService.activateDevice(targetDeviceId);
+        await spotifyFor(roomId).activateDevice(targetDeviceId);
       }
 
-      await spotifyService.transferPlayback(targetDeviceId, false);
+      await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
       // Skip-based queue clearing removed to avoid context hijacks
       // Enforce deterministic playback mode to avoid context/radio fallbacks with delays
-      try { await spotifyService.withRetries('setShuffle(false)', () => spotifyService.setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
+      try { await spotifyFor(roomId).withRetries('setShuffle(false)', () => spotifyFor(roomId).setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
       await new Promise(resolve => setTimeout(resolve, 200));
       // Note: Skip setting repeat to 'off' - startPlaybackFromPlaylist will set it to 'track' to prevent auto-advance
       await new Promise(resolve => setTimeout(resolve, 200));
@@ -4644,9 +4692,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       // Use playlist context if available, otherwise fall back to individual track
       if (room.temporaryPlaylistId) {
         console.log(`🎼 Playing from temporary playlist context: ${room.temporaryPlaylistId}`);
-        await spotifyService.withRetries('startPlaybackFromPlaylist(initial)', () => spotifyService.startPlaybackFromPlaylist(targetDeviceId, room.temporaryPlaylistId, 0, startMs), { attempts: 3, backoffMs: 400 });
+        await spotifyFor(roomId).withRetries('startPlaybackFromPlaylist(initial)', () => spotifyFor(roomId).startPlaybackFromPlaylist(targetDeviceId, room.temporaryPlaylistId, 0, startMs), { attempts: 3, backoffMs: 400 });
       } else {
-        await spotifyService.withRetries('startPlayback(initial)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
+        await spotifyFor(roomId).withRetries('startPlayback(initial)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
       }
       console.log(`✅ Successfully started playback on device: ${targetDeviceId}`);
       try { 
@@ -4663,7 +4711,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       // Set initial volume to 100% (or room's saved volume)
       try {
         const initialVolume = room.volume || 100;
-        await spotifyService.withRetries('setVolume(initial)', () => spotifyService.setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
+        await spotifyFor(roomId).withRetries('setVolume(initial)', () => spotifyFor(roomId).setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
         console.log(`🔊 Set initial volume to ${initialVolume}%`);
       } catch (volumeError) {
         console.error('❌ Error setting initial volume:', volumeError);
@@ -4674,17 +4722,17 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       if (/token expired/i.test(message)) {
         console.log('🔄 Token expired, refreshing and retrying...');
         try {
-          await spotifyService.refreshAccessToken();
+          await spotifyFor(roomId).refreshAccessToken();
           // Re-check device after refresh
-          const devicesAfter = await spotifyService.getUserDevices();
+          const devicesAfter = await spotifyFor(roomId).getUserDevices();
           const stillMissing = !devicesAfter.find(d => d.id === targetDeviceId);
           if (stillMissing) {
             console.log('⚠️ Locked device still missing after refresh; attempting activation...');
-            await spotifyService.activateDevice(targetDeviceId);
+            await spotifyFor(roomId).activateDevice(targetDeviceId);
           }
-          await spotifyService.withRetries('transferPlayback(after-refresh)', () => spotifyService.transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
+          await spotifyFor(roomId).withRetries('transferPlayback(after-refresh)', () => spotifyFor(roomId).transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
           // Skip-based queue clearing removed to avoid context hijacks
-          await spotifyService.withRetries('startPlayback(after-refresh)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
+          await spotifyFor(roomId).withRetries('startPlayback(after-refresh)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
           console.log(`✅ Successfully started playback after token refresh`);
           try { const r = rooms.get(roomId); if (r) r.songStartAtMs = Date.now() - (startMs || 0); } catch {}
           
@@ -4694,7 +4742,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           // Set initial volume to 100% (or room's saved volume)
           try {
             const initialVolume = room.volume || 100;
-            await spotifyService.withRetries('setVolume(after-refresh)', () => spotifyService.setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
+            await spotifyFor(roomId).withRetries('setVolume(after-refresh)', () => spotifyFor(roomId).setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
             console.log(`🔊 Set initial volume to ${initialVolume}% after token refresh`);
           } catch (volumeError) {
             console.error('❌ Error setting initial volume after token refresh:', volumeError);
@@ -4742,7 +4790,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       let correctTrack = false;
       for (let i = 0; i < 3; i++) { // Reduced from 5 to 3 attempts
         await new Promise(r => setTimeout(r, 500)); // Increased delay from 300ms to 500ms
-        const state = await spotifyService.getCurrentPlaybackState();
+        const state = await spotifyFor(roomId).getCurrentPlaybackState();
         playing = !!state?.is_playing;
         const currentId = state?.item?.id;
         correctTrack = currentId === firstSong.id;
@@ -4752,7 +4800,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         // Only try resume if not playing AND we have the right track (avoid restriction errors)
         if (!playing && correctTrack) {
           try { 
-            await spotifyService.resumePlayback(targetDeviceId); 
+            await spotifyFor(roomId).resumePlayback(targetDeviceId); 
           } catch (e) {
             if (!e?.message?.includes('Restriction violated')) {
               logger.warn('⚠️ Resume during verify failed:', 'resume-verify-error', 5);
@@ -4765,9 +4813,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         console.log(`🔧 Verification failed (playing=${playing}, correctTrack=${correctTrack}), correcting with startMs=${startMs}ms`);
         try { 
           if (room.temporaryPlaylistId) {
-            await spotifyService.startPlaybackFromPlaylist(targetDeviceId, room.temporaryPlaylistId, 0, startMs);
+            await spotifyFor(roomId).startPlaybackFromPlaylist(targetDeviceId, room.temporaryPlaylistId, 0, startMs);
           } else {
-            await spotifyService.startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs); 
+            await spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs); 
           }
         } catch {}
       }
@@ -4816,12 +4864,12 @@ async function playNextSong(roomId, deviceId) {
         clearRoomTimer(roomId);
         try {
           const deviceToPause = deviceId || room.selectedDeviceId || loadSavedDevice()?.id;
-          if (deviceToPause) { await spotifyService.pausePlayback(deviceToPause); }
+          if (deviceToPause) { await spotifyFor(roomId).pausePlayback(deviceToPause); }
         } catch (_) {}
         
         // Clean up temporary playlist
         if (room.temporaryPlaylistId) {
-          spotifyService.deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
+          spotifyFor(roomId).deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
             console.warn('⚠️ Failed to delete temporary playlist:', err)
           );
           room.temporaryPlaylistId = null;
@@ -4856,7 +4904,7 @@ async function playNextSong(roomId, deviceId) {
     try {
       let needTransfer = true;
       try {
-        const current = await spotifyService.getCurrentPlaybackState();
+        const current = await spotifyFor(roomId).getCurrentPlaybackState();
         const currentDeviceId = current?.device?.id;
         if (currentDeviceId === targetDeviceId) {
           needTransfer = false;
@@ -4864,7 +4912,7 @@ async function playNextSong(roomId, deviceId) {
         }
       } catch (_) {}
       if (needTransfer) {
-        await spotifyService.withRetries('transferPlayback(next)', () => spotifyService.transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
+        await spotifyFor(roomId).withRetries('transferPlayback(next)', () => spotifyFor(roomId).transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
         // Skip-based queue clearing removed to avoid context hijacks
       }
     } catch (e) {
@@ -4874,20 +4922,20 @@ async function playNextSong(roomId, deviceId) {
 
     try {
       // Ensure device still visible; attempt activation if not
-      const devices = await spotifyService.getUserDevices();
+      const devices = await spotifyFor(roomId).getUserDevices();
       const deviceInList = devices.find(d => d.id === targetDeviceId);
       if (!deviceInList) {
         console.log('⚠️ Locked device not in list before next song; attempting activation...');
-        await spotifyService.activateDevice(targetDeviceId);
+        await spotifyFor(roomId).activateDevice(targetDeviceId);
       }
 
       const playbackStartTime = Date.now();
       console.log(`🎵 Starting Spotify playback for: ${nextSong.name}`);
       // Enforce deterministic playback mode on each advance with delays
-      try { await spotifyService.withRetries('setShuffle(false,next)', () => spotifyService.setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
+      try { await spotifyFor(roomId).withRetries('setShuffle(false,next)', () => spotifyFor(roomId).setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
       await new Promise(resolve => setTimeout(resolve, 200));
       // Reset repeat to 'off' before advancing (clears any previous 'track' repeat)
-      try { await spotifyService.withRetries('setRepeat(off,next)', () => spotifyService.setRepeatState('off', targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
+      try { await spotifyFor(roomId).withRetries('setRepeat(off,next)', () => spotifyFor(roomId).setRepeatState('off', targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
       await new Promise(resolve => setTimeout(resolve, 200));
       // Randomized start position within track when enabled and safe
       let startMs = 0;
@@ -4914,9 +4962,9 @@ async function playNextSong(roomId, deviceId) {
       // Use playlist context if available, otherwise fall back to individual track
       if (room.temporaryPlaylistId) {
         console.log(`🎼 Playing next song from playlist context at index ${room.currentSongIndex}`);
-        await spotifyService.withRetries('startPlaybackFromPlaylist(next)', () => spotifyService.startPlaybackFromPlaylist(targetDeviceId, room.temporaryPlaylistId, room.currentSongIndex, startMs), { attempts: 3, backoffMs: 400 });
+        await spotifyFor(roomId).withRetries('startPlaybackFromPlaylist(next)', () => spotifyFor(roomId).startPlaybackFromPlaylist(targetDeviceId, room.temporaryPlaylistId, room.currentSongIndex, startMs), { attempts: 3, backoffMs: 400 });
       } else {
-        await spotifyService.withRetries('startPlayback(next)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
+        await spotifyFor(roomId).withRetries('startPlayback(next)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
       }
       const playbackEndTime = Date.now();
       console.log(`✅ Successfully started playback on device: ${targetDeviceId}`);
@@ -4927,7 +4975,7 @@ async function playNextSong(roomId, deviceId) {
       // Set initial volume to 100% (or room's saved volume) with single retry
             try {
               const initialVolume = room.volume || 100;
-        await spotifyService.withRetries('setVolume(next)', () => spotifyService.setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
+        await spotifyFor(roomId).withRetries('setVolume(next)', () => spotifyFor(roomId).setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
         console.log(`🔊 Set initial volume to ${initialVolume}%`);
             } catch (volumeError) {
         console.warn('⚠️ Volume setting failed, continuing anyway:', volumeError?.message || volumeError);
@@ -4986,17 +5034,17 @@ async function playNextSong(roomId, deviceId) {
       let correctTrack = false;
       for (let i = 0; i < 5; i++) {
         await new Promise(r => setTimeout(r, 300));
-        const state = await spotifyService.getCurrentPlaybackState();
+        const state = await spotifyFor(roomId).getCurrentPlaybackState();
         playing = !!state?.is_playing;
         const currentId = state?.item?.id;
         correctTrack = currentId === nextSong.id;
         if (!QUIET_MODE) logger.log(`🔎 Playback verify (next) attempt ${i + 1}: is_playing=${playing} correct_track=${correctTrack}`, 'next-verify', 5);
         if (playing) break;
-        try { await spotifyService.withRetries('resumePlayback(verify-next)', () => spotifyService.resumePlayback(targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch {}
+        try { await spotifyFor(roomId).withRetries('resumePlayback(verify-next)', () => spotifyFor(roomId).resumePlayback(targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch {}
       }
       if (!playing || !correctTrack) {
         // Attempt to correct to the intended track once
-        try { await spotifyService.withRetries('startPlayback(correct-next)', () => spotifyService.startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], startMs), { attempts: 2, backoffMs: 300 }); } catch {}
+        try { await spotifyFor(roomId).withRetries('startPlayback(correct-next)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], startMs), { attempts: 2, backoffMs: 300 }); } catch {}
       }
       if (!playing) {
         io.to(roomId).emit('playback-warning', { message: 'Playback did not resume on next track. Verify Spotify device and try transferring playback again.' });
@@ -5009,7 +5057,7 @@ async function playNextSong(roomId, deviceId) {
     // Early-fail check: if progress is still near zero after a few seconds, advance using our controlled flow
     try {
       await new Promise(r => setTimeout(r, 2000)); // Reduced to 2s to minimize transition delay
-      const state = await spotifyService.getCurrentPlaybackState();
+      const state = await spotifyFor(roomId).getCurrentPlaybackState();
       const progress = Number(state?.progress_ms || 0);
       const isPlaying = !!state?.is_playing;
       if (!isPlaying || progress < 2000) { // Increased threshold from 1s to 2s
@@ -5567,15 +5615,15 @@ app.post('/api/rooms/:roomId/end', async (req, res) => {
       try {
         const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
         if (deviceId) {
-          try { await spotifyService.transferPlayback(deviceId, false); } catch {}
-          await spotifyService.pausePlayback(deviceId);
+          try { await spotifyFor(roomId).transferPlayback(deviceId, false); } catch {}
+          await spotifyFor(roomId).pausePlayback(deviceId);
         }
       } catch {}
       room.gameState = 'ended';
       
       // Clean up temporary playlist
       if (room.temporaryPlaylistId) {
-        spotifyService.deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
+        spotifyFor(roomId).deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
           console.warn('⚠️ Failed to delete temporary playlist:', err)
         );
         room.temporaryPlaylistId = null;
@@ -5634,16 +5682,147 @@ if (hasClientBuild) {
   });
 }
 
+function getGoogleOAuthClient() {
+  const base = (process.env.PUBLIC_APP_URL || process.env.CLIENT_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${base}/api/auth/google/callback`;
+  return new OAuth2Client(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    redirectUri
+  );
+}
+
+// --- Host account (Google) ---
+app.get('/api/auth/google', (req, res) => {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return res.status(503).json({ error: 'Google OAuth not configured (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET)' });
+  }
+  const client = getGoogleOAuthClient();
+  const url = client.generateAuthUrl({
+    access_type: 'offline',
+    scope: ['openid', 'email', 'profile'],
+    prompt: 'select_account',
+    state: hostAuth.randomStateToken(),
+  });
+  res.redirect(302, url);
+});
+
+app.get('/api/auth/google/callback', async (req, res) => {
+  const appBase = (process.env.PUBLIC_APP_URL || process.env.CLIENT_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  try {
+    if (!db) {
+      return res.status(503).send('DATABASE_URL is required for host accounts.');
+    }
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+      return res.status(503).send('Google OAuth not configured.');
+    }
+    const { code } = req.query;
+    if (!code || typeof code !== 'string') {
+      return res.redirect(302, `${appBase}/?auth_error=missing_code`);
+    }
+    const client = getGoogleOAuthClient();
+    const r = await client.getToken(code);
+    const tokens = r.tokens || r;
+    if (!tokens.id_token) {
+      return res.redirect(302, `${appBase}/?auth_error=no_id_token`);
+    }
+    const ticket = await client.verifyIdToken({
+      idToken: tokens.id_token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const googleSub = payload?.sub;
+    const email = payload?.email;
+    const displayName = payload?.name || payload?.email;
+    if (!googleSub) {
+      return res.redirect(302, `${appBase}/?auth_error=no_sub`);
+    }
+    const row = await usersStore.upsertUserByGoogle(db, {
+      googleSub,
+      email,
+      displayName,
+    });
+    const token = hostAuth.signHostJwt(row.id);
+    hostAuth.setSessionCookie(res, row.id);
+    return res.redirect(302, `${appBase}/callback-google?token=${encodeURIComponent(token)}&userId=${row.id}`);
+  } catch (e) {
+    console.error('Google callback error:', e?.message || e);
+    return res.redirect(302, `${appBase}/?auth_error=1`);
+  }
+});
+
+app.get('/api/auth/me', async (req, res) => {
+  try {
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    if (!uid) return res.status(401).json({ user: null });
+    if (!db) return res.json({ user: { id: uid } });
+    const row = await usersStore.getUserById(db, uid);
+    return res.json({
+      user: row ? { id: row.id, email: row.email, displayName: row.display_name } : { id: uid },
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to load user' });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  hostAuth.clearSessionCookie(res);
+  res.json({ success: true });
+});
+
+/** Create a new room owned by the logged-in host (default code = MDY + user id). */
+app.post('/api/host/rooms', async (req, res) => {
+  try {
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    if (!uid) return res.status(401).json({ error: 'login_required' });
+    if (!db) return res.status(503).json({ error: 'DATABASE_URL required' });
+    const code = hostAuth.buildDefaultRoomCode(uid);
+    if (rooms.has(code)) {
+      return res.status(409).json({ error: 'room_code_collision', message: 'Try again in a moment.' });
+    }
+    const newRoom = {
+      id: code,
+      organizationId: 'DEFAULT',
+      ownerUserId: uid,
+      licenseKey: null,
+      host: null,
+      hostClientId: null,
+      players: new Map(),
+      gameState: 'waiting',
+      snippetLength: 30,
+      winners: [],
+      repeatMode: false,
+      volume: 100,
+      hybridInPersonPlusOnline: false,
+      playlistSongs: [],
+      currentSongIndex: 0,
+      superStrictLock: false,
+      pattern: 'line',
+      customPattern: undefined,
+      createdAt: new Date().toISOString(),
+    };
+    rooms.set(code, newRoom);
+    return res.json({ roomId: code, ownerUserId: uid });
+  } catch (e) {
+    console.error('POST /api/host/rooms:', e);
+    res.status(500).json({ error: 'Failed to create room' });
+  }
+});
+
 // Spotify API Routes
 app.get('/api/spotify/auth', (req, res) => {
-  console.log('Auth endpoint called');
   try {
-    // Clear any existing tokens when starting a new OAuth flow
-    spotifyTokens = null;
-    console.log('Cleared existing tokens for new OAuth flow');
-    
-    const authUrl = spotifyService.getAuthorizationURL();
-    console.log('Generated auth URL:', authUrl);
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    if (!uid) {
+      return res.status(401).json({
+        error: 'login_required',
+        loginUrl: '/api/auth/google',
+        message: 'Sign in with Google before connecting Spotify.',
+      });
+    }
+    const roomId = String(req.query.roomId || '').trim();
+    const state = hostAuth.signSpotifyOAuthState({ userId: uid, roomId });
+    const authUrl = spotifyServiceDefault.getAuthorizationURL(state);
     res.json({ authUrl });
   } catch (error) {
     console.error('Error generating auth URL:', error);
@@ -5652,50 +5831,19 @@ app.get('/api/spotify/auth', (req, res) => {
 });
 
 app.get('/api/spotify/status', async (req, res) => {
-  console.log('🚨 EMERGENCY SPOTIFY STATUS - Bypassing multi-tenant system');
   try {
-    // Check direct global tokens
-    console.log('🔍 Checking direct spotifyTokens:', !!spotifyTokens, spotifyTokens ? 'has accessToken: ' + !!spotifyTokens.accessToken : 'no tokens');
-    
-    if (!spotifyTokens || !spotifyTokens.accessToken) {
-      console.log('❌ No direct tokens available - returning disconnected');
-      return res.json({ 
-        connected: false,
-        hasTokens: false,
-        mode: 'emergency'
-      });
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    const orgId = uid != null ? `user_${uid}` : 'DEFAULT';
+    const tok = multiTenantSpotify.getTokens(orgId);
+    if (!tok || !tok.accessToken) {
+      return res.json({ connected: false, hasTokens: false, organizationId: orgId });
     }
-
-    console.log('🔑 Direct tokens exist, validating...');
-    // Validate tokens by trying to ensure they're valid
-    try {
-      await spotifyService.ensureValidToken();
-      // If we get here, tokens are valid
-      console.log('✅ Direct tokens valid - returning connected');
-      return res.json({ 
-        connected: true,
-        hasTokens: true,
-        mode: 'emergency'
-      });
-    } catch (error) {
-      console.error('❌ Direct token validation failed:', error?.message || error);
-      // Clear invalid tokens
-      spotifyTokens = null;
-      return res.json({ 
-        connected: false,
-        hasTokens: false,
-        mode: 'emergency',
-        error: 'Token validation failed'
-      });
-    }
+    const svc = multiTenantSpotify.getService(orgId);
+    await svc.ensureValidToken();
+    return res.json({ connected: true, hasTokens: true, organizationId: orgId });
   } catch (error) {
-    console.error('❌ Emergency status check error:', error);
-    res.status(500).json({ 
-      connected: false,
-      hasTokens: false,
-      error: 'Status check failed',
-      details: error.message 
-    });
+    console.error('Spotify status error:', error);
+    res.status(500).json({ connected: false, hasTokens: false, error: 'Status check failed' });
   }
 });
 
@@ -5725,45 +5873,25 @@ app.get('/api/spotify/tokens', (req, res) => {
 });
 
 // Force clear Spotify tokens (for testing)
-app.post('/api/spotify/clear', (req, res) => {
+app.post('/api/spotify/clear', async (req, res) => {
   try {
-    console.log('🗑️  Starting Spotify tokens clear...');
-    
-    // Clear in-memory tokens
-  spotifyTokens = null;
-    console.log('✅ Cleared in-memory tokens');
-    
-    // Clear service tokens
-    if (spotifyService && typeof spotifyService.setTokens === 'function') {
-  spotifyService.setTokens(null, null);
-      console.log('✅ Cleared service tokens');
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    spotifyTokens = null;
+    if (uid != null) {
+      await multiTenantSpotify.clearOrgTokens(`user_${uid}`);
     } else {
-      console.warn('⚠️ spotifyService.setTokens not available');
+      await multiTenantSpotify.clearOrgTokens('DEFAULT');
+      if (spotifyServiceDefault && typeof spotifyServiceDefault.setTokens === 'function') {
+        spotifyServiceDefault.setTokens(null, null);
+      }
     }
-  
-  // Remove saved tokens file
-  try {
-    if (fs.existsSync(TOKEN_FILE)) {
-      fs.unlinkSync(TOKEN_FILE);
-        console.log('✅ Removed saved Spotify tokens file');
-      } else {
-        console.log('ℹ️ No tokens file to remove');
-    }
-    } catch (fileError) {
-      console.error('❌ Error removing tokens file:', fileError);
-      // Don't fail the whole request for file errors
-  }
-  
-    console.log('✅ Successfully cleared Spotify tokens');
-  res.json({ success: true, message: 'Spotify tokens cleared' });
-    
+    try {
+      if (fs.existsSync(TOKEN_FILE)) fs.unlinkSync(TOKEN_FILE);
+    } catch (_) {}
+    res.json({ success: true, message: 'Spotify tokens cleared' });
   } catch (error) {
     console.error('❌ Error in /api/spotify/clear:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to clear tokens',
-      details: error.message 
-    });
+    res.status(500).json({ success: false, error: 'Failed to clear tokens' });
   }
 });
 
@@ -5771,14 +5899,9 @@ app.get('/api/spotify/callback', async (req, res) => {
   const { code, state } = req.query;
 
   const appBase = (process.env.PUBLIC_APP_URL || process.env.CLIENT_APP_URL || '').replace(/\/$/, '');
-  /** Browser top-level navigation from Spotify (vs fetch from our /callback SPA exchanging the code). */
   const isBrowserTopNavigation = req.get('Sec-Fetch-Mode') === 'navigate';
 
-  console.log('🚨 EMERGENCY SPOTIFY CALLBACK - Bypassing multi-tenant system');
-  console.log('Spotify callback received with code:', code ? code.substring(0, 20) + '...' : 'NO CODE');
-
   if (!code) {
-    console.error('No authorization code provided');
     if (isBrowserTopNavigation && appBase) {
       return res.redirect(302, `${appBase}/?spotify_error=missing_code`);
     }
@@ -5786,28 +5909,25 @@ app.get('/api/spotify/callback', async (req, res) => {
   }
 
   try {
-    console.log('🔧 Using direct spotifyService.handleCallback...');
-    const tokens = await spotifyService.handleCallback(code);
-    console.log('✅ Got tokens from Spotify, saving directly...');
-
-    spotifyTokens = tokens;
-    saveTokens(tokens);
-
-    console.log('✅ Tokens saved directly - Emergency fix active');
-
-    if (isBrowserTopNavigation && appBase && state) {
-      const room = String(state);
-      // Must be ?spotify=connected (HostView checks searchParams.get('spotify') === 'connected')
-      return res.redirect(302, `${appBase}/host/${encodeURIComponent(room)}?spotify=connected`);
+    const tokens = await spotifyServiceDefault.handleCallback(code);
+    const parsed = state ? hostAuth.verifySpotifyOAuthState(String(state)) : null;
+    if (parsed && parsed.userId != null) {
+      await multiTenantSpotify.setTokens(`user_${parsed.userId}`, tokens);
+    } else {
+      await multiTenantSpotify.setTokens('DEFAULT', tokens);
+      spotifyTokens = tokens;
+      saveTokens(tokens);
     }
 
-    res.json({
-      success: true,
-      message: 'Spotify connected successfully (emergency mode)',
-      tokens
-    });
+    if (isBrowserTopNavigation && appBase) {
+      const room = parsed?.roomId ? String(parsed.roomId) : '';
+      const path = room ? `/host/${encodeURIComponent(room)}` : '/';
+      return res.redirect(302, `${appBase}${path}?spotify=connected`);
+    }
+
+    res.json({ success: true, message: 'Spotify connected' });
   } catch (error) {
-    console.error('❌ Emergency callback failed:', error);
+    console.error('❌ Spotify callback failed:', error);
     if (isBrowserTopNavigation && appBase) {
       return res.redirect(302, `${appBase}/?spotify_error=1`);
     }
@@ -5817,25 +5937,18 @@ app.get('/api/spotify/callback', async (req, res) => {
 
 app.get('/api/spotify/playlists', async (req, res) => {
   try {
-    // SIMPLIFIED: Always use DEFAULT organization
-    const organizationId = 'DEFAULT';
-    
-    const orgSpotifyService = multiTenantSpotify.getService(organizationId);
-    const orgTokens = multiTenantSpotify.getTokens(organizationId);
-    
+    const svc = spotifyForRequest(req);
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    const orgId = uid != null ? `user_${uid}` : 'DEFAULT';
+    const orgTokens = multiTenantSpotify.getTokens(orgId);
     if (!orgTokens) {
-      return res.status(401).json({ 
-        error: `Spotify not connected for organization: ${organizationId}`,
-        organizationId: organizationId
+      return res.status(401).json({
+        error: `Spotify not connected for ${orgId}`,
+        organizationId: orgId,
       });
     }
-    
-    const playlists = await orgSpotifyService.getUserPlaylists();
-    res.json({ 
-      success: true, 
-      playlists: playlists,
-      organizationId: organizationId
-    });
+    const playlists = await svc.getUserPlaylists();
+    res.json({ success: true, playlists, organizationId: orgId });
   } catch (error) {
     console.error('Error getting playlists:', error);
     res.status(500).json({ error: 'Failed to get playlists' });
@@ -5845,7 +5958,7 @@ app.get('/api/spotify/playlists', async (req, res) => {
 app.get('/api/spotify/playlists/:playlistId/tracks', async (req, res) => {
   try {
     const { playlistId } = req.params;
-    const tracks = await spotifyService.getPlaylistTracks(playlistId);
+    const tracks = await spotifyForRequest(req).getPlaylistTracks(playlistId);
     res.json(tracks);
   } catch (error) {
     console.error('Error getting playlist tracks:', error);
@@ -5861,10 +5974,10 @@ app.get('/api/spotify/devices', async (req, res) => {
     }
 
     console.log('📱 Fetching available Spotify devices...');
-    const devices = await spotifyService.getUserDevices();
+    const devices = await spotifyForRequest(req).getUserDevices();
     let currentPlayback = null;
     try {
-      currentPlayback = await spotifyService.getCurrentPlaybackState();
+      currentPlayback = await spotifyForRequest(req).getCurrentPlaybackState();
     } catch (_) {}
     const currentDevice = currentPlayback?.device || null;
     
@@ -5931,7 +6044,7 @@ app.post('/api/spotify/save-device', async (req, res) => {
 app.post('/api/spotify/play', async (req, res) => {
   try {
     const { deviceId, uris, position } = req.body;
-    await spotifyService.startPlayback(deviceId, uris, position);
+    await spotifyForRequest(req).startPlayback(deviceId, uris, position);
     res.json({ success: true, message: 'Playback started' });
   } catch (error) {
     console.error('Error starting playback:', error);
@@ -5942,7 +6055,7 @@ app.post('/api/spotify/play', async (req, res) => {
 app.post('/api/spotify/pause', async (req, res) => {
   try {
     const { deviceId } = req.body;
-    await spotifyService.pausePlayback(deviceId);
+    await spotifyForRequest(req).pausePlayback(deviceId);
     res.json({ success: true, message: 'Playback paused' });
   } catch (error) {
     console.error('Error pausing playback:', error);
@@ -5953,7 +6066,7 @@ app.post('/api/spotify/pause', async (req, res) => {
 app.post('/api/spotify/next', async (req, res) => {
   try {
     const { deviceId } = req.body;
-    await spotifyService.nextTrack(deviceId);
+    await spotifyForRequest(req).nextTrack(deviceId);
     res.json({ success: true, message: 'Skipped to next track' });
   } catch (error) {
     console.error('Error skipping track:', error);
@@ -5973,27 +6086,27 @@ app.post('/api/spotify/transfer', async (req, res) => {
     }
 
     console.log(`🔀 Transfer request to device ${deviceId} (play=${!!play})`);
-    await spotifyService.ensureValidToken();
+    await spotifyForRequest(req).ensureValidToken();
 
     // Verify device presence; attempt activation if missing
-    const devices = await spotifyService.getUserDevices();
+    const devices = await spotifyForRequest(req).getUserDevices();
     const found = devices.find(d => d.id === deviceId);
     if (!found) {
       console.log('⚠️ Target device not in list; attempting activation...');
-      const activated = await spotifyService.activateDevice(deviceId);
+      const activated = await spotifyForRequest(req).activateDevice(deviceId);
       if (!activated) {
         return res.status(404).json({ success: false, error: 'Device not available; open Spotify on that device and try again' });
       }
     }
 
-    await spotifyService.transferPlayback(deviceId, !!play);
+    await spotifyForRequest(req).transferPlayback(deviceId, !!play);
     console.log(`✅ Transferred playback to ${deviceId}`);
 
     // Return diagnostic info to help verify account/device context
     let profile = null;
-    try { profile = await spotifyService.getCurrentUserProfile(); } catch (_) {}
-    const devicesAfter = await spotifyService.getUserDevices();
-    const currentPlayback = await spotifyService.getCurrentPlaybackState();
+    try { profile = await spotifyForRequest(req).getCurrentUserProfile(); } catch (_) {}
+    const devicesAfter = await spotifyForRequest(req).getUserDevices();
+    const currentPlayback = await spotifyForRequest(req).getCurrentPlaybackState();
     res.json({ 
       success: true, 
       deviceId,
@@ -6010,7 +6123,7 @@ app.post('/api/spotify/transfer', async (req, res) => {
 
 app.get('/api/spotify/current', async (req, res) => {
   try {
-    const track = await spotifyService.getCurrentTrack();
+    const track = await spotifyForRequest(req).getCurrentTrack();
     res.json(track);
   } catch (error) {
     console.error('Error getting current track:', error);
@@ -6053,8 +6166,8 @@ app.post('/api/spotify/shuffle', async (req, res) => {
   try {
     const { shuffle, deviceId } = req.body;
     if (shuffle === undefined) return res.status(400).json({ success: false, error: 'shuffle boolean required' });
-    await spotifyService.ensureValidToken();
-    await spotifyService.setShuffleState(!!shuffle, deviceId);
+    await spotifyForRequest(req).ensureValidToken();
+    await spotifyForRequest(req).setShuffleState(!!shuffle, deviceId);
     res.json({ success: true });
   } catch (error) {
     console.error('❌ Error setting shuffle:', error);
@@ -6068,8 +6181,8 @@ app.post('/api/spotify/repeat', async (req, res) => {
     if (!['track', 'context', 'off'].includes(state)) {
       return res.status(400).json({ success: false, error: 'Invalid repeat state' });
     }
-    await spotifyService.ensureValidToken();
-    await spotifyService.setRepeatState(state, deviceId);
+    await spotifyForRequest(req).ensureValidToken();
+    await spotifyForRequest(req).setRepeatState(state, deviceId);
     res.json({ success: true });
   } catch (error) {
     console.error('❌ Error setting repeat:', error);
@@ -6080,8 +6193,8 @@ app.post('/api/spotify/repeat', async (req, res) => {
 app.post('/api/spotify/previous', async (req, res) => {
   try {
     const { deviceId } = req.body;
-    await spotifyService.ensureValidToken();
-    await spotifyService.previousTrack(deviceId);
+    await spotifyForRequest(req).ensureValidToken();
+    await spotifyForRequest(req).previousTrack(deviceId);
     res.json({ success: true });
   } catch (error) {
     console.error('❌ Error going to previous track:', error);
@@ -6093,8 +6206,8 @@ app.post('/api/spotify/queue', async (req, res) => {
   try {
     const { uri, deviceId } = req.body;
     if (!uri) return res.status(400).json({ success: false, error: 'uri required' });
-    await spotifyService.ensureValidToken();
-    await spotifyService.addToQueue(uri, deviceId);
+    await spotifyForRequest(req).ensureValidToken();
+    await spotifyForRequest(req).addToQueue(uri, deviceId);
     res.json({ success: true });
   } catch (error) {
     console.error('❌ Error adding to queue:', error);
@@ -6112,7 +6225,7 @@ app.post('/api/spotify/force-device', async (req, res) => {
     console.log('🔄 Attempting to force device detection...');
     
     // Use the enhanced forceDeviceActivation method
-    const result = await spotifyService.forceDeviceActivation();
+    const result = await spotifyForRequest(req).forceDeviceActivation();
     
     if (result.success) {
       console.log(`✅ Device activated: ${result.device.name}`);
@@ -6149,7 +6262,7 @@ app.post('/api/spotify/refresh', async (req, res) => {
     console.log('🔄 Refreshing Spotify access token...');
     
     // Refresh the access token
-    const newAccessToken = await spotifyService.refreshAccessToken();
+    const newAccessToken = await spotifyForRequest(req).refreshAccessToken();
     
     // Update stored tokens
     spotifyTokens.accessToken = newAccessToken;
@@ -6182,8 +6295,8 @@ app.post('/api/spotify/volume', async (req, res) => {
     
     console.log(`🔊 Setting volume to ${volume}% on device: ${deviceId}`);
     
-    await spotifyService.ensureValidToken();
-    await spotifyService.setVolume(volume, deviceId);
+    await spotifyForRequest(req).ensureValidToken();
+    await spotifyForRequest(req).setVolume(volume, deviceId);
     
     // Save volume to room state if roomId is provided
     if (roomId) {
@@ -6217,8 +6330,8 @@ app.post('/api/spotify/seek', async (req, res) => {
     
     console.log(`⏩ Seeking to position ${position}ms on device: ${deviceId}`);
     
-    await spotifyService.ensureValidToken();
-    await spotifyService.seekToPosition(position, deviceId);
+    await spotifyForRequest(req).ensureValidToken();
+    await spotifyForRequest(req).seekToPosition(position, deviceId);
     
     console.log('✅ Seek successful');
     res.json({ success: true, message: 'Seek completed' });
@@ -6235,8 +6348,8 @@ app.get('/api/spotify/current-playback', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Spotify not connected' });
     }
     
-    await spotifyService.ensureValidToken();
-    const playback = await spotifyService.getCurrentPlaybackState();
+    await spotifyForRequest(req).ensureValidToken();
+    const playback = await spotifyForRequest(req).getCurrentPlaybackState();
     res.json({ success: true, playbackState: playback || null });
   } catch (error) {
     console.error('❌ Error getting current playback:', error);
@@ -6253,12 +6366,12 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
       return res.status(401).json({ error: 'Spotify not connected' });
     }
     
-    await spotifyService.ensureValidToken();
+    await spotifyForRequest(req).ensureValidToken();
     
     // First get the playlist information to include in track data
     let playlistInfo = null;
     try {
-      const playlistResponse = await spotifyService.spotifyApi.getPlaylist(playlistId);
+      const playlistResponse = await spotifyForRequest(req).spotifyApi.getPlaylist(playlistId);
       playlistInfo = {
         id: playlistResponse.body.id,
         name: playlistResponse.body.name
@@ -6268,7 +6381,7 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
       // Continue without playlist info
     }
     
-    const tracks = await spotifyService.getPlaylistTracks(playlistId, playlistInfo);
+    const tracks = await spotifyForRequest(req).getPlaylistTracks(playlistId, playlistInfo);
     
     res.json({
       success: true,
@@ -6293,13 +6406,13 @@ app.post('/api/spotify/create-output-playlist', async (req, res) => {
       return res.status(400).json({ error: 'Name and trackIds array required' });
     }
     
-    await spotifyService.ensureValidToken();
+    await spotifyForRequest(req).ensureValidToken();
     
     // Convert track IDs to URIs
     const trackUris = trackIds.map(id => `spotify:track:${id}`);
     
     // Create the output playlist
-    const result = await spotifyService.createOutputPlaylist(name, trackUris, description);
+    const result = await spotifyForRequest(req).createOutputPlaylist(name, trackUris, description);
     
     res.json({
       success: true,
@@ -6320,8 +6433,8 @@ app.get('/api/spotify/got-playlists', async (req, res) => {
       return res.status(401).json({ error: 'Spotify not connected' });
     }
     
-    await spotifyService.ensureValidToken();
-    const playlists = await spotifyService.getGameOfTonesPlaylists();
+    await spotifyForRequest(req).ensureValidToken();
+    const playlists = await spotifyForRequest(req).getGameOfTonesPlaylists();
     
     res.json({
       success: true,
@@ -6351,10 +6464,10 @@ app.post('/api/spotify/delete-playlists', async (req, res) => {
     }
     
     console.log('🔑 Ensuring valid token...');
-    await spotifyService.ensureValidToken();
+    await spotifyForRequest(req).ensureValidToken();
     
     console.log('🗑️ Deleting playlists...');
-    const results = await spotifyService.deleteMultiplePlaylists(playlistIds, {
+    const results = await spotifyForRequest(req).deleteMultiplePlaylists(playlistIds, {
       requireGotOutputPrefix: true
     });
     
@@ -6389,9 +6502,9 @@ app.get('/api/spotify/search-tracks', async (req, res) => {
       return res.status(400).json({ error: 'Query parameter q is required' });
     }
     
-    await spotifyService.ensureValidToken();
+    await spotifyForRequest(req).ensureValidToken();
     
-    const tracks = await spotifyService.searchTracks(q, parseInt(limit));
+    const tracks = await spotifyForRequest(req).searchTracks(q, parseInt(limit));
     
     res.json({
       success: true,
@@ -6421,7 +6534,7 @@ app.post('/api/spotify/replace-song', async (req, res) => {
       return res.status(404).json({ error: 'Room not found' });
     }
     
-    await spotifyService.ensureValidToken();
+    await spotifyForRequest(req).ensureValidToken();
     
     // Find the old song in various possible data structures
     let oldSong = null;
@@ -6474,7 +6587,7 @@ app.post('/api/spotify/replace-song', async (req, res) => {
     }
     
     // Get the new song details from Spotify
-    const newSongResponse = await spotifyService.spotifyApi.getTrack(newSongId);
+    const newSongResponse = await spotifyForRequest(req).spotifyApi.getTrack(newSongId);
     const newSongData = newSongResponse.body;
     
     const newSong = {
@@ -6492,7 +6605,7 @@ app.post('/api/spotify/replace-song', async (req, res) => {
     // Replace the song in the original Spotify playlist
     if (oldSong.sourcePlaylistId) {
       try {
-        await spotifyService.replaceTrackInPlaylist(
+        await spotifyForRequest(req).replaceTrackInPlaylist(
           oldSong.sourcePlaylistId,
           `spotify:track:${oldSongId}`,
           `spotify:track:${newSongId}`,
@@ -6617,7 +6730,7 @@ app.post('/api/spotify/suggest-songs', async (req, res) => {
       return res.status(401).json({ error: 'Spotify not connected' });
     }
     
-    await spotifyService.ensureValidToken();
+    await spotifyForRequest(req).ensureValidToken();
     
     console.log(`🤖 Generating AI suggestions for playlist: "${playlistName}"`);
     console.log(`📊 Current songs: ${existingSongs?.length || 0}, Target: ${targetCount}`);
@@ -6698,7 +6811,7 @@ async function generateSmartSuggestions(playlistName, existingSongs = [], target
   for (const query of searchQueries.slice(0, 5)) { // Limit to 5 strategies to avoid rate limits
     try {
       console.log(`🎵 Searching: "${query.query}" (${query.strategy})`);
-      const results = await spotifyService.searchTracks(query.query, 10);
+      const results = await spotifyForRequest(req).searchTracks(query.query, 10);
       
       const filteredResults = results
         .filter(song => !seenSongs.has(song.id))
@@ -7136,8 +7249,8 @@ app.post('/api/spotify/resume', async (req, res) => {
     
     console.log(`▶️ Resuming playback on device: ${deviceId}`);
     
-    await spotifyService.ensureValidToken();
-    await spotifyService.resumePlayback(deviceId);
+    await spotifyForRequest(req).ensureValidToken();
+    await spotifyForRequest(req).resumePlayback(deviceId);
     
     console.log('✅ Playback resumed successfully');
     res.json({ success: true, message: 'Playback resumed' });
@@ -7154,7 +7267,7 @@ function startDeviceKeepAlive() {
   setInterval(async () => {
     try {
       if (spotifyTokens && spotifyTokens.accessToken) {
-        await spotifyService.ensureValidToken();
+        await spotifyServiceDefault.ensureValidToken();
         
         // Only activate device if no active games are playing (to avoid interrupting songs)
         const hasActiveGames = Array.from(rooms.values()).some(room => room.gameState === 'playing');
@@ -7224,7 +7337,7 @@ async function activatePreferredDevice() {
     console.log('🔧 Activating preferred device...');
     
     // Get available devices
-    const devices = await spotifyService.getUserDevices();
+    const devices = await spotifyServiceDefault.getUserDevices();
     const savedDevice = loadSavedDevice();
     
     if (devices.length === 0) {
@@ -7250,9 +7363,9 @@ async function activatePreferredDevice() {
     if (targetDevice) {
       // Assert control on the device without starting playback
       try {
-        await spotifyService.transferPlayback(targetDevice.id, false);
-        try { await spotifyService.setShuffleState(false, targetDevice.id); } catch (_) {}
-        try { await spotifyService.setRepeatState('off', targetDevice.id); } catch (_) {}
+        await spotifyServiceDefault.transferPlayback(targetDevice.id, false);
+        try { await spotifyServiceDefault.setShuffleState(false, targetDevice.id); } catch (_) {}
+        try { await spotifyServiceDefault.setRepeatState('off', targetDevice.id); } catch (_) {}
         console.log(`✅ Asserted control on device without playback: ${targetDevice.name}`);
           } catch (error) {
         console.log(`⚠️ Could not assert control on ${targetDevice.name}, but device is available`);

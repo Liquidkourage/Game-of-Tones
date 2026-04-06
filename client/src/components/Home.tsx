@@ -2,6 +2,8 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Sparkles, Play, UserPlus, Crown } from 'lucide-react';
+import { API_BASE } from '../config';
+import { hostFetch, apiOrigin } from '../utils/hostFetch';
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
@@ -18,6 +20,7 @@ const Home: React.FC = () => {
       return '';
     }
   });
+  const [hostSession, setHostSession] = useState<{ id: number; email?: string | null; displayName?: string | null } | null | undefined>(undefined);
 
   /** Player / QR links: ?join, ?mode=player, ?player=1 — hide host path unless explicitly opened */
   const joinOnly = useMemo(() => {
@@ -45,6 +48,27 @@ const Home: React.FC = () => {
     if (pre) setRoomId((r) => r || pre.toUpperCase());
   }, [searchParams]);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await hostFetch(`${API_BASE || ''}/api/auth/me`);
+        if (cancelled) return;
+        if (!res.ok) {
+          setHostSession(null);
+          return;
+        }
+        const data = await res.json();
+        setHostSession(data.user ?? null);
+      } catch {
+        if (!cancelled) setHostSession(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const showHostSetup = () => {
     setHomeMode('host');
     const next = new URLSearchParams(searchParams);
@@ -54,12 +78,7 @@ const Home: React.FC = () => {
     setSearchParams(next, { replace: true });
   };
 
-  const generateRoomId = () => {
-    const id = Math.random().toString(36).substring(2, 8).toUpperCase();
-    setRoomId(id);
-  };
-
-  const startHosting = () => {
+  const startHosting = async () => {
     if (!playerName.trim()) {
       alert('Please enter your name!');
       return;
@@ -71,8 +90,27 @@ const Home: React.FC = () => {
     } catch {
       /* ignore */
     }
-    const id = roomId || Math.random().toString(36).substring(2, 8).toUpperCase();
-    navigate(`/host/${id}?name=${encodeURIComponent(playerName)}`);
+    const api = apiOrigin();
+    const r = await hostFetch(`${API_BASE || ''}/api/host/rooms`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    if (r.status === 401) {
+      window.location.href = `${api}/api/auth/google`;
+      return;
+    }
+    if (r.status === 503) {
+      alert('Host accounts require DATABASE_URL on the server. Set it in Railway (or .env) and redeploy.');
+      return;
+    }
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      alert((j && (j.message || j.error)) || 'Could not create room. Try again.');
+      return;
+    }
+    const { roomId: created } = await r.json();
+    navigate(`/host/${created}?name=${encodeURIComponent(playerName.trim())}`);
   };
 
   const joinGame = () => {
@@ -205,35 +243,32 @@ const Home: React.FC = () => {
               <Crown className="card-icon" />
               <h3>Host</h3>
             </div>
-            <p className="home-card-lead">Spotify + room controls.</p>
+            <p className="home-card-lead">Sign in, connect Spotify on the host screen, then run your game.</p>
+
+            {hostSession === undefined ? (
+              <p className="home-card-lead" style={{ opacity: 0.75 }}>Checking sign-in…</p>
+            ) : hostSession ? (
+              <p className="home-card-lead" style={{ opacity: 0.9 }}>
+                Signed in as host #{hostSession.id}
+                {hostSession.displayName ? ` (${hostSession.displayName})` : ''}
+              </p>
+            ) : (
+              <p className="home-card-lead" style={{ opacity: 0.9 }}>
+                <a className="btn btn-secondary" href={`${apiOrigin()}/api/auth/google`} style={{ display: 'inline-block', textDecoration: 'none' }}>
+                  Sign in with Google
+                </a>
+              </p>
+            )}
             
             <div className="input-group">
               <input
                 type="text"
-                placeholder="Your name"
+                placeholder="Your name (shown to players)"
                 value={playerName}
                 onChange={(e) => setPlayerName(e.target.value)}
                 className="input"
                 autoComplete="nickname"
               />
-            </div>
-
-            <div className="input-group">
-              <input
-                type="text"
-                placeholder="Room ID (optional)"
-                value={roomId}
-                onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-                className="input"
-                autoCapitalize="characters"
-                autoCorrect="off"
-              />
-              <button 
-                onClick={generateRoomId}
-                className="btn btn-secondary"
-              >
-                Generate
-              </button>
             </div>
 
             <div className="input-group" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.35rem' }}>
@@ -253,11 +288,13 @@ const Home: React.FC = () => {
             </div>
 
             <button 
+              type="button"
               onClick={startHosting}
               className="btn btn-primary"
+              disabled={!hostSession || hostSession === undefined || !playerName.trim()}
             >
               <Play className="btn-icon" />
-              Start Hosting
+              Create room &amp; host
             </button>
           </motion.div>
           )}

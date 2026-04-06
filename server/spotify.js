@@ -64,8 +64,8 @@ class SpotifyService {
     throw lastErr;
   }
 
-  // Get authorization URL for Spotify login
-  getAuthorizationURL() {
+  // Get authorization URL for Spotify login (optional state for OAuth callback routing)
+  getAuthorizationURL(state) {
     const scopes = [
       'user-read-private',
       'user-read-email',
@@ -78,7 +78,7 @@ class SpotifyService {
       'user-read-currently-playing'
     ];
 
-    return this.spotifyApi.createAuthorizeURL(scopes);
+    return this.spotifyApi.createAuthorizeURL(scopes, state || undefined);
   }
 
   // Handle authorization callback

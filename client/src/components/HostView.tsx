@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL } from '../config';
+import { hostFetch, getHostJwt } from '../utils/hostFetch';
 import { BingoPattern, PATTERN_OPTIONS, BINGO_PATTERNS, getPatternDisplayName, getSavedCustomPatterns, saveCustomPattern, SavedCustomPattern } from '../patternDefinitions';
 import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
@@ -99,7 +100,7 @@ function stripPlaylistDescriptionHtml(raw: string): string {
 
 /** Match public display: trim optional "GoT" playlist prefix for column headers. */
 function stripGotPlaylistPrefix(raw: string): string {
-  return raw.replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
+  return raw.replace(/^\s*GoT\s*[-�:]*\s*/i, '').trim();
 }
 
 const HostView: React.FC = () => {
@@ -216,7 +217,7 @@ const HostView: React.FC = () => {
   const [playerCardsFullscreen, setPlayerCardsFullscreen] = useState<boolean>(false);
   /** When overlay is open: false = centered modal, true = viewport-filling panel */
   const [playerCardsMaximized, setPlayerCardsMaximized] = useState<boolean>(false);
-  /** 5×15 mode: playlist title per column (from `fiveby15-pool`, else five selected playlists). */
+  /** 5�15 mode: playlist title per column (from `fiveby15-pool`, else five selected playlists). */
   const [bingoColumnPlaylistNames, setBingoColumnPlaylistNames] = useState<string[]>([]);
   const [showRoundManager, setShowRoundManager] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'setup' | 'play'>('setup');
@@ -275,7 +276,7 @@ const HostView: React.FC = () => {
   // Show toast notification to host
   const showToast = (message: string, type: 'info' | 'success' | 'warn' | 'error' = 'info') => {
     const toast = document.createElement('div');
-    const icons = { info: 'ℹ️', success: '✅', warn: '⚠️', error: '❌' };
+    const icons = { info: '??', success: '?', warn: '??', error: '?' };
     const colors = { 
       info: '#00aaff', 
       success: '#00ff88', 
@@ -331,6 +332,7 @@ const HostView: React.FC = () => {
         licenseKey: newLicenseKey.trim(),
         clientId,
         hostSecret: getHostSecret(),
+        hostToken: getHostJwt() || '',
         inPerson: true
       });
       
@@ -421,11 +423,11 @@ const HostView: React.FC = () => {
   const loadPlaylists = useCallback(async () => {
     try {
       console.log('Loading playlists...');
-      const response = await fetch(`${API_BASE || ''}/api/spotify/playlists`);
+      const response = await hostFetch(`${API_BASE || ''}/api/spotify/playlists`);
       if (response.status === 401) {
         console.warn('Spotify not connected (401) while loading playlists');
         // Don't override isSpotifyConnected here - let status endpoint be authoritative
-        console.log('�� loadPlaylists got 401, but not overriding connection state');
+        console.log('?? loadPlaylists got 401, but not overriding connection state');
         setSpotifyError('Spotify is not connected. Open Connection in the header to connect.');
         setPlaylists([]);
         return;
@@ -448,14 +450,14 @@ const HostView: React.FC = () => {
             return false;
           }
           // Match "got" at the start of the name (with optional separator like "got -", "got:", etc.)
-          const startsWithGot = /^got\s*[-–:]*\s*/i.test(playlist.name);
+          const startsWithGot = /^got\s*[-�:]*\s*/i.test(playlist.name);
           // Match "game of tones" or "gameoftones" anywhere in the name
           const containsGameOfTones = nameLower.includes('game of tones') || nameLower.includes('gameoftones');
           return startsWithGot || containsGameOfTones;
         });
         
         // Debug: log some matched playlists to see what's being matched
-        console.log(`✅ Sample matched GoT playlists (first 20):`, gotPlaylists.slice(0, 20).map((p: Playlist) => `"${p.name}"`));
+        console.log(`? Sample matched GoT playlists (first 20):`, gotPlaylists.slice(0, 20).map((p: Playlist) => `"${p.name}"`));
         
         // Debug: verify ALL matched playlists actually match the pattern
         const suspicious = gotPlaylists.filter((p: Playlist) => {
@@ -464,23 +466,23 @@ const HostView: React.FC = () => {
           if (nameLower.includes('game of tones output') || nameLower.includes('gameoftones output')) {
             return true; // This shouldn't be in the list
           }
-          const startsWithGot = /^got\s*[-–:]*\s*/i.test(p.name);
+          const startsWithGot = /^got\s*[-�:]*\s*/i.test(p.name);
           const containsGameOfTones = nameLower.includes('game of tones') || nameLower.includes('gameoftones');
           return !startsWithGot && !containsGameOfTones;
         });
         if (suspicious.length > 0) {
-          console.warn(`⚠️ Found ${suspicious.length} playlists that don't match GoT pattern or are output playlists:`, suspicious.slice(0, 20).map((p: Playlist) => `"${p.name}"`));
+          console.warn(`?? Found ${suspicious.length} playlists that don't match GoT pattern or are output playlists:`, suspicious.slice(0, 20).map((p: Playlist) => `"${p.name}"`));
         } else {
-          console.log(`✅ All ${gotPlaylists.length} matched playlists verified (GoT pattern, excluding output playlists)`);
+          console.log(`? All ${gotPlaylists.length} matched playlists verified (GoT pattern, excluding output playlists)`);
         }
         
         // Debug: show some examples of what will be displayed (with prefix stripped)
         if (stripGoTPrefix) {
           const displayExamples = gotPlaylists.slice(0, 10).map((p: Playlist) => {
-            const displayName = p.name.replace(/^GoT\s*[-–:]*\s*/i, '');
-            return `"${p.name}" → "${displayName}"`;
+            const displayName = p.name.replace(/^GoT\s*[-�:]*\s*/i, '');
+            return `"${p.name}" ? "${displayName}"`;
           });
-          console.log(`📺 Display examples (with prefix stripped):`, displayExamples);
+          console.log(`?? Display examples (with prefix stripped):`, displayExamples);
         }
         
         setPlaylists(allPlaylists);
@@ -554,21 +556,21 @@ const HostView: React.FC = () => {
               return false;
             }
             // Match "got" at the start of the name (with optional separator like "got -", "got:", etc.)
-            const startsWithGot = /^got\s*[-–:]*\s*/i.test(p.name);
+            const startsWithGot = /^got\s*[-�:]*\s*/i.test(p.name);
             // Match "game of tones" or "gameoftones" anywhere in the name
             const containsGameOfTones = nameLower.includes('game of tones') || nameLower.includes('gameoftones');
             return startsWithGot || containsGameOfTones;
           });
       
-      console.log(`🔍 Filter applied: showAllPlaylists=${showAllPlaylists}, total playlists=${playlists.length}, filtered to=${basePlaylists.length}`);
+      console.log(`?? Filter applied: showAllPlaylists=${showAllPlaylists}, total playlists=${playlists.length}, filtered to=${basePlaylists.length}`);
       if (!showAllPlaylists && basePlaylists.length > 0) {
-        console.log(`✅ Sample filtered playlists (first 10):`, basePlaylists.slice(0, 10).map((p: Playlist) => p.name));
+        console.log(`? Sample filtered playlists (first 10):`, basePlaylists.slice(0, 10).map((p: Playlist) => p.name));
       }
       
       // Always exclude assigned playlists
       const availablePlaylists = basePlaylists.filter((p: Playlist) => !assignedPlaylistIds.has(p.id));
       
-      console.log(`📋 Final visible playlists: ${availablePlaylists.length} (after excluding ${assignedPlaylistIds.size} assigned)`);
+      console.log(`?? Final visible playlists: ${availablePlaylists.length} (after excluding ${assignedPlaylistIds.size} assigned)`);
       
       // Update visible playlists to match current filter and assigned state
       setVisiblePlaylists(availablePlaylists);
@@ -578,8 +580,8 @@ const HostView: React.FC = () => {
     }
   }, [eventRounds, playlists, showAllPlaylists]); // Re-run when rounds, playlists, or filter mode change
 
-  // Auto-switch tabs based on game state (do not depend on eventRounds — round-bucket updates
-  // should not yank the host back to Manager; see handleStartRound → Game tab).
+  // Auto-switch tabs based on game state (do not depend on eventRounds � round-bucket updates
+  // should not yank the host back to Manager; see handleStartRound ? Game tab).
   useEffect(() => {
     if (gameState === 'playing') {
       setActiveTab('play');
@@ -599,7 +601,7 @@ const HostView: React.FC = () => {
     }
   }, [spotifyInitialCheckDone, isSpotifyConnected]);
 
-  /** Spotify disconnected → reopen modal; reconnected → close. */
+  /** Spotify disconnected ? reopen modal; reconnected ? close. */
   useEffect(() => {
     const prev = prevSpotifyConnectedRef.current;
     if (prev === true && isSpotifyConnected === false) {
@@ -631,7 +633,7 @@ const HostView: React.FC = () => {
 
   const refreshRooms = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE || ''}/api/rooms`);
+      const res = await hostFetch(`${API_BASE || ''}/api/rooms`);
       const data = await res.json();
       setRooms(Array.isArray(data?.rooms) ? data.rooms : []);
     } catch {
@@ -643,7 +645,7 @@ const HostView: React.FC = () => {
     try {
       setIsLoadingDevices(true);
       console.log('Loading Spotify devices...');
-      const response = await fetch(`${API_BASE || ''}/api/spotify/devices`);
+      const response = await hostFetch(`${API_BASE || ''}/api/spotify/devices`);
       if (response.status === 401) {
         console.warn('Spotify not connected (401) while loading devices');
         setIsSpotifyConnected(false);
@@ -700,7 +702,7 @@ const HostView: React.FC = () => {
     const refresh = async () => {
       try {
         const cacheBuster = Date.now();
-        const response = await fetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
+        const response = await hostFetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
         const data = await response.json();
         if (data.connected) {
           setIsSpotifyConnected(true);
@@ -717,7 +719,7 @@ const HostView: React.FC = () => {
 
   const fetchPlaybackState = useCallback(async () => {
     try {
-      const resp = await fetch(`${API_BASE || ''}/api/spotify/current-playback`);
+      const resp = await hostFetch(`${API_BASE || ''}/api/spotify/current-playback`);
       if (!resp.ok) {
         if (resp.status >= 500) return; // ignore transient 5xx
         return;
@@ -736,7 +738,7 @@ const HostView: React.FC = () => {
 
   const disconnectSpotify = useCallback(async () => {
     try {
-      await fetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST' });
+      await hostFetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST' });
       setIsSpotifyConnected(false);
       setPlaylists([]);
       setSpotifyError(null);
@@ -759,7 +761,7 @@ const HostView: React.FC = () => {
     const onPageHide = () => {
       if (!isSpotifyConnectedRef.current) return;
       try {
-        void fetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST', keepalive: true });
+        void hostFetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST', keepalive: true });
       } catch {
         /* ignore */
       }
@@ -778,7 +780,7 @@ const HostView: React.FC = () => {
       if (Date.now() - enteredAt < 50) return;
       if (!isSpotifyConnectedRef.current) return;
       try {
-        void fetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST', keepalive: true });
+        void hostFetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST', keepalive: true });
       } catch {
         /* ignore */
       }
@@ -793,7 +795,7 @@ const HostView: React.FC = () => {
 
     try {
       console.log('Saving device:', selectedDevice.name);
-      const response = await fetch(`${API_BASE || ''}/api/spotify/save-device`, {
+      const response = await hostFetch(`${API_BASE || ''}/api/spotify/save-device`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -830,6 +832,7 @@ const HostView: React.FC = () => {
     }
 
     // Initialize socket connection
+    const hostJwt = getHostJwt();
     const newSocket = io(SOCKET_URL || undefined, {
       transports: ['websocket'],
       reconnection: true,
@@ -837,6 +840,7 @@ const HostView: React.FC = () => {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       timeout: 20000,
+      auth: { token: hostJwt || '' },
     });
     setSocket(newSocket);
 
@@ -868,10 +872,10 @@ const HostView: React.FC = () => {
 
     // Bingo verification: single handler (avoid duplicate listeners / double state updates)
     newSocket.on('bingo-verification-needed', (data: any) => {
-      console.log('🔔 Bingo verification needed:', data?.playerName);
+      console.log('?? Bingo verification needed:', data?.playerName);
       setPendingVerification(data);
       setGamePaused(true);
-      addLog(`🎯 ${data.playerName} called BINGO - verification needed!`, 'warn');
+      addLog(`?? ${data.playerName} called BINGO - verification needed!`, 'warn');
       playHostAlertSound();
       schedulePlayerCardsRefresh(120);
     });
@@ -904,10 +908,10 @@ const HostView: React.FC = () => {
           setIsPlaying(false);
           setGamePaused(false);
         } else {
-          addLog(`✅ Bingo approved for ${data.playerName}`, 'info');
+          addLog(`? Bingo approved for ${data.playerName}`, 'info');
         }
       } else {
-        addLog(`❌ Bingo rejected for ${data.playerName}: ${data.reason || 'Invalid pattern'}`, 'warn');
+        addLog(`? Bingo rejected for ${data.playerName}: ${data.reason || 'Invalid pattern'}`, 'warn');
         setGamePaused(false);
       }
     });
@@ -966,7 +970,7 @@ const HostView: React.FC = () => {
       setIsPausedByInterface(false);
       
       console.log('Song playing:', data);
-      addLog(`Now playing: ${data.songName} — ${data.artistName}`, 'info');
+      addLog(`Now playing: ${data.songName} � ${data.artistName}`, 'info');
       
       // Sync volume when song starts playing to ensure it matches interface
       setTimeout(() => {
@@ -1097,7 +1101,7 @@ const HostView: React.FC = () => {
       }
       
       addLog(`Round ${data.roundNumber} - Fresh setup ready! Select playlists to start.`, 'info');
-      console.log('✅ Host UI reset complete - ready for new round setup');
+      console.log('? Host UI reset complete - ready for new round setup');
     });
 
     // NEW: Handle game session ended
@@ -1165,12 +1169,12 @@ const HostView: React.FC = () => {
     // Listen for player card updates
     newSocket.on('player-cards-update', (data: any) => {
       try {
-        console.log('📋 Received player-cards-update:', data);
+        console.log('?? Received player-cards-update:', data);
         if (data && typeof data === 'object') {
           const newPlayerCards = new Map();
           Object.entries(data).forEach(([playerId, cardData]: [string, any]) => {
             if (cardData && cardData.card) {
-              console.log(`📋 Host received player card for ${cardData.playerName}:`, {
+              console.log(`?? Host received player card for ${cardData.playerName}:`, {
                 playedSongs: cardData.playedSongs,
                 playedSongsLength: cardData.playedSongs?.length || 0,
                 cardSquares: cardData.card.squares?.length || 0
@@ -1196,7 +1200,7 @@ const HostView: React.FC = () => {
               if (removed) hasChanged = true;
             }
             if (!hasChanged) return prev;
-            console.log('📋 Updating playerCards map:', newPlayerCards.size, 'cards (was', prev.size, ')');
+            console.log('?? Updating playerCards map:', newPlayerCards.size, 'cards (was', prev.size, ')');
             if (prev.size === 0 && newPlayerCards.size > 0) {
               showToast(`Player cards loaded: ${newPlayerCards.size} players`, 'success');
             }
@@ -1207,11 +1211,11 @@ const HostView: React.FC = () => {
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
               const element = document.querySelector('.player-cards-section');
-              console.log('📋 Post-update DOM check (.player-cards-section):', element ? 'FOUND' : 'NOT FOUND');
+              console.log('?? Post-update DOM check (.player-cards-section):', element ? 'FOUND' : 'NOT FOUND');
             });
           });
         } else {
-          console.log('📋 No valid player cards data received');
+          console.log('?? No valid player cards data received');
         }
       } catch (e) {
         console.warn('Failed to parse player cards:', e);
@@ -1291,7 +1295,7 @@ const HostView: React.FC = () => {
       setWinners([]);
       setMixFinalized(false);
       setSongList([]);
-      console.log('�� Game reset');
+      console.log('?? Game reset');
     });
 
     newSocket.on('playback-error', (data: any) => {
@@ -1327,7 +1331,7 @@ const HostView: React.FC = () => {
         // Non-blocking toast instead of alert to avoid desync
         try {
           const toast = document.createElement('div');
-          toast.textContent = '⚠️ ' + msg;
+          toast.textContent = '?? ' + msg;
           Object.assign(toast.style, {
             position: 'fixed', bottom: '14px', left: '14px', maxWidth: '70vw',
             background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)',
@@ -1344,7 +1348,7 @@ const HostView: React.FC = () => {
         const payload = JSON.stringify(diag, null, 2);
         addLog(`Playback diagnostic: ${payload}`, 'warn');
         // Also print to console for devs
-        console.log('�� Playback diagnostic', diag);
+        console.log('?? Playback diagnostic', diag);
       } catch {}
     });
 
@@ -1361,7 +1365,7 @@ const HostView: React.FC = () => {
       // Show toast notification
       try {
         const toast = document.createElement('div');
-        toast.textContent = '⚠️ ' + msg;
+        toast.textContent = '?? ' + msg;
         Object.assign(toast.style, {
           position: 'fixed', bottom: '14px', left: '14px', maxWidth: '70vw',
           background: 'rgba(255,193,7,0.1)', color: '#fff', border: '1px solid rgba(255,193,7,0.5)',
@@ -1377,11 +1381,11 @@ const HostView: React.FC = () => {
       if (data?.totalDuplicatesRemoved > 0) {
         const msg = `Removed ${data.totalDuplicatesRemoved} duplicate songs across playlists for 5x15 mode`;
         console.log('Deduplication success:', msg);
-        addLog(`✅ ${msg}`, 'info');
+        addLog(`? ${msg}`, 'info');
         if (data?.playlistDetails && Array.isArray(data.playlistDetails)) {
           data.playlistDetails.forEach((detail: any) => {
             if (detail.duplicatesRemoved > 0) {
-              addLog(`  ${detail.name}: ${detail.originalCount} → ${detail.finalCount} songs (${detail.duplicatesRemoved} duplicates removed)`, 'info');
+              addLog(`  ${detail.name}: ${detail.originalCount} ? ${detail.finalCount} songs (${detail.duplicatesRemoved} duplicates removed)`, 'info');
             }
           });
         }
@@ -1390,7 +1394,7 @@ const HostView: React.FC = () => {
 
     // Acknowledge reveal events
     newSocket.on('call-revealed', (data: any) => {
-      addLog(`Call revealed: ${data.hint || 'full'} ${data.songName ? '— ' + data.songName : ''} ${data.artistName ? '— ' + data.artistName : ''}`, 'info');
+      addLog(`Call revealed: ${data.hint || 'full'} ${data.songName ? '� ' + data.songName : ''} ${data.artistName ? '� ' + data.artistName : ''}`, 'info');
     });
 
     // Handle join errors (license key validation)
@@ -1405,6 +1409,10 @@ const HostView: React.FC = () => {
       setIsJoiningRoom(false);
       addLog(data.message || 'This room already has a host.', 'error');
       if (data.reason === 'invalid_host_secret') {
+        navigate(`/?mode=host&prefillRoom=${encodeURIComponent(roomId || '')}`);
+        return;
+      }
+      if (data.reason === 'not_room_owner') {
         navigate(`/?mode=host&prefillRoom=${encodeURIComponent(roomId || '')}`);
         return;
       }
@@ -1426,16 +1434,16 @@ const HostView: React.FC = () => {
       
       // Force check Spotify status after joining room
       setTimeout(async () => {
-        console.log('🔄 Rechecking Spotify status after room join...');
+        console.log('?? Rechecking Spotify status after room join...');
         try {
           const cacheBuster = Date.now();
-          const response = await fetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
+          const response = await hostFetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
           const data = await response.json();
-          console.log('📡 Recheck response:', data);
-          console.log('📡 Recheck response details:', JSON.stringify(data, null, 2));
+          console.log('?? Recheck response:', data);
+          console.log('?? Recheck response details:', JSON.stringify(data, null, 2));
           
           if (data.connected) {
-            console.log('✅ Spotify found connected after room join!');
+            console.log('? Spotify found connected after room join!');
             setIsSpotifyConnected(true);
             setIsSpotifyConnecting(false);
           }
@@ -1447,13 +1455,14 @@ const HostView: React.FC = () => {
 
     // Join room as host (license validation temporarily disabled)
     if (roomId) {
-      console.log('🔓 License validation disabled - joining room directly');
+      console.log('?? License validation disabled - joining room directly');
       newSocket.emit('join-room', {
         roomId,
         playerName: hostPlayerName,
         isHost: true,
         clientId,
         hostSecret: getHostSecret(),
+        hostToken: getHostJwt() || '',
         inPerson: true
       });
     }
@@ -1464,12 +1473,12 @@ const HostView: React.FC = () => {
         console.log('Host view loaded, checking Spotify status...');
         // Add cache-busting parameter to force fresh request
         const cacheBuster = Date.now();
-        const response = await fetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
+        const response = await hostFetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
         const data = await response.json();
 
         if (data.connected) {
           console.log('Spotify already connected, loading playlists...');
-          console.log('�� Status API returned connected=true, setting state to true');
+          console.log('?? Status API returned connected=true, setting state to true');
           setIsSpotifyConnected(true);
           setIsSpotifyConnecting(false);
           await loadPlaylists();
@@ -1481,7 +1490,7 @@ const HostView: React.FC = () => {
           }, 1000);
         } else {
           console.log('Spotify not connected');
-          console.log('�� Status API returned connected=false, setting state to false');
+          console.log('?? Status API returned connected=false, setting state to false');
           setIsSpotifyConnected(false);
           setIsSpotifyConnecting(false);
         }
@@ -1517,7 +1526,7 @@ const HostView: React.FC = () => {
       
       // Check if Spotify is already connected (with cache-busting)
       const cacheBuster = Date.now();
-      const statusResponse = await fetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
+      const statusResponse = await hostFetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
       const statusData = await statusResponse.json();
       
       if (statusData.connected) {
@@ -1529,7 +1538,9 @@ const HostView: React.FC = () => {
       }
       
       // If not connected, initiate OAuth flow
-      const response = await fetch(`${API_BASE || ''}/api/spotify/auth`);
+      const response = await hostFetch(
+        `${API_BASE || ''}/api/spotify/auth?roomId=${encodeURIComponent(roomId || '')}`
+      );
       const data = await response.json();
       
       if (data.authUrl) {
@@ -1542,7 +1553,7 @@ const HostView: React.FC = () => {
         
         // Store the current URL to return to after Spotify auth
         const returnUrl = `/host/${roomId}`;
-        console.log('�� Storing return URL in localStorage:', returnUrl);
+        console.log('?? Storing return URL in localStorage:', returnUrl);
         localStorage.setItem('spotify_return_url', returnUrl);
         try {
           sessionStorage.setItem('spotify_return_url', returnUrl);
@@ -1550,7 +1561,7 @@ const HostView: React.FC = () => {
           /* ignore */
         }
         if (roomId) {
-          console.log('�� Storing room ID in localStorage:', roomId);
+          console.log('?? Storing room ID in localStorage:', roomId);
           localStorage.setItem('spotify_room_id', roomId);
           try {
             sessionStorage.setItem('spotify_room_id', roomId);
@@ -1561,7 +1572,7 @@ const HostView: React.FC = () => {
         
         // Add room ID to the auth URL as a state parameter
         const authUrlWithState = `${data.authUrl}&state=${encodeURIComponent(roomId || '')}`;
-        console.log('�� Redirecting to Spotify with room ID in state parameter');
+        console.log('?? Redirecting to Spotify with room ID in state parameter');
 
         const hs = getHostSecret();
         if (hs) {
@@ -1599,13 +1610,13 @@ const HostView: React.FC = () => {
       // Check if songs have playlist information, if not regenerate
       const needsRegeneration = songList.length > 0 && !songList[0]?.sourcePlaylistId;
       if (needsRegeneration) {
-        console.log('🔄 Songs missing playlist info, regenerating...');
+        console.log('?? Songs missing playlist info, regenerating...');
         await generateSongList();
         // Wait a moment for the song list to update
         await new Promise(resolve => setTimeout(resolve, 500));
       }
 
-      console.log('📋 Finalizing mix with songList:', {
+      console.log('?? Finalizing mix with songList:', {
         length: songList.length,
         hasPlaylistInfo: songList.length > 0 ? !!songList[0]?.sourcePlaylistId : false,
         firstSong: songList.length > 0 ? {
@@ -1617,7 +1628,7 @@ const HostView: React.FC = () => {
       });
 
       // Include current host-side songList ordering to enforce 1x75 pool deterministically
-      console.log('📋 Finalizing mix - Playlist order being sent to server:');
+      console.log('?? Finalizing mix - Playlist order being sent to server:');
       selectedPlaylists.forEach((p, i) => {
         console.log(`   ${i + 1}. ${p.name} (will be column ${i})`);
       });
@@ -1725,14 +1736,14 @@ const HostView: React.FC = () => {
 
   const requestPlayerCards = (opts?: { announce?: boolean }) => {
     if (!socket || !roomId) {
-      console.log('❌ Cannot request player cards: socket or roomId missing', { socket: !!socket, roomId });
+      console.log('? Cannot request player cards: socket or roomId missing', { socket: !!socket, roomId });
       if (opts?.announce) showToast('Cannot request cards - not connected', 'error');
       return;
     }
-    console.log('🔍 Requesting player cards for room:', roomId);
+    console.log('?? Requesting player cards for room:', roomId);
     socket.emit('request-player-cards', { roomId });
     if (opts?.announce) {
-      showToast('Refreshing player cards…', 'info');
+      showToast('Refreshing player cards�', 'info');
       addLog('Requested player cards', 'info');
     }
   };
@@ -1916,7 +1927,7 @@ const HostView: React.FC = () => {
                       : '#888';
               const progressText =
                 progress.needed === 0
-                  ? '🎉 BINGO!'
+                  ? '?? BINGO!'
                   : progress.needed === 1
                     ? '1 more needed!'
                     : `${progress.needed} more needed`;
@@ -1949,7 +1960,7 @@ const HostView: React.FC = () => {
                         marginBottom: '4px'
                       }}
                     >
-                      ⚠️ {cheatingCount} invalid mark{cheatingCount > 1 ? 's' : ''}
+                      ?? {cheatingCount} invalid mark{cheatingCount > 1 ? 's' : ''}
                     </div>
                   )}
                   <div
@@ -2072,19 +2083,19 @@ const HostView: React.FC = () => {
                   bgColor = 'linear-gradient(135deg, #00ff88, #00cc6d)';
                   borderColor = '#00ff88';
                   textColor = '#001a0d';
-                  icon = '✓';
+                  icon = '?';
                   statusText = isFree ? 'Free space' : 'Legitimate';
                 } else if (isMarked && !isFree && !isPlayed) {
                   bgColor = 'linear-gradient(135deg, #ff6b6b, #ff4757)';
                   borderColor = '#ff4757';
                   textColor = '#ffffff';
-                  icon = '⚠';
+                  icon = '?';
                   statusText = 'Invalid - Not played yet!';
                 } else if (!isMarked && isPlayed) {
                   bgColor = 'linear-gradient(135deg, #4dabf7, #339af0)';
                   borderColor = '#339af0';
                   textColor = '#ffffff';
-                  icon = '○';
+                  icon = '?';
                   statusText = 'Played but not marked';
                 } else {
                   bgColor = 'rgba(255,255,255,0.1)';
@@ -2112,7 +2123,7 @@ const HostView: React.FC = () => {
                       lineHeight: 1.1,
                       overflow: 'hidden'
                     }}
-                    title={`${isFree ? 'FREE' : square.songName} — ${isFree ? '' : square.artistName}\nStatus: ${statusText}`}
+                    title={`${isFree ? 'FREE' : square.songName} � ${isFree ? '' : square.artistName}\nStatus: ${statusText}`}
                   >
                     {icon && <span style={{ marginRight: 2 }}>{icon}</span>}
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -2182,7 +2193,7 @@ const HostView: React.FC = () => {
 
 
   const resetEvent = () => {
-    if (window.confirm('⚠️ Reset entire event?\n\nThis will:\n• Reset all rounds to unplanned status\n• Clear all round progress\n• End the current game if running\n• Allow you to replay from Round 1\n\nThis cannot be undone. Continue?')) {
+    if (window.confirm('?? Reset entire event?\n\nThis will:\n� Reset all rounds to unplanned status\n� Clear all round progress\n� End the current game if running\n� Allow you to replay from Round 1\n\nThis cannot be undone. Continue?')) {
       // End current game if running
       if (gameState === 'playing') {
         endGame();
@@ -2211,7 +2222,7 @@ const HostView: React.FC = () => {
       setSongList([]);
       setGameState('waiting');
       
-      addLog('🔄 Event reset - All rounds returned to unplanned status', 'info');
+      addLog('?? Event reset - All rounds returned to unplanned status', 'info');
     }
   };
 
@@ -2278,7 +2289,7 @@ const HostView: React.FC = () => {
       } else {
         // Check if we were paused by the interface and need toResume from exact position
         if (isPausedByInterface && currentSong?.id === song.id) {
-          console.log(`??� Resuming from exact pause position: ${pausePosition}ms`);
+          console.log(`??? Resuming from exact pause position: ${pausePosition}ms`);
           socket.emit('resume-song', { 
             roomId, 
             resumePosition: pausePosition 
@@ -2314,11 +2325,11 @@ const HostView: React.FC = () => {
           socket.emit('pause-song', { roomId });
           setIsPlaying(false);
           setPlaybackState(prev => ({ ...prev, isPlaying: false }));
-          console.log(`⏸️ Paused song at position: ${playbackState.currentTime}ms`);
+          console.log(`?? Paused song at position: ${playbackState.currentTime}ms`);
         } else {
           // Resume the song
           if (isPausedByInterface && currentSong) {
-            console.log(`▶️ Resuming from exact pause position: ${pausePosition}ms`);
+            console.log(`?? Resuming from exact pause position: ${pausePosition}ms`);
             socket.emit('resume-song', { 
               roomId, 
               resumePosition: pausePosition 
@@ -2335,7 +2346,7 @@ const HostView: React.FC = () => {
             socket.emit('resume-song', { roomId });
             setIsPlaying(true);
             setPlaybackState(prev => ({ ...prev, isPlaying: true }));
-            console.log('▶️ Resumed song');
+            console.log('?? Resumed song');
           }
         }
       }
@@ -2430,7 +2441,7 @@ const HostView: React.FC = () => {
   // NEW: Multi-round system handlers
   const handleStartNextRound = () => {
     if (!socket || !roomId) {
-      console.error('⚠️ Cannot start next round: socket or roomId missing', { socket: !!socket, roomId });
+      console.error('?? Cannot start next round: socket or roomId missing', { socket: !!socket, roomId });
       addLog('Error: Cannot start next round - connection issue', 'error');
       return;
     }
@@ -2438,22 +2449,22 @@ const HostView: React.FC = () => {
     const confirmed = window.confirm(
       'Start next round with fresh setup?\n\n' +
       'This will:\n' +
-      '• Keep all players connected\n' +
-      '• Keep Spotify connection\n' +
-      '• Reset to setup screen for new playlists/pattern\n' +
-      '• Clear all bingo cards\n\n' +
+      '� Keep all players connected\n' +
+      '� Keep Spotify connection\n' +
+      '� Reset to setup screen for new playlists/pattern\n' +
+      '� Clear all bingo cards\n\n' +
       'Click OK to proceed.'
     );
     
     if (confirmed) {
-      console.log('🔄 Starting next round with full reset for room:', roomId);
+      console.log('?? Starting next round with full reset for room:', roomId);
       try {
         socket.emit('start-next-round', { roomId, fullReset: true });
         addLog(`Starting fresh round setup...`, 'info');
         // Optimistically close modal (will be confirmed by next-round-reset event)
         setRoundComplete(null);
       } catch (error) {
-        console.error('❌ Error starting next round:', error);
+        console.error('? Error starting next round:', error);
         addLog('Error starting next round - please try again', 'error');
       }
     }
@@ -2493,7 +2504,7 @@ const HostView: React.FC = () => {
   const generateSongList = useCallback(async () => {
     if (!isSpotifyConnected) {
       console.warn('Cannot generate song list: Spotify not connected');
-      console.log('�� isSpotifyConnected state is currently:', isSpotifyConnected);
+      console.log('?? isSpotifyConnected state is currently:', isSpotifyConnected);
       setSongList([]);
       return;
     }
@@ -2506,7 +2517,7 @@ const HostView: React.FC = () => {
       const allSongs: Song[] = [];
       
       for (const playlist of selectedPlaylists) {
-        const response = await fetch(`${API_BASE || ''}/api/spotify/playlist-tracks/${playlist.id}`);
+        const response = await hostFetch(`${API_BASE || ''}/api/spotify/playlist-tracks/${playlist.id}`);
         const data = await response.json();
         
         if (data.success && data.tracks) {
@@ -2518,7 +2529,7 @@ const HostView: React.FC = () => {
       const seen = new Set<string>();
       const uniqueSongs = allSongs.filter(song => {
         if (seen.has(song.id)) {
-          console.log(`⚠️ Duplicate song removed: "${song.name}" by ${song.artist} (ID: ${song.id})`);
+          console.log(`?? Duplicate song removed: "${song.name}" by ${song.artist} (ID: ${song.id})`);
           return false;
         }
         seen.add(song.id);
@@ -2545,13 +2556,13 @@ const HostView: React.FC = () => {
   // Function to fetch current Spotify volume
   const fetchCurrentVolume = useCallback(async () => {
     try {
-      const resp = await fetch(`${API_BASE || ''}/api/spotify/current-playback`);
+      const resp = await hostFetch(`${API_BASE || ''}/api/spotify/current-playback`);
       if (!resp.ok) return;
       const data = await resp.json();
         if (data.success && data.playbackState) {
         const spotifyVolume = (data.playbackState.device?.volume_percent ?? 100) as number;
           setPlaybackState(prev => ({ ...prev, volume: spotifyVolume }));
-          console.log(`�� Synced volume from Spotify: ${spotifyVolume}%`);
+          console.log(`?? Synced volume from Spotify: ${spotifyVolume}%`);
         }
     } catch {
       // ignore
@@ -2564,9 +2575,9 @@ const HostView: React.FC = () => {
     
     try {
       const currentVolume = playbackState.volume;
-      console.log(`🔊 Syncing interface volume (${currentVolume}%) to Spotify`);
+      console.log(`?? Syncing interface volume (${currentVolume}%) to Spotify`);
       
-      const response = await fetch(`${API_BASE || ''}/api/spotify/volume`, {
+      const response = await hostFetch(`${API_BASE || ''}/api/spotify/volume`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2579,9 +2590,9 @@ const HostView: React.FC = () => {
       });
       
       if (response.ok) {
-        console.log(`✅ Volume synced to Spotify: ${currentVolume}%`);
+        console.log(`? Volume synced to Spotify: ${currentVolume}%`);
       } else {
-        console.warn('⚠️ Failed to sync volume to Spotify');
+        console.warn('?? Failed to sync volume to Spotify');
       }
     } catch (error) {
       console.error('Error syncing volume to Spotify:', error);
@@ -2594,13 +2605,13 @@ const HostView: React.FC = () => {
       return;
     }
     try {
-      const response = await fetch(`${API_BASE || ''}/api/spotify/transfer`, {
+      const response = await hostFetch(`${API_BASE || ''}/api/spotify/transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ deviceId: selectedDevice.id, play: false })
       });
       if (response.ok) {
-        console.log('✅ Transferred playback to selected device');
+        console.log('? Transferred playback to selected device');
         await fetchPlaybackState();
         // NudgeResume to ensure correct track/context
         if (socket && roomId) {
@@ -2612,11 +2623,11 @@ const HostView: React.FC = () => {
           const err = await response.json();
           if (err?.error) msg = String(err.error);
         } catch {}
-        console.error('❌ Failed to transfer playback:', msg);
+        console.error('? Failed to transfer playback:', msg);
         alert(`Transfer failed: ${msg}`);
       }
     } catch (e) {
-      console.error('❌ Error transferring playback:', e);
+      console.error('? Error transferring playback:', e);
     }
   }, [selectedDevice, fetchPlaybackState]);
 
@@ -2627,7 +2638,7 @@ const HostView: React.FC = () => {
         return;
       }
       // Try to regain control and auto-play on selected device
-      await fetch(`${API_BASE || ''}/api/spotify/transfer`, {
+      await hostFetch(`${API_BASE || ''}/api/spotify/transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ deviceId: selectedDevice.id, play: false })
@@ -2677,8 +2688,8 @@ const HostView: React.FC = () => {
     // Debounce the actual volume change to prevent rapid API calls
     const timeout = setTimeout(async () => {
       try {
-        console.log(`�� Setting volume to ${newVolume}% on Spotify`);
-        const response = await fetch(`${API_BASE || ''}/api/spotify/volume`, {
+        console.log(`?? Setting volume to ${newVolume}% on Spotify`);
+        const response = await hostFetch(`${API_BASE || ''}/api/spotify/volume`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -2692,7 +2703,7 @@ const HostView: React.FC = () => {
         
         if (response.ok) {
           // Don't fetch current volume - trust our local state
-          console.log(`✅ Volume set to ${newVolume}% successfully`);
+          console.log(`? Volume set to ${newVolume}% successfully`);
         } else {
           console.error('Failed to set volume, reverting to Spotify state');
           fetchCurrentVolume(); // Only revert on error
@@ -2713,8 +2724,8 @@ const HostView: React.FC = () => {
       setIsMuted(false);
       
       try {
-        console.log(`�� Unmuting, setting volume to ${previousVolume}%`);
-        const response = await fetch(`${API_BASE || ''}/api/spotify/volume`, {
+        console.log(`?? Unmuting, setting volume to ${previousVolume}%`);
+        const response = await hostFetch(`${API_BASE || ''}/api/spotify/volume`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -2728,7 +2739,7 @@ const HostView: React.FC = () => {
         
         if (response.ok) {
           // Don't fetch current volume - trust our local state
-          console.log(`✅ Unmuted to ${previousVolume}% successfully`);
+          console.log(`? Unmuted to ${previousVolume}% successfully`);
         } else {
           console.error('Failed to unmute, reverting to Spotify state');
           fetchCurrentVolume();
@@ -2744,8 +2755,8 @@ const HostView: React.FC = () => {
       setIsMuted(true);
       
       try {
-        console.log(`�� Muting, setting volume to 0%`);
-        const response = await fetch(`${API_BASE || ''}/api/spotify/volume`, {
+        console.log(`?? Muting, setting volume to 0%`);
+        const response = await hostFetch(`${API_BASE || ''}/api/spotify/volume`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -2759,7 +2770,7 @@ const HostView: React.FC = () => {
         
         if (response.ok) {
           // Don't fetch current volume - trust our local state
-          console.log(`✅ Muted successfully`);
+          console.log(`? Muted successfully`);
         } else {
           console.error('Failed to mute, reverting to Spotify state');
           fetchCurrentVolume();
@@ -2775,7 +2786,7 @@ const HostView: React.FC = () => {
     setPlaybackState(prev => ({ ...prev, currentTime: newTime }));
     
     try {
-        const response = await fetch(`${API_BASE || ''}/api/spotify/seek`, {
+        const response = await hostFetch(`${API_BASE || ''}/api/spotify/seek`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2828,7 +2839,7 @@ const HostView: React.FC = () => {
     });
     verificationTimeoutRef.current = setTimeout(() => {
       verificationTimeoutRef.current = null;
-      addLog('Approve timed out — clearing verification modal', 'warn');
+      addLog('Approve timed out � clearing verification modal', 'warn');
       setPendingVerification(null);
       setGamePaused(false);
       setIsProcessingVerification(false);
@@ -2851,7 +2862,7 @@ const HostView: React.FC = () => {
     });
     verificationTimeoutRef.current = setTimeout(() => {
       verificationTimeoutRef.current = null;
-      addLog('Reject timed out — clearing verification modal', 'warn');
+      addLog('Reject timed out � clearing verification modal', 'warn');
       setPendingVerification(null);
       setGamePaused(false);
       setIsProcessingVerification(false);
@@ -2870,7 +2881,7 @@ const HostView: React.FC = () => {
 
     try {
       const trackIds = songList.map(song => song.id);
-      const response = await fetch(`${API_BASE || ''}/api/spotify/create-output-playlist`, {
+      const response = await hostFetch(`${API_BASE || ''}/api/spotify/create-output-playlist`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2885,7 +2896,7 @@ const HostView: React.FC = () => {
       const data = await response.json();
       
       if (data.success) {
-        addLog(`✅ Created output playlist: ${data.playlistName} (${data.trackCount} songs)`, 'info');
+        addLog(`? Created output playlist: ${data.playlistName} (${data.trackCount} songs)`, 'info');
         alert(`Successfully created playlist: ${data.playlistName}\n\nIt will appear in your Spotify library under "Game Of Tones Output" playlists.`);
       } else {
         throw new Error(data.error || 'Failed to create playlist');
@@ -2893,7 +2904,7 @@ const HostView: React.FC = () => {
     } catch (error) {
       console.error('Error creating output playlist:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      addLog(`❌ Failed to create output playlist: ${errorMessage}`, 'error');
+      addLog(`? Failed to create output playlist: ${errorMessage}`, 'error');
       alert(`Failed to create playlist: ${errorMessage}`);
     }
   }, [songList, roomId, selectedPlaylists, addLog]);
@@ -2935,7 +2946,7 @@ const HostView: React.FC = () => {
     if (!currentSong) return;
     const playbackSyncInterval = setInterval(async () => {
       try {
-        const resp = await fetch(`${API_BASE || ''}/api/spotify/current-playback`);
+        const resp = await hostFetch(`${API_BASE || ''}/api/spotify/current-playback`);
         if (!resp.ok) {
           if (resp.status >= 500) return; // ignore 5xx
           return;
@@ -2955,11 +2966,11 @@ const HostView: React.FC = () => {
             if (now - lastSongEventAtRef.current < 15000) return;
           }
             if (spotifyIsPlaying !== isPlaying) {
-              console.log(`�� Spotify playback state changed: ${spotifyIsPlaying}, updating interface`);
+              console.log(`?? Spotify playback state changed: ${spotifyIsPlaying}, updating interface`);
               setIsPlaying(spotifyIsPlaying);
             setPlaybackState(prev => ({ ...prev, isPlaying: spotifyIsPlaying, currentTime: spotifyPosition }));
               if (spotifyIsPlaying && isPausedByInterface) {
-                console.log('�� SpotifyResumed externally, clearing pause tracking');
+                console.log('?? SpotifyResumed externally, clearing pause tracking');
                 setIsPausedByInterface(false);
                 setPausePosition(0);
               }
@@ -3051,13 +3062,13 @@ const HostView: React.FC = () => {
     const t = setTimeout(async () => {
       if (cancelled) return;
       try {
-        const resp = await fetch(`${API_BASE || ''}/api/spotify/current-playback`);
+        const resp = await hostFetch(`${API_BASE || ''}/api/spotify/current-playback`);
         if (!resp.ok) return;
         const data = await resp.json();
         const progress = Number(data?.playbackState?.progress_ms || 0);
         const is_sp_playing = !!data?.playbackState?.is_playing;
         if ((!is_sp_playing || progress < 1000) && audioRef.current && audioUrlRef.current) {
-          console.warn('⚠️ Spotify stall detected on host; playing preview fallback');
+          console.warn('?? Spotify stall detected on host; playing preview fallback');
           try { await audioRef.current.play(); } catch {}
         }
       } catch {}
@@ -3295,7 +3306,7 @@ const HostView: React.FC = () => {
             fontSize: '0.95rem',
           }}
         >
-          <option value="">— Select a device —</option>
+          <option value="">� Select a device �</option>
           {devices.map((d) => (
             <option key={d.id} value={d.id}>
               {d.name}
@@ -3309,7 +3320,7 @@ const HostView: React.FC = () => {
           onClick={() => void loadDevices()}
           disabled={isLoadingDevices}
         >
-          {isLoadingDevices ? 'Refreshing…' : 'Refresh devices'}
+          {isLoadingDevices ? 'Refreshing�' : 'Refresh devices'}
         </button>
         <button
           type="button"
@@ -3329,7 +3340,7 @@ const HostView: React.FC = () => {
     </>
   ) : null;
 
-  /** Spotify connect + LED + playback / Disconnect — shown in connection modal. */
+  /** Spotify connect + LED + playback / Disconnect � shown in connection modal. */
   const hostConnectionPanel = (
     <motion.div
       className="host-spotify-playback-unified"
@@ -3341,7 +3352,7 @@ const HostView: React.FC = () => {
         <div className="spotify-section spotify-section--unified">
           {!isSpotifyConnected ? (
             <>
-              <h2>🎵 Spotify Connection</h2>
+              <h2>?? Spotify Connection</h2>
               <div className="spotify-connection-section">
                 {spotifyError && (
                   <div className="spotify-error">
@@ -3396,14 +3407,14 @@ const HostView: React.FC = () => {
       >
         {/* Header */}
         <div className="host-header">
-          <h1>🎮 Game Host</h1>
+          <h1>?? Game Host</h1>
           <div className="room-info" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <button
               type="button"
               className="btn-secondary host-connection-toolbar-btn"
               onClick={() => setShowConnectionModal(true)}
             >
-              🔌 Connection
+              ?? Connection
             </button>
             <span className="room-code">Room: {roomId}</span>
           </div>
@@ -3415,8 +3426,8 @@ const HostView: React.FC = () => {
           {/* Tab Navigation */}
           <div className="tab-navigation host-tab-navigation">
             {[
-              { id: 'setup', label: '🎯 Manager', desc: 'Setup & Management' },
-              { id: 'play', label: '🎮 Game', desc: 'Live Game Controls' }
+              { id: 'setup', label: '?? Manager', desc: 'Setup & Management' },
+              { id: 'play', label: '?? Game', desc: 'Live Game Controls' }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -3475,7 +3486,7 @@ const HostView: React.FC = () => {
                     <strong style={{ color: '#00ff88' }}>Hybrid in-person + online</strong>
                     <br />
                     Remote players who join with &quot;online&quot; can play, but a valid bingo from them does{' '}
-                    <strong>not</strong> pause the game or award the round — only an <strong>in-person</strong> player&apos;s
+                    <strong>not</strong> pause the game or award the round � only an <strong>in-person</strong> player&apos;s
                     bingo does. They still see when they complete the pattern.
                   </span>
                 </label>
@@ -3489,7 +3500,7 @@ const HostView: React.FC = () => {
               animate={{ opacity: 1 }}
               transition={{ delay: 0.3 }}
             >
-              <h2>🎯 Bingo Pattern</h2>
+              <h2>?? Bingo Pattern</h2>
               <div className="pattern-selection">
                 {/* Main Pattern Options */}
                 <div className="main-pattern-options" style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '16px' }}>
@@ -3642,7 +3653,7 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4 }}
           >
-            <h2 className="host-manager-section__title">🖥️ Public display</h2>
+            <h2 className="host-manager-section__title">??? Public display</h2>
             <p className="host-manager-section__lead">
               Text size and what appears on the projector or TV for players.
             </p>
@@ -3663,7 +3674,7 @@ const HostView: React.FC = () => {
                   minWidth: '50px'
                 }}
               >
-                −
+                -
               </button>
               
               <div style={{
@@ -3717,7 +3728,7 @@ const HostView: React.FC = () => {
                   gap: '8px'
                 }}
               >
-                📋 Rules
+                ?? Rules
               </button>
               <button 
                 className="btn-secondary" 
@@ -3730,7 +3741,7 @@ const HostView: React.FC = () => {
                   gap: '8px'
                 }}
               >
-                🎬 Splash
+                ?? Splash
               </button>
               <button 
                 className="btn-secondary" 
@@ -3743,7 +3754,7 @@ const HostView: React.FC = () => {
                   gap: '8px'
                 }}
               >
-                🎵 Call List
+                ?? Call List
               </button>
             </div>
           </motion.div>
@@ -3769,9 +3780,9 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1 }}
                     transition={{ delay: 0.4 }}
                   >
-                    <h3 style={{ marginBottom: 6, fontSize: '1.05rem', fontWeight: 700 }}>📚 Playlist library</h3>
+                    <h3 style={{ marginBottom: 6, fontSize: '1.05rem', fontWeight: 700 }}>?? Playlist library</h3>
                     <p style={{ fontSize: '0.85rem', color: '#a8a8a8', marginBottom: 12, lineHeight: 1.45, maxWidth: 720 }}>
-                      <strong style={{ color: '#fff' }}>In mix</strong> — playlists checked here are included when you{' '}
+                      <strong style={{ color: '#fff' }}>In mix</strong> � playlists checked here are included when you{' '}
                       <strong style={{ color: '#fff' }}>finalize the bingo pool</strong> (song source for the game). You can still{' '}
                       <strong style={{ color: '#fff' }}>drag any row</strong> into round buckets for round-specific setup.
                     </p>
@@ -3787,7 +3798,7 @@ const HostView: React.FC = () => {
                           Short names (hide &quot;GoT-&quot; prefix in this list)
                         </label>
                       </div>
-                      <input type="search" placeholder="Search playlists by name…" value={playlistQuery} onChange={(e) => setPlaylistQuery(e.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.35)', color: '#fff', maxWidth: 420, width: '100%' }} />
+                      <input type="search" placeholder="Search playlists by name�" value={playlistQuery} onChange={(e) => setPlaylistQuery(e.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.35)', color: '#fff', maxWidth: 420, width: '100%' }} />
                     </div>
 
                         <div style={{ 
@@ -3843,7 +3854,7 @@ const HostView: React.FC = () => {
                           Playlist
                           {playlistSort.key === 'name' && (
                             <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
-                              {playlistSort.dir === 'asc' ? '↑' : '↓'}
+                              {playlistSort.dir === 'asc' ? '?' : '?'}
                             </span>
                           )}
                         </button>
@@ -3879,7 +3890,7 @@ const HostView: React.FC = () => {
                           Tracks
                           {playlistSort.key === 'tracks' && (
                             <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
-                              {playlistSort.dir === 'asc' ? '↑' : '↓'}
+                              {playlistSort.dir === 'asc' ? '?' : '?'}
                             </span>
                           )}
                         </button>
@@ -3915,7 +3926,7 @@ const HostView: React.FC = () => {
                           sortedFilteredPlaylists.map((p) => {
                             // Debug: log playlists being rendered (first 10 only)
                             if (sortedFilteredPlaylists.indexOf(p) < 10) {
-                              console.log(`🎨 Rendering playlist ${sortedFilteredPlaylists.indexOf(p) + 1}: "${p.name}" (display: "${stripGoTPrefix ? p.name.replace(/^GoT\s*[-–:]*\s*/i, '') : p.name}")`);
+                              console.log(`?? Rendering playlist ${sortedFilteredPlaylists.indexOf(p) + 1}: "${p.name}" (display: "${stripGoTPrefix ? p.name.replace(/^GoT\s*[-�:]*\s*/i, '') : p.name}")`);
                             }
                           const isSelected = selectedPlaylists.some(sp => sp.id === p.id);
                           // Insufficient: < 15 songs (not enough for any mode)
@@ -3950,7 +3961,7 @@ const HostView: React.FC = () => {
                                 type="checkbox"
                                 checked={isSelected}
                                 aria-label={"Include in game mix: " + (p.name || "playlist")}
-                                title="Include in game mix — used when you finalize the bingo song pool"
+                                title="Include in game mix � used when you finalize the bingo song pool"
                                 onChange={(e) => {
                                   if (e.target.checked) {
                                     setSelectedPlaylists([...selectedPlaylists, p]);
@@ -3976,8 +3987,8 @@ const HostView: React.FC = () => {
                                   fontSize: '0.9rem',
                                   color: isAcceptable ? '#00ff88' : '#fff',
                                 }}>
-                                  {stripGoTPrefix ? p.name.replace(/^GoT\s*[-–:]*\s*/i, '') : p.name}
-                                  {!showAllPlaylists && stripGoTPrefix && (/^got\s*[-–:]*\s*/i.test(p.name) || p.name.toLowerCase().includes('game of tones') || p.name.toLowerCase().includes('gameoftones')) && (
+                                  {stripGoTPrefix ? p.name.replace(/^GoT\s*[-�:]*\s*/i, '') : p.name}
+                                  {!showAllPlaylists && stripGoTPrefix && (/^got\s*[-�:]*\s*/i.test(p.name) || p.name.toLowerCase().includes('game of tones') || p.name.toLowerCase().includes('gameoftones')) && (
                                     <span style={{
                                       fontSize: '0.7rem',
                                       padding: '2px 6px',
@@ -4039,7 +4050,7 @@ const HostView: React.FC = () => {
                           gap: '8px'
                         }}
                       >
-                        📁 Create output playlist
+                        ?? Create output playlist
                       </button>
                     </div>
             </div>
@@ -4052,7 +4063,7 @@ const HostView: React.FC = () => {
                   transition={{ delay: 0.4 }}
                   className="host-manager-round"
                 >
-                  <h2>🎯 Round &amp; event</h2>
+                  <h2>?? Round &amp; event</h2>
                   <p className="host-manager-round__actions-head">Quick actions</p>
                   <div className="host-manager-round__row">
                       {gameState === 'playing' && (
@@ -4062,14 +4073,14 @@ const HostView: React.FC = () => {
                             onClick={completeCurrentRound}
                             className="host-manager-round__btn host-manager-round__btn--green"
                           >
-                            ✅ Complete current round
+                            ? Complete current round
                           </button>
                           <button 
                             type="button"
                             onClick={resetCurrentRound}
                             className="host-manager-round__btn host-manager-round__btn--yellow"
                           >
-                            🔄 Reset current round
+                            ?? Reset current round
                           </button>
                         </>
                       )}
@@ -4081,7 +4092,7 @@ const HostView: React.FC = () => {
                             onClick={() => jumpToRound(nextRound)}
                             className="host-manager-round__btn host-manager-round__btn--blue"
                           >
-                            ⏭️ Start next planned round
+                            ?? Start next planned round
                           </button>
                         ) : null;
                       })()}
@@ -4092,7 +4103,7 @@ const HostView: React.FC = () => {
                           className="btn-danger-outline"
                           title="Reset entire event back to the beginning"
                         >
-                          🔄 Reset event
+                          ?? Reset event
                         </button>
                         <span className="host-manager-round__reset-hint">
                           Clears scores and round state for this room. Cannot be undone.
@@ -4112,14 +4123,14 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1 }}
                   transition={{ delay: 0.2 }}
           >
-            <h2>🎮 Game Controls</h2>
+            <h2>?? Game Controls</h2>
 
                   {/* Game Settings */}
                   <div className="host-game-settings-panel">
                     {/* Track Length Control */}
                     <div style={{ marginBottom: 16 }}>
                       <h4 style={{ fontSize: '0.9rem', color: '#00ff88', marginBottom: 8, fontWeight: 600 }}>
-                        🎵 Track Playback Settings
+                        ?? Track Playback Settings
                       </h4>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -4223,7 +4234,7 @@ const HostView: React.FC = () => {
               </div>
               <div style={{ fontSize: '0.75rem', color: '#8a8a8a', lineHeight: 1.35, maxWidth: 640 }}>
                 <strong style={{ color: '#b5b5b5' }}>Super-Strict:</strong>{' '}
-                Makes the playback watchdog check Spotify more frequently (especially after a &quot;storm&quot; recovery), so wrong device/context gets corrected faster — slightly more API load.
+                Makes the playback watchdog check Spotify more frequently (especially after a &quot;storm&quot; recovery), so wrong device/context gets corrected faster � slightly more API load.
               </div>
             </div>
             </div>
@@ -4238,12 +4249,12 @@ const HostView: React.FC = () => {
                        onClick={finalizeMix}
                        disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
                      >
-                       🎵 Finalize Mix
+                       ?? Finalize Mix
                      </button>
                    )}
                    {mixFinalized && (
                      <div className="mix-finalized-status">
-                       <p className="status-text">✅ Mix finalized - Cards generated for players</p>
+                       <p className="status-text">? Mix finalized - Cards generated for players</p>
                      </div>
                    )}
                   <button
@@ -4280,7 +4291,7 @@ const HostView: React.FC = () => {
                  </>
                ) : (
                  <div className="game-status">
-                  <p className="status-text">🎵 Game is running - Use the Now Playing controls below</p>
+                  <p className="status-text">?? Game is running - Use the Now Playing controls below</p>
                   {gamePaused && (
                     <div
                       className="host-paused-banner"
@@ -4295,7 +4306,7 @@ const HostView: React.FC = () => {
                       }}
                     >
                       <p style={{ color: '#1a1204', fontWeight: 900, marginBottom: 6, fontSize: '1.35rem', letterSpacing: '0.03em' }}>
-                        GAME PAUSED — RESUME HERE
+                        GAME PAUSED � RESUME HERE
                       </p>
                       <p style={{ color: '#2b2215', fontSize: '0.95rem', marginBottom: 14, fontWeight: 600 }}>
                         {pendingVerification
@@ -4313,14 +4324,14 @@ const HostView: React.FC = () => {
                   )}
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                           <button className="btn-secondary" onClick={endGame}>End Game</button>
-                    <button className="btn-secondary" onClick={confirmAndNewRound}>🆕 New Round</button>
+                    <button className="btn-secondary" onClick={confirmAndNewRound}>?? New Round</button>
                           <button
                             type="button"
                             className="btn-accent"
                             onClick={() => setShowRoundManager(!showRoundManager)}
                             aria-pressed={showRoundManager}
                           >
-                            {showRoundManager ? '🎯 Round Manager (on)' : '🎯 Round Manager'}
+                            {showRoundManager ? '?? Round Manager (on)' : '?? Round Manager'}
                           </button>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -4331,7 +4342,7 @@ const HostView: React.FC = () => {
                       onClick={resetDisplayLetters}
                       title="Reset revealed letters on public display (fixes stuck letters)"
                     >
-                      🔤 Reset Letters
+                      ?? Reset Letters
                     </button>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -4343,7 +4354,7 @@ const HostView: React.FC = () => {
                         onClick={() => setShowPlayerCards(!showPlayerCards)}
                         title={showPlayerCards ? "Hide player bingo cards" : "Show player bingo cards and progress"}
                       >
-                        {showPlayerCards ? "👥 Hide Player Cards" : "👥 Show Player Cards"}
+                        {showPlayerCards ? "?? Hide Player Cards" : "?? Show Player Cards"}
                       </button>
                       {showPlayerCards && !playerCardsFullscreen && (
                         <button
@@ -4352,7 +4363,7 @@ const HostView: React.FC = () => {
                           onClick={openPlayerCardsModal}
                           title="Open player cards in a window (expand to full screen inside, or Escape to close)"
                         >
-                          👁 View player cards
+                          ?? View player cards
                         </button>
                       )}
                       </>
@@ -4418,7 +4429,7 @@ const HostView: React.FC = () => {
                       alignItems: 'center',
                       gap: '8px'
                     }}>
-                      🎵 Finalized Playlist ({songList.length || finalizedOrder?.length || 0} songs)
+                      ?? Finalized Playlist ({songList.length || finalizedOrder?.length || 0} songs)
                     </h3>
                     <p style={{
                       color: 'rgba(255,255,255,0.7)',
@@ -4469,7 +4480,7 @@ ${validationMessage}
 ${validation.warnings.length > 0 ? '\nWarnings: ' + validation.warnings.join('; ') : ''}
 ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions.slice(0, 3).join('; ') : ''}
 
-Hover over the ${validation.confidence < 0.7 ? '⚠️' : validation.confidence < 0.8 ? '⚡' : '✅'} icon for detailed validation info.`}
+Hover over the ${validation.confidence < 0.7 ? '??' : validation.confidence < 0.8 ? '?' : '?'} icon for detailed validation info.`}
                           >
                             <span style={{ 
                               color: '#00ff88', 
@@ -4521,7 +4532,7 @@ Original: "${song.name}"
 Cleaned: "${displayTitle}"
 ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions.slice(0, 2).join('; ') : ''}`}
                                 >
-                                  {validation.confidence < 0.7 ? '⚠️' : validation.confidence < 0.8 ? '⚡' : '✅'}
+                                  {validation.confidence < 0.7 ? '??' : validation.confidence < 0.8 ? '?' : '?'}
                                 </span>
                               </div>
                               <div style={{ color: '#b3b3b3', fontSize: '0.8rem' }}>
@@ -4555,7 +4566,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                                 }}
                                 title="Edit song title for Game of Tones"
                               >
-                                ✏️ Edit
+                                ?? Edit
                               </button>
                             </div>
                           </div>
@@ -4575,7 +4586,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   transition={{ delay: 0.2 }}
                   className="host-round-manager-panel"
                 >
-                  <h2>🎯 Round &amp; event management</h2>
+                  <h2>?? Round &amp; event management</h2>
 
                   <div className="host-round-manager-overview">
                     <h4>Event overview</h4>
@@ -4635,10 +4646,10 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                                   )}
                                 </div>
                                 <div className="host-round-manager-round__meta">
-                                  {(round.playlistIds || []).length} playlist{(round.playlistIds || []).length !== 1 ? 's' : ''} • {round.songCount} songs
+                                  {(round.playlistIds || []).length} playlist{(round.playlistIds || []).length !== 1 ? 's' : ''} � {round.songCount} songs
                                   {round.status === 'completed' && round.completedAt && (
                                     <span style={{ marginLeft: 8 }}>
-                                      • Completed {new Date(round.completedAt).toLocaleTimeString()}
+                                      � Completed {new Date(round.completedAt).toLocaleTimeString()}
                                     </span>
                                   )}
                                 </div>
@@ -4664,7 +4675,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
               </div>
             )}
 
-                {/* Player cards: compact strip — open modal or full screen to inspect grids */}
+                {/* Player cards: compact strip � open modal or full screen to inspect grids */}
                 {showPlayerCards && playerCards.size > 0 && !playerCardsFullscreen && (
              <motion.div 
                key={`player-cards-${playerCardsVersion}`}
@@ -4683,10 +4694,10 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ color: '#00ffa3', fontSize: '1rem', fontWeight: 700, margin: 0 }}>
-                          👥 Player cards
+                          ?? Player cards
                         </div>
                         <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
-                          {playerCards.size} player{playerCards.size !== 1 ? 's' : ''} · Pattern:{' '}
+                          {playerCards.size} player{playerCards.size !== 1 ? 's' : ''} � Pattern:{' '}
                           <strong style={{ color: '#c5d4e0' }}>{getPatternDisplayName(pattern)}</strong>
                         </div>
                       </div>
@@ -4707,7 +4718,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                         style={{ fontWeight: 700 }}
                         title="Use the full screen for player cards"
                       >
-                        ⛶ Full screen
+                        ? Full screen
                       </button>
                       </div>
                </div>
@@ -4718,7 +4729,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
 
           {/* Legacy sections removed - now in tabbed interface */}
                   
-          {/* Now Playing — normal document flow (no sticky) so it never covers Manager / round buckets */}
+          {/* Now Playing � normal document flow (no sticky) so it never covers Manager / round buckets */}
           {currentSong && (
             <motion.div 
               className="now-playing-section"
@@ -4735,7 +4746,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                 backdropFilter: 'blur(10px)',
               }}
             >
-               <h2>🎵 Now Playing</h2>
+               <h2>?? Now Playing</h2>
                <div className="now-playing-content">
                  {/* Song Info */}
               <div style={{ 
@@ -4776,7 +4787,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   className="btn-secondary btn-host-icon"
                      onClick={handleMuteToggle}
                    >
-                     {isMuted ? '🔇' : '🔊'}
+                     {isMuted ? '??' : '??'}
                    </button>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, maxWidth: '300px' }}>
                   <span style={{ fontSize: '0.9rem', color: '#b3b3b3', minWidth: '30px' }}>
@@ -4872,11 +4883,11 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
           >
             <div style={{ minWidth: 0 }}>
               <div style={{ color: '#00ffa3', fontWeight: 800, fontSize: 'clamp(1.1rem, 2vw, 1.45rem)', margin: 0 }}>
-                👥 Player Cards & Progress
+                ?? Player Cards & Progress
               </div>
               <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
                 Pattern: <strong style={{ color: '#c5d4e0' }}>{getPatternDisplayName(pattern)}</strong>
-                {' · '}
+                {' � '}
                 <span>Press Escape to close</span>
               </div>
             </div>
@@ -4888,7 +4899,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
               style={{ fontWeight: 700 }}
               title="Return to windowed view"
             >
-              ⊟ Window
+              ? Window
             </button>
             <button
               type="button"
@@ -4896,7 +4907,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
               onClick={closePlayerCardsOverlay}
               style={{ fontWeight: 800 }}
             >
-              ✕ Close
+              ? Close
             </button>
             </div>
           </div>
@@ -4953,11 +4964,11 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
           >
             <div style={{ minWidth: 0 }}>
               <div id="host-player-cards-modal-title" style={{ color: '#00ffa3', fontWeight: 800, fontSize: 'clamp(1.05rem, 2vw, 1.35rem)', margin: 0 }}>
-                👥 Player Cards & Progress
+                ?? Player Cards & Progress
               </div>
               <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
                 Pattern: <strong style={{ color: '#c5d4e0' }}>{getPatternDisplayName(pattern)}</strong>
-                {' · '}
+                {' � '}
                 <span>Click outside or press Escape to close</span>
               </div>
             </div>
@@ -4969,7 +4980,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
               style={{ fontWeight: 800, borderColor: '#00ffa3', color: '#00ffa3' }}
               title="Expand to use the full screen"
             >
-              ⛶ Full screen
+              ? Full screen
             </button>
             <button
               type="button"
@@ -4977,7 +4988,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
               onClick={closePlayerCardsOverlay}
               style={{ fontWeight: 800 }}
             >
-              ✕ Close
+              ? Close
             </button>
             </div>
           </div>
@@ -5021,7 +5032,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
             }}
           >
             <h2 style={{ color: '#00ff88', marginBottom: '16px', textAlign: 'center' }}>
-              🎯 BINGO VERIFICATION NEEDED
+              ?? BINGO VERIFICATION NEEDED
             </h2>
             
             <div style={{ marginBottom: '20px', textAlign: 'center' }}>
@@ -5115,15 +5126,15 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                       if (isInvalid) {
                         bgColor = 'rgba(255, 0, 0, 0.3)';
                         borderColor = '#ff4444';
-                        icon = '⚠️';
+                        icon = '??';
                       } else if (wasPlayed && isMarked) {
                         bgColor = 'rgba(0, 255, 136, 0.3)';
                         borderColor = '#00ff88';
-                        icon = '✓';
+                        icon = '?';
                       } else {
                         bgColor = 'rgba(255, 255, 0, 0.2)';
                         borderColor = '#ffaa00';
-                        icon = 'â—‹';
+                        icon = '○';
                       }
                     } else {
                       // Squares NOT in winning pattern
@@ -5131,12 +5142,12 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                         bgColor = 'rgba(255, 0, 0, 0.2)';
                         borderColor = '#ff4444';
                         borderWidth = '2px';
-                        icon = '⚠️';
+                        icon = '??';
                       } else if (isMarked && wasPlayed) {
                         bgColor = 'rgba(0, 255, 136, 0.15)';
                         borderColor = '#00ff88';
                         borderWidth = '2px';
-                        icon = '✓';
+                        icon = '?';
                       } else if (isMarked && !wasPlayed) {
                         bgColor = 'rgba(255, 255, 0, 0.15)';
                         borderColor = '#ffaa00';
@@ -5163,7 +5174,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                           color: '#fff',
                           fontWeight: isInWinningPattern ? 'bold' : (isMarked ? 'bold' : 'normal')
                         }}
-                        title={`${square.songName} - ${square.artistName}\nMarked: ${isMarked ? 'YES' : 'NO'}\nPlayed: ${wasPlayed ? 'YES' : 'NO'}\n${isInWinningPattern ? 'IN WINNING PATTERN' : 'NOT in pattern'}\n${isInvalid ? '❌ INVALID MARK' : isMarked && wasPlayed ? '✅ VALID MARK' : isMarked ? '⏳ MARKED (not played yet)' : 'Not marked'}`}
+                        title={`${square.songName} - ${square.artistName}\nMarked: ${isMarked ? 'YES' : 'NO'}\nPlayed: ${wasPlayed ? 'YES' : 'NO'}\n${isInWinningPattern ? 'IN WINNING PATTERN' : 'NOT in pattern'}\n${isInvalid ? '? INVALID MARK' : isMarked && wasPlayed ? '? VALID MARK' : isMarked ? '? MARKED (not played yet)' : 'Not marked'}`}
                       >
                         {icon && <span style={{ fontSize: '0.8rem', marginBottom: '2px' }}>{icon}</span>}
                         <span style={{ fontSize: '0.6rem', lineHeight: 1.1 }}>
@@ -5241,7 +5252,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                               padding: '4px 8px',
                               borderRadius: '4px'
                             }}>
-                              ❌ INVALID MARK
+                              ? INVALID MARK
                             </span>
                             <span style={{ 
                               color: '#ff8888',
@@ -5260,7 +5271,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                               padding: '4px 8px',
                               borderRadius: '4px'
                             }}>
-                              ✅ VALID
+                              ? VALID
                             </span>
                             <span style={{ 
                               color: '#88ffaa',
@@ -5279,7 +5290,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                               padding: '4px 8px',
                               borderRadius: '4px'
                             }}>
-                              ⚠️ NOT MARKED
+                              ?? NOT MARKED
                             </span>
                             <span style={{ 
                               color: '#ffcc88',
@@ -5313,7 +5324,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   opacity: isProcessingVerification ? 0.6 : 1
                 }}
               >
-                {isProcessingVerification ? '⏳ Processing...' : '✅ APPROVE BINGO'}
+                {isProcessingVerification ? '? Processing...' : '? APPROVE BINGO'}
                   </button>
                   
                   <button
@@ -5334,7 +5345,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   opacity: isProcessingVerification ? 0.6 : 1
                 }}
               >
-                {isProcessingVerification ? '⏳ Processing...' : '❌ REJECT BINGO'}
+                {isProcessingVerification ? '? Processing...' : '? REJECT BINGO'}
                   </button>
                 </div>
 
@@ -5391,7 +5402,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
             }}
           >
             <h2 style={{ color: '#00ff88', marginBottom: '20px', fontSize: '2rem', fontWeight: 'bold' }}>
-              🏆 Round Complete!
+              ?? Round Complete!
             </h2>
             
             <div style={{ marginBottom: '24px' }}>
@@ -5444,7 +5455,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 255, 136, 0.3)';
                 }}
               >
-                🎮 Start Next Round
+                ?? Start Next Round
               </button>
 
               <button
@@ -5467,7 +5478,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   e.currentTarget.style.background = 'rgba(255, 68, 68, 0.2)';
                 }}
               >
-                🛑 End Game Session
+                ?? End Game Session
               </button>
             </div>
 
