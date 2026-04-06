@@ -3,6 +3,24 @@ import { API_BASE } from '../config';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Music, AlertCircle } from 'lucide-react';
 
+/** Spotify sends `state` as a signed JWT (not the room code). Extract `rid` from payload only. */
+function roomIdFromSpotifyOAuthState(state: string | null | undefined): string | null {
+  if (!state || typeof state !== 'string') return null;
+  const parts = state.split('.');
+  if (parts.length < 2) return null;
+  try {
+    const seg = parts[1];
+    const pad = seg.length % 4 === 0 ? '' : '='.repeat(4 - (seg.length % 4));
+    const b64 = seg.replace(/-/g, '+').replace(/_/g, '/') + pad;
+    const json = JSON.parse(atob(b64)) as { typ?: string; rid?: string | number | null };
+    if (json.typ !== 'spotify_oauth' || json.rid == null || json.rid === '') return null;
+    const rid = String(json.rid).trim();
+    return /^[A-Za-z0-9_-]+$/.test(rid) ? rid : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Where to send the host after Spotify OAuth (localStorage can be empty on callback if origin changed). */
 function resolveSpotifyReturnDestination(searchParams: URLSearchParams): string {
   const fromLs = localStorage.getItem('spotify_return_url');
@@ -11,15 +29,15 @@ function resolveSpotifyReturnDestination(searchParams: URLSearchParams): string 
   if (candidate.startsWith('/host/') && !candidate.includes('undefined')) {
     return candidate;
   }
-  const state = searchParams.get('state')?.trim();
-  if (state) {
-    return `/host/${state}`;
-  }
   const roomId =
     localStorage.getItem('spotify_room_id')?.trim() ||
     sessionStorage.getItem('spotify_room_id')?.trim();
   if (roomId) {
     return `/host/${roomId}`;
+  }
+  const fromState = roomIdFromSpotifyOAuthState(searchParams.get('state')?.trim());
+  if (fromState) {
+    return `/host/${encodeURIComponent(fromState)}`;
   }
   return '/';
 }
