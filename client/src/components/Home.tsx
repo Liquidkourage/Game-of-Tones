@@ -16,6 +16,19 @@ function formatHttpErrorBody(raw: string, status: number): string {
   return t.slice(0, 200);
 }
 
+/** Label shown to players — from Google profile on the server (no manual host name field). */
+function hostDisplayNameFromSession(session: {
+  id: number;
+  email?: string | null;
+  displayName?: string | null;
+}): string {
+  const d = session.displayName?.trim();
+  if (d) return d;
+  const local = session.email?.split('@')[0]?.trim();
+  if (local) return local;
+  return `Host #${session.id}`;
+}
+
 const Home: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -80,6 +93,11 @@ const Home: React.FC = () => {
     };
   }, []);
 
+  const hostDisplayName = useMemo(
+    () => (hostSession ? hostDisplayNameFromSession(hostSession) : ''),
+    [hostSession]
+  );
+
   const showHostSetup = () => {
     setHomeMode('host');
     const next = new URLSearchParams(searchParams);
@@ -90,10 +108,11 @@ const Home: React.FC = () => {
   };
 
   const startHosting = async () => {
-    if (!playerName.trim()) {
-      alert('Please enter your name!');
+    if (!hostSession) {
+      alert('Sign in with Google first.');
       return;
     }
+    const displayName = hostDisplayNameFromSession(hostSession);
     try {
       const secret = hostAccessCode.trim();
       sessionStorage.setItem('tempo_host_secret', secret);
@@ -134,7 +153,7 @@ const Home: React.FC = () => {
       return;
     }
     const { roomId: created } = await r.json();
-    navigate(`/host/${created}?name=${encodeURIComponent(playerName.trim())}`);
+    navigate(`/host/${created}?name=${encodeURIComponent(displayName)}`);
   };
 
   const joinGame = () => {
@@ -298,6 +317,9 @@ const Home: React.FC = () => {
                     </div>
                   ) : null}
                 </dl>
+                <p className="home-host-account__shown-as">
+                  Players will see you as <strong>{hostDisplayName}</strong>
+                </p>
               </div>
             ) : (
               <p className="home-card-lead" style={{ opacity: 0.9 }}>
@@ -306,17 +328,6 @@ const Home: React.FC = () => {
                 </a>
               </p>
             )}
-            
-            <div className="input-group">
-              <input
-                type="text"
-                placeholder="Your name (shown to players)"
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
-                className="input"
-                autoComplete="nickname"
-              />
-            </div>
 
             <div className="input-group" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.35rem' }}>
               <label htmlFor="host-access-code" className="home-host-code-label">
@@ -338,7 +349,7 @@ const Home: React.FC = () => {
               type="button"
               onClick={startHosting}
               className="btn btn-primary"
-              disabled={!hostSession || hostSession === undefined || !playerName.trim()}
+              disabled={!hostSession || hostSession === undefined}
             >
               <Play className="btn-icon" />
               Create room &amp; host

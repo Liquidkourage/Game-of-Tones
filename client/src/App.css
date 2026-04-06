@@ -728,6 +728,18 @@ body {
   word-break: break-word;
 }
 
+.home-host-account__shown-as {
+  margin: 0.65rem 0 0;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: rgba(220, 245, 235, 0.92);
+}
+
+.home-host-account__shown-as strong {
+  color: #e8fff4;
+  font-weight: 700;
+}
+
 .home-host-code-hint {
   font-size: 0.75rem;
   color: #7a8088;
