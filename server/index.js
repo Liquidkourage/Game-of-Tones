@@ -5682,8 +5682,25 @@ if (hasClientBuild) {
   });
 }
 
+/** Scheme + host (+ port). Strips paths so PUBLIC_APP_URL can be a full URL without doubling `/api/auth/google/callback`. */
+function publicAppOrigin() {
+  const raw = (process.env.PUBLIC_APP_URL || process.env.CLIENT_APP_URL || '').trim();
+  if (!raw) return '';
+  let s = raw;
+  if (!/^https?:\/\//i.test(s)) s = `https://${s}`;
+  try {
+    return new URL(s).origin;
+  } catch {
+    return '';
+  }
+}
+
+function publicAppOriginOrDefault() {
+  return publicAppOrigin() || 'http://localhost:3000';
+}
+
 function getGoogleOAuthClient() {
-  const base = (process.env.PUBLIC_APP_URL || process.env.CLIENT_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const base = publicAppOriginOrDefault();
   const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${base}/api/auth/google/callback`;
   return new OAuth2Client(
     process.env.GOOGLE_CLIENT_ID,
@@ -5708,7 +5725,7 @@ app.get('/api/auth/google', (req, res) => {
 });
 
 app.get('/api/auth/google/callback', async (req, res) => {
-  const appBase = (process.env.PUBLIC_APP_URL || process.env.CLIENT_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const appBase = publicAppOriginOrDefault();
   try {
     if (!db) {
       return res.status(503).send('DATABASE_URL is required for host accounts.');
@@ -5898,7 +5915,7 @@ app.post('/api/spotify/clear', async (req, res) => {
 app.get('/api/spotify/callback', async (req, res) => {
   const { code, state } = req.query;
 
-  const appBase = (process.env.PUBLIC_APP_URL || process.env.CLIENT_APP_URL || '').replace(/\/$/, '');
+  const appBase = publicAppOrigin();
   const isBrowserTopNavigation = req.get('Sec-Fetch-Mode') === 'navigate';
 
   if (!code) {
