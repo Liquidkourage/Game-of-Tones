@@ -1383,16 +1383,19 @@ io.on('connection', (socket) => {
   socket.on('join-room', (data) => {
     const { roomId, playerName, isHost = false, clientId, licenseKey, hostSecret, hostToken } = data;
     const hostSecretEnv = (process.env.TEMPO_HOST_SECRET || '').trim();
-    /** If TEMPO_HOST_SECRET is set, only callers who send the same value may host */
+    /** If TEMPO_HOST_SECRET is set, only callers who send the same value may host — unless they prove host identity via Google JWT (socket handshake or hostToken). */
     let wantsHost = isHost;
     if (isHost && hostSecretEnv) {
-      if ((hostSecret || '').trim() !== hostSecretEnv) {
+      const authedHostUid =
+        socket.hostUserId ??
+        (typeof hostToken === 'string' && hostToken.length > 0 ? hostAuth.verifyHostJwt(hostToken) : null);
+      if (authedHostUid == null && (hostSecret || '').trim() !== hostSecretEnv) {
         wantsHost = false;
         console.warn(`Host join rejected: invalid or missing host secret for ${playerName} room ${roomId}`);
         socket.emit('host-join-denied', {
           roomId,
           reason: 'invalid_host_secret',
-          message: 'Invalid host access code. Hosting is restricted.'
+          message: 'Invalid host access code. Hosting is restricted.',
         });
       }
     }

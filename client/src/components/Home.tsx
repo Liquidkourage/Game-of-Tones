@@ -36,14 +36,6 @@ const Home: React.FC = () => {
   const [roomId, setRoomId] = useState('');
   /** Join as remote/online (host can enable hybrid mode so prize waits for in-person bingo) */
   const [joinAsRemote, setJoinAsRemote] = useState(() => searchParams.get('remote') === '1');
-  /** Sent with host join; must match server TEMPO_HOST_SECRET when set */
-  const [hostAccessCode, setHostAccessCode] = useState(() => {
-    try {
-      return sessionStorage.getItem('tempo_host_secret') || localStorage.getItem('tempo_host_secret') || '';
-    } catch {
-      return '';
-    }
-  });
   const [hostSession, setHostSession] = useState<{ id: number; email?: string | null; displayName?: string | null } | null | undefined>(undefined);
 
   /** Player / QR links: ?join, ?mode=player, ?player=1 — hide host path unless explicitly opened */
@@ -113,13 +105,6 @@ const Home: React.FC = () => {
       return;
     }
     const displayName = hostDisplayNameFromSession(hostSession);
-    try {
-      const secret = hostAccessCode.trim();
-      sessionStorage.setItem('tempo_host_secret', secret);
-      localStorage.setItem('tempo_host_secret', secret);
-    } catch {
-      /* ignore */
-    }
     const api = apiOrigin();
     let r: Response;
     try {
@@ -328,22 +313,6 @@ const Home: React.FC = () => {
                 </a>
               </p>
             )}
-
-            <div className="input-group" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.35rem' }}>
-              <label htmlFor="host-access-code" className="home-host-code-label">
-                Host access code
-              </label>
-              <input
-                id="host-access-code"
-                type="password"
-                placeholder="Required on server"
-                value={hostAccessCode}
-                onChange={(e) => setHostAccessCode(e.target.value)}
-                className="input"
-                autoComplete="off"
-              />
-              <span className="home-host-code-hint">Only hosts with this code can open the host screen when the server is configured.</span>
-            </div>
 
             <button 
               type="button"

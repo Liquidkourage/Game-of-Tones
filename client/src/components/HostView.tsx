@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -119,29 +119,6 @@ const HostView: React.FC = () => {
       return Math.random().toString(36).slice(2);
     }
   });
-  const getHostSecret = useCallback(() => {
-    try {
-      const fromSession = sessionStorage.getItem('tempo_host_secret')?.trim() || '';
-      if (fromSession) return fromSession;
-      // Survives new tab / sessionStorage loss (same origin); required when TEMPO_HOST_SECRET is set on server
-      return localStorage.getItem('tempo_host_secret')?.trim() || '';
-    } catch {
-      return '';
-    }
-  }, []);
-
-  /** Before socket join: mirror host secret so OAuth round-trip (same tab) always sees it in both stores. */
-  useLayoutEffect(() => {
-    try {
-      const s = sessionStorage.getItem('tempo_host_secret')?.trim();
-      const l = localStorage.getItem('tempo_host_secret')?.trim();
-      if (s && !l) localStorage.setItem('tempo_host_secret', s);
-      if (l && !s) sessionStorage.setItem('tempo_host_secret', l);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
   const [socket, setSocket] = useState<any>(null);
   const [gameState, setGameState] = useState<'waiting' | 'playing' | 'ended'>('waiting');
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
@@ -337,7 +314,7 @@ const HostView: React.FC = () => {
         isHost: true,
         licenseKey: newLicenseKey.trim(),
         clientId,
-        hostSecret: getHostSecret(),
+        hostSecret: '',
         hostToken: getHostJwt() || '',
         inPerson: true
       });
@@ -351,7 +328,7 @@ const HostView: React.FC = () => {
         }
       }, 10000); // 10 second timeout
     }
-  }, [socket, roomId, isJoiningRoom, licenseKey, hostPlayerName, clientId, getHostSecret]);
+  }, [socket, roomId, isJoiningRoom, licenseKey, hostPlayerName, clientId]);
 
   // Advanced playback states
   const [playbackState, setPlaybackState] = useState<PlaybackState>({
@@ -1488,7 +1465,7 @@ const HostView: React.FC = () => {
         playerName: hostPlayerName,
         isHost: true,
         clientId,
-        hostSecret: getHostSecret(),
+        hostSecret: '',
         hostToken: getHostJwt() || '',
         inPerson: true
       });
@@ -1541,7 +1518,7 @@ const HostView: React.FC = () => {
         clearTimeout(volumeTimeout);
       }
     };
-  }, [roomId, loadPlaylists, loadDevices, hostPlayerName, clientId, navigate, getHostSecret, disconnectSpotify]);
+  }, [roomId, loadPlaylists, loadDevices, hostPlayerName, clientId, navigate, disconnectSpotify]);
 
 
 
@@ -1612,16 +1589,6 @@ const HostView: React.FC = () => {
           /* ignore */
         }
 
-        const hs = getHostSecret();
-        if (hs) {
-          try {
-            localStorage.setItem('tempo_host_secret', hs);
-            sessionStorage.setItem('tempo_host_secret', hs);
-          } catch {
-            /* ignore */
-          }
-        }
-
         // Do not append &state= here — the server already set state to a signed JWT (room is inside it).
         window.location.href = data.authUrl;
       } else {
@@ -1638,7 +1605,7 @@ const HostView: React.FC = () => {
       setSpotifyError('Failed to connect to Spotify. Please check your internet connection and try again.');
       setIsSpotifyConnecting(false);
     }
-  }, [roomId, getHostSecret]); // Remove loadPlaylists from dependencies
+  }, [roomId]);
 
 
 
