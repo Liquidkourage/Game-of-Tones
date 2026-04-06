@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
@@ -73,13 +74,6 @@ function countOccupiedBandsInPool(ids: string[] | null | undefined, playedIds: R
   return n;
 }
 
-/**
- * Same vertical band as the App display header (`App.tsx`: absolute header at `top: 8`).
- * We align to that strip (not the 73px spacer below it) so toasts read with “TEMPO – Music Bingo”.
- * z-index on these toasts is above the header (200) so they paint over that row when shown.
- */
-const DISPLAY_HEADER_TOAST_TOP = 'calc(env(safe-area-inset-top, 0px) + 10px)';
-
 const PublicDisplay: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [fontSizeMultiplier, setFontSizeMultiplier] = useState<number>(1.0);
@@ -89,6 +83,36 @@ const PublicDisplay: React.FC = () => {
   const showNowPlaying = (searchParams.get('np') === '1') || (searchParams.get('nowPlaying') === '1');
   const debugMode = (searchParams.get('debug') === '1') || (searchParams.get('dbg') === '1');
   const displayRef = useRef<HTMLDivElement | null>(null);
+  /** Pixel `top` for portaled toasts: measured from `.app-header` so placement survives Framer/header animation. */
+  const [headerToastTopPx, setHeaderToastTopPx] = useState<number>(78);
+
+  useLayoutEffect(() => {
+    let raf = 0;
+    const measure = () => {
+      const el = document.querySelector('.app-header');
+      if (el) {
+        const bottom = el.getBoundingClientRect().bottom;
+        setHeaderToastTopPx(Math.round(bottom + 8));
+      }
+    };
+    measure();
+    // Header uses motion `initial` / `animate`; remeasure after it settles (`App.tsx` ~0.8s).
+    const t = window.setTimeout(measure, 900);
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    const hel = document.querySelector('.app-header');
+    if (hel && ro) ro.observe(hel);
+    const onResize = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(measure);
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener('resize', onResize);
+      ro?.disconnect();
+      cancelAnimationFrame(raf);
+    };
+  }, []);
   const [roomInfo, setRoomInfo] = useState<{ id: string; playerCount: number } | null>(null);
   // Splash/intro overlay (can disable with ?splash=0)
   const splashEnabled = (searchParams.get('splash') !== '0');
@@ -2573,6 +2597,8 @@ const PublicDisplay: React.FC = () => {
         )}
       </AnimatePresence>
 
+      {typeof document !== 'undefined' &&
+        createPortal(
       <AnimatePresence>
         {showWinnerBanner && (() => {
           const isBigWinCelebration = winnerName && !winnerName.startsWith('🔄');
@@ -2587,11 +2613,14 @@ const PublicDisplay: React.FC = () => {
               : { duration: 0.25 }}
             style={{
               position: 'fixed',
-              top: DISPLAY_HEADER_TOAST_TOP,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              width: isBigWinCelebration ? 'min(96vw, 1500px)' : 'auto',
+              left: 0,
+              right: 0,
+              top: `${headerToastTopPx}px`,
+              marginLeft: 'auto',
+              marginRight: 'auto',
+              width: isBigWinCelebration ? 'min(96vw, 1500px)' : 'fit-content',
               maxWidth: isBigWinCelebration ? 'min(96vw, 1500px)' : 'min(92vw, 720px)',
+              zIndex: 10020,
               background: isBigWinCelebration
                 ? 'linear-gradient(165deg, rgba(0,255,180,0.42) 0%, rgba(0,200,120,0.18) 45%, rgba(0,80,60,0.22) 100%)'
                 : 'linear-gradient(180deg, rgba(0,255,136,0.25), rgba(0,255,136,0.1))',
@@ -2615,7 +2644,6 @@ const PublicDisplay: React.FC = () => {
                 ? 'clamp(1.85rem, 1.1rem + 4.2vw, 5.25rem)'
                 : 'clamp(1rem, 2vw + 0.4rem, 1.65rem)',
               lineHeight: isBigWinCelebration ? 1.1 : 1.25,
-              zIndex: 2200
             }}
           >
             {isBigWinCelebration && (
@@ -2654,11 +2682,14 @@ const PublicDisplay: React.FC = () => {
             exit={{ opacity: 0, y: 10 }}
             style={{
               position: 'fixed',
-              top: DISPLAY_HEADER_TOAST_TOP,
-              left: '50%',
-              transform: 'translateX(-50%)',
+              left: 0,
+              right: 0,
+              top: `${headerToastTopPx}px`,
+              marginLeft: 'auto',
+              marginRight: 'auto',
               maxWidth: 'min(92vw, 720px)',
-              zIndex: 2100,
+              width: 'fit-content',
+              zIndex: 10010,
               padding: '14px 20px',
               borderRadius: 14,
               background: 'linear-gradient(180deg, rgba(0,160,255,0.38), rgba(0,60,100,0.25))',
@@ -2684,12 +2715,14 @@ const PublicDisplay: React.FC = () => {
             transition={{ duration: 0.25 }}
             style={{
               position: 'fixed',
-              top: DISPLAY_HEADER_TOAST_TOP,
-              bottom: 'auto',
-              left: '50%',
-              transform: 'translateX(-50%)',
+              left: 0,
+              right: 0,
+              top: `${headerToastTopPx}px`,
+              marginLeft: 'auto',
+              marginRight: 'auto',
               width: 'min(96vw, 56rem)',
               maxWidth: '96vw',
+              zIndex: 10000,
               boxSizing: 'border-box',
               background: 'rgba(0,0,0,0.88)',
               color: '#00ff88',
@@ -2702,14 +2735,15 @@ const PublicDisplay: React.FC = () => {
               textAlign: 'center',
               wordBreak: 'break-word',
               boxShadow: '0 12px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,255,136,0.25) inset',
-              zIndex: 1900,
               border: 'max(2px, 0.2vmin) solid rgba(0,255,136,0.45)',
             }}
           >
             Revealed: {revealToast}
           </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+        )}
       <AnimatePresence>
         {showSplash && (
           <motion.div
