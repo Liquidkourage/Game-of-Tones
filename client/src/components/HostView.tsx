@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL } from '../config';
-import { hostFetch, getHostJwt } from '../utils/hostFetch';
+import { hostFetch, getHostJwt, apiOrigin } from '../utils/hostFetch';
 import { BingoPattern, PATTERN_OPTIONS, BINGO_PATTERNS, getPatternDisplayName, getSavedCustomPatterns, saveCustomPattern, SavedCustomPattern } from '../patternDefinitions';
 import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
@@ -1537,42 +1537,53 @@ const HostView: React.FC = () => {
         return;
       }
       
-      // If not connected, initiate OAuth flow
+      // If not connected, initiate OAuth flow (server puts signed JWT in ?state= including roomId)
       const response = await hostFetch(
         `${API_BASE || ''}/api/spotify/auth?roomId=${encodeURIComponent(roomId || '')}`
       );
-      const data = await response.json();
-      
+      const data = (await response.json().catch(() => ({}))) as {
+        authUrl?: string;
+        error?: string;
+        message?: string;
+        loginUrl?: string;
+      };
+
+      if (response.status === 401 || data.error === 'login_required') {
+        window.location.href = `${apiOrigin()}${data.loginUrl || '/api/auth/google'}`;
+        setIsSpotifyConnecting(false);
+        return;
+      }
+
+      if (!response.ok) {
+        setSpotifyError(
+          data.message ||
+            data.error ||
+            `Could not start Spotify login (HTTP ${response.status}). Check server logs.`
+        );
+        setIsSpotifyConnecting(false);
+        return;
+      }
+
       if (data.authUrl) {
         if (!roomId) {
           setSpotifyError('Missing room code. Go back to home and start hosting again.');
           setIsSpotifyConnecting(false);
           return;
         }
-        console.log('Redirecting to Spotify authorization...');
-        
-        // Store the current URL to return to after Spotify auth
+
         const returnUrl = `/host/${roomId}`;
-        console.log('?? Storing return URL in localStorage:', returnUrl);
         localStorage.setItem('spotify_return_url', returnUrl);
         try {
           sessionStorage.setItem('spotify_return_url', returnUrl);
         } catch {
           /* ignore */
         }
-        if (roomId) {
-          console.log('?? Storing room ID in localStorage:', roomId);
-          localStorage.setItem('spotify_room_id', roomId);
-          try {
-            sessionStorage.setItem('spotify_room_id', roomId);
-          } catch {
-            /* ignore */
-          }
+        localStorage.setItem('spotify_room_id', roomId);
+        try {
+          sessionStorage.setItem('spotify_room_id', roomId);
+        } catch {
+          /* ignore */
         }
-        
-        // Add room ID to the auth URL as a state parameter
-        const authUrlWithState = `${data.authUrl}&state=${encodeURIComponent(roomId || '')}`;
-        console.log('?? Redirecting to Spotify with room ID in state parameter');
 
         const hs = getHostSecret();
         if (hs) {
@@ -1584,11 +1595,15 @@ const HostView: React.FC = () => {
           }
         }
 
-        // Redirect to Spotify
-        window.location.href = authUrlWithState;
+        // Do not append &state= here — the server already set state to a signed JWT (room is inside it).
+        window.location.href = data.authUrl;
       } else {
-        console.error('Failed to get Spotify authorization URL');
-        setSpotifyError('Failed to get Spotify authorization URL. Please try again.');
+        console.error('Failed to get Spotify authorization URL', response.status, data);
+        setSpotifyError(
+          data.message ||
+            data.error ||
+            'Failed to get Spotify authorization URL. Please try again.'
+        );
         setIsSpotifyConnecting(false);
       }
     } catch (error) {
