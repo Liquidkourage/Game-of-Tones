@@ -5,6 +5,17 @@ import { Sparkles, Play, UserPlus, Crown } from 'lucide-react';
 import { API_BASE } from '../config';
 import { hostFetch, apiOrigin } from '../utils/hostFetch';
 
+/** Express/HTML error pages are not JSON; show a short message instead of raw markup. */
+function formatHttpErrorBody(raw: string, status: number): string {
+  const t = raw.trim();
+  if (t.startsWith('<!DOCTYPE') || t.startsWith('<html')) {
+    const m = t.match(/<pre>([^<]*)<\/pre>/i);
+    if (m) return `Server error (${m[1].trim()}). Try again.`;
+    return `Server error (HTTP ${status}). Try again.`;
+  }
+  return t.slice(0, 200);
+}
+
 const Home: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -117,7 +128,7 @@ const Home: React.FC = () => {
         const j = raw ? JSON.parse(raw) : {};
         msg = (j && (j.message || j.error)) || '';
       } catch {
-        msg = raw.slice(0, 200);
+        msg = formatHttpErrorBody(raw, r.status);
       }
       alert(msg || `Could not create room (HTTP ${r.status}). Try again.`);
       return;

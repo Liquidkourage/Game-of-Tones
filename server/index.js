@@ -5802,6 +5802,10 @@ function allocateHostOwnedRoom(uid) {
       return { code, mode: 'create' };
     }
     const room = rooms.get(code);
+    if (!room || typeof room !== 'object') {
+      rooms.delete(code);
+      return { code, mode: 'create' };
+    }
     const owner = room.ownerUserId;
     if (owner == null) {
       room.ownerUserId = uid;
@@ -5815,7 +5819,7 @@ function allocateHostOwnedRoom(uid) {
 }
 
 /** Create a new room owned by the logged-in host (default code = MDY + user id). */
-app.post('/api/host/rooms', async (req, res) => {
+app.post('/api/host/rooms', (req, res) => {
   try {
     const uid = hostAuth.getHostUserIdFromRequest(req);
     if (!uid) return res.status(401).json({ error: 'login_required' });
