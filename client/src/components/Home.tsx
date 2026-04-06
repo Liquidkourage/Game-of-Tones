@@ -91,11 +91,17 @@ const Home: React.FC = () => {
       /* ignore */
     }
     const api = apiOrigin();
-    const r = await hostFetch(`${API_BASE || ''}/api/host/rooms`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: '{}',
-    });
+    let r: Response;
+    try {
+      r = await hostFetch(`${API_BASE || ''}/api/host/rooms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+    } catch (e) {
+      alert(`Could not reach the server to create a room. Check your connection. (${String(e)})`);
+      return;
+    }
     if (r.status === 401) {
       window.location.href = `${api}/api/auth/google`;
       return;
@@ -105,8 +111,15 @@ const Home: React.FC = () => {
       return;
     }
     if (!r.ok) {
-      const j = await r.json().catch(() => ({}));
-      alert((j && (j.message || j.error)) || 'Could not create room. Try again.');
+      const raw = await r.text().catch(() => '');
+      let msg = '';
+      try {
+        const j = raw ? JSON.parse(raw) : {};
+        msg = (j && (j.message || j.error)) || '';
+      } catch {
+        msg = raw.slice(0, 200);
+      }
+      alert(msg || `Could not create room (HTTP ${r.status}). Try again.`);
       return;
     }
     const { roomId: created } = await r.json();

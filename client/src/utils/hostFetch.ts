@@ -31,7 +31,7 @@ export function hostFetch(input: string, init?: RequestInit): Promise<Response> 
   const headers = new Headers(init?.headers);
   const t = getHostJwt();
   if (t) headers.set('Authorization', `Bearer ${t}`);
-  return fetch(input, { ...init, headers });
+  return fetch(input, { credentials: 'include', ...init, headers });
 }
 
 export function apiOrigin(): string {

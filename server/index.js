@@ -5787,42 +5787,72 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ success: true });
 });
 
+/**
+ * Pick a room id for a host: reuse default MDY+userId if free; claim socket-created rooms with no owner;
+ * idempotent if this host already owns that id; otherwise try random suffixes.
+ */
+function allocateHostOwnedRoom(uid) {
+  const base = hostAuth.buildDefaultRoomCode(uid);
+  const candidates = [base];
+  for (let i = 0; i < 32; i++) {
+    candidates.push(`${base}${Math.random().toString(36).slice(2, 6)}`);
+  }
+  for (const code of candidates) {
+    if (!rooms.has(code)) {
+      return { code, mode: 'create' };
+    }
+    const room = rooms.get(code);
+    const owner = room.ownerUserId;
+    if (owner == null) {
+      room.ownerUserId = uid;
+      return { code, mode: 'claim' };
+    }
+    if (Number(owner) === Number(uid)) {
+      return { code, mode: 'reuse' };
+    }
+  }
+  return null;
+}
+
 /** Create a new room owned by the logged-in host (default code = MDY + user id). */
 app.post('/api/host/rooms', async (req, res) => {
   try {
     const uid = hostAuth.getHostUserIdFromRequest(req);
     if (!uid) return res.status(401).json({ error: 'login_required' });
     if (!db) return res.status(503).json({ error: 'DATABASE_URL required' });
-    const code = hostAuth.buildDefaultRoomCode(uid);
-    if (rooms.has(code)) {
+    const picked = allocateHostOwnedRoom(uid);
+    if (!picked) {
       return res.status(409).json({ error: 'room_code_collision', message: 'Try again in a moment.' });
     }
-    const newRoom = {
-      id: code,
-      organizationId: 'DEFAULT',
-      ownerUserId: uid,
-      licenseKey: null,
-      host: null,
-      hostClientId: null,
-      players: new Map(),
-      gameState: 'waiting',
-      snippetLength: 30,
-      winners: [],
-      repeatMode: false,
-      volume: 100,
-      hybridInPersonPlusOnline: false,
-      playlistSongs: [],
-      currentSongIndex: 0,
-      superStrictLock: false,
-      pattern: 'line',
-      customPattern: undefined,
-      createdAt: new Date().toISOString(),
-    };
-    rooms.set(code, newRoom);
+    const { code, mode } = picked;
+    if (mode === 'create') {
+      const newRoom = {
+        id: code,
+        organizationId: 'DEFAULT',
+        ownerUserId: uid,
+        licenseKey: null,
+        host: null,
+        hostClientId: null,
+        players: new Map(),
+        gameState: 'waiting',
+        snippetLength: 30,
+        winners: [],
+        repeatMode: false,
+        volume: 100,
+        hybridInPersonPlusOnline: false,
+        playlistSongs: [],
+        currentSongIndex: 0,
+        superStrictLock: false,
+        pattern: 'line',
+        customPattern: undefined,
+        createdAt: new Date().toISOString(),
+      };
+      rooms.set(code, newRoom);
+    }
     return res.json({ roomId: code, ownerUserId: uid });
   } catch (e) {
     console.error('POST /api/host/rooms:', e);
-    res.status(500).json({ error: 'Failed to create room' });
+    res.status(500).json({ error: 'Failed to create room', message: e?.message || 'Failed to create room' });
   }
 });
 
