@@ -15,7 +15,17 @@ const CallbackGoogle: React.FC = () => {
     if (token) {
       setHostJwt(token);
     }
-    navigate('/', { replace: true });
+    let dest = '/';
+    try {
+      const ret = sessionStorage.getItem('tempo_post_auth_return')?.trim();
+      if (ret && ret.startsWith('/host/')) {
+        dest = ret;
+        sessionStorage.removeItem('tempo_post_auth_return');
+      }
+    } catch {
+      /* ignore */
+    }
+    navigate(dest, { replace: true });
   }, [navigate, searchParams]);
 
   return (

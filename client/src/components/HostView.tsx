@@ -1553,6 +1553,18 @@ const HostView: React.FC = () => {
       };
 
       if (response.status === 401 || data.error === 'login_required') {
+        try {
+          const qs = new URLSearchParams();
+          const n = searchParams.get('name');
+          if (n) qs.set('name', n);
+          const q = qs.toString();
+          sessionStorage.setItem(
+            'tempo_post_auth_return',
+            `/host/${encodeURIComponent(roomId || '')}${q ? `?${q}` : ''}`
+          );
+        } catch {
+          /* ignore */
+        }
         window.location.href = browserGoogleLoginUrl();
         setIsSpotifyConnecting(false);
         return;
@@ -1605,7 +1617,7 @@ const HostView: React.FC = () => {
       setSpotifyError('Failed to connect to Spotify. Please check your internet connection and try again.');
       setIsSpotifyConnecting(false);
     }
-  }, [roomId]);
+  }, [roomId, searchParams]);
 
 
 

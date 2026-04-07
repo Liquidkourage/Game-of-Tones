@@ -64,6 +64,18 @@ const Home: React.FC = () => {
     if (pre) setRoomId((r) => r || pre.toUpperCase());
   }, [searchParams]);
 
+  /** Signed-in host + ?prefillRoom= — go straight to that room (avoids parking on home after OAuth). */
+  useEffect(() => {
+    if (hostSession === undefined) return;
+    if (!hostSession) return;
+    if (joinOnly) return;
+    if (homeMode !== 'host') return;
+    const pre = searchParams.get('prefillRoom')?.trim();
+    if (!pre || !/^[A-Za-z0-9_-]+$/.test(pre)) return;
+    const name = hostDisplayNameFromSession(hostSession);
+    navigate(`/host/${encodeURIComponent(pre)}?name=${encodeURIComponent(name)}`, { replace: true });
+  }, [hostSession, joinOnly, homeMode, searchParams, navigate]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
