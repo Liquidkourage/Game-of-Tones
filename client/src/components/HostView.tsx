@@ -103,11 +103,29 @@ function stripGotPlaylistPrefix(raw: string): string {
   return raw.replace(/^\s*GoT\s*[-�:]*\s*/i, '').trim();
 }
 
+/** Persisted before Spotify/Google redirects so return URL without ?name= still shows the right host label. */
+const HOST_DISPLAY_NAME_KEY = 'tempo_host_display_name';
+
 const HostView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const hostPlayerName = searchParams.get('name')?.trim() || 'Host';
+
+  useEffect(() => {
+    if (!roomId) return;
+    if (searchParams.get('name')?.trim()) return;
+    try {
+      const saved = sessionStorage.getItem(HOST_DISPLAY_NAME_KEY)?.trim();
+      if (saved) {
+        const next = new URLSearchParams(searchParams);
+        next.set('name', saved);
+        setSearchParams(next, { replace: true });
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [roomId, searchParams, setSearchParams]);
   const [clientId] = useState<string>(() => {
     try {
       const existing = localStorage.getItem('client_id');
@@ -700,25 +718,55 @@ const HostView: React.FC = () => {
   /** After server-side Spotify OAuth redirect (?spotify=connected), refresh status and clean URL. */
   useEffect(() => {
     if (searchParams.get('spotify') !== 'connected') return;
+    const ac = new AbortController();
     const next = new URLSearchParams(searchParams);
     next.delete('spotify');
     setSearchParams(next, { replace: true });
+
+    const fetchStatus = async () => {
+      const cacheBuster = Date.now();
+      const response = await hostFetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
+      const data = await response.json();
+      return data.connected === true;
+    };
+
+    let deviceRetryTimer: number | null = null;
     const refresh = async () => {
       try {
-        const cacheBuster = Date.now();
-        const response = await hostFetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
-        const data = await response.json();
-        if (data.connected) {
+        // Give session + Spotify token propagation a moment after full-page redirect (avoids racing the socket effect's status check).
+        await new Promise((r) => setTimeout(r, 750));
+        if (ac.signal.aborted) return;
+        let ok = await fetchStatus();
+        if (!ok && !ac.signal.aborted) {
+          await new Promise((r) => setTimeout(r, 1500));
+          if (!ac.signal.aborted) ok = await fetchStatus();
+        }
+        if (ac.signal.aborted) return;
+        if (ok) {
           setIsSpotifyConnected(true);
           setIsSpotifyConnecting(false);
           await loadPlaylists();
           await loadDevices();
+          // Devices often appear a few seconds after Spotify app / Web Player activates.
+          deviceRetryTimer = window.setTimeout(() => {
+            if (!ac.signal.aborted) void loadDevices();
+          }, 2000);
+        } else {
+          setSpotifyError(
+            'Spotify did not report connected yet. Wait a few seconds and use Connect Spotify again, or refresh the page.'
+          );
         }
       } catch (e) {
         console.error('Post-Spotify OAuth refresh failed:', e);
+      } finally {
+        if (!ac.signal.aborted) setSpotifyInitialCheckDone(true);
       }
     };
     void refresh();
+    return () => {
+      if (deviceRetryTimer) clearTimeout(deviceRetryTimer);
+      ac.abort();
+    };
   }, [searchParams, setSearchParams, loadPlaylists, loadDevices]);
 
   const fetchPlaybackState = useCallback(async () => {
@@ -758,7 +806,8 @@ const HostView: React.FC = () => {
   }, [isSpotifyConnected]);
 
   /**
-   * Tab close / full page navigation: socket handlers do not run, so clear tokens best-effort.
+   * Tab close / full page navigation: clear tokens best-effort (socket handlers do not run).
+   * Do not also clear on React unmount: SPA navigation (e.g. host → home) would wipe Spotify and force reconnect.
    * Uses keepalive so the request can finish after the page tears down.
    */
   useEffect(() => {
@@ -772,23 +821,6 @@ const HostView: React.FC = () => {
     };
     window.addEventListener('pagehide', onPageHide);
     return () => window.removeEventListener('pagehide', onPageHide);
-  }, []);
-
-  /**
-   * SPA navigation away from host (e.g. back to home): pagehide may not run.
-   * Skip cleanup if unmount happens within ~50ms of mount so React StrictMode dev remount does not clear tokens.
-   */
-  useEffect(() => {
-    const enteredAt = Date.now();
-    return () => {
-      if (Date.now() - enteredAt < 50) return;
-      if (!isSpotifyConnectedRef.current) return;
-      try {
-        void hostFetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST', keepalive: true });
-      } catch {
-        /* ignore */
-      }
-    };
   }, []);
 
   const saveSelectedDevice = useCallback(async () => {
@@ -847,6 +879,8 @@ const HostView: React.FC = () => {
       auth: { token: hostJwt || '' },
     });
     setSocket(newSocket);
+    /** One retry if first host join failed host-secret check (e.g. JWT not ready yet). */
+    let hostSecretRetryOnce = false;
 
     // Auto-refresh host player-card snapshot (debounced; replaces manual Request Player Cards)
     let playerCardsRefreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1413,6 +1447,20 @@ const HostView: React.FC = () => {
       setIsJoiningRoom(false);
       addLog(data.message || 'This room already has a host.', 'error');
       if (data.reason === 'invalid_host_secret') {
+        const jwt = getHostJwt();
+        if (jwt && !hostSecretRetryOnce) {
+          hostSecretRetryOnce = true;
+          newSocket.emit('join-room', {
+            roomId,
+            playerName: hostPlayerName,
+            isHost: true,
+            clientId,
+            hostSecret: '',
+            hostToken: jwt,
+            inPerson: true,
+          });
+          return;
+        }
         navigate(`/?mode=host&prefillRoom=${encodeURIComponent(roomId || '')}`);
         return;
       }
@@ -1457,9 +1505,10 @@ const HostView: React.FC = () => {
       }, 1000);
     });
 
-    // Join room as host (license validation temporarily disabled)
-    if (roomId) {
-      console.log('?? License validation disabled - joining room directly');
+    // Join as host after the socket is connected so the handshake runs first; re-read JWT at emit time.
+    const emitHostJoin = () => {
+      if (!roomId) return;
+      console.log('?? License validation disabled - joining room as host');
       newSocket.emit('join-room', {
         roomId,
         playerName: hostPlayerName,
@@ -1467,13 +1516,23 @@ const HostView: React.FC = () => {
         clientId,
         hostSecret: '',
         hostToken: getHostJwt() || '',
-        inPerson: true
+        inPerson: true,
       });
-    }
+    };
+    newSocket.on('connect', emitHostJoin);
+    if (newSocket.connected) emitHostJoin();
 
     // Check Spotify status and load playlists if connected
     const checkSpotifyStatus = async () => {
       try {
+        // Returning from Spotify OAuth: dedicated effect handles status + loads (with delay/retry). Avoid duplicate API calls and false "not connected".
+        try {
+          if (new URLSearchParams(window.location.search).get('spotify') === 'connected') {
+            return;
+          }
+        } catch {
+          /* ignore */
+        }
         console.log('Host view loaded, checking Spotify status...');
         // Add cache-busting parameter to force fresh request
         const cacheBuster = Date.now();
@@ -1511,6 +1570,7 @@ const HostView: React.FC = () => {
 
     // Cleanup socket on unmount
     return () => {
+      newSocket.off('connect', emitHostJoin);
       if (playerCardsRefreshTimer) clearTimeout(playerCardsRefreshTimer);
       newSocket.close();
       // Clear any pending volume timeout
@@ -1562,6 +1622,7 @@ const HostView: React.FC = () => {
             'tempo_post_auth_return',
             `/host/${encodeURIComponent(roomId || '')}${q ? `?${q}` : ''}`
           );
+          sessionStorage.setItem(HOST_DISPLAY_NAME_KEY, hostPlayerName);
         } catch {
           /* ignore */
         }
@@ -1600,6 +1661,11 @@ const HostView: React.FC = () => {
         } catch {
           /* ignore */
         }
+        try {
+          sessionStorage.setItem(HOST_DISPLAY_NAME_KEY, hostPlayerName);
+        } catch {
+          /* ignore */
+        }
 
         // Do not append &state= here — the server already set state to a signed JWT (room is inside it).
         window.location.href = data.authUrl;
@@ -1617,7 +1683,7 @@ const HostView: React.FC = () => {
       setSpotifyError('Failed to connect to Spotify. Please check your internet connection and try again.');
       setIsSpotifyConnecting(false);
     }
-  }, [roomId, searchParams]);
+  }, [roomId, searchParams, hostPlayerName]);
 
 
 
@@ -3327,7 +3393,7 @@ const HostView: React.FC = () => {
             fontSize: '0.95rem',
           }}
         >
-          <option value="">� Select a device �</option>
+          <option value="">Select a device</option>
           {devices.map((d) => (
             <option key={d.id} value={d.id}>
               {d.name}
@@ -3341,7 +3407,7 @@ const HostView: React.FC = () => {
           onClick={() => void loadDevices()}
           disabled={isLoadingDevices}
         >
-          {isLoadingDevices ? 'Refreshing�' : 'Refresh devices'}
+          {isLoadingDevices ? 'Refreshing…' : 'Refresh devices'}
         </button>
         <button
           type="button"
@@ -3355,7 +3421,9 @@ const HostView: React.FC = () => {
       </div>
       {devices.length === 0 && !isLoadingDevices && (
         <p style={{ marginTop: 10, fontSize: '0.8rem', color: '#ffb347' }}>
-          No devices found. Open the Spotify app on the target device, then tap Refresh devices.
+          No devices found. Open Spotify on phone or desktop (or the Spotify Web Player in a browser), start
+          playback once so the app is active, then tap Refresh devices. Spotify Premium is required for
+          playback control on some setups.
         </p>
       )}
     </>

@@ -1390,13 +1390,13 @@ io.on('connection', (socket) => {
         socket.hostUserId ??
         (typeof hostToken === 'string' && hostToken.length > 0 ? hostAuth.verifyHostJwt(hostToken) : null);
       if (authedHostUid == null && (hostSecret || '').trim() !== hostSecretEnv) {
-        wantsHost = false;
         console.warn(`Host join rejected: invalid or missing host secret for ${playerName} room ${roomId}`);
         socket.emit('host-join-denied', {
           roomId,
           reason: 'invalid_host_secret',
           message: 'Invalid host access code. Hosting is restricted.',
         });
+        return;
       }
     }
     logger.info(`Player ${playerName} (${wantsHost ? 'host' : 'player'}) joining room: ${roomId}`, 'player-join');
@@ -6074,11 +6074,15 @@ app.get('/api/spotify/playlists/:playlistId/tracks', async (req, res) => {
 // Spotify API endpoints
 app.get('/api/spotify/devices', async (req, res) => {
   try {
-    if (!spotifyTokens || !spotifyTokens.accessToken) {
-      return res.status(401).json({ error: 'Spotify not connected' });
+    /** Must match /api/spotify/status — legacy `spotifyTokens` is DEFAULT only; signed-in hosts use user_${uid}. */
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    const orgId = uid != null ? `user_${uid}` : 'DEFAULT';
+    const orgTokens = multiTenantSpotify.getTokens(orgId);
+    if (!orgTokens || !orgTokens.accessToken) {
+      return res.status(401).json({ error: 'Spotify not connected', organizationId: orgId });
     }
 
-    console.log('📱 Fetching available Spotify devices...');
+    console.log(`📱 Fetching available Spotify devices (org ${orgId})...`);
     const devices = await spotifyForRequest(req).getUserDevices();
     let currentPlayback = null;
     try {
