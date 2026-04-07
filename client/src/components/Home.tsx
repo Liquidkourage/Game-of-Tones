@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Sparkles, Play, UserPlus, Crown, CheckCircle2 } from 'lucide-react';
 import { API_BASE } from '../config';
-import { hostFetch, apiOrigin } from '../utils/hostFetch';
+import { hostFetch, apiOrigin, browserGoogleLoginUrl } from '../utils/hostFetch';
 
 /** Express/HTML error pages are not JSON; show a short message instead of raw markup. */
 function formatHttpErrorBody(raw: string, status: number): string {
@@ -118,7 +118,7 @@ const Home: React.FC = () => {
       return;
     }
     if (r.status === 401) {
-      window.location.href = `${api}/api/auth/google`;
+      window.location.href = browserGoogleLoginUrl();
       return;
     }
     if (r.status === 503) {
@@ -308,7 +308,7 @@ const Home: React.FC = () => {
               </div>
             ) : (
               <p className="home-card-lead" style={{ opacity: 0.9 }}>
-                <a className="btn btn-secondary" href={`${apiOrigin()}/api/auth/google`} style={{ display: 'inline-block', textDecoration: 'none' }}>
+                <a className="btn btn-secondary" href={browserGoogleLoginUrl()} style={{ display: 'inline-block', textDecoration: 'none' }}>
                   Sign in with Google
                 </a>
               </p>

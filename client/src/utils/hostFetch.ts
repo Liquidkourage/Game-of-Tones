@@ -37,3 +37,14 @@ export function hostFetch(input: string, init?: RequestInit): Promise<Response> 
 export function apiOrigin(): string {
   return (API_BASE || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/$/, '');
 }
+
+/**
+ * Full URL to start Google host login. Always use the SPA's origin (window.location), not apiOrigin(),
+ * so the OAuth round-trip and tempo_host_jwt in localStorage stay on the same site as the UI.
+ * When REACT_APP_API_BASE points at another host, apiOrigin()/api/auth/google would open login on the
+ * API host while the JWT is stored on the page origin — then API calls look "logged out".
+ */
+export function browserGoogleLoginUrl(): string {
+  if (typeof window === 'undefined') return '/api/auth/google';
+  return `${window.location.origin.replace(/\/$/, '')}/api/auth/google`;
+}

@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL } from '../config';
-import { hostFetch, getHostJwt, apiOrigin } from '../utils/hostFetch';
+import { hostFetch, getHostJwt, apiOrigin, browserGoogleLoginUrl } from '../utils/hostFetch';
 import { BingoPattern, PATTERN_OPTIONS, BINGO_PATTERNS, getPatternDisplayName, getSavedCustomPatterns, saveCustomPattern, SavedCustomPattern } from '../patternDefinitions';
 import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
@@ -1553,7 +1553,7 @@ const HostView: React.FC = () => {
       };
 
       if (response.status === 401 || data.error === 'login_required') {
-        window.location.href = `${apiOrigin()}${data.loginUrl || '/api/auth/google'}`;
+        window.location.href = browserGoogleLoginUrl();
         setIsSpotifyConnecting(false);
         return;
       }
