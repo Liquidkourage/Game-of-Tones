@@ -1,14 +1,43 @@
 ﻿import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { 
-  Play, 
-  Pause, 
-  SkipForward, 
-  Music, 
+import {
+  Play,
+  Pause,
+  SkipForward,
+  Music,
   Trophy,
   Plus,
-  X
+  X,
+  LayoutDashboard,
+  Gamepad2,
+  Link2,
+  Grid3x3,
+  Monitor,
+  BookOpen,
+  Image as ImageIcon,
+  ListMusic,
+  Library,
+  ListPlus,
+  ListChecks,
+  CalendarRange,
+  RotateCcw,
+  Trash2,
+  Sliders,
+  Volume2,
+  VolumeX,
+  Users,
+  AlertTriangle,
+  AlertCircle,
+  CheckCircle2,
+  PartyPopper,
+  Flag,
+  Pencil,
+  Maximize2,
+  AppWindow,
+  Check,
+  Sparkles,
+  Radio,
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL } from '../config';
@@ -277,7 +306,7 @@ const HostView: React.FC = () => {
   // Show toast notification to host
   const showToast = (message: string, type: 'info' | 'success' | 'warn' | 'error' = 'info') => {
     const toast = document.createElement('div');
-    const icons = { info: '??', success: '?', warn: '??', error: '?' };
+    const icons = { info: 'i', success: 'OK', warn: '!', error: '!' };
     const colors = { 
       info: '#00aaff', 
       success: '#00ff88', 
@@ -1369,7 +1398,7 @@ const HostView: React.FC = () => {
         // Non-blocking toast instead of alert to avoid desync
         try {
           const toast = document.createElement('div');
-          toast.textContent = '?? ' + msg;
+          toast.textContent = msg;
           Object.assign(toast.style, {
             position: 'fixed', bottom: '14px', left: '14px', maxWidth: '70vw',
             background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)',
@@ -1403,7 +1432,7 @@ const HostView: React.FC = () => {
       // Show toast notification
       try {
         const toast = document.createElement('div');
-        toast.textContent = '?? ' + msg;
+        toast.textContent = msg;
         Object.assign(toast.style, {
           position: 'fixed', bottom: '14px', left: '14px', maxWidth: '70vw',
           background: 'rgba(255,193,7,0.1)', color: '#fff', border: '1px solid rgba(255,193,7,0.5)',
@@ -1432,7 +1461,7 @@ const HostView: React.FC = () => {
 
     // Acknowledge reveal events
     newSocket.on('call-revealed', (data: any) => {
-      addLog(`Call revealed: ${data.hint || 'full'} ${data.songName ? '� ' + data.songName : ''} ${data.artistName ? '� ' + data.artistName : ''}`, 'info');
+      addLog(`Call revealed: ${data.hint || 'full'} ${data.songName ? '— ' + data.songName : ''} ${data.artistName ? '— ' + data.artistName : ''}`, 'info');
     });
 
     // Handle join errors (license key validation)
@@ -1830,7 +1859,7 @@ const HostView: React.FC = () => {
     console.log('?? Requesting player cards for room:', roomId);
     socket.emit('request-player-cards', { roomId });
     if (opts?.announce) {
-      showToast('Refreshing player cards�', 'info');
+      showToast('Refreshing player cards…', 'info');
       addLog('Requested player cards', 'info');
     }
   };
@@ -2014,7 +2043,7 @@ const HostView: React.FC = () => {
                       : '#888';
               const progressText =
                 progress.needed === 0
-                  ? '?? BINGO!'
+                  ? 'BINGO!'
                   : progress.needed === 1
                     ? '1 more needed!'
                     : `${progress.needed} more needed`;
@@ -2033,9 +2062,14 @@ const HostView: React.FC = () => {
                     style={{
                       color: progressColor,
                       fontWeight: 600,
-                      marginBottom: '4px'
+                      marginBottom: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
                     }}
                   >
+                    {progress.needed === 0 && <Trophy className="w-4 h-4" style={{ color: progressColor }} aria-hidden />}
                     {progressText}
                   </div>
                   {cheatingCount > 0 && (
@@ -2044,10 +2078,15 @@ const HostView: React.FC = () => {
                         color: '#ff4444',
                         fontSize: '0.75rem',
                         fontWeight: 'bold',
-                        marginBottom: '4px'
+                        marginBottom: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
                       }}
                     >
-                      ?? {cheatingCount} invalid mark{cheatingCount > 1 ? 's' : ''}
+                      <AlertTriangle className="w-4 h-4" aria-hidden />
+                      {cheatingCount} invalid mark{cheatingCount > 1 ? 's' : ''}
                     </div>
                   )}
                   <div
@@ -2210,7 +2249,7 @@ const HostView: React.FC = () => {
                       lineHeight: 1.1,
                       overflow: 'hidden'
                     }}
-                    title={`${isFree ? 'FREE' : square.songName} � ${isFree ? '' : square.artistName}\nStatus: ${statusText}`}
+                    title={`${isFree ? 'FREE' : square.songName} — ${isFree ? '' : square.artistName}\nStatus: ${statusText}`}
                   >
                     {icon && <span style={{ marginRight: 2 }}>{icon}</span>}
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -2280,7 +2319,7 @@ const HostView: React.FC = () => {
 
 
   const resetEvent = () => {
-    if (window.confirm('?? Reset entire event?\n\nThis will:\n� Reset all rounds to unplanned status\n� Clear all round progress\n� End the current game if running\n� Allow you to replay from Round 1\n\nThis cannot be undone. Continue?')) {
+    if (window.confirm('Reset entire event?\n\nThis will:\n• Reset all rounds to unplanned status\n• Clear all round progress\n• End the current game if running\n• Allow you to replay from Round 1\n\nThis cannot be undone. Continue?')) {
       // End current game if running
       if (gameState === 'playing') {
         endGame();
@@ -2536,10 +2575,10 @@ const HostView: React.FC = () => {
     const confirmed = window.confirm(
       'Start next round with fresh setup?\n\n' +
       'This will:\n' +
-      '� Keep all players connected\n' +
-      '� Keep Spotify connection\n' +
-      '� Reset to setup screen for new playlists/pattern\n' +
-      '� Clear all bingo cards\n\n' +
+      '• Keep all players connected\n' +
+      '• Keep Spotify connection\n' +
+      '• Reset to setup screen for new playlists/pattern\n' +
+      '• Clear all bingo cards\n\n' +
       'Click OK to proceed.'
     );
     
@@ -2926,7 +2965,7 @@ const HostView: React.FC = () => {
     });
     verificationTimeoutRef.current = setTimeout(() => {
       verificationTimeoutRef.current = null;
-      addLog('Approve timed out � clearing verification modal', 'warn');
+      addLog('Approve timed out — clearing verification modal', 'warn');
       setPendingVerification(null);
       setGamePaused(false);
       setIsProcessingVerification(false);
@@ -2949,7 +2988,7 @@ const HostView: React.FC = () => {
     });
     verificationTimeoutRef.current = setTimeout(() => {
       verificationTimeoutRef.current = null;
-      addLog('Reject timed out � clearing verification modal', 'warn');
+      addLog('Reject timed out — clearing verification modal', 'warn');
       setPendingVerification(null);
       setGamePaused(false);
       setIsProcessingVerification(false);
@@ -3441,7 +3480,10 @@ const HostView: React.FC = () => {
         <div className="spotify-section spotify-section--unified">
           {!isSpotifyConnected ? (
             <>
-              <h2>?? Spotify Connection</h2>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Music className="w-6 h-6" style={{ color: '#1ed760' }} aria-hidden />
+                Spotify Connection
+              </h2>
               <div className="spotify-connection-section">
                 {spotifyError && (
                   <div className="spotify-error">
@@ -3496,14 +3538,19 @@ const HostView: React.FC = () => {
       >
         {/* Header */}
         <div className="host-header">
-          <h1>?? Game Host</h1>
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: 10, margin: 0 }}>
+            <Gamepad2 className="w-8 h-8" style={{ color: '#00ff88' }} aria-hidden />
+            Game Host
+          </h1>
           <div className="room-info" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <button
               type="button"
               className="btn-secondary host-connection-toolbar-btn"
               onClick={() => setShowConnectionModal(true)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
             >
-              ?? Connection
+              <Link2 className="w-4 h-4" aria-hidden />
+              Connection
             </button>
             {hostAccount ? (
               <span
@@ -3530,20 +3577,28 @@ const HostView: React.FC = () => {
         <div className="host-content" style={{ paddingBottom: '20px' }}>
           {/* Tab Navigation */}
           <div className="tab-navigation host-tab-navigation">
-            {[
-              { id: 'setup', label: '?? Manager', desc: 'Setup & Management' },
-              { id: 'play', label: '?? Game', desc: 'Live Game Controls' }
-            ].map(tab => (
+            {(
+              [
+                { id: 'setup', Icon: LayoutDashboard, label: 'Manager', desc: 'Setup & Management' },
+                { id: 'play', Icon: Gamepad2, label: 'Game', desc: 'Live Game Controls' },
+              ] as const
+            ).map((tab) => {
+              const TabIcon = tab.Icon;
+              return (
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => setActiveTab(tab.id as 'setup' | 'play')}
                 className={`host-tab-button ${activeTab === tab.id ? 'active' : ''}`}
               >
-                <div>{tab.label}</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <TabIcon className="w-5 h-5" aria-hidden />
+                  {tab.label}
+                </div>
                 <div className="host-tab-button__desc">{tab.desc}</div>
               </button>
-            ))}
+            );
+            })}
           </div>
 
           {/* Tab Content */}
@@ -3591,7 +3646,7 @@ const HostView: React.FC = () => {
                     <strong style={{ color: '#00ff88' }}>Hybrid in-person + online</strong>
                     <br />
                     Remote players who join with &quot;online&quot; can play, but a valid bingo from them does{' '}
-                    <strong>not</strong> pause the game or award the round � only an <strong>in-person</strong> player&apos;s
+                    <strong>not</strong> pause the game or award the round — only an <strong>in-person</strong> player&apos;s
                     bingo does. They still see when they complete the pattern.
                   </span>
                 </label>
@@ -3605,7 +3660,10 @@ const HostView: React.FC = () => {
               animate={{ opacity: 1 }}
               transition={{ delay: 0.3 }}
             >
-              <h2>?? Bingo Pattern</h2>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Grid3x3 className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
+                Bingo Pattern
+              </h2>
               <div className="pattern-selection">
                 {/* Main Pattern Options */}
                 <div className="main-pattern-options" style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '16px' }}>
@@ -3758,7 +3816,10 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4 }}
           >
-            <h2 className="host-manager-section__title">??? Public display</h2>
+            <h2 className="host-manager-section__title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Monitor className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
+              Public display
+            </h2>
             <p className="host-manager-section__lead">
               Text size and what appears on the projector or TV for players.
             </p>
@@ -3833,7 +3894,8 @@ const HostView: React.FC = () => {
                   gap: '8px'
                 }}
               >
-                ?? Rules
+                <BookOpen className="w-4 h-4" aria-hidden />
+                Rules
               </button>
               <button 
                 className="btn-secondary" 
@@ -3846,7 +3908,8 @@ const HostView: React.FC = () => {
                   gap: '8px'
                 }}
               >
-                ?? Splash
+                <ImageIcon className="w-4 h-4" aria-hidden />
+                Splash
               </button>
               <button 
                 className="btn-secondary" 
@@ -3859,7 +3922,8 @@ const HostView: React.FC = () => {
                   gap: '8px'
                 }}
               >
-                ?? Call List
+                <ListMusic className="w-4 h-4" aria-hidden />
+                Call List
               </button>
             </div>
           </motion.div>
@@ -3885,9 +3949,12 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1 }}
                     transition={{ delay: 0.4 }}
                   >
-                    <h3 style={{ marginBottom: 6, fontSize: '1.05rem', fontWeight: 700 }}>?? Playlist library</h3>
+                    <h3 style={{ marginBottom: 6, fontSize: '1.05rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Library className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
+                      Playlist library
+                    </h3>
                     <p style={{ fontSize: '0.85rem', color: '#a8a8a8', marginBottom: 12, lineHeight: 1.45, maxWidth: 720 }}>
-                      <strong style={{ color: '#fff' }}>In mix</strong> � playlists checked here are included when you{' '}
+                      <strong style={{ color: '#fff' }}>In mix</strong>: playlists checked here are included when you{' '}
                       <strong style={{ color: '#fff' }}>finalize the bingo pool</strong> (song source for the game). You can still{' '}
                       <strong style={{ color: '#fff' }}>drag any row</strong> into round buckets for round-specific setup.
                     </p>
@@ -3903,7 +3970,7 @@ const HostView: React.FC = () => {
                           Short names (hide &quot;GoT-&quot; prefix in this list)
                         </label>
                       </div>
-                      <input type="search" placeholder="Search playlists by name�" value={playlistQuery} onChange={(e) => setPlaylistQuery(e.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.35)', color: '#fff', maxWidth: 420, width: '100%' }} />
+                      <input type="search" placeholder="Search playlists by name…" value={playlistQuery} onChange={(e) => setPlaylistQuery(e.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.35)', color: '#fff', maxWidth: 420, width: '100%' }} />
                     </div>
 
                         <div style={{ 
@@ -4066,7 +4133,7 @@ const HostView: React.FC = () => {
                                 type="checkbox"
                                 checked={isSelected}
                                 aria-label={"Include in game mix: " + (p.name || "playlist")}
-                                title="Include in game mix � used when you finalize the bingo song pool"
+                                title="Include in game mix — used when you finalize the bingo song pool"
                                 onChange={(e) => {
                                   if (e.target.checked) {
                                     setSelectedPlaylists([...selectedPlaylists, p]);
@@ -4155,7 +4222,8 @@ const HostView: React.FC = () => {
                           gap: '8px'
                         }}
                       >
-                        ?? Create output playlist
+                        <ListPlus className="w-4 h-4" aria-hidden />
+                        Create output playlist
                       </button>
                     </div>
             </div>
@@ -4168,7 +4236,10 @@ const HostView: React.FC = () => {
                   transition={{ delay: 0.4 }}
                   className="host-manager-round"
                 >
-                  <h2>?? Round &amp; event</h2>
+                  <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <CalendarRange className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
+                    Round &amp; event
+                  </h2>
                   <p className="host-manager-round__actions-head">Quick actions</p>
                   <div className="host-manager-round__row">
                       {gameState === 'playing' && (
@@ -4178,14 +4249,16 @@ const HostView: React.FC = () => {
                             onClick={completeCurrentRound}
                             className="host-manager-round__btn host-manager-round__btn--green"
                           >
-                            ? Complete current round
+                            <CheckCircle2 className="w-4 h-4" aria-hidden />
+                            Complete current round
                           </button>
                           <button 
                             type="button"
                             onClick={resetCurrentRound}
                             className="host-manager-round__btn host-manager-round__btn--yellow"
                           >
-                            ?? Reset current round
+                            <RotateCcw className="w-4 h-4" aria-hidden />
+                            Reset current round
                           </button>
                         </>
                       )}
@@ -4197,7 +4270,8 @@ const HostView: React.FC = () => {
                             onClick={() => jumpToRound(nextRound)}
                             className="host-manager-round__btn host-manager-round__btn--blue"
                           >
-                            ?? Start next planned round
+                            <SkipForward className="w-4 h-4" aria-hidden />
+                            Start next planned round
                           </button>
                         ) : null;
                       })()}
@@ -4208,7 +4282,8 @@ const HostView: React.FC = () => {
                           className="btn-danger-outline"
                           title="Reset entire event back to the beginning"
                         >
-                          ?? Reset event
+                          <Trash2 className="w-4 h-4" aria-hidden />
+                          Reset event
                         </button>
                         <span className="host-manager-round__reset-hint">
                           Clears scores and round state for this room. Cannot be undone.
@@ -4228,14 +4303,18 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1 }}
                   transition={{ delay: 0.2 }}
           >
-            <h2>?? Game Controls</h2>
+            <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Sliders className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
+              Game Controls
+            </h2>
 
                   {/* Game Settings */}
                   <div className="host-game-settings-panel">
                     {/* Track Length Control */}
                     <div style={{ marginBottom: 16 }}>
-                      <h4 style={{ fontSize: '0.9rem', color: '#00ff88', marginBottom: 8, fontWeight: 600 }}>
-                        ?? Track Playback Settings
+                      <h4 style={{ fontSize: '0.9rem', color: '#00ff88', marginBottom: 8, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Radio className="w-4 h-4" style={{ color: '#00ff88' }} aria-hidden />
+                        Track Playback Settings
                       </h4>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -4339,7 +4418,7 @@ const HostView: React.FC = () => {
               </div>
               <div style={{ fontSize: '0.75rem', color: '#8a8a8a', lineHeight: 1.35, maxWidth: 640 }}>
                 <strong style={{ color: '#b5b5b5' }}>Super-Strict:</strong>{' '}
-                Makes the playback watchdog check Spotify more frequently (especially after a &quot;storm&quot; recovery), so wrong device/context gets corrected faster � slightly more API load.
+                Makes the playback watchdog check Spotify more frequently (especially after a &quot;storm&quot; recovery), so wrong device/context gets corrected faster — slightly more API load.
               </div>
             </div>
             </div>
@@ -4354,12 +4433,16 @@ const HostView: React.FC = () => {
                        onClick={finalizeMix}
                        disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
                      >
-                       ?? Finalize Mix
+                       <ListChecks className="w-4 h-4" aria-hidden />
+                       Finalize Mix
                      </button>
                    )}
                    {mixFinalized && (
                      <div className="mix-finalized-status">
-                       <p className="status-text">? Mix finalized - Cards generated for players</p>
+                       <p className="status-text" style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
+                         <CheckCircle2 className="w-4 h-4" style={{ color: '#00ff88' }} aria-hidden />
+                         Mix finalized — cards generated for players
+                       </p>
                      </div>
                    )}
                   <button
@@ -4396,7 +4479,10 @@ const HostView: React.FC = () => {
                  </>
                ) : (
                  <div className="game-status">
-                  <p className="status-text">?? Game is running - Use the Now Playing controls below</p>
+                  <p className="status-text" style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <Sparkles className="w-4 h-4" style={{ color: '#00ff88' }} aria-hidden />
+                    Game is running — use the Now Playing controls below
+                  </p>
                   {gamePaused && (
                     <div
                       className="host-paused-banner"
@@ -4411,7 +4497,7 @@ const HostView: React.FC = () => {
                       }}
                     >
                       <p style={{ color: '#1a1204', fontWeight: 900, marginBottom: 6, fontSize: '1.35rem', letterSpacing: '0.03em' }}>
-                        GAME PAUSED � RESUME HERE
+                        GAME PAUSED — RESUME HERE
                       </p>
                       <p style={{ color: '#2b2215', fontSize: '0.95rem', marginBottom: 14, fontWeight: 600 }}>
                         {pendingVerification
@@ -4429,14 +4515,28 @@ const HostView: React.FC = () => {
                   )}
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                           <button className="btn-secondary" onClick={endGame}>End Game</button>
-                    <button className="btn-secondary" onClick={confirmAndNewRound}>?? New Round</button>
+                    <button className="btn-secondary" onClick={confirmAndNewRound} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <Flag className="w-4 h-4" aria-hidden />
+                      New Round
+                    </button>
                           <button
                             type="button"
                             className="btn-accent"
                             onClick={() => setShowRoundManager(!showRoundManager)}
                             aria-pressed={showRoundManager}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
                           >
-                            {showRoundManager ? '?? Round Manager (on)' : '?? Round Manager'}
+                            {showRoundManager ? (
+                              <>
+                                <ListChecks className="w-4 h-4" aria-hidden />
+                                Round Manager (on)
+                              </>
+                            ) : (
+                              <>
+                                <CalendarRange className="w-4 h-4" aria-hidden />
+                                Round Manager
+                              </>
+                            )}
                           </button>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -4446,8 +4546,10 @@ const HostView: React.FC = () => {
                       className="btn-secondary btn-host-warn" 
                       onClick={resetDisplayLetters}
                       title="Reset revealed letters on public display (fixes stuck letters)"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
                     >
-                      ?? Reset Letters
+                      <RotateCcw className="w-4 h-4" aria-hidden />
+                      Reset Letters
                     </button>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -4458,8 +4560,19 @@ const HostView: React.FC = () => {
                         className={`btn-secondary btn-host-cards-toggle ${showPlayerCards ? 'btn-host-cards-toggle--on' : 'btn-host-cards-toggle--off'}`}
                         onClick={() => setShowPlayerCards(!showPlayerCards)}
                         title={showPlayerCards ? "Hide player bingo cards" : "Show player bingo cards and progress"}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
                       >
-                        {showPlayerCards ? "?? Hide Player Cards" : "?? Show Player Cards"}
+                        {showPlayerCards ? (
+                          <>
+                            <Users className="w-4 h-4" aria-hidden />
+                            Hide Player Cards
+                          </>
+                        ) : (
+                          <>
+                            <Users className="w-4 h-4" aria-hidden />
+                            Show Player Cards
+                          </>
+                        )}
                       </button>
                       {showPlayerCards && !playerCardsFullscreen && (
                         <button
@@ -4467,8 +4580,10 @@ const HostView: React.FC = () => {
                           className="btn-secondary btn-host-emphasis"
                           onClick={openPlayerCardsModal}
                           title="Open player cards in a window (expand to full screen inside, or Escape to close)"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
                         >
-                          ?? View player cards
+                          <Users className="w-4 h-4" aria-hidden />
+                          View player cards
                         </button>
                       )}
                       </>
@@ -4534,7 +4649,8 @@ const HostView: React.FC = () => {
                       alignItems: 'center',
                       gap: '8px'
                     }}>
-                      ?? Finalized Playlist ({songList.length || finalizedOrder?.length || 0} songs)
+                      <ListChecks className="w-5 h-5" aria-hidden />
+                      Finalized Playlist ({songList.length || finalizedOrder?.length || 0} songs)
                     </h3>
                     <p style={{
                       color: 'rgba(255,255,255,0.7)',
@@ -4585,7 +4701,7 @@ ${validationMessage}
 ${validation.warnings.length > 0 ? '\nWarnings: ' + validation.warnings.join('; ') : ''}
 ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions.slice(0, 3).join('; ') : ''}
 
-Hover over the ${validation.confidence < 0.7 ? '??' : validation.confidence < 0.8 ? '?' : '?'} icon for detailed validation info.`}
+Hover over the validation icon for detailed validation info.`}
                           >
                             <span style={{ 
                               color: '#00ff88', 
@@ -4637,7 +4753,13 @@ Original: "${song.name}"
 Cleaned: "${displayTitle}"
 ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions.slice(0, 2).join('; ') : ''}`}
                                 >
-                                  {validation.confidence < 0.7 ? '??' : validation.confidence < 0.8 ? '?' : '?'}
+                                  {validation.confidence < 0.7 ? (
+                                    <AlertTriangle size={14} aria-hidden />
+                                  ) : validation.confidence < 0.8 ? (
+                                    <AlertCircle size={14} aria-hidden />
+                                  ) : (
+                                    <CheckCircle2 size={14} aria-hidden />
+                                  )}
                                 </span>
                               </div>
                               <div style={{ color: '#b3b3b3', fontSize: '0.8rem' }}>
@@ -4671,7 +4793,8 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                                 }}
                                 title="Edit song title for Game of Tones"
                               >
-                                ?? Edit
+                                <Pencil className="w-3.5 h-3.5" aria-hidden />
+                                Edit
                               </button>
                             </div>
                           </div>
@@ -4691,7 +4814,10 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   transition={{ delay: 0.2 }}
                   className="host-round-manager-panel"
                 >
-                  <h2>?? Round &amp; event management</h2>
+                  <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <CalendarRange className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
+                    Round &amp; event management
+                  </h2>
 
                   <div className="host-round-manager-overview">
                     <h4>Event overview</h4>
@@ -4751,10 +4877,10 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                                   )}
                                 </div>
                                 <div className="host-round-manager-round__meta">
-                                  {(round.playlistIds || []).length} playlist{(round.playlistIds || []).length !== 1 ? 's' : ''} � {round.songCount} songs
+                                  {(round.playlistIds || []).length} playlist{(round.playlistIds || []).length !== 1 ? 's' : ''} · {round.songCount} songs
                                   {round.status === 'completed' && round.completedAt && (
                                     <span style={{ marginLeft: 8 }}>
-                                      � Completed {new Date(round.completedAt).toLocaleTimeString()}
+                                      · Completed {new Date(round.completedAt).toLocaleTimeString()}
                                     </span>
                                   )}
                                 </div>
@@ -4798,11 +4924,12 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
              >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ color: '#00ffa3', fontSize: '1rem', fontWeight: 700, margin: 0 }}>
-                          ?? Player cards
+                        <div style={{ color: '#00ffa3', fontSize: '1rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Users className="w-5 h-5" aria-hidden />
+                          Player cards
                         </div>
                         <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
-                          {playerCards.size} player{playerCards.size !== 1 ? 's' : ''} � Pattern:{' '}
+                          {playerCards.size} player{playerCards.size !== 1 ? 's' : ''} · Pattern:{' '}
                           <strong style={{ color: '#c5d4e0' }}>{getPatternDisplayName(pattern)}</strong>
                         </div>
                       </div>
@@ -4823,7 +4950,8 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                         style={{ fontWeight: 700 }}
                         title="Use the full screen for player cards"
                       >
-                        ? Full screen
+                        <Maximize2 className="w-4 h-4" aria-hidden />
+                        Full screen
                       </button>
                       </div>
                </div>
@@ -4851,7 +4979,10 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                 backdropFilter: 'blur(10px)',
               }}
             >
-               <h2>?? Now Playing</h2>
+               <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                 <Music className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
+                 Now Playing
+               </h2>
                <div className="now-playing-content">
                  {/* Song Info */}
               <div style={{ 
@@ -4892,7 +5023,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   className="btn-secondary btn-host-icon"
                      onClick={handleMuteToggle}
                    >
-                     {isMuted ? '??' : '??'}
+                     {isMuted ? <VolumeX className="w-5 h-5" aria-hidden /> : <Volume2 className="w-5 h-5" aria-hidden />}
                    </button>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, maxWidth: '300px' }}>
                   <span style={{ fontSize: '0.9rem', color: '#b3b3b3', minWidth: '30px' }}>
@@ -4987,12 +5118,13 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
             }}
           >
             <div style={{ minWidth: 0 }}>
-              <div style={{ color: '#00ffa3', fontWeight: 800, fontSize: 'clamp(1.1rem, 2vw, 1.45rem)', margin: 0 }}>
-                ?? Player Cards & Progress
+              <div style={{ color: '#00ffa3', fontWeight: 800, fontSize: 'clamp(1.1rem, 2vw, 1.45rem)', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Users className="w-6 h-6" aria-hidden />
+                Player Cards &amp; Progress
               </div>
               <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
                 Pattern: <strong style={{ color: '#c5d4e0' }}>{getPatternDisplayName(pattern)}</strong>
-                {' � '}
+                {' · '}
                 <span>Press Escape to close</span>
               </div>
             </div>
@@ -5001,18 +5133,20 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
               type="button"
               className="btn-secondary"
               onClick={() => setPlayerCardsMaximized(false)}
-              style={{ fontWeight: 700 }}
+              style={{ fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 8 }}
               title="Return to windowed view"
             >
-              ? Window
+              <AppWindow className="w-4 h-4" aria-hidden />
+              Window
             </button>
             <button
               type="button"
               className="btn-secondary"
               onClick={closePlayerCardsOverlay}
-              style={{ fontWeight: 800 }}
+              style={{ fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 8 }}
             >
-              ? Close
+              <X className="w-4 h-4" aria-hidden />
+              Close
             </button>
             </div>
           </div>
@@ -5068,12 +5202,13 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
             }}
           >
             <div style={{ minWidth: 0 }}>
-              <div id="host-player-cards-modal-title" style={{ color: '#00ffa3', fontWeight: 800, fontSize: 'clamp(1.05rem, 2vw, 1.35rem)', margin: 0 }}>
-                ?? Player Cards & Progress
+              <div id="host-player-cards-modal-title" style={{ color: '#00ffa3', fontWeight: 800, fontSize: 'clamp(1.05rem, 2vw, 1.35rem)', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Users className="w-6 h-6" aria-hidden />
+                Player Cards &amp; Progress
               </div>
               <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
                 Pattern: <strong style={{ color: '#c5d4e0' }}>{getPatternDisplayName(pattern)}</strong>
-                {' � '}
+                {' · '}
                 <span>Click outside or press Escape to close</span>
               </div>
             </div>
@@ -5082,18 +5217,20 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
               type="button"
               className="btn-secondary"
               onClick={() => setPlayerCardsMaximized(true)}
-              style={{ fontWeight: 800, borderColor: '#00ffa3', color: '#00ffa3' }}
+              style={{ fontWeight: 800, borderColor: '#00ffa3', color: '#00ffa3', display: 'inline-flex', alignItems: 'center', gap: 8 }}
               title="Expand to use the full screen"
             >
-              ? Full screen
+              <Maximize2 className="w-4 h-4" aria-hidden />
+              Full screen
             </button>
             <button
               type="button"
               className="btn-secondary"
               onClick={closePlayerCardsOverlay}
-              style={{ fontWeight: 800 }}
+              style={{ fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 8 }}
             >
-              ? Close
+              <X className="w-4 h-4" aria-hidden />
+              Close
             </button>
             </div>
           </div>
@@ -5136,8 +5273,9 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
               boxShadow: '0 20px 60px rgba(0, 255, 136, 0.3)'
             }}
           >
-            <h2 style={{ color: '#00ff88', marginBottom: '16px', textAlign: 'center' }}>
-              ?? BINGO VERIFICATION NEEDED
+            <h2 style={{ color: '#00ff88', marginBottom: '16px', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              <AlertTriangle className="w-7 h-7" aria-hidden />
+              BINGO VERIFICATION NEEDED
             </h2>
             
             <div style={{ marginBottom: '20px', textAlign: 'center' }}>
@@ -5223,7 +5361,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                     let bgColor = 'rgba(255,255,255,0.1)';
                     let borderColor = 'rgba(255,255,255,0.3)';
                     let borderWidth = '1px';
-                    let icon = '';
+                    let icon: 'bad' | 'good' | 'pending' | 'warn' | null = null;
                     
                     // Determine styling based on state
                     if (isInWinningPattern) {
@@ -5231,15 +5369,15 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                       if (isInvalid) {
                         bgColor = 'rgba(255, 0, 0, 0.3)';
                         borderColor = '#ff4444';
-                        icon = '??';
+                        icon = 'bad';
                       } else if (wasPlayed && isMarked) {
                         bgColor = 'rgba(0, 255, 136, 0.3)';
                         borderColor = '#00ff88';
-                        icon = '?';
+                        icon = 'good';
                       } else {
                         bgColor = 'rgba(255, 255, 0, 0.2)';
                         borderColor = '#ffaa00';
-                        icon = '○';
+                        icon = 'pending';
                       }
                     } else {
                       // Squares NOT in winning pattern
@@ -5247,17 +5385,17 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                         bgColor = 'rgba(255, 0, 0, 0.2)';
                         borderColor = '#ff4444';
                         borderWidth = '2px';
-                        icon = '??';
+                        icon = 'bad';
                       } else if (isMarked && wasPlayed) {
                         bgColor = 'rgba(0, 255, 136, 0.15)';
                         borderColor = '#00ff88';
                         borderWidth = '2px';
-                        icon = '?';
+                        icon = 'good';
                       } else if (isMarked && !wasPlayed) {
                         bgColor = 'rgba(255, 255, 0, 0.15)';
                         borderColor = '#ffaa00';
                         borderWidth = '2px';
-                        icon = '?';
+                        icon = 'warn';
                       }
                     }
                     
@@ -5279,9 +5417,12 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                           color: '#fff',
                           fontWeight: isInWinningPattern ? 'bold' : (isMarked ? 'bold' : 'normal')
                         }}
-                        title={`${square.songName} - ${square.artistName}\nMarked: ${isMarked ? 'YES' : 'NO'}\nPlayed: ${wasPlayed ? 'YES' : 'NO'}\n${isInWinningPattern ? 'IN WINNING PATTERN' : 'NOT in pattern'}\n${isInvalid ? '? INVALID MARK' : isMarked && wasPlayed ? '? VALID MARK' : isMarked ? '? MARKED (not played yet)' : 'Not marked'}`}
+                        title={`${square.songName} - ${square.artistName}\nMarked: ${isMarked ? 'YES' : 'NO'}\nPlayed: ${wasPlayed ? 'YES' : 'NO'}\n${isInWinningPattern ? 'IN WINNING PATTERN' : 'NOT in pattern'}\n${isInvalid ? 'Invalid mark' : isMarked && wasPlayed ? 'Valid mark' : isMarked ? 'Marked (not played yet)' : 'Not marked'}`}
                       >
-                        {icon && <span style={{ fontSize: '0.8rem', marginBottom: '2px' }}>{icon}</span>}
+                        {icon === 'bad' && <X size={12} aria-hidden style={{ marginBottom: 2 }} />}
+                        {icon === 'good' && <Check size={12} aria-hidden style={{ marginBottom: 2, color: '#00ff88' }} />}
+                        {icon === 'pending' && <span style={{ fontSize: '0.75rem', marginBottom: 2 }} aria-hidden>○</span>}
+                        {icon === 'warn' && <span style={{ fontSize: '0.75rem', marginBottom: 2 }} aria-hidden>!</span>}
                         <span style={{ fontSize: '0.6rem', lineHeight: 1.1 }}>
                           {square.songName.substring(0, 8)}
                         </span>
@@ -5374,9 +5515,13 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                               fontWeight: 'bold',
                               backgroundColor: 'rgba(0, 255, 136, 0.2)',
                               padding: '4px 8px',
-                              borderRadius: '4px'
+                              borderRadius: '4px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
                             }}>
-                              ? VALID
+                              <Check size={14} aria-hidden />
+                              VALID
                             </span>
                             <span style={{ 
                               color: '#88ffaa',
@@ -5393,9 +5538,13 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                               fontWeight: 'bold',
                               backgroundColor: 'rgba(255, 170, 0, 0.2)',
                               padding: '4px 8px',
-                              borderRadius: '4px'
+                              borderRadius: '4px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
                             }}>
-                              ?? NOT MARKED
+                              <AlertCircle size={14} aria-hidden />
+                              NOT MARKED
                             </span>
                             <span style={{ 
                               color: '#ffcc88',
@@ -5506,8 +5655,9 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
               textAlign: 'center'
             }}
           >
-            <h2 style={{ color: '#00ff88', marginBottom: '20px', fontSize: '2rem', fontWeight: 'bold' }}>
-              ?? Round Complete!
+            <h2 style={{ color: '#00ff88', marginBottom: '20px', fontSize: '2rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+              <PartyPopper className="w-9 h-9" aria-hidden />
+              Round Complete!
             </h2>
             
             <div style={{ marginBottom: '24px' }}>
@@ -5549,7 +5699,11 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   color: '#001a0d',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 15px rgba(0, 255, 136, 0.3)'
+                  boxShadow: '0 4px 15px rgba(0, 255, 136, 0.3)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10,
                 }}
                 onMouseOver={(e) => {
                   e.currentTarget.style.transform = 'scale(1.05)';
@@ -5560,7 +5714,8 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 255, 136, 0.3)';
                 }}
               >
-                ?? Start Next Round
+                <SkipForward className="w-5 h-5" aria-hidden />
+                Start Next Round
               </button>
 
               <button
@@ -5574,7 +5729,11 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   fontWeight: 'bold',
                   color: '#ff4444',
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease'
+                  transition: 'all 0.2s ease',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10,
                 }}
                 onMouseOver={(e) => {
                   e.currentTarget.style.background = 'rgba(255, 68, 68, 0.3)';
@@ -5583,7 +5742,8 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   e.currentTarget.style.background = 'rgba(255, 68, 68, 0.2)';
                 }}
               >
-                ?? End Game Session
+                <X className="w-5 h-5" aria-hidden />
+                End Game Session
               </button>
             </div>
 
