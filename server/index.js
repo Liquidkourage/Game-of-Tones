@@ -5891,6 +5891,12 @@ app.get('/api/spotify/auth', (req, res) => {
       });
     }
     const roomId = String(req.query.roomId || '').trim();
+    if (!roomId) {
+      return res.status(400).json({
+        error: 'room_required',
+        message: 'Open a host room before connecting Spotify (stay on /host/your-room).',
+      });
+    }
     const state = hostAuth.signSpotifyOAuthState({ userId: uid, roomId });
     const authUrl = spotifyServiceDefault.getAuthorizationURL(state);
     res.json({ authUrl });
@@ -5965,14 +5971,41 @@ app.post('/api/spotify/clear', async (req, res) => {
   }
 });
 
+/** Fetch/XHR to /api/spotify/callback should get JSON; top-level Spotify redirect should get 302. */
+function spotifyCallbackWantsJson(req) {
+  const sec = req.get('Sec-Fetch-Mode') || '';
+  if (sec === 'cors' || sec === 'same-origin') return true;
+  const accept = req.headers.accept || '';
+  if (accept.includes('application/json')) return true;
+  return false;
+}
+
+/** Decode `rid` from state JWT payload without verify (redirect URL only; tokens use verified state). */
+function roomIdFromSpotifyStatePayload(state) {
+  if (!state || typeof state !== 'string') return '';
+  try {
+    const parts = String(state).split('.');
+    if (parts.length < 2) return '';
+    const seg = parts[1];
+    const pad = seg.length % 4 === 0 ? '' : '='.repeat(4 - (seg.length % 4));
+    const b64 = seg.replace(/-/g, '+').replace(/_/g, '/') + pad;
+    const json = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
+    if (json.typ !== 'spotify_oauth' || json.rid == null || json.rid === '') return '';
+    return String(json.rid).trim();
+  } catch {
+    return '';
+  }
+}
+
 app.get('/api/spotify/callback', async (req, res) => {
   const { code, state } = req.query;
 
   const appBase = publicAppOrigin();
-  const isBrowserTopNavigation = req.get('Sec-Fetch-Mode') === 'navigate';
+  const wantsJson = spotifyCallbackWantsJson(req);
+  const shouldRedirectBrowser = appBase && !wantsJson;
 
   if (!code) {
-    if (isBrowserTopNavigation && appBase) {
+    if (shouldRedirectBrowser) {
       return res.redirect(302, `${appBase}/?spotify_error=missing_code`);
     }
     return res.status(400).json({ error: 'Authorization code required' });
@@ -5989,8 +6022,10 @@ app.get('/api/spotify/callback', async (req, res) => {
       saveTokens(tokens);
     }
 
-    if (isBrowserTopNavigation && appBase) {
-      const room = parsed?.roomId ? String(parsed.roomId) : '';
+    if (shouldRedirectBrowser) {
+      const room =
+        (parsed?.roomId && String(parsed.roomId)) ||
+        (state ? roomIdFromSpotifyStatePayload(String(state)) : '');
       const path = room ? `/host/${encodeURIComponent(room)}` : '/';
       return res.redirect(302, `${appBase}${path}?spotify=connected`);
     }
@@ -5998,7 +6033,7 @@ app.get('/api/spotify/callback', async (req, res) => {
     res.json({ success: true, message: 'Spotify connected' });
   } catch (error) {
     console.error('❌ Spotify callback failed:', error);
-    if (isBrowserTopNavigation && appBase) {
+    if (shouldRedirectBrowser) {
       return res.redirect(302, `${appBase}/?spotify_error=1`);
     }
     res.status(500).json({ error: 'Failed to connect Spotify' });

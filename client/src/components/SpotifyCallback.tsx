@@ -126,7 +126,14 @@ const SpotifyCallback: React.FC = () => {
       const destKey = `spotify_oauth_dest_${code}`;
 
       try {
-        const response = await fetch(`${API_BASE || ''}/api/spotify/callback?code=${encodeURIComponent(code)}`);
+        const stateParam = searchParams.get('state');
+        const qs = new URLSearchParams();
+        qs.set('code', code);
+        if (stateParam) qs.set('state', stateParam);
+        const response = await fetch(`${API_BASE || ''}/api/spotify/callback?${qs.toString()}`, {
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        });
         const data = await response.json();
 
         if (data.success) {
