@@ -3,42 +3,74 @@ import { API_BASE } from '../config';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Music, AlertCircle } from 'lucide-react';
 
-/** Spotify sends `state` as a signed JWT (not the room code). Extract `rid` from payload only. */
-function roomIdFromSpotifyOAuthState(state: string | null | undefined): string | null {
-  if (!state || typeof state !== 'string') return null;
-  const parts = state.split('.');
-  if (parts.length < 2) return null;
+/** Decode JWT payload segment (base64url) — UTF-8 safe; latin-only atob can break some payloads. */
+function parseJwtPayloadJson<T = unknown>(segment: string): T | null {
   try {
-    const seg = parts[1];
-    const pad = seg.length % 4 === 0 ? '' : '='.repeat(4 - (seg.length % 4));
-    const b64 = seg.replace(/-/g, '+').replace(/_/g, '/') + pad;
-    const json = JSON.parse(atob(b64)) as { typ?: string; rid?: string | number | null };
-    if (json.typ !== 'spotify_oauth' || json.rid == null || json.rid === '') return null;
-    const rid = String(json.rid).trim();
-    return /^[A-Za-z0-9_-]+$/.test(rid) ? rid : null;
+    const pad = segment.length % 4 === 0 ? '' : '='.repeat(4 - (segment.length % 4));
+    const b64 = segment.replace(/-/g, '+').replace(/_/g, '/') + pad;
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const json = new TextDecoder('utf-8').decode(bytes);
+    return JSON.parse(json) as T;
   } catch {
     return null;
   }
 }
 
-/** Where to send the host after Spotify OAuth (localStorage can be empty on callback if origin changed). */
+/** Spotify sends `state` as a signed JWT (not the room code). Extract `rid` from payload only. */
+function roomIdFromSpotifyOAuthState(state: string | null | undefined): string | null {
+  if (!state || typeof state !== 'string') return null;
+  const parts = state.split('.');
+  if (parts.length < 2) return null;
+  const json = parseJwtPayloadJson<{ typ?: string; rid?: string | number | null }>(parts[1]);
+  if (!json || json.typ !== 'spotify_oauth' || json.rid == null || json.rid === '') return null;
+  const rid = String(json.rid).trim();
+  return /^[A-Za-z0-9_-]+$/.test(rid) ? rid : null;
+}
+
+function buildHostSpotifyReturn(roomId: string): string {
+  const r = roomId.trim();
+  if (!r || !/^[A-Za-z0-9_-]+$/.test(r)) return '';
+  const qs = new URLSearchParams();
+  qs.set('spotify', 'connected');
+  return `/host/${encodeURIComponent(r)}?${qs.toString()}`;
+}
+
+/**
+ * Where to send the host after Spotify OAuth.
+ * Prefer `state` JWT `rid` first — Spotify always returns `state`; storage may be empty after redirect.
+ */
 function resolveSpotifyReturnDestination(searchParams: URLSearchParams): string {
+  const fromState = roomIdFromSpotifyOAuthState(searchParams.get('state')?.trim());
+  if (fromState) {
+    const dest = buildHostSpotifyReturn(fromState);
+    if (dest) return dest;
+  }
+
+  const roomFromStorage =
+    localStorage.getItem('spotify_room_id')?.trim() ||
+    sessionStorage.getItem('spotify_room_id')?.trim() ||
+    localStorage.getItem('spotify_oauth_pending_room')?.trim() ||
+    sessionStorage.getItem('spotify_oauth_pending_room')?.trim();
+  if (roomFromStorage) {
+    const dest = buildHostSpotifyReturn(roomFromStorage);
+    if (dest) return dest;
+  }
+
   const fromLs = localStorage.getItem('spotify_return_url');
   const fromSs = sessionStorage.getItem('spotify_return_url');
   const candidate = (fromLs || fromSs || '').trim();
   if (candidate.startsWith('/host/') && !candidate.includes('undefined')) {
-    return candidate;
+    const m = candidate.match(/^\/host\/([^/?#]+)/);
+    if (m?.[1]) {
+      const dest = buildHostSpotifyReturn(decodeURIComponent(m[1]));
+      if (dest) return dest;
+    }
+    const sep = candidate.includes('?') ? '&' : '?';
+    return candidate.includes('spotify=') ? candidate : `${candidate}${sep}spotify=connected`;
   }
-  const roomId =
-    localStorage.getItem('spotify_room_id')?.trim() ||
-    sessionStorage.getItem('spotify_room_id')?.trim();
-  if (roomId) {
-    return `/host/${roomId}`;
-  }
-  const fromState = roomIdFromSpotifyOAuthState(searchParams.get('state')?.trim());
-  if (fromState) {
-    return `/host/${encodeURIComponent(fromState)}`;
-  }
+
   return '/?mode=host';
 }
 
@@ -46,8 +78,10 @@ function cleanupSpotifyReturnMarkers() {
   try {
     localStorage.removeItem('spotify_return_url');
     localStorage.removeItem('spotify_room_id');
+    localStorage.removeItem('spotify_oauth_pending_room');
     sessionStorage.removeItem('spotify_return_url');
     sessionStorage.removeItem('spotify_room_id');
+    sessionStorage.removeItem('spotify_oauth_pending_room');
   } catch {
     /* ignore */
   }

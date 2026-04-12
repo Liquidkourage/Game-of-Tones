@@ -1701,6 +1701,12 @@ const HostView: React.FC = () => {
           /* ignore */
         }
         try {
+          localStorage.setItem('spotify_oauth_pending_room', roomId);
+          sessionStorage.setItem('spotify_oauth_pending_room', roomId);
+        } catch {
+          /* ignore */
+        }
+        try {
           sessionStorage.setItem(HOST_DISPLAY_NAME_KEY, hostPlayerName);
         } catch {
           /* ignore */
