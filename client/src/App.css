@@ -644,6 +644,50 @@ body {
   line-height: 1.45;
 }
 
+.home-auth-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  max-width: 32rem;
+  margin: 0 auto 1.25rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 180, 80, 0.35);
+  background: rgba(255, 140, 40, 0.08);
+  color: var(--text-primary, #e8eaef);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.home-auth-banner__icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  color: #ffb347;
+  margin-top: 0.1rem;
+}
+
+.home-auth-banner__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.home-auth-banner__dismiss {
+  flex-shrink: 0;
+  align-self: center;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.85rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.2);
+  color: inherit;
+  cursor: pointer;
+}
+
+.home-auth-banner__dismiss:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
 .home-host-reveal {
   margin-top: 1.25rem;
   width: 100%;

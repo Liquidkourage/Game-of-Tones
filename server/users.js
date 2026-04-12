@@ -42,8 +42,78 @@ async function getUserById(db, id) {
   return r.rows[0] || null;
 }
 
+function normalizeHostEmail(email) {
+  if (!email || typeof email !== 'string') return '';
+  return email.trim().toLowerCase();
+}
+
+async function getUserByGoogleSub(db, googleSub) {
+  if (!db || !googleSub) return null;
+  const r = await db.query('SELECT id, google_sub, email, display_name, created_at FROM users WHERE google_sub = $1', [
+    googleSub,
+  ]);
+  return r.rows[0] || null;
+}
+
+async function ensureHostAllowlistTable(db) {
+  if (!db) return false;
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS host_allowlist (
+      email TEXT PRIMARY KEY,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  return true;
+}
+
+/** Emails listed in TEMPO_HOST_ALLOWLIST_EMAILS (comma-separated) or host_allowlist table. */
+async function isEmailAllowlistedForHostSignin(db, normalizedEmail) {
+  if (!normalizedEmail) return false;
+  const envList = (process.env.TEMPO_HOST_ALLOWLIST_EMAILS || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (envList.includes(normalizedEmail)) return true;
+  if (!db) return false;
+  const r = await db.query('SELECT 1 FROM host_allowlist WHERE email = $1', [normalizedEmail]);
+  return r.rows.length > 0;
+}
+
+async function addHostAllowlistEmail(db, normalizedEmail) {
+  if (!db) throw new Error('DATABASE_URL is required');
+  await ensureHostAllowlistTable(db);
+  const r = await db.query(
+    `INSERT INTO host_allowlist (email) VALUES ($1)
+     ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
+     RETURNING email, created_at`,
+    [normalizedEmail]
+  );
+  return r.rows[0];
+}
+
+async function removeHostAllowlistEmail(db, normalizedEmail) {
+  if (!db) throw new Error('DATABASE_URL is required');
+  await ensureHostAllowlistTable(db);
+  const r = await db.query('DELETE FROM host_allowlist WHERE email = $1 RETURNING email', [normalizedEmail]);
+  return r.rows[0] || null;
+}
+
+async function listHostAllowlist(db) {
+  if (!db) return [];
+  await ensureHostAllowlistTable(db);
+  const r = await db.query('SELECT email, created_at FROM host_allowlist ORDER BY email ASC');
+  return r.rows;
+}
+
 module.exports = {
   ensureUsersTable,
+  ensureHostAllowlistTable,
   upsertUserByGoogle,
   getUserById,
+  getUserByGoogleSub,
+  normalizeHostEmail,
+  isEmailAllowlistedForHostSignin,
+  addHostAllowlistEmail,
+  removeHostAllowlistEmail,
+  listHostAllowlist,
 };

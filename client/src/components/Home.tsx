@@ -125,6 +125,14 @@ const Home: React.FC = () => {
     [hostSession]
   );
 
+  const authError = useMemo(() => searchParams.get('auth_error')?.trim() || '', [searchParams]);
+
+  const dismissAuthError = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('auth_error');
+    setSearchParams(next, { replace: true });
+  };
+
   const showHostSetup = () => {
     setHomeMode('host');
     const next = new URLSearchParams(searchParams);
@@ -277,6 +285,18 @@ const Home: React.FC = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, delay: 0.08 }}
       >
+        {authError === 'not_invited' && (
+          <div className="home-auth-banner" role="alert">
+            <AlertTriangle className="home-auth-banner__icon" aria-hidden />
+            <div className="home-auth-banner__text">
+              <strong>Host sign-in not enabled for this account.</strong> Ask your organizer to add your email, then try signing in
+              again with Google.
+            </div>
+            <button type="button" className="home-auth-banner__dismiss" onClick={dismissAuthError}>
+              Dismiss
+            </button>
+          </div>
+        )}
         {!joinOnly && (
           <div className="home-mode-tabs" role="tablist" aria-label="How are you joining?">
             <button

@@ -736,6 +736,7 @@ async function initializeDatabase() {
       )
     `);
     await usersStore.ensureUsersTable(db);
+    await usersStore.ensureHostAllowlistTable(db);
     console.log('✅ Database tables initialized');
     return true;
   } catch (error) {
@@ -5795,6 +5796,17 @@ app.get('/api/auth/google/callback', async (req, res) => {
     if (!googleSub) {
       return res.redirect(302, `${appBase}/?auth_error=no_sub`);
     }
+    /** New Google accounts only: require email on allowlist (DB + TEMPO_HOST_ALLOWLIST_EMAILS). Existing users always sign in. Set TEMPO_HOST_SIGNIN_MODE=allowlist to enable. */
+    if (String(process.env.TEMPO_HOST_SIGNIN_MODE || '').trim().toLowerCase() === 'allowlist') {
+      const normEmail = usersStore.normalizeHostEmail(email || '');
+      const existing = await usersStore.getUserByGoogleSub(db, googleSub);
+      if (!existing) {
+        const allowed = await usersStore.isEmailAllowlistedForHostSignin(db, normEmail);
+        if (!allowed) {
+          return res.redirect(302, `${appBase}/?auth_error=not_invited`);
+        }
+      }
+    }
     const row = await usersStore.upsertUserByGoogle(db, {
       googleSub,
       email,
@@ -5826,6 +5838,79 @@ app.get('/api/auth/me', async (req, res) => {
 app.post('/api/auth/logout', (req, res) => {
   hostAuth.clearSessionCookie(res);
   res.json({ success: true });
+});
+
+/** Shared secret for onboarding routes. Send Authorization: Bearer <secret> or X-Admin-Secret: <secret>. */
+function verifyAdminSecret(req) {
+  const secret = (process.env.TEMPO_ADMIN_SECRET || '').trim();
+  if (!secret) return false;
+  const auth = req.headers.authorization;
+  if (auth && auth.startsWith('Bearer ')) {
+    return auth.slice(7).trim() === secret;
+  }
+  const h = req.headers['x-admin-secret'];
+  if (typeof h === 'string' && h.trim() === secret) return true;
+  return false;
+}
+
+function adminSecretOr503(res) {
+  const configured = !!(process.env.TEMPO_ADMIN_SECRET || '').trim();
+  return res.status(configured ? 401 : 503).json({
+    error: configured ? 'unauthorized' : 'admin_not_configured',
+    message: configured ? 'Invalid or missing admin secret.' : 'Set TEMPO_ADMIN_SECRET to use admin routes.',
+  });
+}
+
+/**
+ * Invite a host email so they can complete Google sign-in when TEMPO_HOST_SIGNIN_MODE=allowlist.
+ * Also useful to record who is cleared before you turn allowlist on.
+ */
+app.post('/api/admin/host-allowlist', async (req, res) => {
+  try {
+    if (!verifyAdminSecret(req)) return adminSecretOr503(res);
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const raw = typeof body.email === 'string' ? body.email : '';
+    const email = usersStore.normalizeHostEmail(raw);
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ error: 'invalid_email', message: 'Provide { "email": "user@example.com" }' });
+    }
+    const row = await usersStore.addHostAllowlistEmail(db, email);
+    return res.json({ ok: true, email: row.email, createdAt: row.created_at });
+  } catch (e) {
+    console.error('POST /api/admin/host-allowlist:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.get('/api/admin/host-allowlist', async (req, res) => {
+  try {
+    if (!verifyAdminSecret(req)) return adminSecretOr503(res);
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const rows = await usersStore.listHostAllowlist(db);
+    return res.json({ emails: rows });
+  } catch (e) {
+    console.error('GET /api/admin/host-allowlist:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.delete('/api/admin/host-allowlist', async (req, res) => {
+  try {
+    if (!verifyAdminSecret(req)) return adminSecretOr503(res);
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const raw = typeof body.email === 'string' ? body.email : '';
+    const email = usersStore.normalizeHostEmail(raw);
+    if (!email) {
+      return res.status(400).json({ error: 'invalid_email', message: 'Provide { "email": "..." } in body.' });
+    }
+    const removed = await usersStore.removeHostAllowlistEmail(db, email);
+    return res.json({ ok: true, removed: !!removed, email });
+  } catch (e) {
+    console.error('DELETE /api/admin/host-allowlist:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
 });
 
 /**
