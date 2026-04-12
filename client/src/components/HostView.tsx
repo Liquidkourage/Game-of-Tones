@@ -1507,8 +1507,25 @@ const HostView: React.FC = () => {
         navigate(`/?mode=host&prefillRoom=${encodeURIComponent(roomId || '')}`);
         return;
       }
+      /** Room already has an active host socket (other tab, other device, or race). Never send the host UI to /player — that was confusing and looked like a random redirect. */
+      if (data.reason === 'room_has_host') {
+        try {
+          sessionStorage.setItem('skip_prefill_host_nav', '1');
+        } catch {
+          /* ignore */
+        }
+        navigate(`/?mode=host&prefillRoom=${encodeURIComponent(roomId || '')}`);
+        return;
+      }
+      try {
+        sessionStorage.setItem('skip_prefill_host_nav', '1');
+      } catch {
+        /* ignore */
+      }
       if (roomId) {
-        navigate(`/player/${roomId}?name=${encodeURIComponent(hostPlayerName)}`);
+        navigate(`/?mode=host&prefillRoom=${encodeURIComponent(roomId || '')}`);
+      } else {
+        navigate('/?mode=host');
       }
     });
 
