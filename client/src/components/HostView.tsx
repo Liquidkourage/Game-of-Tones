@@ -1490,10 +1490,20 @@ const HostView: React.FC = () => {
           });
           return;
         }
+        try {
+          sessionStorage.setItem('skip_prefill_host_nav', '1');
+        } catch {
+          /* ignore */
+        }
         navigate(`/?mode=host&prefillRoom=${encodeURIComponent(roomId || '')}`);
         return;
       }
       if (data.reason === 'not_room_owner') {
+        try {
+          sessionStorage.setItem('skip_prefill_host_nav', '1');
+        } catch {
+          /* ignore */
+        }
         navigate(`/?mode=host&prefillRoom=${encodeURIComponent(roomId || '')}`);
         return;
       }

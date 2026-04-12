@@ -64,17 +64,32 @@ const Home: React.FC = () => {
     if (pre) setRoomId((r) => r || pre.toUpperCase());
   }, [searchParams]);
 
-  /** ?mode=host&prefillRoom= — go straight to that room (avoids parking on home after OAuth / socket redirect). */
+  /** Signed-in host + ?prefillRoom= — enter /host/:room (OAuth return). Skip when HostView sent us here after host-join-denied (avoids /host ↔ home loop). */
   useEffect(() => {
     if (hostSession === undefined) return;
+    if (!hostSession) return;
     if (joinOnly) return;
     if (homeMode !== 'host') return;
     const pre = searchParams.get('prefillRoom')?.trim();
     if (!pre || !/^[A-Za-z0-9_-]+$/.test(pre)) return;
-    const name = hostSession ? hostDisplayNameFromSession(hostSession) : '';
-    const qs = name ? `?name=${encodeURIComponent(name)}` : '';
-    navigate(`/host/${encodeURIComponent(pre)}${qs}`, { replace: true });
-  }, [hostSession, joinOnly, homeMode, searchParams, navigate]);
+    let skip = false;
+    try {
+      if (sessionStorage.getItem('skip_prefill_host_nav') === '1') {
+        sessionStorage.removeItem('skip_prefill_host_nav');
+        skip = true;
+      }
+    } catch {
+      /* ignore */
+    }
+    if (skip) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('prefillRoom');
+      setSearchParams(next, { replace: true });
+      return;
+    }
+    const name = hostDisplayNameFromSession(hostSession);
+    navigate(`/host/${encodeURIComponent(pre)}?name=${encodeURIComponent(name)}`, { replace: true });
+  }, [hostSession, joinOnly, homeMode, searchParams, navigate, setSearchParams]);
 
   useEffect(() => {
     let cancelled = false;
