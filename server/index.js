@@ -1403,6 +1403,15 @@ io.on('connection', (socket) => {
 
     let organizationId = 'DEFAULT';
 
+    /** Google host user id from handshake or join payload (used for owner checks and owner takeover). */
+    let claimUid = null;
+    if (wantsHost) {
+      claimUid = socket.hostUserId ?? null;
+      if (claimUid == null && typeof hostToken === 'string' && hostToken.length > 0) {
+        claimUid = hostAuth.verifyHostJwt(hostToken);
+      }
+    }
+
     // Create room if it doesn't exist
     if (!rooms.has(roomId)) {
       logger.info(`Creating new room: ${roomId} for organization: ${organizationId}`, 'room-create');
@@ -1440,10 +1449,6 @@ io.on('connection', (socket) => {
 
     /** Host-owned rooms: only the signed-in host may take the host role. */
     if (wantsHost && room.ownerUserId != null) {
-      let claimUid = socket.hostUserId ?? null;
-      if (claimUid == null && typeof hostToken === 'string' && hostToken.length > 0) {
-        claimUid = hostAuth.verifyHostJwt(hostToken);
-      }
       if (claimUid == null || Number(claimUid) !== Number(room.ownerUserId)) {
         socket.emit('host-join-denied', {
           roomId,
@@ -1485,13 +1490,30 @@ io.on('connection', (socket) => {
           effectiveIsHost = true;
           console.log(`New host claimed room ${roomId} (previous host disconnected)`);
         } else {
-          effectiveIsHost = false;
-          console.warn(`Host claim rejected for ${playerName} — room ${roomId} already has an active host`);
-          socket.emit('host-join-denied', {
-            roomId,
-            reason: 'room_has_host',
-            message: 'This room already has a host. Use the player link to join, or wait for the host to leave.'
-          });
+          /** Active host socket still connected, but room is host-owned and joiner is that owner (e.g. "Continue" after modal, new tab, or clientId mismatch). Allow takeover. */
+          const ownerUid = room.ownerUserId != null ? Number(room.ownerUserId) : null;
+          if (
+            ownerUid != null &&
+            claimUid != null &&
+            Number(claimUid) === ownerUid
+          ) {
+            if (room.players.has(room.host)) {
+              const op = room.players.get(room.host);
+              if (op) op.isHost = false;
+            }
+            room.host = socket.id;
+            if (clientId) room.hostClientId = clientId;
+            effectiveIsHost = true;
+            console.log(`Host takeover by room owner (uid ${ownerUid}) for room ${roomId}`);
+          } else {
+            effectiveIsHost = false;
+            console.warn(`Host claim rejected for ${playerName} — room ${roomId} already has an active host`);
+            socket.emit('host-join-denied', {
+              roomId,
+              reason: 'room_has_host',
+              message: 'This room already has a host. Use the player link to join, or wait for the host to leave.'
+            });
+          }
         }
       }
     }
