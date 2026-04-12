@@ -1,9 +1,9 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Sparkles, Play, UserPlus, Crown, CheckCircle2 } from 'lucide-react';
+import { Sparkles, Play, UserPlus, Crown, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { API_BASE } from '../config';
-import { hostFetch, apiOrigin, browserGoogleLoginUrl } from '../utils/hostFetch';
+import { hostFetch, browserGoogleLoginUrl } from '../utils/hostFetch';
 
 /** Express/HTML error pages are not JSON; show a short message instead of raw markup. */
 function formatHttpErrorBody(raw: string, status: number): string {
@@ -37,6 +37,9 @@ const Home: React.FC = () => {
   /** Join as remote/online (host can enable hybrid mode so prize waits for in-person bingo) */
   const [joinAsRemote, setJoinAsRemote] = useState(() => searchParams.get('remote') === '1');
   const [hostSession, setHostSession] = useState<{ id: number; email?: string | null; displayName?: string | null } | null | undefined>(undefined);
+  /** Server said default room id is already in memory — offer continue vs new code (avoids host socket / create loop). */
+  const [hostRoomReuseModal, setHostRoomReuseModal] = useState<{ roomId: string } | null>(null);
+  const [isCreatingHostRoom, setIsCreatingHostRoom] = useState(false);
 
   /** Player / QR links: ?join, ?mode=player, ?player=1 — hide host path unless explicitly opened */
   const joinOnly = useMemo(() => {
@@ -126,46 +129,61 @@ const Home: React.FC = () => {
     setSearchParams(next, { replace: true });
   };
 
-  const startHosting = async () => {
+  const goToHostRoom = (rid: string, displayName: string) => {
+    navigate(`/host/${encodeURIComponent(rid)}?name=${encodeURIComponent(displayName)}`);
+  };
+
+  const startHosting = async (opts?: { forceNewRoom?: boolean }) => {
     if (!hostSession) {
       alert('Sign in with Google first.');
       return;
     }
     const displayName = hostDisplayNameFromSession(hostSession);
-    const api = apiOrigin();
-    let r: Response;
+    const forceNewRoom = opts?.forceNewRoom === true;
+    setIsCreatingHostRoom(true);
     try {
-      r = await hostFetch(`${API_BASE || ''}/api/host/rooms`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: '{}',
-      });
-    } catch (e) {
-      alert(`Could not reach the server to create a room. Check your connection. (${String(e)})`);
-      return;
-    }
-    if (r.status === 401) {
-      window.location.href = browserGoogleLoginUrl();
-      return;
-    }
-    if (r.status === 503) {
-      alert('Host accounts require DATABASE_URL on the server. Set it in Railway (or .env) and redeploy.');
-      return;
-    }
-    if (!r.ok) {
-      const raw = await r.text().catch(() => '');
-      let msg = '';
+      let r: Response;
       try {
-        const j = raw ? JSON.parse(raw) : {};
-        msg = (j && (j.message || j.error)) || '';
-      } catch {
-        msg = formatHttpErrorBody(raw, r.status);
+        r = await hostFetch(`${API_BASE || ''}/api/host/rooms`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ forceNewRoom }),
+        });
+      } catch (e) {
+        alert(`Could not reach the server to create a room. Check your connection. (${String(e)})`);
+        return;
       }
-      alert(msg || `Could not create room (HTTP ${r.status}). Try again.`);
-      return;
+      if (r.status === 401) {
+        window.location.href = browserGoogleLoginUrl();
+        return;
+      }
+      if (r.status === 503) {
+        alert('Host accounts require DATABASE_URL on the server. Set it in Railway (or .env) and redeploy.');
+        return;
+      }
+      if (!r.ok) {
+        const raw = await r.text().catch(() => '');
+        let msg = '';
+        try {
+          const j = raw ? JSON.parse(raw) : {};
+          msg = (j && (j.message || j.error)) || '';
+        } catch {
+          msg = formatHttpErrorBody(raw, r.status);
+        }
+        alert(msg || `Could not create room (HTTP ${r.status}). Try again.`);
+        return;
+      }
+      const data = (await r.json()) as { roomId: string; mode?: string };
+      const { roomId: created, mode } = data;
+      if (mode === 'reuse' && !forceNewRoom) {
+        setHostRoomReuseModal({ roomId: created });
+        return;
+      }
+      setHostRoomReuseModal(null);
+      goToHostRoom(created, displayName);
+    } finally {
+      setIsCreatingHostRoom(false);
     }
-    const { roomId: created } = await r.json();
-    navigate(`/host/${created}?name=${encodeURIComponent(displayName)}`);
   };
 
   const joinGame = () => {
@@ -181,6 +199,62 @@ const Home: React.FC = () => {
 
   return (
     <div className="home-container">
+      {hostRoomReuseModal && hostSession && (
+        <div
+          className="home-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-room-reuse-title"
+        >
+          <div className="home-modal">
+            <div className="home-modal__icon">
+              <AlertTriangle className="home-modal__icon-svg" aria-hidden />
+            </div>
+            <h2 id="home-room-reuse-title" className="home-modal__title">
+              Room already running
+            </h2>
+            <p className="home-modal__body">
+              Your room code <strong>{hostRoomReuseModal.roomId}</strong> is already active on the server (for example another tab
+              may still be connected as host). Opening it again can fail if that session is still there.
+            </p>
+            <p className="home-modal__body home-modal__body--muted">
+              Continue to try the host screen for this code, or create a <strong>new</strong> room with a different code.
+            </p>
+            <div className="home-modal__actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={isCreatingHostRoom}
+                onClick={() => setHostRoomReuseModal(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={isCreatingHostRoom}
+                onClick={() => {
+                  void startHosting({ forceNewRoom: true });
+                }}
+              >
+                Create new room
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={isCreatingHostRoom}
+                onClick={() => {
+                  const name = hostDisplayNameFromSession(hostSession);
+                  setHostRoomReuseModal(null);
+                  goToHostRoom(hostRoomReuseModal.roomId, name);
+                }}
+              >
+                Continue to host
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <motion.header
         className="home-hero"
         initial={{ opacity: 0, y: 12 }}
@@ -343,12 +417,12 @@ const Home: React.FC = () => {
 
             <button 
               type="button"
-              onClick={startHosting}
+              onClick={() => void startHosting()}
               className="btn btn-primary"
-              disabled={!hostSession || hostSession === undefined}
+              disabled={!hostSession || hostSession === undefined || isCreatingHostRoom}
             >
               <Play className="btn-icon" />
-              Create room &amp; host
+              {isCreatingHostRoom ? 'Creating…' : 'Create room & host'}
             </button>
           </motion.div>
           )}

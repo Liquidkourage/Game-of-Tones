@@ -5810,7 +5810,8 @@ app.post('/api/auth/logout', (req, res) => {
  * Pick a room id for a host: reuse default MDY+userId if free; claim socket-created rooms with no owner;
  * idempotent if this host already owns that id; otherwise try random suffixes.
  */
-function allocateHostOwnedRoom(uid) {
+function allocateHostOwnedRoom(uid, options = {}) {
+  const forceNew = options.forceNew === true;
   const base = hostAuth.buildDefaultRoomCode(uid);
   const candidates = [base];
   for (let i = 0; i < 32; i++) {
@@ -5831,7 +5832,10 @@ function allocateHostOwnedRoom(uid) {
       return { code, mode: 'claim' };
     }
     if (Number(owner) === Number(uid)) {
-      return { code, mode: 'reuse' };
+      if (!forceNew) {
+        return { code, mode: 'reuse' };
+      }
+      continue;
     }
   }
   return null;
@@ -5843,7 +5847,9 @@ app.post('/api/host/rooms', (req, res) => {
     const uid = hostAuth.getHostUserIdFromRequest(req);
     if (!uid) return res.status(401).json({ error: 'login_required' });
     if (!db) return res.status(503).json({ error: 'DATABASE_URL required' });
-    const picked = allocateHostOwnedRoom(uid);
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const forceNewRoom = body.forceNewRoom === true || body.forceNew === true;
+    const picked = allocateHostOwnedRoom(uid, { forceNew: forceNewRoom });
     if (!picked) {
       return res.status(409).json({ error: 'room_code_collision', message: 'Try again in a moment.' });
     }
@@ -5872,7 +5878,7 @@ app.post('/api/host/rooms', (req, res) => {
       };
       rooms.set(code, newRoom);
     }
-    return res.json({ roomId: code, ownerUserId: uid });
+    return res.json({ roomId: code, ownerUserId: uid, mode });
   } catch (e) {
     console.error('POST /api/host/rooms:', e);
     res.status(500).json({ error: 'Failed to create room', message: e?.message || 'Failed to create room' });

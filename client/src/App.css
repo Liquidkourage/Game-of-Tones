@@ -660,6 +660,73 @@ body {
   color: var(--accent-color);
 }
 
+.home-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(8, 10, 14, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.home-modal {
+  width: min(100%, 26rem);
+  padding: 1.25rem 1.35rem;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 255, 136, 0.28);
+  background: var(--surface-card);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.home-modal__icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.65rem;
+}
+
+.home-modal__icon-svg {
+  width: 2rem;
+  height: 2rem;
+  color: #ffaa33;
+  filter: drop-shadow(0 0 10px rgba(255, 170, 51, 0.35));
+}
+
+.home-modal__title {
+  margin: 0 0 0.75rem;
+  font-size: 1.2rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--primary-text);
+}
+
+.home-modal__body {
+  margin: 0 0 0.65rem;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--secondary-text);
+}
+
+.home-modal__body--muted {
+  font-size: 0.86rem;
+  opacity: 0.92;
+}
+
+.home-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 1.1rem;
+}
+
+.home-modal__actions .btn {
+  flex: 1 1 auto;
+  min-width: 6.5rem;
+}
+
 .home-host-code-label {
   font-size: 0.82rem;
   font-weight: 600;
