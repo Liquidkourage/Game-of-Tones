@@ -43,6 +43,8 @@ export function apiOrigin(): string {
  * so the OAuth round-trip and tempo_host_jwt in localStorage stay on the same site as the UI.
  * When REACT_APP_API_BASE points at another host, apiOrigin()/api/auth/google would open login on the
  * API host while the JWT is stored on the page origin — then API calls look "logged out".
+ * Use one canonical app hostname in production (Spotify redirect URI + bookmarks); storage does not
+ * sync across subdomains (got.* vs tempo.*), which looks like random failures until the "right" try.
  */
 export function browserGoogleLoginUrl(): string {
   if (typeof window === 'undefined') return '/api/auth/google';

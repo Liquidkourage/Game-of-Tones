@@ -74,7 +74,7 @@ function resolveSpotifyReturnDestination(searchParams: URLSearchParams): string 
   return '/?mode=host';
 }
 
-function cleanupSpotifyReturnMarkers() {
+function cleanupSpotifyReturnMarkers(codeForSnap?: string | null) {
   try {
     localStorage.removeItem('spotify_return_url');
     localStorage.removeItem('spotify_room_id');
@@ -82,9 +82,30 @@ function cleanupSpotifyReturnMarkers() {
     sessionStorage.removeItem('spotify_return_url');
     sessionStorage.removeItem('spotify_room_id');
     sessionStorage.removeItem('spotify_oauth_pending_room');
+    if (codeForSnap) {
+      sessionStorage.removeItem(`spotify_oauth_dest_snap_${codeForSnap}`);
+    }
   } catch {
     /* ignore */
   }
+}
+
+/** React Strict Mode + async fetch can double-invoke; OAuth codes are single-use so only one navigation should win. */
+function navigateOnceToDest(
+  navigate: (to: string, opts?: { replace?: boolean }) => void,
+  dest: string,
+  code: string | null
+) {
+  if (code) {
+    try {
+      const k = `spotify_oauth_nav_done_${code}`;
+      if (sessionStorage.getItem(k) === '1') return;
+      sessionStorage.setItem(k, '1');
+    } catch {
+      /* ignore */
+    }
+  }
+  navigate(dest, { replace: true });
 }
 
 /**
@@ -110,8 +131,9 @@ const SpotifyCallback: React.FC = () => {
           window.clearInterval(tid);
           const dest =
             sessionStorage.getItem(`spotify_oauth_dest_${code}`) ||
-            resolveSpotifyReturnDestination(searchParams);
-          navigate(dest, { replace: true });
+            sessionStorage.getItem(`spotify_oauth_dest_snap_${code}`) ||
+            resolveSpotifyReturnDestination(new URLSearchParams(window.location.search));
+          navigateOnceToDest(navigate, dest, code);
         }
       }, 40);
       const timeout = window.setTimeout(() => window.clearInterval(tid), 20000);
@@ -132,7 +154,7 @@ const SpotifyCallback: React.FC = () => {
         const dest = resolveSpotifyReturnDestination(searchParams);
         cleanupSpotifyReturnMarkers();
         console.warn('Spotify auth error param:', oauthError, '→', dest);
-        window.setTimeout(() => navigate(dest, { replace: true }), 1800);
+        window.setTimeout(() => navigateOnceToDest(navigate, dest, searchParams.get('code')), 1800);
         return;
       }
 
@@ -143,13 +165,14 @@ const SpotifyCallback: React.FC = () => {
         }
         const dest = resolveSpotifyReturnDestination(searchParams);
         cleanupSpotifyReturnMarkers();
-        window.setTimeout(() => navigate(dest, { replace: true }), 1800);
+        window.setTimeout(() => navigateOnceToDest(navigate, dest, null), 1800);
         return;
       }
 
       const pendingDest = resolveSpotifyReturnDestination(searchParams);
       try {
         sessionStorage.setItem('spotify_pending_oauth_dest', pendingDest);
+        sessionStorage.setItem(`spotify_oauth_dest_snap_${code}`, pendingDest);
       } catch {
         /* ignore */
       }
@@ -188,10 +211,10 @@ const SpotifyCallback: React.FC = () => {
           } catch {
             /* ignore */
           }
-          cleanupSpotifyReturnMarkers();
+          cleanupSpotifyReturnMarkers(code);
 
           if (!cancelled) {
-            navigate(dest, { replace: true });
+            navigateOnceToDest(navigate, dest, code);
           }
         } else {
           const dest =
@@ -203,7 +226,7 @@ const SpotifyCallback: React.FC = () => {
             setStatus('error');
             setMessage('Failed to connect to Spotify. Please try again.');
           }
-          window.setTimeout(() => navigate(dest, { replace: true }), 2000);
+          window.setTimeout(() => navigateOnceToDest(navigate, dest, code), 2000);
         }
       } catch (error) {
         console.error('Error handling Spotify callback:', error);
@@ -216,7 +239,7 @@ const SpotifyCallback: React.FC = () => {
           setStatus('error');
           setMessage('An error occurred while connecting to Spotify.');
         }
-        window.setTimeout(() => navigate(dest, { replace: true }), 2000);
+        window.setTimeout(() => navigateOnceToDest(navigate, dest, code), 2000);
       }
     };
 
