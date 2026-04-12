@@ -64,10 +64,9 @@ const Home: React.FC = () => {
     if (pre) setRoomId((r) => r || pre.toUpperCase());
   }, [searchParams]);
 
-  /** Signed-in host + ?prefillRoom= — enter /host/:room (OAuth return). Skip when HostView sent us here after host-join-denied (avoids /host ↔ home loop). */
+  /** ?mode=host&prefillRoom= — enter /host/:room once auth check finishes (signed-in or not). Name query only when session exists. Skip when HostView set skip_prefill_host_nav after host-join-denied (avoids /host ↔ home loop). */
   useEffect(() => {
     if (hostSession === undefined) return;
-    if (!hostSession) return;
     if (joinOnly) return;
     if (homeMode !== 'host') return;
     const pre = searchParams.get('prefillRoom')?.trim();
@@ -87,8 +86,9 @@ const Home: React.FC = () => {
       setSearchParams(next, { replace: true });
       return;
     }
-    const name = hostDisplayNameFromSession(hostSession);
-    navigate(`/host/${encodeURIComponent(pre)}?name=${encodeURIComponent(name)}`, { replace: true });
+    const name = hostSession ? hostDisplayNameFromSession(hostSession) : '';
+    const qs = name ? `?name=${encodeURIComponent(name)}` : '';
+    navigate(`/host/${encodeURIComponent(pre)}${qs}`, { replace: true });
   }, [hostSession, joinOnly, homeMode, searchParams, navigate, setSearchParams]);
 
   useEffect(() => {
