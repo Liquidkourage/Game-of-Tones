@@ -3698,3 +3698,257 @@ button.conn-chip.conn-chip-compact {
   font-size: 0.95rem;
   color: rgba(255, 255, 255, 0.75);
 }
+
+/* --- Admin (/admin) host allowlist --- */
+.admin-page {
+  min-height: calc(100vh - 2rem);
+  padding: 1.5rem 1rem 2.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.admin-page__inner {
+  width: min(100%, 26rem);
+  padding: 1.5rem 1.25rem;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 255, 136, 0.2);
+  background: rgba(12, 14, 18, 0.85);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.35);
+}
+
+.admin-page__inner--wide {
+  width: min(100%, 36rem);
+}
+
+.admin-page__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--secondary-text, #9aa3ad);
+}
+
+.admin-page__spinner {
+  width: 2rem;
+  height: 2rem;
+  animation: admin-spin 0.9s linear infinite;
+  color: #00ff88;
+}
+
+@keyframes admin-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.admin-page__icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  color: #7ae8ff;
+  margin-bottom: 0.75rem;
+}
+
+.admin-page__icon--ok {
+  color: #00ff88;
+}
+
+.admin-page__icon--denied {
+  color: #ff8866;
+}
+
+.admin-page__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.admin-page__lead {
+  margin: 0 0 1rem;
+  line-height: 1.55;
+  color: rgba(232, 234, 239, 0.88);
+  font-size: 0.95rem;
+}
+
+.admin-page__lead code {
+  font-size: 0.85em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.admin-page__hint {
+  margin: 1rem 0 0;
+  font-size: 0.88rem;
+  color: var(--secondary-text, #9aa3ad);
+}
+
+.admin-page__signin {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+}
+
+.admin-page__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 1.25rem;
+  color: #7ae8ff;
+  text-decoration: none;
+  font-size: 0.92rem;
+}
+
+.admin-page__back:hover {
+  text-decoration: underline;
+}
+
+.admin-page__back--footer {
+  margin-top: 2rem;
+}
+
+.admin-page__error {
+  color: #ff8866;
+  margin: 0 0 0.75rem;
+  font-size: 0.92rem;
+}
+
+.admin-page__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.admin-page__header .admin-page__title {
+  margin-bottom: 0.25rem;
+}
+
+.admin-page__meta {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--secondary-text, #9aa3ad);
+}
+
+.admin-page__email {
+  opacity: 0.9;
+}
+
+.admin-page__banner {
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.admin-page__banner--on {
+  border: 1px solid rgba(0, 255, 136, 0.35);
+  background: rgba(0, 255, 136, 0.08);
+}
+
+.admin-page__banner--off {
+  border: 1px solid rgba(255, 180, 80, 0.25);
+  background: rgba(255, 140, 40, 0.06);
+}
+
+.admin-page__add {
+  margin-bottom: 1.25rem;
+}
+
+.admin-page__label {
+  display: block;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--secondary-text, #9aa3ad);
+  margin-bottom: 0.45rem;
+}
+
+.admin-page__add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: stretch;
+}
+
+.admin-page__add-row .input {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.admin-page__add-row .btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.admin-page__table-wrap {
+  margin-top: 0.5rem;
+}
+
+.admin-page__h2 {
+  margin: 0 0 0.65rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: rgba(232, 234, 239, 0.95);
+}
+
+.admin-page__muted {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--secondary-text, #9aa3ad);
+}
+
+.admin-page__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.admin-page__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.admin-page__row:last-child {
+  border-bottom: none;
+}
+
+.admin-page__row-email {
+  font-size: 0.95rem;
+  word-break: break-all;
+}
+
+.admin-page__remove {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 68, 68, 0.12);
+  color: #ff8888;
+  cursor: pointer;
+}
+
+.admin-page__remove:hover:not(:disabled) {
+  background: rgba(255, 68, 68, 0.22);
+}
+
+.admin-page__remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

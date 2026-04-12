@@ -11,6 +11,7 @@ import PlayerView from './components/PlayerView';
 import PublicDisplay from './components/PublicDisplay';
 import SpotifyCallback from './components/SpotifyCallback';
 import CallbackGoogle from './components/CallbackGoogle';
+import AdminPage from './components/AdminPage';
 import DisplayHeaderInfo from './components/DisplayHeaderInfo';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -71,10 +72,11 @@ function AppHeader() {
 function App() {
   const location = useLocation();
   const isDisplay = /^\/display(\/.+|$)/.test(location.pathname);
+  const isAdmin = location.pathname === '/admin';
   return (
     <div className="App">
       <div className="app-container">
-        <AppHeader />
+        {!isAdmin && <AppHeader />}
         {isDisplay && <div style={{ height: 73 }} />}
         <main className="app-main">
           <ErrorBoundary>
@@ -104,6 +106,7 @@ function App() {
               <Route path="/display/:roomId" element={<PublicDisplay />} />
               <Route path="/callback" element={<SpotifyCallback />} />
               <Route path="/callback-google" element={<CallbackGoogle />} />
+              <Route path="/admin" element={<AdminPage />} />
             </Routes>
           </ErrorBoundary>
         </main>

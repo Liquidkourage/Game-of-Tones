@@ -5840,26 +5840,92 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ success: true });
 });
 
-/** Shared secret for onboarding routes. Send Authorization: Bearer <secret> or X-Admin-Secret: <secret>. */
+/** Shared secret for scripts/curl. Also send X-Admin-Secret so it never conflicts with a Bearer JWT. */
 function verifyAdminSecret(req) {
   const secret = (process.env.TEMPO_ADMIN_SECRET || '').trim();
   if (!secret) return false;
-  const auth = req.headers.authorization;
-  if (auth && auth.startsWith('Bearer ')) {
-    return auth.slice(7).trim() === secret;
-  }
   const h = req.headers['x-admin-secret'];
   if (typeof h === 'string' && h.trim() === secret) return true;
+  const auth = req.headers.authorization;
+  if (auth && auth.startsWith('Bearer ')) {
+    const t = auth.slice(7).trim();
+    if (t === secret) return true;
+  }
   return false;
 }
 
-function adminSecretOr503(res) {
-  const configured = !!(process.env.TEMPO_ADMIN_SECRET || '').trim();
-  return res.status(configured ? 401 : 503).json({
-    error: configured ? 'unauthorized' : 'admin_not_configured',
-    message: configured ? 'Invalid or missing admin secret.' : 'Set TEMPO_ADMIN_SECRET to use admin routes.',
-  });
+function getAdminConfigured() {
+  return (
+    !!(process.env.TEMPO_ADMIN_SECRET || '').trim() ||
+    !!(process.env.TEMPO_ADMIN_EMAILS || '').trim()
+  );
 }
+
+/** Returns true if authorized; otherwise sends response and returns false. */
+async function requireAdmin(req, res) {
+  if (!getAdminConfigured()) {
+    res.status(503).json({
+      error: 'admin_not_configured',
+      message:
+        'Set TEMPO_ADMIN_EMAILS (comma-separated Google emails) and/or TEMPO_ADMIN_SECRET on the server.',
+    });
+    return false;
+  }
+  if (verifyAdminSecret(req)) return true;
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  if (!uid || !db) {
+    res.status(401).json({
+      error: 'admin_session_required',
+      message: 'Sign in with Google as an admin, or use X-Admin-Secret with the configured secret.',
+    });
+    return false;
+  }
+  const row = await usersStore.getUserById(db, uid);
+  const email = usersStore.normalizeHostEmail(row?.email || '');
+  const adminEmails = (process.env.TEMPO_ADMIN_EMAILS || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (email && adminEmails.includes(email)) return true;
+  res.status(401).json({
+    error: 'forbidden',
+    message: 'This account is not listed in TEMPO_ADMIN_EMAILS.',
+  });
+  return false;
+}
+
+app.get('/api/admin/me', async (req, res) => {
+  try {
+    const adminConfigured = getAdminConfigured();
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    if (!uid || !db) {
+      return res.json({
+        admin: false,
+        adminConfigured,
+        signedIn: false,
+        allowlistMode: String(process.env.TEMPO_HOST_SIGNIN_MODE || '').trim().toLowerCase() === 'allowlist',
+      });
+    }
+    const row = await usersStore.getUserById(db, uid);
+    const email = usersStore.normalizeHostEmail(row?.email || '');
+    const adminEmails = (process.env.TEMPO_ADMIN_EMAILS || '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    const admin = !!(email && adminEmails.includes(email));
+    return res.json({
+      admin,
+      adminConfigured,
+      signedIn: true,
+      email: row?.email ?? null,
+      displayName: row?.display_name ?? null,
+      allowlistMode: String(process.env.TEMPO_HOST_SIGNIN_MODE || '').trim().toLowerCase() === 'allowlist',
+    });
+  } catch (e) {
+    console.error('GET /api/admin/me:', e);
+    res.status(500).json({ error: 'failed' });
+  }
+});
 
 /**
  * Invite a host email so they can complete Google sign-in when TEMPO_HOST_SIGNIN_MODE=allowlist.
@@ -5867,7 +5933,7 @@ function adminSecretOr503(res) {
  */
 app.post('/api/admin/host-allowlist', async (req, res) => {
   try {
-    if (!verifyAdminSecret(req)) return adminSecretOr503(res);
+    if (!(await requireAdmin(req, res))) return;
     if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     const raw = typeof body.email === 'string' ? body.email : '';
@@ -5885,7 +5951,7 @@ app.post('/api/admin/host-allowlist', async (req, res) => {
 
 app.get('/api/admin/host-allowlist', async (req, res) => {
   try {
-    if (!verifyAdminSecret(req)) return adminSecretOr503(res);
+    if (!(await requireAdmin(req, res))) return;
     if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
     const rows = await usersStore.listHostAllowlist(db);
     return res.json({ emails: rows });
@@ -5897,7 +5963,7 @@ app.get('/api/admin/host-allowlist', async (req, res) => {
 
 app.delete('/api/admin/host-allowlist', async (req, res) => {
   try {
-    if (!verifyAdminSecret(req)) return adminSecretOr503(res);
+    if (!(await requireAdmin(req, res))) return;
     if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     const raw = typeof body.email === 'string' ? body.email : '';
