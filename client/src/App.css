@@ -104,7 +104,9 @@ body {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  text-shadow: var(--neon-glow);
+  /* No text-shadow here: large blur + gradient clip reads as a smeared/broken header in Chrome. */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Player route: TEMPO bar stays full width but uses less vertical space — more room for card + controls */
