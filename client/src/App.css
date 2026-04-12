@@ -100,18 +100,14 @@ body {
 .logo h1 {
   font-size: 2.7rem;
   font-weight: 700;
-  /* Gradient text — keep neon glow: without it, gradient+transparent fill can fail to paint
-     over `.app-header` backdrop-filter and the title reads as dark/invisible. */
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  text-shadow: var(--neon-glow);
+  /* Solid fill + drop-shadow glow: `background-clip: text` + `backdrop-filter` often fails to
+     composite (glyphs read as dark/empty); large `text-shadow` then looks like “black text + halo”. */
+  color: #00ffcc;
+  color: color-mix(in srgb, var(--accent-color) 55%, #00ccff);
+  text-shadow: none;
+  filter: drop-shadow(0 0 10px rgba(0, 255, 136, 0.5));
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  /* Helps gradient + clipped text composite reliably over header backdrop-filter */
-  isolation: isolate;
-  transform: translateZ(0);
 }
 
 /* Player route: TEMPO bar stays full width but uses less vertical space — more room for card + controls */
