@@ -39,7 +39,7 @@ function resolveSpotifyReturnDestination(searchParams: URLSearchParams): string 
   if (fromState) {
     return `/host/${encodeURIComponent(fromState)}`;
   }
-  return '/';
+  return '/?mode=host';
 }
 
 function cleanupSpotifyReturnMarkers() {
