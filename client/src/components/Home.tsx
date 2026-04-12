@@ -37,7 +37,12 @@ const Home: React.FC = () => {
   /** Join as remote/online (host can enable hybrid mode so prize waits for in-person bingo) */
   const [joinAsRemote, setJoinAsRemote] = useState(() => searchParams.get('remote') === '1');
   const [hostSession, setHostSession] = useState<{ id: number; email?: string | null; displayName?: string | null } | null | undefined>(undefined);
-  /** Server said default room id is already in memory — offer continue vs new code (avoids host socket / create loop). */
+  /**
+   * Server `POST /api/host/rooms` returns `mode: 'reuse'` when your default code already exists in RAM.
+   * If the first click returned `create` but HostView double-emitted `join-room`, you got `room_has_host`,
+   * bounced home, then the second click hit `reuse` — modal only on that second response. HostView now
+   * emits one join per socket until disconnect/reconnect.
+   */
   const [hostRoomReuseModal, setHostRoomReuseModal] = useState<{ roomId: string } | null>(null);
   const [isCreatingHostRoom, setIsCreatingHostRoom] = useState(false);
 

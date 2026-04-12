@@ -910,6 +910,14 @@ const HostView: React.FC = () => {
     setSocket(newSocket);
     /** One retry if first host join failed host-secret check (e.g. JWT not ready yet). */
     let hostSecretRetryOnce = false;
+    /**
+     * Only one join-room as host per socket lifecycle until disconnect/reconnect.
+     * Without this, `connect` + `if (already connected)` (and Strict Mode remount overlap) can emit twice;
+     * the second join hits room_has_host and kicks the user home — feels like a loop and skips the reuse modal.
+     */
+    let hostJoinEmitted = false;
+    /** Set below; reconnect calls this after reset so host re-enters the room socket. */
+    let emitHostJoinImpl: () => void = () => {};
 
     // Auto-refresh host player-card snapshot (debounced; replaces manual Request Player Cards)
     let playerCardsRefreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1319,6 +1327,7 @@ const HostView: React.FC = () => {
     });
 
     newSocket.on('disconnect', (reason: string) => {
+      hostJoinEmitted = false;
       console.warn('Socket disconnected:', reason);
       if (reason !== 'io client disconnect') {
         showToast('Connection lost - reconnecting...', 'warn');
@@ -1329,6 +1338,8 @@ const HostView: React.FC = () => {
     });
     newSocket.io.on('reconnect', () => {
       console.log('Socket reconnected. Refreshing Spotify status and devices.');
+      hostJoinEmitted = false;
+      emitHostJoinImpl();
       showToast('Connection restored', 'success');
       lastReconnectAtRef.current = Date.now();
       ignorePollingUntilRef.current = Date.now() + 15000; // ignore polling flips for 15s
@@ -1562,8 +1573,10 @@ const HostView: React.FC = () => {
     });
 
     // Join as host after the socket is connected so the handshake runs first; re-read JWT at emit time.
-    const emitHostJoin = () => {
-      if (!roomId) return;
+    const onConnectJoin = () => emitHostJoinImpl();
+    emitHostJoinImpl = () => {
+      if (!roomId || hostJoinEmitted) return;
+      hostJoinEmitted = true;
       console.log('?? License validation disabled - joining room as host');
       newSocket.emit('join-room', {
         roomId,
@@ -1575,8 +1588,8 @@ const HostView: React.FC = () => {
         inPerson: true,
       });
     };
-    newSocket.on('connect', emitHostJoin);
-    if (newSocket.connected) emitHostJoin();
+    newSocket.on('connect', onConnectJoin);
+    if (newSocket.connected) emitHostJoinImpl();
 
     // Check Spotify status and load playlists if connected
     const checkSpotifyStatus = async () => {
@@ -1626,7 +1639,7 @@ const HostView: React.FC = () => {
 
     // Cleanup socket on unmount
     return () => {
-      newSocket.off('connect', emitHostJoin);
+      newSocket.off('connect', onConnectJoin);
       if (playerCardsRefreshTimer) clearTimeout(playerCardsRefreshTimer);
       newSocket.close();
       // Clear any pending volume timeout
