@@ -1464,11 +1464,21 @@ io.on('connection', (socket) => {
       try {
         const urow = await usersStore.getUserById(db, claimUid);
         const emailNorm = usersStore.normalizeHostEmail(urow?.email || '');
-        if (!emailNorm || !(await usersStore.isEmailAllowlistedForHostSignin(db, emailNorm))) {
+        if (!emailNorm) {
           socket.emit('host-join-denied', {
             roomId,
             reason: 'host_not_approved',
-            message: 'This account is not approved to host games. Ask an organizer to add your email.',
+            message:
+              'Your host account has no email on file. Sign out and sign in with Google again, then try hosting.',
+          });
+          return;
+        }
+        if (!(await usersStore.isEmailAllowlistedForHostSignin(db, emailNorm))) {
+          socket.emit('host-join-denied', {
+            roomId,
+            reason: 'host_not_approved',
+            message:
+              'This account is not approved to host games. Ask your organizer to add your Google email (or an equivalent Gmail address) to the allowlist.',
           });
           return;
         }
@@ -6101,10 +6111,19 @@ async function requireApprovedHostUid(req, res) {
   }
   const urow = await usersStore.getUserById(db, uid);
   const emailNorm = usersStore.normalizeHostEmail(urow?.email || '');
-  if (!emailNorm || !(await usersStore.isEmailAllowlistedForHostSignin(db, emailNorm))) {
+  if (!emailNorm) {
+    res.status(403).json({
+      error: 'host_profile_incomplete',
+      message:
+        'Your host account has no email on file. Sign out, then sign in with Google again so your email can be verified against the allowlist.',
+    });
+    return null;
+  }
+  if (!(await usersStore.isEmailAllowlistedForHostSignin(db, emailNorm))) {
     res.status(403).json({
       error: 'host_not_approved',
-      message: 'This account is not approved to host games. Ask an organizer to add your email.',
+      message:
+        'This account is not approved to host games. Ask your organizer to add your exact Google email (or an equivalent Gmail address) to the allowlist.',
     });
     return null;
   }

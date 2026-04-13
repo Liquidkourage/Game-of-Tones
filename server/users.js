@@ -21,6 +21,11 @@ async function ensureUsersTable(db) {
 
 async function upsertUserByGoogle(db, { googleSub, email, displayName }) {
   if (!db) throw new Error('DATABASE_URL is required for host accounts');
+  /** Never persist empty string: COALESCE(EXCLUDED.email, users.email) would keep '' and break allowlist checks. */
+  const emailClean =
+    email && typeof email === 'string' && email.trim() ? email.trim() : null;
+  const nameClean =
+    displayName && typeof displayName === 'string' && displayName.trim() ? displayName.trim() : null;
   const r = await db.query(
     `INSERT INTO users (google_sub, email, display_name)
      VALUES ($1, $2, $3)
@@ -28,7 +33,7 @@ async function upsertUserByGoogle(db, { googleSub, email, displayName }) {
        email = COALESCE(EXCLUDED.email, users.email),
        display_name = COALESCE(EXCLUDED.display_name, users.display_name)
      RETURNING id, google_sub, email, display_name, created_at`,
-    [googleSub, email || null, displayName || null]
+    [googleSub, emailClean, nameClean]
   );
   return r.rows[0];
 }
@@ -45,6 +50,35 @@ async function getUserById(db, id) {
 function normalizeHostEmail(email) {
   if (!email || typeof email !== 'string') return '';
   return email.trim().toLowerCase();
+}
+
+/**
+ * Gmail treats j.doe@gmail.com and jdoe@gmail.com as the same inbox. Allowlist matching uses this
+ * so an admin can add either form and sign-in still matches Google’s returned address.
+ */
+function canonicalEmailForAllowlist(email) {
+  const n = normalizeHostEmail(email);
+  if (!n) return '';
+  const at = n.lastIndexOf('@');
+  if (at <= 0) return n;
+  let local = n.slice(0, at);
+  let domain = n.slice(at + 1);
+  if (domain === 'googlemail.com') domain = 'gmail.com';
+  if (domain === 'gmail.com') {
+    const noTag = local.split('+')[0];
+    const collapsed = noTag.replace(/\./g, '');
+    return `${collapsed}@gmail.com`;
+  }
+  return n;
+}
+
+/** Distinct strings to check against host_allowlist / env (raw + canonical for Gmail). */
+function emailAllowlistCandidates(normalizedEmail) {
+  const n = normalizeHostEmail(normalizedEmail);
+  if (!n) return [];
+  const c = canonicalEmailForAllowlist(n);
+  if (c && c !== n) return [...new Set([n, c])];
+  return [n];
 }
 
 async function getUserByGoogleSub(db, googleSub) {
@@ -77,15 +111,27 @@ function isApprovedHostsOnlyMode() {
 
 /** Emails listed in TEMPO_HOST_ALLOWLIST_EMAILS (comma-separated) or host_allowlist table. */
 async function isEmailAllowlistedForHostSignin(db, normalizedEmail) {
-  if (!normalizedEmail) return false;
+  const candidates = emailAllowlistCandidates(normalizedEmail);
+  if (candidates.length === 0) return false;
+  const userCanon = canonicalEmailForAllowlist(normalizedEmail);
+
   const envList = (process.env.TEMPO_HOST_ALLOWLIST_EMAILS || '')
     .split(',')
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
-  if (envList.includes(normalizedEmail)) return true;
+  for (const e of envList) {
+    if (candidates.includes(e)) return true;
+    if (userCanon && canonicalEmailForAllowlist(e) === userCanon) return true;
+  }
   if (!db) return false;
-  const r = await db.query('SELECT 1 FROM host_allowlist WHERE email = $1', [normalizedEmail]);
-  return r.rows.length > 0;
+  const r = await db.query('SELECT 1 FROM host_allowlist WHERE email = ANY($1::text[])', [candidates]);
+  if (r.rows.length > 0) return true;
+  /** DB rows may use a different Gmail spelling than Google returns — compare canonical forms. */
+  const all = await db.query('SELECT email FROM host_allowlist');
+  for (const row of all.rows) {
+    if (userCanon && canonicalEmailForAllowlist(row.email) === userCanon) return true;
+  }
+  return false;
 }
 
 async function addHostAllowlistEmail(db, normalizedEmail) {
@@ -121,6 +167,8 @@ module.exports = {
   getUserById,
   getUserByGoogleSub,
   normalizeHostEmail,
+  canonicalEmailForAllowlist,
+  emailAllowlistCandidates,
   isApprovedHostsOnlyMode,
   isEmailAllowlistedForHostSignin,
   addHostAllowlistEmail,
