@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { API_BASE } from '../config';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Music, AlertCircle } from 'lucide-react';
+import { hostFetch } from '../utils/hostFetch';
 
 /** Decode JWT payload segment (base64url) — UTF-8 safe; latin-only atob can break some payloads. */
 function parseJwtPayloadJson<T = unknown>(segment: string): T | null {
@@ -187,8 +188,8 @@ const SpotifyCallback: React.FC = () => {
         const qs = new URLSearchParams();
         qs.set('code', code);
         if (stateParam) qs.set('state', stateParam);
-        const response = await fetch(`${API_BASE || ''}/api/spotify/callback?${qs.toString()}`, {
-          credentials: 'include',
+        /** Use hostFetch so Authorization Bearer (tempo_host_jwt) is sent when API is on another origin; cookies alone do not cross hosts. */
+        const response = await hostFetch(`${API_BASE || ''}/api/spotify/callback?${qs.toString()}`, {
           headers: { Accept: 'application/json' },
         });
         const data = await response.json();
