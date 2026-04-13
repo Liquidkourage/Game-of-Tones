@@ -342,7 +342,7 @@ function saveTokens(tokens) {
   }
 }
 
-// Load saved device from file
+// Load saved device from file (legacy single file, no host user)
 function loadSavedDevice() {
   try {
     if (fs.existsSync(DEVICE_FILE)) {
@@ -356,6 +356,34 @@ function loadSavedDevice() {
   return null;
 }
 
+function deviceFileForUserId(uid) {
+  if (uid == null || !Number.isFinite(Number(uid))) return DEVICE_FILE;
+  return path.join(__dirname, `spotify_device_user_${Number(uid)}.json`);
+}
+
+function loadSavedDeviceForUser(uid) {
+  try {
+    const file = deviceFileForUserId(uid);
+    if (fs.existsSync(file)) {
+      return JSON.parse(fs.readFileSync(file, 'utf8'));
+    }
+  } catch (error) {
+    console.error('❌ Error loading device for user:', error);
+  }
+  return null;
+}
+
+/** Prefer host-owned room's saved device (per Spotify account). */
+function loadSavedDeviceForRoom(roomId) {
+  const room = rooms.get(roomId);
+  const uid = room?.ownerUserId;
+  if (uid != null && Number.isFinite(Number(uid))) {
+    const d = loadSavedDeviceForUser(Number(uid));
+    if (d) return d;
+  }
+  return loadSavedDevice();
+}
+
 // Save device to file
 function saveDevice(device) {
   try {
@@ -363,6 +391,16 @@ function saveDevice(device) {
     console.log('💾 Saved device to file:', device.name);
   } catch (error) {
     console.error('❌ Error saving device to file:', error);
+  }
+}
+
+function saveDeviceForUser(uid, device) {
+  try {
+    const file = deviceFileForUserId(uid);
+    fs.writeFileSync(file, JSON.stringify(device, null, 2), 'utf8');
+    console.log(`💾 Saved device for host user ${uid}:`, device.name);
+  } catch (error) {
+    console.error('❌ Error saving device for user:', error);
   }
 }
 
@@ -428,7 +466,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     // STRICT device control: use provided device or saved device only
     let targetDeviceId = deviceId;
     if (!targetDeviceId) {
-      const savedDevice = loadSavedDevice();
+      const savedDevice = loadSavedDeviceForRoom(roomId);
       if (savedDevice) {
         targetDeviceId = savedDevice.id;
         console.log(`🎵 Using saved device for song: ${savedDevice.name}`);
@@ -841,11 +879,18 @@ function getOrganizationFromRoom(roomId) {
   return room ? spotifyOrgForRoom(room) : 'DEFAULT';
 }
 
-/** Spotify API routes: use logged-in host's tokens when present, else DEFAULT. */
+/** Spotify HTTP API: logged-in host only — each host uses user_${uid} tokens (never shared DEFAULT). */
 function spotifyForRequest(req) {
   const uid = hostAuth.getHostUserIdFromRequest(req);
-  if (uid != null) return multiTenantSpotify.getService(`user_${uid}`);
-  return spotifyServiceDefault;
+  if (uid == null) return null;
+  return multiTenantSpotify.getService(`user_${uid}`);
+}
+
+function hostSpotifyHasTokens(req) {
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  if (uid == null) return false;
+  const t = multiTenantSpotify.getTokens(`user_${uid}`);
+  return !!(t && t.accessToken);
 }
 
 // Timer management to prevent conflicts
@@ -871,7 +916,7 @@ function startSimpleContextMonitor(roomId, deviceId) {
   // Get the target device ID (use saved device if deviceId not provided)
   let targetDeviceId = deviceId;
   if (!targetDeviceId) {
-    const savedDevice = loadSavedDevice();
+    const savedDevice = loadSavedDeviceForRoom(roomId);
     if (savedDevice) {
       targetDeviceId = savedDevice.id;
     }
@@ -1927,7 +1972,7 @@ io.on('connection', (socket) => {
         // Pause Spotify playback during verification
         (async () => {
           try {
-            const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+            const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
             if (deviceId) {
               await spotifyFor(roomId).pausePlayback(deviceId);
               console.log(`⏸️ Spotify paused for bingo verification by ${player.name}`);
@@ -2094,7 +2139,7 @@ io.on('connection', (socket) => {
         // Pause Spotify playback during verification
         (async () => {
           try {
-            const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+            const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
             if (deviceId) {
               await spotifyFor(roomId).pausePlayback(deviceId);
               console.log(`⏸️ Spotify paused for invalid bingo verification by ${player.name}`);
@@ -2314,7 +2359,7 @@ io.on('connection', (socket) => {
       // CRITICAL: Stop Spotify playback when round completes
       (async () => {
         try {
-          const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+          const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
           if (deviceId) {
             await spotifyFor(roomId).pausePlayback(deviceId);
             console.log(`⏸️ Spotify paused - round complete`);
@@ -2441,7 +2486,7 @@ io.on('connection', (socket) => {
         // Resume from where we left off - first resume Spotify playback, then start progression timer
         (async () => {
           try {
-            const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+            const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
             if (deviceId) {
               await spotifyFor(roomId).resumePlayback(deviceId);
               console.log(`▶️ Spotify resumed after rejecting ${player.name}'s bingo`);
@@ -2482,7 +2527,7 @@ io.on('connection', (socket) => {
       // Resume Spotify playback
       (async () => {
         try {
-          const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+          const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
           if (deviceId) {
             await spotifyFor(roomId).resumePlayback(deviceId);
             console.log(`▶️ Spotify resumed after manual resume`);
@@ -2656,7 +2701,7 @@ io.on('connection', (socket) => {
     // CRITICAL: Stop Spotify playback before reset
     (async () => {
       try {
-        const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+        const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
         if (deviceId) {
           await spotifyFor(roomId).pausePlayback(deviceId);
           console.log(`⏸️ Spotify paused before round reset`);
@@ -2780,7 +2825,7 @@ io.on('connection', (socket) => {
     clearPlayerCardUpdateTimer(roomId); // Clear debounce timer
     
     try {
-      const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+      const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
       if (deviceId) {
         spotifyFor(roomId).pausePlayback(deviceId).catch(() => {});
       }
@@ -3174,7 +3219,7 @@ io.on('connection', (socket) => {
       clearRoomTimer(roomId);
       if (stopPlayback) {
         try {
-          const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+          const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
           if (deviceId) {
             try { await spotifyFor(roomId).transferPlayback(deviceId, false); } catch {}
             await spotifyFor(roomId).pausePlayback(deviceId);
@@ -3210,7 +3255,7 @@ io.on('connection', (socket) => {
       clearRoomTimer(roomId);
       if (stopPlayback) {
         try {
-          const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+          const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
           if (deviceId) {
             try { await spotifyFor(roomId).transferPlayback(deviceId, false); } catch {}
             await spotifyFor(roomId).pausePlayback(deviceId);
@@ -3267,7 +3312,7 @@ io.on('connection', (socket) => {
         
         // Clear the timer when pausing
         clearRoomTimer(roomId);
-        const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+        const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
         if (!deviceId) {
           console.error('❌ No device found for pause');
           socket.emit('error', { message: 'No device available for pause' });
@@ -3347,7 +3392,7 @@ io.on('connection', (socket) => {
     if (room && room.host === socket.id) {
       try {
         console.log('▶️ Resuming song in room:', roomId);
-        const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+        const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
         if (!deviceId) {
           console.error('❌ No device found for resume');
           socket.emit('error', { message: 'No device available for resume' });
@@ -3865,9 +3910,10 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
     return;
   }
 
-  // Check if Spotify is connected
-  if (!spotifyTokens || !spotifyTokens.accessToken) {
-    console.error('❌ Cannot generate bingo cards: Spotify not connected');
+  const org = spotifyOrgForRoom(room);
+  const tok = multiTenantSpotify.getTokens(org);
+  if (!tok || !tok.accessToken) {
+    console.error('❌ Cannot generate bingo cards: Spotify not connected for this host');
     return;
   }
 
@@ -4478,9 +4524,10 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     return;
   }
 
-  // Check if Spotify is connected and refresh token if needed
-  if (!spotifyTokens || !spotifyTokens.accessToken) {
-    console.error('❌ Cannot start playback: Spotify not connected');
+  const org = spotifyOrgForRoom(room);
+  const tok = multiTenantSpotify.getTokens(org);
+  if (!tok || !tok.accessToken) {
+    console.error('❌ Cannot start playback: Spotify not connected for this host');
     return;
   }
 
@@ -4719,7 +4766,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     // Use provided deviceId or fall back to saved device (STRICT-ONLY: no other fallback)
     let targetDeviceId = deviceId;
     if (!targetDeviceId) {
-      const savedDevice = loadSavedDevice();
+      const savedDevice = loadSavedDeviceForRoom(roomId);
       if (savedDevice) {
         targetDeviceId = savedDevice.id;
         console.log(`🎵 Using saved device for playback: ${savedDevice.name}`);
@@ -4949,7 +4996,7 @@ async function playNextSong(roomId, deviceId) {
         room.gameState = 'ended';
         clearRoomTimer(roomId);
         try {
-          const deviceToPause = deviceId || room.selectedDeviceId || loadSavedDevice()?.id;
+          const deviceToPause = deviceId || room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
           if (deviceToPause) { await spotifyFor(roomId).pausePlayback(deviceToPause); }
         } catch (_) {}
         
@@ -4974,7 +5021,7 @@ async function playNextSong(roomId, deviceId) {
     // STRICT device control: use provided device or saved device only
     let targetDeviceId = deviceId;
     if (!targetDeviceId) {
-      const savedDevice = loadSavedDevice();
+      const savedDevice = loadSavedDeviceForRoom(roomId);
       if (savedDevice) {
         targetDeviceId = savedDevice.id;
         console.log(`🎵 Using saved device for next song: ${savedDevice.name}`);
@@ -5699,7 +5746,7 @@ app.post('/api/rooms/:roomId/end', async (req, res) => {
     try {
       clearRoomTimer(roomId);
       try {
-        const deviceId = room.selectedDeviceId || loadSavedDevice()?.id;
+        const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
         if (deviceId) {
           try { await spotifyFor(roomId).transferPlayback(deviceId, false); } catch {}
           await spotifyFor(roomId).pausePlayback(deviceId);
@@ -6143,7 +6190,23 @@ app.post('/api/host/rooms', async (req, res) => {
   }
 });
 
-// Spotify API Routes
+// Spotify API Routes — hosts must be signed in (Google JWT); each host uses their own Spotify tokens (user_${id}).
+app.use('/api/spotify', (req, res, next) => {
+  const full = (req.originalUrl || req.url || '').split('?')[0];
+  const rel = (req.path || '').split('?')[0] || full.replace(/^.*\/api\/spotify/, '') || full;
+  if (full.includes('/api/spotify/callback') || rel === '/callback' || rel.endsWith('/callback')) return next();
+  if (req.method === 'GET' && (full.endsWith('/api/spotify/status') || rel === '/status')) return next();
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  if (!uid) {
+    return res.status(401).json({
+      error: 'login_required',
+      loginUrl: '/api/auth/google',
+      message: 'Sign in with Google to use Spotify as a host.',
+    });
+  }
+  next();
+});
+
 app.get('/api/spotify/auth', async (req, res) => {
   try {
     const uid = await requireApprovedHostUid(req, res);
@@ -6181,28 +6244,30 @@ app.get('/api/spotify/status', async (req, res) => {
   }
 });
 
-// Get current tokens for environment variable setup
+// Get current tokens for debugging (signed-in host only — their own Spotify connection)
 app.get('/api/spotify/tokens', (req, res) => {
-  if (!spotifyTokens || !spotifyTokens.accessToken || !spotifyTokens.refreshToken) {
-    return res.status(404).json({ 
-      error: 'No Spotify tokens available. Connect Spotify first.' 
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  if (!uid) {
+    return res.status(401).json({ error: 'login_required', message: 'Sign in with Google first.' });
+  }
+  const tok = multiTenantSpotify.getTokens(`user_${uid}`);
+  if (!tok || !tok.accessToken || !tok.refreshToken) {
+    return res.status(404).json({
+      error: 'No Spotify tokens for this host. Connect Spotify from the host screen first.',
     });
   }
-  
-  res.json({ 
+
+  res.json({
     success: true,
-    message: 'Copy these environment variables to Railway project settings:',
+    message: 'These tokens belong to the signed-in host Spotify account (user-specific).',
     envVars: {
-      SPOTIFY_ACCESS_TOKEN: spotifyTokens.accessToken,
-      SPOTIFY_REFRESH_TOKEN: spotifyTokens.refreshToken
+      SPOTIFY_ACCESS_TOKEN: tok.accessToken,
+      SPOTIFY_REFRESH_TOKEN: tok.refreshToken,
     },
     instructions: [
-      '1. Go to your Railway project dashboard',
-      '2. Click on "Variables" tab',
-      '3. Add these two environment variables',
-      '4. Redeploy your app',
-      '5. Spotify will auto-connect on future deployments!'
-    ]
+      'Per-host tokens are stored in the database under organization_id user_<hostId>.',
+      'You normally do not need to copy these; use Connect Spotify in the app.',
+    ],
   });
 });
 
@@ -6213,6 +6278,10 @@ app.post('/api/spotify/clear', async (req, res) => {
     spotifyTokens = null;
     if (uid != null) {
       await multiTenantSpotify.clearOrgTokens(`user_${uid}`);
+      try {
+        const devFile = deviceFileForUserId(uid);
+        if (fs.existsSync(devFile)) fs.unlinkSync(devFile);
+      } catch (_) {}
     } else {
       await multiTenantSpotify.clearOrgTokens('DEFAULT');
       if (spotifyServiceDefault && typeof spotifyServiceDefault.setTokens === 'function') {
@@ -6222,6 +6291,7 @@ app.post('/api/spotify/clear', async (req, res) => {
     try {
       if (fs.existsSync(TOKEN_FILE)) fs.unlinkSync(TOKEN_FILE);
     } catch (_) {}
+    spotifyTokens = multiTenantSpotify.getTokens('DEFAULT');
     res.json({ success: true, message: 'Spotify tokens cleared' });
   } catch (error) {
     console.error('❌ Error in /api/spotify/clear:', error);
@@ -6301,8 +6371,11 @@ app.get('/api/spotify/callback', async (req, res) => {
 app.get('/api/spotify/playlists', async (req, res) => {
   try {
     const svc = spotifyForRequest(req);
+    if (!svc) {
+      return res.status(401).json({ error: 'login_required', message: 'Sign in with Google to load playlists.' });
+    }
     const uid = hostAuth.getHostUserIdFromRequest(req);
-    const orgId = uid != null ? `user_${uid}` : 'DEFAULT';
+    const orgId = `user_${uid}`;
     const orgTokens = multiTenantSpotify.getTokens(orgId);
     if (!orgTokens) {
       return res.status(401).json({
@@ -6332,9 +6405,8 @@ app.get('/api/spotify/playlists/:playlistId/tracks', async (req, res) => {
 // Spotify API endpoints
 app.get('/api/spotify/devices', async (req, res) => {
   try {
-    /** Must match /api/spotify/status — legacy `spotifyTokens` is DEFAULT only; signed-in hosts use user_${uid}. */
     const uid = hostAuth.getHostUserIdFromRequest(req);
-    const orgId = uid != null ? `user_${uid}` : 'DEFAULT';
+    const orgId = `user_${uid}`;
     const orgTokens = multiTenantSpotify.getTokens(orgId);
     if (!orgTokens || !orgTokens.accessToken) {
       return res.status(401).json({ error: 'Spotify not connected', organizationId: orgId });
@@ -6348,8 +6420,7 @@ app.get('/api/spotify/devices', async (req, res) => {
     } catch (_) {}
     const currentDevice = currentPlayback?.device || null;
     
-    // Load saved device
-    const savedDevice = loadSavedDevice();
+    const savedDevice = loadSavedDeviceForUser(uid);
     
     if (devices.length === 0) {
       console.log('⚠️  No devices found - user may need to open Spotify on a device');
@@ -6389,12 +6460,16 @@ app.get('/api/spotify/devices', async (req, res) => {
 app.post('/api/spotify/save-device', async (req, res) => {
   try {
     const { device } = req.body;
+    const uid = hostAuth.getHostUserIdFromRequest(req);
     
     if (!device || !device.id) {
       return res.status(400).json({ error: 'Device information required' });
     }
-    
-    saveDevice(device);
+    if (uid == null) {
+      return res.status(401).json({ error: 'login_required' });
+    }
+
+    saveDeviceForUser(uid, device);
     console.log(`💾 Device saved: ${device.name} (${device.id})`);
     
     res.json({ 
@@ -6445,7 +6520,7 @@ app.post('/api/spotify/next', async (req, res) => {
 app.post('/api/spotify/transfer', async (req, res) => {
   try {
     const { deviceId, play = true } = req.body || {};
-    if (!spotifyTokens || !spotifyTokens.accessToken) {
+    if (!hostSpotifyHasTokens(req)) {
       return res.status(401).json({ success: false, error: 'Spotify not connected' });
     }
     if (!deviceId || typeof deviceId !== 'string') {
@@ -6585,7 +6660,7 @@ app.post('/api/spotify/queue', async (req, res) => {
 // Force device detection by attempting playback
 app.post('/api/spotify/force-device', async (req, res) => {
   try {
-    if (!spotifyTokens || !spotifyTokens.accessToken) {
+    if (!hostSpotifyHasTokens(req)) {
       return res.status(401).json({ error: 'Spotify not connected' });
     }
 
@@ -6619,27 +6694,27 @@ app.post('/api/spotify/force-device', async (req, res) => {
   }
 });
 
-// Refresh Spotify connection endpoint
+// Refresh Spotify connection endpoint (current host's tokens only)
 app.post('/api/spotify/refresh', async (req, res) => {
   try {
-    if (!spotifyTokens || !spotifyTokens.refreshToken) {
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    if (!uid) return res.status(401).json({ error: 'login_required' });
+    const orgId = `user_${uid}`;
+    const tok = multiTenantSpotify.getTokens(orgId);
+    if (!tok || !tok.refreshToken) {
       return res.status(401).json({ error: 'No refresh token available' });
     }
 
-    console.log('🔄 Refreshing Spotify access token...');
-    
-    // Refresh the access token
-    const newAccessToken = await spotifyForRequest(req).refreshAccessToken();
-    
-    // Update stored tokens
-    spotifyTokens.accessToken = newAccessToken;
-    saveTokens(spotifyTokens);
-    
+    console.log('🔄 Refreshing Spotify access token for', orgId);
+    const svc = multiTenantSpotify.getService(orgId);
+    await svc.refreshAccessToken();
+    await multiTenantSpotify.setTokens(orgId, {
+      accessToken: svc.accessToken,
+      refreshToken: svc.refreshToken || tok.refreshToken,
+      expiresIn: 3600,
+    });
+
     console.log('✅ Spotify access token refreshed successfully');
-    
-    // Reactivate the preferred device
-    await activatePreferredDevice();
-    
     res.json({ success: true, message: 'Spotify connection refreshed' });
   } catch (error) {
     console.error('❌ Error refreshing Spotify connection:', error);
@@ -6652,7 +6727,7 @@ app.post('/api/spotify/volume', async (req, res) => {
   try {
     const { volume, deviceId, roomId } = req.body;
     
-    if (!spotifyTokens || !spotifyTokens.accessToken) {
+    if (!hostSpotifyHasTokens(req)) {
       return res.status(401).json({ error: 'Spotify not connected' });
     }
     
@@ -6687,7 +6762,7 @@ app.post('/api/spotify/seek', async (req, res) => {
   try {
     const { position, deviceId } = req.body;
     
-    if (!spotifyTokens || !spotifyTokens.accessToken) {
+    if (!hostSpotifyHasTokens(req)) {
       return res.status(401).json({ error: 'Spotify not connected' });
     }
     
@@ -6711,7 +6786,7 @@ app.post('/api/spotify/seek', async (req, res) => {
 // Get current playback state (normalized for client)
 app.get('/api/spotify/current-playback', async (req, res) => {
   try {
-    if (!spotifyTokens || !spotifyTokens.accessToken) {
+    if (!hostSpotifyHasTokens(req)) {
       return res.status(401).json({ success: false, error: 'Spotify not connected' });
     }
     
@@ -6729,7 +6804,7 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
   try {
     const { playlistId } = req.params;
     
-    if (!spotifyTokens || !spotifyTokens.accessToken) {
+    if (!hostSpotifyHasTokens(req)) {
       return res.status(401).json({ error: 'Spotify not connected' });
     }
     
@@ -6765,7 +6840,7 @@ app.post('/api/spotify/create-output-playlist', async (req, res) => {
   try {
     const { name, trackIds, description } = req.body;
     
-    if (!spotifyTokens || !spotifyTokens.accessToken) {
+    if (!hostSpotifyHasTokens(req)) {
       return res.status(401).json({ error: 'Spotify not connected' });
     }
     
@@ -6796,7 +6871,7 @@ app.post('/api/spotify/create-output-playlist', async (req, res) => {
 // Get user's Game Of Tones output playlists
 app.get('/api/spotify/got-playlists', async (req, res) => {
   try {
-    if (!spotifyTokens || !spotifyTokens.accessToken) {
+    if (!hostSpotifyHasTokens(req)) {
       return res.status(401).json({ error: 'Spotify not connected' });
     }
     
@@ -6820,7 +6895,7 @@ app.post('/api/spotify/delete-playlists', async (req, res) => {
     const { playlistIds } = req.body;
     console.log('🗑️ Request body:', { playlistIds: playlistIds?.length ? `${playlistIds.length} playlists` : 'none' });
     
-    if (!spotifyTokens || !spotifyTokens.accessToken) {
+    if (!hostSpotifyHasTokens(req)) {
       console.log('❌ Spotify not connected');
       return res.status(401).json({ error: 'Spotify not connected' });
     }
@@ -6861,7 +6936,7 @@ app.get('/api/spotify/search-tracks', async (req, res) => {
   try {
     const { q, limit = 20 } = req.query;
     
-    if (!spotifyTokens || !spotifyTokens.accessToken) {
+    if (!hostSpotifyHasTokens(req)) {
       return res.status(401).json({ error: 'Spotify not connected' });
     }
     
@@ -6888,7 +6963,7 @@ app.post('/api/spotify/replace-song', async (req, res) => {
   try {
     const { roomId, oldSongId, newSongId, position } = req.body;
     
-    if (!spotifyTokens || !spotifyTokens.accessToken) {
+    if (!hostSpotifyHasTokens(req)) {
       return res.status(401).json({ error: 'Spotify not connected' });
     }
     
@@ -7087,12 +7162,7 @@ app.post('/api/spotify/suggest-songs', async (req, res) => {
       targetCount 
     });
     
-    console.log('🤖 Spotify tokens status:', { 
-      hasTokens: !!spotifyTokens, 
-      hasAccessToken: !!(spotifyTokens && spotifyTokens.accessToken) 
-    });
-    
-    if (!spotifyTokens || !spotifyTokens.accessToken) {
+    if (!hostSpotifyHasTokens(req)) {
       console.log('🤖 Returning Spotify not connected error');
       return res.status(401).json({ error: 'Spotify not connected' });
     }
@@ -7103,7 +7173,11 @@ app.post('/api/spotify/suggest-songs', async (req, res) => {
     console.log(`📊 Current songs: ${existingSongs?.length || 0}, Target: ${targetCount}`);
     
     // Analyze playlist name for themes and keywords
-    const suggestions = await generateSmartSuggestions(playlistName, existingSongs, targetCount);
+    const spotifySvc = spotifyForRequest(req);
+    if (!spotifySvc) {
+      return res.status(401).json({ error: 'login_required' });
+    }
+    const suggestions = await generateSmartSuggestions(playlistName, existingSongs, targetCount, spotifySvc);
     
     res.json({
       success: true,
@@ -7148,7 +7222,10 @@ app.post('/api/spotify/suggest-songs', async (req, res) => {
 });
 
 // Smart suggestion generation function
-async function generateSmartSuggestions(playlistName, existingSongs = [], targetCount = 15) {
+async function generateSmartSuggestions(playlistName, existingSongs = [], targetCount = 15, spotifyService) {
+  if (!spotifyService) {
+    throw new Error('Spotify service required');
+  }
   const songsNeeded = Math.max(0, targetCount - existingSongs.length);
   
   if (songsNeeded <= 0) {
@@ -7178,7 +7255,7 @@ async function generateSmartSuggestions(playlistName, existingSongs = [], target
   for (const query of searchQueries.slice(0, 5)) { // Limit to 5 strategies to avoid rate limits
     try {
       console.log(`🎵 Searching: "${query.query}" (${query.strategy})`);
-      const results = await spotifyForRequest(req).searchTracks(query.query, 10);
+      const results = await spotifyService.searchTracks(query.query, 10);
       
       const filteredResults = results
         .filter(song => !seenSongs.has(song.id))
@@ -7610,7 +7687,7 @@ app.post('/api/spotify/resume', async (req, res) => {
   try {
     const { deviceId } = req.body;
     
-    if (!spotifyTokens || !spotifyTokens.accessToken) {
+    if (!hostSpotifyHasTokens(req)) {
       return res.status(401).json({ error: 'Spotify not connected' });
     }
     
