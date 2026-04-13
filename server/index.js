@@ -1412,9 +1412,9 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
 
 io.use((socket, next) => {
   try {
-    const t = socket.handshake.auth && socket.handshake.auth.token;
-    if (typeof t === 'string' && t.length > 0) {
-      const p = hostAuth.decodeHostJwtPayload(t);
+    const token = hostAuth.getHostSessionTokenFromHandshake(socket.handshake);
+    if (typeof token === 'string' && token.length > 0) {
+      const p = hostAuth.decodeHostJwtPayload(token);
       if (p) {
         socket.hostUserId = p.userId;
         socket.hostEmailFromJwt = p.email || null;
@@ -5947,10 +5947,17 @@ app.get('/api/auth/me', async (req, res) => {
   try {
     const uid = hostAuth.getHostUserIdFromRequest(req);
     if (!uid) return res.status(401).json({ user: null });
-    if (!db) return res.json({ user: { id: uid } });
+    const rawJwt = hostAuth.getHostJwtRawFromRequest(req);
+    if (!db) {
+      return res.json({
+        user: { id: uid },
+        ...(rawJwt ? { hostToken: rawJwt } : {}),
+      });
+    }
     const row = await usersStore.getUserById(db, uid);
     return res.json({
       user: row ? { id: row.id, email: row.email, displayName: row.display_name } : { id: uid },
+      ...(rawJwt ? { hostToken: rawJwt } : {}),
     });
   } catch (e) {
     res.status(500).json({ error: 'Failed to load user' });

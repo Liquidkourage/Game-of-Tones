@@ -104,20 +104,44 @@ function parseCookies(header) {
   return out;
 }
 
-function getHostUserIdFromRequest(req) {
+/** Raw JWT string from Bearer or host session cookie (for syncing client localStorage with HttpOnly cookie). */
+function getHostJwtRawFromRequest(req) {
   const auth = req.headers.authorization;
   if (auth && auth.startsWith('Bearer ')) {
-    const id = verifyHostJwt(auth.slice(7));
-    if (id != null) return id;
+    const t = auth.slice(7).trim();
+    if (t) return t;
   }
   if (req.cookies && req.cookies[COOKIE_NAME]) {
-    const id = verifyHostJwt(req.cookies[COOKIE_NAME]);
+    const t = req.cookies[COOKIE_NAME];
+    if (typeof t === 'string' && t.length > 0) return t;
+  }
+  const cookies = parseCookies(req.headers.cookie || '');
+  const t = cookies[COOKIE_NAME];
+  return typeof t === 'string' && t.length > 0 ? t : null;
+}
+
+function getHostUserIdFromRequest(req) {
+  const raw = getHostJwtRawFromRequest(req);
+  if (raw) {
+    const id = verifyHostJwt(raw);
     if (id != null) return id;
   }
-  const cookies = parseCookies(req.headers.cookie);
-  const t = cookies[COOKIE_NAME];
-  if (t) return verifyHostJwt(t);
   return null;
+}
+
+/**
+ * Socket.io: same JWT as REST — handshake.auth.token OR Cookie header (HttpOnly session).
+ * Without this, hosts who only have a cookie (no tempo_host_jwt in localStorage) get claimUid=null.
+ */
+function getHostSessionTokenFromHandshake(handshake) {
+  const auth = handshake && handshake.auth;
+  const t = auth && typeof auth.token === 'string' ? auth.token.trim() : '';
+  if (t.length > 0) return t;
+  const raw = handshake && handshake.headers && handshake.headers.cookie;
+  if (!raw || typeof raw !== 'string') return null;
+  const cookies = parseCookies(raw);
+  const c = cookies[COOKIE_NAME];
+  return typeof c === 'string' && c.length > 0 ? c : null;
 }
 
 function sessionCookieOptions() {
@@ -168,6 +192,8 @@ module.exports = {
   decodeHostJwtPayload,
   getHostEmailFromJwtToken,
   getHostEmailFromRequest,
+  getHostJwtRawFromRequest,
+  getHostSessionTokenFromHandshake,
   signSpotifyOAuthState,
   verifySpotifyOAuthState,
   parseCookies,

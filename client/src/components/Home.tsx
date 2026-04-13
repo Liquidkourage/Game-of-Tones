@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Sparkles, Play, UserPlus, Crown, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { API_BASE } from '../config';
-import { hostFetch, browserGoogleLoginUrl } from '../utils/hostFetch';
+import { hostFetch, setHostJwt, browserGoogleLoginUrl } from '../utils/hostFetch';
 
 /** Express/HTML error pages are not JSON; show a short message instead of raw markup. */
 function formatHttpErrorBody(raw: string, status: number): string {
@@ -109,7 +109,11 @@ const Home: React.FC = () => {
           setHostSession(null);
           return;
         }
-        const data = await res.json();
+        const data = (await res.json()) as {
+          user?: { id: number; email?: string | null; displayName?: string | null } | null;
+          hostToken?: string;
+        };
+        if (data.hostToken && typeof data.hostToken === 'string') setHostJwt(data.hostToken);
         setHostSession(data.user ?? null);
       } catch {
         if (!cancelled) setHostSession(null);

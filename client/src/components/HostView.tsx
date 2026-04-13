@@ -41,7 +41,7 @@ import {
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL } from '../config';
-import { hostFetch, getHostJwt, apiOrigin, browserGoogleLoginUrl } from '../utils/hostFetch';
+import { hostFetch, getHostJwt, setHostJwt, apiOrigin, browserGoogleLoginUrl } from '../utils/hostFetch';
 import { BingoPattern, PATTERN_OPTIONS, BINGO_PATTERNS, getPatternDisplayName, getSavedCustomPatterns, saveCustomPattern, SavedCustomPattern } from '../patternDefinitions';
 import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
@@ -257,6 +257,8 @@ const HostView: React.FC = () => {
     email?: string | null;
     displayName?: string | null;
   } | null | undefined>(undefined);
+  /** After /api/auth/me finishes (and optional hostToken → localStorage), socket can use Bearer + hostToken. */
+  const [hostAuthBootstrapDone, setHostAuthBootstrapDone] = useState(false);
 
   // Pause position tracking
   const [pausePosition, setPausePosition] = useState<number>(0);
@@ -583,10 +585,16 @@ const HostView: React.FC = () => {
           setHostAccount(null);
           return;
         }
-        const data = (await res.json()) as { user?: { id: number; email?: string | null; displayName?: string | null } | null };
+        const data = (await res.json()) as {
+          user?: { id: number; email?: string | null; displayName?: string | null } | null;
+          hostToken?: string;
+        };
+        if (data.hostToken && typeof data.hostToken === 'string') setHostJwt(data.hostToken);
         setHostAccount(data.user ?? null);
       } catch {
         if (!cancelled) setHostAccount(null);
+      } finally {
+        if (!cancelled) setHostAuthBootstrapDone(true);
       }
     })();
     return () => {
@@ -883,6 +891,8 @@ const HostView: React.FC = () => {
   }, [selectedDevice]);
 
   useEffect(() => {
+    if (!hostAuthBootstrapDone) return;
+
     console.log('HostView useEffect triggered');
     console.log('Current window.location.pathname:', window.location.pathname);
     console.log('Current window.location.href:', window.location.href);
@@ -1656,7 +1666,16 @@ const HostView: React.FC = () => {
         clearTimeout(volumeTimeout);
       }
     };
-  }, [roomId, loadPlaylists, loadDevices, hostPlayerName, clientId, navigate, disconnectSpotify]);
+  }, [
+    hostAuthBootstrapDone,
+    roomId,
+    loadPlaylists,
+    loadDevices,
+    hostPlayerName,
+    clientId,
+    navigate,
+    disconnectSpotify,
+  ]);
 
 
 
