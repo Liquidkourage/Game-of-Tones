@@ -134,6 +134,22 @@ async function isEmailAllowlistedForHostSignin(db, normalizedEmail) {
   return false;
 }
 
+/**
+ * True if any of the provided emails (JWT claim, users.email, etc.) matches the host allowlist.
+ * Use this for session checks so old JWTs without `eml` still work when DB email matches, and
+ * Workspace/OAuth vs stored email quirks are covered as long as one spelling is allowlisted.
+ */
+async function isEmailAllowlistedForHostUser(db, ...emails) {
+  const seen = new Set();
+  for (const raw of emails) {
+    const n = normalizeHostEmail(typeof raw === 'string' ? raw : '');
+    if (!n || seen.has(n)) continue;
+    seen.add(n);
+    if (await isEmailAllowlistedForHostSignin(db, n)) return true;
+  }
+  return false;
+}
+
 async function addHostAllowlistEmail(db, normalizedEmail) {
   if (!db) throw new Error('DATABASE_URL is required');
   await ensureHostAllowlistTable(db);
@@ -171,6 +187,7 @@ module.exports = {
   emailAllowlistCandidates,
   isApprovedHostsOnlyMode,
   isEmailAllowlistedForHostSignin,
+  isEmailAllowlistedForHostUser,
   addHostAllowlistEmail,
   removeHostAllowlistEmail,
   listHostAllowlist,

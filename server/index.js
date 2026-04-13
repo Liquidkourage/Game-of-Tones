@@ -1473,10 +1473,11 @@ io.on('connection', (socket) => {
       }
       try {
         const urow = await usersStore.getUserById(db, claimUid);
-        const emailNorm = usersStore.normalizeHostEmail(
-          hostEmailFromJwt || urow?.email || ''
-        );
-        if (!emailNorm) {
+        const dbEmail = urow?.email;
+        if (
+          !usersStore.normalizeHostEmail(hostEmailFromJwt || '') &&
+          !usersStore.normalizeHostEmail(dbEmail || '')
+        ) {
           socket.emit('host-join-denied', {
             roomId,
             reason: 'host_not_approved',
@@ -1485,7 +1486,7 @@ io.on('connection', (socket) => {
           });
           return;
         }
-        if (!(await usersStore.isEmailAllowlistedForHostSignin(db, emailNorm))) {
+        if (!(await usersStore.isEmailAllowlistedForHostUser(db, hostEmailFromJwt, dbEmail))) {
           socket.emit('host-join-denied', {
             roomId,
             reason: 'host_not_approved',
@@ -6125,10 +6126,12 @@ async function requireApprovedHostUid(req, res) {
     return null;
   }
   const urow = await usersStore.getUserById(db, uid);
-  const emailNorm = usersStore.normalizeHostEmail(
-    hostAuth.getHostEmailFromRequest(req) || urow?.email || ''
-  );
-  if (!emailNorm) {
+  const jwtEmail = hostAuth.getHostEmailFromRequest(req);
+  const dbEmail = urow?.email;
+  if (
+    !usersStore.normalizeHostEmail(jwtEmail || '') &&
+    !usersStore.normalizeHostEmail(dbEmail || '')
+  ) {
     res.status(403).json({
       error: 'host_profile_incomplete',
       message:
@@ -6136,7 +6139,7 @@ async function requireApprovedHostUid(req, res) {
     });
     return null;
   }
-  if (!(await usersStore.isEmailAllowlistedForHostSignin(db, emailNorm))) {
+  if (!(await usersStore.isEmailAllowlistedForHostUser(db, jwtEmail, dbEmail))) {
     res.status(403).json({
       error: 'host_not_approved',
       message:
