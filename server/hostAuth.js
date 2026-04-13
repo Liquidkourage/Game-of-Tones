@@ -16,19 +16,58 @@ function getJwtSecret() {
   return s || 'dev-only-change-me';
 }
 
-function signHostJwt(userId) {
-  return jwt.sign({ sub: String(userId), typ: 'host' }, getJwtSecret(), { expiresIn: '30d' });
+/**
+ * Host session JWT. Optional `eml` is the normalized email from Google at sign-in time (same source as OAuth
+ * allowlist checks) so API/socket approval matches Workspace primary vs alias quirks vs users.email in DB.
+ */
+function signHostJwt(userId, normalizedEmail) {
+  const payload = { sub: String(userId), typ: 'host' };
+  if (normalizedEmail && typeof normalizedEmail === 'string') {
+    const e = normalizedEmail.trim().toLowerCase();
+    if (e) payload.eml = e;
+  }
+  return jwt.sign(payload, getJwtSecret(), { expiresIn: '30d' });
 }
 
-function verifyHostJwt(token) {
+function decodeHostJwtPayload(token) {
   try {
     const p = jwt.verify(token, getJwtSecret());
     if (p.typ !== 'host' || !p.sub) return null;
     const id = parseInt(p.sub, 10);
-    return Number.isFinite(id) ? id : null;
+    if (!Number.isFinite(id)) return null;
+    const email = typeof p.eml === 'string' ? p.eml.trim().toLowerCase() : null;
+    return { userId: id, email: email || null };
   } catch {
     return null;
   }
+}
+
+function verifyHostJwt(token) {
+  const p = decodeHostJwtPayload(token);
+  return p ? p.userId : null;
+}
+
+/** Email embedded in host JWT at login (preferred over users.email for allowlist checks). */
+function getHostEmailFromJwtToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const p = decodeHostJwtPayload(token);
+  return p?.email || null;
+}
+
+function getHostEmailFromRequest(req) {
+  const auth = req.headers.authorization;
+  if (auth && auth.startsWith('Bearer ')) {
+    const e = getHostEmailFromJwtToken(auth.slice(7));
+    if (e) return e;
+  }
+  if (req.cookies && req.cookies[COOKIE_NAME]) {
+    const e = getHostEmailFromJwtToken(req.cookies[COOKIE_NAME]);
+    if (e) return e;
+  }
+  const cookies = parseCookies(req.headers.cookie);
+  const t = cookies[COOKIE_NAME];
+  if (t) return getHostEmailFromJwtToken(t);
+  return null;
 }
 
 /** Short-lived JWT for Spotify OAuth `state` (ties callback to host user + optional room redirect). */
@@ -88,8 +127,8 @@ function sessionCookieOptions() {
   return { httpOnly: true, secure, sameSite, maxAge, path: '/' };
 }
 
-function setSessionCookie(res, userId) {
-  const token = signHostJwt(userId);
+function setSessionCookie(res, userId, normalizedEmail) {
+  const token = signHostJwt(userId, normalizedEmail);
   const opts = sessionCookieOptions();
   const parts = [
     `${COOKIE_NAME}=${encodeURIComponent(token)}`,
@@ -126,6 +165,9 @@ module.exports = {
   COOKIE_NAME,
   signHostJwt,
   verifyHostJwt,
+  decodeHostJwtPayload,
+  getHostEmailFromJwtToken,
+  getHostEmailFromRequest,
   signSpotifyOAuthState,
   verifySpotifyOAuthState,
   parseCookies,

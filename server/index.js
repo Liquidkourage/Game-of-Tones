@@ -1414,8 +1414,11 @@ io.use((socket, next) => {
   try {
     const t = socket.handshake.auth && socket.handshake.auth.token;
     if (typeof t === 'string' && t.length > 0) {
-      const uid = hostAuth.verifyHostJwt(t);
-      if (uid != null) socket.hostUserId = uid;
+      const p = hostAuth.decodeHostJwtPayload(t);
+      if (p) {
+        socket.hostUserId = p.userId;
+        socket.hostEmailFromJwt = p.email || null;
+      }
     }
   } catch (_) {}
   next();
@@ -1436,8 +1439,15 @@ io.on('connection', (socket) => {
     if (wantsHost) {
       claimUid = socket.hostUserId ?? null;
       if (claimUid == null && typeof hostToken === 'string' && hostToken.length > 0) {
-        claimUid = hostAuth.verifyHostJwt(hostToken);
+        const p = hostAuth.decodeHostJwtPayload(hostToken);
+        claimUid = p ? p.userId : null;
       }
+    }
+
+    /** Email from JWT (same as Google OAuth allowlist source); hostToken may carry it if handshake lacked it. */
+    let hostEmailFromJwt = socket.hostEmailFromJwt || null;
+    if (!hostEmailFromJwt && typeof hostToken === 'string' && hostToken.length > 0) {
+      hostEmailFromJwt = hostAuth.getHostEmailFromJwtToken(hostToken);
     }
 
     /**
@@ -1463,7 +1473,9 @@ io.on('connection', (socket) => {
       }
       try {
         const urow = await usersStore.getUserById(db, claimUid);
-        const emailNorm = usersStore.normalizeHostEmail(urow?.email || '');
+        const emailNorm = usersStore.normalizeHostEmail(
+          hostEmailFromJwt || urow?.email || ''
+        );
         if (!emailNorm) {
           socket.emit('host-join-denied', {
             roomId,
@@ -1497,7 +1509,9 @@ io.on('connection', (socket) => {
     if (isHost && hostSecretEnv) {
       const authedHostUid =
         socket.hostUserId ??
-        (typeof hostToken === 'string' && hostToken.length > 0 ? hostAuth.verifyHostJwt(hostToken) : null);
+        (typeof hostToken === 'string' && hostToken.length > 0
+          ? (hostAuth.decodeHostJwtPayload(hostToken) || {}).userId ?? null
+          : null);
       if (authedHostUid == null && (hostSecret || '').trim() !== hostSecretEnv) {
         console.warn(`Host join rejected: invalid or missing host secret for ${playerName} room ${roomId}`);
         socket.emit('host-join-denied', {
@@ -5918,8 +5932,9 @@ app.get('/api/auth/google/callback', async (req, res) => {
       email,
       displayName,
     });
-    const token = hostAuth.signHostJwt(row.id);
-    hostAuth.setSessionCookie(res, row.id);
+    const signedEmail = usersStore.normalizeHostEmail(normEmail || row.email || '');
+    const token = hostAuth.signHostJwt(row.id, signedEmail);
+    hostAuth.setSessionCookie(res, row.id, signedEmail);
     return res.redirect(302, `${appBase}/callback-google?token=${encodeURIComponent(token)}&userId=${row.id}`);
   } catch (e) {
     console.error('Google callback error:', e?.message || e);
@@ -6110,7 +6125,9 @@ async function requireApprovedHostUid(req, res) {
     return null;
   }
   const urow = await usersStore.getUserById(db, uid);
-  const emailNorm = usersStore.normalizeHostEmail(urow?.email || '');
+  const emailNorm = usersStore.normalizeHostEmail(
+    hostAuth.getHostEmailFromRequest(req) || urow?.email || ''
+  );
   if (!emailNorm) {
     res.status(403).json({
       error: 'host_profile_incomplete',
