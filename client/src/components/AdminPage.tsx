@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, ArrowLeft, Loader2, Trash2, UserPlus } from 'lucide-react';
+import { Shield, ArrowLeft, Loader2, Trash2, UserPlus, Copy, Check } from 'lucide-react';
 import { API_BASE } from '../config';
 import { browserGoogleLoginUrl, hostFetch } from '../utils/hostFetch';
 
@@ -17,6 +17,14 @@ type AdminMe = {
 
 type AllowRow = { email: string; created_at?: string };
 
+type OrgRow = { id: number; name: string; spotify_client_id: string; created_at?: string };
+
+type SpotifyTenantSetup = {
+  spotifyDashboardUrl: string;
+  redirectUris: { redirectUri: string; origin: string; label: string }[];
+  orgEncryptionKeyConfigured: boolean;
+};
+
 const AdminPage: React.FC = () => {
   const [me, setMe] = useState<AdminMe | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -24,6 +32,16 @@ const AdminPage: React.FC = () => {
   const [listError, setListError] = useState<string | null>(null);
   const [newEmail, setNewEmail] = useState('');
   const [busy, setBusy] = useState(false);
+  const [orgs, setOrgs] = useState<OrgRow[] | null>(null);
+  const [orgError, setOrgError] = useState<string | null>(null);
+  const [orgName, setOrgName] = useState('');
+  const [orgClientId, setOrgClientId] = useState('');
+  const [orgSecret, setOrgSecret] = useState('');
+  const [assignUserId, setAssignUserId] = useState('');
+  const [assignOrgId, setAssignOrgId] = useState('');
+  const [spotifySetup, setSpotifySetup] = useState<SpotifyTenantSetup | null>(null);
+  const [spotifySetupError, setSpotifySetupError] = useState<string | null>(null);
+  const [copiedUri, setCopiedUri] = useState<string | null>(null);
 
   const refreshList = useCallback(async () => {
     setListError(null);
@@ -72,9 +90,74 @@ const AdminPage: React.FC = () => {
     };
   }, []);
 
+  const refreshOrgs = useCallback(async () => {
+    setOrgError(null);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/admin/organizations`);
+      if (res.status === 401 || res.status === 403) {
+        setOrgs([]);
+        return;
+      }
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setOrgError((j && j.message) || `HTTP ${res.status}`);
+        setOrgs(null);
+        return;
+      }
+      const data = (await res.json()) as { organizations?: OrgRow[] };
+      setOrgs(Array.isArray(data.organizations) ? data.organizations : []);
+    } catch (e) {
+      setOrgError(String(e));
+      setOrgs(null);
+    }
+  }, []);
+
   useEffect(() => {
     if (me?.admin) void refreshList();
   }, [me?.admin, refreshList]);
+
+  useEffect(() => {
+    if (me?.admin) void refreshOrgs();
+  }, [me?.admin, refreshOrgs]);
+
+  useEffect(() => {
+    if (!me?.admin) return;
+    let cancelled = false;
+    (async () => {
+      setSpotifySetupError(null);
+      try {
+        const res = await hostFetch(`${API_BASE || ''}/api/admin/spotify-tenant-setup`);
+        if (cancelled) return;
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          setSpotifySetupError((j && j.message) || `HTTP ${res.status}`);
+          setSpotifySetup(null);
+          return;
+        }
+        const data = (await res.json()) as SpotifyTenantSetup;
+        setSpotifySetup(data);
+      } catch (e) {
+        if (!cancelled) {
+          setSpotifySetupError(String(e));
+          setSpotifySetup(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [me?.admin]);
+
+  const copyRedirectUri = async (uri: string) => {
+    try {
+      await navigator.clipboard.writeText(uri);
+      setSpotifySetupError(null);
+      setCopiedUri(uri);
+      window.setTimeout(() => setCopiedUri((u) => (u === uri ? null : u)), 2000);
+    } catch {
+      setSpotifySetupError('Could not copy to clipboard (browser blocked).');
+    }
+  };
 
   const addEmail = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,6 +197,61 @@ const AdminPage: React.FC = () => {
         return;
       }
       void refreshList();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const createOrganization = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = orgName.trim();
+    const cid = orgClientId.trim();
+    const sec = orgSecret.trim();
+    if (!name || !cid || !sec) return;
+    setBusy(true);
+    setOrgError(null);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/admin/organizations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, spotifyClientId: cid, spotifyClientSecret: sec }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setOrgError((j && j.message) || `Could not create organization (${res.status})`);
+        return;
+      }
+      setOrgName('');
+      setOrgClientId('');
+      setOrgSecret('');
+      void refreshOrgs();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const assignUserOrganization = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const uid = parseInt(assignUserId.trim(), 10);
+    if (!Number.isFinite(uid)) return;
+    const raw = assignOrgId.trim();
+    const organizationId = raw === '' ? null : parseInt(raw, 10);
+    if (organizationId != null && !Number.isFinite(organizationId)) return;
+    setBusy(true);
+    setOrgError(null);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/admin/users/${uid}/organization`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setOrgError((j && j.message) || `Could not assign (${res.status})`);
+        return;
+      }
+      setAssignUserId('');
+      setAssignOrgId('');
     } finally {
       setBusy(false);
     }
@@ -216,7 +354,7 @@ const AdminPage: React.FC = () => {
         <header className="admin-page__header">
           <Shield className="admin-page__icon admin-page__icon--ok" aria-hidden />
           <div>
-            <h1 className="admin-page__title">Host allowlist</h1>
+            <h1 className="admin-page__title">Admin</h1>
             <p className="admin-page__meta">
               Signed in as {me.displayName ? <strong>{me.displayName}</strong> : null}{' '}
               {me.email ? (
@@ -244,6 +382,177 @@ const AdminPage: React.FC = () => {
             host.
           </p>
         )}
+
+        <section className="admin-page__table-wrap admin-page__tenant-section" style={{ marginBottom: '2rem' }}>
+          <h2 className="admin-page__h2">Tenant Spotify apps (enterprise)</h2>
+          <p className="admin-page__muted" style={{ marginBottom: '0.75rem' }}>
+            Each approved tenant uses their own Spotify Developer <strong>Client ID</strong> and <strong>Client Secret</strong>. Hosts
+            without an organization still use the server&apos;s default <code>SPOTIFY_CLIENT_ID</code> /{' '}
+            <code>SPOTIFY_CLIENT_SECRET</code>.
+          </p>
+
+          {spotifySetup && !spotifySetup.orgEncryptionKeyConfigured && (
+            <p className="admin-page__banner admin-page__banner--on" style={{ marginBottom: '1rem' }}>
+              <strong>Encrypt tenant secrets</strong> — set <code>TEMPO_ORG_CREDENTIALS_KEY</code> to 64 hex characters on the server
+              before relying on stored tenant credentials.
+            </p>
+          )}
+
+          {spotifySetupError && (
+            <p className="admin-page__error" style={{ marginBottom: '0.5rem' }}>
+              {spotifySetupError}
+            </p>
+          )}
+
+          <details className="admin-page__tenant-guide" open>
+            <summary className="admin-page__tenant-guide-summary">Step-by-step: Spotify app for a tenant</summary>
+            <ol className="admin-page__tenant-steps">
+              <li>
+                Open the{' '}
+                <a href={spotifySetup?.spotifyDashboardUrl || 'https://developer.spotify.com/dashboard'} target="_blank" rel="noreferrer">
+                  Spotify Developer Dashboard
+                </a>{' '}
+                (tenant or your team signs in).
+              </li>
+              <li>
+                Click <strong>Create app</strong>, name it, accept terms, then open the app&apos;s <strong>Settings</strong>.
+              </li>
+              <li>
+                Under <strong>Redirect URIs</strong>, add <em>every</em> URI below that matches how users open this game (production
+                and local dev if needed). Use <strong>Add</strong>, paste exactly, then <strong>Save</strong> at the bottom of the
+                dashboard page.
+              </li>
+              <li>
+                Copy the app&apos;s <strong>Client ID</strong> and <strong>Client secret</strong> (View client secret).
+              </li>
+              <li>
+                In this admin page, create the tenant and paste those values. Then assign the host&apos;s numeric user id to that
+                organization.
+              </li>
+              <li>
+                The host opens a room and uses <strong>Connect Spotify</strong> again so tokens are issued for the tenant&apos;s app.
+              </li>
+            </ol>
+            <div className="admin-page__tenant-uris">
+              <p className="admin-page__muted admin-page__tenant-uris-lead">
+                Register these redirect URIs in the tenant&apos;s Spotify app (exact match, including <code>https</code> and path):
+              </p>
+              {spotifySetup === null && !spotifySetupError && (
+                <p className="admin-page__muted">Loading redirect URIs from server…</p>
+              )}
+              {spotifySetup &&
+                spotifySetup.redirectUris.map((row) => (
+                  <div key={row.redirectUri} className="admin-page__uri-row">
+                    <code className="admin-page__uri-code" title={row.label}>
+                      {row.redirectUri}
+                    </code>
+                    <button
+                      type="button"
+                      className="btn btn-secondary admin-page__copy-uri"
+                      onClick={() => void copyRedirectUri(row.redirectUri)}
+                      aria-label={`Copy ${row.redirectUri}`}
+                    >
+                      {copiedUri === row.redirectUri ? (
+                        <>
+                          <Check size={16} aria-hidden /> Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={16} aria-hidden /> Copy
+                        </>
+                      )}
+                    </button>
+                    <span className="admin-page__uri-label">{row.label}</span>
+                  </div>
+                ))}
+            </div>
+          </details>
+
+          {orgError && <p className="admin-page__error">{orgError}</p>}
+          <form className="admin-page__add" onSubmit={(e) => void createOrganization(e)} style={{ marginBottom: '1rem' }}>
+            <div className="admin-page__add-row" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+              <input
+                type="text"
+                className="input"
+                placeholder="Organization name"
+                value={orgName}
+                onChange={(e) => setOrgName(e.target.value)}
+                disabled={busy}
+                style={{ minWidth: '140px' }}
+              />
+              <input
+                type="text"
+                className="input"
+                placeholder="Spotify Client ID"
+                value={orgClientId}
+                onChange={(e) => setOrgClientId(e.target.value)}
+                autoComplete="off"
+                disabled={busy}
+                style={{ minWidth: '180px' }}
+              />
+              <input
+                type="password"
+                className="input"
+                placeholder="Spotify Client Secret"
+                value={orgSecret}
+                onChange={(e) => setOrgSecret(e.target.value)}
+                autoComplete="new-password"
+                disabled={busy}
+                style={{ minWidth: '180px' }}
+              />
+              <button type="submit" className="btn btn-primary" disabled={busy || !orgName.trim() || !orgClientId.trim() || !orgSecret.trim()}>
+                Create tenant
+              </button>
+            </div>
+          </form>
+          <form className="admin-page__add" onSubmit={(e) => void assignUserOrganization(e)}>
+            <label className="admin-page__label">Assign host user to tenant (numeric user id from DB / auth)</label>
+            <div className="admin-page__add-row" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+              <input
+                type="text"
+                inputMode="numeric"
+                className="input"
+                placeholder="User id"
+                value={assignUserId}
+                onChange={(e) => setAssignUserId(e.target.value)}
+                disabled={busy}
+                style={{ maxWidth: '120px' }}
+              />
+              <input
+                type="text"
+                inputMode="numeric"
+                className="input"
+                placeholder="Organization id (empty = default app)"
+                value={assignOrgId}
+                onChange={(e) => setAssignOrgId(e.target.value)}
+                disabled={busy}
+                style={{ minWidth: '220px' }}
+              />
+              <button type="submit" className="btn btn-primary" disabled={busy || !assignUserId.trim()}>
+                Assign
+              </button>
+            </div>
+          </form>
+          {orgs === null ? (
+            <p className="admin-page__muted">Loading organizations…</p>
+          ) : orgs.length === 0 ? (
+            <p className="admin-page__muted">No tenant Spotify apps yet.</p>
+          ) : (
+            <ul className="admin-page__list" style={{ marginTop: '0.75rem' }}>
+              {orgs.map((o) => (
+                <li key={o.id} className="admin-page__row">
+                  <span className="admin-page__row-email">
+                    <strong>#{o.id}</strong> {o.name} — client id {o.spotify_client_id?.slice(0, 8)}…
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <h2 className="admin-page__h2" style={{ marginBottom: '0.75rem' }}>
+          Host allowlist
+        </h2>
 
         <form className="admin-page__add" onSubmit={(e) => void addEmail(e)}>
           <label htmlFor="admin-new-email" className="admin-page__label">

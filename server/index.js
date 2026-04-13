@@ -12,6 +12,8 @@ const fs = require('fs');
 const path = require('path');
 const hostAuth = require('./hostAuth');
 const usersStore = require('./users');
+const organizationsStore = require('./organizations');
+const credentialCrypto = require('./credentialCrypto');
 
 // Song title cleaning utility
 function cleanSongTitle(title) {
@@ -583,6 +585,12 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
   }
 }
 
+function parseUserIdFromSpotifyOrgKey(organizationId) {
+  if (typeof organizationId !== 'string' || !organizationId.startsWith('user_')) return null;
+  const id = parseInt(organizationId.slice(5), 10);
+  return Number.isFinite(id) ? id : null;
+}
+
 // Multi-Tenant Spotify Manager
 class MultiTenantSpotifyManager {
   constructor() {
@@ -590,10 +598,23 @@ class MultiTenantSpotifyManager {
     this.orgTokens = new Map();
     this.defaultOrg = 'DEFAULT';
   }
+
+  /** Drop cached SpotifyService when tenant credentials change (call after primeTenantSpotifyCredentials). */
+  invalidateUserService(uid) {
+    if (uid == null) return;
+    const key = `user_${uid}`;
+    this.orgServices.delete(key);
+  }
   
   getService(organizationId = this.defaultOrg) {
     if (!this.orgServices.has(organizationId)) {
-      const service = new SpotifyService();
+      const uid = parseUserIdFromSpotifyOrgKey(organizationId);
+      let credentialOverride;
+      if (uid != null) {
+        const o = organizationsStore.getCredentialOptionsForUser(uid);
+        if (o !== undefined) credentialOverride = o;
+      }
+      const service = new SpotifyService(credentialOverride);
       this.orgServices.set(organizationId, service);
       
       // Load org-specific tokens
@@ -775,6 +796,7 @@ async function initializeDatabase() {
     `);
     await usersStore.ensureUsersTable(db);
     await usersStore.ensureHostAllowlistTable(db);
+    await organizationsStore.ensureOrganizationsTable(db);
     console.log('✅ Database tables initialized');
     return true;
   } catch (error) {
@@ -1503,6 +1525,14 @@ io.on('connection', (socket) => {
           message: 'Could not verify host approval. Try again.',
         });
         return;
+      }
+    }
+
+    if (wantsHost && claimUid != null && db) {
+      try {
+        await organizationsStore.primeTenantSpotifyCredentials(db, multiTenantSpotify, claimUid);
+      } catch (e) {
+        console.error('join-room primeTenantSpotifyCredentials:', e?.message || e);
       }
     }
 
@@ -6114,6 +6144,75 @@ app.delete('/api/admin/host-allowlist', async (req, res) => {
   }
 });
 
+/** Enterprise: tenant-specific Spotify Developer apps (credentials encrypted with TEMPO_ORG_CREDENTIALS_KEY). */
+app.get('/api/admin/organizations', async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const organizations = await organizationsStore.listOrganizations(db);
+    res.json({ organizations });
+  } catch (e) {
+    console.error('GET /api/admin/organizations:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.post('/api/admin/organizations', async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const organization = await organizationsStore.createOrganization(db, {
+      name: body.name,
+      spotifyClientId: body.spotifyClientId,
+      spotifyClientSecret: body.spotifyClientSecret,
+    });
+    res.json({ ok: true, organization });
+  } catch (e) {
+    console.error('POST /api/admin/organizations:', e);
+    res.status(400).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.patch('/api/admin/users/:userId/organization', async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const userId = parseInt(req.params.userId, 10);
+    if (!Number.isFinite(userId)) {
+      return res.status(400).json({ error: 'invalid_user_id', message: 'userId must be a number.' });
+    }
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const raw = body.organizationId;
+    const organizationId =
+      raw === null || raw === undefined || raw === '' ? null : parseInt(String(raw), 10);
+    if (organizationId != null && !Number.isFinite(organizationId)) {
+      return res.status(400).json({ error: 'invalid_organization_id', message: 'organizationId must be a number or null.' });
+    }
+    const result = await organizationsStore.setUserOrganizationId(db, userId, organizationId);
+    await organizationsStore.primeTenantSpotifyCredentials(db, multiTenantSpotify, userId);
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    console.error('PATCH /api/admin/users/:userId/organization:', e);
+    res.status(400).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+/** Hints for onboarding tenant Spotify apps: exact redirect URIs and encryption key status. */
+app.get('/api/admin/spotify-tenant-setup', async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    res.json({
+      spotifyDashboardUrl: 'https://developer.spotify.com/dashboard',
+      redirectUris: collectSpotifySpaRedirectUrisForAdmin(),
+      orgEncryptionKeyConfigured: credentialCrypto.isOrgCredentialsKeyConfigured(),
+    });
+  } catch (e) {
+    console.error('GET /api/admin/spotify-tenant-setup:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
 /**
  * When TEMPO_APPROVED_HOSTS_ONLY is on, require JWT + allowlisted email. Sends response and returns null if denied.
  */
@@ -6285,8 +6384,61 @@ function spotifyRedirectUriFromAppOrigin(appOrigin) {
   return `${o}/callback`;
 }
 
+/** Redirect URIs to register in each tenant Spotify app (SPA /callback + optional server SPOTIFY_REDIRECT_URI). */
+function collectSpotifySpaRedirectUrisForAdmin() {
+  const entries = [];
+  const seenUris = new Set();
+  const addOrigin = (originInput, label) => {
+    const o = normalizeHttpsOrigin(originInput);
+    if (!o) return;
+    const uri = `${o}/callback`;
+    if (seenUris.has(uri)) return;
+    seenUris.add(uri);
+    entries.push({ redirectUri: uri, origin: o, label });
+  };
+
+  const base = publicAppOrigin();
+  if (base) {
+    addOrigin(base, 'Primary app URL (PUBLIC_APP_URL or CLIENT_APP_URL)');
+  } else {
+    addOrigin('http://localhost:3000', 'When PUBLIC_APP_URL is unset (typical local dev)');
+  }
+
+  const def = publicAppOriginOrDefault();
+  addOrigin(def, 'Resolved public app default');
+
+  const extras = (process.env.TEMPO_ALLOWED_APP_ORIGINS || '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+  extras.forEach((raw, i) => {
+    addOrigin(
+      raw,
+      extras.length > 1
+        ? `Extra allowed origin #${i + 1} (TEMPO_ALLOWED_APP_ORIGINS)`
+        : 'Extra allowed origin (TEMPO_ALLOWED_APP_ORIGINS)'
+    );
+  });
+
+  const srv = (process.env.SPOTIFY_REDIRECT_URI || '').trim();
+  if (srv) {
+    try {
+      const u = new URL(/^https?:\/\//i.test(srv) ? srv : `https://${srv}`);
+      const full = u.href.split('?')[0];
+      if (!seenUris.has(full)) {
+        seenUris.add(full);
+        entries.push({ redirectUri: full, origin: u.origin, label: 'SPOTIFY_REDIRECT_URI (server OAuth default)' });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return entries;
+}
+
 // Spotify API Routes — hosts must be signed in (Google JWT); each host uses their own Spotify tokens (user_${id}).
-app.use('/api/spotify', (req, res, next) => {
+app.use('/api/spotify', async (req, res, next) => {
   const full = (req.originalUrl || req.url || '').split('?')[0];
   const rel = (req.path || '').split('?')[0] || full.replace(/^.*\/api\/spotify/, '') || full;
   if (full.includes('/api/spotify/callback') || rel === '/callback' || rel.endsWith('/callback')) return next();
@@ -6298,6 +6450,11 @@ app.use('/api/spotify', (req, res, next) => {
       loginUrl: '/api/auth/google',
       message: 'Sign in with Google to use Spotify as a host.',
     });
+  }
+  try {
+    if (db) await organizationsStore.primeTenantSpotifyCredentials(db, multiTenantSpotify, uid);
+  } catch (e) {
+    console.error('primeTenantSpotifyCredentials:', e?.message || e);
   }
   next();
 });
@@ -6330,7 +6487,9 @@ app.get('/api/spotify/auth', async (req, res) => {
       roomId,
       spotifyRedirectUri: spotifyRedirectUri || undefined,
     });
-    const authUrl = spotifyServiceDefault.getAuthorizationURL(state, spotifyRedirectUri);
+    if (db) await organizationsStore.primeTenantSpotifyCredentials(db, multiTenantSpotify, uid);
+    const svc = multiTenantSpotify.getService(`user_${uid}`);
+    const authUrl = svc.getAuthorizationURL(state, spotifyRedirectUri);
     res.json({ authUrl });
   } catch (error) {
     console.error('Error generating auth URL:', error);
@@ -6341,6 +6500,7 @@ app.get('/api/spotify/auth', async (req, res) => {
 app.get('/api/spotify/status', async (req, res) => {
   try {
     const uid = hostAuth.getHostUserIdFromRequest(req);
+    if (uid != null && db) await organizationsStore.primeTenantSpotifyCredentials(db, multiTenantSpotify, uid);
     const orgId = uid != null ? `user_${uid}` : 'DEFAULT';
     const tok = multiTenantSpotify.getTokens(orgId);
     if (!tok || !tok.accessToken) {
@@ -6453,7 +6613,14 @@ app.get('/api/spotify/callback', async (req, res) => {
   try {
     const parsed = state ? hostAuth.verifySpotifyOAuthState(String(state)) : null;
     const redirectForGrant = parsed?.spotifyRedirectUri || null;
-    const tokens = await spotifyServiceDefault.handleCallback(code, redirectForGrant);
+    if (parsed?.userId != null && db) {
+      await organizationsStore.primeTenantSpotifyCredentials(db, multiTenantSpotify, parsed.userId);
+    }
+    const svc =
+      parsed?.userId != null
+        ? multiTenantSpotify.getService(`user_${parsed.userId}`)
+        : spotifyServiceDefault;
+    const tokens = await svc.handleCallback(code, redirectForGrant);
     if (parsed && parsed.userId != null) {
       await multiTenantSpotify.setTokens(`user_${parsed.userId}`, tokens);
     } else {
@@ -7848,6 +8015,17 @@ server.listen(PORT, async () => {
   
   // Initialize database
   await initializeDatabase();
+
+  if (db) {
+    try {
+      const r = await db.query('SELECT id FROM users WHERE organization_id IS NOT NULL');
+      for (const row of r.rows) {
+        await organizationsStore.primeTenantSpotifyCredentials(db, multiTenantSpotify, row.id);
+      }
+    } catch (e) {
+      console.error('Startup tenant Spotify prime:', e?.message || e);
+    }
+  }
 
   if (usersStore.isApprovedHostsOnlyMode()) {
     console.log(

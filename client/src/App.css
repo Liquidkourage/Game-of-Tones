@@ -3952,3 +3952,82 @@ button.conn-chip.conn-chip-compact {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.admin-page__tenant-section .admin-page__tenant-guide {
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.admin-page__tenant-guide-summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: rgba(232, 234, 239, 0.98);
+  list-style: none;
+}
+
+.admin-page__tenant-guide-summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-page__tenant-guide[open] .admin-page__tenant-guide-summary {
+  margin-bottom: 0.75rem;
+}
+
+.admin-page__tenant-steps {
+  margin: 0 0 1rem;
+  padding-left: 1.35rem;
+  font-size: 0.92rem;
+  color: rgba(232, 234, 239, 0.88);
+  line-height: 1.55;
+}
+
+.admin-page__tenant-steps li {
+  margin-bottom: 0.45rem;
+}
+
+.admin-page__tenant-steps a {
+  color: #7ab8ff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.admin-page__tenant-uris-lead {
+  margin-bottom: 0.5rem !important;
+}
+
+.admin-page__uri-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.admin-page__uri-code {
+  flex: 1 1 200px;
+  font-size: 0.82rem;
+  word-break: break-all;
+  color: #c8e6c9;
+}
+
+.admin-page__copy-uri {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.85rem;
+}
+
+.admin-page__uri-label {
+  flex: 1 1 100%;
+  font-size: 0.8rem;
+  color: var(--secondary-text, #9aa3ad);
+}

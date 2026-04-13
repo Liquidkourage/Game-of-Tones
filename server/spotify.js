@@ -9,11 +9,21 @@ const https = require('https');
 const GOT_OUTPUT_PLAYLIST_NAME_PREFIX = 'Game Of Tones Output - ';
 
 class SpotifyService {
-  constructor() {
+  /**
+   * @param {undefined | null | { clientId: string; clientSecret: string }} options - If object with id+secret, use tenant's Spotify Developer app; else env SPOTIFY_*.
+   */
+  constructor(options) {
     this.defaultRedirectUri = process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:7094/callback';
+    const override =
+      options &&
+      typeof options === 'object' &&
+      typeof options.clientId === 'string' &&
+      options.clientId &&
+      typeof options.clientSecret === 'string' &&
+      options.clientSecret;
     this.spotifyApi = new SpotifyWebApi({
-      clientId: process.env.SPOTIFY_CLIENT_ID,
-      clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+      clientId: override ? options.clientId : process.env.SPOTIFY_CLIENT_ID,
+      clientSecret: override ? options.clientSecret : process.env.SPOTIFY_CLIENT_SECRET,
       redirectUri: this.defaultRedirectUri,
     });
     
