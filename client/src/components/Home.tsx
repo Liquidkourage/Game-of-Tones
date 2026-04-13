@@ -174,6 +174,18 @@ const Home: React.FC = () => {
         alert('Host accounts require DATABASE_URL on the server. Set it in Railway (or .env) and redeploy.');
         return;
       }
+      if (r.status === 403) {
+        const raw = await r.text().catch(() => '');
+        let msg = 'This account is not approved to host games.';
+        try {
+          const j = raw ? JSON.parse(raw) : {};
+          if (j && j.message) msg = String(j.message);
+        } catch {
+          /* ignore */
+        }
+        alert(msg);
+        return;
+      }
       if (!r.ok) {
         const raw = await r.text().catch(() => '');
         let msg = '';
@@ -285,12 +297,21 @@ const Home: React.FC = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, delay: 0.08 }}
       >
-        {authError === 'not_invited' && (
+        {(authError === 'not_invited' || authError === 'host_not_approved') && (
           <div className="home-auth-banner" role="alert">
             <AlertTriangle className="home-auth-banner__icon" aria-hidden />
             <div className="home-auth-banner__text">
-              <strong>Host sign-in not enabled for this account.</strong> Ask your organizer to add your email, then try signing in
-              again with Google.
+              {authError === 'not_invited' ? (
+                <>
+                  <strong>Host sign-in not enabled for this account.</strong> Ask your organizer to add your email, then try signing
+                  in again with Google.
+                </>
+              ) : (
+                <>
+                  <strong>Not approved to host.</strong> Ask your organizer to add your email to the host allowlist, then refresh
+                  and try again.
+                </>
+              )}
             </div>
             <button type="button" className="home-auth-banner__dismiss" onClick={dismissAuthError}>
               Dismiss

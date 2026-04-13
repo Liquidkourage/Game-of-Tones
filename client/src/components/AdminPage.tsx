@@ -11,6 +11,8 @@ type AdminMe = {
   email?: string | null;
   displayName?: string | null;
   allowlistMode: boolean;
+  /** Server: TEMPO_APPROVED_HOSTS_ONLY — only allowlisted emails may host */
+  approvedHostsOnly?: boolean;
 };
 
 type AllowRow = { email: string; created_at?: string };
@@ -226,14 +228,20 @@ const AdminPage: React.FC = () => {
           </div>
         </header>
 
-        {me.allowlistMode ? (
+        {me.approvedHostsOnly ? (
           <p className="admin-page__banner admin-page__banner--on">
-            <strong>Allowlist mode is on</strong> — new host Google accounts must be listed below before they can sign in.
+            <strong>Approved hosts only</strong> — only emails below (or in <code>TEMPO_HOST_ALLOWLIST_EMAILS</code>) may sign in as
+            hosts, create rooms, or run host controls. This is enforced server-wide.
+          </p>
+        ) : me.allowlistMode ? (
+          <p className="admin-page__banner admin-page__banner--on">
+            <strong>Legacy allowlist</strong> — <code>TEMPO_HOST_SIGNIN_MODE=allowlist</code> blocks <em>new</em> host accounts only.
+            Prefer <code>TEMPO_APPROVED_HOSTS_ONLY=1</code> to require approval for everyone.
           </p>
         ) : (
           <p className="admin-page__banner admin-page__banner--off">
-            <strong>Allowlist mode is off</strong> — any Google account can still sign in until you set{' '}
-            <code>TEMPO_HOST_SIGNIN_MODE=allowlist</code> on the server.
+            <strong>Open hosting</strong> — set <code>TEMPO_APPROVED_HOSTS_ONLY=1</code> on the server so only allowlisted emails can
+            host.
           </p>
         )}
 

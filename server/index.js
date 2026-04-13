@@ -1381,11 +1381,64 @@ io.on('connection', (socket) => {
   logger.log('User connected:', 'user-connect', 20);
 
   // Join room
-  socket.on('join-room', (data) => {
+  socket.on('join-room', async (data) => {
     const { roomId, playerName, isHost = false, clientId, licenseKey, hostSecret, hostToken } = data;
     const hostSecretEnv = (process.env.TEMPO_HOST_SECRET || '').trim();
-    /** If TEMPO_HOST_SECRET is set, only callers who send the same value may host — unless they prove host identity via Google JWT (socket handshake or hostToken). */
     let wantsHost = isHost;
+
+    /** Google host user id from handshake or join payload (used for owner checks and owner takeover). */
+    let claimUid = null;
+    if (wantsHost) {
+      claimUid = socket.hostUserId ?? null;
+      if (claimUid == null && typeof hostToken === 'string' && hostToken.length > 0) {
+        claimUid = hostAuth.verifyHostJwt(hostToken);
+      }
+    }
+
+    /**
+     * Approved-hosts-only: require Google JWT + allowlisted email. TEMPO_HOST_SECRET cannot substitute
+     * (prevents anonymous hosting with only the shared secret).
+     */
+    if (wantsHost && usersStore.isApprovedHostsOnlyMode()) {
+      if (claimUid == null) {
+        socket.emit('host-join-denied', {
+          roomId,
+          reason: 'host_not_approved',
+          message: 'Sign in with Google as an approved host to run games.',
+        });
+        return;
+      }
+      if (!db) {
+        socket.emit('host-join-denied', {
+          roomId,
+          reason: 'host_not_approved',
+          message: 'Server is missing DATABASE_URL; host approval cannot be verified.',
+        });
+        return;
+      }
+      try {
+        const urow = await usersStore.getUserById(db, claimUid);
+        const emailNorm = usersStore.normalizeHostEmail(urow?.email || '');
+        if (!emailNorm || !(await usersStore.isEmailAllowlistedForHostSignin(db, emailNorm))) {
+          socket.emit('host-join-denied', {
+            roomId,
+            reason: 'host_not_approved',
+            message: 'This account is not approved to host games. Ask an organizer to add your email.',
+          });
+          return;
+        }
+      } catch (e) {
+        console.error('join-room approved-host check:', e);
+        socket.emit('host-join-denied', {
+          roomId,
+          reason: 'host_not_approved',
+          message: 'Could not verify host approval. Try again.',
+        });
+        return;
+      }
+    }
+
+    /** If TEMPO_HOST_SECRET is set, only callers who send the same value may host — unless they prove host identity via Google JWT (socket handshake or hostToken). */
     if (isHost && hostSecretEnv) {
       const authedHostUid =
         socket.hostUserId ??
@@ -1403,15 +1456,6 @@ io.on('connection', (socket) => {
     logger.info(`Player ${playerName} (${wantsHost ? 'host' : 'player'}) joining room: ${roomId}`, 'player-join');
 
     let organizationId = 'DEFAULT';
-
-    /** Google host user id from handshake or join payload (used for owner checks and owner takeover). */
-    let claimUid = null;
-    if (wantsHost) {
-      claimUid = socket.hostUserId ?? null;
-      if (claimUid == null && typeof hostToken === 'string' && hostToken.length > 0) {
-        claimUid = hostAuth.verifyHostJwt(hostToken);
-      }
-    }
 
     // Create room if it doesn't exist
     if (!rooms.has(roomId)) {
@@ -5796,9 +5840,14 @@ app.get('/api/auth/google/callback', async (req, res) => {
     if (!googleSub) {
       return res.redirect(302, `${appBase}/?auth_error=no_sub`);
     }
-    /** New Google accounts only: require email on allowlist (DB + TEMPO_HOST_ALLOWLIST_EMAILS). Existing users always sign in. Set TEMPO_HOST_SIGNIN_MODE=allowlist to enable. */
-    if (String(process.env.TEMPO_HOST_SIGNIN_MODE || '').trim().toLowerCase() === 'allowlist') {
-      const normEmail = usersStore.normalizeHostEmail(email || '');
+    const normEmail = usersStore.normalizeHostEmail(email || '');
+    /** TEMPO_APPROVED_HOSTS_ONLY=1: only allowlisted emails may obtain a host session (new and existing users). */
+    if (usersStore.isApprovedHostsOnlyMode()) {
+      if (!normEmail || !(await usersStore.isEmailAllowlistedForHostSignin(db, normEmail))) {
+        return res.redirect(302, `${appBase}/?auth_error=not_invited`);
+      }
+    } else if (String(process.env.TEMPO_HOST_SIGNIN_MODE || '').trim().toLowerCase() === 'allowlist') {
+      /** Legacy: new Google accounts only — existing users always sign in. Prefer TEMPO_APPROVED_HOSTS_ONLY=1 for full enforcement. */
       const existing = await usersStore.getUserByGoogleSub(db, googleSub);
       if (!existing) {
         const allowed = await usersStore.isEmailAllowlistedForHostSignin(db, normEmail);
@@ -5903,7 +5952,10 @@ app.get('/api/admin/me', async (req, res) => {
         admin: false,
         adminConfigured,
         signedIn: false,
-        allowlistMode: String(process.env.TEMPO_HOST_SIGNIN_MODE || '').trim().toLowerCase() === 'allowlist',
+        allowlistMode:
+          usersStore.isApprovedHostsOnlyMode() ||
+          String(process.env.TEMPO_HOST_SIGNIN_MODE || '').trim().toLowerCase() === 'allowlist',
+        approvedHostsOnly: usersStore.isApprovedHostsOnlyMode(),
       });
     }
     const row = await usersStore.getUserById(db, uid);
@@ -5919,7 +5971,10 @@ app.get('/api/admin/me', async (req, res) => {
       signedIn: true,
       email: row?.email ?? null,
       displayName: row?.display_name ?? null,
-      allowlistMode: String(process.env.TEMPO_HOST_SIGNIN_MODE || '').trim().toLowerCase() === 'allowlist',
+      allowlistMode:
+        usersStore.isApprovedHostsOnlyMode() ||
+        String(process.env.TEMPO_HOST_SIGNIN_MODE || '').trim().toLowerCase() === 'allowlist',
+      approvedHostsOnly: usersStore.isApprovedHostsOnlyMode(),
     });
   } catch (e) {
     console.error('GET /api/admin/me:', e);
@@ -5980,6 +6035,36 @@ app.delete('/api/admin/host-allowlist', async (req, res) => {
 });
 
 /**
+ * When TEMPO_APPROVED_HOSTS_ONLY is on, require JWT + allowlisted email. Sends response and returns null if denied.
+ */
+async function requireApprovedHostUid(req, res) {
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  if (!uid) {
+    res.status(401).json({
+      error: 'login_required',
+      loginUrl: '/api/auth/google',
+      message: 'Sign in with Google first.',
+    });
+    return null;
+  }
+  if (!usersStore.isApprovedHostsOnlyMode()) return uid;
+  if (!db) {
+    res.status(503).json({ error: 'database_required', message: 'DATABASE_URL required' });
+    return null;
+  }
+  const urow = await usersStore.getUserById(db, uid);
+  const emailNorm = usersStore.normalizeHostEmail(urow?.email || '');
+  if (!emailNorm || !(await usersStore.isEmailAllowlistedForHostSignin(db, emailNorm))) {
+    res.status(403).json({
+      error: 'host_not_approved',
+      message: 'This account is not approved to host games. Ask an organizer to add your email.',
+    });
+    return null;
+  }
+  return uid;
+}
+
+/**
  * Pick a room id for a host: reuse default MDY+userId if free; claim socket-created rooms with no owner;
  * idempotent if this host already owns that id; otherwise try random suffixes.
  */
@@ -6015,10 +6100,10 @@ function allocateHostOwnedRoom(uid, options = {}) {
 }
 
 /** Create a new room owned by the logged-in host (default code = MDY + user id). */
-app.post('/api/host/rooms', (req, res) => {
+app.post('/api/host/rooms', async (req, res) => {
   try {
-    const uid = hostAuth.getHostUserIdFromRequest(req);
-    if (!uid) return res.status(401).json({ error: 'login_required' });
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
     if (!db) return res.status(503).json({ error: 'DATABASE_URL required' });
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     const forceNewRoom = body.forceNewRoom === true || body.forceNew === true;
@@ -6059,16 +6144,10 @@ app.post('/api/host/rooms', (req, res) => {
 });
 
 // Spotify API Routes
-app.get('/api/spotify/auth', (req, res) => {
+app.get('/api/spotify/auth', async (req, res) => {
   try {
-    const uid = hostAuth.getHostUserIdFromRequest(req);
-    if (!uid) {
-      return res.status(401).json({
-        error: 'login_required',
-        loginUrl: '/api/auth/google',
-        message: 'Sign in with Google before connecting Spotify.',
-      });
-    }
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
     const roomId = String(req.query.roomId || '').trim();
     if (!roomId) {
       return res.status(400).json({
@@ -7580,7 +7659,13 @@ server.listen(PORT, async () => {
   
   // Initialize database
   await initializeDatabase();
-  
+
+  if (usersStore.isApprovedHostsOnlyMode()) {
+    console.log(
+      '🔒 TEMPO_APPROVED_HOSTS_ONLY: only allowlisted emails may sign in as hosts, create rooms, or join as host (see TEMPO_HOST_ALLOWLIST_EMAILS + host_allowlist).'
+    );
+  }
+
   // Auto-connect to Spotify
   await autoConnectSpotify();
   

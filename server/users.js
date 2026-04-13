@@ -66,6 +66,15 @@ async function ensureHostAllowlistTable(db) {
   return true;
 }
 
+/**
+ * When true, only emails on the host allowlist (DB + TEMPO_HOST_ALLOWLIST_EMAILS) may sign in as hosts,
+ * create rooms via POST /api/host/rooms, or join a socket as host. Set TEMPO_APPROVED_HOSTS_ONLY=1.
+ */
+function isApprovedHostsOnlyMode() {
+  const v = (process.env.TEMPO_APPROVED_HOSTS_ONLY || '').trim();
+  return v === '1' || v.toLowerCase() === 'true' || v.toLowerCase() === 'yes';
+}
+
 /** Emails listed in TEMPO_HOST_ALLOWLIST_EMAILS (comma-separated) or host_allowlist table. */
 async function isEmailAllowlistedForHostSignin(db, normalizedEmail) {
   if (!normalizedEmail) return false;
@@ -112,6 +121,7 @@ module.exports = {
   getUserById,
   getUserByGoogleSub,
   normalizeHostEmail,
+  isApprovedHostsOnlyMode,
   isEmailAllowlistedForHostSignin,
   addHostAllowlistEmail,
   removeHostAllowlistEmail,

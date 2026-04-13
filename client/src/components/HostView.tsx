@@ -1486,6 +1486,15 @@ const HostView: React.FC = () => {
       console.warn('host-join-denied:', data);
       setIsJoiningRoom(false);
       addLog(data.message || 'This room already has a host.', 'error');
+      if (data.reason === 'host_not_approved') {
+        try {
+          sessionStorage.setItem('skip_prefill_host_nav', '1');
+        } catch {
+          /* ignore */
+        }
+        navigate(`/?mode=host&auth_error=host_not_approved`);
+        return;
+      }
       if (data.reason === 'invalid_host_secret') {
         const jwt = getHostJwt();
         if (jwt && !hostSecretRetryOnce) {
