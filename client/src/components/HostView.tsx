@@ -1699,8 +1699,10 @@ const HostView: React.FC = () => {
       }
       
       // If not connected, initiate OAuth flow (server puts signed JWT in ?state= including roomId)
-      const response = await hostFetch(
-        `${API_BASE || ''}/api/spotify/auth?roomId=${encodeURIComponent(roomId || '')}`
+        const appOrigin =
+          typeof window !== 'undefined' ? `&appOrigin=${encodeURIComponent(window.location.origin)}` : '';
+        const response = await hostFetch(
+        `${API_BASE || ''}/api/spotify/auth?roomId=${encodeURIComponent(roomId || '')}${appOrigin}`
       );
       const data = (await response.json().catch(() => ({}))) as {
         authUrl?: string;

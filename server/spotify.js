@@ -10,10 +10,11 @@ const GOT_OUTPUT_PLAYLIST_NAME_PREFIX = 'Game Of Tones Output - ';
 
 class SpotifyService {
   constructor() {
+    this.defaultRedirectUri = process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:7094/callback';
     this.spotifyApi = new SpotifyWebApi({
       clientId: process.env.SPOTIFY_CLIENT_ID,
       clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-      redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:7094/callback'
+      redirectUri: this.defaultRedirectUri,
     });
     
     this.accessToken = null;
@@ -65,7 +66,7 @@ class SpotifyService {
   }
 
   // Get authorization URL for Spotify login (optional state for OAuth callback routing)
-  getAuthorizationURL(state) {
+  getAuthorizationURL(state, redirectUriOverride) {
     const scopes = [
       'user-read-private',
       'user-read-email',
@@ -75,17 +76,38 @@ class SpotifyService {
       'playlist-modify-public',
       'user-read-playback-state',
       'user-modify-playback-state',
-      'user-read-currently-playing'
+      'user-read-currently-playing',
     ];
 
-    return this.spotifyApi.createAuthorizeURL(scopes, state || undefined);
+    const target = redirectUriOverride || this.defaultRedirectUri;
+    const prev =
+      typeof this.spotifyApi.getRedirectURI === 'function'
+        ? this.spotifyApi.getRedirectURI()
+        : this.defaultRedirectUri;
+    this.spotifyApi.setRedirectURI(target);
+    try {
+      return this.spotifyApi.createAuthorizeURL(scopes, state || undefined);
+    } finally {
+      this.spotifyApi.setRedirectURI(prev);
+    }
   }
 
   // Handle authorization callback
-  async handleCallback(code) {
+  async handleCallback(code, redirectUriOverride) {
     try {
       console.log('Handling Spotify callback with code:', code.substring(0, 20) + '...');
-      const data = await this.spotifyApi.authorizationCodeGrant(code);
+      const target = redirectUriOverride || this.defaultRedirectUri;
+      const prev =
+        typeof this.spotifyApi.getRedirectURI === 'function'
+          ? this.spotifyApi.getRedirectURI()
+          : this.defaultRedirectUri;
+      this.spotifyApi.setRedirectURI(target);
+      let data;
+      try {
+        data = await this.spotifyApi.authorizationCodeGrant(code);
+      } finally {
+        this.spotifyApi.setRedirectURI(prev);
+      }
       console.log('Successfully got tokens from Spotify');
       this.accessToken = data.body.access_token;
       this.refreshToken = data.body.refresh_token;

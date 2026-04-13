@@ -6236,6 +6236,55 @@ app.post('/api/host/rooms', async (req, res) => {
   }
 });
 
+/** Normalize to origin for Spotify app redirect allowlist (https; localhost http allowed). */
+function normalizeHttpsOrigin(input) {
+  const s = String(input || '').trim();
+  if (!s) return '';
+  try {
+    const u = new URL(/^https?:\/\//i.test(s) ? s : `https://${s}`);
+    const isLocal = u.hostname === 'localhost' || u.hostname === '127.0.0.1';
+    if (u.protocol !== 'https:' && !isLocal) return '';
+    return u.origin;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * SPA origins allowed to complete Spotify OAuth on /callback (must match Spotify app redirect URIs).
+ * Set TEMPO_ALLOWED_APP_ORIGINS=https://got.example.com,https://tempo.example.com when using multiple subdomains.
+ */
+function isAllowedSpotifyAppOrigin(origin) {
+  const o = normalizeHttpsOrigin(origin);
+  if (!o) return false;
+  const extras = (process.env.TEMPO_ALLOWED_APP_ORIGINS || '')
+    .split(',')
+    .map((x) => normalizeHttpsOrigin(x.trim()))
+    .filter(Boolean);
+  const base = publicAppOrigin();
+  const allowed = new Set([base, publicAppOriginOrDefault(), ...extras].filter(Boolean));
+  if (allowed.has(o)) return true;
+  const parent = (process.env.TEMPO_TRUST_PARENT_DOMAIN || '').trim().toLowerCase();
+  if (parent && base) {
+    try {
+      const bh = new URL(base).hostname.toLowerCase();
+      const oh = new URL(o).hostname.toLowerCase();
+      if (oh === parent || oh.endsWith(`.${parent}`)) {
+        if (bh === parent || bh.endsWith(`.${parent}`)) return true;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return false;
+}
+
+function spotifyRedirectUriFromAppOrigin(appOrigin) {
+  const o = normalizeHttpsOrigin(appOrigin);
+  if (!o || !isAllowedSpotifyAppOrigin(appOrigin)) return null;
+  return `${o}/callback`;
+}
+
 // Spotify API Routes — hosts must be signed in (Google JWT); each host uses their own Spotify tokens (user_${id}).
 app.use('/api/spotify', (req, res, next) => {
   const full = (req.originalUrl || req.url || '').split('?')[0];
@@ -6264,8 +6313,24 @@ app.get('/api/spotify/auth', async (req, res) => {
         message: 'Open a host room before connecting Spotify (stay on /host/your-room).',
       });
     }
-    const state = hostAuth.signSpotifyOAuthState({ userId: uid, roomId });
-    const authUrl = spotifyServiceDefault.getAuthorizationURL(state);
+    let spotifyRedirectUri = null;
+    const appOrigin = String(req.query.appOrigin || '').trim();
+    if (appOrigin) {
+      spotifyRedirectUri = spotifyRedirectUriFromAppOrigin(appOrigin);
+      if (!spotifyRedirectUri) {
+        return res.status(400).json({
+          error: 'invalid_app_origin',
+          message:
+            'This app origin is not allowed for Spotify OAuth. Set TEMPO_ALLOWED_APP_ORIGINS to include it, or omit appOrigin to use SPOTIFY_REDIRECT_URI.',
+        });
+      }
+    }
+    const state = hostAuth.signSpotifyOAuthState({
+      userId: uid,
+      roomId,
+      spotifyRedirectUri: spotifyRedirectUri || undefined,
+    });
+    const authUrl = spotifyServiceDefault.getAuthorizationURL(state, spotifyRedirectUri);
     res.json({ authUrl });
   } catch (error) {
     console.error('Error generating auth URL:', error);
@@ -6386,8 +6451,9 @@ app.get('/api/spotify/callback', async (req, res) => {
   }
 
   try {
-    const tokens = await spotifyServiceDefault.handleCallback(code);
     const parsed = state ? hostAuth.verifySpotifyOAuthState(String(state)) : null;
+    const redirectForGrant = parsed?.spotifyRedirectUri || null;
+    const tokens = await spotifyServiceDefault.handleCallback(code, redirectForGrant);
     if (parsed && parsed.userId != null) {
       await multiTenantSpotify.setTokens(`user_${parsed.userId}`, tokens);
     } else {

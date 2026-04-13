@@ -71,12 +71,12 @@ function getHostEmailFromRequest(req) {
 }
 
 /** Short-lived JWT for Spotify OAuth `state` (ties callback to host user + optional room redirect). */
-function signSpotifyOAuthState({ userId, roomId }) {
-  return jwt.sign(
-    { typ: 'spotify_oauth', uid: userId, rid: roomId || null },
-    getJwtSecret(),
-    { expiresIn: '15m' }
-  );
+function signSpotifyOAuthState({ userId, roomId, spotifyRedirectUri }) {
+  const payload = { typ: 'spotify_oauth', uid: userId, rid: roomId || null };
+  if (spotifyRedirectUri && typeof spotifyRedirectUri === 'string' && spotifyRedirectUri.length < 512) {
+    payload.rdr = spotifyRedirectUri;
+  }
+  return jwt.sign(payload, getJwtSecret(), { expiresIn: '15m' });
 }
 
 function verifySpotifyOAuthState(token) {
@@ -85,7 +85,8 @@ function verifySpotifyOAuthState(token) {
     if (p.typ !== 'spotify_oauth' || p.uid == null) return null;
     const id = parseInt(p.uid, 10);
     if (!Number.isFinite(id)) return null;
-    return { userId: id, roomId: p.rid ? String(p.rid) : null };
+    const redirectUri = typeof p.rdr === 'string' && p.rdr.length > 0 ? p.rdr : null;
+    return { userId: id, roomId: p.rid ? String(p.rid) : null, spotifyRedirectUri: redirectUri };
   } catch {
     return null;
   }
@@ -148,7 +149,9 @@ function sessionCookieOptions() {
   const secure = process.env.NODE_ENV === 'production';
   const sameSite = 'lax';
   const maxAge = 30 * 24 * 60 * 60 * 1000;
-  return { httpOnly: true, secure, sameSite, maxAge, path: '/' };
+  /** e.g. `.liquidkourage.com` — share host session across got.* / tempo.* (localStorage is per-host). */
+  const domain = (process.env.TEMPO_HOST_COOKIE_DOMAIN || '').trim();
+  return { httpOnly: true, secure, sameSite, maxAge, path: '/', domain: domain || undefined };
 }
 
 function setSessionCookie(res, userId, normalizedEmail) {
@@ -161,15 +164,18 @@ function setSessionCookie(res, userId, normalizedEmail) {
     `SameSite=${opts.sameSite}`,
     opts.secure ? 'Secure' : '',
     'HttpOnly',
+    opts.domain ? `Domain=${opts.domain}` : '',
   ].filter(Boolean);
   res.setHeader('Set-Cookie', parts.join('; '));
 }
 
 function clearSessionCookie(res) {
   const secure = process.env.NODE_ENV === 'production';
+  const domain = (process.env.TEMPO_HOST_COOKIE_DOMAIN || '').trim();
+  const domainPart = domain ? `; Domain=${domain}` : '';
   res.setHeader(
     'Set-Cookie',
-    `${COOKIE_NAME}=; Path=/; Max-Age=0; SameSite=lax${secure ? '; Secure' : ''}; HttpOnly`
+    `${COOKIE_NAME}=; Path=/; Max-Age=0; SameSite=lax${secure ? '; Secure' : ''}; HttpOnly${domainPart}`
   );
 }
 
