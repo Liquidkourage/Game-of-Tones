@@ -114,6 +114,15 @@ const PublicDisplay: React.FC = () => {
     };
   }, []);
   const [roomInfo, setRoomInfo] = useState<{ id: string; playerCount: number } | null>(null);
+  const [venueBranding, setVenueBranding] = useState<{
+    eventTitle?: string;
+    sponsorLine?: string;
+    footerText?: string;
+    runbookUrl?: string;
+    logoUrl?: string;
+    primaryColor?: string;
+    accentColor?: string;
+  } | null>(null);
   // Splash/intro overlay (can disable with ?splash=0)
   const splashEnabled = (searchParams.get('splash') !== '0');
   const [showSplash, setShowSplash] = useState<boolean>(splashEnabled);
@@ -383,6 +392,9 @@ const PublicDisplay: React.FC = () => {
       console.log('🖥️ PublicDisplay: Received room state sync:', payload);
       try {
         if (payload) {
+          if (payload.venueBranding !== undefined) {
+            setVenueBranding(payload.venueBranding || null);
+          }
           const serverSaysNoPlays =
             (typeof payload.totalPlayedCount === 'number' && payload.totalPlayedCount === 0) ||
             (Array.isArray(payload.playedSongIds) && payload.playedSongIds.length === 0);
@@ -2361,7 +2373,32 @@ const PublicDisplay: React.FC = () => {
   }
 
   return (
-    <div ref={displayRef} className="public-display">
+    <div
+      ref={displayRef}
+      className={`public-display${venueBranding ? ' public-display--venue' : ''}`}
+      style={
+        {
+          ...(venueBranding?.primaryColor ? { '--venue-primary': venueBranding.primaryColor } : {}),
+          ...(venueBranding?.accentColor ? { '--venue-accent': venueBranding.accentColor } : {}),
+        } as React.CSSProperties
+      }
+    >
+      {venueBranding &&
+        (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine) && (
+          <div className="public-display-venue-bar">
+            {venueBranding.logoUrl ? (
+              <img src={venueBranding.logoUrl} alt="" className="public-display-venue-logo" />
+            ) : null}
+            <div className="public-display-venue-text">
+              {venueBranding.eventTitle ? (
+                <span className="public-display-venue-title">{venueBranding.eventTitle}</span>
+              ) : null}
+              {venueBranding.sponsorLine ? (
+                <span className="public-display-venue-sponsor">{venueBranding.sponsorLine}</span>
+              ) : null}
+            </div>
+          </div>
+        )}
 
       <AnimatePresence>
         {winnerCardModal && (

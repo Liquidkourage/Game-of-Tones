@@ -1356,6 +1356,104 @@ body {
   }
 }
 
+/* Venue / corporate branding (organization venue_settings) */
+.player-container--venue {
+  --player-accent: var(--venue-accent, var(--accent-teal, #14b8a6));
+}
+
+.player-venue-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  padding: 0.45rem 0.5rem 0.65rem;
+  margin-bottom: 0.15rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.player-venue-logo {
+  max-height: 40px;
+  max-width: 140px;
+  object-fit: contain;
+}
+
+.player-venue-titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.player-venue-event {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--venue-primary, rgba(232, 234, 239, 0.98));
+  line-height: 1.2;
+}
+
+.player-venue-sponsor {
+  font-size: 0.78rem;
+  color: var(--venue-accent, rgba(180, 200, 220, 0.9));
+  margin-top: 0.15rem;
+}
+
+.player-venue-footer {
+  margin: 0.75rem auto 0;
+  max-width: 560px;
+  padding: 0 0.75rem;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: rgba(200, 210, 220, 0.75);
+  text-align: center;
+}
+
+.player-venue-runbook {
+  display: block;
+  text-align: center;
+  margin: 0.35rem auto 0;
+  font-size: 0.78rem;
+  color: var(--venue-accent, #7ab8ff);
+  text-decoration: underline;
+}
+
+.public-display--venue {
+  --display-accent: var(--venue-accent, #14b8a6);
+}
+
+.public-display-venue-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 1.5vmin, 20px);
+  flex-wrap: wrap;
+  padding: clamp(6px, 1vmin, 14px) clamp(12px, 2vmin, 28px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.public-display-venue-logo {
+  max-height: clamp(36px, 6vmin, 72px);
+  max-width: min(40vw, 280px);
+  object-fit: contain;
+}
+
+.public-display-venue-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  text-align: center;
+  min-width: 0;
+}
+
+.public-display-venue-title {
+  font-size: clamp(1rem, 2.2vmin, 1.6rem);
+  font-weight: 800;
+  color: var(--venue-primary, rgba(240, 245, 255, 0.98));
+}
+
+.public-display-venue-sponsor {
+  font-size: clamp(0.8rem, 1.5vmin, 1.1rem);
+  color: var(--venue-accent, rgba(200, 220, 240, 0.9));
+}
+
 /* Card first: width-led square; chrome sits below in the same column (see .player-main-column). */
 .player-container .player-bingo-stage {
   position: relative;

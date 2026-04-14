@@ -38,6 +38,18 @@ interface Song {
   artist: string;
 }
 
+interface VenueBranding {
+  eventTitle?: string;
+  sponsorLine?: string;
+  footerText?: string;
+  runbookUrl?: string;
+  logoUrl?: string;
+  primaryColor?: string;
+  accentColor?: string;
+  defaultSnippetLength?: number;
+  volumeCap?: number;
+}
+
 /** Match public display: trim optional "GoT" playlist prefix for column headers. */
 function stripGotPlaylistPrefix(raw: string): string {
   return raw.replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
@@ -103,6 +115,7 @@ const PlayerView: React.FC = () => {
   const [songsPlayed, setSongsPlayed] = useState<number>(0);
   /** 5×15 mode: playlist name per column (from server `fiveby15-pool`). */
   const [bingoColumnPlaylistNames, setBingoColumnPlaylistNames] = useState<string[]>([]);
+  const [venueBranding, setVenueBranding] = useState<VenueBranding | null>(null);
 
   /** User multiplier (70–150) on the automatic square text size (CSS: --player-card-font-scale). */
   const CARD_FONT_STORAGE_KEY = 'player_card_font_percent';
@@ -325,6 +338,12 @@ const PlayerView: React.FC = () => {
       setConnectionStatus('reconnecting');
     });
 
+    newSocket.on('room-joined', (data: any) => {
+      if (data?.venueBranding !== undefined) {
+        setVenueBranding(data.venueBranding ?? null);
+      }
+    });
+
     newSocket.on('player-joined', (data: any) => {
       console.log('Player joined:', data);
       setGameState(prev => ({
@@ -358,6 +377,9 @@ const PlayerView: React.FC = () => {
 
     newSocket.on('room-state', (payload: any) => {
       try {
+        if (payload?.venueBranding !== undefined) {
+          setVenueBranding(payload.venueBranding ?? null);
+        }
         if (typeof payload?.hybridInPersonPlusOnline === 'boolean') {
           setHybridPrizeInPersonOnly(payload.hybridInPersonPlusOnline);
         }
@@ -1354,13 +1376,15 @@ const PlayerView: React.FC = () => {
 
   return (
     <div
-      className={`player-container ${bingoCard ? 'has-card' : ''}`}
+      className={`player-container ${bingoCard ? 'has-card' : ''}${venueBranding ? ' player-container--venue' : ''}`}
       style={{
         '--player-card-font-scale': cardFontPercent / 100,
         '--player-visual-bottom-gap': `${visualBottomGapPx}px`,
         ...(visualViewportHeightPx > 0
           ? { '--player-vh-budget': `${visualViewportHeightPx}px` }
           : {}),
+        ...(venueBranding?.primaryColor ? { '--venue-primary': venueBranding.primaryColor } : {}),
+        ...(venueBranding?.accentColor ? { '--venue-accent': venueBranding.accentColor } : {}),
       } as React.CSSProperties}
     >
       {/* Name prompt overlay if no name provided */}
@@ -1406,6 +1430,22 @@ const PlayerView: React.FC = () => {
 
       {/* 1) Card first: width-led square (CSS). 2) Chrome below — grouped in .player-main-column for vertical centering on tall viewports. */}
       <div className="player-main-column">
+        {venueBranding &&
+          (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine) && (
+            <div className="player-venue-strip">
+              {venueBranding.logoUrl ? (
+                <img src={venueBranding.logoUrl} alt="" className="player-venue-logo" />
+              ) : null}
+              <div className="player-venue-titles">
+                {venueBranding.eventTitle ? (
+                  <div className="player-venue-event">{venueBranding.eventTitle}</div>
+                ) : null}
+                {venueBranding.sponsorLine ? (
+                  <div className="player-venue-sponsor">{venueBranding.sponsorLine}</div>
+                ) : null}
+              </div>
+            </div>
+          )}
         <motion.div
           className="bingo-section player-bingo-stage"
           initial={{ opacity: 0 }}
@@ -1638,6 +1678,20 @@ const PlayerView: React.FC = () => {
               {connectionToast}
             </motion.div>
           )}
+
+          {venueBranding?.footerText ? (
+            <footer className="player-venue-footer">{venueBranding.footerText}</footer>
+          ) : null}
+          {venueBranding?.runbookUrl ? (
+            <a
+              href={venueBranding.runbookUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="player-venue-runbook"
+            >
+              Event runbook
+            </a>
+          ) : null}
         </div>
 
         {(bingoStatus !== 'idle' || bingoMessage) && (

@@ -25,6 +25,30 @@ type SpotifyTenantSetup = {
   orgEncryptionKeyConfigured: boolean;
 };
 
+type VenueForm = {
+  eventTitle: string;
+  sponsorLine: string;
+  footerText: string;
+  runbookUrl: string;
+  logoUrl: string;
+  primaryColor: string;
+  accentColor: string;
+  defaultSnippetLength: string;
+  volumeCap: string;
+};
+
+const emptyVenueForm = (): VenueForm => ({
+  eventTitle: '',
+  sponsorLine: '',
+  footerText: '',
+  runbookUrl: '',
+  logoUrl: '',
+  primaryColor: '',
+  accentColor: '',
+  defaultSnippetLength: '',
+  volumeCap: '',
+});
+
 const AdminPage: React.FC = () => {
   const [me, setMe] = useState<AdminMe | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -42,6 +66,11 @@ const AdminPage: React.FC = () => {
   const [spotifySetup, setSpotifySetup] = useState<SpotifyTenantSetup | null>(null);
   const [spotifySetupError, setSpotifySetupError] = useState<string | null>(null);
   const [copiedUri, setCopiedUri] = useState<string | null>(null);
+  const [venueOrgId, setVenueOrgId] = useState('');
+  const [venueForm, setVenueForm] = useState<VenueForm>(emptyVenueForm);
+  const [venueError, setVenueError] = useState<string | null>(null);
+  const [venueSavedAt, setVenueSavedAt] = useState<number | null>(null);
+  const [venueLoading, setVenueLoading] = useState(false);
 
   const refreshList = useCallback(async () => {
     setListError(null);
@@ -147,6 +176,88 @@ const AdminPage: React.FC = () => {
       cancelled = true;
     };
   }, [me?.admin]);
+
+  const loadVenueForOrg = useCallback(async (id: string) => {
+    if (!id.trim()) return;
+    setVenueError(null);
+    setVenueLoading(true);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/admin/organizations/${encodeURIComponent(id)}`);
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setVenueError((j && j.message) || `HTTP ${res.status}`);
+        setVenueForm(emptyVenueForm());
+        return;
+      }
+      const vs = (j.organization && j.organization.venueSettings) || {};
+      setVenueForm({
+        eventTitle: String(vs.eventTitle || ''),
+        sponsorLine: String(vs.sponsorLine || ''),
+        footerText: String(vs.footerText || ''),
+        runbookUrl: String(vs.runbookUrl || ''),
+        logoUrl: String(vs.logoUrl || ''),
+        primaryColor: String(vs.primaryColor || ''),
+        accentColor: String(vs.accentColor || ''),
+        defaultSnippetLength:
+          vs.defaultSnippetLength != null && vs.defaultSnippetLength !== '' ? String(vs.defaultSnippetLength) : '',
+        volumeCap: vs.volumeCap != null && vs.volumeCap !== '' ? String(vs.volumeCap) : '',
+      });
+    } catch (e) {
+      setVenueError(String(e));
+      setVenueForm(emptyVenueForm());
+    } finally {
+      setVenueLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!me?.admin || !venueOrgId.trim()) return;
+    void loadVenueForOrg(venueOrgId.trim());
+  }, [me?.admin, venueOrgId, loadVenueForOrg]);
+
+  const saveVenueSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const id = venueOrgId.trim();
+    if (!id) return;
+    setBusy(true);
+    setVenueError(null);
+    setVenueSavedAt(null);
+    try {
+      const dsl = venueForm.defaultSnippetLength.trim();
+      const vc = venueForm.volumeCap.trim();
+      const venueSettings: Record<string, unknown> = {
+        eventTitle: venueForm.eventTitle.trim(),
+        sponsorLine: venueForm.sponsorLine.trim(),
+        footerText: venueForm.footerText.trim(),
+        runbookUrl: venueForm.runbookUrl.trim(),
+        logoUrl: venueForm.logoUrl.trim(),
+        primaryColor: venueForm.primaryColor.trim(),
+        accentColor: venueForm.accentColor.trim(),
+      };
+      if (dsl !== '') {
+        const n = parseInt(dsl, 10);
+        venueSettings.defaultSnippetLength = Number.isFinite(n) ? n : null;
+      } else venueSettings.defaultSnippetLength = null;
+      if (vc !== '') {
+        const n = parseInt(vc, 10);
+        venueSettings.volumeCap = Number.isFinite(n) ? n : null;
+      } else venueSettings.volumeCap = null;
+      const res = await hostFetch(`${API_BASE || ''}/api/admin/organizations/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ venueSettings }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setVenueError((j && j.message) || `Could not save (${res.status})`);
+        return;
+      }
+      setVenueSavedAt(Date.now());
+      void loadVenueForOrg(id);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const copyRedirectUri = async (uri: string) => {
     try {
@@ -548,6 +659,138 @@ const AdminPage: React.FC = () => {
               ))}
             </ul>
           )}
+        </section>
+
+        <section className="admin-page__table-wrap" style={{ marginBottom: '2rem' }}>
+          <h2 className="admin-page__h2">Venue &amp; corporate branding</h2>
+          <p className="admin-page__muted" style={{ marginBottom: '0.75rem' }}>
+            Saved per organization. Applies to player and public display when hosts in that org run a room (logo, colors, event copy,
+            optional runbook link). Snippet length and volume cap are stored for future host defaults.
+          </p>
+          {venueError && <p className="admin-page__error">{venueError}</p>}
+          {venueSavedAt != null && (
+            <p className="admin-page__muted" style={{ marginBottom: '0.5rem' }}>
+              Saved.
+            </p>
+          )}
+          <form className="admin-page__add" onSubmit={(e) => void saveVenueSettings(e)}>
+            <label className="admin-page__label" htmlFor="admin-venue-org">
+              Organization
+            </label>
+            <div className="admin-page__add-row" style={{ flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <select
+                id="admin-venue-org"
+                className="input"
+                value={venueOrgId}
+                onChange={(e) => {
+                  setVenueOrgId(e.target.value);
+                  setVenueSavedAt(null);
+                }}
+                disabled={busy || venueLoading}
+                style={{ minWidth: '220px' }}
+              >
+                <option value="">Select organization…</option>
+                {(orgs || []).map((o) => (
+                  <option key={o.id} value={String(o.id)}>
+                    #{o.id} {o.name}
+                  </option>
+                ))}
+              </select>
+              {venueLoading && (
+                <span className="admin-page__muted" style={{ alignSelf: 'center' }}>
+                  Loading…
+                </span>
+              )}
+            </div>
+            <div
+              className="admin-page__venue-grid"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                gap: '0.65rem',
+                marginBottom: '0.75rem',
+              }}
+            >
+              <input
+                type="text"
+                className="input"
+                placeholder="Event title (headline)"
+                value={venueForm.eventTitle}
+                onChange={(e) => setVenueForm((f) => ({ ...f, eventTitle: e.target.value }))}
+                disabled={busy || !venueOrgId}
+              />
+              <input
+                type="text"
+                className="input"
+                placeholder="Sponsor line"
+                value={venueForm.sponsorLine}
+                onChange={(e) => setVenueForm((f) => ({ ...f, sponsorLine: e.target.value }))}
+                disabled={busy || !venueOrgId}
+              />
+              <input
+                type="url"
+                className="input"
+                placeholder="Logo URL (https)"
+                value={venueForm.logoUrl}
+                onChange={(e) => setVenueForm((f) => ({ ...f, logoUrl: e.target.value }))}
+                disabled={busy || !venueOrgId}
+              />
+              <input
+                type="text"
+                className="input"
+                placeholder="Primary color (#0d9488)"
+                value={venueForm.primaryColor}
+                onChange={(e) => setVenueForm((f) => ({ ...f, primaryColor: e.target.value }))}
+                disabled={busy || !venueOrgId}
+              />
+              <input
+                type="text"
+                className="input"
+                placeholder="Accent color (#14b8a6)"
+                value={venueForm.accentColor}
+                onChange={(e) => setVenueForm((f) => ({ ...f, accentColor: e.target.value }))}
+                disabled={busy || !venueOrgId}
+              />
+              <input
+                type="url"
+                className="input"
+                placeholder="Runbook / support URL"
+                value={venueForm.runbookUrl}
+                onChange={(e) => setVenueForm((f) => ({ ...f, runbookUrl: e.target.value }))}
+                disabled={busy || !venueOrgId}
+              />
+              <input
+                type="text"
+                inputMode="numeric"
+                className="input"
+                placeholder="Default snippet length (sec)"
+                value={venueForm.defaultSnippetLength}
+                onChange={(e) => setVenueForm((f) => ({ ...f, defaultSnippetLength: e.target.value }))}
+                disabled={busy || !venueOrgId}
+              />
+              <input
+                type="text"
+                inputMode="numeric"
+                className="input"
+                placeholder="Volume cap (1–100)"
+                value={venueForm.volumeCap}
+                onChange={(e) => setVenueForm((f) => ({ ...f, volumeCap: e.target.value }))}
+                disabled={busy || !venueOrgId}
+              />
+            </div>
+            <textarea
+              className="input"
+              placeholder="Footer / legal line (shown on player)"
+              value={venueForm.footerText}
+              onChange={(e) => setVenueForm((f) => ({ ...f, footerText: e.target.value }))}
+              disabled={busy || !venueOrgId}
+              rows={3}
+              style={{ width: '100%', resize: 'vertical', marginBottom: '0.75rem' }}
+            />
+            <button type="submit" className="btn btn-primary" disabled={busy || !venueOrgId.trim()}>
+              Save venue settings
+            </button>
+          </form>
         </section>
 
         <h2 className="admin-page__h2" style={{ marginBottom: '0.75rem' }}>

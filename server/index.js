@@ -1174,6 +1174,7 @@ async function playNextSongSimple(roomId, deviceId) {
       winners: room.winners || [],
       roundWinners: room.roundWinners || [],
       publicDisplayFontSize: room.publicDisplayFontSize || 1.0,
+      venueBranding: venueBrandingForRoom(room),
       playedSongs: playedSongIds.map(songId => {
         const foundSong = room.playlistSongs?.find(s => s.id === songId);
         return foundSong ? {
@@ -1675,6 +1676,14 @@ io.on('connection', (socket) => {
     };
     
     room.players.set(socket.id, player);
+
+    if (room.ownerUserId != null && db) {
+      try {
+        await resolveRoomVenueBranding(room);
+      } catch (e) {
+        console.error('join-room resolveRoomVenueBranding:', e?.message || e);
+      }
+    }
     
     if (effectiveIsHost) {
       for (const [pid, p] of room.players) {
@@ -1704,7 +1713,8 @@ io.on('connection', (socket) => {
       playerName: playerName,
       isHost: effectiveIsHost,
       playerCount: getNonHostPlayerCount(room),
-      hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline
+      hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline,
+      venueBranding: venueBrandingForRoom(room),
     });
 
     // Log available devices for debugging
@@ -1737,7 +1747,8 @@ io.on('connection', (socket) => {
             mixFinalized: room.mixFinalized || false,
             playlists: room.finalizedPlaylists || room.playlists || [],
             selectedDeviceId: room.selectedDeviceId || null,
-            hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline
+            hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline,
+            venueBranding: venueBrandingForRoom(room),
           });
           
           // Send current song info if playing
@@ -2938,6 +2949,7 @@ io.on('connection', (socket) => {
         winners: room.winners || [],
         roundWinners: room.roundWinners || [],
         publicDisplayFontSize: room.publicDisplayFontSize || 1.0,
+        venueBranding: venueBrandingForRoom(room),
         // Include played songs for PublicDisplay sync (includes current song)
         playedSongs: playedSongIds.map(songId => {
           const foundSong = room.playlistSongs?.find(s => s.id === songId);
@@ -6198,6 +6210,49 @@ app.patch('/api/admin/users/:userId/organization', async (req, res) => {
   }
 });
 
+app.get('/api/admin/organizations/:id', async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'invalid_id', message: 'Invalid organization id.' });
+    }
+    const org = await organizationsStore.getOrganizationById(db, id);
+    if (!org) return res.status(404).json({ error: 'not_found', message: 'Organization not found.' });
+    res.json({ organization: org });
+  } catch (e) {
+    console.error('GET /api/admin/organizations/:id:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.patch('/api/admin/organizations/:id', async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'invalid_id', message: 'Invalid organization id.' });
+    }
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const patch = body.venueSettings;
+    if (patch == null || typeof patch !== 'object') {
+      return res.status(400).json({
+        error: 'invalid_body',
+        message: 'Provide { "venueSettings": { ... } } with venue / corporate fields.',
+      });
+    }
+    const venueSettings = await organizationsStore.patchOrganizationVenueSettings(db, id, patch);
+    res.json({ ok: true, venueSettings });
+  } catch (e) {
+    console.error('PATCH /api/admin/organizations/:id:', e);
+    const msg = e?.message || 'Failed';
+    const code = msg === 'organization not found' ? 404 : 400;
+    res.status(code).json({ error: 'failed', message: msg });
+  }
+});
+
 /** Hints for onboarding tenant Spotify apps: exact redirect URIs and encryption key status. */
 app.get('/api/admin/spotify-tenant-setup', async (req, res) => {
   try {
@@ -6328,12 +6383,46 @@ app.post('/api/host/rooms', async (req, res) => {
       };
       rooms.set(code, newRoom);
     }
+    const roomRef = rooms.get(code);
+    if (roomRef) {
+      try {
+        await resolveRoomVenueBranding(roomRef);
+        const b = roomRef.venueBranding;
+        if (b && typeof b.defaultSnippetLength === 'number') {
+          roomRef.snippetLength = b.defaultSnippetLength;
+        }
+        if (b && typeof b.volumeCap === 'number') {
+          roomRef.volume = Math.min(typeof roomRef.volume === 'number' ? roomRef.volume : 100, b.volumeCap);
+        }
+      } catch (e) {
+        console.error('resolveRoomVenueBranding:', e?.message || e);
+      }
+    }
     return res.json({ roomId: code, ownerUserId: uid, mode });
   } catch (e) {
     console.error('POST /api/host/rooms:', e);
     res.status(500).json({ error: 'Failed to create room', message: e?.message || 'Failed to create room' });
   }
 });
+
+/** Load venue / corporate branding for a host-owned room (organization venue_settings). */
+async function resolveRoomVenueBranding(room) {
+  if (!room) return;
+  if (!db || room.ownerUserId == null) {
+    room.venueBranding = null;
+    return;
+  }
+  const uid = Number(room.ownerUserId);
+  if (!Number.isFinite(uid)) {
+    room.venueBranding = null;
+    return;
+  }
+  room.venueBranding = await organizationsStore.getVenueBrandingForHostUserId(db, uid);
+}
+
+function venueBrandingForRoom(room) {
+  return room && room.venueBranding ? room.venueBranding : null;
+}
 
 /** Normalize to origin for Spotify app redirect allowlist (https; localhost http allowed). */
 function normalizeHttpsOrigin(input) {
