@@ -138,6 +138,9 @@ function stripGotPlaylistPrefix(raw: string): string {
 /** Persisted before Spotify/Google redirects so return URL without ?name= still shows the right host label. */
 const HOST_DISPLAY_NAME_KEY = 'tempo_host_display_name';
 
+/** Stable empty ref for useMemo playlist id lists (avoids re-running effects every render). */
+const NO_PLAYLIST_IDS: string[] = [];
+
 const HostView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -543,6 +546,24 @@ const HostView: React.FC = () => {
     eventRounds.flatMap(round => round.playlistIds || [])
   );
 
+  /** Same inclusion rules as the effect that sets `visiblePlaylists`, but computed synchronously during render so explicit-stats fetching does not race one frame behind playlist load. */
+  const playlistIdsForExplicitStats = useMemo(() => {
+    if (!playlists?.length) return NO_PLAYLIST_IDS;
+    const basePlaylists = showAllPlaylists
+      ? playlists
+      : playlists.filter((p: Playlist) => {
+          const nameLower = p.name.toLowerCase();
+          if (nameLower.includes('game of tones output') || nameLower.includes('gameoftones output')) {
+            return false;
+          }
+          const startsWithGot = /^got\s*[-�:]*\s*/i.test(p.name);
+          const containsGameOfTones = nameLower.includes('game of tones') || nameLower.includes('gameoftones');
+          return startsWithGot || containsGameOfTones;
+        });
+    const assigned = new Set(eventRounds.flatMap((round) => round.playlistIds || []));
+    return basePlaylists.filter((p) => !assigned.has(p.id)).map((p) => p.id);
+  }, [playlists, showAllPlaylists, eventRounds]);
+
   // Filter playlists by query and exclude already assigned playlists
   const filteredPlaylists = useMemo(() => {
     const assigned = new Set(
@@ -646,48 +667,68 @@ const HostView: React.FC = () => {
     }
   }, [eventRounds, playlists, showAllPlaylists]); // Re-run when rounds, playlists, or filter mode change
 
-  const visiblePlaylistIdsKey = useMemo(
-    () => visiblePlaylists.map((p) => p.id).join(','),
-    [visiblePlaylists]
-  );
-
   /** Load Spotify explicit vs total counts for visible playlists (chunked batch API). */
   useEffect(() => {
-    if (!isSpotifyConnected || visiblePlaylists.length === 0) {
+    if (!hostAuthBootstrapDone || !isSpotifyConnected) {
+      if (!isSpotifyConnected) {
+        setPlaylistExplicitStats({});
+        setPlaylistExplicitStatsLoading(false);
+      }
+      return;
+    }
+    const allIds = playlistIdsForExplicitStats;
+    if (allIds.length === 0) {
       setPlaylistExplicitStats({});
       setPlaylistExplicitStatsLoading(false);
       return;
     }
     let cancelled = false;
     setPlaylistExplicitStatsLoading(true);
-    (async () => {
-      const allIds = visiblePlaylists.map((p) => p.id);
+
+    const fetchChunks = async (): Promise<{
+      merged: Record<string, { total: number; explicitCount: number }>;
+      anyHttpError: boolean;
+    }> => {
       const merged: Record<string, { total: number; explicitCount: number }> = {};
+      let anyHttpError = false;
       const chunkSize = 30;
-      try {
-        for (let i = 0; i < allIds.length; i += chunkSize) {
-          if (cancelled) return;
-          const chunk = allIds.slice(i, i + chunkSize);
-          const res = await hostFetch(`${API_BASE || ''}/api/spotify/playlists/explicit-stats-batch`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ playlistIds: chunk }),
-          });
-          if (!res.ok || cancelled) continue;
-          const data = (await res.json()) as {
-            results?: Record<string, { total?: number; explicitCount?: number; error?: string }>;
-          };
-          const r = data.results || {};
-          for (const [pid, v] of Object.entries(r)) {
-            if (
-              v &&
-              typeof v === 'object' &&
-              typeof v.explicitCount === 'number' &&
-              typeof v.total === 'number'
-            ) {
-              merged[pid] = { total: v.total, explicitCount: v.explicitCount };
-            }
+      for (let i = 0; i < allIds.length; i += chunkSize) {
+        if (cancelled) return { merged, anyHttpError };
+        const chunk = allIds.slice(i, i + chunkSize);
+        const res = await hostFetch(`${API_BASE || ''}/api/spotify/playlists/explicit-stats-batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ playlistIds: chunk }),
+        });
+        if (!res.ok) {
+          anyHttpError = true;
+          console.warn('explicit-stats-batch HTTP', res.status, res.statusText);
+          continue;
+        }
+        const data = (await res.json()) as {
+          results?: Record<string, { total?: number; explicitCount?: number; error?: string }>;
+        };
+        const r = data.results || {};
+        for (const [pid, v] of Object.entries(r)) {
+          if (
+            v &&
+            typeof v === 'object' &&
+            typeof v.explicitCount === 'number' &&
+            typeof v.total === 'number'
+          ) {
+            merged[pid] = { total: v.total, explicitCount: v.explicitCount };
           }
+        }
+      }
+      return { merged, anyHttpError };
+    };
+
+    (async () => {
+      try {
+        let { merged, anyHttpError } = await fetchChunks();
+        if (!cancelled && anyHttpError) {
+          await new Promise((r) => setTimeout(r, 1600));
+          if (!cancelled) ({ merged } = await fetchChunks());
         }
         if (!cancelled) setPlaylistExplicitStats(merged);
       } catch {
@@ -699,7 +740,7 @@ const HostView: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [isSpotifyConnected, visiblePlaylistIdsKey]);
+  }, [hostAuthBootstrapDone, isSpotifyConnected, playlistIdsForExplicitStats]);
 
   // Auto-switch tabs based on game state (do not depend on eventRounds � round-bucket updates
   // should not yank the host back to Manager; see handleStartRound ? Game tab).
