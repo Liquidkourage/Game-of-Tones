@@ -270,32 +270,25 @@ class SpotifyService {
     await this.ensureValidToken();
     const pid = String(playlistId || '').trim();
     if (!pid) throw new Error('playlist id required');
-    const paginate = async (extraOpts) => {
-      let offset = 0;
-      const limit = 100;
-      let total = 0;
-      let explicitCount = 0;
-      while (true) {
-        const response = await this.spotifyApi.getPlaylistTracks(pid, { limit, offset, ...extraOpts });
-        const items = response.body.items || [];
-        if (items.length === 0) break;
-        for (const item of items) {
-          const t = item.track;
-          if (!t || !t.id) continue;
-          total++;
-          if (t.explicit === true) explicitCount++;
-        }
-        offset += limit;
-        if (items.length < limit) break;
+    // Full track payload so `explicit` is always present (minimal `fields` can omit or break nested props on some API responses).
+    let offset = 0;
+    const limit = 100;
+    let total = 0;
+    let explicitCount = 0;
+    while (true) {
+      const response = await this.spotifyApi.getPlaylistTracks(pid, { limit, offset });
+      const items = response.body.items || [];
+      if (items.length === 0) break;
+      for (const item of items) {
+        const t = item.track;
+        if (!t || !t.id) continue;
+        total++;
+        if (t.explicit === true) explicitCount++;
       }
-      return { total, explicitCount };
-    };
-    try {
-      return await paginate({ fields: 'items(track(id,explicit))' });
-    } catch (e) {
-      console.warn('getPlaylistExplicitStats: fields filter failed, using full track payload', e?.message || e);
-      return await paginate({});
+      offset += limit;
+      if (items.length < limit) break;
     }
+    return { total, explicitCount };
   }
 
   // Get public playlist tracks (for playlists not owned by user)

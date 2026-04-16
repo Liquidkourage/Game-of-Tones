@@ -560,9 +560,19 @@ const HostView: React.FC = () => {
           const containsGameOfTones = nameLower.includes('game of tones') || nameLower.includes('gameoftones');
           return startsWithGot || containsGameOfTones;
         });
-    const assigned = new Set(eventRounds.flatMap((round) => round.playlistIds || []));
-    return basePlaylists.filter((p) => !assigned.has(p.id)).map((p) => p.id);
+    const assigned = new Set(
+      eventRounds.flatMap((round) => round.playlistIds || []).map((id) => String(id))
+    );
+    return basePlaylists
+      .filter((p) => p.id != null && !assigned.has(String(p.id)))
+      .map((p) => String(p.id));
   }, [playlists, showAllPlaylists, eventRounds]);
+
+  /** Stable string so the explicit-stats effect reruns when the id set changes (not only array identity). */
+  const playlistIdsForExplicitStatsKey = useMemo(
+    () => playlistIdsForExplicitStats.join(','),
+    [playlistIdsForExplicitStats]
+  );
 
   // Filter playlists by query and exclude already assigned playlists
   const filteredPlaylists = useMemo(() => {
@@ -716,7 +726,7 @@ const HostView: React.FC = () => {
             typeof v.explicitCount === 'number' &&
             typeof v.total === 'number'
           ) {
-            merged[pid] = { total: v.total, explicitCount: v.explicitCount };
+            merged[String(pid)] = { total: v.total, explicitCount: v.explicitCount };
           }
         }
       }
@@ -740,7 +750,7 @@ const HostView: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [hostAuthBootstrapDone, isSpotifyConnected, playlistIdsForExplicitStats]);
+  }, [hostAuthBootstrapDone, isSpotifyConnected, playlistIdsForExplicitStatsKey]);
 
   // Auto-switch tabs based on game state (do not depend on eventRounds � round-bucket updates
   // should not yank the host back to Manager; see handleStartRound ? Game tab).
@@ -4378,7 +4388,10 @@ const HostView: React.FC = () => {
                                 }}
                               >
                                 <span>{p.tracks} songs</span>
-                                {playlistExplicitStats[p.id] != null && playlistExplicitStats[p.id].explicitCount > 0 ? (
+                                {(() => {
+                                  const pid = String(p.id);
+                                  const rowStat = playlistExplicitStats[pid];
+                                  return rowStat != null && rowStat.explicitCount > 0 ? (
                                   <span
                                     style={{
                                       display: 'inline-flex',
@@ -4396,9 +4409,10 @@ const HostView: React.FC = () => {
                                     title="Tracks flagged as explicit in Spotify"
                                   >
                                     <SpotifyExplicitBadge size="sm" title="Spotify explicit track" />
-                                    {playlistExplicitStats[p.id].explicitCount} explicit
+                                    {rowStat.explicitCount} explicit
                                   </span>
-                                ) : null}
+                                ) : null;
+                                })()}
                               </span>
                               {isInsufficient && (
                                 <span style={{ fontSize: '0.72rem', color: '#ffb347', whiteSpace: 'nowrap', padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,179,71,0.35)', background: 'rgba(255,179,71,0.08)', flexShrink: 0, paddingTop: 6 }} title="Need at least 15 tracks for a standard round; add songs in Spotify">Need 15+</span>

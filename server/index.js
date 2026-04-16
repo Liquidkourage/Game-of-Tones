@@ -7245,16 +7245,29 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
 /** Batch: explicit vs total track counts per playlist (Spotify `track.explicit`). */
 app.post('/api/spotify/playlists/explicit-stats-batch', async (req, res) => {
   try {
-    if (!hostSpotifyHasTokens(req)) {
-      return res.status(401).json({ error: 'Spotify not connected' });
+    const svc = spotifyForRequest(req);
+    if (!svc) {
+      return res.status(401).json({ error: 'login_required', message: 'Sign in with Google to load playlists.' });
     }
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    if (uid == null) {
+      return res.status(401).json({ error: 'login_required' });
+    }
+    const orgId = `user_${uid}`;
+    await multiTenantSpotify.ensureOrgTokensLoaded(orgId);
+    const orgTokens = multiTenantSpotify.getTokens(orgId);
+    if (!orgTokens || !orgTokens.accessToken) {
+      return res.status(401).json({
+        error: `Spotify not connected for ${orgId}`,
+        organizationId: orgId,
+      });
+    }
+    await svc.ensureValidToken();
     const raw = req.body && Array.isArray(req.body.playlistIds) ? req.body.playlistIds : [];
     const ids = raw.map((x) => String(x).trim()).filter(Boolean).slice(0, 80);
     if (ids.length === 0) {
       return res.json({ results: {} });
     }
-    const svc = spotifyForRequest(req);
-    await svc.ensureValidToken();
     const results = {};
     for (const pid of ids) {
       try {
