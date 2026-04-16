@@ -1813,6 +1813,8 @@ body {
   padding: 0 4px;
   width: 100%;
   padding-bottom: 0;
+  /* Breath between bingo card and chrome / BINGO button */
+  margin-top: clamp(6px, 1.4vmin, 14px);
 }
 
 /* Must follow .player-rest base: center chrome (flex cross-axis) on wide layouts; otherwise stretch pins chrome to the left */
