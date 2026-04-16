@@ -616,16 +616,27 @@ class MultiTenantSpotifyManager {
       }
       const service = new SpotifyService(credentialOverride);
       this.orgServices.set(organizationId, service);
-      
-      // Load org-specific tokens
-      const tokens = this.loadOrgTokens(organizationId);
-      if (tokens) {
-        service.setTokens(tokens.accessToken, tokens.refreshToken);
-        this.orgTokens.set(organizationId, tokens);
-        console.log(`✅ Loaded Spotify tokens for organization: ${organizationId}`);
-      }
+      // Tokens are applied via setTokens() after OAuth, or ensureOrgTokensLoaded() from DB.
+      // Do NOT call async loadOrgTokens here without await (would store a Promise in orgTokens).
     }
     return this.orgServices.get(organizationId);
+  }
+
+  /**
+   * Ensure in-memory tokens exist for this org (e.g. after server restart). Loads from DB if needed.
+   * Clears corrupted entries (e.g. a Promise mistakenly stored by old getService).
+   */
+  async ensureOrgTokensLoaded(organizationId = this.defaultOrg) {
+    let tok = this.orgTokens.get(organizationId);
+    if (tok && typeof tok.then === 'function') {
+      this.orgTokens.delete(organizationId);
+      tok = undefined;
+    }
+    if (tok && tok.accessToken) return true;
+    const loaded = await this.loadOrgTokens(organizationId);
+    if (!loaded || !loaded.accessToken) return false;
+    await this.setTokens(organizationId, loaded);
+    return true;
   }
   
   getTokens(organizationId = this.defaultOrg) {
@@ -3978,8 +3989,8 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
   }
 
   const org = spotifyOrgForRoom(room);
-  const tok = multiTenantSpotify.getTokens(org);
-  if (!tok || !tok.accessToken) {
+  const tokensOk = await multiTenantSpotify.ensureOrgTokensLoaded(org);
+  if (!tokensOk) {
     console.error('❌ Cannot generate bingo cards: Spotify not connected for this host');
     return;
   }
@@ -4592,9 +4603,12 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
   }
 
   const org = spotifyOrgForRoom(room);
-  const tok = multiTenantSpotify.getTokens(org);
-  if (!tok || !tok.accessToken) {
-    console.error('❌ Cannot start playback: Spotify not connected for this host');
+  const tokensOk = await multiTenantSpotify.ensureOrgTokensLoaded(org);
+  if (!tokensOk) {
+    console.error('❌ Cannot start playback: Spotify not connected for this host (no tokens in memory or DB)');
+    io.to(roomId).emit('playback-error', {
+      message: 'Spotify is not connected for this host. Open Connection and connect Spotify, then try Start Game again.',
+    });
     return;
   }
 
