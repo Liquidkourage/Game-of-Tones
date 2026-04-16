@@ -616,12 +616,17 @@ const HostView: React.FC = () => {
   }, [filteredPlaylists, playlistSort]);
 
   /**
-   * Union: library ids (sync from `playlists`) + every row id currently rendered.
-   * Redundant on purpose — if state timing ever omits a row id from the library list, we still fetch stats for visible rows.
+   * Union of library + table row ids, with visible rows first so the first batch request
+   * paints explicit badges on-screen before the rest of the library finishes.
    */
   const allPlaylistIdsForExplicitStats = useMemo(() => {
-    const rowIds = sortedFilteredPlaylists.map((p) => normalizeSpotifyPlaylistId(p.id)).filter(Boolean);
-    return Array.from(new Set([...playlistIdsForExplicitStats, ...rowIds]));
+    const rowIds = sortedFilteredPlaylists
+      .map((p) => normalizeSpotifyPlaylistId(p.id))
+      .filter(Boolean);
+    const uniqueRow = Array.from(new Set(rowIds));
+    const rowSet = new Set(uniqueRow);
+    const rest = playlistIdsForExplicitStats.filter((id) => !rowSet.has(id));
+    return [...uniqueRow, ...rest];
   }, [playlistIdsForExplicitStats, sortedFilteredPlaylists]);
 
   const allPlaylistIdsForExplicitStatsKey = useMemo(
@@ -712,16 +717,16 @@ const HostView: React.FC = () => {
     setPlaylistExplicitStatsLoading(true);
     setPlaylistExplicitStatsError(null);
 
-    const fetchChunksOnce = async (): Promise<{
+    const fetchChunksOnce = async (ids: string[]): Promise<{
       merged: Record<string, { total: number; explicitCount: number }>;
       anyHttpError: boolean;
     }> => {
       const merged: Record<string, { total: number; explicitCount: number }> = {};
       let anyHttpError = false;
       const chunkSize = 30;
-      for (let i = 0; i < allIds.length; i += chunkSize) {
+      for (let i = 0; i < ids.length; i += chunkSize) {
         if (cancelled) return { merged, anyHttpError };
-        const chunk = allIds.slice(i, i + chunkSize);
+        const chunk = ids.slice(i, i + chunkSize);
         const res = await hostFetch(`${API_BASE || ''}/api/spotify/playlists/explicit-stats-batch`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -752,23 +757,50 @@ const HostView: React.FC = () => {
       return { merged, anyHttpError };
     };
 
-    (async () => {
-      const maxAttempts = 3;
-      try {
-        let lastMerged: Record<string, { total: number; explicitCount: number }> = {};
-        for (let attempt = 0; attempt < maxAttempts; attempt++) {
-          if (cancelled) return;
-          if (attempt > 0) {
-            await new Promise((r) => setTimeout(r, 900 * attempt));
-          }
-          if (cancelled) return;
-          const { merged, anyHttpError } = await fetchChunksOnce();
-          lastMerged = { ...lastMerged, ...merged };
-          if (!anyHttpError) break;
+    const runWithRetries = async (ids: string[]) => {
+      let lastMerged: Record<string, { total: number; explicitCount: number }> = {};
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (cancelled) return lastMerged;
+        if (attempt > 0) {
+          await new Promise((r) => setTimeout(r, 900 * attempt));
         }
+        if (cancelled) return lastMerged;
+        const { merged, anyHttpError } = await fetchChunksOnce(ids);
+        lastMerged = { ...lastMerged, ...merged };
+        if (!anyHttpError) break;
+      }
+      return lastMerged;
+    };
+
+    /** First N ids are visible rows (see allPlaylistIdsForExplicitStats) — finish those first so labels appear quickly. */
+    const PRIORITY_COUNT = 20;
+
+    (async () => {
+      try {
+        const priorityIds = allIds.slice(0, PRIORITY_COUNT);
+        const restIds = allIds.slice(PRIORITY_COUNT);
+        let acc: Record<string, { total: number; explicitCount: number }> = {};
+
+        if (priorityIds.length > 0) {
+          acc = await runWithRetries(priorityIds);
+          if (!cancelled) {
+            setPlaylistExplicitStats(acc);
+            setPlaylistExplicitStatsLoading(false);
+          }
+        }
+
+        if (restIds.length > 0 && !cancelled) {
+          setPlaylistExplicitStatsLoading(true);
+          const m2 = await runWithRetries(restIds);
+          if (!cancelled) {
+            acc = { ...acc, ...m2 };
+            setPlaylistExplicitStats(acc);
+          }
+        }
+
         if (!cancelled) {
-          setPlaylistExplicitStats(lastMerged);
-          const okCount = Object.keys(lastMerged).length;
+          setPlaylistExplicitStatsLoading(false);
+          const okCount = Object.keys(acc).length;
           if (okCount === 0 && allIds.length > 0) {
             setPlaylistExplicitStatsError('Could not load explicit track counts from Spotify. Check connection and try refreshing playlists.');
           } else {

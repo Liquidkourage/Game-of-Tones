@@ -15,6 +15,31 @@ const usersStore = require('./users');
 const organizationsStore = require('./organizations');
 const credentialCrypto = require('./credentialCrypto');
 
+/**
+ * Run async work over `ids` with bounded concurrency (Spotify explicit-stats batch was
+ * sequential before — dozens of playlists × pagination could take minutes).
+ */
+async function mapPlaylistIdsWithConcurrency(ids, concurrency, fn) {
+  const results = Object.create(null);
+  if (!ids || ids.length === 0) return results;
+  const n = Math.min(Math.max(1, concurrency), ids.length);
+  let next = 0;
+  const worker = async () => {
+    while (true) {
+      const i = next++;
+      if (i >= ids.length) return;
+      const id = ids[i];
+      try {
+        results[id] = await fn(id);
+      } catch (e) {
+        results[id] = { error: e?.message || 'failed' };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: n }, () => worker()));
+  return results;
+}
+
 // Song title cleaning utility
 function cleanSongTitle(title) {
   if (!title || typeof title !== 'string') {
@@ -7268,14 +7293,7 @@ app.post('/api/spotify/playlists/explicit-stats-batch', async (req, res) => {
     if (ids.length === 0) {
       return res.json({ results: {} });
     }
-    const results = {};
-    for (const pid of ids) {
-      try {
-        results[pid] = await svc.getPlaylistExplicitStats(pid);
-      } catch (e) {
-        results[pid] = { error: e?.message || 'failed' };
-      }
-    }
+    const results = await mapPlaylistIdsWithConcurrency(ids, 8, (pid) => svc.getPlaylistExplicitStats(pid));
     res.json({ results });
   } catch (e) {
     console.error('POST /api/spotify/playlists/explicit-stats-batch:', e);
