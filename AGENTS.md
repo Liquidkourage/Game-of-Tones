@@ -7,7 +7,12 @@
   - `package.json` / deps changed, or
   - you changed build config / env handling, or
   - the user explicitly wants a production build verified.
-- **Commit + push** after completing work unless the user says not to—do not wait for a separate “commit/push” prompt (batch logical fixes into one commit when possible).
+- **Commit + push** after completing work **by default**. Only skip git when the user **explicitly** asks to leave changes uncommitted or local (e.g. “don’t commit”, “no push”, “WIP only”). Do not wait for a separate “commit/push” prompt (batch logical fixes into one commit when possible).
+
+### Making “always ship” apply in Cursor
+
+- **This repo:** `AGENTS.md` (this file) is loaded for the workspace—keep the rule above here.
+- **All your projects:** add the same instruction under **Cursor Settings → Rules → User rules** (global), or create **`.cursor/rules/*.mdc`** in a repo with `alwaysApply: true` so every chat in that project follows it.
 
 ## Repo layout
 
