@@ -556,7 +556,8 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     room.currentSong = {
       id: song.id,
       name: song.name,
-      artist: song.artist
+      artist: song.artist,
+      explicit: song.explicit === true
     };
     try { const r = rooms.get(roomId); if (r) r.songStartAtMs = Date.now() - (startMs || 0); } catch {}
 
@@ -565,6 +566,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       songName: song.name,
       customSongName: customSongTitles.get(song.id) || cleanSongTitle(song.name),
       artistName: song.artist,
+      explicit: song.explicit === true,
       snippetLength: room.snippetLength,
       currentIndex: songIndex,
       totalSongs: room.playlistSongs.length,
@@ -1134,7 +1136,8 @@ async function playNextSongSimple(roomId, deviceId) {
   room.currentSong = {
     id: nextSong.id,
     name: nextSong.name,
-    artist: nextSong.artist
+    artist: nextSong.artist,
+    explicit: nextSong.explicit === true
   };
   room.currentSongStartMs = startMs; // Store for restart correction
 
@@ -1161,6 +1164,7 @@ async function playNextSongSimple(roomId, deviceId) {
       songName: nextSong.name,
       customSongName: customSongTitles.get(nextSong.id) || cleanSongTitle(nextSong.name),
       artistName: nextSong.artist,
+      explicit: nextSong.explicit === true,
       snippetLength: room.snippetLength,
       currentIndex: room.currentSongIndex,
       totalSongs: room.playlistSongs.length,
@@ -1764,14 +1768,19 @@ io.on('connection', (socket) => {
           
           // Send current song info if playing
           if (room.currentSong && room.snippetLength) {
+            const idx = room.currentSongIndex || 0;
+            const poolSong = room.playlistSongs?.[idx];
+            const explicit =
+              room.currentSong.explicit === true || poolSong?.explicit === true;
             socket.emit('song-playing', {
               songId: room.currentSong.id,
               songName: room.currentSong.name,
               artistName: room.currentSong.artist,
+              explicit,
               snippetLength: room.snippetLength,
-              currentIndex: room.currentSongIndex || 0,
+              currentIndex: idx,
               totalSongs: room.playlistSongs?.length || 0,
-              previewUrl: (room.playlistSongs?.[room.currentSongIndex || 0]?.previewUrl) || null
+              previewUrl: poolSong?.previewUrl || null
             });
           }
           
@@ -1785,14 +1794,19 @@ io.on('connection', (socket) => {
         } else {
           // Non-host player: Emit current song to sync display timing
           if (room.currentSong && room.snippetLength) {
+            const idx = room.currentSongIndex || 0;
+            const poolSong = room.playlistSongs?.[idx];
+            const explicit =
+              room.currentSong.explicit === true || poolSong?.explicit === true;
             socket.emit('song-playing', {
               songId: room.currentSong.id,
               songName: room.currentSong.name,
               artistName: room.currentSong.artist,
+              explicit,
               snippetLength: room.snippetLength,
-              currentIndex: room.currentSongIndex || 0,
+              currentIndex: idx,
               totalSongs: room.playlistSongs?.length || 0,
-              previewUrl: (room.playlistSongs?.[room.currentSongIndex || 0]?.previewUrl) || null
+              previewUrl: poolSong?.previewUrl || null
             });
           }
         }
@@ -3745,13 +3759,20 @@ io.on('connection', (socket) => {
     const room = rooms.get(roomId);
     
     if (room && room.host === socket.id) {
-      room.currentSong = { id: songId, name: songName, artist: artistName };
+      const fromPool = room.playlistSongs?.find((s) => s.id === songId);
+      room.currentSong = {
+        id: songId,
+        name: songName,
+        artist: artistName,
+        explicit: fromPool?.explicit === true
+      };
       
       io.to(roomId).emit('song-playing', {
         songId,
         songName,
         customSongName: customSongTitles.get(songId) || cleanSongTitle(songName),
         artistName,
+        explicit: fromPool?.explicit === true,
         snippetLength: room.snippetLength
       });
       
@@ -4977,7 +4998,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     room.currentSong = {
       id: firstSong.id,
       name: firstSong.name,
-      artist: firstSong.artist
+      artist: firstSong.artist,
+      explicit: firstSong.explicit === true
     };
 
     io.to(roomId).emit('song-playing', {
@@ -4985,6 +5007,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       songName: firstSong.name,
       customSongName: customSongTitles.get(firstSong.id) || cleanSongTitle(firstSong.name),
       artistName: firstSong.artist,
+      explicit: firstSong.explicit === true,
       snippetLength: room.snippetLength,
       currentIndex: 0,
       totalSongs: allSongs.length,
@@ -5223,7 +5246,8 @@ async function playNextSong(roomId, deviceId) {
     room.currentSong = {
       id: nextSong.id,
       name: nextSong.name,
-      artist: nextSong.artist
+      artist: nextSong.artist,
+      explicit: nextSong.explicit === true
     };
 
     io.to(roomId).emit('song-playing', {
@@ -5231,6 +5255,7 @@ async function playNextSong(roomId, deviceId) {
       songName: nextSong.name,
       customSongName: customSongTitles.get(nextSong.id) || cleanSongTitle(nextSong.name),
       artistName: nextSong.artist,
+      explicit: nextSong.explicit === true,
       snippetLength: room.snippetLength,
       currentIndex: room.currentSongIndex,
       totalSongs: room.playlistSongs.length,

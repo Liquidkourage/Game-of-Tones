@@ -46,6 +46,7 @@ import { BingoPattern, PATTERN_OPTIONS, BINGO_PATTERNS, getPatternDisplayName, g
 import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
 import RoundPlanner from './RoundPlanner';
+import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
 import { validateSongTitle, validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
 import './HostView.css';
@@ -237,7 +238,6 @@ const HostView: React.FC = () => {
   const [superStrict, setSuperStrict] = useState<boolean>(false);
   const [showRooms, setShowRooms] = useState<boolean>(false);
   const [rooms, setRooms] = useState<Array<any>>([]);
-  const [showPlayerCards, setShowPlayerCards] = useState<boolean>(true);
   const [playerCards, setPlayerCards] = useState<Map<string, any>>(new Map());
   const [playerCardsVersion, setPlayerCardsVersion] = useState<number>(0); // Force re-render trigger
   const [playerCardsFullscreen, setPlayerCardsFullscreen] = useState<boolean>(false);
@@ -1093,6 +1093,7 @@ const HostView: React.FC = () => {
         id: data.songId,
         name: data.songName,
         artist: data.artistName,
+        explicit: data.explicit === true,
       });
       lastSongEventAtRef.current = Date.now();
       setIsPlaying(true);
@@ -1103,6 +1104,7 @@ const HostView: React.FC = () => {
           id: data.songId,
           name: data.songName,
           artist: data.artistName,
+          explicit: data.explicit === true,
         },
         duration: data.snippetLength * 1000, // Convert to milliseconds
         currentTime: 0
@@ -2406,12 +2408,6 @@ const HostView: React.FC = () => {
       </div>
     );
   };
-
-  useEffect(() => {
-    if (!showPlayerCards) {
-      setPlayerCardsFullscreen(false);
-    }
-  }, [showPlayerCards]);
 
   useEffect(() => {
     if (!playerCardsFullscreen) {
@@ -4344,16 +4340,21 @@ const HostView: React.FC = () => {
                                 {playlistExplicitStats[p.id] != null && playlistExplicitStats[p.id].explicitCount > 0 ? (
                                   <span
                                     style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 6,
                                       fontSize: '0.68rem',
                                       fontWeight: 700,
-                                      color: '#ff9ecf',
-                                      border: '1px solid rgba(255, 158, 207, 0.45)',
+                                      color: 'rgba(255,255,255,0.92)',
+                                      border: '1px solid rgba(255,255,255,0.14)',
                                       borderRadius: 6,
-                                      padding: '2px 6px',
+                                      padding: '3px 8px 3px 6px',
                                       whiteSpace: 'nowrap',
+                                      background: 'rgba(0,0,0,0.45)',
                                     }}
                                     title="Tracks flagged as explicit in Spotify"
                                   >
+                                    <SpotifyExplicitBadge size="sm" title="Spotify explicit track" />
                                     {playlistExplicitStats[p.id].explicitCount} explicit
                                   </span>
                                 ) : null}
@@ -4719,40 +4720,17 @@ const HostView: React.FC = () => {
                     </button>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {playerCards.size > 0 && (
-                      <>
-                      <button 
+                    {playerCards.size > 0 && !playerCardsFullscreen && (
+                      <button
                         type="button"
-                        className={`btn-secondary btn-host-cards-toggle ${showPlayerCards ? 'btn-host-cards-toggle--on' : 'btn-host-cards-toggle--off'}`}
-                        onClick={() => setShowPlayerCards(!showPlayerCards)}
-                        title={showPlayerCards ? "Hide player bingo cards" : "Show player bingo cards and progress"}
+                        className="btn-secondary btn-host-emphasis"
+                        onClick={openPlayerCardsModal}
+                        title="Open player cards in a window (expand to full screen inside, or Escape to close)"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
                       >
-                        {showPlayerCards ? (
-                          <>
-                            <Users className="w-4 h-4" aria-hidden />
-                            Hide Player Cards
-                          </>
-                        ) : (
-                          <>
-                            <Users className="w-4 h-4" aria-hidden />
-                            Show Player Cards
-                          </>
-                        )}
+                        <Users className="w-4 h-4" aria-hidden />
+                        View player cards
                       </button>
-                      {showPlayerCards && !playerCardsFullscreen && (
-                        <button
-                          type="button"
-                          className="btn-secondary btn-host-emphasis"
-                          onClick={openPlayerCardsModal}
-                          title="Open player cards in a window (expand to full screen inside, or Escape to close)"
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-                        >
-                          <Users className="w-4 h-4" aria-hidden />
-                          View player cards
-                        </button>
-                      )}
-                      </>
                     )}
                     <span style={{ fontSize: '0.75rem', color: '#888', maxWidth: 340 }}>
                       Player cards refresh automatically when the game starts, players join, songs play, or bingo verification opens.
@@ -4826,8 +4804,18 @@ const HostView: React.FC = () => {
                     }}>
                       These are the songs that will be used in your bingo game. You can edit titles to make them more recognizable for players.
                       {' '}
-                      <span style={{ color: 'rgba(255,200,230,0.95)' }}>
-                        Tracks marked <strong style={{ fontWeight: 800 }}>E</strong> are flagged explicit on Spotify.
+                      <span
+                        style={{
+                          color: 'rgba(255,255,255,0.88)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        Tracks with the Spotify explicit label
+                        <SpotifyExplicitBadge size="lg" title="Spotify explicit content label" />
+                        are flagged explicit in Spotify.
                       </span>
                     </p>
                     
@@ -4891,20 +4879,7 @@ Hover over the validation icon for detailed validation info.`}
                               }}>
                                 {displayTitle}
                                 {song.explicit === true && (
-                                  <span
-                                    style={{
-                                      fontSize: '0.68rem',
-                                      fontWeight: 800,
-                                      color: '#ffb8e6',
-                                      border: '1px solid rgba(255, 158, 207, 0.55)',
-                                      borderRadius: 4,
-                                      padding: '1px 6px',
-                                      lineHeight: 1.2,
-                                    }}
-                                    title="Marked explicit on Spotify"
-                                  >
-                                    E
-                                  </span>
+                                  <SpotifyExplicitBadge size="md" title="Marked explicit on Spotify" />
                                 )}
                                 {customSongTitles[song.id] && (
                                   <span style={{ 
@@ -5093,7 +5068,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
             )}
 
                 {/* Player cards: compact strip � open modal or full screen to inspect grids */}
-                {showPlayerCards && playerCards.size > 0 && !playerCardsFullscreen && (
+                {playerCards.size > 0 && !playerCardsFullscreen && (
              <motion.div 
                key={`player-cards-${playerCardsVersion}`}
                initial={{ opacity: 0 }}
@@ -5178,8 +5153,23 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                 marginBottom: 16,
                 textAlign: 'center'
               }}>
-                <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#00ff88', marginBottom: 8 }}>
-                  {currentSong.name}
+                <div
+                  style={{
+                    fontSize: '1.2rem',
+                    fontWeight: 'bold',
+                    color: '#00ff88',
+                    marginBottom: 8,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <span>{currentSong.name}</span>
+                  {currentSong.explicit === true && (
+                    <SpotifyExplicitBadge size="lg" title="Marked explicit on Spotify" />
+                  )}
                 </div>
                 <div style={{ fontSize: '1rem', color: '#b3b3b3' }}>
                   by {currentSong.artist}
@@ -5274,7 +5264,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
       )}
 
       {/* Player cards: centered modal (default) or expanded full-screen panel (z-index below bingo verification) */}
-      {showPlayerCards && playerCards.size > 0 && playerCardsFullscreen && (
+      {playerCards.size > 0 && playerCardsFullscreen && (
         playerCardsMaximized ? (
         <div
           role="dialog"

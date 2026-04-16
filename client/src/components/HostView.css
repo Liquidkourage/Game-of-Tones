@@ -1142,31 +1142,6 @@
   box-shadow: 0 0 20px rgba(255, 180, 60, 0.25);
 }
 
-/* Player cards visibility toggle */
-.host-view .btn-host-cards-toggle--off {
-  background: rgba(0, 255, 163, 0.12);
-  border-color: rgba(0, 255, 180, 0.55);
-  color: #062a1c;
-  font-weight: 700;
-}
-
-.host-view .btn-host-cards-toggle--off:hover:not(:disabled) {
-  background: rgba(0, 255, 163, 0.2);
-  color: #021810;
-}
-
-.host-view .btn-host-cards-toggle--on {
-  background: linear-gradient(180deg, #ff7a45 0%, #e85d2a 100%);
-  border: 1px solid rgba(255, 150, 100, 0.55);
-  color: #fff;
-  font-weight: 700;
-}
-
-.host-view .btn-host-cards-toggle--on:hover:not(:disabled) {
-  filter: brightness(1.05);
-  box-shadow: 0 0 18px rgba(255, 120, 80, 0.25);
-}
-
 .host-view .btn-host-emphasis {
   border-color: #00ffa3;
   color: #00ffa3;
