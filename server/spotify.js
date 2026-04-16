@@ -245,6 +245,7 @@ class SpotifyService {
             duration: item.track.duration_ms,
             uri: item.track.uri,
             previewUrl: item.track.preview_url || null,
+            explicit: item.track.explicit === true,
             sourcePlaylistId: playlistId,
             sourcePlaylistName: playlistInfo?.name || 'Unknown Playlist'
           }));
@@ -262,6 +263,41 @@ class SpotifyService {
     }
   }
 
+  /**
+   * Count total tracks and tracks marked explicit by Spotify (paginated; prefers minimal `fields`).
+   */
+  async getPlaylistExplicitStats(playlistId) {
+    await this.ensureValidToken();
+    const pid = String(playlistId || '').trim();
+    if (!pid) throw new Error('playlist id required');
+    const paginate = async (extraOpts) => {
+      let offset = 0;
+      const limit = 100;
+      let total = 0;
+      let explicitCount = 0;
+      while (true) {
+        const response = await this.spotifyApi.getPlaylistTracks(pid, { limit, offset, ...extraOpts });
+        const items = response.body.items || [];
+        if (items.length === 0) break;
+        for (const item of items) {
+          const t = item.track;
+          if (!t || !t.id) continue;
+          total++;
+          if (t.explicit === true) explicitCount++;
+        }
+        offset += limit;
+        if (items.length < limit) break;
+      }
+      return { total, explicitCount };
+    };
+    try {
+      return await paginate({ fields: 'items(track(id,explicit))' });
+    } catch (e) {
+      console.warn('getPlaylistExplicitStats: fields filter failed, using full track payload', e?.message || e);
+      return await paginate({});
+    }
+  }
+
   // Get public playlist tracks (for playlists not owned by user)
   async getPublicPlaylistTracks(playlistId) {
     await this.ensureValidToken();
@@ -276,7 +312,8 @@ class SpotifyService {
           artist: item.track.artists.map(artist => artist.name).join(', '),
           album: item.track.album.name,
           duration: item.track.duration_ms,
-          uri: item.track.uri
+          uri: item.track.uri,
+          explicit: item.track.explicit === true
         }));
       
       return tracks;
@@ -511,7 +548,8 @@ class SpotifyService {
         popularity: track.popularity,
         preview_url: track.preview_url,
         uri: track.uri,
-        external_urls: track.external_urls
+        external_urls: track.external_urls,
+        explicit: track.explicit === true
       }));
     } catch (error) {
       console.error('Error searching tracks:', error);

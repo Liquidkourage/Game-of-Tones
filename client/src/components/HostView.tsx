@@ -65,6 +65,8 @@ interface Song {
   name: string;
   artist: string;
   duration?: number; // Make duration optional
+  /** Spotify: track has explicit content */
+  explicit?: boolean;
   sourcePlaylistId?: string;
   sourcePlaylistName?: string;
 }
@@ -406,6 +408,11 @@ const HostView: React.FC = () => {
     key: 'none' | 'name' | 'tracks';
     dir: 'asc' | 'desc';
   }>({ key: 'none', dir: 'asc' });
+  /** Spotify explicit counts per playlist id (batch API) */
+  const [playlistExplicitStats, setPlaylistExplicitStats] = useState<
+    Record<string, { total: number; explicitCount: number }>
+  >({});
+  const [playlistExplicitStatsLoading, setPlaylistExplicitStatsLoading] = useState(false);
   // const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]); // duplicate removed
   
   // Pause position tracking (duplicates removed below)
@@ -638,6 +645,61 @@ const HostView: React.FC = () => {
       setVisiblePlaylists([]);
     }
   }, [eventRounds, playlists, showAllPlaylists]); // Re-run when rounds, playlists, or filter mode change
+
+  const visiblePlaylistIdsKey = useMemo(
+    () => visiblePlaylists.map((p) => p.id).join(','),
+    [visiblePlaylists]
+  );
+
+  /** Load Spotify explicit vs total counts for visible playlists (chunked batch API). */
+  useEffect(() => {
+    if (!isSpotifyConnected || visiblePlaylists.length === 0) {
+      setPlaylistExplicitStats({});
+      setPlaylistExplicitStatsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setPlaylistExplicitStatsLoading(true);
+    (async () => {
+      const allIds = visiblePlaylists.map((p) => p.id);
+      const merged: Record<string, { total: number; explicitCount: number }> = {};
+      const chunkSize = 30;
+      try {
+        for (let i = 0; i < allIds.length; i += chunkSize) {
+          if (cancelled) return;
+          const chunk = allIds.slice(i, i + chunkSize);
+          const res = await hostFetch(`${API_BASE || ''}/api/spotify/playlists/explicit-stats-batch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ playlistIds: chunk }),
+          });
+          if (!res.ok || cancelled) continue;
+          const data = (await res.json()) as {
+            results?: Record<string, { total?: number; explicitCount?: number; error?: string }>;
+          };
+          const r = data.results || {};
+          for (const [pid, v] of Object.entries(r)) {
+            if (
+              v &&
+              typeof v === 'object' &&
+              typeof v.explicitCount === 'number' &&
+              typeof v.total === 'number'
+            ) {
+              merged[pid] = { total: v.total, explicitCount: v.explicitCount };
+            }
+          }
+        }
+        if (!cancelled) setPlaylistExplicitStats(merged);
+      } catch {
+        if (!cancelled) setPlaylistExplicitStats({});
+      } finally {
+        if (!cancelled) setPlaylistExplicitStatsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isSpotifyConnected, visiblePlaylistIdsKey]);
 
   // Auto-switch tabs based on game state (do not depend on eventRounds � round-bucket updates
   // should not yank the host back to Manager; see handleStartRound ? Game tab).
@@ -4047,6 +4109,11 @@ const HostView: React.FC = () => {
                         </label>
                       </div>
                       <input type="search" placeholder="Search playlists by name…" value={playlistQuery} onChange={(e) => setPlaylistQuery(e.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.35)', color: '#fff', maxWidth: 420, width: '100%' }} />
+                      {playlistExplicitStatsLoading ? (
+                        <p style={{ fontSize: '0.78rem', color: '#888', margin: '4px 0 0' }}>
+                          Scanning playlists for Spotify explicit flags…
+                        </p>
+                      ) : null}
                     </div>
 
                         <div style={{ 
@@ -4259,14 +4326,37 @@ const HostView: React.FC = () => {
                                   );
                                 })()}
                               </span>
-                              <span style={{ 
-                                fontSize: '0.8rem', 
-                                opacity: 0.7,
-                                color: isAcceptable ? '#00ff88' : '#b3b3b3',
-                                flexShrink: 0,
-                                paddingTop: 2,
-                              }}>
-                                {p.tracks} songs
+                              <span
+                                style={{
+                                  fontSize: '0.8rem',
+                                  opacity: 0.7,
+                                  color: isAcceptable ? '#00ff88' : '#b3b3b3',
+                                  flexShrink: 0,
+                                  paddingTop: 2,
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'flex-end',
+                                  gap: 4,
+                                  textAlign: 'right',
+                                }}
+                              >
+                                <span>{p.tracks} songs</span>
+                                {playlistExplicitStats[p.id] != null && playlistExplicitStats[p.id].explicitCount > 0 ? (
+                                  <span
+                                    style={{
+                                      fontSize: '0.68rem',
+                                      fontWeight: 700,
+                                      color: '#ff9ecf',
+                                      border: '1px solid rgba(255, 158, 207, 0.45)',
+                                      borderRadius: 6,
+                                      padding: '2px 6px',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                    title="Tracks flagged as explicit in Spotify"
+                                  >
+                                    {playlistExplicitStats[p.id].explicitCount} explicit
+                                  </span>
+                                ) : null}
                               </span>
                               {isInsufficient && (
                                 <span style={{ fontSize: '0.72rem', color: '#ffb347', whiteSpace: 'nowrap', padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,179,71,0.35)', background: 'rgba(255,179,71,0.08)', flexShrink: 0, paddingTop: 6 }} title="Need at least 15 tracks for a standard round; add songs in Spotify">Need 15+</span>
@@ -4735,6 +4825,10 @@ const HostView: React.FC = () => {
                       lineHeight: '1.4'
                     }}>
                       These are the songs that will be used in your bingo game. You can edit titles to make them more recognizable for players.
+                      {' '}
+                      <span style={{ color: 'rgba(255,200,230,0.95)' }}>
+                        Tracks marked <strong style={{ fontWeight: 800 }}>E</strong> are flagged explicit on Spotify.
+                      </span>
                     </p>
                     
                     <div style={{
@@ -4796,6 +4890,22 @@ Hover over the validation icon for detailed validation info.`}
                                 gap: '8px'
                               }}>
                                 {displayTitle}
+                                {song.explicit === true && (
+                                  <span
+                                    style={{
+                                      fontSize: '0.68rem',
+                                      fontWeight: 800,
+                                      color: '#ffb8e6',
+                                      border: '1px solid rgba(255, 158, 207, 0.55)',
+                                      borderRadius: 4,
+                                      padding: '1px 6px',
+                                      lineHeight: 1.2,
+                                    }}
+                                    title="Marked explicit on Spotify"
+                                  >
+                                    E
+                                  </span>
+                                )}
                                 {customSongTitles[song.id] && (
                                   <span style={{ 
                                     fontSize: '0.8rem', 

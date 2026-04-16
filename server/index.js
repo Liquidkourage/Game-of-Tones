@@ -7203,6 +7203,34 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
   }
 });
 
+/** Batch: explicit vs total track counts per playlist (Spotify `track.explicit`). */
+app.post('/api/spotify/playlists/explicit-stats-batch', async (req, res) => {
+  try {
+    if (!hostSpotifyHasTokens(req)) {
+      return res.status(401).json({ error: 'Spotify not connected' });
+    }
+    const raw = req.body && Array.isArray(req.body.playlistIds) ? req.body.playlistIds : [];
+    const ids = raw.map((x) => String(x).trim()).filter(Boolean).slice(0, 80);
+    if (ids.length === 0) {
+      return res.json({ results: {} });
+    }
+    const svc = spotifyForRequest(req);
+    await svc.ensureValidToken();
+    const results = {};
+    for (const pid of ids) {
+      try {
+        results[pid] = await svc.getPlaylistExplicitStats(pid);
+      } catch (e) {
+        results[pid] = { error: e?.message || 'failed' };
+      }
+    }
+    res.json({ results });
+  } catch (e) {
+    console.error('POST /api/spotify/playlists/explicit-stats-batch:', e);
+    res.status(500).json({ error: 'Failed to load explicit stats' });
+  }
+});
+
 // Create permanent output playlist
 app.post('/api/spotify/create-output-playlist', async (req, res) => {
   try {
