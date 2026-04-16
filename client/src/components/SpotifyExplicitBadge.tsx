@@ -1,5 +1,3 @@
-import { useId } from 'react';
-
 export type SpotifyExplicitBadgeSize = 'sm' | 'md' | 'lg';
 
 const SIZE_PX: Record<SpotifyExplicitBadgeSize, { w: number; h: number }> = {
@@ -11,9 +9,12 @@ const SIZE_PX: Record<SpotifyExplicitBadgeSize, { w: number; h: number }> = {
   lg: { w: 34, h: 22 },
 };
 
+/** Light gray rounded square with dark “E” — matches Spotify’s explicit label (positive space). */
+const BG = '#b3b3b3';
+const FG = '#121212';
+
 /**
- * Spotify-style explicit label: solid black rounded block with “E” as negative space
- * (background shows through the letter). Matches the in-app Spotify treatment.
+ * Spotify-style explicit label: light block, bold dark E (same visual language as Spotify’s icon).
  */
 export function SpotifyExplicitBadge({
   size = 'md',
@@ -24,7 +25,6 @@ export function SpotifyExplicitBadge({
   title?: string;
   className?: string;
 }) {
-  const maskId = `spotify-explicit-${useId().replace(/:/g, '')}`;
   const { w, h } = SIZE_PX[size];
   const vbW = 18;
   const vbH = 12;
@@ -40,29 +40,30 @@ export function SpotifyExplicitBadge({
       style={{
         flexShrink: 0,
         verticalAlign: 'middle',
-        filter:
-          'drop-shadow(0 0 1px rgba(255,255,255,0.12)) drop-shadow(0 1px 3px rgba(0,0,0,0.75))',
+        filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.55))',
       }}
     >
       <title>{title}</title>
-      <defs>
-        <mask id={maskId}>
-          <rect width={vbW} height={vbH} rx="2.5" fill="white" />
-          <text
-            x={vbW / 2}
-            y="9.45"
-            textAnchor="middle"
-            fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-            fontSize="8.35"
-            fontWeight={900}
-            letterSpacing="-0.02em"
-            fill="black"
-          >
-            E
-          </text>
-        </mask>
-      </defs>
-      <rect width={vbW} height={vbH} rx="2.5" fill="#000000" mask={`url(#${maskId})`} />
+      <rect
+        width={vbW}
+        height={vbH}
+        rx="2.5"
+        fill={BG}
+        stroke="rgba(0,0,0,0.18)"
+        strokeWidth="0.35"
+      />
+      <text
+        x={vbW / 2}
+        y="9.45"
+        textAnchor="middle"
+        fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+        fontSize="8.35"
+        fontWeight={900}
+        letterSpacing="-0.02em"
+        fill={FG}
+      >
+        E
+      </text>
     </svg>
   );
 }
