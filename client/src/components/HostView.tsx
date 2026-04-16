@@ -141,6 +141,28 @@ const HOST_DISPLAY_NAME_KEY = 'tempo_host_display_name';
 /** Stable empty ref for useMemo playlist id lists (avoids re-running effects every render). */
 const NO_PLAYLIST_IDS: string[] = [];
 
+/** Spotify playlist ids are strings; rounds/API may store numbers — normalize for Set lookups. */
+function normalizeSpotifyPlaylistId(id: unknown): string {
+  if (id == null || id === '') return '';
+  return String(id).trim();
+}
+
+/** GoT mix library filter (same rules as visible playlist effect). */
+function filterBasePlaylistsForMix(playlists: Playlist[], showAllPlaylists: boolean): Playlist[] {
+  if (!showAllPlaylists) {
+    return playlists.filter((p: Playlist) => {
+      const nameLower = p.name.toLowerCase();
+      if (nameLower.includes('game of tones output') || nameLower.includes('gameoftones output')) {
+        return false;
+      }
+      const startsWithGot = /^got\s*[-�:]*\s*/i.test(p.name);
+      const containsGameOfTones = nameLower.includes('game of tones') || nameLower.includes('gameoftones');
+      return startsWithGot || containsGameOfTones;
+    });
+  }
+  return playlists;
+}
+
 const HostView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -416,6 +438,10 @@ const HostView: React.FC = () => {
     Record<string, { total: number; explicitCount: number }>
   >({});
   const [playlistExplicitStatsLoading, setPlaylistExplicitStatsLoading] = useState(false);
+  /** Set when batch returns no usable stats after retries (host can still play; labels may be missing). */
+  const [playlistExplicitStatsError, setPlaylistExplicitStatsError] = useState<string | null>(null);
+  /** Increment to re-run explicit-stats fetch (same playlist ids, e.g. after fixing Spotify auth). */
+  const [explicitStatsRefreshNonce, setExplicitStatsRefreshNonce] = useState(0);
   // const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]); // duplicate removed
   
   // Pause position tracking (duplicates removed below)
@@ -541,57 +567,40 @@ const HostView: React.FC = () => {
   }, []);
 
 
-  // Get all playlist IDs that are already assigned to rounds
-  const assignedPlaylistIds = new Set(
-    eventRounds.flatMap(round => round.playlistIds || [])
+  /** Assigned-to-round ids as strings so Spotify id === round id always matches. */
+  const assignedPlaylistIds = useMemo(
+    () => new Set(eventRounds.flatMap((round) => round.playlistIds || []).map((id) => String(id))),
+    [eventRounds]
   );
 
-  /** Same inclusion rules as the effect that sets `visiblePlaylists`, but computed synchronously during render so explicit-stats fetching does not race one frame behind playlist load. */
+  /** Same inclusion rules as the effect that sets `visiblePlaylists`, computed synchronously (no race with playlist load). */
   const playlistIdsForExplicitStats = useMemo(() => {
     if (!playlists?.length) return NO_PLAYLIST_IDS;
-    const basePlaylists = showAllPlaylists
-      ? playlists
-      : playlists.filter((p: Playlist) => {
-          const nameLower = p.name.toLowerCase();
-          if (nameLower.includes('game of tones output') || nameLower.includes('gameoftones output')) {
-            return false;
-          }
-          const startsWithGot = /^got\s*[-�:]*\s*/i.test(p.name);
-          const containsGameOfTones = nameLower.includes('game of tones') || nameLower.includes('gameoftones');
-          return startsWithGot || containsGameOfTones;
-        });
-    const assigned = new Set(
-      eventRounds.flatMap((round) => round.playlistIds || []).map((id) => String(id))
-    );
+    const basePlaylists = filterBasePlaylistsForMix(playlists, showAllPlaylists);
     return basePlaylists
-      .filter((p) => p.id != null && !assigned.has(String(p.id)))
-      .map((p) => String(p.id));
-  }, [playlists, showAllPlaylists, eventRounds]);
-
-  /** Stable string so the explicit-stats effect reruns when the id set changes (not only array identity). */
-  const playlistIdsForExplicitStatsKey = useMemo(
-    () => playlistIdsForExplicitStats.join(','),
-    [playlistIdsForExplicitStats]
-  );
+      .filter((p) => {
+        const pid = normalizeSpotifyPlaylistId(p.id);
+        return pid !== '' && !assignedPlaylistIds.has(pid);
+      })
+      .map((p) => normalizeSpotifyPlaylistId(p.id));
+  }, [playlists, showAllPlaylists, assignedPlaylistIds]);
 
   // Filter playlists by query and exclude already assigned playlists
   const filteredPlaylists = useMemo(() => {
-    const assigned = new Set(
-      eventRounds.flatMap((round) => round.playlistIds || [])
-    );
     if (playlistQuery) {
       const q = playlistQuery.toLowerCase();
       return visiblePlaylists.filter((p) => {
+        const pid = normalizeSpotifyPlaylistId(p.id);
         return (
-          !assigned.has(p.id) &&
+          !assignedPlaylistIds.has(pid) &&
           ((p.name || '').toLowerCase().includes(q) ||
             (p.owner || '').toLowerCase().includes(q) ||
             (p.description || '').toLowerCase().includes(q))
         );
       });
     }
-    return visiblePlaylists.filter((p) => !assigned.has(p.id));
-  }, [visiblePlaylists, playlistQuery, eventRounds]);
+    return visiblePlaylists.filter((p) => !assignedPlaylistIds.has(normalizeSpotifyPlaylistId(p.id)));
+  }, [visiblePlaylists, playlistQuery, assignedPlaylistIds]);
 
   const sortedFilteredPlaylists = useMemo(() => {
     const rows = [...filteredPlaylists];
@@ -605,6 +614,20 @@ const HostView: React.FC = () => {
     });
     return rows;
   }, [filteredPlaylists, playlistSort]);
+
+  /**
+   * Union: library ids (sync from `playlists`) + every row id currently rendered.
+   * Redundant on purpose — if state timing ever omits a row id from the library list, we still fetch stats for visible rows.
+   */
+  const allPlaylistIdsForExplicitStats = useMemo(() => {
+    const rowIds = sortedFilteredPlaylists.map((p) => normalizeSpotifyPlaylistId(p.id)).filter(Boolean);
+    return Array.from(new Set([...playlistIdsForExplicitStats, ...rowIds]));
+  }, [playlistIdsForExplicitStats, sortedFilteredPlaylists]);
+
+  const allPlaylistIdsForExplicitStatsKey = useMemo(
+    () => JSON.stringify(allPlaylistIdsForExplicitStats),
+    [allPlaylistIdsForExplicitStats]
+  );
 
   const togglePlaylistSort = useCallback((key: 'name' | 'tracks') => {
     setPlaylistSort((prev) => {
@@ -643,59 +666,53 @@ const HostView: React.FC = () => {
   // Update visible playlists when rounds change to exclude newly assigned playlists, or when filter mode changes
   useEffect(() => {
     if (playlists && playlists.length > 0) {
-      // Apply filter based on showAllPlaylists state
-      const basePlaylists = showAllPlaylists 
-        ? playlists 
-        : playlists.filter((p: Playlist) => {
-            const nameLower = p.name.toLowerCase();
-            // Exclude output playlists (generated when starting a round)
-            if (nameLower.includes('game of tones output') || nameLower.includes('gameoftones output')) {
-              return false;
-            }
-            // Match "got" at the start of the name (with optional separator like "got -", "got:", etc.)
-            const startsWithGot = /^got\s*[-�:]*\s*/i.test(p.name);
-            // Match "game of tones" or "gameoftones" anywhere in the name
-            const containsGameOfTones = nameLower.includes('game of tones') || nameLower.includes('gameoftones');
-            return startsWithGot || containsGameOfTones;
-          });
-      
+      const basePlaylists = filterBasePlaylistsForMix(playlists, showAllPlaylists);
+
       console.log(`?? Filter applied: showAllPlaylists=${showAllPlaylists}, total playlists=${playlists.length}, filtered to=${basePlaylists.length}`);
       if (!showAllPlaylists && basePlaylists.length > 0) {
         console.log(`? Sample filtered playlists (first 10):`, basePlaylists.slice(0, 10).map((p: Playlist) => p.name));
       }
-      
-      // Always exclude assigned playlists
-      const availablePlaylists = basePlaylists.filter((p: Playlist) => !assignedPlaylistIds.has(p.id));
-      
+
+      const availablePlaylists = basePlaylists.filter((p: Playlist) => {
+        const pid = normalizeSpotifyPlaylistId(p.id);
+        return pid !== '' && !assignedPlaylistIds.has(pid);
+      });
+
       console.log(`?? Final visible playlists: ${availablePlaylists.length} (after excluding ${assignedPlaylistIds.size} assigned)`);
-      
-      // Update visible playlists to match current filter and assigned state
+
       setVisiblePlaylists(availablePlaylists);
     } else if (playlists && playlists.length === 0) {
-      // Clear visible playlists if playlists array is empty
       setVisiblePlaylists([]);
     }
-  }, [eventRounds, playlists, showAllPlaylists]); // Re-run when rounds, playlists, or filter mode change
+  }, [assignedPlaylistIds, playlists, showAllPlaylists]);
 
-  /** Load Spotify explicit vs total counts for visible playlists (chunked batch API). */
+  /** Load Spotify explicit vs total counts for playlists in the Manager list (chunked batch API, retries). */
   useEffect(() => {
     if (!hostAuthBootstrapDone || !isSpotifyConnected) {
       if (!isSpotifyConnected) {
         setPlaylistExplicitStats({});
         setPlaylistExplicitStatsLoading(false);
+        setPlaylistExplicitStatsError(null);
       }
       return;
     }
-    const allIds = playlistIdsForExplicitStats;
-    if (allIds.length === 0) {
+    let allIds: string[] = [];
+    try {
+      allIds = JSON.parse(allPlaylistIdsForExplicitStatsKey) as string[];
+    } catch {
+      allIds = [];
+    }
+    if (!Array.isArray(allIds) || allIds.length === 0) {
       setPlaylistExplicitStats({});
       setPlaylistExplicitStatsLoading(false);
+      setPlaylistExplicitStatsError(null);
       return;
     }
     let cancelled = false;
     setPlaylistExplicitStatsLoading(true);
+    setPlaylistExplicitStatsError(null);
 
-    const fetchChunks = async (): Promise<{
+    const fetchChunksOnce = async (): Promise<{
       merged: Record<string, { total: number; explicitCount: number }>;
       anyHttpError: boolean;
     }> => {
@@ -727,6 +744,8 @@ const HostView: React.FC = () => {
             typeof v.total === 'number'
           ) {
             merged[String(pid)] = { total: v.total, explicitCount: v.explicitCount };
+          } else if (v && typeof v === 'object' && (v as { error?: string }).error) {
+            console.warn('explicit-stats playlist', pid, (v as { error?: string }).error);
           }
         }
       }
@@ -734,15 +753,34 @@ const HostView: React.FC = () => {
     };
 
     (async () => {
+      const maxAttempts = 3;
       try {
-        let { merged, anyHttpError } = await fetchChunks();
-        if (!cancelled && anyHttpError) {
-          await new Promise((r) => setTimeout(r, 1600));
-          if (!cancelled) ({ merged } = await fetchChunks());
+        let lastMerged: Record<string, { total: number; explicitCount: number }> = {};
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          if (cancelled) return;
+          if (attempt > 0) {
+            await new Promise((r) => setTimeout(r, 900 * attempt));
+          }
+          if (cancelled) return;
+          const { merged, anyHttpError } = await fetchChunksOnce();
+          lastMerged = { ...lastMerged, ...merged };
+          if (!anyHttpError) break;
         }
-        if (!cancelled) setPlaylistExplicitStats(merged);
-      } catch {
-        if (!cancelled) setPlaylistExplicitStats({});
+        if (!cancelled) {
+          setPlaylistExplicitStats(lastMerged);
+          const okCount = Object.keys(lastMerged).length;
+          if (okCount === 0 && allIds.length > 0) {
+            setPlaylistExplicitStatsError('Could not load explicit track counts from Spotify. Check connection and try refreshing playlists.');
+          } else {
+            setPlaylistExplicitStatsError(null);
+          }
+        }
+      } catch (e) {
+        console.error('explicit-stats batch failed', e);
+        if (!cancelled) {
+          setPlaylistExplicitStats({});
+          setPlaylistExplicitStatsError('Failed to load explicit counts.');
+        }
       } finally {
         if (!cancelled) setPlaylistExplicitStatsLoading(false);
       }
@@ -750,7 +788,7 @@ const HostView: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [hostAuthBootstrapDone, isSpotifyConnected, playlistIdsForExplicitStatsKey]);
+  }, [hostAuthBootstrapDone, isSpotifyConnected, allPlaylistIdsForExplicitStatsKey, explicitStatsRefreshNonce]);
 
   // Auto-switch tabs based on game state (do not depend on eventRounds � round-bucket updates
   // should not yank the host back to Manager; see handleStartRound ? Game tab).
@@ -944,6 +982,9 @@ const HostView: React.FC = () => {
       setIsSpotifyConnected(false);
       setPlaylists([]);
       setSpotifyError(null);
+      setPlaylistExplicitStats({});
+      setPlaylistExplicitStatsLoading(false);
+      setPlaylistExplicitStatsError(null);
     } catch (error) {
       console.error('Error disconnecting Spotify:', error);
     }
@@ -4155,10 +4196,32 @@ const HostView: React.FC = () => {
                           Short names (hide &quot;GoT-&quot; prefix in this list)
                         </label>
                       </div>
-                      <input type="search" placeholder="Search playlists by name…" value={playlistQuery} onChange={(e) => setPlaylistQuery(e.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.35)', color: '#fff', maxWidth: 420, width: '100%' }} />
+                      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, maxWidth: 560, width: '100%' }}>
+                        <input type="search" placeholder="Search playlists by name…" value={playlistQuery} onChange={(e) => setPlaylistQuery(e.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.35)', color: '#fff', flex: '1 1 220px', minWidth: 180 }} />
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+                          disabled={!isSpotifyConnected || playlistExplicitStatsLoading}
+                          title="Request explicit-track counts again from Spotify"
+                          onClick={() => setExplicitStatsRefreshNonce((n) => n + 1)}
+                        >
+                          Refresh explicit labels
+                        </button>
+                      </div>
                       {playlistExplicitStatsLoading ? (
                         <p style={{ fontSize: '0.78rem', color: '#888', margin: '4px 0 0' }}>
                           Scanning playlists for Spotify explicit flags…
+                        </p>
+                      ) : null}
+                      {playlistExplicitStatsError ? (
+                        <p style={{ fontSize: '0.78rem', color: '#ff9e6e', margin: '4px 0 0', maxWidth: 720 }}>
+                          {playlistExplicitStatsError}
+                        </p>
+                      ) : null}
+                      {!playlistExplicitStatsLoading && !playlistExplicitStatsError && Object.keys(playlistExplicitStats).length > 0 ? (
+                        <p style={{ fontSize: '0.72rem', color: 'rgba(160,200,180,0.95)', margin: '4px 0 0', maxWidth: 720 }}>
+                          Explicit badge appears when Spotify reports at least one explicit track in that playlist.
                         </p>
                       ) : null}
                     </div>
@@ -4389,8 +4452,8 @@ const HostView: React.FC = () => {
                               >
                                 <span>{p.tracks} songs</span>
                                 {(() => {
-                                  const pid = String(p.id);
-                                  const rowStat = playlistExplicitStats[pid];
+                                  const pid = normalizeSpotifyPlaylistId(p.id);
+                                  const rowStat = pid ? playlistExplicitStats[pid] : undefined;
                                   return rowStat != null && rowStat.explicitCount > 0 ? (
                                   <span
                                     style={{
