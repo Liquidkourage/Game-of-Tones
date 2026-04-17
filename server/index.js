@@ -280,8 +280,21 @@ const io = socketIo(server, {
   }
 });
 
-// Middleware
-app.use(helmet());
+// Middleware — allow Synapse (and self) to embed this app in an iframe; rely on CSP, not X-Frame-Options
+// (default helmet SAMEORIGIN blocks cross-origin parents even if CSP allows them).
+const helmetCspDirectives = {
+  ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+};
+delete helmetCspDirectives['frame-ancestors'];
+helmetCspDirectives.frameAncestors = ["'self'", 'https://synapse.liquidkourage.com'];
+app.use(
+  helmet({
+    frameguard: false,
+    contentSecurityPolicy: {
+      directives: helmetCspDirectives,
+    },
+  }),
+);
 app.use(compression());
 app.use(cors({
   origin: function (origin, callback) {
