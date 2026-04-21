@@ -50,6 +50,7 @@ import RoundPlanner from './RoundPlanner';
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
 import { validateSongTitle, validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
+import { runExplicitStatsWithRetries } from '../utils/explicitPlaylistStatsBatch';
 import './HostView.css';
 
 interface Playlist {
@@ -322,6 +323,14 @@ const HostView: React.FC = () => {
       status: 'unplanned'
     }
   ]);
+  const eventRoundsRef = useRef(eventRounds);
+  useEffect(() => {
+    eventRoundsRef.current = eventRounds;
+  }, [eventRounds]);
+  /** Set when GET /playlists returns inline explicit stats; effect consumes to skip duplicate priority fetches. */
+  const explicitStatsPrefetchFromPlaylistsRef = useRef<Record<string, { total: number; explicitCount: number }> | null>(
+    null
+  );
   const [currentRoundIndex, setCurrentRoundIndex] = useState<number>(-1);
   
   // License key management
@@ -500,7 +509,16 @@ const HostView: React.FC = () => {
   const loadPlaylists = useCallback(async () => {
     try {
       console.log('Loading playlists...');
-      const response = await hostFetch(`${API_BASE || ''}/api/spotify/playlists`);
+      const assignedForQuery = eventRoundsRef.current
+        .flatMap((r) => r.playlistIds || [])
+        .map((id) => String(id))
+        .filter(Boolean);
+      const qs = new URLSearchParams();
+      qs.set('includeExplicitStats', '1');
+      if (assignedForQuery.length > 0) {
+        qs.set('assigned', assignedForQuery.join(','));
+      }
+      const response = await hostFetch(`${API_BASE || ''}/api/spotify/playlists?${qs.toString()}`);
       if (response.status === 401) {
         console.warn('Spotify not connected (401) while loading playlists');
         // Don't override isSpotifyConnected here - let status endpoint be authoritative
@@ -567,6 +585,22 @@ const HostView: React.FC = () => {
         setShowAllPlaylists(false);
         // Don't set visiblePlaylists here - let the useEffect handle it to ensure consistency
         console.log('Playlists loaded:', gotPlaylists.length, 'GoT playlists will be shown by default (from', allPlaylists.length, 'total playlists)');
+
+        const inline = data.explicitStatsByPlaylistId as
+          | Record<string, { total?: number; explicitCount?: number }>
+          | undefined;
+        if (inline && typeof inline === 'object') {
+          const cleaned: Record<string, { total: number; explicitCount: number }> = {};
+          for (const [pid, v] of Object.entries(inline)) {
+            if (v && typeof v.total === 'number' && typeof v.explicitCount === 'number') {
+              cleaned[pid] = { total: v.total, explicitCount: v.explicitCount };
+            }
+          }
+          if (Object.keys(cleaned).length > 0) {
+            explicitStatsPrefetchFromPlaylistsRef.current = cleaned;
+            setPlaylistExplicitStats((prev) => ({ ...prev, ...cleaned }));
+          }
+        }
       } else {
         console.error('Failed to load playlists:', data.error);
       }
@@ -726,61 +760,6 @@ const HostView: React.FC = () => {
     setPlaylistExplicitStatsLoading(true);
     setPlaylistExplicitStatsError(null);
 
-    const fetchChunksOnce = async (ids: string[]): Promise<{
-      merged: Record<string, { total: number; explicitCount: number }>;
-      anyHttpError: boolean;
-    }> => {
-      const merged: Record<string, { total: number; explicitCount: number }> = {};
-      let anyHttpError = false;
-      const chunkSize = 30;
-      for (let i = 0; i < ids.length; i += chunkSize) {
-        if (cancelled) return { merged, anyHttpError };
-        const chunk = ids.slice(i, i + chunkSize);
-        const res = await hostFetch(`${API_BASE || ''}/api/spotify/playlists/explicit-stats-batch`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ playlistIds: chunk }),
-        });
-        if (!res.ok) {
-          anyHttpError = true;
-          console.warn('explicit-stats-batch HTTP', res.status, res.statusText);
-          continue;
-        }
-        const data = (await res.json()) as {
-          results?: Record<string, { total?: number; explicitCount?: number; error?: string }>;
-        };
-        const r = data.results || {};
-        for (const [pid, v] of Object.entries(r)) {
-          if (
-            v &&
-            typeof v === 'object' &&
-            typeof v.explicitCount === 'number' &&
-            typeof v.total === 'number'
-          ) {
-            merged[String(pid)] = { total: v.total, explicitCount: v.explicitCount };
-          } else if (v && typeof v === 'object' && (v as { error?: string }).error) {
-            console.warn('explicit-stats playlist', pid, (v as { error?: string }).error);
-          }
-        }
-      }
-      return { merged, anyHttpError };
-    };
-
-    const runWithRetries = async (ids: string[]) => {
-      let lastMerged: Record<string, { total: number; explicitCount: number }> = {};
-      for (let attempt = 0; attempt < 3; attempt++) {
-        if (cancelled) return lastMerged;
-        if (attempt > 0) {
-          await new Promise((r) => setTimeout(r, 900 * attempt));
-        }
-        if (cancelled) return lastMerged;
-        const { merged, anyHttpError } = await fetchChunksOnce(ids);
-        lastMerged = { ...lastMerged, ...merged };
-        if (!anyHttpError) break;
-      }
-      return lastMerged;
-    };
-
     /** First N ids are visible rows (see allPlaylistIdsForExplicitStats) — finish those first so labels appear quickly. */
     const PRIORITY_COUNT = 20;
 
@@ -790,20 +769,39 @@ const HostView: React.FC = () => {
         const restIds = allIds.slice(PRIORITY_COUNT);
         let acc: Record<string, { total: number; explicitCount: number }> = {};
 
-        if (priorityIds.length > 0) {
-          acc = await runWithRetries(priorityIds);
+        const pref = explicitStatsPrefetchFromPlaylistsRef.current;
+        explicitStatsPrefetchFromPlaylistsRef.current = null;
+        if (pref && priorityIds.length > 0) {
+          for (const id of priorityIds) {
+            const v = pref[id];
+            if (v && typeof v.total === 'number' && typeof v.explicitCount === 'number') {
+              acc[id] = v;
+            }
+          }
+          if (Object.keys(acc).length > 0 && !cancelled) {
+            setPlaylistExplicitStats((prev) => ({ ...prev, ...acc }));
+            setPlaylistExplicitStatsLoading(false);
+          }
+        }
+
+        const needPriority = priorityIds.filter((id) => !acc[id]);
+        if (needPriority.length > 0) {
+          if (cancelled) return;
+          const mergedP = await runExplicitStatsWithRetries(needPriority);
+          acc = { ...acc, ...mergedP };
           if (!cancelled) {
-            setPlaylistExplicitStats(acc);
+            setPlaylistExplicitStats((prev) => ({ ...prev, ...mergedP }));
             setPlaylistExplicitStatsLoading(false);
           }
         }
 
         if (restIds.length > 0 && !cancelled) {
           setPlaylistExplicitStatsLoading(true);
-          const m2 = await runWithRetries(restIds);
+          if (cancelled) return;
+          const m2 = await runExplicitStatsWithRetries(restIds);
           if (!cancelled) {
             acc = { ...acc, ...m2 };
-            setPlaylistExplicitStats(acc);
+            setPlaylistExplicitStats((prev) => ({ ...prev, ...m2 }));
           }
         }
 

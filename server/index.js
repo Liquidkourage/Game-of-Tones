@@ -14,6 +14,7 @@ const hostAuth = require('./hostAuth');
 const usersStore = require('./users');
 const organizationsStore = require('./organizations');
 const credentialCrypto = require('./credentialCrypto');
+const managerPlaylistFilter = require('./managerPlaylistFilter');
 
 /**
  * Run async work over `ids` with bounded concurrency (Spotify explicit-stats batch was
@@ -6850,7 +6851,54 @@ app.get('/api/spotify/playlists', async (req, res) => {
       });
     }
     const playlists = await svc.getUserPlaylists();
-    res.json({ success: true, playlists, organizationId: orgId });
+
+    const wantExplicitStats =
+      req.query.includeExplicitStats === '1' ||
+      req.query.includeExplicitStats === 'true' ||
+      req.query.includeExplicitStats === 'yes';
+    let explicitStatsByPlaylistId;
+    if (wantExplicitStats) {
+      if (uid == null) {
+        return res.status(401).json({ error: 'login_required' });
+      }
+      await multiTenantSpotify.ensureOrgTokensLoaded(orgId);
+      await svc.ensureValidToken();
+      const assignedRaw = req.query.assigned;
+      const assignedList = Array.isArray(assignedRaw)
+        ? assignedRaw.map((x) => String(x).trim()).filter(Boolean)
+        : String(assignedRaw || '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+      const assignedSet = new Set(assignedList);
+      const withoutTempo = playlists.filter((p) => p.name && !p.name.startsWith('TEMPO'));
+      const priorityIds = managerPlaylistFilter
+        .computeManagerExplicitPlaylistIds(withoutTempo, false, assignedSet)
+        .slice(0, 20);
+      explicitStatsByPlaylistId = {};
+      if (priorityIds.length > 0) {
+        const raw = await mapPlaylistIdsWithConcurrency(priorityIds, 8, (pid) =>
+          svc.getPlaylistExplicitStats(pid),
+        );
+        for (const [pid, v] of Object.entries(raw)) {
+          if (
+            v &&
+            typeof v === 'object' &&
+            typeof v.total === 'number' &&
+            typeof v.explicitCount === 'number'
+          ) {
+            explicitStatsByPlaylistId[pid] = { total: v.total, explicitCount: v.explicitCount };
+          }
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      playlists,
+      organizationId: orgId,
+      ...(explicitStatsByPlaylistId !== undefined && { explicitStatsByPlaylistId }),
+    });
   } catch (error) {
     console.error('Error getting playlists:', error);
     res.status(500).json({ error: 'Failed to get playlists' });
