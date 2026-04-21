@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
@@ -162,6 +162,21 @@ const PublicDisplay: React.FC = () => {
   const [oneBy75Ids, setOneBy75Ids] = useState<string[] | null>(null);
   const oneBy75IdsRef = useRef<string[] | null>(null);
   const [fiveBy15Columns, setFiveBy15Columns] = useState<string[][] | null>(null);
+  /** Host override: 5×15 BINGO columns, 1×75 carousel, or follow mix/URL. */
+  const [callListMode, setCallListMode] = useState<'auto' | 'grouped' | '5x15'>('auto');
+  const columnCallListLayout = useMemo((): boolean => {
+    if (callListMode === 'grouped') return false;
+    if (callListMode === '5x15') return true;
+    return !!(fiveBy15Columns || searchParams.get('mode') === '5x15');
+  }, [callListMode, fiveBy15Columns, searchParams]);
+  /** Columns to render for 5×15 layout: server map or 5×15-chunks of flat 1×75 pool. */
+  const layoutFiveColumns = useMemo((): string[][] | null => {
+    if (fiveBy15Columns) return fiveBy15Columns;
+    if (!columnCallListLayout) return null;
+    const ids = oneBy75Ids;
+    if (!ids || ids.length < 1) return null;
+    return [0, 1, 2, 3, 4].map((c) => ids.slice(c * 15, c * 15 + 15));
+  }, [columnCallListLayout, fiveBy15Columns, oneBy75Ids]);
   const idToColumnRef = useRef<Record<string, number>>({});
   const pendingPlacementRef = useRef<Set<string>>(new Set());
   const playedOrderRef = useRef<string[]>([]);
@@ -248,6 +263,19 @@ const PublicDisplay: React.FC = () => {
   const [freezeAll, setFreezeAll] = useState<boolean>(false);
   const [frozenCols, setFrozenCols] = useState<boolean[]>([false, false, false, false, false]);
   const [freezeRows, setFreezeRows] = useState<number[]>([0, 0, 0, 0, 0]);
+
+  // Host/room can change call list layout mid-game; reset local scroll/phase so the swap is predictable
+  // (does not clear played order, reveals, or pool data).
+  useEffect(() => {
+    setCarouselIndex(0);
+    setVertIndex(0);
+    setVertIndices([0, 0, 0, 0, 0]);
+    setPhasePx(0);
+    setFreezeAll(false);
+    setFrozenCols([false, false, false, false, false]);
+    setFreezeRows([0, 0, 0, 0, 0]);
+  }, [callListMode]);
+
   // Per-ball animation seeds (stable for component lifetime)
   const ballAnimSeedsRef = useRef<Array<{
     dx: number; dy: number; rz: number; rx: number; ry: number;
@@ -459,6 +487,13 @@ const PublicDisplay: React.FC = () => {
           if (typeof payload.publicDisplayFontSize === 'number') {
             setFontSizeMultiplier(payload.publicDisplayFontSize);
           }
+          if (
+            payload.publicDisplayCallListMode === 'grouped' ||
+            payload.publicDisplayCallListMode === '5x15' ||
+            payload.publicDisplayCallListMode === 'auto'
+          ) {
+            setCallListMode(payload.publicDisplayCallListMode);
+          }
           
           // CRITICAL: Sync currentIndexRef from server state (needed for proper display on refresh)
           if (typeof payload.currentSongIndex === 'number') {
@@ -576,6 +611,13 @@ const PublicDisplay: React.FC = () => {
       if (typeof data?.fontSize === 'number') {
         setFontSizeMultiplier(data.fontSize);
         console.log(`📏 Public display font size updated to ${data.fontSize}x`);
+      }
+    });
+
+    newSocket.on('public-display-call-list-mode-updated', (data: any) => {
+      const m = data?.mode;
+      if (m === 'grouped' || m === '5x15' || m === 'auto') {
+        setCallListMode(m);
       }
     });
 
@@ -1379,7 +1421,7 @@ const PublicDisplay: React.FC = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       // 5x15 mode uses vertical column scroll, not this horizontal carousel
-      if (fiveBy15Columns) return;
+      if (columnCallListLayout) return;
 
       // Always read the latest pool from the ref — the previous code captured `ids` once when
       // the effect ran, so the interval could keep slicing an old/partial array (e.g. before
@@ -1408,18 +1450,18 @@ const PublicDisplay: React.FC = () => {
     // Tick period = shift duration (~1s) + desired pause (5s) ⇒ 6000ms
     }, 6000);
     return () => clearInterval(interval);
-  }, [oneBy75Ids, visibleCols, fiveBy15Columns]);
+  }, [oneBy75Ids, visibleCols, columnCallListLayout]);
 
   // Keep carousel index in range when band count drops (pool / play state changes)
   useEffect(() => {
-    if (fiveBy15Columns) return;
+    if (columnCallListLayout) return;
     const ids = oneBy75IdsRef.current;
     if (!ids?.length) return;
     const played = new Set(playedOrderRef.current);
     const totalGroups = countOccupiedBandsInPool(ids, played);
     if (totalGroups <= visibleCols) return;
     setCarouselIndex((prev) => Math.min(prev, totalGroups));
-  }, [oneBy75Ids, totalPlayedCount, visibleCols, fiveBy15Columns]);
+  }, [oneBy75Ids, totalPlayedCount, visibleCols, columnCallListLayout]);
 
   // Measure viewport width for pixel-perfect slides (one column per step)
   useEffect(() => {
@@ -1479,12 +1521,12 @@ const PublicDisplay: React.FC = () => {
   useEffect(() => {
     const ids = oneBy75IdsRef.current;
     if (!ids) return;
-    // Only run when in 5x15 context
-    if (!fiveBy15Columns) { setVertIndex(0); setVertIndices([0,0,0,0,0]); return; }
+    if (!columnCallListLayout) { setVertIndex(0); setVertIndices([0,0,0,0,0]); return; }
+    if (!layoutFiveColumns) { setVertIndex(0); setVertIndices([0,0,0,0,0]); return; }
     // Use ONLY explicitly tracked played order to avoid phantom pool-seeded entries
     const played = new Set<string>(playedOrderRef.current);
     // Compute per-column max index
-    const perColLengths = fiveBy15Columns.map(col => col.filter(id => played.has(id)).length);
+    const perColLengths = layoutFiveColumns.map((col) => col.filter((id) => played.has(id)).length);
     const perColMax = perColLengths.map(len => Math.max(0, len - 5));
     // Reset indices if no scrolling needed
     if (perColMax.every(m => m === 0)) { setVertIndex(0); setVertIndices([0,0,0,0,0]); return; }
@@ -1504,7 +1546,7 @@ const PublicDisplay: React.FC = () => {
       });
     }, 6000);
     return () => clearInterval(interval);
-  }, [oneBy75Ids, totalPlayedCount, fiveBy15Columns]);
+  }, [oneBy75Ids, totalPlayedCount, layoutFiveColumns, columnCallListLayout]);
 
   // Fetch initial room info for display card
   useEffect(() => {
@@ -1785,11 +1827,15 @@ const PublicDisplay: React.FC = () => {
   };
 
   const renderOneBy75Columns = () => {
-    // In 5x15 mode, wait until columns arrive to avoid misplacement
-    const requestedFiveByFifteen = (searchParams.get('mode') === '5x15') || !!fiveBy15Columns;
-    if (requestedFiveByFifteen && !fiveBy15Columns) return (
-      <div className="call-list-content"><div className="no-calls"><p>Initializing columns…</p></div></div>
-    );
+    if (columnCallListLayout && !layoutFiveColumns) {
+      return (
+        <div className="call-list-content">
+          <div className="no-calls">
+            <p>Initializing columns…</p>
+          </div>
+        </div>
+      );
+    }
     // CRITICAL FIX: Use ref as fallback if state isn't set yet (fixes first song not displaying)
     const idsToUse = oneBy75Ids || oneBy75IdsRef.current;
     if (!idsToUse) return null;
@@ -1797,8 +1843,8 @@ const PublicDisplay: React.FC = () => {
     // If we have explicit 5x15 columns, respect those per-column lists; otherwise derive from flat pool
     // Build base columns from authoritative map if available, else fallback
     let baseCols: string[][];
-    if (fiveBy15Columns) {
-      baseCols = fiveBy15Columns;
+    if (layoutFiveColumns) {
+      baseCols = layoutFiveColumns;
     } else if (idToColumnRef.current && Object.keys(idToColumnRef.current).length > 0) {
       const colsInit: string[][] = [[], [], [], [], []];
       for (const id of idsToUse) {
@@ -1836,8 +1882,8 @@ const PublicDisplay: React.FC = () => {
       const mapped = idToColumnRef.current[currentSongId];
       if (typeof mapped === 'number' && mapped >= 0 && mapped < 5) {
         activeColumnIndex = mapped;
-      } else if (fiveBy15Columns) {
-        const found = fiveBy15Columns.findIndex((col) => col.includes(currentSongId));
+      } else if (layoutFiveColumns) {
+        const found = layoutFiveColumns.findIndex((col) => col.includes(currentSongId));
         if (found >= 0) activeColumnIndex = found;
       }
     }
@@ -3720,7 +3766,7 @@ const PublicDisplay: React.FC = () => {
                 // Check both state and ref to ensure rendering works even when columns are still loading
                 const hasIds = oneBy75Ids || oneBy75IdsRef.current;
                 if (hasIds) {
-                  return (fiveBy15Columns || (searchParams.get('mode') === '5x15')) 
+                  return columnCallListLayout
                     ? renderOneBy75Columns() 
                     : renderOneBy75GroupedColumns();
                 }

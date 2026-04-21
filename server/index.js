@@ -1227,6 +1227,7 @@ async function playNextSongSimple(roomId, deviceId) {
       winners: room.winners || [],
       roundWinners: room.roundWinners || [],
       publicDisplayFontSize: room.publicDisplayFontSize || 1.0,
+      publicDisplayCallListMode: room.publicDisplayCallListMode || 'auto',
       venueBranding: venueBrandingForRoom(room),
       playedSongs: playedSongIds.map(songId => {
         const foundSong = room.playlistSongs?.find(s => s.id === songId);
@@ -1801,6 +1802,7 @@ io.on('connection', (socket) => {
             playlists: room.finalizedPlaylists || room.playlists || [],
             selectedDeviceId: room.selectedDeviceId || null,
             hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline,
+            publicDisplayCallListMode: room.publicDisplayCallListMode || 'auto',
             venueBranding: venueBrandingForRoom(room),
           });
           
@@ -2011,6 +2013,24 @@ io.on('connection', (socket) => {
       console.log(`📏 Public display font size set to ${validFontSize}x for room ${roomId}`);
     } catch (e) {
       console.error('❌ Error setting public display font size:', e?.message || e);
+    }
+  });
+
+  // Host: force public display call list layout (5×15 BINGO columns vs 1×75 carousel) or follow mix/URL
+  socket.on('set-public-display-call-list-mode', (data = {}) => {
+    try {
+      const { roomId, mode } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
+      if (!isCurrentHost) return;
+      const m = String(mode || '').toLowerCase();
+      const next = m === 'grouped' || m === '1x75' ? 'grouped' : m === '5x15' || m === 'columns' ? '5x15' : 'auto';
+      room.publicDisplayCallListMode = next;
+      io.to(roomId).emit('public-display-call-list-mode-updated', { mode: next });
+      console.log(`🖥️ Public display call list mode for room ${roomId}: ${next}`);
+    } catch (e) {
+      console.error('❌ Error setting public display call list mode:', e?.message || e);
     }
   });
 
@@ -3012,6 +3032,7 @@ io.on('connection', (socket) => {
         winners: room.winners || [],
         roundWinners: room.roundWinners || [],
         publicDisplayFontSize: room.publicDisplayFontSize || 1.0,
+        publicDisplayCallListMode: room.publicDisplayCallListMode || 'auto',
         venueBranding: venueBrandingForRoom(room),
         // Include played songs for PublicDisplay sync (includes current song)
         playedSongs: playedSongIds.map(songId => {

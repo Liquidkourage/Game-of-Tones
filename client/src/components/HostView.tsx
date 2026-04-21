@@ -17,6 +17,7 @@ import {
   BookOpen,
   Image as ImageIcon,
   ListMusic,
+  List,
   Library,
   ListPlus,
   ListChecks,
@@ -230,6 +231,8 @@ const HostView: React.FC = () => {
     }
   });
   const [publicDisplayFontSize, setPublicDisplayFontSize] = useState<number>(1.0); // Multiplier for public display font sizes
+  /** Matches server / public display: 5×15 BINGO columns vs 1×75 carousel vs mix/URL default. */
+  const [publicDisplayCallListMode, setPublicDisplayCallListMode] = useState<'auto' | 'grouped' | '5x15'>('auto');
 
   // Handler to update public display font size
   const updatePublicDisplayFontSize = (newSize: number) => {
@@ -237,6 +240,12 @@ const HostView: React.FC = () => {
     setPublicDisplayFontSize(clampedSize);
     if (socket && roomId) {
       socket.emit('set-public-display-font-size', { roomId, fontSize: clampedSize });
+    }
+  };
+  const updatePublicDisplayCallListMode = (mode: 'auto' | 'grouped' | '5x15') => {
+    setPublicDisplayCallListMode(mode);
+    if (socket && roomId) {
+      socket.emit('set-public-display-call-list-mode', { roomId, mode });
     }
   };
   const [selectedCustomPattern, setSelectedCustomPattern] = useState<SavedCustomPattern | null>(null);
@@ -1430,6 +1439,26 @@ const HostView: React.FC = () => {
     newSocket.on('public-display-font-size-updated', (data: any) => {
       if (typeof data?.fontSize === 'number') {
         setPublicDisplayFontSize(data.fontSize);
+      }
+    });
+
+    newSocket.on('public-display-call-list-mode-updated', (data: any) => {
+      const m = data?.mode;
+      if (m === 'grouped' || m === '5x15' || m === 'auto') {
+        setPublicDisplayCallListMode(m);
+      }
+    });
+
+    newSocket.on('room-state', (payload: any) => {
+      if (
+        payload?.publicDisplayCallListMode === 'grouped' ||
+        payload?.publicDisplayCallListMode === '5x15' ||
+        payload?.publicDisplayCallListMode === 'auto'
+      ) {
+        setPublicDisplayCallListMode(payload.publicDisplayCallListMode);
+      }
+      if (typeof payload?.publicDisplayFontSize === 'number') {
+        setPublicDisplayFontSize(payload.publicDisplayFontSize);
       }
     });
 
@@ -4183,6 +4212,45 @@ const HostView: React.FC = () => {
                 <ListMusic className="w-4 h-4" aria-hidden />
                 Call List
               </button>
+            </div>
+            <div className="host-manager-display__divider" style={{ marginTop: 14 }} />
+            <p className="host-manager-display__sub">Call list layout (projector)</p>
+            <p style={{ fontSize: '0.78rem', color: '#9a9a9a', marginBottom: 10, lineHeight: 1.4, maxWidth: 520 }}>
+              <strong style={{ color: '#c8c8c8' }}>5×15</strong> uses BINGO columns (B–O).{' '}
+              <strong style={{ color: '#c8c8c8' }}>1×75</strong> uses the scrolling band carousel.{' '}
+              <strong style={{ color: '#c8c8c8' }}>Auto</strong> follows your finalized mix and the display URL (<code style={{ fontSize: '0.72rem' }}>?mode=5x15</code>).
+            </p>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+              {(
+                [
+                  { mode: '5x15' as const, label: '5×15 columns', Icon: Grid3x3 },
+                  { mode: 'grouped' as const, label: '1×75 carousel', Icon: List },
+                  { mode: 'auto' as const, label: 'Auto', Icon: Sliders },
+                ]
+              ).map(({ mode, label, Icon }) => {
+                const active = publicDisplayCallListMode === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => updatePublicDisplayCallListMode(mode)}
+                    style={{
+                      fontSize: '0.88rem',
+                      padding: '10px 14px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      border: active ? '1px solid rgba(0,255,136,0.65)' : undefined,
+                      background: active ? 'rgba(0,255,136,0.14)' : undefined,
+                      color: active ? '#00ff88' : undefined,
+                    }}
+                  >
+                    <Icon className="w-4 h-4" aria-hidden />
+                    {label}
+                  </button>
+                );
+              })}
             </div>
           </motion.div>
                   </div>
