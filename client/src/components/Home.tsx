@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Sparkles, Play, UserPlus, Crown, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Sparkles, Play, UserPlus, Crown, CheckCircle2, AlertTriangle, Link2 } from 'lucide-react';
 import { API_BASE } from '../config';
 import { hostFetch, setHostJwt, browserGoogleLoginUrl } from '../utils/hostFetch';
 
@@ -45,6 +45,8 @@ const Home: React.FC = () => {
    */
   const [hostRoomReuseModal, setHostRoomReuseModal] = useState<{ roomId: string } | null>(null);
   const [isCreatingHostRoom, setIsCreatingHostRoom] = useState(false);
+  const [hostSignInPageUrl, setHostSignInPageUrl] = useState('');
+  const [hostSignInUrlCopied, setHostSignInUrlCopied] = useState(false);
 
   /** Player / QR links: ?join, ?mode=player, ?player=1 — hide host path unless explicitly opened */
   const joinOnly = useMemo(() => {
@@ -71,6 +73,11 @@ const Home: React.FC = () => {
     const pre = searchParams.get('prefillRoom')?.trim();
     if (pre) setRoomId((r) => r || pre.toUpperCase());
   }, [searchParams]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setHostSignInPageUrl(`${window.location.origin.replace(/\/$/, '')}/api/auth/google`);
+  }, []);
 
   /** ?mode=host&prefillRoom= — enter /host/:room once auth check finishes (signed-in or not). Skip when HostView set skip_prefill_host_nav after host-join-denied (avoids /host ↔ home loop). */
   useEffect(() => {
@@ -144,6 +151,17 @@ const Home: React.FC = () => {
       /* ignore */
     }
     window.location.href = browserGoogleLoginUrl();
+  };
+
+  const copyHostSignInPageUrl = async () => {
+    if (!hostSignInPageUrl) return;
+    try {
+      await navigator.clipboard.writeText(hostSignInPageUrl);
+      setHostSignInUrlCopied(true);
+      window.setTimeout(() => setHostSignInUrlCopied(false), 2000);
+    } catch {
+      /* ignore */
+    }
   };
 
   const showHostSetup = () => {
@@ -437,6 +455,64 @@ const Home: React.FC = () => {
               <h3>Host</h3>
             </div>
             <p className="home-card-lead">Sign in, connect Spotify on the host screen, then run your game.</p>
+
+            {hostSignInPageUrl && (
+              <div
+                className="home-host-signin-page-url"
+                style={{
+                  marginBottom: 14,
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  background: 'rgba(0,0,0,0.28)',
+                  border: '1px solid rgba(0,255,170,0.2)',
+                }}
+              >
+                <p
+                  className="home-card-lead"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    margin: '0 0 8px',
+                    fontSize: '0.88rem',
+                    opacity: 0.95,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  <Link2 size={16} style={{ opacity: 0.85, flexShrink: 0 }} aria-hidden />
+                  <span>
+                    <strong>Host Google sign-in URL</strong> (bookmark, share, or use if the button is not on screen).{' '}
+                    {hostSession ? (
+                      <span style={{ opacity: 0.85 }}>You are already signed in; use this to sign in on another device or browser.</span>
+                    ) : null}
+                  </span>
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                  <code
+                    style={{
+                      fontSize: '0.78rem',
+                      wordBreak: 'break-all',
+                      flex: '1 1 200px',
+                      color: '#7dffc8',
+                      background: 'rgba(0,0,0,0.35)',
+                      padding: '8px 10px',
+                      borderRadius: 8,
+                      border: '1px solid rgba(255,255,255,0.08)',
+                    }}
+                  >
+                    {hostSignInPageUrl}
+                  </code>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={copyHostSignInPageUrl}
+                    style={{ fontSize: '0.85rem', padding: '8px 14px' }}
+                  >
+                    {hostSignInUrlCopied ? 'Copied' : 'Copy link'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {hostSession === undefined ? (
               <p className="home-card-lead" style={{ opacity: 0.75 }}>Checking sign-in…</p>
