@@ -26,30 +26,6 @@ export function clearHostJwt(): void {
   }
 }
 
-/**
- * Clear local JWT, then drop the HttpOnly host session cookie on the server.
- * POSTs to both `REACT_APP_API_BASE` (when set) and the current page origin when they differ,
- * so the cookie is cleared whether it was set on the API host or the app host (split dev / CDN + API).
- */
-export async function postHostLogout(): Promise<void> {
-  clearHostJwt();
-  if (typeof window === 'undefined') return;
-  const pageOrigin = window.location.origin.replace(/\/$/, '');
-  const envBase = (API_BASE || '').trim().replace(/\/$/, '');
-  const bases = new Set<string>();
-  if (envBase) bases.add(envBase);
-  bases.add(pageOrigin);
-  await Promise.allSettled(
-    Array.from(bases).map((base) =>
-      fetch(`${base}/api/auth/logout`, {
-        method: 'POST',
-        credentials: 'include',
-        mode: 'cors',
-      })
-    )
-  );
-}
-
 /** API requests with optional host Bearer token (cross-origin dev: set REACT_APP_API_BASE). */
 export function hostFetch(input: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers);
@@ -60,6 +36,20 @@ export function hostFetch(input: string, init?: RequestInit): Promise<Response> 
 
 export function apiOrigin(): string {
   return (API_BASE || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/$/, '');
+}
+
+/**
+ * Sign out: clear `tempo_host_jwt` then full-page GET to the API’s `/api/auth/logout?return=…`.
+ * Navigating (not fetch) is required so the browser always applies the HttpOnly cookie clear; credentialed
+ * cross-origin `fetch` often does not (CORS / Set-Cookie), which left users “still signed in” after refresh
+ * (e.g. got.liquidkourage.com with API on another host).
+ */
+export function postHostLogout(): void {
+  clearHostJwt();
+  if (typeof window === 'undefined') return;
+  const returnTo = window.location.href;
+  const base = apiOrigin();
+  window.location.replace(`${base}/api/auth/logout?return=${encodeURIComponent(returnTo)}`);
 }
 
 /**

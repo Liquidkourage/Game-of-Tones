@@ -6105,6 +6105,35 @@ app.get('/api/auth/me', async (req, res) => {
   }
 });
 
+/**
+ * After host logout, full-page redirect target (hardening — only allow our app surfaces).
+ * Used by GET /api/auth/logout; fetch + Set-Cookie often fails to clear session across origins (CORS).
+ */
+function getLogoutRedirectTarget(req) {
+  const fallback = `${publicAppOriginOrDefault()}/`;
+  const raw = (req.query && (req.query.return || req.query.next)) || '';
+  if (!raw || typeof raw !== 'string') return fallback;
+  const s = raw.trim();
+  if (s.length > 2048) return fallback;
+  try {
+    const u = new URL(s);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return fallback;
+    const o = u.origin;
+    if (corsAllowedOrigins.includes(o)) return s;
+    if (publicAppOriginForCors && o === publicAppOriginForCors) return s;
+    if (/^https:\/\/[a-z0-9-]+\.liquidkourage\.com$/i.test(o)) return s;
+    if (/^http:\/\/localhost(:\d+)?$/.test(o) || /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(o)) return s;
+  } catch (e) {
+    /* ignore */
+  }
+  return fallback;
+}
+
+app.get('/api/auth/logout', (req, res) => {
+  hostAuth.clearSessionCookie(res);
+  res.redirect(302, getLogoutRedirectTarget(req));
+});
+
 app.post('/api/auth/logout', (req, res) => {
   hostAuth.clearSessionCookie(res);
   res.json({ success: true });

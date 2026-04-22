@@ -168,9 +168,8 @@ const Home: React.FC = () => {
     }
   };
 
-  const handleHostLogout = async () => {
-    await postHostLogout();
-    setHostSession(null);
+  const handleHostLogout = () => {
+    postHostLogout();
   };
 
   const showHostSetup = () => {
