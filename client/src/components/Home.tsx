@@ -481,9 +481,10 @@ const Home: React.FC = () => {
                 >
                   <Link2 size={16} style={{ opacity: 0.85, flexShrink: 0 }} aria-hidden />
                   <span>
-                    <strong>Host Google sign-in URL</strong> (bookmark, share, or use if the button is not on screen).{' '}
+                    <strong>Optional:</strong> bookmark or share this link — you never have to copy it. When you are not signed in,
+                    use <strong>Sign in with Google</strong> below (or paste this URL in the address bar).{' '}
                     {hostSession ? (
-                      <span style={{ opacity: 0.85 }}>You are already signed in; use this to sign in on another device or browser.</span>
+                      <span style={{ opacity: 0.85 }}>You are signed in on this device; the link is for another browser or a co-host.</span>
                     ) : null}
                   </span>
                 </p>
