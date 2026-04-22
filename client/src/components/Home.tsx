@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Sparkles, Play, UserPlus, Crown, CheckCircle2, AlertTriangle, Link2 } from 'lucide-react';
 import { API_BASE } from '../config';
-import { hostFetch, setHostJwt, browserGoogleLoginUrl } from '../utils/hostFetch';
+import { hostFetch, setHostJwt, browserGoogleLoginUrl, clearHostJwt } from '../utils/hostFetch';
 
 /** Express/HTML error pages are not JSON; show a short message instead of raw markup. */
 function formatHttpErrorBody(raw: string, status: number): string {
@@ -162,6 +162,16 @@ const Home: React.FC = () => {
     } catch {
       /* ignore */
     }
+  };
+
+  const handleHostLogout = async () => {
+    try {
+      await hostFetch(`${API_BASE || ''}/api/auth/logout`, { method: 'POST' });
+    } catch {
+      /* still clear local session */
+    }
+    clearHostJwt();
+    setHostSession(null);
   };
 
   const showHostSetup = () => {
@@ -376,6 +386,54 @@ const Home: React.FC = () => {
               <Crown className="home-mode-tab-icon" aria-hidden />
               Host
             </button>
+          </div>
+        )}
+
+        {!joinOnly && hostSession !== undefined && (
+          <div
+            className="home-host-session-bar"
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+              marginBottom: 14,
+              padding: '10px 14px',
+              borderRadius: 10,
+              background: 'rgba(0,0,0,0.25)',
+              border: '1px solid rgba(0,200,150,0.25)',
+            }}
+          >
+            <span style={{ fontSize: '0.88rem', color: 'rgba(255,255,255,0.9)', lineHeight: 1.4 }}>
+              {hostSession ? (
+                <>
+                  <strong>Host</strong> signed in as{' '}
+                  <strong style={{ color: '#a8ffd9' }}>{hostSession.email || hostDisplayName}</strong>
+                </>
+              ) : (
+                <>No host sign-in on this device — hosting uses Google; there is no separate sign-up.</>
+              )}
+            </span>
+            {hostSession ? (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => void handleHostLogout()}
+                style={{ fontSize: '0.86rem', padding: '8px 16px' }}
+              >
+                Sign out
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={goToHostGoogleSignIn}
+                style={{ fontSize: '0.86rem', padding: '8px 16px' }}
+              >
+                Sign in with Google
+              </button>
+            )}
           </div>
         )}
 
