@@ -7,7 +7,7 @@
   - `package.json` / deps changed, or
   - you changed build config / env handling, or
   - the user explicitly wants a production build verified.
-- **Commit + push** after completing work **by default**. Only skip git when the user **explicitly** asks to leave changes uncommitted or local (e.g. “don’t commit”, “no push”, “WIP only”). Do not wait for a separate “commit/push” prompt (batch logical fixes into one commit when possible).
+- **Commit + push** after completing work **by default**. Only skip git when the user **explicitly** asks to leave changes uncommitted or local (e.g. “don’t commit”, “no push”, “WIP only”). **Do not wait** for a separate “commit/push” request—finish the task by shipping to `origin` (batch related edits into one commit). If the user later says they always need commits pushed, follow this file literally every time.
 
 ### Making “always ship” apply in Cursor
 
