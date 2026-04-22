@@ -1,7 +1,9 @@
-import React from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Routes, Route, useLocation, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Shield } from 'lucide-react';
+import { API_BASE } from './config';
+import { hostFetch } from './utils/hostFetch';
 import './App.css';
 
 // Components
@@ -17,7 +19,30 @@ import ErrorBoundary from './components/ErrorBoundary';
 
 function AppHeader() {
   const location = useLocation();
+  const [showAdminLink, setShowAdminLink] = useState(false);
   const isDisplay = /^\/display(\/.+|$)/.test(location.pathname);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await hostFetch(`${API_BASE || ''}/api/admin/me`);
+        if (cancelled) return;
+        if (!res.ok) {
+          setShowAdminLink(false);
+          return;
+        }
+        const data = (await res.json()) as { admin?: boolean };
+        setShowAdminLink(data.admin === true);
+      } catch {
+        if (!cancelled) setShowAdminLink(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname]);
+
   const headerStyle = isDisplay
     ? { 
         position: 'absolute' as const, 
@@ -61,7 +86,16 @@ function AppHeader() {
         </div>
       </div>
       {!isDisplay && (
-        <div style={{ position: 'absolute', right: '2rem', top: '50%', transform: 'translateY(-50%)', zIndex: 101 }}>
+        <div
+          className="app-header__trailing"
+          style={{ position: 'absolute', right: '2rem', top: '50%', transform: 'translateY(-50%)', zIndex: 101 }}
+        >
+          {showAdminLink && (
+            <Link to="/admin" className="app-header__admin-link" title="Admin">
+              <Shield size={16} aria-hidden className="app-header__admin-icon" />
+              <span>Admin</span>
+            </Link>
+          )}
           <DisplayHeaderInfo />
         </div>
       )}
