@@ -121,8 +121,13 @@ const Home: React.FC = () => {
           user?: { id: number; email?: string | null; displayName?: string | null } | null;
           hostToken?: string;
         };
+        if (!data.user) {
+          clearHostJwt();
+          setHostSession(null);
+          return;
+        }
         if (data.hostToken && typeof data.hostToken === 'string') setHostJwt(data.hostToken);
-        setHostSession(data.user ?? null);
+        setHostSession(data.user);
       } catch {
         if (!cancelled) {
           clearHostJwt();

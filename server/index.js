@@ -6089,7 +6089,8 @@ app.get('/api/auth/me', async (req, res) => {
   res.setHeader('Pragma', 'no-cache');
   try {
     const uid = hostAuth.getHostUserIdFromRequest(req);
-    if (!uid) return res.status(401).json({ user: null });
+    // 200 + { user: null } (not 401) so the SPA "am I a host?" probe does not look like a failed request in DevTools.
+    if (!uid) return res.json({ user: null });
     const rawJwt = hostAuth.getHostJwtRawFromRequest(req);
     if (!db) {
       return res.json({

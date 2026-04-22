@@ -699,8 +699,13 @@ const HostView: React.FC = () => {
           user?: { id: number; email?: string | null; displayName?: string | null } | null;
           hostToken?: string;
         };
+        if (!data.user) {
+          clearHostJwt();
+          setHostAccount(null);
+          return;
+        }
         if (data.hostToken && typeof data.hostToken === 'string') setHostJwt(data.hostToken);
-        setHostAccount(data.user ?? null);
+        setHostAccount(data.user);
       } catch {
         if (!cancelled) {
           clearHostJwt();
