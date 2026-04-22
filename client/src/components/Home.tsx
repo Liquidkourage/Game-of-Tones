@@ -137,6 +137,15 @@ const Home: React.FC = () => {
     setSearchParams(next, { replace: true });
   };
 
+  const goToHostGoogleSignIn = () => {
+    try {
+      sessionStorage.setItem('tempo_post_auth_return', '/?mode=host');
+    } catch {
+      /* ignore */
+    }
+    window.location.href = browserGoogleLoginUrl();
+  };
+
   const showHostSetup = () => {
     setHomeMode('host');
     const next = new URLSearchParams(searchParams);
@@ -171,6 +180,11 @@ const Home: React.FC = () => {
         return;
       }
       if (r.status === 401) {
+        try {
+          sessionStorage.setItem('tempo_post_auth_return', '/?mode=host');
+        } catch {
+          /* ignore */
+        }
         window.location.href = browserGoogleLoginUrl();
         return;
       }
@@ -458,11 +472,18 @@ const Home: React.FC = () => {
                 </p>
               </div>
             ) : (
-              <p className="home-card-lead" style={{ opacity: 0.9 }}>
-                <a className="btn btn-secondary" href={browserGoogleLoginUrl()} style={{ display: 'inline-block', textDecoration: 'none' }}>
+              <div className="home-host-signin" role="region" aria-label="Host sign in">
+                <p className="home-card-lead" style={{ marginBottom: 14, opacity: 0.95, lineHeight: 1.5 }}>
+                  Sign in with Google to create a room. Your Spotify link and host controls stay on this account.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={goToHostGoogleSignIn}
+                >
                   Sign in with Google
-                </a>
-              </p>
+                </button>
+              </div>
             )}
 
             <button 
