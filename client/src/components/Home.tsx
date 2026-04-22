@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Sparkles, Play, UserPlus, Crown, CheckCircle2, AlertTriangle, Link2 } from 'lucide-react';
 import { API_BASE } from '../config';
-import { hostFetch, setHostJwt, browserGoogleLoginUrl, clearHostJwt } from '../utils/hostFetch';
+import { hostFetch, setHostJwt, browserGoogleLoginUrl, clearHostJwt, postHostLogout } from '../utils/hostFetch';
 
 /** Express/HTML error pages are not JSON; show a short message instead of raw markup. */
 function formatHttpErrorBody(raw: string, status: number): string {
@@ -113,6 +113,7 @@ const Home: React.FC = () => {
         const res = await hostFetch(`${API_BASE || ''}/api/auth/me`);
         if (cancelled) return;
         if (!res.ok) {
+          clearHostJwt();
           setHostSession(null);
           return;
         }
@@ -123,7 +124,10 @@ const Home: React.FC = () => {
         if (data.hostToken && typeof data.hostToken === 'string') setHostJwt(data.hostToken);
         setHostSession(data.user ?? null);
       } catch {
-        if (!cancelled) setHostSession(null);
+        if (!cancelled) {
+          clearHostJwt();
+          setHostSession(null);
+        }
       }
     })();
     return () => {
@@ -165,12 +169,7 @@ const Home: React.FC = () => {
   };
 
   const handleHostLogout = async () => {
-    try {
-      await hostFetch(`${API_BASE || ''}/api/auth/logout`, { method: 'POST' });
-    } catch {
-      /* still clear local session */
-    }
-    clearHostJwt();
+    await postHostLogout();
     setHostSession(null);
   };
 

@@ -42,7 +42,7 @@ import {
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL } from '../config';
-import { hostFetch, getHostJwt, setHostJwt, apiOrigin, browserGoogleLoginUrl } from '../utils/hostFetch';
+import { hostFetch, getHostJwt, setHostJwt, clearHostJwt, apiOrigin, browserGoogleLoginUrl } from '../utils/hostFetch';
 import { BingoPattern, PATTERN_OPTIONS, BINGO_PATTERNS, getPatternDisplayName, getSavedCustomPatterns, saveCustomPattern, SavedCustomPattern } from '../patternDefinitions';
 import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
@@ -691,6 +691,7 @@ const HostView: React.FC = () => {
         const res = await hostFetch(`${API_BASE || ''}/api/auth/me`);
         if (cancelled) return;
         if (!res.ok) {
+          clearHostJwt();
           setHostAccount(null);
           return;
         }
@@ -701,7 +702,10 @@ const HostView: React.FC = () => {
         if (data.hostToken && typeof data.hostToken === 'string') setHostJwt(data.hostToken);
         setHostAccount(data.user ?? null);
       } catch {
-        if (!cancelled) setHostAccount(null);
+        if (!cancelled) {
+          clearHostJwt();
+          setHostAccount(null);
+        }
       } finally {
         if (!cancelled) setHostAuthBootstrapDone(true);
       }
