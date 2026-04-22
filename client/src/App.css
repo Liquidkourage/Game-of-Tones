@@ -918,6 +918,57 @@ body {
   accent-color: var(--accent-color);
 }
 
+/* In-app steps for new hosts (Home → Host) */
+.home-host-guide {
+  margin: 0 0 1.15rem;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(0, 255, 200, 0.12);
+}
+
+.home-host-guide summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+  list-style: none;
+}
+
+.home-host-guide summary::-webkit-details-marker {
+  display: none;
+}
+
+.home-host-guide__icon {
+  flex-shrink: 0;
+  color: var(--accent-color);
+  opacity: 0.9;
+}
+
+.home-host-guide ol {
+  margin: 0.75rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.home-host-guide li {
+  margin-bottom: 0.45rem;
+}
+
+.home-host-guide__foot {
+  margin: 0.65rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--secondary-text);
+  opacity: 0.9;
+}
+
 .home-playbook {
   margin-top: 1.15rem;
   padding: 1rem 1rem 0;

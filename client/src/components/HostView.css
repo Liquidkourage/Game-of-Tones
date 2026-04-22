@@ -515,6 +515,15 @@
   }
 }
 
+.host-view .host-spotify-guide {
+  margin: 0 0 0.9rem;
+  max-width: 32rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.86);
+  text-align: left;
+}
+
 .host-view .spotify-connection-section {
   display: flex;
   flex-direction: column;

@@ -3778,6 +3778,11 @@ const HostView: React.FC = () => {
                 <Music className="w-6 h-6" style={{ color: '#1ed760' }} aria-hidden />
                 Spotify Connection
               </h2>
+              <p className="host-spotify-guide">
+                Sign in with the <strong>Spotify account</strong> that should play music and own playlists for this show (e.g. your
+                event or work account). You only need a normal Spotify login — not a developer account. After this, pick a{' '}
+                <strong>playback device</strong> below.
+              </p>
               <div className="spotify-connection-section">
                 {spotifyError && (
                   <div className="spotify-error">

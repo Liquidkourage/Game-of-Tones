@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Sparkles, Play, UserPlus, Crown, CheckCircle2, AlertTriangle, Link2 } from 'lucide-react';
+import { Sparkles, Play, UserPlus, Crown, CheckCircle2, AlertTriangle, Link2, ListOrdered } from 'lucide-react';
 import { API_BASE } from '../config';
 import { hostFetch, setHostJwt, browserGoogleLoginUrl, clearHostJwt, postHostLogout } from '../utils/hostFetch';
 
@@ -468,6 +468,35 @@ const Home: React.FC = () => {
               <h3>Host</h3>
             </div>
             <p className="home-card-lead">Sign in, connect Spotify on the host screen, then run your game.</p>
+
+            <details className="home-host-guide" open>
+              <summary>
+                <ListOrdered className="home-host-guide__icon" size={18} aria-hidden />
+                <span>Host quick start (first time?)</span>
+              </summary>
+              <ol>
+                <li>
+                  <strong>Sign in with Google</strong> using the email your organizer allowlisted (often your work address).
+                </li>
+                <li>
+                  Click <strong>Create room &amp; host</strong> — you&apos;ll open the host screen with a <strong>room code</strong> to share.
+                </li>
+                <li>
+                  <strong>Connect Spotify</strong> and sign in to the <strong>Spotify</strong> account that should play music for this
+                  show (e.g. your event or work Spotify — you don’t need a Spotify <em>Developer</em> account).
+                </li>
+                <li>
+                  In host controls, pick a <strong>playback device</strong> (speaker / laptop) so sound goes to the right place.
+                </li>
+                <li>
+                  Players use <strong>Join</strong> on this site and enter the room code.
+                </li>
+              </ol>
+              <p className="home-host-guide__foot">
+                If your organization uses a custom setup, your team may have you <strong>Connect Spotify</strong> again
+                after your account is linked — that is normal.
+              </p>
+            </details>
 
             {hostSession !== undefined && (
               <div
