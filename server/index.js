@@ -6085,6 +6085,8 @@ app.get('/api/auth/google/callback', async (req, res) => {
 });
 
 app.get('/api/auth/me', async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
   try {
     const uid = hostAuth.getHostUserIdFromRequest(req);
     if (!uid) return res.status(401).json({ user: null });
@@ -6122,6 +6124,8 @@ function getLogoutRedirectTarget(req) {
     if (corsAllowedOrigins.includes(o)) return s;
     if (publicAppOriginForCors && o === publicAppOriginForCors) return s;
     if (/^https:\/\/[a-z0-9-]+\.liquidkourage\.com$/i.test(o)) return s;
+    if (o.startsWith('https://') && /\.railway\.app$/i.test(o)) return s;
+    if (o.startsWith('https://') && /\.vercel\.app$/i.test(o)) return s;
     if (/^http:\/\/localhost(:\d+)?$/.test(o) || /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(o)) return s;
   } catch (e) {
     /* ignore */
@@ -6130,11 +6134,15 @@ function getLogoutRedirectTarget(req) {
 }
 
 app.get('/api/auth/logout', (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
   hostAuth.clearSessionCookie(res);
   res.redirect(302, getLogoutRedirectTarget(req));
 });
 
 app.post('/api/auth/logout', (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
   hostAuth.clearSessionCookie(res);
   res.json({ success: true });
 });

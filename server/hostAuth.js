@@ -172,11 +172,20 @@ function setSessionCookie(res, userId, normalizedEmail) {
 function clearSessionCookie(res) {
   const secure = process.env.NODE_ENV === 'production';
   const domain = (process.env.TEMPO_HOST_COOKIE_DOMAIN || '').trim();
-  const domainPart = domain ? `; Domain=${domain}` : '';
-  res.setHeader(
-    'Set-Cookie',
-    `${COOKIE_NAME}=; Path=/; Max-Age=0; SameSite=lax${secure ? '; Secure' : ''}; HttpOnly${domainPart}`
-  );
+  // Express clearCookie: drop host-only and Domain= variants; a manual Set-Cookie can miss one
+  // and leave a stale `tempo_host_session` (looks like "still signed in" on refresh).
+  if (res.clearCookie) {
+    res.clearCookie(COOKIE_NAME, { path: '/', httpOnly: true, secure, sameSite: 'lax' });
+    if (domain) {
+      res.clearCookie(COOKIE_NAME, { path: '/', httpOnly: true, secure, sameSite: 'lax', domain });
+    }
+  } else {
+    const domainPart = domain ? `; Domain=${domain}` : '';
+    res.setHeader(
+      'Set-Cookie',
+      `${COOKIE_NAME}=; Path=/; Max-Age=0; SameSite=lax${secure ? '; Secure' : ''}; HttpOnly${domainPart}`
+    );
+  }
 }
 
 /** Default room code: MDY (no leading zeros on M/D) + YY + user id */

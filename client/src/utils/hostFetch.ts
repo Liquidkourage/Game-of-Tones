@@ -39,17 +39,30 @@ export function apiOrigin(): string {
 }
 
 /**
- * Sign out: clear `tempo_host_jwt` then full-page GET to the API’s `/api/auth/logout?return=…`.
- * Navigating (not fetch) is required so the browser always applies the HttpOnly cookie clear; credentialed
- * cross-origin `fetch` often does not (CORS / Set-Cookie), which left users “still signed in” after refresh
- * (e.g. got.liquidkourage.com with API on another host).
+ * Sign out: clear `tempo_host_jwt` then full-page GET so Set-Cookie is applied.
+ * The HttpOnly session is set on the *app* origin (Google OAuth is started from `window.location`); if
+ * `REACT_APP_API_BASE` is a different host (e.g. Railway), logging out *only* on the API never sends that
+ * cookie, so it never clears. We hit the *page* origin first, then chain the API when they differ.
  */
 export function postHostLogout(): void {
   clearHostJwt();
   if (typeof window === 'undefined') return;
   const returnTo = window.location.href;
-  const base = apiOrigin();
-  window.location.replace(`${base}/api/auth/logout?return=${encodeURIComponent(returnTo)}`);
+  const page = window.location.origin.replace(/\/$/, '');
+  const envApi = (API_BASE || '').trim().replace(/\/$/, '');
+  const cb = `_${Date.now().toString(36)}`;
+
+  if (!envApi || envApi === page) {
+    window.location.replace(
+      `${page}/api/auth/logout?return=${encodeURIComponent(returnTo)}&_cb=${cb}`
+    );
+    return;
+  }
+  // Chain: app host clears the cookie the browser has for this site, then the API host (same logic).
+  const back = encodeURIComponent(returnTo);
+  const secondHop = `${envApi}/api/auth/logout?return=${back}&_cb=${cb}2`;
+  const first = `${page}/api/auth/logout?return=${encodeURIComponent(secondHop)}&_cb=${cb}1`;
+  window.location.replace(first);
 }
 
 /**
