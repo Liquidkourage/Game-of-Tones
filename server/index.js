@@ -6924,6 +6924,25 @@ app.get('/api/spotify/callback', async (req, res) => {
     if (parsed?.userId != null && db) {
       await organizationsStore.primeTenantSpotifyCredentials(db, multiTenantSpotify, parsed.userId);
     }
+    if (parsed?.userId != null) {
+      const copt = organizationsStore.getCredentialOptionsForUser(parsed.userId);
+      const envCid = String(process.env.SPOTIFY_CLIENT_ID || '').trim();
+      if (copt && copt.clientId) {
+        console.log(
+          `[Spotify OAuth] user_${parsed.userId} token exchange: ORGANIZATION row client_id prefix ${String(
+            copt.clientId
+          ).slice(0, 8)}… (must match secret in same row; TEMPO_ORG_CREDENTIALS_KEY must match encrypt step)`
+        );
+      } else {
+        console.log(
+          `[Spotify OAuth] user_${parsed.userId} token exchange: server ENV SPOTIFY_CLIENT_ID/SECRET${
+            envCid
+              ? ` (client_id prefix ${envCid.slice(0, 8)}…)`
+              : ' (SPOTIFY_CLIENT_ID unset — fix Railway)'
+          }`
+        );
+      }
+    }
     const svc =
       parsed?.userId != null
         ? multiTenantSpotify.getService(`user_${parsed.userId}`)
