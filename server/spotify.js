@@ -12,6 +12,13 @@ const https = require('https');
  */
 const GOT_OUTPUT_PLAYLIST_NAME_PREFIX = 'Game Of Tones Output - ';
 
+/**
+ * Spotify may send Retry-After of 86400+ seconds when restricting an app; honoring that
+ * in-process would block every Web API call for 24h and the host UI shows no playlists.
+ * We still back off, but cap so the server can retry after a few minutes (logging the raw value).
+ */
+const SPOTIFY_QUARANTINE_MAX_MS = 15 * 60 * 1000;
+
 class SpotifyService {
   /**
    * @param {undefined | null | { clientId: string; clientSecret: string }} options - If object with id+secret, use tenant's Spotify Developer app; else env SPOTIFY_*.
@@ -77,19 +84,21 @@ class SpotifyService {
     if (!this.isRateLimitError(error)) return;
     const now = Date.now();
     const raSec = this.getRetryAfterSecFromError(error);
-    const waitMs =
+    const rawWaitMs =
       raSec > 0
         ? Math.min(86400 * 1000, raSec * 1000)
         : Math.min(3600 * 1000, 60_000);
+    const waitMs = Math.min(rawWaitMs, SPOTIFY_QUARANTINE_MAX_MS);
     this._spotifyQuarantineUntil = Math.max(this._spotifyQuarantineUntil || 0, now + waitMs);
     this._playbackStateBackoffUntil = Math.max(this._playbackStateBackoffUntil || 0, now + waitMs);
     if (now - (this._lastGlobal429LogAt || 0) > 120_000) {
       this._lastGlobal429LogAt = now;
       const untilIso = new Date(this._spotifyQuarantineUntil).toISOString();
+      const capped = rawWaitMs > SPOTIFY_QUARANTINE_MAX_MS;
       console.warn(
-        `⚠️ Spotify 429 [${source}] — pausing API calls until ${untilIso} (Retry-After: ${
+        `⚠️ Spotify 429 [${source}] — pausing API calls until ${untilIso} (Retry-After from Spotify: ${
           raSec || 'n/a'
-        }s). If this persists, check the app status in Spotify Developer Dashboard.`
+        }s${capped ? `; capped to ${SPOTIFY_QUARANTINE_MAX_MS / 1000}s for in-process backoff` : ''}). If this persists, check the app status in Spotify Developer Dashboard.`
       );
     }
   }

@@ -527,6 +527,21 @@ const HostView: React.FC = () => {
         setPlaylists([]);
         return;
       }
+      if (response.status === 429) {
+        let retryMin = '';
+        try {
+          const d = (await response.json()) as { retryAfterSec?: number; message?: string };
+          if (d && typeof d.retryAfterSec === 'number' && d.retryAfterSec > 0) {
+            retryMin = ` (retry in about ${Math.max(1, Math.ceil(d.retryAfterSec / 60))} min)`;
+          }
+        } catch {
+          /* ignore */
+        }
+        setSpotifyError(
+          `Spotify is rate-limiting this app right now${retryMin}. Wait and tap Refresh, or check your app in the Spotify Developer Dashboard (quota / usage).`
+        );
+        return;
+      }
       const data = await response.json();
       
       if (data.success) {
@@ -603,6 +618,13 @@ const HostView: React.FC = () => {
         }
       } else {
         console.error('Failed to load playlists:', data.error);
+        if (data && data.error === 'spotify_rate_limited') {
+          const ra = typeof data.retryAfterSec === 'number' ? data.retryAfterSec : null;
+          const retryMin = ra != null && ra > 0 ? ` (retry in about ${Math.max(1, Math.ceil(ra / 60))} min)` : '';
+          setSpotifyError(
+            `Spotify is rate-limiting this app${retryMin}. Wait and refresh, or check the Developer Dashboard.`
+          );
+        }
       }
     } catch (error) {
       console.error('Error loading playlists:', error);
