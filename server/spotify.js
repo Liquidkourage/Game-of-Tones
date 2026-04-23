@@ -362,6 +362,24 @@ class SpotifyService {
     return Number.isFinite(n) && n >= 0 ? n : 0;
   }
 
+  /**
+   * GET /v1/me — which Spotify user this access token represents (for support / logs).
+   * Does not require user-read-email; id + display_name are always present for valid tokens.
+   */
+  async getCurrentUserProfileBrief() {
+    await this._ensureCanCallWebApi('getCurrentUserProfileBrief');
+    const { body } = await this._webApiGet('/v1/me', 'getCurrentUserProfileBrief');
+    if (!body || typeof body !== 'object') {
+      return { spotifyUserId: null, displayName: null, product: null, country: null };
+    }
+    return {
+      spotifyUserId: body.id != null ? String(body.id) : null,
+      displayName: body.display_name != null ? String(body.display_name) : null,
+      product: body.product != null ? String(body.product) : null,
+      country: body.country != null ? String(body.country) : null,
+    };
+  }
+
   // Get user's playlists
   async getUserPlaylists() {
     await this._ensureCanCallWebApi('getUserPlaylists');

@@ -6802,6 +6802,57 @@ app.get('/api/spotify/status', async (req, res) => {
   }
 });
 
+/**
+ * Returns which Spotify user the stored token represents (GET /v1/me). Check in DevTools or curl; does not return email.
+ */
+app.get('/api/spotify/whoami', async (req, res) => {
+  try {
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    if (uid == null) {
+      return res
+        .status(401)
+        .json({ error: 'login_required', message: 'Sign in with Google to verify Spotify account.' });
+    }
+    const orgId = `user_${uid}`;
+    await multiTenantSpotify.ensureOrgTokensLoaded(orgId);
+    const svc = spotifyForRequest(req);
+    if (!svc) {
+      return res.status(401).json({ error: 'login_required' });
+    }
+    if (!multiTenantSpotify.getTokens(orgId)) {
+      return res.status(401).json({
+        error: 'spotify_not_connected',
+        message: 'Connect Spotify on the host screen first.',
+        organizationId: orgId,
+      });
+    }
+    if (svc.isQuarantined()) {
+      return res.status(429).json({
+        error: 'spotify_rate_limited',
+        message: 'Spotify API quarantine active (recent 429).',
+        retryAfterSec: svc.getQuarantineRemainingSec(),
+      });
+    }
+    const me = await svc.getCurrentUserProfileBrief();
+    return res.json({
+      success: true,
+      organizationId: orgId,
+      source: 'https://api.spotify.com/v1/me',
+      spotifyUserId: me.spotifyUserId,
+      displayName: me.displayName,
+      product: me.product,
+      country: me.country,
+      hint: 'In development mode, this Spotify user id must be among users allowed in the Spotify app dashboard.',
+    });
+  } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
+    console.error('GET /api/spotify/whoami:', error);
+    return res
+      .status(500)
+      .json({ error: 'whoami_failed', message: error?.message || 'Failed to load Spotify profile' });
+  }
+});
+
 // Get current tokens for debugging (signed-in host only — their own Spotify connection)
 app.get('/api/spotify/tokens', (req, res) => {
   const uid = hostAuth.getHostUserIdFromRequest(req);
@@ -7034,6 +7085,46 @@ function sendSpotifyWebApiErrorIfNeeded(res, error) {
   return false;
 }
 
+/** When TEMPO_SPOTIFY_LOG_ACCOUNT_PROOF=1, log GET /v1/me once per org (extra API call) alongside playlist proof. */
+const spotifyAccountProofLoggedForOrg = new Set();
+
+/**
+ * Railway-friendly proof that Spotify returned real playlist data (no extra API calls).
+ * Optional env adds one /v1/me per org for account id + display name.
+ */
+function logSpotifyPlaylistSuccessProof(orgId, svc, { spotifyListTotal, playlists }) {
+  const rows = playlists || [];
+  const sample = rows
+    .slice(0, 3)
+    .map((p) => (p && p.name ? String(p.name).slice(0, 80) : ''))
+    .filter(Boolean);
+  const sampleStr = sample.length ? ` sample_first_playlist_names=${JSON.stringify(sample)}` : '';
+  const base = `✅ Spotify playlist data [${orgId}]: source=GET /v1/me/playlists spotify_paging_total=${
+    spotifyListTotal ?? 'n/a'
+  } returned_rows=${rows.length}${sampleStr}`;
+
+  const wantMe =
+    process.env.TEMPO_SPOTIFY_LOG_ACCOUNT_PROOF === '1' || process.env.TEMPO_SPOTIFY_LOG_ACCOUNT_PROOF === 'true';
+  if (wantMe && !spotifyAccountProofLoggedForOrg.has(orgId)) {
+    spotifyAccountProofLoggedForOrg.add(orgId);
+    (async () => {
+      try {
+        const me = await svc.getCurrentUserProfileBrief();
+        console.log(
+          `${base} | account_proof=GET /v1/me spotify_user_id=${me.spotifyUserId || 'n/a'} display_name=${JSON.stringify(
+            me.displayName || ''
+          )} product=${me.product || 'n/a'} country=${me.country || 'n/a'}`
+        );
+      } catch (e) {
+        console.warn(`Spotify account proof (GET /v1/me) failed for ${orgId}:`, e?.message || e);
+        console.log(base);
+      }
+    })();
+    return;
+  }
+  console.log(base);
+}
+
 app.get('/api/spotify/playlists', async (req, res) => {
   try {
     const uid = hostAuth.getHostUserIdFromRequest(req);
@@ -7061,6 +7152,7 @@ app.get('/api/spotify/playlists', async (req, res) => {
       });
     }
     const { playlists, spotifyListTotal } = await svc.getUserPlaylists();
+    logSpotifyPlaylistSuccessProof(orgId, svc, { spotifyListTotal, playlists });
 
     const wantExplicitStats =
       req.query.includeExplicitStats === '1' ||

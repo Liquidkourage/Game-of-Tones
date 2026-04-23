@@ -4341,6 +4341,26 @@ const HostView: React.FC = () => {
                       <strong style={{ color: '#fff' }}>finalize the bingo pool</strong> (song source for the game). You can still{' '}
                       <strong style={{ color: '#fff' }}>drag any row</strong> into round buckets for round-specific setup.
                     </p>
+                    {spotifyError ? (
+                      <div
+                        className="spotify-error"
+                        style={{ marginBottom: 12, maxWidth: 720, padding: '12px 14px' }}
+                        role="alert"
+                      >
+                        <p style={{ margin: '0 0 10px', lineHeight: 1.5 }}>{spotifyError}</p>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          style={{ fontSize: '0.85rem' }}
+                          onClick={() => {
+                            setSpotifyError(null);
+                            void loadPlaylists();
+                          }}
+                        >
+                          Retry loading playlists
+                        </button>
+                      </div>
+                    ) : null}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
                       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
                         <span style={{ fontSize: '0.72rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>Library scope</span>
