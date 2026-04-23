@@ -5,7 +5,8 @@ export type PlaylistExplicitStat = { total: number; explicitCount: number };
 
 /**
  * POST /api/spotify/playlists/explicit-stats-batch in chunks.
- * Used by HostView for the non-priority tail of the Manager list (priority may come from GET /playlists?includeExplicitStats=1).
+ * Used by HostView for the Manager list (priority rows first, then tail). GET /playlists no longer
+ * requests includeExplicitStats to avoid doubling Spotify work on first load.
  */
 export async function fetchPlaylistExplicitStatsBatch(
   playlistIds: string[],

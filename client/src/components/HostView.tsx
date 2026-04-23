@@ -515,7 +515,10 @@ const HostView: React.FC = () => {
         .map((id) => String(id))
         .filter(Boolean);
       const qs = new URLSearchParams();
-      qs.set('includeExplicitStats', '1');
+      // Do NOT set includeExplicitStats here: the server would fan out to many GET playlist tracks
+      // (20 playlists × full pagination, 8 concurrent) on the same request as getUserPlaylists,
+      // which easily trips Spotify 429 on first load. Explicit counts load afterward via
+      // runExplicitStatsWithRetries in the useEffect below.
       if (assignedForQuery.length > 0) {
         qs.set('assigned', assignedForQuery.join(','));
       }
