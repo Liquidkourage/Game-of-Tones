@@ -7079,6 +7079,12 @@ app.get('/api/spotify/callback', async (req, res) => {
         });
       }
     }
+    // New OAuth must not reuse a SpotifyService that is still in 429 quarantine: getService()
+    // returns the same instance until invalidated; fresh tokens on a quarantined instance keep
+    // /api/spotify/* returning 429 without calling api.spotify.com (playlists, devices, etc.).
+    if (parsed?.userId != null) {
+      multiTenantSpotify.invalidateUserService(parsed.userId);
+    }
     const svc =
       parsed?.userId != null
         ? multiTenantSpotify.getService(`user_${parsed.userId}`)
@@ -7667,6 +7673,7 @@ app.post('/api/spotify/refresh', async (req, res) => {
       refreshToken: svc.refreshToken || tok.refreshToken,
       expiresIn: 3600,
     });
+    svc.clearRateLimitQuarantine();
 
     console.log('✅ Spotify access token refreshed successfully');
     res.json({ success: true, message: 'Spotify connection refreshed' });

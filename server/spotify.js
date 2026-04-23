@@ -123,6 +123,14 @@ class SpotifyService {
     return Math.max(0, Math.ceil(((this._spotifyQuarantineUntil || 0) - Date.now()) / 1000));
   }
 
+  /**
+   * Clear in-process 429 backoff. Call after a successful token refresh (POST /api/spotify/refresh) so
+   * Web API is attempted again. OAuth uses a new SpotifyService (invalidate) instead of this.
+   */
+  clearRateLimitQuarantine() {
+    this._spotifyQuarantineUntil = 0;
+  }
+
   _makeQuarantineError(caller) {
     const err = new Error(`Spotify API quarantined (${caller})`);
     err.statusCode = 429;
