@@ -1667,6 +1667,16 @@ io.on('connection', (socket) => {
 
     const room = rooms.get(roomId);
 
+    /**
+     * Socket-first room creation (above) does not set ownerUserId. Without it, spotifyOrgForRoom()
+     * falls back to DEFAULT and uses the wrong token row — refresh can fail with invalid_client
+     * when env/DB was migrated to a new Spotify app while user tokens live on user_${uid}.
+     * Claim the room for the first signed-in host (same as POST /api/host/rooms pre-seeded rooms).
+     */
+    if (wantsHost && claimUid != null && room && room.ownerUserId == null) {
+      room.ownerUserId = claimUid;
+    }
+
     /** Host-owned rooms: only the signed-in host may take the host role. */
     if (wantsHost && room.ownerUserId != null) {
       if (claimUid == null || Number(claimUid) !== Number(room.ownerUserId)) {
