@@ -4510,10 +4510,21 @@ const HostView: React.FC = () => {
                               console.log(`?? Rendering playlist ${sortedFilteredPlaylists.indexOf(p) + 1}: "${p.name}" (display: "${stripGoTPrefix ? p.name.replace(/^GoT\s*[-�:]*\s*/i, '') : p.name}")`);
                             }
                           const isSelected = selectedPlaylists.some(sp => sp.id === p.id);
+                          const pidForRow = normalizeSpotifyPlaylistId(p.id);
+                          const rowStatForCount =
+                            pidForRow && playlistExplicitStats[pidForRow]
+                              ? playlistExplicitStats[pidForRow]
+                              : undefined;
+                          const trackCount = Math.max(
+                            p.tracks,
+                            rowStatForCount && typeof rowStatForCount.total === 'number'
+                              ? rowStatForCount.total
+                              : 0
+                          );
                           // Insufficient: < 15 songs (not enough for any mode)
-                          const isInsufficient = p.tracks < 15;
+                          const isInsufficient = trackCount < 15;
                           // Acceptable: 15+ songs (good for 5x15 mode) and 75+ songs (good for both modes)
-                          const isAcceptable = p.tracks >= 15;
+                          const isAcceptable = trackCount >= 15;
                           
                           return (
                             <div 
@@ -4606,9 +4617,9 @@ const HostView: React.FC = () => {
                                   textAlign: 'right',
                                 }}
                               >
-                                <span>{p.tracks} songs</span>
+                                <span>{trackCount} songs</span>
                                 {(() => {
-                                  const pid = normalizeSpotifyPlaylistId(p.id);
+                                  const pid = pidForRow;
                                   const rowStat = pid ? playlistExplicitStats[pid] : undefined;
                                   return rowStat != null && rowStat.explicitCount > 0 ? (
                                   <span

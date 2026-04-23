@@ -345,36 +345,48 @@ class SpotifyService {
     }
   }
 
+  /** Track count on list-playlist items (Spotify: tracks.total). */
+  _playlistItemsTotalFromListItem(playlist) {
+    const t = playlist && playlist.tracks;
+    if (!t || typeof t !== 'object') return 0;
+    const n = Number(t.total);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  }
+
   // Get user's playlists
   async getUserPlaylists() {
     await this._ensureCanCallWebApi('getUserPlaylists');
-    
+
     try {
       const playlists = [];
       let offset = 0;
       const limit = 50;
-      
+
+      // Use direct Web API so `tracks.total` matches Spotify JSON (Node SDK can omit/reshape fields).
       while (true) {
-        const response = await this.spotifyApi.getUserPlaylists({ limit, offset });
-        const items = response.body.items;
-        
+        const path = `/v1/me/playlists?limit=${limit}&offset=${offset}`;
+        const { body } = await this._webApiGet(path, 'getUserPlaylists');
+        const items = (body && Array.isArray(body.items) ? body.items : []) || [];
+
         if (items.length === 0) break;
-        
+
         playlists.push(...items);
         offset += limit;
-        
+
         if (items.length < limit) break;
       }
-      
-      return playlists.map(playlist => ({
+
+      return playlists.map((playlist) => ({
         id: playlist.id,
         name: playlist.name,
         description: playlist.description,
-        /** Simplified playlist objects may omit `tracks` in some responses — treat as 0. */
-        tracks: playlist.tracks && typeof playlist.tracks.total === 'number' ? playlist.tracks.total : 0,
+        tracks: this._playlistItemsTotalFromListItem(playlist),
         public: playlist.public,
         collaborative: playlist.collaborative,
-        owner: playlist.owner && playlist.owner.display_name != null ? playlist.owner.display_name : 'Unknown',
+        owner:
+          playlist.owner && playlist.owner.display_name != null
+            ? playlist.owner.display_name
+            : 'Unknown',
       }));
     } catch (error) {
       if (this.isRateLimitError(error)) {
