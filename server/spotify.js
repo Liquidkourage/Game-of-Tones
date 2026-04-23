@@ -481,6 +481,10 @@ class SpotifyService {
       }));
       return { playlists, spotifyListTotal };
     } catch (error) {
+      // 429 from _webApiGet: quarantine already applied there — avoid duplicate log/state
+      if (this.isRateLimitError(error) && error && error.headers) {
+        throw error;
+      }
       if (this.isRateLimitError(error)) {
         this.applyRateLimitQuarantine(error, 'getUserPlaylists');
         throw error;

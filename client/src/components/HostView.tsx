@@ -992,6 +992,7 @@ const HostView: React.FC = () => {
           setIsSpotifyConnected(true);
           setIsSpotifyConnecting(false);
           await loadPlaylists();
+          await new Promise((r) => setTimeout(r, 400));
           await loadDevices();
           // Devices often appear a few seconds after Spotify app / Web Player activates.
           deviceRetryTimer = window.setTimeout(() => {
@@ -1586,13 +1587,15 @@ const HostView: React.FC = () => {
         }
       }
       (async () => {
-        await fetchPlaybackState();
-        await loadDevices();
         const now = Date.now();
         if (now - lastLoadPlaylistsOnSocketReconnectAtRef.current > 90_000) {
           lastLoadPlaylistsOnSocketReconnectAtRef.current = now;
           await loadPlaylists();
         }
+        await new Promise((r) => setTimeout(r, 400));
+        await loadDevices();
+        await new Promise((r) => setTimeout(r, 400));
+        await fetchPlaybackState();
         // Re-request player cards after reconnection to restore UI state
         setTimeout(() => {
           schedulePlayerCardsRefresh(300);
@@ -1860,6 +1863,8 @@ const HostView: React.FC = () => {
           setIsSpotifyConnected(true);
           setIsSpotifyConnecting(false);
           await loadPlaylists();
+          // Stagger Web API calls (dev-mode Spotify quota is tight; parallel /devices + /playlists + /player hurts 429s)
+          await new Promise((r) => setTimeout(r, 400));
           await loadDevices(); // Load devices when connected
           
           // Sync volume when Spotify connects to ensure it matches interface
