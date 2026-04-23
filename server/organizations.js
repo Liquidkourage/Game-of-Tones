@@ -4,6 +4,7 @@
  */
 
 const credentialCrypto = require('./credentialCrypto');
+const spotifyPipelineLog = require('./spotifyPipelineLog');
 
 /** uid -> { clientId, clientSecret } | null (primed: use env) | missing (not primed yet) */
 const credentialOptionsByUserId = new Map();
@@ -26,8 +27,22 @@ async function primeTenantSpotifyCredentials(db, multiTenantSpotify, uid) {
   const prev = credentialOptionsByUserId.get(uid);
   const prevFp = prev === null ? 'env' : prev && typeof prev === 'object' ? `${prev.clientId}:${prev.clientSecret.length}` : undefined;
   if (prevFp === fp && credentialOptionsByUserId.has(uid)) return;
+  if (spotifyPipelineLog.isEnabled()) {
+    const orgRow = creds
+      ? {
+          host_user_id: String(uid),
+          source: 'organizations_table',
+          spotify_client_id_prefix: spotifyPipelineLog.clientIdPrefix(creds.clientId),
+          secret_len: String(creds.clientSecret != null ? creds.clientSecret.length : 0),
+        }
+      : { host_user_id: String(uid), source: 'server_env_SPOTIFY_CLIENT_ID', server_client_id_prefix: spotifyPipelineLog.clientIdPrefix(process.env.SPOTIFY_CLIENT_ID) };
+    spotifyPipelineLog.log('prime_credentials_applied', orgRow);
+  }
   credentialOptionsByUserId.set(uid, creds);
   if (multiTenantSpotify && typeof multiTenantSpotify.invalidateUserService === 'function') {
+    if (spotifyPipelineLog.isEnabled()) {
+      spotifyPipelineLog.log('invalidate_spotify_service_cache', { host_user_id: String(uid) });
+    }
     multiTenantSpotify.invalidateUserService(uid);
   }
 }

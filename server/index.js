@@ -15,6 +15,7 @@ const usersStore = require('./users');
 const organizationsStore = require('./organizations');
 const credentialCrypto = require('./credentialCrypto');
 const managerPlaylistFilter = require('./managerPlaylistFilter');
+const spotifyPipelineLog = require('./spotifyPipelineLog');
 
 /**
  * Run async work over `ids` with bounded concurrency (Spotify explicit-stats batch was
@@ -227,6 +228,14 @@ function validateEnvironment() {
 
 // Validate environment before starting
 validateEnvironment();
+if (spotifyPipelineLog.isEnabled()) {
+  console.log(
+    '📣 TEMPO_SPOTIFY_PIPELINE_LOG: ON — structured logs for host user → org credentials → tokens → Spotify (no secrets).'
+  );
+  if (spotifyPipelineLog.isWebApiLogEnabled()) {
+    console.log('📣 TEMPO_SPOTIFY_LOG_WEBAPI: ON — logs each api.spotify.com path + HTTP status (verbose).');
+  }
+}
 
 const app = express();
 // Logging verbosity
@@ -655,6 +664,24 @@ class MultiTenantSpotifyManager {
         const o = organizationsStore.getCredentialOptionsForUser(uid);
         if (o !== undefined) credentialOverride = o;
       }
+      const credDesc =
+        credentialOverride === undefined
+          ? 'unprimed_map_uses_env'
+          : credentialOverride === null
+            ? 'primed_no_org_row_uses_env'
+            : 'organizations_table_client';
+      const newClientPrefix =
+        credentialOverride && credentialOverride.clientId
+          ? spotifyPipelineLog.clientIdPrefix(credentialOverride.clientId)
+          : spotifyPipelineLog.clientIdPrefix(process.env.SPOTIFY_CLIENT_ID);
+      if (spotifyPipelineLog.isEnabled()) {
+        spotifyPipelineLog.log('spotify_service_constructed', {
+          organization_id: organizationId,
+          host_user_id: uid != null ? String(uid) : 'n/a',
+          credential_path: credDesc,
+          client_id_prefix: newClientPrefix,
+        });
+      }
       const service = new SpotifyService(credentialOverride);
       this.orgServices.set(organizationId, service);
       // Tokens are applied via setTokens() after OAuth, or ensureOrgTokensLoaded() from DB.
@@ -664,6 +691,13 @@ class MultiTenantSpotifyManager {
     // After invalidateUserService, the new SpotifyService has no tokens even though orgTokens may still hold them.
     const tok = this.orgTokens.get(organizationId);
     if (tok && tok.accessToken && (!service.accessToken || !service.refreshToken)) {
+      if (spotifyPipelineLog.isEnabled()) {
+        spotifyPipelineLog.log('spotify_service_rehydrate_tokens', {
+          organization_id: organizationId,
+          has_access_token: '1',
+          has_refresh_token: tok.refreshToken ? '1' : '0',
+        });
+      }
       service.setTokens(tok.accessToken, tok.refreshToken);
     }
     return service;
@@ -679,9 +713,28 @@ class MultiTenantSpotifyManager {
       this.orgTokens.delete(organizationId);
       tok = undefined;
     }
-    if (tok && tok.accessToken) return true;
+    if (tok && tok.accessToken) {
+      if (spotifyPipelineLog.isEnabled()) {
+        spotifyPipelineLog.log('org_tokens_in_memory', { organization_id: organizationId, source: 'cache' });
+      }
+      return true;
+    }
+    if (spotifyPipelineLog.isEnabled()) {
+      spotifyPipelineLog.log('org_tokens_load_start', { organization_id: organizationId, source: 'db_or_env' });
+    }
     const loaded = await this.loadOrgTokens(organizationId);
-    if (!loaded || !loaded.accessToken) return false;
+    if (!loaded || !loaded.accessToken) {
+      if (spotifyPipelineLog.isEnabled()) {
+        spotifyPipelineLog.log('org_tokens_load_miss', { organization_id: organizationId });
+      }
+      return false;
+    }
+    if (spotifyPipelineLog.isEnabled()) {
+      spotifyPipelineLog.log('org_tokens_load_ok', {
+        organization_id: organizationId,
+        has_refresh: loaded.refreshToken ? '1' : '0',
+      });
+    }
     await this.setTokens(organizationId, loaded);
     return true;
   }
@@ -692,6 +745,14 @@ class MultiTenantSpotifyManager {
   
   async setTokens(organizationId, tokens) {
     this.orgTokens.set(organizationId, tokens);
+    if (spotifyPipelineLog.isEnabled()) {
+      spotifyPipelineLog.log('org_tokens_set', {
+        organization_id: organizationId,
+        has_access_token: tokens && tokens.accessToken ? '1' : '0',
+        has_refresh_token: tokens && tokens.refreshToken ? '1' : '0',
+        persist: 'db',
+      });
+    }
     const service = this.getService(organizationId);
     service.setTokens(tokens.accessToken, tokens.refreshToken);
     await this.saveOrgTokens(organizationId, tokens);
@@ -6743,6 +6804,14 @@ app.use('/api/spotify', async (req, res, next) => {
   } catch (e) {
     console.error('primeTenantSpotifyCredentials:', e?.message || e);
   }
+  if (spotifyPipelineLog.isEnabled()) {
+    spotifyPipelineLog.log('api_spotify_request', {
+      method: req.method,
+      path: rel,
+      host_user_id: String(uid),
+      org_key: `user_${uid}`,
+    });
+  }
   next();
 });
 
@@ -6999,6 +7068,16 @@ app.get('/api/spotify/callback', async (req, res) => {
           }`
         );
       }
+      if (spotifyPipelineLog.isEnabled()) {
+        spotifyPipelineLog.log('oauth_code_exchange', {
+          host_user_id: String(parsed.userId),
+          org_key: `user_${parsed.userId}`,
+          client_source: copt && copt.clientId ? 'organizations_table' : 'env',
+          client_id_prefix: spotifyPipelineLog.clientIdPrefix(
+            copt && copt.clientId ? copt.clientId : process.env.SPOTIFY_CLIENT_ID
+          ),
+        });
+      }
     }
     const svc =
       parsed?.userId != null
@@ -7007,10 +7086,19 @@ app.get('/api/spotify/callback', async (req, res) => {
     const tokens = await svc.handleCallback(code, redirectForGrant);
     if (parsed && parsed.userId != null) {
       await multiTenantSpotify.setTokens(`user_${parsed.userId}`, tokens);
+      if (spotifyPipelineLog.isEnabled()) {
+        spotifyPipelineLog.log('oauth_callback_tokens_stored', {
+          org_key: `user_${parsed.userId}`,
+          host_user_id: String(parsed.userId),
+        });
+      }
     } else {
       await multiTenantSpotify.setTokens('DEFAULT', tokens);
       spotifyTokens = tokens;
       saveTokens(tokens);
+      if (spotifyPipelineLog.isEnabled()) {
+        spotifyPipelineLog.log('oauth_callback_tokens_stored', { org_key: 'DEFAULT' });
+      }
     }
 
     if (shouldRedirectBrowser) {
@@ -7024,6 +7112,9 @@ app.get('/api/spotify/callback', async (req, res) => {
     res.json({ success: true, message: 'Spotify connected' });
   } catch (error) {
     const detail = spotifyCallbackUserMessage(error);
+    if (spotifyPipelineLog.isEnabled()) {
+      spotifyPipelineLog.log('oauth_callback_fail', { message: detail });
+    }
     console.error('❌ Spotify callback failed:', error?.body || error?.message || error);
     if (shouldRedirectBrowser) {
       return res.redirect(302, `${appBase}/?spotify_error=1`);
@@ -7145,10 +7236,34 @@ app.get('/api/spotify/playlists', async (req, res) => {
       });
     }
     if (svc.isQuarantined()) {
+      if (spotifyPipelineLog.isEnabled()) {
+        spotifyPipelineLog.log('playlists_route_skip_quarantined', {
+          org_key: orgId,
+          host_user_id: String(uid),
+          remaining_s: String(svc.getQuarantineRemainingSec()),
+        });
+      }
       return res.status(429).json({
         error: 'spotify_rate_limited',
         message: 'Spotify API quarantine active (recent 429). Try again after Retry-After.',
         retryAfterSec: svc.getQuarantineRemainingSec(),
+      });
+    }
+    if (spotifyPipelineLog.isEnabled()) {
+      const copt = organizationsStore.getCredentialOptionsForUser(uid);
+      spotifyPipelineLog.log('playlists_route_pre_getUserPlaylists', {
+        org_key: orgId,
+        host_user_id: String(uid),
+        cred_map: copt === undefined ? 'unprimed' : copt === null ? 'env' : 'org_row',
+        org_client_id_prefix: copt && copt.clientId ? spotifyPipelineLog.clientIdPrefix(copt.clientId) : 'n/a',
+        server_env_client_id_prefix: spotifyPipelineLog.clientIdPrefix(process.env.SPOTIFY_CLIENT_ID),
+        spotifyService_client_id_prefix: svc._pipelineClientIdPrefix,
+        spotifyService_cred_mode: svc._pipelineCredentialMode,
+        explicit_stats_query: String(
+          req.query.includeExplicitStats === '1' ||
+            req.query.includeExplicitStats === 'true' ||
+            req.query.includeExplicitStats === 'yes'
+        ),
       });
     }
     const { playlists, spotifyListTotal } = await svc.getUserPlaylists();

@@ -1,5 +1,6 @@
 const SpotifyWebApi = require('spotify-web-api-node');
 const https = require('https');
+const pl = require('./spotifyPipelineLog');
 
 /**
  * Web API base URL and path shapes follow the official OpenAPI schema:
@@ -37,7 +38,10 @@ class SpotifyService {
       clientSecret: override ? options.clientSecret : process.env.SPOTIFY_CLIENT_SECRET,
       redirectUri: this.defaultRedirectUri,
     });
-    
+    const cidForLog = override ? options.clientId : process.env.SPOTIFY_CLIENT_ID;
+    this._pipelineClientIdPrefix = pl.clientIdPrefix(cidForLog);
+    this._pipelineCredentialMode = override ? 'organization_client' : 'env_client';
+
     this.accessToken = null;
     this.refreshToken = null;
     this.tokenExpirationTime = null;
@@ -82,8 +86,16 @@ class SpotifyService {
    */
   applyRateLimitQuarantine(error, source) {
     if (!this.isRateLimitError(error)) return;
-    const now = Date.now();
     const raSec = this.getRetryAfterSecFromError(error);
+    if (pl.isEnabled()) {
+      pl.log('quarantine_429', {
+        source: String(source),
+        client_id_prefix: this._pipelineClientIdPrefix,
+        cred_mode: this._pipelineCredentialMode,
+        spotify_retry_after_s: String(raSec),
+      });
+    }
+    const now = Date.now();
     const rawWaitMs =
       raSec > 0
         ? Math.min(86400 * 1000, raSec * 1000)
@@ -166,8 +178,19 @@ class SpotifyService {
               body = { _raw: buf };
             }
             const sc = res.statusCode || 0;
+            if (pl.isWebApiLogEnabled()) {
+              const pathOnly = String(path).split('?')[0];
+              pl.log('web_api_response', { label, path: pathOnly, status: String(sc) });
+            }
             if (sc >= 200 && sc < 300) {
               return resolve({ body, statusCode: sc, headers: res.headers });
+            }
+            if (pl.isEnabled() && !pl.isWebApiLogEnabled()) {
+              pl.log('web_api_error', {
+                label,
+                path: String(path).split('?')[0],
+                status: String(sc),
+              });
             }
             const err = new Error(
               (body && body.error && (body.error.message || String(body.error))) || `Spotify API ${sc}`
@@ -325,13 +348,33 @@ class SpotifyService {
     }
 
     try {
+      if (pl.isEnabled()) {
+        pl.log('token_refresh_attempt', {
+          cred_mode: this._pipelineCredentialMode,
+          client_id_prefix: this._pipelineClientIdPrefix,
+        });
+      }
       const data = await this.spotifyApi.refreshAccessToken();
       this.accessToken = data.body.access_token;
       this.tokenExpirationTime = Date.now() + (data.body.expires_in * 1000);
       this.spotifyApi.setAccessToken(this.accessToken);
-      
+      if (pl.isEnabled()) {
+        const exp = data.body.expires_in;
+        pl.log('token_refresh_ok', {
+          cred_mode: this._pipelineCredentialMode,
+          client_id_prefix: this._pipelineClientIdPrefix,
+          expires_in_s: String(exp),
+        });
+      }
       return this.accessToken;
     } catch (error) {
+      if (pl.isEnabled()) {
+        pl.log('token_refresh_fail', {
+          cred_mode: this._pipelineCredentialMode,
+          client_id_prefix: this._pipelineClientIdPrefix,
+          err: (error && error.message) || String(error),
+        });
+      }
       console.error('Error refreshing Spotify token:', error);
       throw error;
     }
