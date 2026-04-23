@@ -1064,27 +1064,14 @@ const HostView: React.FC = () => {
   const isSpotifyConnectedRef = useRef(false);
   /** Back off host polling of /api/spotify/current-playback when server returns 429. */
   const spotifyPollBackoffUntilRef = useRef(0);
+  /** Throttle getUserPlaylists on socket reconnect to avoid piling on Spotify (429) next to OAuth / status checks. */
+  const lastLoadPlaylistsOnSocketReconnectAtRef = useRef(0);
   useEffect(() => {
     isSpotifyConnectedRef.current = isSpotifyConnected;
   }, [isSpotifyConnected]);
 
-  /**
-   * Tab close / full page navigation: clear tokens best-effort (socket handlers do not run).
-   * Do not also clear on React unmount: SPA navigation (e.g. host → home) would wipe Spotify and force reconnect.
-   * Uses keepalive so the request can finish after the page tears down.
-   */
-  useEffect(() => {
-    const onPageHide = () => {
-      if (!isSpotifyConnectedRef.current) return;
-      try {
-        void hostFetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST', keepalive: true });
-      } catch {
-        /* ignore */
-      }
-    };
-    window.addEventListener('pagehide', onPageHide);
-    return () => window.removeEventListener('pagehide', onPageHide);
-  }, []);
+  // Intentionally no pagehide -> /api/spotify/clear: it fired on bfcache/navigation, wiped DB tokens, and caused
+  // constant disconnect/reconnect + extra Web API load. Use the header Disconnect control to clear tokens.
 
   const saveSelectedDevice = useCallback(async () => {
     if (!selectedDevice) {
@@ -1613,7 +1600,11 @@ const HostView: React.FC = () => {
       (async () => {
         await fetchPlaybackState();
         await loadDevices();
-        await loadPlaylists();
+        const now = Date.now();
+        if (now - lastLoadPlaylistsOnSocketReconnectAtRef.current > 90_000) {
+          lastLoadPlaylistsOnSocketReconnectAtRef.current = now;
+          await loadPlaylists();
+        }
         // Re-request player cards after reconnection to restore UI state
         setTimeout(() => {
           schedulePlayerCardsRefresh(300);
