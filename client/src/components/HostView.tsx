@@ -212,6 +212,8 @@ const HostView: React.FC = () => {
   const [gamePaused, setGamePaused] = useState(false);
   const [mixFinalized, setMixFinalized] = useState(false);
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
+  /** From GET /api/spotify/playlists: Spotify PagingObject total (null = unknown / not loaded). */
+  const [spotifyMyPlaylistsTotal, setSpotifyMyPlaylistsTotal] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
@@ -508,7 +510,6 @@ const HostView: React.FC = () => {
 
   const loadPlaylists = useCallback(async () => {
     try {
-      console.log('Loading playlists...');
       const assignedForQuery = eventRoundsRef.current
         .flatMap((r) => r.playlistIds || [])
         .map((id) => String(id))
@@ -520,11 +521,9 @@ const HostView: React.FC = () => {
       }
       const response = await hostFetch(`${API_BASE || ''}/api/spotify/playlists?${qs.toString()}`);
       if (response.status === 401) {
-        console.warn('Spotify not connected (401) while loading playlists');
-        // Don't override isSpotifyConnected here - let status endpoint be authoritative
-        console.log('?? loadPlaylists got 401, but not overriding connection state');
         setSpotifyError('Spotify is not connected. Open Connection in the header to connect.');
         setPlaylists([]);
+        setSpotifyMyPlaylistsTotal(null);
         return;
       }
       if (response.status === 429) {
@@ -537,69 +536,36 @@ const HostView: React.FC = () => {
         } catch {
           /* ignore */
         }
+        setSpotifyMyPlaylistsTotal(null);
         setSpotifyError(
           `Spotify is rate-limiting this app right now${retryMin}. Wait and tap Refresh, or check your app in the Spotify Developer Dashboard (quota / usage).`
         );
         return;
       }
-      const data = await response.json();
+      const data = (await response.json()) as {
+        success?: boolean;
+        playlists?: Playlist[];
+        error?: string;
+        spotifyListTotal?: number;
+        retryAfterSec?: number;
+        explicitStatsByPlaylistId?: Record<string, { total?: number; explicitCount?: number }>;
+      };
       
       if (data.success) {
+        if (typeof data.spotifyListTotal === 'number') {
+          setSpotifyMyPlaylistsTotal(data.spotifyListTotal);
+        } else {
+          setSpotifyMyPlaylistsTotal(null);
+        }
         // Filter out temporary TEMPO playlists (store all others in state)
-        const allPlaylists = data.playlists.filter((playlist: Playlist) => 
+        const allPlaylists = (data.playlists || []).filter((playlist: Playlist) => 
           !playlist.name.startsWith('TEMPO')
         );
-        
-        // Filter to only Game of Tones playlists for default view
-        // Match playlists that start with "got" (with optional separator) or contain "game of tones" or "gameoftones"
-        // BUT exclude output playlists (generated when starting a round)
-        const gotPlaylists = allPlaylists.filter((playlist: Playlist) => {
-          const nameLower = playlist.name.toLowerCase();
-          // Exclude output playlists
-          if (nameLower.includes('game of tones output') || nameLower.includes('gameoftones output')) {
-            return false;
-          }
-          // Match "got" at the start of the name (with optional separator like "got -", "got:", etc.)
-          const startsWithGot = /^got\s*[-�:]*\s*/i.test(playlist.name);
-          // Match "game of tones" or "gameoftones" anywhere in the name
-          const containsGameOfTones = nameLower.includes('game of tones') || nameLower.includes('gameoftones');
-          return startsWithGot || containsGameOfTones;
-        });
-        
-        // Debug: log some matched playlists to see what's being matched
-        console.log(`? Sample matched GoT playlists (first 20):`, gotPlaylists.slice(0, 20).map((p: Playlist) => `"${p.name}"`));
-        
-        // Debug: verify ALL matched playlists actually match the pattern
-        const suspicious = gotPlaylists.filter((p: Playlist) => {
-          const nameLower = p.name.toLowerCase();
-          // Check if it's an output playlist (should be excluded)
-          if (nameLower.includes('game of tones output') || nameLower.includes('gameoftones output')) {
-            return true; // This shouldn't be in the list
-          }
-          const startsWithGot = /^got\s*[-�:]*\s*/i.test(p.name);
-          const containsGameOfTones = nameLower.includes('game of tones') || nameLower.includes('gameoftones');
-          return !startsWithGot && !containsGameOfTones;
-        });
-        if (suspicious.length > 0) {
-          console.warn(`?? Found ${suspicious.length} playlists that don't match GoT pattern or are output playlists:`, suspicious.slice(0, 20).map((p: Playlist) => `"${p.name}"`));
-        } else {
-          console.log(`? All ${gotPlaylists.length} matched playlists verified (GoT pattern, excluding output playlists)`);
-        }
-        
-        // Debug: show some examples of what will be displayed (with prefix stripped)
-        if (stripGoTPrefix) {
-          const displayExamples = gotPlaylists.slice(0, 10).map((p: Playlist) => {
-            const displayName = p.name.replace(/^GoT\s*[-�:]*\s*/i, '');
-            return `"${p.name}" ? "${displayName}"`;
-          });
-          console.log(`?? Display examples (with prefix stripped):`, displayExamples);
-        }
         
         setPlaylists(allPlaylists);
         // Reset filter to GoT-only by default when playlists are reloaded
         setShowAllPlaylists(false);
         // Don't set visiblePlaylists here - let the useEffect handle it to ensure consistency
-        console.log('Playlists loaded:', gotPlaylists.length, 'GoT playlists will be shown by default (from', allPlaylists.length, 'total playlists)');
 
         const inline = data.explicitStatsByPlaylistId as
           | Record<string, { total?: number; explicitCount?: number }>
@@ -617,6 +583,7 @@ const HostView: React.FC = () => {
           }
         }
       } else {
+        setSpotifyMyPlaylistsTotal(null);
         console.error('Failed to load playlists:', data.error);
         if (data && data.error === 'spotify_rate_limited') {
           const ra = typeof data.retryAfterSec === 'number' ? data.retryAfterSec : null;
@@ -627,6 +594,7 @@ const HostView: React.FC = () => {
         }
       }
     } catch (error) {
+      setSpotifyMyPlaylistsTotal(null);
       console.error('Error loading playlists:', error);
     }
   }, []);
@@ -679,6 +647,35 @@ const HostView: React.FC = () => {
     });
     return rows;
   }, [filteredPlaylists, playlistSort]);
+
+  /** Shown when the library table has no rows (search, filter, or all assigned to rounds). */
+  const playlistLibraryEmptyMessage = useMemo(() => {
+    const q = playlistQuery.trim();
+    if (q) return 'No playlists match your search.';
+    if (spotifyMyPlaylistsTotal === 0) {
+      return 'Spotify reports 0 playlists for the connected account. In the Spotify app, create a named playlist, then use Refresh. (Liked Songs is not always listed the same as user playlists.)';
+    }
+    if (!playlists.length) {
+      if (spotifyMyPlaylistsTotal != null && spotifyMyPlaylistsTotal > 0) {
+        return 'Spotify has playlists, but this list hides names that start with "TEMPO". Rename those in Spotify or add other playlists to use the host library here.';
+      }
+      return 'No available playlists.';
+    }
+    const base = filterBasePlaylistsForMix(playlists, showAllPlaylists);
+    if (base.length === 0) {
+      if (!showAllPlaylists) {
+        return `Spotify returned ${playlists.length} playlist(s), but none match GoT picks (name starts with "GoT" or contains "Game of Tones"). Use "All my playlists" to see your full library.`;
+      }
+      return 'No available playlists.';
+    }
+    const hasUnassigned = base.some(
+      (p) => !assignedPlaylistIds.has(normalizeSpotifyPlaylistId(p.id))
+    );
+    if (!hasUnassigned) {
+      return 'Every playlist in this view is already assigned to a round. Remove one from a round or add playlists in Spotify.';
+    }
+    return 'No available playlists.';
+  }, [playlistQuery, playlists, showAllPlaylists, assignedPlaylistIds, spotifyMyPlaylistsTotal]);
 
   /**
    * Union of library + table row ids, with visible rows first so the first batch request
@@ -746,19 +743,10 @@ const HostView: React.FC = () => {
   useEffect(() => {
     if (playlists && playlists.length > 0) {
       const basePlaylists = filterBasePlaylistsForMix(playlists, showAllPlaylists);
-
-      console.log(`?? Filter applied: showAllPlaylists=${showAllPlaylists}, total playlists=${playlists.length}, filtered to=${basePlaylists.length}`);
-      if (!showAllPlaylists && basePlaylists.length > 0) {
-        console.log(`? Sample filtered playlists (first 10):`, basePlaylists.slice(0, 10).map((p: Playlist) => p.name));
-      }
-
       const availablePlaylists = basePlaylists.filter((p: Playlist) => {
         const pid = normalizeSpotifyPlaylistId(p.id);
         return pid !== '' && !assignedPlaylistIds.has(pid);
       });
-
-      console.log(`?? Final visible playlists: ${availablePlaylists.length} (after excluding ${assignedPlaylistIds.size} assigned)`);
-
       setVisiblePlaylists(availablePlaylists);
     } else if (playlists && playlists.length === 0) {
       setVisiblePlaylists([]);
@@ -4513,8 +4501,8 @@ const HostView: React.FC = () => {
                         </span>
                       </div>
                       {sortedFilteredPlaylists.length === 0 ? (
-                          <div style={{ padding: 20, textAlign: 'center', opacity: 0.7 }}>
-                            {playlistQuery ? 'No playlists match your search.' : 'No available playlists.'}
+                          <div style={{ padding: 20, textAlign: 'center', opacity: 0.7, lineHeight: 1.5 }}>
+                            {playlistLibraryEmptyMessage}
                         </div>
                         ) : (
                           sortedFilteredPlaylists.map((p) => {

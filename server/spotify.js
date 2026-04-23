@@ -367,25 +367,46 @@ class SpotifyService {
     await this._ensureCanCallWebApi('getUserPlaylists');
 
     try {
-      const playlists = [];
+      const raw = [];
       let offset = 0;
       const limit = 50;
+      let spotifyListTotal = null;
+      let isFirst = true;
 
       // Use direct Web API so `tracks.total` matches Spotify JSON (Node SDK can omit/reshape fields).
       while (true) {
         const path = `/v1/me/playlists?limit=${limit}&offset=${offset}`;
         const { body } = await this._webApiGet(path, 'getUserPlaylists');
+        if (isFirst && body && typeof body.total === 'number' && body.total >= 0) {
+          spotifyListTotal = body.total;
+          isFirst = false;
+        } else if (isFirst) {
+          isFirst = false;
+        }
         const items = (body && Array.isArray(body.items) ? body.items : []) || [];
 
         if (items.length === 0) break;
 
-        playlists.push(...items);
+        raw.push(...items);
         offset += limit;
 
         if (items.length < limit) break;
       }
 
-      return playlists.map((playlist) => ({
+      if (
+        spotifyListTotal != null &&
+        spotifyListTotal > 0 &&
+        raw.length === 0
+      ) {
+        console.error(
+          `getUserPlaylists: Spotify /v1/me/playlists total=${spotifyListTotal} but no items were returned (offset 0) — check API response shape or token scopes.`
+        );
+      }
+      if (raw.length > 0 && spotifyListTotal === 0) {
+        console.warn('getUserPlaylists: got playlist rows but spotifyListTotal=0 (unexpected).');
+      }
+
+      const playlists = raw.map((playlist) => ({
         id: playlist.id,
         name: playlist.name,
         description: playlist.description,
@@ -397,6 +418,7 @@ class SpotifyService {
             ? playlist.owner.display_name
             : 'Unknown',
       }));
+      return { playlists, spotifyListTotal };
     } catch (error) {
       if (this.isRateLimitError(error)) {
         this.applyRateLimitQuarantine(error, 'getUserPlaylists');

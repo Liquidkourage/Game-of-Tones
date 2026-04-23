@@ -660,7 +660,13 @@ class MultiTenantSpotifyManager {
       // Tokens are applied via setTokens() after OAuth, or ensureOrgTokensLoaded() from DB.
       // Do NOT call async loadOrgTokens here without await (would store a Promise in orgTokens).
     }
-    return this.orgServices.get(organizationId);
+    const service = this.orgServices.get(organizationId);
+    // After invalidateUserService, the new SpotifyService has no tokens even though orgTokens may still hold them.
+    const tok = this.orgTokens.get(organizationId);
+    if (tok && tok.accessToken && (!service.accessToken || !service.refreshToken)) {
+      service.setTokens(tok.accessToken, tok.refreshToken);
+    }
+    return service;
   }
 
   /**
@@ -7030,12 +7036,16 @@ function sendSpotifyWebApiErrorIfNeeded(res, error) {
 
 app.get('/api/spotify/playlists', async (req, res) => {
   try {
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    if (uid == null) {
+      return res.status(401).json({ error: 'login_required', message: 'Sign in with Google to load playlists.' });
+    }
+    const orgId = `user_${uid}`;
+    await multiTenantSpotify.ensureOrgTokensLoaded(orgId);
     const svc = spotifyForRequest(req);
     if (!svc) {
       return res.status(401).json({ error: 'login_required', message: 'Sign in with Google to load playlists.' });
     }
-    const uid = hostAuth.getHostUserIdFromRequest(req);
-    const orgId = `user_${uid}`;
     const orgTokens = multiTenantSpotify.getTokens(orgId);
     if (!orgTokens) {
       return res.status(401).json({
@@ -7050,7 +7060,7 @@ app.get('/api/spotify/playlists', async (req, res) => {
         retryAfterSec: svc.getQuarantineRemainingSec(),
       });
     }
-    const playlists = await svc.getUserPlaylists();
+    const { playlists, spotifyListTotal } = await svc.getUserPlaylists();
 
     const wantExplicitStats =
       req.query.includeExplicitStats === '1' ||
@@ -7097,6 +7107,8 @@ app.get('/api/spotify/playlists', async (req, res) => {
       success: true,
       playlists,
       organizationId: orgId,
+      /** Spotify PagingObject total from /v1/me/playlists (same account as the access token). */
+      spotifyListTotal: spotifyListTotal != null ? spotifyListTotal : undefined,
       ...(explicitStatsByPlaylistId !== undefined && { explicitStatsByPlaylistId }),
     });
   } catch (error) {
