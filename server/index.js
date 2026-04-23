@@ -1005,7 +1005,9 @@ function startSimpleContextMonitor(roomId, deviceId) {
       }
       
       // Get current playback state to check device
-      const state = await spotifyFor(roomId).getCurrentPlaybackState();
+      const spMon = spotifyFor(roomId);
+      const state = await spMon.getCurrentPlaybackState();
+      if (state == null && spMon._playbackNullDueToRateLimit) return;
       const currentDeviceId = state?.device?.id;
       
       // CRITICAL: Check if playback has switched to a different device
@@ -1077,8 +1079,8 @@ function startSimpleContextMonitor(roomId, deviceId) {
     } catch (_e) {
       // Ignore monitor errors to prevent spam
     }
-  }, 3000); // Check every 3 seconds - more frequent to catch device switches quickly
-  
+  }, 6000); // Polling /v1/me/player — keep conservative to avoid Spotify rate limits
+
   roomPlaybackWatchers.set(roomId, intervalId);
 }
 
@@ -1284,7 +1286,9 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
     try {
       const room = rooms.get(roomId);
       if (!room || room.gameState !== 'playing') { clearPlaybackWatcher(roomId); return; }
-      const state = await spotifyFor(roomId).getCurrentPlaybackState();
+      const spPlayback = spotifyFor(roomId);
+      const state = await spPlayback.getCurrentPlaybackState();
+      if (state == null && spPlayback._playbackNullDueToRateLimit) return;
       const isPlaying = !!state?.is_playing;
       const currentId = state?.item?.id;
       const progress = Number(state?.progress_ms || 0);
@@ -1388,7 +1392,17 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
         // Surface a warning with context info to host
         try {
           const ctx = await spotifyFor(roomId).getCurrentPlaybackState();
-          const devices = await spotifyFor(roomId).getUserDevices();
+          let devices = [];
+          const r = rooms.get(roomId);
+          const devGate = 60000; // do not list devices on every correction (extra API weight)
+          if (r && (!r._lastPlaybackDiagDeviceFetchAt || now - r._lastPlaybackDiagDeviceFetchAt > devGate)) {
+            r._lastPlaybackDiagDeviceFetchAt = now;
+            try {
+              devices = (await spotifyFor(roomId).getUserDevices()) || [];
+            } catch (_) {
+              devices = [];
+            }
+          }
           const ctxUri = ctx?.context?.uri || '(none)';
           const ctxName = ctx?.item?.name || '(unknown track)';
           const ctxArtist = ctx?.item?.artists?.map?.((a) => a?.name).filter(Boolean).join(', ') || '';
@@ -1463,13 +1477,17 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
         }
       }
       
-      // Also enforce repeat mode but it's secondary to the pause strategy
+      // Enforce repeat mode (throttled: avoid setRepeat on every poll tick)
       if (room.temporaryPlaylistId && state?.repeat_state !== 'track') {
-        try {
-          console.log(`🔄 Enforcing repeat 'track' mode (was: ${state?.repeat_state})`);
-          await spotifyFor(roomId).setRepeatState('track', deviceId);
-        } catch (e) {
-          console.warn('⚠️ Failed to enforce repeat mode:', e?.message);
+        const rptLast = room._lastRepeatEnforceAtMs || 0;
+        if (now - rptLast > 20000) {
+          room._lastRepeatEnforceAtMs = now;
+          try {
+            console.log(`🔄 Enforcing repeat 'track' mode (was: ${state?.repeat_state})`);
+            await spotifyFor(roomId).setRepeatState('track', deviceId);
+          } catch (e) {
+            console.warn('⚠️ Failed to enforce repeat mode:', e?.message);
+          }
         }
       }
       
@@ -1484,7 +1502,8 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
     } catch (_e) {
       // ignore
     }
-  }, ((room && room.superStrictLock && room.stormUntilMs && Date.now() < room.stormUntilMs) ? 1500 : (strict ? 2000 : Math.max(2500, Math.min(5000, snippetMs / 6)))));
+  // Intervals: avoid sustained sub-3s polling of /v1/me/player (Spotify quota + enforcement risk)
+  }, ((room && room.superStrictLock && room.stormUntilMs && Date.now() < room.stormUntilMs) ? 4000 : (strict ? 4000 : Math.max(5000, Math.min(10000, snippetMs / 4)))));
   roomPlaybackWatchers.set(roomId, intervalId);
 }
 
@@ -2069,14 +2088,18 @@ io.on('connection', (socket) => {
       room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
       if (!room.calledSongIds.includes(room.currentSong.id)) {
         room.calledSongIds.push(room.currentSong.id);
-        console.log(`📝 BINGO CALL: Marked current song as played BEFORE validation: ${room.currentSong.name} (${room.currentSong.id})`);
+        logger.debug(`📝 BINGO CALL: Marked current song as played BEFORE validation: ${room.currentSong.name} (${room.currentSong.id})`);
       } else {
-        console.log(`✅ BINGO CALL: Current song already in played list: ${room.currentSong.name} (${room.currentSong.id})`);
+        logger.debug(`✅ BINGO CALL: Current song already in played list: ${room.currentSong.name} (${room.currentSong.id})`);
       }
-      console.log(`📋 BINGO CALL: Total played songs before validation: ${room.calledSongIds.length}`);
     } else {
       console.warn(`⚠️ BINGO CALL: No current song to mark as played! This could cause validation issues.`);
     }
+    logger.log(
+      `Bingo: ${player.name} — ${(room.calledSongIds || []).length} call(s) on list, validating…`,
+      'bingo-call-summary',
+      20
+    );
     
     const validationResult = validateBingoForPattern(player.bingoCard, room);
 
@@ -2159,8 +2182,12 @@ io.on('connection', (socket) => {
       const calledIds = room.calledSongIds || [];
       const missingFromPlaylist = [];
       
-      console.log(`🔍 BINGO VERIFICATION: Building played songs list from ${calledIds.length} called IDs`);
-      console.log(`🔍 Called song IDs: [${calledIds.join(', ')}]`);
+      logger.debug(`🔍 BINGO VERIFICATION: Building played songs list from ${calledIds.length} called IDs`);
+      const idSample =
+        calledIds.length <= 12
+          ? calledIds.join(', ')
+          : `${calledIds.slice(0, 8).join(', ')} … +${calledIds.length - 8} more`;
+      logger.debug(`🔍 Called song IDs (sample): [${idSample}]`);
       
       for (const songId of calledIds) {
         // Find the song in the playlist
@@ -2171,14 +2198,20 @@ io.on('connection', (socket) => {
             name: foundSong.name,
             artist: foundSong.artist
           });
-          console.log(`✅ Found played song: ${foundSong.name} by ${foundSong.artist}`);
         } else {
           missingFromPlaylist.push(songId);
           console.warn(`⚠️ Song ID ${songId} in calledSongIds but NOT found in room.playlistSongs`);
         }
       }
       
-      console.log(`📊 VERIFICATION SUMMARY: ${actuallyPlayedSongs.length} played songs found, ${missingFromPlaylist.length} missing from playlist`);
+      logger.log(
+        `Bingo verify: ${actuallyPlayedSongs.length} resolved from playlist, ${missingFromPlaylist.length} id(s) missing (player ${player.name})`,
+        'bingo-verify-summary',
+        20
+      );
+      logger.debug(
+        `📊 VERIFICATION: first songs ${actuallyPlayedSongs.slice(0, 3).map(s => s.name).join('; ') || '—'} … (${actuallyPlayedSongs.length} total)`
+      );
       if (missingFromPlaylist.length > 0) {
         console.warn(`🚨 MISSING SONGS: [${missingFromPlaylist.join(', ')}] - This could indicate a data integrity issue`);
       }
@@ -2194,18 +2227,28 @@ io.on('connection', (socket) => {
       
       // Validate marked squares data using the source card
       const markedSquares = sourceCard.squares.filter(s => s.marked);
-      console.log(`🔍 MARKED SQUARES: Player has ${markedSquares.length} marked squares`);
-      console.log(`🔍 VERIFICATION DEBUG: Using ${room.bingoCards?.get(socket.id) ? 'room.bingoCards' : 'player.bingoCard'} as source`);
-      markedSquares.forEach((square, index) => {
-        const wasPlayed = actuallyPlayedSongs.some(played => played.id === square.songId);
-        console.log(`${index + 1}. ${square.songName} by ${square.artistName} (${square.songId}) - ${wasPlayed ? '✅ PLAYED' : '❌ NOT PLAYED'}`);
-      });
-      
-      // Debug: Verify card has marked properties before sending
+      const notPlayedMarks = markedSquares.filter(
+        (sq) => !actuallyPlayedSongs.some((p) => p.id === sq.songId) && !sq.isFreeSpace
+      );
+      logger.debug(`🔍 MARKED SQUARES: ${markedSquares.length} marked; ${notPlayedMarks.length} not in played list (non-free)`);
+      logger.debug(
+        `🔍 Card source: ${room.bingoCards?.get(socket.id) ? 'room.bingoCards' : 'player.bingoCard'}`
+      );
+      if (notPlayedMarks.length) {
+        logger.warn(
+          `⚠️ Bingo host verify: ${notPlayedMarks.length} marked square(s) not in playedSongs: ${notPlayedMarks
+            .slice(0, 5)
+            .map((s) => s.songId)
+            .join(', ')}${notPlayedMarks.length > 5 ? '…' : ''}`
+        );
+      }
       const markedCount = sourceCard.squares.filter(s => s.marked).length;
-      console.log(`🔍 VERIFICATION DEBUG: Card has ${markedCount} marked squares out of ${sourceCard.squares.length} total`);
-      console.log(`🔍 VERIFICATION DEBUG: Sample square marked state:`, sourceCard.squares[0]?.marked);
-      console.log(`🔍 VERIFICATION DEBUG: Marked squares positions:`, sourceCard.squares.filter(s => s.marked).map(s => `${s.position} (${s.songName})`));
+      logger.debug(
+        `🔍 Card: ${markedCount} marked / ${sourceCard.squares.length} sq; positions: ${sourceCard.squares
+          .filter((s) => s.marked)
+          .map((s) => s.position)
+          .join(', ')}`
+      );
       
       // Create a deep copy to ensure we're sending fresh data
       const cardToSend = {
@@ -5583,25 +5626,27 @@ function validateBingoForPattern(card, room) {
   // This ensures validation works even if current song hasn't been added to calledSongIds yet
   if (room?.currentSong?.id && !playedSongIds.includes(room.currentSong.id)) {
     playedSongIds.push(room.currentSong.id);
-    console.log(`🎯 Added current song to validation list: ${room.currentSong.name} (${room.currentSong.id})`);
+    logger.debug(`🎯 Added current song to validation list: ${room.currentSong.name} (${room.currentSong.id})`);
   }
   
-  console.log(`🎯 Validating bingo for pattern: "${pattern}" (room pattern: "${room?.pattern}")`);
-  console.log(`🎯 Played songs count: ${playedSongIds.length}`);
-  console.log(`🎯 Called song IDs:`, playedSongIds.slice(-10)); // Show last 10 for debugging
-  console.log(`🎯 Card has ${card.squares.length} squares, ${card.squares.filter(s => s.marked).length} marked`);
+  logger.debug(`🎯 Validating bingo for pattern: "${pattern}" (room pattern: "${room?.pattern}")`);
+  logger.debug(`🎯 Played songs count: ${playedSongIds.length}`);
+  logger.debug(`🎯 Called song IDs (last 10): ${JSON.stringify(playedSongIds.slice(-10))}`);
+  logger.debug(`🎯 Card has ${card.squares.length} squares, ${card.squares.filter(s => s.marked).length} marked`);
   
   // Debug: Show card song IDs vs played song IDs
   const cardSongIds = card.squares.map(s => s.songId);
   const markedCardSongIds = card.squares.filter(s => s.marked).map(s => s.songId);
-  console.log(`🎯 Card song IDs (first 10):`, cardSongIds.slice(0, 10));
-  console.log(`🎯 Marked card song IDs (first 10):`, markedCardSongIds.slice(0, 10));
+  logger.debug(`🎯 Card song IDs (first 10): ${JSON.stringify(cardSongIds.slice(0, 10))}`);
+  logger.debug(`🎯 Marked card song IDs (first 10): ${JSON.stringify(markedCardSongIds.slice(0, 10))}`);
   
   // Helper function to check if a marked square corresponds to a played song (or free space)
   const isMarkedSquareValid = (square) => {
     const isValid = square && square.marked && (square.isFreeSpace || playedSongIds.includes(square.songId));
     if (!isValid && square && square.marked) {
-      console.log(`🎯 Invalid marked square: ${square.position} - songId: ${square.songId}, marked: ${square.marked}, inPlayedList: ${playedSongIds.includes(square.songId)}`);
+      logger.debug(
+        `🎯 Invalid marked square: ${square.position} - songId: ${square.songId}, marked: ${square.marked}, inPlayedList: ${playedSongIds.includes(square.songId)}`
+      );
     }
     return isValid;
   };
@@ -5651,14 +5696,14 @@ function validateBingoForPattern(card, room) {
       }
     }
     if (invalidCount > 0) {
-      console.log(`🎯 Full card validation failed: ${invalidCount} invalid squares`);
-      console.log(`🎯 Invalid squares:`, invalidSquares.slice(0, 5)); // Log first 5 for debugging
+      logger.debug(`🎯 Full card validation failed: ${invalidCount} invalid squares`);
+      logger.debug(`🎯 Invalid squares (first 5): ${JSON.stringify(invalidSquares.slice(0, 5))}`);
       return { 
         valid: false, 
         reason: `Full card incomplete. Need ${invalidCount} more squares marked with played songs.`
       };
     }
-    console.log(`🎯 Full card validation passed: all 25 squares marked with played songs`);
+    logger.debug('🎯 Full card validation passed: all 25 squares marked with played songs');
     return { valid: true, reason: 'Full card complete!' };
   }
   
@@ -6873,6 +6918,55 @@ app.get('/api/spotify/callback', async (req, res) => {
   }
 });
 
+function isSpotifyHttp429(e) {
+  return !!(e && (e.statusCode === 429 || e?.body?.error?.status === 429));
+}
+
+function sendSpotify429IfNeeded(res, error) {
+  if (!isSpotifyHttp429(error)) return false;
+  const h = error.headers || {};
+  const ra = h['retry-after'] ?? h['Retry-After'];
+  const raNum = ra != null && !Number.isNaN(Number(ra)) ? Number(ra) : null;
+  res.status(429).json({
+    error: 'spotify_rate_limited',
+    message:
+      'Spotify is rate-limiting this application. Check the app in the Spotify Developer Dashboard; the server will avoid hammering the API until Retry-After elapses.',
+    retryAfterSec: raNum,
+  });
+  return true;
+}
+
+/** Map Web API / HTTP layer errors to JSON for clients; returns true if response was sent. */
+function sendSpotifyWebApiErrorIfNeeded(res, error) {
+  if (sendSpotify429IfNeeded(res, error)) return true;
+  const sc = Number(
+    error?.statusCode ?? error?.body?.error?.status ?? error?.code ?? 0
+  );
+  if (!sc) return false;
+  const msg =
+    (error.body && error.body.error && (error.body.error.message || String(error.body.error))) ||
+    error?.message ||
+    'Spotify request failed';
+  const payload = { error: 'spotify_error', message: msg, status: sc, details: error?.body || null };
+  if (sc === 401) {
+    res.status(401).json({ ...payload, error: 'spotify_unauthorized' });
+    return true;
+  }
+  if (sc === 403) {
+    res.status(403).json({ ...payload, error: 'spotify_forbidden' });
+    return true;
+  }
+  if (sc === 404) {
+    res.status(404).json({ ...payload, error: 'spotify_not_found' });
+    return true;
+  }
+  if (sc >= 500 && sc < 600) {
+    res.status(502).json({ ...payload, error: 'spotify_unavailable' });
+    return true;
+  }
+  return false;
+}
+
 app.get('/api/spotify/playlists', async (req, res) => {
   try {
     const svc = spotifyForRequest(req);
@@ -6886,6 +6980,13 @@ app.get('/api/spotify/playlists', async (req, res) => {
       return res.status(401).json({
         error: `Spotify not connected for ${orgId}`,
         organizationId: orgId,
+      });
+    }
+    if (svc.isQuarantined()) {
+      return res.status(429).json({
+        error: 'spotify_rate_limited',
+        message: 'Spotify API quarantine active (recent 429). Try again after Retry-After.',
+        retryAfterSec: svc.getQuarantineRemainingSec(),
       });
     }
     const playlists = await svc.getUserPlaylists();
@@ -6938,6 +7039,7 @@ app.get('/api/spotify/playlists', async (req, res) => {
       ...(explicitStatsByPlaylistId !== undefined && { explicitStatsByPlaylistId }),
     });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('Error getting playlists:', error);
     res.status(500).json({ error: 'Failed to get playlists' });
   }
@@ -6949,6 +7051,7 @@ app.get('/api/spotify/playlists/:playlistId/tracks', async (req, res) => {
     const tracks = await spotifyForRequest(req).getPlaylistTracks(playlistId);
     res.json(tracks);
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('Error getting playlist tracks:', error);
     res.status(500).json({ error: 'Failed to get playlist tracks' });
   }
@@ -6964,6 +7067,14 @@ app.get('/api/spotify/devices', async (req, res) => {
       return res.status(401).json({ error: 'Spotify not connected', organizationId: orgId });
     }
 
+    const spotifyReq = spotifyForRequest(req);
+    if (spotifyReq && spotifyReq.isQuarantined()) {
+      return res.status(429).json({
+        error: 'spotify_rate_limited',
+        message: 'Spotify API quarantine active (recent 429).',
+        retryAfterSec: spotifyReq.getQuarantineRemainingSec(),
+      });
+    }
     console.log(`📱 Fetching available Spotify devices (org ${orgId})...`);
     const devices = await spotifyForRequest(req).getUserDevices();
     let currentPlayback = null;
@@ -7003,6 +7114,7 @@ app.get('/api/spotify/devices', async (req, res) => {
       currentDevice: currentDevice
     });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('Error getting devices:', error);
     res.status(500).json({ error: 'Failed to retrieve devices' });
   }
@@ -7041,6 +7153,7 @@ app.post('/api/spotify/play', async (req, res) => {
     await spotifyForRequest(req).startPlayback(deviceId, uris, position);
     res.json({ success: true, message: 'Playback started' });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('Error starting playback:', error);
     res.status(500).json({ error: 'Failed to start playback' });
   }
@@ -7052,6 +7165,7 @@ app.post('/api/spotify/pause', async (req, res) => {
     await spotifyForRequest(req).pausePlayback(deviceId);
     res.json({ success: true, message: 'Playback paused' });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('Error pausing playback:', error);
     res.status(500).json({ error: 'Failed to pause playback' });
   }
@@ -7063,6 +7177,7 @@ app.post('/api/spotify/next', async (req, res) => {
     await spotifyForRequest(req).nextTrack(deviceId);
     res.json({ success: true, message: 'Skipped to next track' });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('Error skipping track:', error);
     res.status(500).json({ error: 'Failed to skip track' });
   }
@@ -7109,6 +7224,7 @@ app.post('/api/spotify/transfer', async (req, res) => {
       currentPlayback
     });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     const msg = error?.body?.error?.message || error?.message || 'Unknown error';
     console.error('❌ Error transferring playback:', msg);
     res.status(500).json({ success: false, error: msg });
@@ -7120,6 +7236,7 @@ app.get('/api/spotify/current', async (req, res) => {
     const track = await spotifyForRequest(req).getCurrentTrack();
     res.json(track);
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('Error getting current track:', error);
     res.status(500).json({ error: 'Failed to get current track' });
   }
@@ -7164,6 +7281,7 @@ app.post('/api/spotify/shuffle', async (req, res) => {
     await spotifyForRequest(req).setShuffleState(!!shuffle, deviceId);
     res.json({ success: true });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('❌ Error setting shuffle:', error);
     res.status(500).json({ success: false, error: 'Failed to set shuffle' });
   }
@@ -7179,6 +7297,7 @@ app.post('/api/spotify/repeat', async (req, res) => {
     await spotifyForRequest(req).setRepeatState(state, deviceId);
     res.json({ success: true });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('❌ Error setting repeat:', error);
     res.status(500).json({ success: false, error: 'Failed to set repeat' });
   }
@@ -7191,6 +7310,7 @@ app.post('/api/spotify/previous', async (req, res) => {
     await spotifyForRequest(req).previousTrack(deviceId);
     res.json({ success: true });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('❌ Error going to previous track:', error);
     res.status(500).json({ success: false, error: 'Failed to go to previous track' });
   }
@@ -7204,6 +7324,7 @@ app.post('/api/spotify/queue', async (req, res) => {
     await spotifyForRequest(req).addToQueue(uri, deviceId);
     res.json({ success: true });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('❌ Error adding to queue:', error);
     res.status(500).json({ success: false, error: 'Failed to add to queue' });
   }
@@ -7237,6 +7358,7 @@ app.post('/api/spotify/force-device', async (req, res) => {
       });
     }
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('Error forcing device detection:', error);
     res.status(500).json({ 
       success: false, 
@@ -7269,6 +7391,7 @@ app.post('/api/spotify/refresh', async (req, res) => {
     console.log('✅ Spotify access token refreshed successfully');
     res.json({ success: true, message: 'Spotify connection refreshed' });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('❌ Error refreshing Spotify connection:', error);
     res.status(500).json({ error: 'Failed to refresh Spotify connection' });
   }
@@ -7304,6 +7427,7 @@ app.post('/api/spotify/volume', async (req, res) => {
     console.log('✅ Volume set successfully');
     res.json({ success: true, message: 'Volume updated' });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('❌ Error setting volume:', error);
     res.status(500).json({ error: 'Failed to set volume' });
   }
@@ -7330,6 +7454,7 @@ app.post('/api/spotify/seek', async (req, res) => {
     console.log('✅ Seek successful');
     res.json({ success: true, message: 'Seek completed' });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('❌ Error seeking:', error);
     res.status(500).json({ error: 'Failed to seek' });
   }
@@ -7341,11 +7466,19 @@ app.get('/api/spotify/current-playback', async (req, res) => {
     if (!hostSpotifyHasTokens(req)) {
       return res.status(401).json({ success: false, error: 'Spotify not connected' });
     }
-    
-    await spotifyForRequest(req).ensureValidToken();
-    const playback = await spotifyForRequest(req).getCurrentPlaybackState();
+    const s = spotifyForRequest(req);
+    if (s && s.isQuarantined() && s.getQuarantineRemainingSec() > 0) {
+      return res.status(429).json({
+        success: false,
+        error: 'spotify_rate_limited',
+        retryAfterSec: s.getQuarantineRemainingSec(),
+      });
+    }
+    await s.ensureValidToken();
+    const playback = await s.getCurrentPlaybackState();
     res.json({ success: true, playbackState: playback || null });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('❌ Error getting current playback:', error);
     res.status(500).json({ success: false, error: 'Failed to get current playback' });
   }
@@ -7382,6 +7515,7 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
       tracks: tracks
     });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('❌ Error getting playlist tracks:', error);
     res.status(500).json({ error: 'Failed to get playlist tracks' });
   }
@@ -7416,6 +7550,7 @@ app.post('/api/spotify/playlists/explicit-stats-batch', async (req, res) => {
     const results = await mapPlaylistIdsWithConcurrency(ids, 8, (pid) => svc.getPlaylistExplicitStats(pid));
     res.json({ results });
   } catch (e) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, e)) return;
     console.error('POST /api/spotify/playlists/explicit-stats-batch:', e);
     res.status(500).json({ error: 'Failed to load explicit stats' });
   }
@@ -7449,6 +7584,7 @@ app.post('/api/spotify/create-output-playlist', async (req, res) => {
       trackCount: trackIds.length
     });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('Error creating output playlist:', error);
     res.status(500).json({ error: 'Failed to create output playlist' });
   }
@@ -7469,6 +7605,7 @@ app.get('/api/spotify/got-playlists', async (req, res) => {
       playlists: playlists
     });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('Error getting Game Of Tones playlists:', error);
     res.status(500).json({ error: 'Failed to get playlists' });
   }
@@ -7511,6 +7648,7 @@ app.post('/api/spotify/delete-playlists', async (req, res) => {
       results: results
     });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('❌ Error deleting playlists:', error);
     console.error('❌ Error stack:', error.stack);
     res.status(500).json({ error: 'Failed to delete playlists', details: error.message });
@@ -7539,6 +7677,7 @@ app.get('/api/spotify/search-tracks', async (req, res) => {
       tracks: tracks
     });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('Error searching tracks:', error);
     res.status(500).json({ error: 'Failed to search tracks', details: error.message });
   }
@@ -7722,6 +7861,7 @@ app.post('/api/spotify/replace-song', async (req, res) => {
     });
     
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('Error replacing song:', error);
     res.status(500).json({ error: 'Failed to replace song', details: error.message });
   }
@@ -7775,6 +7915,7 @@ app.post('/api/spotify/suggest-songs', async (req, res) => {
       }
     });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('❌ Error generating song suggestions:', error);
     
     // Provide more specific error messages based on the error type
@@ -8285,6 +8426,7 @@ app.post('/api/spotify/resume', async (req, res) => {
     console.log('✅ Playback resumed successfully');
     res.json({ success: true, message: 'Playback resumed' });
   } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('❌ Error resuming playback:', error);
     res.status(500).json({ error: 'Failed to resume playback' });
   }
@@ -8297,6 +8439,9 @@ function startDeviceKeepAlive() {
   setInterval(async () => {
     try {
       if (spotifyTokens && spotifyTokens.accessToken) {
+        if (typeof spotifyServiceDefault.isQuarantined === 'function' && spotifyServiceDefault.isQuarantined()) {
+          return;
+        }
         await spotifyServiceDefault.ensureValidToken();
         
         // Only activate device if no active games are playing (to avoid interrupting songs)
@@ -8381,6 +8526,9 @@ async function autoConnectSpotify() {
 // Activate the preferred device automatically
 async function activatePreferredDevice() {
   try {
+    if (typeof spotifyServiceDefault.isQuarantined === 'function' && spotifyServiceDefault.isQuarantined()) {
+      return;
+    }
     console.log('🔧 Activating preferred device...');
     
     // Get available devices

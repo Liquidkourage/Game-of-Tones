@@ -35,13 +35,15 @@
    # Server Configuration
    PORT=5000
    NODE_ENV=development
-   CLIENT_URL=http://localhost:3000
+   CLIENT_URL=http://127.0.0.1:3000
 
        # Spotify API Configuration
     SPOTIFY_CLIENT_ID=your_actual_client_id_here
     SPOTIFY_CLIENT_SECRET=your_actual_client_secret_here
     SPOTIFY_REDIRECT_URI=http://127.0.0.1:3002/callback
    ```
+
+   Use **`http://127.0.0.1`** (not `http://localhost`) for local redirect URIs where possible — it matches Spotify’s redirect URI rules. Production must use **HTTPS**. If the app’s requested OAuth **scopes** change in code, register the same redirect URI and have each host **disconnect and connect Spotify again** so Spotify issues a token with the new scopes.
 
 ## Step 3: Start the Application
 

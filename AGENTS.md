@@ -14,6 +14,11 @@
 - **This repo:** `AGENTS.md` (this file) is loaded for the workspace—keep the rule above here.
 - **All your projects:** add the same instruction under **Cursor Settings → Rules → User rules** (global), or create **`.cursor/rules/*.mdc`** in a repo with `alwaysApply: true` so every chat in that project follows it.
 
+## Spotify Web API
+
+- Follow the [OpenAPI schema](https://developer.spotify.com/reference/web-api/open-api-schema.yaml) for paths and shapes; playlist track pages use `GET /v1/playlists/{id}/items` in `server/spotify.js` (`_fetchPlaylistItemsPage`).
+- OAuth is Authorization Code with server-side callback (no implicit grant). After changing requested **scopes** in `getAuthorizationURL`, hosts must **re-connect Spotify** to grant new scopes.
+
 ## Repo layout
 
 - **UI:** `client/src/` (React, `PlayerView`, `HostView`, etc.)

@@ -1040,6 +1040,8 @@ const HostView: React.FC = () => {
 
   /** Mirrors connection state for unload handlers (avoid stale closures). */
   const isSpotifyConnectedRef = useRef(false);
+  /** Back off host polling of /api/spotify/current-playback when server returns 429. */
+  const spotifyPollBackoffUntilRef = useRef(0);
   useEffect(() => {
     isSpotifyConnectedRef.current = isSpotifyConnected;
   }, [isSpotifyConnected]);
@@ -3366,7 +3368,20 @@ const HostView: React.FC = () => {
     if (!currentSong) return;
     const playbackSyncInterval = setInterval(async () => {
       try {
+        if (Date.now() < spotifyPollBackoffUntilRef.current) return;
         const resp = await hostFetch(`${API_BASE || ''}/api/spotify/current-playback`);
+        if (resp.status === 429) {
+          let j: { retryAfterSec?: number } = {};
+          try {
+            j = (await resp.json()) as { retryAfterSec?: number };
+          } catch {
+            /* ignore */
+          }
+          const ra = Number(j.retryAfterSec);
+          const sec = Number.isFinite(ra) && ra > 0 ? Math.min(86400, ra) : 3600;
+          spotifyPollBackoffUntilRef.current = Date.now() + sec * 1000;
+          return;
+        }
         if (!resp.ok) {
           if (resp.status >= 500) return; // ignore 5xx
           return;
@@ -3399,7 +3414,7 @@ const HostView: React.FC = () => {
       } catch {
         // ignore
       }
-    }, 30000); // 30s throttle
+    }, 60000); // 60s: reduce Spotify Web API load via /current-playback
     return () => clearInterval(playbackSyncInterval);
   }, [currentSong, isPlaying, isPausedByInterface]);
 
@@ -3823,6 +3838,35 @@ const HostView: React.FC = () => {
           <div className="playback-device-section playback-device-section--unified">{playbackDeviceContent}</div>
         )}
       </div>
+      <p
+        className="spotify-attribution"
+        style={{
+          fontSize: '0.72rem',
+          color: 'rgba(200, 210, 220, 0.78)',
+          marginTop: 14,
+          lineHeight: 1.45,
+        }}
+      >
+        Music metadata and playback control use the{' '}
+        <a
+          href="https://developer.spotify.com/documentation/web-api"
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: 'inherit', textDecoration: 'underline' }}
+        >
+          Spotify Web API
+        </a>
+        . Spotify® is a trademark of Spotify AB. See the{' '}
+        <a
+          href="https://developer.spotify.com/terms"
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: 'inherit', textDecoration: 'underline' }}
+        >
+          Spotify Developer Terms
+        </a>
+        .
+      </p>
     </motion.div>
   );
 
