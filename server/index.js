@@ -6867,6 +6867,20 @@ function roomIdFromSpotifyStatePayload(state) {
   }
 }
 
+/** User-safe detail for client when token exchange or OAuth pre-check fails. */
+function spotifyCallbackUserMessage(err) {
+  const body = err?.body;
+  const desc = body && (body.error_description || body.error);
+  if (typeof desc === 'string' && desc.length > 0) {
+    const s = desc.length > 220 ? `${desc.slice(0, 217)}…` : desc;
+    return s;
+  }
+  if (err?.message && typeof err.message === 'string' && !err.message.includes('Webapi')) {
+    return err.message.length > 220 ? `${err.message.slice(0, 217)}…` : err.message;
+  }
+  return 'Failed to connect Spotify';
+}
+
 app.get('/api/spotify/callback', async (req, res) => {
   const { code, state } = req.query;
 
@@ -6881,8 +6895,21 @@ app.get('/api/spotify/callback', async (req, res) => {
     return res.status(400).json({ error: 'Authorization code required' });
   }
 
+  const rawState = state != null ? String(state).trim() : '';
+  const parsed = rawState ? hostAuth.verifySpotifyOAuthState(rawState) : null;
+  if (rawState && !parsed) {
+    if (shouldRedirectBrowser) {
+      return res.redirect(302, `${appBase}/?spotify_error=state`);
+    }
+    return res.status(400).json({
+      success: false,
+      error: 'oauth_state_expired',
+      message:
+        'The Spotify sign-in page was open too long, or the session was invalid. Close this tab, go back to the host room, and click Connect to Spotify again.',
+    });
+  }
+
   try {
-    const parsed = state ? hostAuth.verifySpotifyOAuthState(String(state)) : null;
     const redirectForGrant = parsed?.spotifyRedirectUri || null;
     if (parsed?.userId != null && db) {
       await organizationsStore.primeTenantSpotifyCredentials(db, multiTenantSpotify, parsed.userId);
@@ -6910,11 +6937,16 @@ app.get('/api/spotify/callback', async (req, res) => {
 
     res.json({ success: true, message: 'Spotify connected' });
   } catch (error) {
-    console.error('❌ Spotify callback failed:', error);
+    const detail = spotifyCallbackUserMessage(error);
+    console.error('❌ Spotify callback failed:', error?.body || error?.message || error);
     if (shouldRedirectBrowser) {
       return res.redirect(302, `${appBase}/?spotify_error=1`);
     }
-    res.status(500).json({ error: 'Failed to connect Spotify' });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to connect Spotify',
+      message: detail,
+    });
   }
 });
 

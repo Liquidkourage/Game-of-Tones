@@ -192,9 +192,14 @@ const SpotifyCallback: React.FC = () => {
         const response = await hostFetch(`${API_BASE || ''}/api/spotify/callback?${qs.toString()}`, {
           headers: { Accept: 'application/json' },
         });
-        const data = await response.json();
+        const data = (await response.json()) as {
+          success?: boolean;
+          message?: string;
+          error?: string;
+          tokens?: unknown;
+        };
 
-        if (data.success) {
+        if (response.ok && data.success) {
           if (data.tokens) {
             try {
               localStorage.setItem('spotify_tokens', JSON.stringify(data.tokens));
@@ -225,7 +230,11 @@ const SpotifyCallback: React.FC = () => {
           sessionStorage.removeItem('spotify_oauth_inflight');
           if (!cancelled) {
             setStatus('error');
-            setMessage('Failed to connect to Spotify. Please try again.');
+            setMessage(
+              (typeof data.message === 'string' && data.message.trim() && data.message) ||
+                (typeof data.error === 'string' && data.error.trim() && data.error) ||
+                'Failed to connect to Spotify. Please try again.',
+            );
           }
           window.setTimeout(() => navigateOnceToDest(navigate, dest, code), 2000);
         }

@@ -370,10 +370,11 @@ class SpotifyService {
         id: playlist.id,
         name: playlist.name,
         description: playlist.description,
-        tracks: playlist.tracks.total,
+        /** Simplified playlist objects may omit `tracks` in some responses — treat as 0. */
+        tracks: playlist.tracks && typeof playlist.tracks.total === 'number' ? playlist.tracks.total : 0,
         public: playlist.public,
         collaborative: playlist.collaborative,
-        owner: playlist.owner.display_name
+        owner: playlist.owner && playlist.owner.display_name != null ? playlist.owner.display_name : 'Unknown',
       }));
     } catch (error) {
       if (this.isRateLimitError(error)) {
