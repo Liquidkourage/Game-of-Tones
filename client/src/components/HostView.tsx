@@ -638,11 +638,23 @@ const HostView: React.FC = () => {
         playlist?: Playlist;
         error?: string;
         message?: string;
+        retryAfterSec?: number;
       };
       if (!res.ok) {
-        setPlaylistByLinkError(
-          d.message || d.error || (res.status === 429 ? 'Spotify is rate-limiting. Try again later.' : `Could not add (${res.status})`)
-        );
+        if (res.status === 429) {
+          const ra = typeof d.retryAfterSec === 'number' && d.retryAfterSec > 0 ? d.retryAfterSec : null;
+          const wait =
+            ra != null
+              ? ` Try again in about ${Math.max(1, Math.ceil(ra / 60))} min (Spotify’s Retry-After: ${ra}s).`
+              : ' Try again after cooldown.';
+          setPlaylistByLinkError(
+            `Spotify is rate-limiting playlist requests for this app right now, including a single link lookup — not a bad URL.${wait} Nothing in TEMPO can override Spotify’s wait window.`
+          );
+        } else {
+          setPlaylistByLinkError(
+            d.message || d.error || `Could not add (${res.status})`
+          );
+        }
         return;
       }
       if (d.playlist && d.playlist.id) {
