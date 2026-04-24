@@ -156,9 +156,9 @@ class SpotifyService {
   /**
    * Raw GET to api.spotify.com (used for /items where the Node SDK still maps older paths).
    */
-  _webApiGet(path, label) {
+  _webApiGet(path, label, { bypassQuarantine = false } = {}) {
     return new Promise((resolve, reject) => {
-      if (this.isQuarantined()) {
+      if (!bypassQuarantine && this.isQuarantined()) {
         return reject(this._makeQuarantineError(label));
       }
       if (!this.accessToken) {
@@ -428,6 +428,45 @@ class SpotifyService {
       displayName: body.display_name != null ? String(body.display_name) : null,
       product: body.product != null ? String(body.product) : null,
       country: body.country != null ? String(body.country) : null,
+    };
+  }
+
+  /**
+   * GET /v1/playlists/{id} (minimal fields) — may succeed when /v1/me/playlists is 429; used for
+   * host “add by link” fallback. Same row shape as getUserPlaylists() items.
+   * @param {object} [options]
+   * @param {boolean} [options.emergencyBypassQuarantine] - allow one read while TEMPO in-process
+   *   429 quarantine (still honors Spotify’s own 429 on the wire).
+   */
+  async getPlaylistMetadataBrief(playlistId, options = {}) {
+    const emergency = Boolean(options && options.emergencyBypassQuarantine);
+    if (emergency) {
+      await this.ensureValidToken();
+    } else {
+      await this._ensureCanCallWebApi('getPlaylistMetadataBrief');
+    }
+    const id = String(playlistId || '').trim();
+    if (!id) throw new Error('playlist id required');
+    const path = `/v1/playlists/${encodeURIComponent(id)}?fields=${encodeURIComponent(
+      'id,name,description,public,collaborative,owner(display_name),tracks.total'
+    )}`;
+    const { body } = await this._webApiGet(path, 'getPlaylistMetadataBrief', {
+      bypassQuarantine: emergency,
+    });
+    if (!body || typeof body !== 'object' || !body.id) {
+      throw new Error('Unexpected playlist response');
+    }
+    return {
+      id: String(body.id),
+      name: body.name,
+      description: body.description,
+      public: body.public,
+      collaborative: body.collaborative,
+      owner:
+        body.owner && body.owner.display_name != null
+          ? String(body.owner.display_name)
+          : 'Unknown',
+      tracks: this._playlistItemsTotalFromListItem({ tracks: body.tracks }),
     };
   }
 

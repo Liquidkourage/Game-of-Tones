@@ -916,6 +916,13 @@ async function initializeDatabase() {
     await usersStore.ensureUsersTable(db);
     await usersStore.ensureHostAllowlistTable(db);
     await organizationsStore.ensureOrganizationsTable(db);
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS host_spotify_playlist_list_cache (
+        organization_id VARCHAR(50) PRIMARY KEY,
+        data JSONB NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
     console.log('✅ Database tables initialized');
     return true;
   } catch (error) {
@@ -984,6 +991,66 @@ async function deleteTokensFromDatabase(organizationId) {
   } catch (error) {
     console.error(`❌ Failed to delete tokens for ${organizationId}:`, error);
     return false;
+  }
+}
+
+function parseSpotifyPlaylistIdFromUserInput(input) {
+  const s = String(input || '').trim();
+  if (!s) return null;
+  const mUrl = s.match(/playlist\/([a-zA-Z0-9]+)/);
+  if (mUrl) return mUrl[1];
+  const mUri = s.match(/spotify:playlist:([a-zA-Z0-9]+)/i);
+  if (mUri) return mUri[1];
+  if (/^[a-zA-Z0-9]{8,}$/.test(s) && !s.includes('/') && !s.includes(':')) {
+    return s;
+  }
+  return null;
+}
+
+async function saveHostPlaylistListCache(organizationId, { playlists, spotifyListTotal }) {
+  if (!db) return false;
+  try {
+    const payload = {
+      playlists: Array.isArray(playlists) ? playlists : [],
+      spotifyListTotal: spotifyListTotal != null && Number.isFinite(spotifyListTotal) ? spotifyListTotal : null,
+    };
+    await db.query(
+      `
+      INSERT INTO host_spotify_playlist_list_cache (organization_id, data, updated_at)
+      VALUES ($1, $2::jsonb, CURRENT_TIMESTAMP)
+      ON CONFLICT (organization_id) DO UPDATE SET data = $2::jsonb, updated_at = CURRENT_TIMESTAMP
+    `,
+      [organizationId, JSON.stringify(payload)]
+    );
+    return true;
+  } catch (e) {
+    console.error('saveHostPlaylistListCache:', e?.message || e);
+    return false;
+  }
+}
+
+async function loadHostPlaylistListCache(organizationId) {
+  if (!db) return null;
+  try {
+    const r = await db.query(
+      'SELECT data, updated_at FROM host_spotify_playlist_list_cache WHERE organization_id = $1',
+      [organizationId]
+    );
+    if (r.rows.length === 0) return null;
+    const row = r.rows[0];
+    const d = row.data;
+    if (!d || typeof d !== 'object') return null;
+    const playlists = Array.isArray(d.playlists) ? d.playlists : [];
+    const st = d.spotifyListTotal;
+    const spotifyListTotal = typeof st === 'number' && st >= 0 ? st : null;
+    return {
+      playlists,
+      spotifyListTotal,
+      updatedAt: row.updated_at,
+    };
+  } catch (e) {
+    console.error('loadHostPlaylistListCache:', e?.message || e);
+    return null;
   }
 }
 
@@ -7036,6 +7103,15 @@ app.post('/api/spotify/clear', async (req, res) => {
     if (uid != null) {
       await multiTenantSpotify.clearOrgTokens(`user_${uid}`);
       try {
+        if (db) {
+          await db.query('DELETE FROM host_spotify_playlist_list_cache WHERE organization_id = $1', [
+            `user_${uid}`,
+          ]);
+        }
+      } catch (e) {
+        console.error('clear playlist list cache:', e?.message || e);
+      }
+      try {
         const devFile = deviceFileForUserId(uid);
         if (fs.existsSync(devFile)) fs.unlinkSync(devFile);
       } catch (_) {}
@@ -7302,12 +7378,13 @@ function logSpotifyPlaylistSuccessProof(orgId, svc, { spotifyListTotal, playlist
 }
 
 app.get('/api/spotify/playlists', async (req, res) => {
+  let orgId;
   try {
     const uid = hostAuth.getHostUserIdFromRequest(req);
     if (uid == null) {
       return res.status(401).json({ error: 'login_required', message: 'Sign in with Google to load playlists.' });
     }
-    const orgId = `user_${uid}`;
+    orgId = `user_${uid}`;
     await multiTenantSpotify.ensureOrgTokensLoaded(orgId);
     const svc = spotifyForRequest(req);
     if (!svc) {
@@ -7321,6 +7398,23 @@ app.get('/api/spotify/playlists', async (req, res) => {
       });
     }
     if (svc.isQuarantined()) {
+      const cachedQ = await loadHostPlaylistListCache(orgId);
+      if (cachedQ && Array.isArray(cachedQ.playlists) && cachedQ.playlists.length > 0) {
+        if (spotifyPipelineLog.isEnabled()) {
+          spotifyPipelineLog.log('playlists_serving_from_list_cache', { org_key: orgId, reason: 'in_process_quarantine' });
+        }
+        return res.json({
+          success: true,
+          playlists: cachedQ.playlists,
+          organizationId: orgId,
+          spotifyListTotal: cachedQ.spotifyListTotal != null ? cachedQ.spotifyListTotal : undefined,
+          fromSpotifyListCache: true,
+          stale: true,
+          cacheUpdatedAt: cachedQ.updatedAt,
+          cacheMessage:
+            'TEMPO is pausing Spotify calls after a recent rate limit. Showing the last library list we saved. Use Add by link below or try Refresh later.',
+        });
+      }
       if (spotifyPipelineLog.isEnabled()) {
         spotifyPipelineLog.log('playlists_route_skip_quarantined', {
           org_key: orgId,
@@ -7352,6 +7446,7 @@ app.get('/api/spotify/playlists', async (req, res) => {
       });
     }
     const { playlists, spotifyListTotal } = await svc.getUserPlaylists();
+    await saveHostPlaylistListCache(orgId, { playlists, spotifyListTotal });
     logSpotifyPlaylistSuccessProof(orgId, svc, { spotifyListTotal, playlists });
 
     const wantExplicitStats =
@@ -7404,9 +7499,60 @@ app.get('/api/spotify/playlists', async (req, res) => {
       ...(explicitStatsByPlaylistId !== undefined && { explicitStatsByPlaylistId }),
     });
   } catch (error) {
+    if (isSpotifyHttp429(error)) {
+      const cached429 = await loadHostPlaylistListCache(orgId);
+      if (cached429 && Array.isArray(cached429.playlists) && cached429.playlists.length > 0) {
+        if (spotifyPipelineLog.isEnabled()) {
+          spotifyPipelineLog.log('playlists_serving_from_list_cache', { org_key: orgId, reason: 'spotify_429' });
+        }
+        return res.json({
+          success: true,
+          playlists: cached429.playlists,
+          organizationId: orgId,
+          spotifyListTotal: cached429.spotifyListTotal != null ? cached429.spotifyListTotal : undefined,
+          fromSpotifyListCache: true,
+          stale: true,
+          cacheUpdatedAt: cached429.updatedAt,
+          cacheMessage:
+            'Spotify is rate-limiting the library list (GET /v1/me/playlists). Showing the last list we saved. You can add a playlist by link without listing the library, or use Refresh after cooldown.',
+        });
+      }
+    }
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('Error getting playlists:', error);
     res.status(500).json({ error: 'Failed to get playlists' });
+  }
+});
+
+app.post('/api/spotify/playlist-lookup', async (req, res) => {
+  try {
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    if (uid == null) {
+      return res.status(401).json({ error: 'login_required', message: 'Sign in with Google first.' });
+    }
+    const orgId = `user_${uid}`;
+    await multiTenantSpotify.ensureOrgTokensLoaded(orgId);
+    if (!multiTenantSpotify.getTokens(orgId)) {
+      return res.status(400).json({ error: 'spotify_not_connected', message: 'Connect Spotify from the host screen first.' });
+    }
+    const svc = spotifyForRequest(req);
+    if (!svc) {
+      return res.status(401).json({ error: 'login_required' });
+    }
+    const raw = req.body && (req.body.urlOrId != null ? String(req.body.urlOrId) : String(req.body.input || ''));
+    const pid = parseSpotifyPlaylistIdFromUserInput(raw);
+    if (!pid) {
+      return res.status(400).json({
+        error: 'bad_input',
+        message: 'Paste a Spotify playlist link (open.spotify.com/playlist/…) or the playlist id.',
+      });
+    }
+    const playlist = await svc.getPlaylistMetadataBrief(pid, { emergencyBypassQuarantine: true });
+    return res.json({ success: true, playlist });
+  } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
+    console.error('POST /api/spotify/playlist-lookup:', error);
+    res.status(500).json({ error: 'playlist_lookup_failed', message: error && error.message ? String(error.message) : 'error' });
   }
 });
 

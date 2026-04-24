@@ -212,6 +212,11 @@ const HostView: React.FC = () => {
   const [gamePaused, setGamePaused] = useState(false);
   const [mixFinalized, setMixFinalized] = useState(false);
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
+  /** Server served GET /v1/me/playlists from last successful DB copy (Spotify 429 or TEMPO quarantine). */
+  const [spotifyListCacheInfo, setSpotifyListCacheInfo] = useState<string | null>(null);
+  const [playlistByLinkInput, setPlaylistByLinkInput] = useState('');
+  const [playlistByLinkLoading, setPlaylistByLinkLoading] = useState(false);
+  const [playlistByLinkError, setPlaylistByLinkError] = useState<string | null>(null);
   /** From GET /api/spotify/playlists: Spotify PagingObject total (null = unknown / not loaded). */
   const [spotifyMyPlaylistsTotal, setSpotifyMyPlaylistsTotal] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -525,6 +530,7 @@ const HostView: React.FC = () => {
       const response = await hostFetch(`${API_BASE || ''}/api/spotify/playlists?${qs.toString()}`);
       if (response.status === 401) {
         setSpotifyError('Spotify is not connected. Open Connection in the header to connect.');
+        setSpotifyListCacheInfo(null);
         setPlaylists([]);
         setSpotifyMyPlaylistsTotal(null);
         return;
@@ -540,6 +546,7 @@ const HostView: React.FC = () => {
           /* ignore */
         }
         setSpotifyMyPlaylistsTotal(null);
+        setSpotifyListCacheInfo(null);
         setSpotifyError(
           `Spotify is rate-limiting this app right now${retryMin}. Wait and tap Refresh, or check your app in the Spotify Developer Dashboard (quota / usage).`
         );
@@ -551,10 +558,20 @@ const HostView: React.FC = () => {
         error?: string;
         spotifyListTotal?: number;
         retryAfterSec?: number;
+        fromSpotifyListCache?: boolean;
+        cacheMessage?: string;
+        cacheUpdatedAt?: string;
         explicitStatsByPlaylistId?: Record<string, { total?: number; explicitCount?: number }>;
       };
       
       if (data.success) {
+        if (data.fromSpotifyListCache) {
+          const m = (data.cacheMessage || 'Showing a saved copy of your Spotify library list.').trim();
+          const t = data.cacheUpdatedAt ? new Date(String(data.cacheUpdatedAt)).toLocaleString() : '';
+          setSpotifyListCacheInfo(t ? `${m} (saved ${t})` : m);
+        } else {
+          setSpotifyListCacheInfo(null);
+        }
         if (typeof data.spotifyListTotal === 'number') {
           setSpotifyMyPlaylistsTotal(data.spotifyListTotal);
         } else {
@@ -601,6 +618,49 @@ const HostView: React.FC = () => {
       console.error('Error loading playlists:', error);
     }
   }, []);
+
+  const addPlaylistByLink = useCallback(async () => {
+    setPlaylistByLinkError(null);
+    const raw = playlistByLinkInput.trim();
+    if (!raw) {
+      setPlaylistByLinkError('Paste a playlist link or id.');
+      return;
+    }
+    setPlaylistByLinkLoading(true);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/spotify/playlist-lookup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urlOrId: raw }),
+      });
+      const d = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        playlist?: Playlist;
+        error?: string;
+        message?: string;
+      };
+      if (!res.ok) {
+        setPlaylistByLinkError(
+          d.message || d.error || (res.status === 429 ? 'Spotify is rate-limiting. Try again later.' : `Could not add (${res.status})`)
+        );
+        return;
+      }
+      if (d.playlist && d.playlist.id) {
+        const p = d.playlist;
+        setPlaylists((prev) => {
+          const m = new Map(prev.map((x) => [x.id, x]));
+          m.set(p.id, p);
+          return Array.from(m.values());
+        });
+        setPlaylistByLinkInput('');
+        setShowAllPlaylists(true);
+      }
+    } catch (e) {
+      setPlaylistByLinkError(e instanceof Error ? e.message : 'Request failed');
+    } finally {
+      setPlaylistByLinkLoading(false);
+    }
+  }, [playlistByLinkInput]);
 
 
   /** Assigned-to-round ids as strings so Spotify id === round id always matches. */
@@ -4349,6 +4409,72 @@ const HostView: React.FC = () => {
                       <strong style={{ color: '#fff' }}>finalize the bingo pool</strong> (song source for the game). You can still{' '}
                       <strong style={{ color: '#fff' }}>drag any row</strong> into round buckets for round-specific setup.
                     </p>
+                    {spotifyListCacheInfo ? (
+                      <div
+                        style={{
+                          marginBottom: 12,
+                          maxWidth: 720,
+                          padding: '12px 14px',
+                          borderRadius: 10,
+                          border: '1px solid rgba(255,193,7,0.45)',
+                          background: 'rgba(255,193,7,0.1)',
+                          color: '#f5e6c8',
+                          fontSize: '0.88rem',
+                          lineHeight: 1.5,
+                      }}
+                        role="status"
+                    >
+                        <strong style={{ color: '#ffc857' }}>Library list: saved copy</strong> — {spotifyListCacheInfo} Use
+                        &quot;Add by link&quot; below to pull in one playlist if Spotify is still blocking a full library refresh.
+                  </div>
+                    ) : null}
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        gap: 10,
+                        marginBottom: 12,
+                        maxWidth: 720,
+                        padding: '12px 14px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(0,255,136,0.25)',
+                        background: 'rgba(0,255,136,0.06)',
+                      }}
+                    >
+                      <span style={{ fontSize: '0.82rem', color: '#c8d8d0', fontWeight: 600 }}>Add by link</span>
+                      <input
+                        type="text"
+                        value={playlistByLinkInput}
+                        onChange={(e) => setPlaylistByLinkInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') void addPlaylistByLink();
+                        }}
+                        placeholder="https://open.spotify.com/playlist/… or id"
+                        disabled={!isSpotifyConnected || playlistByLinkLoading}
+                        style={{
+                          flex: '1 1 220px',
+                          minWidth: 180,
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          background: 'rgba(0,0,0,0.35)',
+                          color: '#fff',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                        disabled={!isSpotifyConnected || playlistByLinkLoading}
+                        onClick={() => void addPlaylistByLink()}
+                      >
+                        {playlistByLinkLoading ? 'Adding…' : 'Add playlist'}
+                      </button>
+                    </div>
+                    {playlistByLinkError ? (
+                      <p style={{ fontSize: '0.82rem', color: '#ff9e6e', margin: '0 0 10px' }}>{playlistByLinkError}</p>
+                    ) : null}
                     {spotifyError ? (
                       <div
                         className="spotify-error"
