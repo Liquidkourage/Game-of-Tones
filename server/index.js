@@ -6922,6 +6922,85 @@ app.get('/api/spotify/whoami', async (req, res) => {
   }
 });
 
+/**
+ * Direct probe of api.spotify.com (bypasses in-process 429 quarantine). Open in a browser while
+ * signed in as a host (same site cookie) — no command line. Add ?playlists=1 to also call playlists.
+ * Compare with /api/spotify/whoami when isolating our quarantine vs Spotify.
+ */
+app.get('/api/spotify/diagnostic-raw', async (req, res) => {
+  try {
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    if (uid == null) {
+      return res.status(401).json({
+        error: 'login_required',
+        message: 'Sign in with Google, then open this URL again in the same browser.',
+      });
+    }
+    const orgId = `user_${uid}`;
+    const ok = await multiTenantSpotify.ensureOrgTokensLoaded(orgId);
+    if (!ok || !multiTenantSpotify.getTokens(orgId)) {
+      return res.status(400).json({
+        error: 'spotify_not_connected',
+        message: 'Connect Spotify from the host screen first, then use this link again.',
+      });
+    }
+    const svc = spotifyForRequest(req);
+    if (!svc) {
+      return res.status(401).json({ error: 'login_required' });
+    }
+    try {
+      await svc.ensureValidToken();
+    } catch (e) {
+      return res.status(401).json({
+        error: 'token_refresh_failed',
+        message: e && e.message ? String(e.message) : 'Could not refresh Spotify access token',
+      });
+    }
+    const access = svc.accessToken;
+    if (!access) {
+      return res.status(500).json({ error: 'no_access_token' });
+    }
+
+    const withPlaylists =
+      req.query.playlists === '1' || req.query.playlists === 'true' || req.query.playlists === 'yes';
+    const note =
+      'Bypasses TEMPO in-process 429 quarantine. status/retry-after are from api.spotify.com.';
+
+    async function one(url) {
+      const r = await fetch(url, {
+        headers: { Authorization: `Bearer ${access}` },
+      });
+      const ra = r.headers.get('retry-after') || r.headers.get('Retry-After') || null;
+      const text = await r.text();
+      let body;
+      try {
+        const j = JSON.parse(text);
+        if (j && (j.id || j.error)) {
+          body = j;
+        } else {
+          body = { _preview: text.length > 400 ? text.slice(0, 400) + '…' : text };
+        }
+      } catch {
+        body = { _raw: text.length > 400 ? text.slice(0, 400) + '…' : text };
+      }
+      return { url, status: r.status, retryAfter: ra, body };
+    }
+
+    const results = [];
+    results.push(await one('https://api.spotify.com/v1/me'));
+    if (withPlaylists) {
+      results.push(await one('https://api.spotify.com/v1/me/playlists?limit=1'));
+    }
+
+    return res.json({ ok: true, note, client_id_prefix: svc._pipelineClientIdPrefix, results });
+  } catch (error) {
+    console.error('GET /api/spotify/diagnostic-raw:', error);
+    return res
+      .status(500)
+      .json({ error: 'diagnostic_raw_failed', message: error && error.message ? String(error.message) : 'error' });
+  }
+});
+
 // Get current tokens for debugging (signed-in host only — their own Spotify connection)
 app.get('/api/spotify/tokens', (req, res) => {
   const uid = hostAuth.getHostUserIdFromRequest(req);

@@ -10,6 +10,10 @@
  * Use this to see whether Spotify is returning 200 vs 429 for your *developer app* + *user* token,
  * independent of the game server.
  *
+ * No command line: in the browser, sign in as a host, connect Spotify, then open (same site):
+ *   {PUBLIC_APP or API}/api/spotify/diagnostic-raw
+ *   {same}?playlists=1
+ *
  * From repo root (set env in shell or a local .env — do not commit secrets):
  *   node tools/spotify-minimal-ping.js
  *   node tools/spotify-minimal-ping.js --playlists
