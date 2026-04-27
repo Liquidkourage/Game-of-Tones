@@ -1056,18 +1056,6 @@ const HostView: React.FC = () => {
     }
   }, []);
 
-  const disconnectSpotify = useCallback(async () => {
-    try {
-      await hostFetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST' });
-      setIsSpotifyConnected(false);
-      setPlaylists([]);
-      setSpotifyError(null);
-      setWebApiQuarantine({ active: false });
-    } catch (error) {
-      console.error('Error disconnecting Spotify:', error);
-    }
-  }, []);
-
   /** Mirrors connection state for unload handlers (avoid stale closures). */
   const isSpotifyConnectedRef = useRef(false);
   /** Back off host polling of /api/spotify/current-playback when server returns 429. */
@@ -1076,6 +1064,34 @@ const HostView: React.FC = () => {
   const lastLoadPlaylistsOnSocketReconnectAtRef = useRef(0);
   /** Last non-empty list sent in finalize-mix (React state can lag right after setSongList / socket events). */
   const lastFinalizeMixSongListRef = useRef<Song[] | null>(null);
+  /** Mirror songList for incremental setlist fetches (avoids refetching every playlist on each new selection). */
+  const songListRef = useRef<Song[]>([]);
+  /** Playlist ids we have already fully loaded track lists for. */
+  const fullyLoadedPlaylistIdsRef = useRef<Set<string>>(new Set());
+  /** Bumped to cancel in-flight generateSongList and drop stale cache. */
+  const setlistBuildGenerationRef = useRef(0);
+  useEffect(() => {
+    songListRef.current = songList;
+  }, [songList]);
+  const invalidateSetlistBuildCache = useCallback(() => {
+    setlistBuildGenerationRef.current += 1;
+    fullyLoadedPlaylistIdsRef.current.clear();
+  }, []);
+
+  const disconnectSpotify = useCallback(async () => {
+    try {
+      await hostFetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST' });
+      setIsSpotifyConnected(false);
+      setPlaylists([]);
+      setSpotifyError(null);
+      setWebApiQuarantine({ active: false });
+      setSongList([]);
+      invalidateSetlistBuildCache();
+    } catch (error) {
+      console.error('Error disconnecting Spotify:', error);
+    }
+  }, [invalidateSetlistBuildCache]);
+
   useEffect(() => {
     isSpotifyConnectedRef.current = isSpotifyConnected;
   }, [isSpotifyConnected]);
@@ -1412,6 +1428,7 @@ const HostView: React.FC = () => {
       setSongList([]);
       setFinalizedOrder([]);
       lastFinalizeMixSongListRef.current = null;
+      invalidateSetlistBuildCache();
       
       // Preserve round winners history
       if (data.roundWinners) {
@@ -1642,6 +1659,7 @@ const HostView: React.FC = () => {
       setWinners([]);
       setMixFinalized(false);
       setSongList([]);
+      invalidateSetlistBuildCache();
       console.log('?? Game reset');
     });
 
@@ -1962,6 +1980,7 @@ const HostView: React.FC = () => {
     navigate,
     disconnectSpotify,
     showHostAckNotification,
+    invalidateSetlistBuildCache,
   ]);
 
 
@@ -2091,7 +2110,7 @@ const HostView: React.FC = () => {
       let listToSend: Song[] = songList;
       if (listToSend.length > 0 && !listToSend[0]?.sourcePlaylistId) {
         console.log('?? Songs missing playlist info, regenerating...');
-        const regen = await generateSongList();
+        const regen = await generateSongList({ force: true });
         listToSend = regen;
         await new Promise((resolve) => setTimeout(resolve, 200));
       } else if (listToSend.length === 0) {
@@ -2730,6 +2749,7 @@ const HostView: React.FC = () => {
       setSelectedPlaylists([]);
       setMixFinalized(false);
       setSongList([]);
+      invalidateSetlistBuildCache();
       setGameState('waiting');
       
       addLog('?? Event reset - All rounds returned to unplanned status', 'info');
@@ -3010,66 +3030,119 @@ const HostView: React.FC = () => {
     });
   };
 
-  // Generate and shuffle song list from selected playlists. Returns the shuffled list (or []) so callers can finalize without stale React state.
-  const generateSongList = useCallback(async (): Promise<Song[]> => {
-    if (!isSpotifyConnected) {
-      console.warn('Cannot generate song list: Spotify not connected');
-      console.log('?? isSpotifyConnected state is currently:', isSpotifyConnected);
-      setSongList([]);
-      return [];
-    }
-    if (selectedPlaylists.length === 0) {
-      setSongList([]);
-      return [];
-    }
-
-    try {
-      const allSongs: Song[] = [];
-      
-      for (let i = 0; i < selectedPlaylists.length; i++) {
-        if (i > 0) {
-          await new Promise((r) => setTimeout(r, 450));
-        }
-        const playlist = selectedPlaylists[i];
-        const qs = new URLSearchParams();
-        if (playlist.name) qs.set('playlistName', playlist.name);
-        const q = qs.toString();
-        const response = await hostFetch(
-          `${API_BASE || ''}/api/spotify/playlist-tracks/${playlist.id}${q ? `?${q}` : ''}`
-        );
-        const data = await response.json();
-        
-        if (data.success && data.tracks) {
-          allSongs.push(...data.tracks);
-        }
+  // Generate and shuffle song list from selected playlists. Only fetches tracks for newly selected playlists (avoids re-downloading the whole library on each click). Use { force: true } to refetch all.
+  const generateSongList = useCallback(
+    async (opts?: { force?: boolean }): Promise<Song[]> => {
+      if (!isSpotifyConnected) {
+        console.warn('Cannot generate song list: Spotify not connected');
+        setSongList([]);
+        fullyLoadedPlaylistIdsRef.current.clear();
+        return [];
+      }
+      if (selectedPlaylists.length === 0) {
+        fullyLoadedPlaylistIdsRef.current.clear();
+        setSongList([]);
+        return [];
       }
 
-      // Deduplicate songs by ID (fix for duplicate songs appearing in output playlist)
-      const seen = new Set<string>();
-      const uniqueSongs = allSongs.filter(song => {
-        if (seen.has(song.id)) {
-          console.log(`?? Duplicate song removed: "${song.name}" by ${song.artist} (ID: ${song.id})`);
-          return false;
+      if (opts?.force) {
+        fullyLoadedPlaylistIdsRef.current.clear();
+      }
+      setlistBuildGenerationRef.current += 1;
+      const myBuild = setlistBuildGenerationRef.current;
+
+      const selectedIds = new Set(selectedPlaylists.map((p) => p.id));
+      Array.from(fullyLoadedPlaylistIdsRef.current).forEach((id) => {
+        if (!selectedIds.has(id)) {
+          fullyLoadedPlaylistIdsRef.current.delete(id);
         }
-        seen.add(song.id);
-        return true;
       });
 
-      // Shuffle the songs using Fisher-Yates algorithm
-      const shuffledSongs = [...uniqueSongs];
-      for (let i = shuffledSongs.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffledSongs[i], shuffledSongs[j]] = [shuffledSongs[j], shuffledSongs[i]];
+      const kept: Song[] = opts?.force
+        ? []
+        : songListRef.current.filter(
+            (s) => s.sourcePlaylistId && selectedIds.has(s.sourcePlaylistId)
+          );
+
+      const toFetch = selectedPlaylists.filter((p) => !fullyLoadedPlaylistIdsRef.current.has(p.id));
+
+      const dedupeAndShuffle = (songs: Song[]) => {
+        const seen = new Set<string>();
+        const uniqueSongs = songs.filter((song) => {
+          if (seen.has(song.id)) {
+            return false;
+          }
+          seen.add(song.id);
+          return true;
+        });
+        const shuffledSongs = [...uniqueSongs];
+        for (let i = shuffledSongs.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffledSongs[i], shuffledSongs[j]] = [shuffledSongs[j], shuffledSongs[i]];
+        }
+        return shuffledSongs;
+      };
+
+      if (setlistBuildGenerationRef.current !== myBuild) {
+        return [];
       }
 
-      setSongList(shuffledSongs);
-      console.log(`Generated ${shuffledSongs.length} shuffled songs`);
-      return shuffledSongs;
-    } catch (error) {
-      console.error('Error generating song list:', error);
-      return [];
-    }
-  }, [selectedPlaylists, isSpotifyConnected]);
+      if (toFetch.length === 0) {
+        if (kept.length === 0) {
+          setSongList([]);
+          return [];
+        }
+        const shuffledSongs = dedupeAndShuffle(kept);
+        if (setlistBuildGenerationRef.current !== myBuild) {
+          return [];
+        }
+        setSongList(shuffledSongs);
+        console.log(`Setlist: ${shuffledSongs.length} songs (reused already-loaded tracks)`);
+        return shuffledSongs;
+      }
+
+      try {
+        let allSongs: Song[] = [...kept];
+
+        for (let i = 0; i < toFetch.length; i++) {
+          if (setlistBuildGenerationRef.current !== myBuild) {
+            return [];
+          }
+          if (i > 0) {
+            await new Promise((r) => setTimeout(r, 300));
+          }
+          const playlist = toFetch[i];
+          const qs = new URLSearchParams();
+          if (playlist.name) qs.set('playlistName', playlist.name);
+          const q = qs.toString();
+          const response = await hostFetch(
+            `${API_BASE || ''}/api/spotify/playlist-tracks/${playlist.id}${q ? `?${q}` : ''}`
+          );
+          const data = (await response.json()) as { success?: boolean; tracks?: Song[] };
+
+          if (setlistBuildGenerationRef.current !== myBuild) {
+            return [];
+          }
+          if (data.success && data.tracks) {
+            allSongs.push(...data.tracks);
+            fullyLoadedPlaylistIdsRef.current.add(playlist.id);
+          }
+        }
+
+        const shuffledSongs = dedupeAndShuffle(allSongs);
+        if (setlistBuildGenerationRef.current !== myBuild) {
+          return [];
+        }
+        setSongList(shuffledSongs);
+        console.log(`Generated ${shuffledSongs.length} shuffled songs (fetched ${toFetch.length} playlist(s), reused ${kept.length} track(s) from buffer)`);
+        return shuffledSongs;
+      } catch (error) {
+        console.error('Error generating song list:', error);
+        return [];
+      }
+    },
+    [selectedPlaylists, isSpotifyConnected]
+  );
 
   // Advanced playback functions
   const [volumeTimeout, setVolumeTimeout] = useState<NodeJS.Timeout | null>(null);
@@ -3517,10 +3590,13 @@ const HostView: React.FC = () => {
     return () => clearInterval(playbackSyncInterval);
   }, [currentSong, isPlaying, isPausedByInterface]);
 
-  // Generate song list when selected playlists change
+  // Build master setlist when selection changes. Debounced: ticking several playlists in a row = one import wave; incremental fetch only requests new picks.
   useEffect(() => {
-    generateSongList();
-  }, [selectedPlaylists, generateSongList]);
+    const t = window.setTimeout(() => {
+      void generateSongList();
+    }, 750);
+    return () => window.clearTimeout(t);
+  }, [selectedPlaylists, isSpotifyConnected, generateSongList]);
   
   // Keyboard shortcuts
   useEffect(() => {
