@@ -1,6 +1,7 @@
 const SpotifyWebApi = require('spotify-web-api-node');
 const https = require('https');
 const pl = require('./spotifyPipelineLog');
+const webApi = require('./spotifyWebApiMeter');
 
 /**
  * Web API base URL and path shapes follow the official OpenAPI schema:
@@ -38,6 +39,7 @@ class SpotifyService {
       clientSecret: override ? options.clientSecret : process.env.SPOTIFY_CLIENT_SECRET,
       redirectUri: this.defaultRedirectUri,
     });
+    this._wrapSpotifyWebApiForMeter();
     const cidForLog = override ? options.clientId : process.env.SPOTIFY_CLIENT_ID;
     this._pipelineClientIdPrefix = pl.clientIdPrefix(cidForLog);
     this._pipelineCredentialMode = override ? 'organization_client' : 'env_client';
@@ -154,6 +156,47 @@ class SpotifyService {
   }
 
   /**
+   * Proxy spotify-web-api-node: count one api.spotify.com request per call (excludes token/OAuth helpers).
+   */
+  _wrapSpotifyWebApiForMeter() {
+    const raw = this.spotifyApi;
+    const noCount = new Set([
+      'setAccessToken',
+      'setRefreshToken',
+      'setClientId',
+      'setClientSecret',
+      'setRedirectURI',
+      'setCredentials',
+      'resetAccessToken',
+      'getAccessToken',
+      'getRefreshToken',
+      'getClientId',
+      'getClientSecret',
+      'getRedirectURI',
+      'getCredentials',
+      'getHttpManager',
+      'createAuthorizeURL',
+      'authorizationCodeGrant',
+      'refreshAccessToken',
+      'clientCredentialsGrant',
+    ]);
+    this.spotifyApi = new Proxy(raw, {
+      get: (target, prop) => {
+        if (prop === 'constructor') return target.constructor;
+        const v = target[prop];
+        if (typeof v !== 'function') return v;
+        if (noCount.has(String(prop))) {
+          return v.bind(target);
+        }
+        return function proxiedSpotifyRequest(...args) {
+          webApi.record(1);
+          return v.apply(target, args);
+        };
+      },
+    });
+  }
+
+  /**
    * Raw GET to api.spotify.com (used for /items where the Node SDK still maps older paths).
    */
   _webApiGet(path, label, { bypassQuarantine = false } = {}) {
@@ -164,6 +207,7 @@ class SpotifyService {
       if (!this.accessToken) {
         return reject(new Error('No access token'));
       }
+      webApi.record(1);
       const req = https.request(
         {
           hostname: 'api.spotify.com',
@@ -680,6 +724,7 @@ class SpotifyService {
   _transferPlaybackDirect(deviceId, play) {
     return new Promise((resolve, reject) => {
       const body = JSON.stringify({ device_ids: [deviceId], play: !!play });
+      webApi.record(1);
       const req = https.request({
         hostname: 'api.spotify.com',
         path: '/v1/me/player',

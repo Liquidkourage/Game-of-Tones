@@ -1709,6 +1709,39 @@ const HostView: React.FC = () => {
       addLog(`Playback error: ${msg}`, 'error');
     });
 
+    newSocket.on('spotify-failsafe', (data: any) => {
+      const msg =
+        data?.message ||
+        'Spotify was disconnected due to very high API traffic. Reconnect from the host when you are ready.';
+      console.warn('Spotify failsafe (server):', data);
+      setIsSpotifyConnected(false);
+      setSpotifyError(msg);
+      addLog(`Spotify failsafe: ${msg}`, 'error');
+      try {
+        const toast = document.createElement('div');
+        toast.textContent = msg;
+        Object.assign(toast.style, {
+          position: 'fixed',
+          bottom: '14px',
+          left: '14px',
+          maxWidth: '80vw',
+          background: 'rgba(220, 53, 69, 0.15)',
+          color: '#fff',
+          border: '1px solid rgba(220, 53, 69, 0.6)',
+          padding: '12px 14px',
+          borderRadius: '10px',
+          zIndex: 10000,
+          fontWeight: 700,
+        } as unknown as CSSStyleDeclaration);
+        document.body.appendChild(toast);
+        setTimeout(() => {
+          try {
+            document.body.removeChild(toast);
+          } catch {}
+        }, 12_000);
+      } catch {}
+    });
+
     newSocket.on('playback-warning', (data: any) => {
       const msg = data?.message || 'Playback warning occurred';
       const type = data?.type || 'general';

@@ -742,6 +742,15 @@ class MultiTenantSpotifyManager {
   getTokens(organizationId = this.defaultOrg) {
     return this.orgTokens.get(organizationId);
   }
+
+  /** Org keys that currently have an access token (for failsafe / bulk clear). */
+  getOrganizationIdsWithStoredTokens() {
+    const out = [];
+    for (const [k, v] of this.orgTokens.entries()) {
+      if (v && v.accessToken) out.push(k);
+    }
+    return out;
+  }
   
   async setTokens(organizationId, tokens) {
     this.orgTokens.set(organizationId, tokens);
@@ -1069,6 +1078,50 @@ const multiTenantSpotify = new MultiTenantSpotifyManager();
 // Legacy support - DEFAULT org (no host user on room)
 const spotifyServiceDefault = multiTenantSpotify.getService('DEFAULT');
 let spotifyTokens = multiTenantSpotify.getTokens('DEFAULT');
+
+const spotifyWebApiMeter = require('./spotifyWebApiMeter');
+spotifyWebApiMeter.setFailsafeHandler(async (info) => {
+  const orgIds = multiTenantSpotify.getOrganizationIdsWithStoredTokens();
+  console.error(
+    `🛡️ TEMPO_SPOTIFY_FAILSAFE: ~${info.count30s} Spotify Web API calls in the last 30s (threshold ${info.max}). Clearing all in-memory and stored host tokens to protect the developer app.`
+  );
+  for (const orgId of orgIds) {
+    try {
+      await multiTenantSpotify.clearOrgTokens(orgId);
+      if (db && orgId.startsWith('user_')) {
+        try {
+          await db.query('DELETE FROM host_spotify_playlist_list_cache WHERE organization_id = $1', [orgId]);
+        } catch (e) {
+          console.error('TEMPO_SPOTIFY_FAILSAFE playlist list cache delete:', e?.message || e);
+        }
+      }
+      const u = parseUserIdFromSpotifyOrgKey(orgId);
+      if (u != null) {
+        try {
+          const f = deviceFileForUserId(u);
+          if (fs.existsSync(f)) fs.unlinkSync(f);
+        } catch (_) {}
+      }
+    } catch (e) {
+      console.error('TEMPO_SPOTIFY_FAILSAFE clear org', orgId, e);
+    }
+  }
+  try {
+    if (fs.existsSync(TOKEN_FILE)) fs.unlinkSync(TOKEN_FILE);
+  } catch (_) {}
+  spotifyTokens = multiTenantSpotify.getTokens('DEFAULT');
+  try {
+    io.emit('spotify-failsafe', {
+      message:
+        'Spotify was disconnected automatically: very high API traffic in the last 30 seconds. Reconnect Spotify from the host when you are ready.',
+      count30s: info.count30s,
+      max: info.max,
+      reason: 'web_api_30s_burst',
+    });
+  } catch (e) {
+    console.error('TEMPO_SPOTIFY_FAILSAFE socket emit', e);
+  }
+});
 
 function spotifyOrgForRoom(room) {
   if (!room) return 'DEFAULT';
@@ -6936,6 +6989,20 @@ app.get('/api/spotify/status', async (req, res) => {
     console.error('Spotify status error:', error);
     res.status(500).json({ connected: false, hasTokens: false, error: 'Status check failed' });
   }
+});
+
+/** Rolling estimate of api.spotify.com calls (30s) + current failsafe threshold (no extra Spotify request). */
+app.get('/api/spotify/web-api-meter', (req, res) => {
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  if (uid == null) {
+    return res.status(401).json({ error: 'login_required' });
+  }
+  res.json({
+    windowMs: 30_000,
+    estimate: spotifyWebApiMeter.getEstimateLast30s(),
+    threshold: spotifyWebApiMeter.getThreshold(),
+    failsafeEnabled: spotifyWebApiMeter.isFailsafeEnabled(),
+  });
 });
 
 /**
