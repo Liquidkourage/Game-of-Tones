@@ -459,11 +459,27 @@ class SpotifyService {
     }
   }
 
-  /** Track count on list-playlist items (Spotify: tracks.total). */
+  /**
+   * Track count on playlist list rows / metadata.
+   * Spotify deprecated `tracks` in favor of `items` (a ref { href, total } on /me/playlists
+   * simplified objects, or the items paging object on full GET /playlists/{id}).
+   * Prefer `items.total` when present; fall back to `tracks.total` for older responses.
+   */
   _playlistItemsTotalFromListItem(playlist) {
-    const t = playlist && playlist.tracks;
-    if (!t || typeof t !== 'object') return 0;
-    const n = Number(t.total);
+    if (!playlist || typeof playlist !== 'object') return 0;
+    let ref = null;
+    if (
+      playlist.items != null &&
+      typeof playlist.items === 'object' &&
+      !Array.isArray(playlist.items) &&
+      Object.prototype.hasOwnProperty.call(playlist.items, 'total')
+    ) {
+      ref = playlist.items;
+    } else if (playlist.tracks != null && typeof playlist.tracks === 'object') {
+      ref = playlist.tracks;
+    }
+    if (!ref) return 0;
+    const n = Number(ref.total);
     return Number.isFinite(n) && n >= 0 ? n : 0;
   }
 
@@ -502,7 +518,7 @@ class SpotifyService {
     const id = String(playlistId || '').trim();
     if (!id) throw new Error('playlist id required');
     const path = `/v1/playlists/${encodeURIComponent(id)}?fields=${encodeURIComponent(
-      'id,name,description,public,collaborative,owner(display_name),tracks.total'
+      'id,name,description,public,collaborative,owner(display_name),items.total,tracks.total'
     )}`;
     const { body } = await this._webApiGet(path, 'getPlaylistMetadataBrief', {
       bypassQuarantine: emergency,
@@ -520,7 +536,7 @@ class SpotifyService {
         body.owner && body.owner.display_name != null
           ? String(body.owner.display_name)
           : 'Unknown',
-      tracks: this._playlistItemsTotalFromListItem({ tracks: body.tracks }),
+      tracks: this._playlistItemsTotalFromListItem(body),
     };
   }
 
@@ -535,7 +551,7 @@ class SpotifyService {
       let spotifyListTotal = null;
       let isFirst = true;
 
-      // Use direct Web API so `tracks.total` matches Spotify JSON (Node SDK can omit/reshape fields).
+      // Use direct Web API so we keep `items.total` / `tracks.total` (Spotify is moving to `items`).
       while (true) {
         if (offset > 0) {
           await new Promise((r) => setTimeout(r, 200));
