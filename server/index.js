@@ -8060,22 +8060,31 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
       return res.status(401).json({ error: 'Spotify not connected' });
     }
     
-    await spotifyForRequest(req).ensureValidToken();
+    const svc = spotifyForRequest(req);
+    await svc.ensureValidToken();
     
-    // First get the playlist information to include in track data
+    // If the host already has the name (e.g. from the library), skip an extra getPlaylist() Web API call.
+    const q = req.query || {};
+    const rawName = q.playlistName != null ? q.playlistName : q.name;
+    const nameFromClient =
+      rawName != null && String(rawName).trim() !== '' ? String(rawName).trim() : '';
     let playlistInfo = null;
-    try {
-      const playlistResponse = await spotifyForRequest(req).spotifyApi.getPlaylist(playlistId);
-      playlistInfo = {
-        id: playlistResponse.body.id,
-        name: playlistResponse.body.name
-      };
-    } catch (error) {
-      console.warn('⚠️ Could not fetch playlist info for', playlistId, ':', error.message);
-      // Continue without playlist info
+    if (nameFromClient) {
+      playlistInfo = { id: playlistId, name: nameFromClient };
+    } else {
+      try {
+        const playlistResponse = await svc.spotifyApi.getPlaylist(playlistId);
+        playlistInfo = {
+          id: playlistResponse.body.id,
+          name: playlistResponse.body.name
+        };
+      } catch (error) {
+        console.warn('⚠️ Could not fetch playlist info for', playlistId, ':', error.message);
+        // Continue without playlist info
+      }
     }
     
-    const tracks = await spotifyForRequest(req).getPlaylistTracks(playlistId, playlistInfo);
+    const tracks = await svc.getPlaylistTracks(playlistId, playlistInfo);
     
     res.json({
       success: true,

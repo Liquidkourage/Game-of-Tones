@@ -3026,8 +3026,17 @@ const HostView: React.FC = () => {
     try {
       const allSongs: Song[] = [];
       
-      for (const playlist of selectedPlaylists) {
-        const response = await hostFetch(`${API_BASE || ''}/api/spotify/playlist-tracks/${playlist.id}`);
+      for (let i = 0; i < selectedPlaylists.length; i++) {
+        if (i > 0) {
+          await new Promise((r) => setTimeout(r, 450));
+        }
+        const playlist = selectedPlaylists[i];
+        const qs = new URLSearchParams();
+        if (playlist.name) qs.set('playlistName', playlist.name);
+        const q = qs.toString();
+        const response = await hostFetch(
+          `${API_BASE || ''}/api/spotify/playlist-tracks/${playlist.id}${q ? `?${q}` : ''}`
+        );
         const data = await response.json();
         
         if (data.success && data.tracks) {
@@ -3789,11 +3798,11 @@ const HostView: React.FC = () => {
         : rem >= 60
           ? `${Math.floor(rem / 60)}m ${rem % 60}s`
           : `${rem}s`;
-    const cap = q.inProcessMaxCooldownSec ?? 900;
+    const cap = q.inProcessMaxCooldownSec ?? 480;
     const parts: string[] = [
-      `Spotify is rate limiting the Web API (HTTP 429). This is Spotify’s throttling, not a multi-hour block imposed by TEMPO.`,
-      `TEMPO only spaces out repeat requests on this server (up to ${cap}s) so we don’t make it worse. You can often still run a show using cached data, “Add by link” for a playlist, and device playback while Spotify cools off.`,
-      `This burst: ${q.sourceDescription || q.source || 'Spotify Web API'}. TEMPO’s cool-down: ~${remPart}.`,
+      `Spotify is rate limiting the Web API (HTTP 429). You are not expected to “come back in 12 hours”—TEMPO only spaces out requests on this server (at most ~${Math.ceil(cap / 60)} min between back-off windows), and full playlist data is cached briefly after the first load so finalizing a mix does not re-download the same tracks from Spotify.`,
+      `You can often still run a show using the library you already loaded, “Add by link” for a playlist, and device playback while Spotify cools off.`,
+      `This burst: ${q.sourceDescription || q.source || 'Spotify Web API'}. Current spacing: ~${remPart}.`,
     ];
     if (q.spotifyRetryAfterSec != null && q.spotifyRetryAfterSec > 0) {
       const s = q.spotifyRetryAfterSec;

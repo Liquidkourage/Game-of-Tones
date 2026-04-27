@@ -18,8 +18,13 @@ const GOT_OUTPUT_PLAYLIST_NAME_PREFIX = 'Game Of Tones Output - ';
  * Spotify may send Retry-After of 86400+ seconds when restricting an app; honoring that
  * in-process would block every Web API call for 24h and the host UI shows no playlists.
  * We still back off, but cap so the server can retry after a few minutes (logging the raw value).
+ * This is not a "wait half a day" mode — TEMPO never enforces Spotify’s long Retry-After; it only
+ * spaces *this server’s* requests. (Playlist track lists are also cached to avoid duplicate pagination.)
  */
-const SPOTIFY_QUARANTINE_MAX_MS = 15 * 60 * 1000;
+const SPOTIFY_QUARANTINE_MAX_MS = 8 * 60 * 1000;
+
+/** Full getPlaylistTracks() results, reused when the host loads tracks then finalizes (halves /items load). */
+const PLAYLIST_TRACKS_CACHE_TTL_MS = 25 * 60 * 1000;
 
 class SpotifyService {
   /**
@@ -61,6 +66,8 @@ class SpotifyService {
     this._quarantineSpotifyRetryAfterSec = null;
     this._quarantineEffectiveCooldownSec = null;
     this._quarantineCapped = false;
+    /** Full track lists keyed by playlist id — avoids re-paginating /items when host loads then finalizes. */
+    this._playlistTracksCache = new Map();
   }
 
   // Classify common Spotify Web API errors
@@ -667,7 +674,19 @@ class SpotifyService {
   // Get playlist tracks (paginated via GET /playlists/{id}/items)
   async getPlaylistTracks(playlistId, playlistInfo = null) {
     await this._ensureCanCallWebApi('getPlaylistTracks');
-    
+
+    const cacheKey = String(playlistId);
+    const cached = this._playlistTracksCache.get(cacheKey);
+    const now = Date.now();
+    if (cached && now - cached.at < PLAYLIST_TRACKS_CACHE_TTL_MS && Array.isArray(cached.tracks)) {
+      const name = playlistInfo?.name || 'Unknown Playlist';
+      return cached.tracks.map((t) => ({
+        ...t,
+        sourcePlaylistId: playlistId,
+        sourcePlaylistName: name,
+      }));
+    }
+
     try {
       const tracks = [];
       let offset = 0;
@@ -700,7 +719,8 @@ class SpotifyService {
         
         if (items.length < limit) break;
       }
-      
+
+      this._playlistTracksCache.set(cacheKey, { at: now, tracks });
       return tracks;
     } catch (error) {
       this._rethrowIfRateLimited(error, 'getPlaylistTracks');
