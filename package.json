@@ -16,7 +16,8 @@
     "install-all": "npm run install-server && npm run install-client",
     "start": "node server/index.js",
     "client:typecheck": "cd client && npm run typecheck",
-    "spotify:ping": "node tools/spotify-minimal-ping.js"
+    "spotify:ping": "node tools/spotify-minimal-ping.js",
+    "encrypt-org-secret": "node tools/encrypt-spotify-org-secret.js"
   },
   "keywords": [
     "music",
