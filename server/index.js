@@ -14,33 +14,7 @@ const hostAuth = require('./hostAuth');
 const usersStore = require('./users');
 const organizationsStore = require('./organizations');
 const credentialCrypto = require('./credentialCrypto');
-const managerPlaylistFilter = require('./managerPlaylistFilter');
 const spotifyPipelineLog = require('./spotifyPipelineLog');
-
-/**
- * Run async work over `ids` with bounded concurrency (Spotify explicit-stats batch was
- * sequential before — dozens of playlists × pagination could take minutes).
- */
-async function mapPlaylistIdsWithConcurrency(ids, concurrency, fn) {
-  const results = Object.create(null);
-  if (!ids || ids.length === 0) return results;
-  const n = Math.min(Math.max(1, concurrency), ids.length);
-  let next = 0;
-  const worker = async () => {
-    while (true) {
-      const i = next++;
-      if (i >= ids.length) return;
-      const id = ids[i];
-      try {
-        results[id] = await fn(id);
-      } catch (e) {
-        results[id] = { error: e?.message || 'failed' };
-      }
-    }
-  };
-  await Promise.all(Array.from({ length: n }, () => worker()));
-  return results;
-}
 
 // Song title cleaning utility
 function cleanSongTitle(title) {
@@ -7505,57 +7479,11 @@ app.get('/api/spotify/playlists', async (req, res) => {
         server_env_client_id_prefix: spotifyPipelineLog.clientIdPrefix(process.env.SPOTIFY_CLIENT_ID),
         spotifyService_client_id_prefix: svc._pipelineClientIdPrefix,
         spotifyService_cred_mode: svc._pipelineCredentialMode,
-        explicit_stats_query: String(
-          req.query.includeExplicitStats === '1' ||
-            req.query.includeExplicitStats === 'true' ||
-            req.query.includeExplicitStats === 'yes'
-        ),
       });
     }
     const { playlists, spotifyListTotal } = await svc.getUserPlaylists();
     await saveHostPlaylistListCache(orgId, { playlists, spotifyListTotal });
     logSpotifyPlaylistSuccessProof(orgId, svc, { spotifyListTotal, playlists });
-
-    const wantExplicitStats =
-      req.query.includeExplicitStats === '1' ||
-      req.query.includeExplicitStats === 'true' ||
-      req.query.includeExplicitStats === 'yes';
-    let explicitStatsByPlaylistId;
-    if (wantExplicitStats) {
-      if (uid == null) {
-        return res.status(401).json({ error: 'login_required' });
-      }
-      await multiTenantSpotify.ensureOrgTokensLoaded(orgId);
-      await svc.ensureValidToken();
-      const assignedRaw = req.query.assigned;
-      const assignedList = Array.isArray(assignedRaw)
-        ? assignedRaw.map((x) => String(x).trim()).filter(Boolean)
-        : String(assignedRaw || '')
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean);
-      const assignedSet = new Set(assignedList);
-      const withoutTempo = playlists.filter((p) => p.name && !p.name.startsWith('TEMPO'));
-      const priorityIds = managerPlaylistFilter
-        .computeManagerExplicitPlaylistIds(withoutTempo, false, assignedSet)
-        .slice(0, 20);
-      explicitStatsByPlaylistId = {};
-      if (priorityIds.length > 0) {
-        const raw = await mapPlaylistIdsWithConcurrency(priorityIds, 4, (pid) =>
-          svc.getPlaylistExplicitStats(pid),
-        );
-        for (const [pid, v] of Object.entries(raw)) {
-          if (
-            v &&
-            typeof v === 'object' &&
-            typeof v.total === 'number' &&
-            typeof v.explicitCount === 'number'
-          ) {
-            explicitStatsByPlaylistId[pid] = { total: v.total, explicitCount: v.explicitCount };
-          }
-        }
-      }
-    }
 
     res.json({
       success: true,
@@ -7563,7 +7491,6 @@ app.get('/api/spotify/playlists', async (req, res) => {
       organizationId: orgId,
       /** Spotify PagingObject total from /v1/me/playlists (same account as the access token). */
       spotifyListTotal: spotifyListTotal != null ? spotifyListTotal : undefined,
-      ...(explicitStatsByPlaylistId !== undefined && { explicitStatsByPlaylistId }),
     });
   } catch (error) {
     if (isSpotifyHttp429(error)) {
@@ -8097,41 +8024,6 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('❌ Error getting playlist tracks:', error);
     res.status(500).json({ error: 'Failed to get playlist tracks' });
-  }
-});
-
-/** Batch: explicit vs total track counts per playlist (Spotify `track.explicit`). */
-app.post('/api/spotify/playlists/explicit-stats-batch', async (req, res) => {
-  try {
-    const svc = spotifyForRequest(req);
-    if (!svc) {
-      return res.status(401).json({ error: 'login_required', message: 'Sign in with Google to load playlists.' });
-    }
-    const uid = hostAuth.getHostUserIdFromRequest(req);
-    if (uid == null) {
-      return res.status(401).json({ error: 'login_required' });
-    }
-    const orgId = `user_${uid}`;
-    await multiTenantSpotify.ensureOrgTokensLoaded(orgId);
-    const orgTokens = multiTenantSpotify.getTokens(orgId);
-    if (!orgTokens || !orgTokens.accessToken) {
-      return res.status(401).json({
-        error: `Spotify not connected for ${orgId}`,
-        organizationId: orgId,
-      });
-    }
-    await svc.ensureValidToken();
-    const raw = req.body && Array.isArray(req.body.playlistIds) ? req.body.playlistIds : [];
-    const ids = raw.map((x) => String(x).trim()).filter(Boolean).slice(0, 80);
-    if (ids.length === 0) {
-      return res.json({ results: {} });
-    }
-    const results = await mapPlaylistIdsWithConcurrency(ids, 4, (pid) => svc.getPlaylistExplicitStats(pid));
-    res.json({ results });
-  } catch (e) {
-    if (sendSpotifyWebApiErrorIfNeeded(res, e)) return;
-    console.error('POST /api/spotify/playlists/explicit-stats-batch:', e);
-    res.status(500).json({ error: 'Failed to load explicit stats' });
   }
 });
 
