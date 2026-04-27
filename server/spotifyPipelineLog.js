@@ -4,12 +4,18 @@
  *
  * For per-request Web API line logs (api.spotify.com paths + status), also set TEMPO_SPOTIFY_LOG_WEBAPI=1
  * (only effective when TEMPO_SPOTIFY_PIPELINE_LOG is on). Can be noisy.
+ *
+ * TEMPO_SPOTIFY_LOG_WEBAPI_OK=1|true  — also log 2xx web_api_response lines (default: only non-2xx, still noisy but useful)
+ * TEMPO_SPOTIFY_LOG_API_REQUEST=0|off  — do not log api_spotify_request (method+path) on each /api/spotify/* hit
  */
 
 const ENABLED =
   process.env.TEMPO_SPOTIFY_PIPELINE_LOG === '1' || String(process.env.TEMPO_SPOTIFY_PIPELINE_LOG).toLowerCase() === 'true';
 const WEBAPI =
   process.env.TEMPO_SPOTIFY_LOG_WEBAPI === '1' || String(process.env.TEMPO_SPOTIFY_LOG_WEBAPI).toLowerCase() === 'true';
+
+let lastQuarantine429PipelineLogAt = 0;
+const QUARANTINE_429_LOG_THROTTLE_MS = 5_000;
 
 function isEnabled() {
   return ENABLED;
@@ -18,6 +24,43 @@ function isEnabled() {
 /** When true, log each _webApiGet to api.spotify.com (path + status). Requires isEnabled() too. */
 function isWebApiLogEnabled() {
   return ENABLED && WEBAPI;
+}
+
+/** Log 2xx web_api_response lines (default false when WEBAPI is on — set TEMPO_SPOTIFY_LOG_WEBAPI_OK=1 for full peephole). */
+function isWebApiLogOkStatusEnabled() {
+  const v = process.env.TEMPO_SPOTIFY_LOG_WEBAPI_OK;
+  return v === '1' || String(v).toLowerCase() === 'true' || v === 'on';
+}
+
+/**
+ * @param {number} statusCode
+ */
+function shouldLogWebApiResponseStatus(statusCode) {
+  if (!isWebApiLogEnabled()) return false;
+  const sc = Number(statusCode);
+  if (!Number.isFinite(sc)) return true;
+  if (sc >= 200 && sc < 300) {
+    return isWebApiLogOkStatusEnabled();
+  }
+  return true;
+}
+
+function shouldLogQuarantine429ToPipeline() {
+  if (!isEnabled()) return true;
+  const now = Date.now();
+  if (now - lastQuarantine429PipelineLogAt < QUARANTINE_429_LOG_THROTTLE_MS) {
+    return false;
+  }
+  lastQuarantine429PipelineLogAt = now;
+  return true;
+}
+
+function isApiRequestLogEnabled() {
+  const v = process.env.TEMPO_SPOTIFY_LOG_API_REQUEST;
+  if (v === '0' || String(v).toLowerCase() === 'false' || v === 'off') {
+    return false;
+  }
+  return true;
 }
 
 function clientIdPrefix(id) {
@@ -50,6 +93,10 @@ function log(event, fields) {
 module.exports = {
   isEnabled,
   isWebApiLogEnabled,
+  isWebApiLogOkStatusEnabled,
+  shouldLogWebApiResponseStatus,
+  shouldLogQuarantine429ToPipeline,
+  isApiRequestLogEnabled,
   log,
   clientIdPrefix,
 };

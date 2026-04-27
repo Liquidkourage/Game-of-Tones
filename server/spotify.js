@@ -89,7 +89,7 @@ class SpotifyService {
   applyRateLimitQuarantine(error, source) {
     if (!this.isRateLimitError(error)) return;
     const raSec = this.getRetryAfterSecFromError(error);
-    if (pl.isEnabled()) {
+    if (pl.isEnabled() && pl.shouldLogQuarantine429ToPipeline()) {
       pl.log('quarantine_429', {
         source: String(source),
         client_id_prefix: this._pipelineClientIdPrefix,
@@ -230,7 +230,7 @@ class SpotifyService {
               body = { _raw: buf };
             }
             const sc = res.statusCode || 0;
-            if (pl.isWebApiLogEnabled()) {
+            if (pl.shouldLogWebApiResponseStatus(sc)) {
               const pathOnly = String(path).split('?')[0];
               pl.log('web_api_response', { label, path: pathOnly, status: String(sc) });
             }
@@ -427,7 +427,12 @@ class SpotifyService {
           err: (error && error.message) || String(error),
         });
       }
-      console.error('Error refreshing Spotify token:', error);
+      const msg = (error && error.message) || String(error);
+      if (process.env.TEMPO_SPOTIFY_LOG_FULL_TOKEN_ERRORS === '1') {
+        console.error('Error refreshing Spotify token:', error);
+      } else {
+        console.error('Error refreshing Spotify token:', msg);
+      }
       throw error;
     }
   }

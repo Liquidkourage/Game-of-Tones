@@ -6924,7 +6924,7 @@ app.use('/api/spotify', async (req, res, next) => {
   } catch (e) {
     console.error('primeTenantSpotifyCredentials:', e?.message || e);
   }
-  if (spotifyPipelineLog.isEnabled()) {
+  if (spotifyPipelineLog.isEnabled() && spotifyPipelineLog.isApiRequestLogEnabled()) {
     spotifyPipelineLog.log('api_spotify_request', {
       method: req.method,
       path: rel,
