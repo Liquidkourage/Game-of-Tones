@@ -3747,27 +3747,30 @@ const HostView: React.FC = () => {
     const rem = q.remainingSec;
     const remPart =
       rem >= 120
-        ? `about ${Math.ceil(rem / 60)} min`
+        ? `~${Math.ceil(rem / 60)} min`
         : rem >= 60
           ? `${Math.floor(rem / 60)}m ${rem % 60}s`
           : `${rem}s`;
+    const cap = q.inProcessMaxCooldownSec ?? 900;
     const parts: string[] = [
-      `What triggered it: ${q.sourceDescription || q.source || 'Spotify Web API'}.`,
-      `Time left on TEMPO’s cool-down: ~${remPart} (this server pauses Web API calls for up to ${q.inProcessMaxCooldownSec ?? 900}s per incident).`,
+      `TEMPO is not waiting half a day. This server only spaces out Web API calls (up to ${cap}s per incident) and will retry; you can usually keep a show going with a cached library, “Add by link” for a playlist, and device playback while Spotify cools off.`,
+      `This burst was triggered by: ${q.sourceDescription || q.source || 'Spotify Web API'}. Current cool-down: ~${remPart}.`,
     ];
     if (q.spotifyRetryAfterSec != null && q.spotifyRetryAfterSec > 0) {
       const s = q.spotifyRetryAfterSec;
+      const hours = s / 3600;
       const human =
-        s >= 3600
-          ? `~${(s / 3600).toFixed(1)} hours (${s.toLocaleString()}s)`
+        hours >= 1
+          ? `~${hours.toFixed(1)} h (Spotify’s Retry-After — ${s.toLocaleString()}s)`
           : s >= 60
-            ? `${Math.ceil(s / 60)} min (${s}s)`
+            ? `~${Math.ceil(s / 60)} min (${s}s)`
             : `${s}s`;
-      parts.push(`Spotify’s Retry-After header: ${human}.`);
-    }
-    if (q.spotifyRetryCapped) {
       parts.push(
-        `Spotify’s suggested wait is longer than TEMPO’s in-process cap, so the app may call Spotify again sooner — you can still get 429s until Spotify throttling eases.`
+        `Spotify’s HTTP header can suggest a long wait (${human}). TEMPO does not honor that entire window; the host still isn’t “frozen” for 12+ hours. If calls keep failing, check your app in the Spotify Developer Dashboard and avoid hammering Refresh on the library.`
+      );
+    } else if (q.spotifyRetryCapped) {
+      parts.push(
+        `Spotify’s suggested wait was longer than TEMPO’s in-process cap; you may still see 429s until their throttling eases.`
       );
     }
     return parts.join(' ');
