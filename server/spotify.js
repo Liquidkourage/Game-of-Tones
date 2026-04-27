@@ -483,6 +483,9 @@ class SpotifyService {
 
       // Use direct Web API so `tracks.total` matches Spotify JSON (Node SDK can omit/reshape fields).
       while (true) {
+        if (offset > 0) {
+          await new Promise((r) => setTimeout(r, 200));
+        }
         const path = `/v1/me/playlists?limit=${limit}&offset=${offset}`;
         const { body } = await this._webApiGet(path, 'getUserPlaylists');
         if (isFirst && body && typeof body.total === 'number' && body.total >= 0) {
@@ -1095,6 +1098,9 @@ class SpotifyService {
       const limit = 50;
       
       while (true) {
+        if (offset > 0) {
+          await new Promise((r) => setTimeout(r, 200));
+        }
         const response = await this.spotifyApi.getUserPlaylists(userId, { limit, offset });
         const batch = response.body.items;
         

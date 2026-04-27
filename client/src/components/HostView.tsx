@@ -855,7 +855,7 @@ const HostView: React.FC = () => {
     setPlaylistExplicitStatsError(null);
 
     /** First N ids are visible rows (see allPlaylistIdsForExplicitStats) — finish those first so labels appear quickly. */
-    const PRIORITY_COUNT = 20;
+    const PRIORITY_COUNT = 12;
 
     (async () => {
       try {
@@ -1067,7 +1067,7 @@ const HostView: React.FC = () => {
           setIsSpotifyConnected(true);
           setIsSpotifyConnecting(false);
           await loadPlaylists();
-          await new Promise((r) => setTimeout(r, 400));
+          await new Promise((r) => setTimeout(r, 800));
           await loadDevices();
           // Devices often appear a few seconds after Spotify app / Web Player activates.
           deviceRetryTimer = window.setTimeout(() => {
@@ -1667,9 +1667,9 @@ const HostView: React.FC = () => {
           lastLoadPlaylistsOnSocketReconnectAtRef.current = now;
           await loadPlaylists();
         }
-        await new Promise((r) => setTimeout(r, 400));
+        await new Promise((r) => setTimeout(r, 800));
         await loadDevices();
-        await new Promise((r) => setTimeout(r, 400));
+        await new Promise((r) => setTimeout(r, 800));
         await fetchPlaybackState();
         // Re-request player cards after reconnection to restore UI state
         setTimeout(() => {
@@ -1939,7 +1939,7 @@ const HostView: React.FC = () => {
           setIsSpotifyConnecting(false);
           await loadPlaylists();
           // Stagger Web API calls (dev-mode Spotify quota is tight; parallel /devices + /playlists + /player hurts 429s)
-          await new Promise((r) => setTimeout(r, 400));
+          await new Promise((r) => setTimeout(r, 800));
           await loadDevices(); // Load devices when connected
           
           // Sync volume when Spotify connects to ensure it matches interface
@@ -3495,7 +3495,7 @@ const HostView: React.FC = () => {
       } catch {
         // ignore
       }
-    }, 60000); // 60s: reduce Spotify Web API load via /current-playback
+    }, 120_000); // 120s: minimize /me/player via /api/spotify/current-playback (was 60s)
     return () => clearInterval(playbackSyncInterval);
   }, [currentSong, isPlaying, isPausedByInterface]);
 

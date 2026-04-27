@@ -15,6 +15,9 @@ export async function fetchPlaylistExplicitStatsBatch(
   let anyHttpError = false;
   const chunkSize = 30;
   for (let i = 0; i < playlistIds.length; i += chunkSize) {
+    if (i > 0) {
+      await new Promise((r) => setTimeout(r, 400));
+    }
     const chunk = playlistIds.slice(i, i + chunkSize);
     const res = await hostFetch(`${API_BASE || ''}/api/spotify/playlists/explicit-stats-batch`, {
       method: 'POST',

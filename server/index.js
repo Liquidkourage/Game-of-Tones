@@ -1213,7 +1213,7 @@ function startSimpleContextMonitor(roomId, deviceId) {
     } catch (_e) {
       // Ignore monitor errors to prevent spam
     }
-  }, 6000); // Polling /v1/me/player — keep conservative to avoid Spotify rate limits
+  }, 12_000); // Polling /v1/me/player (was 6s; 12s cuts API volume ~in half, slower device-context detection)
 
   roomPlaybackWatchers.set(roomId, intervalId);
 }
@@ -7474,7 +7474,7 @@ app.get('/api/spotify/playlists', async (req, res) => {
         .slice(0, 20);
       explicitStatsByPlaylistId = {};
       if (priorityIds.length > 0) {
-        const raw = await mapPlaylistIdsWithConcurrency(priorityIds, 8, (pid) =>
+        const raw = await mapPlaylistIdsWithConcurrency(priorityIds, 4, (pid) =>
           svc.getPlaylistExplicitStats(pid),
         );
         for (const [pid, v] of Object.entries(raw)) {
@@ -8059,7 +8059,7 @@ app.post('/api/spotify/playlists/explicit-stats-batch', async (req, res) => {
     if (ids.length === 0) {
       return res.json({ results: {} });
     }
-    const results = await mapPlaylistIdsWithConcurrency(ids, 8, (pid) => svc.getPlaylistExplicitStats(pid));
+    const results = await mapPlaylistIdsWithConcurrency(ids, 4, (pid) => svc.getPlaylistExplicitStats(pid));
     res.json({ results });
   } catch (e) {
     if (sendSpotifyWebApiErrorIfNeeded(res, e)) return;
@@ -8946,7 +8946,7 @@ app.post('/api/spotify/resume', async (req, res) => {
 
 // Keep device active with periodic activation
 function startDeviceKeepAlive() {
-  console.log('🔋 Starting device keep-alive (every 5 minutes)...');
+  console.log('🔋 Starting device keep-alive (every 10 minutes)...');
   
   setInterval(async () => {
     try {
@@ -8967,7 +8967,7 @@ function startDeviceKeepAlive() {
     } catch (error) {
       console.log('⚠️ Device keep-alive failed (this is normal if no active session)');
     }
-  }, 5 * 60 * 1000); // Every 5 minutes
+  }, 10 * 60 * 1000); // Every 10 minutes (5 was often enough activation; halves token/device churn)
 }
 
 // Start the server
