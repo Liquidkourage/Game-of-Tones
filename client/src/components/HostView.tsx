@@ -46,6 +46,7 @@ import { hostFetch, getHostJwt, setHostJwt, clearHostJwt, apiOrigin, browserGoog
 import { BingoPattern, PATTERN_OPTIONS, BINGO_PATTERNS, getPatternDisplayName, getSavedCustomPatterns, saveCustomPattern, SavedCustomPattern } from '../patternDefinitions';
 import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
+import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModal';
 import RoundPlanner from './RoundPlanner';
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
@@ -214,6 +215,13 @@ const HostView: React.FC = () => {
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
   /** Server served GET /v1/me/playlists from last successful DB copy (Spotify 429 or TEMPO quarantine). */
   const [spotifyListCacheInfo, setSpotifyListCacheInfo] = useState<string | null>(null);
+  /** High-salience notice; blocks UI until the host dismisses (API / rate / failsafe). */
+  const [hostAckNotification, setHostAckNotification] = useState<{
+    id: string;
+    title: string;
+    message: string;
+    variant: HostAckVariant;
+  } | null>(null);
   const [playlistByLinkInput, setPlaylistByLinkInput] = useState('');
   const [playlistByLinkLoading, setPlaylistByLinkLoading] = useState(false);
   const [playlistByLinkError, setPlaylistByLinkError] = useState<string | null>(null);
@@ -513,6 +521,27 @@ const HostView: React.FC = () => {
     persistProfiles(next);
   };
 
+  const showHostAckNotification = useCallback(
+    (p: { title: string; message: string; variant?: HostAckVariant; id?: string }) => {
+      setHostAckNotification({
+        id: p.id ?? `host-ack-${Date.now()}`,
+        title: p.title,
+        message: p.message,
+        variant: p.variant ?? 'warning',
+      });
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!hostAckNotification) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [hostAckNotification]);
+
   const loadPlaylists = useCallback(async () => {
     try {
       const assignedForQuery = eventRoundsRef.current
@@ -547,9 +576,13 @@ const HostView: React.FC = () => {
         }
         setSpotifyMyPlaylistsTotal(null);
         setSpotifyListCacheInfo(null);
-        setSpotifyError(
-          `Spotify is rate-limiting this app right now${retryMin}. Wait and tap Refresh, or check your app in the Spotify Developer Dashboard (quota / usage).`
-        );
+        setSpotifyError(null);
+        showHostAckNotification({
+          id: 'playlists-http-429',
+          title: 'Spotify rate limit',
+          variant: 'warning',
+          message: `Spotify is rate-limiting this app right now${retryMin}. Wait, then tap Refresh on your library, or check your app in the Spotify Developer Dashboard (quota / usage).`,
+        });
         return;
       }
       const data = (await response.json()) as {
@@ -608,16 +641,20 @@ const HostView: React.FC = () => {
         if (data && data.error === 'spotify_rate_limited') {
           const ra = typeof data.retryAfterSec === 'number' ? data.retryAfterSec : null;
           const retryMin = ra != null && ra > 0 ? ` (retry in about ${Math.max(1, Math.ceil(ra / 60))} min)` : '';
-          setSpotifyError(
-            `Spotify is rate-limiting this app${retryMin}. Wait and refresh, or check the Developer Dashboard.`
-          );
+          setSpotifyError(null);
+          showHostAckNotification({
+            id: 'playlists-spotify_rate_limited',
+            title: 'Spotify rate limit',
+            variant: 'warning',
+            message: `Spotify is rate-limiting this app or the server is cooling down${retryMin}. Wait and tap Refresh, or check the Developer Dashboard.`,
+          });
         }
       }
     } catch (error) {
       setSpotifyMyPlaylistsTotal(null);
       console.error('Error loading playlists:', error);
     }
-  }, []);
+  }, [showHostAckNotification]);
 
   const addPlaylistByLink = useCallback(async () => {
     setPlaylistByLinkError(null);
@@ -647,9 +684,13 @@ const HostView: React.FC = () => {
             ra != null
               ? ` Try again in about ${Math.max(1, Math.ceil(ra / 60))} min (Spotify’s Retry-After: ${ra}s).`
               : ' Try again after cooldown.';
-          setPlaylistByLinkError(
-            `Spotify is rate-limiting playlist requests for this app right now, including a single link lookup — not a bad URL.${wait} Nothing in TEMPO can override Spotify’s wait window.`
-          );
+          setPlaylistByLinkError(null);
+          showHostAckNotification({
+            id: 'playlist-by-link-429',
+            title: 'Spotify rate limit',
+            variant: 'warning',
+            message: `Spotify is rate-limiting playlist requests for this app right now, including a single link lookup — not a bad URL.${wait} Nothing in TEMPO can override Spotify’s wait window.`,
+          });
         } else {
           setPlaylistByLinkError(
             d.message || d.error || `Could not add (${res.status})`
@@ -672,7 +713,7 @@ const HostView: React.FC = () => {
     } finally {
       setPlaylistByLinkLoading(false);
     }
-  }, [playlistByLinkInput]);
+  }, [playlistByLinkInput, showHostAckNotification]);
 
 
   /** Assigned-to-round ids as strings so Spotify id === round id always matches. */
@@ -1717,29 +1758,16 @@ const HostView: React.FC = () => {
       setIsSpotifyConnected(false);
       setSpotifyError(msg);
       addLog(`Spotify failsafe: ${msg}`, 'error');
-      try {
-        const toast = document.createElement('div');
-        toast.textContent = msg;
-        Object.assign(toast.style, {
-          position: 'fixed',
-          bottom: '14px',
-          left: '14px',
-          maxWidth: '80vw',
-          background: 'rgba(220, 53, 69, 0.15)',
-          color: '#fff',
-          border: '1px solid rgba(220, 53, 69, 0.6)',
-          padding: '12px 14px',
-          borderRadius: '10px',
-          zIndex: 10000,
-          fontWeight: 700,
-        } as unknown as CSSStyleDeclaration);
-        document.body.appendChild(toast);
-        setTimeout(() => {
-          try {
-            document.body.removeChild(toast);
-          } catch {}
-        }, 12_000);
-      } catch {}
+      const detail =
+        typeof data?.count30s === 'number' && data?.max != null
+          ? `\n\n(Approx. ${data.count30s} Spotify API calls in 30s; automatic disconnect threshold is ${data.max}.)`
+          : '';
+      showHostAckNotification({
+        id: 'server-spotify-failsafe',
+        title: 'Spotify disconnected (API protection)',
+        variant: 'error',
+        message: `${msg}${detail}`,
+      });
     });
 
     newSocket.on('playback-warning', (data: any) => {
@@ -2015,6 +2043,7 @@ const HostView: React.FC = () => {
     clientId,
     navigate,
     disconnectSpotify,
+    showHostAckNotification,
   ]);
 
 
@@ -3986,6 +4015,14 @@ const HostView: React.FC = () => {
 
   return (
     <div className="host-view">
+      <HostAcknowledgeModal
+        open={hostAckNotification != null}
+        title={hostAckNotification?.title ?? ''}
+        message={hostAckNotification?.message ?? ''}
+        variant={hostAckNotification?.variant ?? 'warning'}
+        acknowledgeLabel="OK"
+        onAcknowledge={() => setHostAckNotification(null)}
+      />
       <motion.div 
         className="host-container"
         initial={{ opacity: 0, y: 20 }}
