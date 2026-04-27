@@ -1,10 +1,27 @@
 /**
  * Enterprise tenants: each organization may use its own Spotify Developer app (client id + secret).
- * Secrets are encrypted at rest when TEMPO_ORG_CREDENTIALS_KEY is set.
+ * By default, secrets in `spotify_client_secret_encrypted` are encrypted with TEMPO_ORG_CREDENTIALS_KEY.
+ * For local/diagnostic use only, set TEMPO_ORG_PLAINTEXT_SECRETS=1 to read/write that column as raw
+ * text (no encryption). Revert to encrypted storage in production; do not commit secrets.
  */
 
 const credentialCrypto = require('./credentialCrypto');
 const spotifyPipelineLog = require('./spotifyPipelineLog');
+
+/**
+ * When true, `spotify_client_secret_encrypted` holds the literal client secret (misnamed column).
+ * Default off. Unsafe on shared or production DBs.
+ */
+function orgPlaintextSecretsMode() {
+  const v = String(process.env.TEMPO_ORG_PLAINTEXT_SECRETS || '').trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes';
+}
+
+if (orgPlaintextSecretsMode()) {
+  console.warn(
+    '[organizations] TEMPO_ORG_PLAINTEXT_SECRETS is on: org Spotify client secrets are stored and read as PLAINTEXT. Turn this off as soon as diagnosis is done.'
+  );
+}
 
 /** uid -> { clientId, clientSecret } | null (primed: use env) | missing (not primed yet) */
 const credentialOptionsByUserId = new Map();
@@ -84,12 +101,22 @@ async function getCredentialsForUserId(db, userId) {
   );
   if (r.rows.length === 0) return null;
   const row = r.rows[0];
-  const secret = credentialCrypto.decryptSecret(row.spotify_client_secret_encrypted);
-  if (!secret) {
-    console.error(
-      `organizations: could not decrypt Spotify secret for user ${userId} — check TEMPO_ORG_CREDENTIALS_KEY`
-    );
-    return null;
+  const raw = row.spotify_client_secret_encrypted;
+  let secret;
+  if (orgPlaintextSecretsMode()) {
+    secret = String(raw == null ? '' : raw).trim();
+    if (!secret) {
+      console.error(`organizations: empty Spotify client secret in DB for user ${userId} (plaintext mode)`);
+      return null;
+    }
+  } else {
+    secret = credentialCrypto.decryptSecret(raw);
+    if (!secret) {
+      console.error(
+        `organizations: could not decrypt Spotify secret for user ${userId} — check TEMPO_ORG_CREDENTIALS_KEY, or TEMPO_ORG_PLAINTEXT_SECRETS=1 only for diagnosis with a plaintext value in the column`
+      );
+      return null;
+    }
   }
   return {
     clientId: String(row.spotify_client_id || '').trim(),
@@ -115,7 +142,7 @@ async function createOrganization(db, { name, spotifyClientId, spotifyClientSecr
   if (!n || !cid || !csec) {
     throw new Error('name, spotifyClientId, and spotifyClientSecret are required');
   }
-  const enc = credentialCrypto.encryptSecret(csec);
+  const enc = orgPlaintextSecretsMode() ? csec : credentialCrypto.encryptSecret(csec);
   const r = await db.query(
     `INSERT INTO organizations (name, spotify_client_id, spotify_client_secret_encrypted)
      VALUES ($1, $2, $3)
