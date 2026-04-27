@@ -378,7 +378,12 @@ class SpotifyService {
         expiresIn: data.body.expires_in
       };
     } catch (error) {
-      console.error('Error getting Spotify tokens:', error);
+      const msg = (error && error.message) || String(error);
+      if (process.env.TEMPO_SPOTIFY_LOG_FULL_TOKEN_ERRORS === '1') {
+        console.error('Error getting Spotify tokens:', error);
+      } else {
+        console.error('Error getting Spotify tokens:', msg);
+      }
       throw error;
     }
   }
