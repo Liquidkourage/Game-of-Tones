@@ -63,6 +63,37 @@ interface Playlist {
   owner?: string;
 }
 
+/** In-process Web API 429 cool-down (from GET /api/spotify/status and error bodies). */
+type WebApiQuarantineState =
+  | { active: false }
+  | {
+      active: true;
+      remainingSec: number;
+      source?: string;
+      sourceDescription?: string;
+      spotifyRetryAfterSec: number | null;
+      effectiveCooldownSec?: number;
+      inProcessMaxCooldownSec?: number;
+      spotifyRetryCapped?: boolean;
+    };
+
+function normalizeWebApiQuarantine(raw: unknown): WebApiQuarantineState {
+  if (!raw || typeof raw !== 'object') return { active: false };
+  const o = raw as Record<string, unknown>;
+  if (o.active !== true) return { active: false };
+  return {
+    active: true,
+    remainingSec: Math.max(0, typeof o.remainingSec === 'number' ? o.remainingSec : 0),
+    source: typeof o.source === 'string' ? o.source : undefined,
+    sourceDescription: typeof o.sourceDescription === 'string' ? o.sourceDescription : undefined,
+    spotifyRetryAfterSec:
+      typeof o.spotifyRetryAfterSec === 'number' && o.spotifyRetryAfterSec > 0 ? o.spotifyRetryAfterSec : null,
+    effectiveCooldownSec: typeof o.effectiveCooldownSec === 'number' ? o.effectiveCooldownSec : undefined,
+    inProcessMaxCooldownSec: typeof o.inProcessMaxCooldownSec === 'number' ? o.inProcessMaxCooldownSec : 900,
+    spotifyRetryCapped: o.spotifyRetryCapped === true,
+  };
+}
+
 interface Song {
   id: string;
   name: string;
@@ -211,6 +242,8 @@ const HostView: React.FC = () => {
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
   /** Server served GET /v1/me/playlists from last successful DB copy (Spotify 429 or TEMPO quarantine). */
   const [spotifyListCacheInfo, setSpotifyListCacheInfo] = useState<string | null>(null);
+  /** Spotify Web API 429 in-process quarantine (source, Retry-After, remaining). */
+  const [webApiQuarantine, setWebApiQuarantine] = useState<WebApiQuarantineState>({ active: false });
   /** High-salience notice; blocks UI until the host dismisses (API / rate / failsafe). */
   const [hostAckNotification, setHostAckNotification] = useState<{
     id: string;
@@ -516,6 +549,27 @@ const HostView: React.FC = () => {
     []
   );
 
+  const refreshSpotifyQuarantineFromStatus = useCallback(async () => {
+    try {
+      const response = await hostFetch(`${API_BASE || ''}/api/spotify/status?_=${Date.now()}`);
+      const data = (await response.json()) as { webApiQuarantine?: unknown };
+      if (data.webApiQuarantine != null) {
+        setWebApiQuarantine(normalizeWebApiQuarantine(data.webApiQuarantine));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isSpotifyConnected) return;
+    if (webApiQuarantine.active !== true) return;
+    const id = window.setInterval(() => {
+      void refreshSpotifyQuarantineFromStatus();
+    }, 4000);
+    return () => clearInterval(id);
+  }, [isSpotifyConnected, webApiQuarantine.active, refreshSpotifyQuarantineFromStatus]);
+
   useEffect(() => {
     if (!hostAckNotification) return;
     const prev = document.body.style.overflow;
@@ -546,7 +600,14 @@ const HostView: React.FC = () => {
       if (response.status === 429) {
         let retryMin = '';
         try {
-          const d = (await response.json()) as { retryAfterSec?: number; message?: string };
+          const d = (await response.json()) as {
+            retryAfterSec?: number;
+            message?: string;
+            webApiQuarantine?: unknown;
+          };
+          if (d.webApiQuarantine != null) {
+            setWebApiQuarantine(normalizeWebApiQuarantine(d.webApiQuarantine));
+          }
           if (d && typeof d.retryAfterSec === 'number' && d.retryAfterSec > 0) {
             retryMin = ` (retry in about ${Math.max(1, Math.ceil(d.retryAfterSec / 60))} min)`;
           }
@@ -573,7 +634,12 @@ const HostView: React.FC = () => {
         fromSpotifyListCache?: boolean;
         cacheMessage?: string;
         cacheUpdatedAt?: string;
+        webApiQuarantine?: unknown;
       };
+
+      if (data.webApiQuarantine != null) {
+        setWebApiQuarantine(normalizeWebApiQuarantine(data.webApiQuarantine));
+      }
       
       if (data.success) {
         if (data.fromSpotifyListCache) {
@@ -924,7 +990,10 @@ const HostView: React.FC = () => {
     const fetchStatus = async () => {
       const cacheBuster = Date.now();
       const response = await hostFetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
-      const data = await response.json();
+      const data = (await response.json()) as { connected?: boolean; webApiQuarantine?: unknown };
+      if (data.webApiQuarantine != null) {
+        setWebApiQuarantine(normalizeWebApiQuarantine(data.webApiQuarantine));
+      }
       return data.connected === true;
     };
 
@@ -993,6 +1062,7 @@ const HostView: React.FC = () => {
       setIsSpotifyConnected(false);
       setPlaylists([]);
       setSpotifyError(null);
+      setWebApiQuarantine({ active: false });
     } catch (error) {
       console.error('Error disconnecting Spotify:', error);
     }
@@ -1775,10 +1845,12 @@ const HostView: React.FC = () => {
         try {
           const cacheBuster = Date.now();
           const response = await hostFetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
-          const data = await response.json();
+          const data = (await response.json()) as { connected?: boolean; webApiQuarantine?: unknown };
           console.log('?? Recheck response:', data);
           console.log('?? Recheck response details:', JSON.stringify(data, null, 2));
-          
+          if (data.webApiQuarantine != null) {
+            setWebApiQuarantine(normalizeWebApiQuarantine(data.webApiQuarantine));
+          }
           if (data.connected) {
             console.log('? Spotify found connected after room join!');
             setIsSpotifyConnected(true);
@@ -1824,7 +1896,10 @@ const HostView: React.FC = () => {
         // Add cache-busting parameter to force fresh request
         const cacheBuster = Date.now();
         const response = await hostFetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
-        const data = await response.json();
+        const data = (await response.json()) as { connected?: boolean; webApiQuarantine?: unknown };
+        if (data.webApiQuarantine != null) {
+          setWebApiQuarantine(normalizeWebApiQuarantine(data.webApiQuarantine));
+        }
 
         if (data.connected) {
           console.log('Spotify already connected, loading playlists...');
@@ -1890,8 +1965,10 @@ const HostView: React.FC = () => {
       // Check if Spotify is already connected (with cache-busting)
       const cacheBuster = Date.now();
       const statusResponse = await hostFetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
-      const statusData = await statusResponse.json();
-      
+      const statusData = (await statusResponse.json()) as { connected?: boolean; webApiQuarantine?: unknown };
+      if (statusData.webApiQuarantine != null) {
+        setWebApiQuarantine(normalizeWebApiQuarantine(statusData.webApiQuarantine));
+      }
       if (statusData.connected) {
         console.log('Spotify already connected, loading playlists...');
         setIsSpotifyConnected(true);
@@ -3664,6 +3741,38 @@ const HostView: React.FC = () => {
     (finalizedOrder?.length ?? 0) > 0 ||
     mixFinalized;
 
+  const webApiQuarantineBannerText = useMemo(() => {
+    if (webApiQuarantine.active !== true) return null;
+    const q = webApiQuarantine;
+    const rem = q.remainingSec;
+    const remPart =
+      rem >= 120
+        ? `about ${Math.ceil(rem / 60)} min`
+        : rem >= 60
+          ? `${Math.floor(rem / 60)}m ${rem % 60}s`
+          : `${rem}s`;
+    const parts: string[] = [
+      `What triggered it: ${q.sourceDescription || q.source || 'Spotify Web API'}.`,
+      `Time left on TEMPO’s cool-down: ~${remPart} (this server pauses Web API calls for up to ${q.inProcessMaxCooldownSec ?? 900}s per incident).`,
+    ];
+    if (q.spotifyRetryAfterSec != null && q.spotifyRetryAfterSec > 0) {
+      const s = q.spotifyRetryAfterSec;
+      const human =
+        s >= 3600
+          ? `~${(s / 3600).toFixed(1)} hours (${s.toLocaleString()}s)`
+          : s >= 60
+            ? `${Math.ceil(s / 60)} min (${s}s)`
+            : `${s}s`;
+      parts.push(`Spotify’s Retry-After header: ${human}.`);
+    }
+    if (q.spotifyRetryCapped) {
+      parts.push(
+        `Spotify’s suggested wait is longer than TEMPO’s in-process cap, so the app may call Spotify again sooner — you can still get 429s until Spotify throttling eases.`
+      );
+    }
+    return parts.join(' ');
+  }, [webApiQuarantine]);
+
   const playbackDeviceContent = isSpotifyConnected ? (
     <>
       <div
@@ -3899,6 +4008,26 @@ const HostView: React.FC = () => {
           </div>
         </div>
 
+        {isSpotifyConnected && webApiQuarantine.active && webApiQuarantineBannerText ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className="host-spotify-quarantine-banner"
+            style={{
+              margin: '0 0 0',
+              padding: '12px 18px',
+              borderRadius: 10,
+              background: 'rgba(255, 193, 7, 0.1)',
+              border: '1px solid rgba(255, 193, 7, 0.42)',
+              color: 'rgba(255, 240, 210, 0.98)',
+              fontSize: '0.88rem',
+              lineHeight: 1.55,
+            }}
+          >
+            <strong style={{ color: '#ffc14a', display: 'block', marginBottom: 6 }}>Spotify is rate limiting</strong>
+            {webApiQuarantineBannerText}
+          </div>
+        ) : null}
 
         {/* Main Content */}
         <div className="host-content" style={{ paddingBottom: '20px' }}>

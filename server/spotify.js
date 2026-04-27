@@ -56,6 +56,11 @@ class SpotifyService {
     /** When > Date.now(), skip Spotify Web API calls (429 with Retry-After, often 24h for restricted apps). */
     this._spotifyQuarantineUntil = 0;
     this._lastGlobal429LogAt = 0;
+    /** Last 429: which API path / label, Spotify Retry-After (seconds), effective cooldown (seconds, capped), uncapped. */
+    this._quarantineSource = null;
+    this._quarantineSpotifyRetryAfterSec = null;
+    this._quarantineEffectiveCooldownSec = null;
+    this._quarantineCapped = false;
   }
 
   // Classify common Spotify Web API errors
@@ -103,12 +108,16 @@ class SpotifyService {
         ? Math.min(86400 * 1000, raSec * 1000)
         : Math.min(3600 * 1000, 60_000);
     const waitMs = Math.min(rawWaitMs, SPOTIFY_QUARANTINE_MAX_MS);
+    const capped = rawWaitMs > SPOTIFY_QUARANTINE_MAX_MS;
+    this._quarantineSource = String(source);
+    this._quarantineSpotifyRetryAfterSec = raSec > 0 ? raSec : null;
+    this._quarantineEffectiveCooldownSec = Math.max(1, Math.round(waitMs / 1000));
+    this._quarantineCapped = capped;
     this._spotifyQuarantineUntil = Math.max(this._spotifyQuarantineUntil || 0, now + waitMs);
     this._playbackStateBackoffUntil = Math.max(this._playbackStateBackoffUntil || 0, now + waitMs);
     if (now - (this._lastGlobal429LogAt || 0) > 120_000) {
       this._lastGlobal429LogAt = now;
       const untilIso = new Date(this._spotifyQuarantineUntil).toISOString();
-      const capped = rawWaitMs > SPOTIFY_QUARANTINE_MAX_MS;
       console.warn(
         `⚠️ Spotify 429 [${source}] — pausing API calls until ${untilIso} (Retry-After from Spotify: ${
           raSec || 'n/a'
@@ -125,12 +134,53 @@ class SpotifyService {
     return Math.max(0, Math.ceil(((this._spotifyQuarantineUntil || 0) - Date.now()) / 1000));
   }
 
+  _describeQuarantineSource(source) {
+    const s = String(source || 'unknown');
+    const labels = {
+      getUserPlaylists: 'Loading your playlist library (GET /v1/me/playlists)',
+      getPlaylistItems: 'Reading playlist track pages (GET /v1/playlists/…/items)',
+      getPlaylistMetadataBrief: 'Loading playlist details',
+      getPlaylistTracks: 'Loading a playlist’s full track list',
+      getCurrentUserProfileBrief: 'Spotify user profile (GET /v1/me)',
+      getCurrentPlaybackState: 'Current playback / player state',
+    };
+    if (labels[s]) return labels[s];
+    if (s.startsWith('withRetries:')) {
+      return `A Spotify call that can retry: ${s.replace(/^withRetries:/, '')}`;
+    }
+    return `Spotify Web API: ${s}`;
+  }
+
+  /**
+   * In-process 429 cooldown for api.spotify.com (for host UI). Not cleared until cooldown ends
+   * or clearRateLimitQuarantine().
+   */
+  getWebApiQuarantineInfo() {
+    if (!this.isQuarantined()) {
+      return { active: false };
+    }
+    return {
+      active: true,
+      remainingSec: this.getQuarantineRemainingSec(),
+      source: this._quarantineSource,
+      sourceDescription: this._describeQuarantineSource(this._quarantineSource),
+      spotifyRetryAfterSec: this._quarantineSpotifyRetryAfterSec,
+      effectiveCooldownSec: this._quarantineEffectiveCooldownSec,
+      inProcessMaxCooldownSec: Math.floor(SPOTIFY_QUARANTINE_MAX_MS / 1000),
+      spotifyRetryCapped: this._quarantineCapped === true,
+    };
+  }
+
   /**
    * Clear in-process 429 backoff. Call after a successful token refresh (POST /api/spotify/refresh) so
    * Web API is attempted again. OAuth uses a new SpotifyService (invalidate) instead of this.
    */
   clearRateLimitQuarantine() {
     this._spotifyQuarantineUntil = 0;
+    this._quarantineSource = null;
+    this._quarantineSpotifyRetryAfterSec = null;
+    this._quarantineEffectiveCooldownSec = null;
+    this._quarantineCapped = false;
   }
 
   _makeQuarantineError(caller) {

@@ -6954,14 +6954,31 @@ app.get('/api/spotify/status', async (req, res) => {
     const orgId = uid != null ? `user_${uid}` : 'DEFAULT';
     const tok = multiTenantSpotify.getTokens(orgId);
     if (!tok || !tok.accessToken) {
-      return res.json({ connected: false, hasTokens: false, organizationId: orgId });
+      return res.json({ connected: false, hasTokens: false, organizationId: orgId, webApiQuarantine: { active: false } });
     }
     const svc = multiTenantSpotify.getService(orgId);
-    await svc.ensureValidToken();
-    return res.json({ connected: true, hasTokens: true, organizationId: orgId });
+    const webApiQuarantine = svc.getWebApiQuarantineInfo();
+    try {
+      await svc.ensureValidToken();
+    } catch (e) {
+      console.error('Spotify status ensureValidToken:', e?.message || e);
+      return res.json({
+        connected: true,
+        hasTokens: true,
+        organizationId: orgId,
+        webApiQuarantine,
+        tokenRefreshError: e && e.message ? String(e.message) : 'token_refresh_failed',
+      });
+    }
+    return res.json({ connected: true, hasTokens: true, organizationId: orgId, webApiQuarantine });
   } catch (error) {
     console.error('Spotify status error:', error);
-    res.status(500).json({ connected: false, hasTokens: false, error: 'Status check failed' });
+    res.status(500).json({
+      connected: false,
+      hasTokens: false,
+      error: 'Status check failed',
+      webApiQuarantine: { active: false },
+    });
   }
 });
 
@@ -7008,6 +7025,7 @@ app.get('/api/spotify/whoami', async (req, res) => {
         error: 'spotify_rate_limited',
         message: 'Spotify API quarantine active (recent 429).',
         retryAfterSec: svc.getQuarantineRemainingSec(),
+        webApiQuarantine: svc.getWebApiQuarantineInfo(),
       });
     }
     const me = await svc.getCurrentUserProfileBrief();
@@ -7454,6 +7472,7 @@ app.get('/api/spotify/playlists', async (req, res) => {
           cacheUpdatedAt: cachedQ.updatedAt,
           cacheMessage:
             'TEMPO is pausing Spotify calls after a recent rate limit. Showing the last library list we saved. Use Add by link below or try Refresh later.',
+          webApiQuarantine: svc.getWebApiQuarantineInfo(),
         });
       }
       if (spotifyPipelineLog.isEnabled()) {
@@ -7467,6 +7486,7 @@ app.get('/api/spotify/playlists', async (req, res) => {
         error: 'spotify_rate_limited',
         message: 'Spotify API quarantine active (recent 429). Try again after Retry-After.',
         retryAfterSec: svc.getQuarantineRemainingSec(),
+        webApiQuarantine: svc.getWebApiQuarantineInfo(),
       });
     }
     if (spotifyPipelineLog.isEnabled()) {
@@ -7491,6 +7511,7 @@ app.get('/api/spotify/playlists', async (req, res) => {
       organizationId: orgId,
       /** Spotify PagingObject total from /v1/me/playlists (same account as the access token). */
       spotifyListTotal: spotifyListTotal != null ? spotifyListTotal : undefined,
+      webApiQuarantine: svc.getWebApiQuarantineInfo(),
     });
   } catch (error) {
     if (isSpotifyHttp429(error)) {
@@ -7509,6 +7530,7 @@ app.get('/api/spotify/playlists', async (req, res) => {
           cacheUpdatedAt: cached429.updatedAt,
           cacheMessage:
             'Spotify is rate-limiting the library list (GET /v1/me/playlists). Showing the last list we saved. You can add a playlist by link without listing the library, or use Refresh after cooldown.',
+          webApiQuarantine: spotifyForRequest(req).getWebApiQuarantineInfo(),
         });
       }
     }
@@ -7578,6 +7600,7 @@ app.get('/api/spotify/devices', async (req, res) => {
         error: 'spotify_rate_limited',
         message: 'Spotify API quarantine active (recent 429).',
         retryAfterSec: spotifyReq.getQuarantineRemainingSec(),
+        webApiQuarantine: spotifyReq.getWebApiQuarantineInfo(),
       });
     }
     console.log(`📱 Fetching available Spotify devices (org ${orgId})...`);
