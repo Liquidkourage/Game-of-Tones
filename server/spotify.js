@@ -26,6 +26,20 @@ const SPOTIFY_QUARANTINE_MAX_MS = 8 * 60 * 1000;
 /** Full getPlaylistTracks() results, reused when the host loads tracks then finalizes (halves /items load). */
 const PLAYLIST_TRACKS_CACHE_TTL_MS = 25 * 60 * 1000;
 
+/**
+ * Minimum ms between *starts* of api.spotify.com calls for one SpotifyService (one user token).
+ * Serializes traffic to avoid bursty parallel requests — the main avoidable cause of 429.
+ * SPOTIFY_WEB_API_MIN_INTERVAL_MS=0 disables (emergency only).
+ * Default 400 (~2.5 req/s max for that user from this process).
+ */
+function readWebApiPacingMinMs() {
+  const raw = process.env.SPOTIFY_WEB_API_MIN_INTERVAL_MS;
+  if (raw === '0') return 0;
+  const n = parseInt(raw != null && raw !== '' ? raw : '400', 10);
+  if (!Number.isFinite(n) || n < 0) return 400;
+  return Math.min(10_000, n);
+}
+
 class SpotifyService {
   /**
    * @param {undefined | null | { clientId: string; clientSecret: string }} options - If object with id+secret, use tenant's Spotify Developer app; else env SPOTIFY_*.
@@ -68,6 +82,10 @@ class SpotifyService {
     this._quarantineCapped = false;
     /** Full track lists keyed by playlist id — avoids re-paginating /items when host loads then finalizes. */
     this._playlistTracksCache = new Map();
+    /** Global pacing for this token (see readWebApiPacingMinMs). */
+    this._pacingMinIntervalMs = readWebApiPacingMinMs();
+    this._paceQueueTail = Promise.resolve();
+    this._nextWebApiSlotAt = 0;
   }
 
   // Classify common Spotify Web API errors
@@ -213,10 +231,33 @@ class SpotifyService {
   }
 
   /**
+   * Serialized “next slot” pacing for every Web API call on this token — prevents burst 429s.
+   */
+  async _paceBeforeWebApiRequest() {
+    if (!this._pacingMinIntervalMs) return;
+    const min = this._pacingMinIntervalMs;
+    const run = async () => {
+      const now = Date.now();
+      const wait = Math.max(0, (this._nextWebApiSlotAt || 0) - now);
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      this._nextWebApiSlotAt = Date.now() + min;
+    };
+    const p = this._paceQueueTail.then(run);
+    this._paceQueueTail = p.catch(() => {});
+    await p;
+  }
+
+  async _paceAndThen(fn) {
+    await this._paceBeforeWebApiRequest();
+    return await fn();
+  }
+
+  /**
    * Proxy spotify-web-api-node: count one api.spotify.com request per call (excludes token/OAuth helpers).
    */
   _wrapSpotifyWebApiForMeter() {
     const raw = this.spotifyApi;
+    const self = this;
     const noCount = new Set([
       'setAccessToken',
       'setRefreshToken',
@@ -247,7 +288,7 @@ class SpotifyService {
         }
         return function proxiedSpotifyRequest(...args) {
           webApi.record(1);
-          return v.apply(target, args);
+          return self._paceAndThen(() => v.apply(target, args));
         };
       },
     });
@@ -256,14 +297,15 @@ class SpotifyService {
   /**
    * Raw GET to api.spotify.com (used for /items where the Node SDK still maps older paths).
    */
-  _webApiGet(path, label, { bypassQuarantine = false } = {}) {
+  async _webApiGet(path, label, { bypassQuarantine = false } = {}) {
+    if (!bypassQuarantine && this.isQuarantined()) {
+      return Promise.reject(this._makeQuarantineError(label));
+    }
+    if (!this.accessToken) {
+      return Promise.reject(new Error('No access token'));
+    }
+    await this._paceBeforeWebApiRequest();
     return new Promise((resolve, reject) => {
-      if (!bypassQuarantine && this.isQuarantined()) {
-        return reject(this._makeQuarantineError(label));
-      }
-      if (!this.accessToken) {
-        return reject(new Error('No access token'));
-      }
       webApi.record(1);
       const req = https.request(
         {
@@ -610,7 +652,7 @@ class SpotifyService {
 
       // Use direct Web API so we keep `items.total` / `tracks.total` (Spotify is moving to `items`).
       while (true) {
-        if (offset > 0) {
+        if (offset > 0 && !this._pacingMinIntervalMs) {
           await new Promise((r) => setTimeout(r, 200));
         }
         const path = `/v1/me/playlists?limit=${limit}&offset=${offset}`;
@@ -784,7 +826,8 @@ class SpotifyService {
     }
   }
 
-  _transferPlaybackDirect(deviceId, play) {
+  async _transferPlaybackDirect(deviceId, play) {
+    await this._paceBeforeWebApiRequest();
     return new Promise((resolve, reject) => {
       const body = JSON.stringify({ device_ids: [deviceId], play: !!play });
       webApi.record(1);
