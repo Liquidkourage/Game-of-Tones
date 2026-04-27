@@ -4468,7 +4468,9 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           fiveCols.push(src);
           colNames.push(perListGloballyUnique[col].name || `Column ${col+1}`);
           console.log(`   ✅ Column ${col} assigned to playlist: ${perListGloballyUnique[col].name}`);
-          src.forEach(s => { if (s && s.id) metaMap[s.id] = { name: s.name, artist: s.artist }; });
+          src.forEach(s => {
+            if (s && s.id) metaMap[s.id] = { name: s.name, artist: s.artist, explicit: s.explicit === true };
+          });
         }
         const roomRef = rooms.get(roomId);
         if (roomRef) {
@@ -4495,7 +4497,15 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           
           // Emit finalized global order for Host UI
           try {
-            const orderWithMeta = globalOrder.map(id => ({ id, name: metaMap[id]?.name || '', artist: metaMap[id]?.artist || '' }));
+            const orderWithMeta = globalOrder.map((id) => {
+              const m = metaMap[id];
+              return {
+                id,
+                name: m?.name || '',
+                artist: m?.artist || '',
+                explicit: m?.explicit === true,
+              };
+            });
             io.to(roomId).emit('finalized-order', { order: orderWithMeta });
           } catch (_) {}
         }
@@ -4546,8 +4556,36 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
         roomRef.oneBySeventyFivePool = base.map(s => ({ id: s.id }));
         console.log(`✅ 1x75: Stored ${base.length} songs in oneBySeventyFivePool for card/playback alignment`);
         io.to(roomId).emit('oneby75-pool', { ids: base.map(s => s.id) });
+        try {
+          if (base.length > 0) {
+            const orderWithMeta = base.map(s => ({
+              id: s.id,
+              name: s.name || '',
+              artist: s.artist || '',
+              explicit: s.explicit === true,
+            }));
+            io.to(roomId).emit('finalized-order', { order: orderWithMeta });
+          }
+        } catch (_) {}
       }
   }
+
+    if (mode === 'fallback') {
+      try {
+        const poolSongs = buildGlobalPool();
+        if (poolSongs.length > 0) {
+          const orderWithMeta = poolSongs.map(s => ({
+            id: s.id,
+            name: s.name || '',
+            artist: s.artist || '',
+            explicit: s.explicit === true,
+          }));
+          io.to(roomId).emit('finalized-order', { order: orderWithMeta });
+        }
+      } catch (e) {
+        console.warn('⚠️ Failed to emit finalized-order for fallback mode:', e?.message || e);
+      }
+    }
 
   const cards = new Map();
     if (!room.clientCards) room.clientCards = new Map();

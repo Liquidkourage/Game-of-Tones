@@ -1074,6 +1074,8 @@ const HostView: React.FC = () => {
   const spotifyPollBackoffUntilRef = useRef(0);
   /** Throttle getUserPlaylists on socket reconnect to avoid piling on Spotify (429) next to OAuth / status checks. */
   const lastLoadPlaylistsOnSocketReconnectAtRef = useRef(0);
+  /** Last non-empty list sent in finalize-mix (React state can lag right after setSongList / socket events). */
+  const lastFinalizeMixSongListRef = useRef<Song[] | null>(null);
   useEffect(() => {
     isSpotifyConnectedRef.current = isSpotifyConnected;
   }, [isSpotifyConnected]);
@@ -1237,7 +1239,14 @@ const HostView: React.FC = () => {
     // Receive the finalized shuffled order for 5x15
     newSocket.on('finalized-order', (data: any) => {
       try {
-        const arr = Array.isArray(data?.order) ? data.order.map((o: any) => ({ id: o.id, name: o.name, artist: o.artist })) : [];
+        const arr = Array.isArray(data?.order)
+          ? data.order.map((o: any) => ({
+              id: o.id,
+              name: o.name,
+              artist: o.artist,
+              explicit: o.explicit === true,
+            }))
+          : [];
         if (arr.length > 0) {
           setFinalizedOrder(arr);
           addLog(`Finalized order received (${arr.length} tracks)`, 'info');
@@ -1402,6 +1411,7 @@ const HostView: React.FC = () => {
       setPlayedSoFar([]);
       setSongList([]);
       setFinalizedOrder([]);
+      lastFinalizeMixSongListRef.current = null;
       
       // Preserve round winners history
       if (data.roundWinners) {
@@ -2078,24 +2088,35 @@ const HostView: React.FC = () => {
     if (mixFinalized) return true;
 
     try {
-      // Check if songs have playlist information, if not regenerate
-      const needsRegeneration = songList.length > 0 && !songList[0]?.sourcePlaylistId;
-      if (needsRegeneration) {
+      let listToSend: Song[] = songList;
+      if (listToSend.length > 0 && !listToSend[0]?.sourcePlaylistId) {
         console.log('?? Songs missing playlist info, regenerating...');
-        await generateSongList();
-        // Wait a moment for the song list to update
-        await new Promise(resolve => setTimeout(resolve, 500));
+        const regen = await generateSongList();
+        listToSend = regen;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      } else if (listToSend.length === 0) {
+        addLog('Loading tracks from playlists before finalizing…', 'info');
+        listToSend = await generateSongList();
+      }
+
+      if (listToSend.length === 0) {
+        window.alert(
+          'No songs could be loaded from your playlists. Spotify’s Web API may be rate limiting this app (429). Wait a few minutes, use Refresh on the library, or try again. Cards can still be built on the server; if the list below stays empty, refresh this page or reconnect Spotify.'
+        );
+        return false;
       }
 
       console.log('?? Finalizing mix with songList:', {
-        length: songList.length,
-        hasPlaylistInfo: songList.length > 0 ? !!songList[0]?.sourcePlaylistId : false,
-        firstSong: songList.length > 0 ? {
-          id: songList[0].id,
-          name: songList[0].name,
-          sourcePlaylistId: songList[0].sourcePlaylistId,
-          sourcePlaylistName: songList[0].sourcePlaylistName
-        } : null
+        length: listToSend.length,
+        hasPlaylistInfo: listToSend.length > 0 ? !!listToSend[0]?.sourcePlaylistId : false,
+        firstSong: listToSend.length > 0
+          ? {
+              id: listToSend[0].id,
+              name: listToSend[0].name,
+              sourcePlaylistId: listToSend[0].sourcePlaylistId,
+              sourcePlaylistName: listToSend[0].sourcePlaylistName,
+            }
+          : null,
       });
 
       // Include current host-side songList ordering to enforce 1x75 pool deterministically
@@ -2123,11 +2144,12 @@ const HostView: React.FC = () => {
           resolve(true);
         };
 
+        lastFinalizeMixSongListRef.current = listToSend;
         socket.on('mix-finalized', onFinalized);
         socket.emit('finalize-mix', {
           roomId: roomId,
           playlists: selectedPlaylists,
-          songList,
+          songList: listToSend,
           freeSpace: freeSpaceEnabled
         });
       });
@@ -2160,7 +2182,14 @@ const HostView: React.FC = () => {
       return;
     }
 
-    if (songList.length === 0) {
+    const resolveSongListForStart = () =>
+      finalizedOrder && finalizedOrder.length > 0
+        ? finalizedOrder
+        : songList.length > 0
+          ? songList
+          : lastFinalizeMixSongListRef.current ?? [];
+
+    if (resolveSongListForStart().length === 0) {
       alert('No songs loaded from playlists. Ensure Spotify is connected and playlists have tracks, then try again.');
       return;
     }
@@ -2177,6 +2206,12 @@ const HostView: React.FC = () => {
         }
       }
 
+      const songListForStart = resolveSongListForStart();
+      if (songListForStart.length === 0) {
+        alert('No song pool is available. Refresh the page or load playlists again.');
+        return;
+      }
+
       console.log('Starting game with playlists:', selectedPlaylists);
       setIsStartingGame(true);
       socket.emit('start-game', {
@@ -2184,7 +2219,7 @@ const HostView: React.FC = () => {
         playlists: selectedPlaylists,
         snippetLength,
         deviceId: selectedDevice.id, // Require the selected device ID
-        songList: songList, // Send the shuffled song list to ensure server uses same order
+        songList: songListForStart, // Send the shuffled song list to ensure server uses same order
         randomStarts,
         pattern,
         customMask,
@@ -2975,17 +3010,17 @@ const HostView: React.FC = () => {
     });
   };
 
-  // Generate and shuffle song list from selected playlists
-  const generateSongList = useCallback(async () => {
+  // Generate and shuffle song list from selected playlists. Returns the shuffled list (or []) so callers can finalize without stale React state.
+  const generateSongList = useCallback(async (): Promise<Song[]> => {
     if (!isSpotifyConnected) {
       console.warn('Cannot generate song list: Spotify not connected');
       console.log('?? isSpotifyConnected state is currently:', isSpotifyConnected);
       setSongList([]);
-      return;
+      return [];
     }
     if (selectedPlaylists.length === 0) {
       setSongList([]);
-      return;
+      return [];
     }
 
     try {
@@ -3020,10 +3055,12 @@ const HostView: React.FC = () => {
 
       setSongList(shuffledSongs);
       console.log(`Generated ${shuffledSongs.length} shuffled songs`);
+      return shuffledSongs;
     } catch (error) {
       console.error('Error generating song list:', error);
+      return [];
     }
-  }, [selectedPlaylists]);
+  }, [selectedPlaylists, isSpotifyConnected]);
 
   // Advanced playback functions
   const [volumeTimeout, setVolumeTimeout] = useState<NodeJS.Timeout | null>(null);
@@ -3735,11 +3772,12 @@ const HostView: React.FC = () => {
     }
   }, [roomId]);
 
-  /** True when the host has a built pool to show (matches visibility of Finalized Playlist block). */
-  const hasFinalizedSongPool =
-    songList.length > 0 ||
-    (finalizedOrder?.length ?? 0) > 0 ||
-    mixFinalized;
+  /** Non-empty track list for the game pool (host list or server-provided order). */
+  const finalizedPoolSongs: Song[] =
+    (finalizedOrder && finalizedOrder.length > 0 ? finalizedOrder : null) || songList;
+  const hasFinalizedSongPool = finalizedPoolSongs.length > 0;
+  /** Server said mix is finalized but this UI has no tracks (e.g. client fetches got 429; rare timing). */
+  const showFinalizedButEmptyPool = mixFinalized && finalizedPoolSongs.length === 0;
 
   const webApiQuarantineBannerText = useMemo(() => {
     if (webApiQuarantine.active !== true) return null;
@@ -3753,8 +3791,9 @@ const HostView: React.FC = () => {
           : `${rem}s`;
     const cap = q.inProcessMaxCooldownSec ?? 900;
     const parts: string[] = [
-      `TEMPO is not waiting half a day. This server only spaces out Web API calls (up to ${cap}s per incident) and will retry; you can usually keep a show going with a cached library, “Add by link” for a playlist, and device playback while Spotify cools off.`,
-      `This burst was triggered by: ${q.sourceDescription || q.source || 'Spotify Web API'}. Current cool-down: ~${remPart}.`,
+      `Spotify is rate limiting the Web API (HTTP 429). This is Spotify’s throttling, not a multi-hour block imposed by TEMPO.`,
+      `TEMPO only spaces out repeat requests on this server (up to ${cap}s) so we don’t make it worse. You can often still run a show using cached data, “Add by link” for a playlist, and device playback while Spotify cools off.`,
+      `This burst: ${q.sourceDescription || q.source || 'Spotify Web API'}. TEMPO’s cool-down: ~${remPart}.`,
     ];
     if (q.spotifyRetryAfterSec != null && q.spotifyRetryAfterSec > 0) {
       const s = q.spotifyRetryAfterSec;
@@ -3766,11 +3805,11 @@ const HostView: React.FC = () => {
             ? `~${Math.ceil(s / 60)} min (${s}s)`
             : `${s}s`;
       parts.push(
-        `Spotify’s HTTP header can suggest a long wait (${human}). TEMPO does not honor that entire window; the host still isn’t “frozen” for 12+ hours. If calls keep failing, check your app in the Spotify Developer Dashboard and avoid hammering Refresh on the library.`
+        `Spotify’s Retry-After can look extreme (${human}). TEMPO does not sleep for that long; the host is not “frozen” for 12+ hours. If API calls still fail, check your app in the Spotify Developer Dashboard and avoid hammering Refresh on the library.`
       );
     } else if (q.spotifyRetryCapped) {
       parts.push(
-        `Spotify’s suggested wait was longer than TEMPO’s in-process cap; you may still see 429s until their throttling eases.`
+        `Spotify’s suggested wait was longer than TEMPO’s spacing cap; you may still get 429s from Spotify until their throttling eases.`
       );
     }
     return parts.join(' ');
@@ -5196,6 +5235,27 @@ const HostView: React.FC = () => {
                   </div>
                 )}
 
+                {showFinalizedButEmptyPool && (
+                  <div
+                    className="finalized-playlist-section finalized-playlist-section--error"
+                    style={{
+                      marginTop: 20,
+                      padding: '16px 18px',
+                      borderRadius: 12,
+                      background: 'rgba(255, 120, 80, 0.08)',
+                      border: '1px solid rgba(255, 140, 100, 0.45)',
+                      color: 'rgba(255, 240, 230, 0.95)',
+                      fontSize: '0.9rem',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <strong style={{ color: '#ffb090', display: 'block', marginBottom: 8 }}>
+                      Mix finalized, but no track list in this view
+                    </strong>
+                    Spotify may have rate limited playlist fetches (429) while the server still built cards. Try Refresh on the music library, wait a few minutes, or reload this page. The rate limit is from Spotify’s Web API, not a multi-hour wait imposed by TEMPO.
+                  </div>
+                )}
+
                 {/* Finalized Playlist Display */}
                 {hasFinalizedSongPool && (
                   <motion.div
@@ -5221,7 +5281,7 @@ const HostView: React.FC = () => {
                       gap: '8px'
                     }}>
                       <ListChecks className="w-5 h-5" aria-hidden />
-                      Finalized Playlist ({songList.length || finalizedOrder?.length || 0} songs)
+                      Finalized Playlist ({finalizedPoolSongs.length} songs)
                     </h3>
                     <p style={{
                       color: 'rgba(255,255,255,0.7)',
@@ -5253,7 +5313,7 @@ const HostView: React.FC = () => {
                       borderRadius: '8px',
                       background: 'rgba(0,0,0,0.2)'
                     }}>
-                      {(finalizedOrder || songList).map((song: any, index: number) => {
+                      {finalizedPoolSongs.map((song: any, index: number) => {
                         const displayTitle = getDisplaySongTitle(song.id, song.name);
                         const validation = validateSongTitleSync(displayTitle, song.name);
                         const validationColor = getValidationColor(validation);
@@ -5267,7 +5327,7 @@ const HostView: React.FC = () => {
                               alignItems: 'center',
                               gap: '12px',
                               padding: '12px',
-                              borderBottom: index < (finalizedOrder || songList).length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                              borderBottom: index < finalizedPoolSongs.length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none',
                               fontSize: '0.9rem',
                               // Highlight problematic titles
                               background: validation.confidence < 0.7 ? 'rgba(255,68,68,0.1)' : 'transparent',
