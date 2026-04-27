@@ -27,6 +27,24 @@ const SPOTIFY_QUARANTINE_MAX_MS = 8 * 60 * 1000;
 const PLAYLIST_TRACKS_CACHE_TTL_MS = 25 * 60 * 1000;
 
 /**
+ * February 2026 Web API (Development Mode) — Search endpoint limits.
+ * @see https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide
+ */
+const SPOTIFY_SEARCH_LIMIT_DEFAULT = 5;
+const SPOTIFY_SEARCH_LIMIT_MAX = 10;
+
+function clampSearchLimit(n) {
+  if (n == null || n === '' || Number.isNaN(Number(n))) return SPOTIFY_SEARCH_LIMIT_DEFAULT;
+  const v = Math.floor(Number(n));
+  return Math.max(1, Math.min(SPOTIFY_SEARCH_LIMIT_MAX, v));
+}
+
+function normalizeSearchOffset(n) {
+  if (n == null || n === '' || Number.isNaN(Number(n))) return 0;
+  return Math.max(0, Math.floor(Number(n)));
+}
+
+/**
  * Minimum ms between *starts* of api.spotify.com calls for one SpotifyService (one user token).
  * Serializes traffic to avoid bursty parallel requests — the main avoidable cause of 429.
  * SPOTIFY_WEB_API_MIN_INTERVAL_MS=0 disables (emergency only).
@@ -253,6 +271,19 @@ class SpotifyService {
   }
 
   /**
+   * Normalize to spotify:track:… URIs for playlist item APIs (February 2026: POST/DELETE /playlists/{id}/items).
+   */
+  _asSpotifyTrackUris(uris) {
+    return (Array.isArray(uris) ? uris : [uris])
+      .filter((u) => u != null && String(u).trim() !== '')
+      .map((u) => {
+        const s = String(u).trim();
+        if (s.startsWith('spotify:')) return s;
+        return `spotify:track:${s}`;
+      });
+  }
+
+  /**
    * Proxy spotify-web-api-node: count one api.spotify.com request per call (excludes token/OAuth helpers).
    */
   _wrapSpotifyWebApiForMeter() {
@@ -364,6 +395,94 @@ class SpotifyService {
         req.destroy();
         reject(new Error('Spotify request timeout'));
       });
+      req.end();
+    });
+  }
+
+  /**
+   * Raw POST/PUT/DELETE to api.spotify.com (February 2026: POST /v1/me/playlists, /v1/playlists/{id}/items, etc.).
+   */
+  async _webApiRequest(method, path, bodyObj, label, { bypassQuarantine = false } = {}) {
+    if (!bypassQuarantine && this.isQuarantined()) {
+      return Promise.reject(this._makeQuarantineError(label));
+    }
+    if (!this.accessToken) {
+      return Promise.reject(new Error('No access token'));
+    }
+    await this._paceBeforeWebApiRequest();
+    const bodyStr =
+      bodyObj == null
+        ? undefined
+        : typeof bodyObj === 'string'
+          ? bodyObj
+          : JSON.stringify(bodyObj);
+    return new Promise((resolve, reject) => {
+      webApi.record(1);
+      const headers = {
+        Authorization: `Bearer ${this.accessToken}`,
+        Accept: 'application/json',
+      };
+      if (bodyStr != null && bodyStr !== '') {
+        headers['Content-Type'] = 'application/json';
+        headers['Content-Length'] = Buffer.byteLength(bodyStr, 'utf8');
+      }
+      const req = https.request(
+        {
+          hostname: 'api.spotify.com',
+          path,
+          method: String(method).toUpperCase(),
+          headers,
+        },
+        (res) => {
+          const parts = [];
+          res.on('data', (c) => parts.push(c));
+          res.on('end', () => {
+            const buf = Buffer.concat(parts).toString('utf8');
+            let body = null;
+            try {
+              body = buf ? JSON.parse(buf) : null;
+            } catch {
+              body = buf ? { _raw: buf } : null;
+            }
+            const sc = res.statusCode || 0;
+            if (pl.shouldLogWebApiResponseStatus(sc)) {
+              const pathOnly = String(path).split('?')[0];
+              pl.log('web_api_response', { label, path: pathOnly, status: String(sc) });
+            }
+            if (sc >= 200 && sc < 300) {
+              return resolve({ body, statusCode: sc, headers: res.headers });
+            }
+            if (pl.isEnabled() && !pl.isWebApiLogEnabled()) {
+              pl.log('web_api_error', {
+                label,
+                path: String(path).split('?')[0],
+                status: String(sc),
+              });
+            }
+            const err = new Error(
+              (body && body.error && (body.error.message || String(body.error))) || `Spotify API ${sc}`
+            );
+            err.statusCode = sc;
+            err.body = body;
+            err.headers = res.headers;
+            if (sc === 429 || this.isRateLimitError(err)) {
+              this.applyRateLimitQuarantine(
+                { statusCode: 429, headers: res.headers, body: body || {} },
+                label
+              );
+            }
+            reject(err);
+          });
+        }
+      );
+      req.on('error', reject);
+      req.setTimeout(90000, () => {
+        req.destroy();
+        reject(new Error('Spotify request timeout'));
+      });
+      if (bodyStr != null && bodyStr !== '') {
+        req.write(bodyStr, 'utf8');
+      }
       req.end();
     });
   }
@@ -982,20 +1101,23 @@ class SpotifyService {
     }
   }
 
-  // Search for playlists
-  async searchPlaylists(query, limit = 20) {
+  // Search for playlists (limit max 10, default 5; offset for paging — February 2026 Web API)
+  async searchPlaylists(query, limit = SPOTIFY_SEARCH_LIMIT_DEFAULT, offset = 0) {
     await this._ensureCanCallWebApi('searchPlaylists');
     
     try {
-      const response = await this.spotifyApi.searchPlaylists(query, { limit });
+      const response = await this.spotifyApi.searchPlaylists(query, {
+        limit: clampSearchLimit(limit),
+        offset: normalizeSearchOffset(offset),
+      });
       return response.body.playlists.items.map(playlist => ({
         id: playlist.id,
         name: playlist.name,
         description: playlist.description,
-        tracks: playlist.tracks.total,
+        tracks: this._playlistItemsTotalFromListItem(playlist),
         public: playlist.public,
         collaborative: playlist.collaborative,
-        owner: playlist.owner.display_name,
+        owner: (playlist.owner && playlist.owner.display_name) || 'Unknown',
         images: playlist.images
       }));
     } catch (error) {
@@ -1005,12 +1127,15 @@ class SpotifyService {
     }
   }
 
-  // Search for tracks
-  async searchTracks(query, limit = 20) {
+  // Search for tracks (limit max 10, default 5; offset for paging)
+  async searchTracks(query, limit = SPOTIFY_SEARCH_LIMIT_DEFAULT, offset = 0) {
     await this._ensureCanCallWebApi('searchTracks');
     
     try {
-      const response = await this.spotifyApi.searchTracks(query, { limit });
+      const response = await this.spotifyApi.searchTracks(query, {
+        limit: clampSearchLimit(limit),
+        offset: normalizeSearchOffset(offset),
+      });
       return response.body.tracks.items.map(track => ({
         id: track.id,
         name: track.name,
@@ -1165,31 +1290,28 @@ class SpotifyService {
     }
   }
 
-  // Create a temporary playlist for context-based playback
+  // Create a temporary playlist for context-based playback (POST /v1/me/playlists + /items)
   async createTemporaryPlaylist(name, trackUris) {
     await this._ensureCanCallWebApi('createTemporaryPlaylist');
     try {
-      // Get current user
-      const userResponse = await this.spotifyApi.getMe();
-      const userId = userResponse.body.id;
-      
       const organizedName = `${GOT_OUTPUT_PLAYLIST_NAME_PREFIX}${name}`;
-      
-      // Create playlist
-      const playlistResponse = await this.spotifyApi.createPlaylist(userId, {
-        name: organizedName,
-        description: 'Generated by TEMPO Music Bingo - Game Of Tones Output Playlist',
-        public: false
-      });
-      
-      const playlistId = playlistResponse.body.id;
-      
-      // Add tracks to playlist in chunks (Spotify limit is 100 per request)
-      const chunkSize = 100;
-      for (let i = 0; i < trackUris.length; i += chunkSize) {
-        const chunk = trackUris.slice(i, i + chunkSize);
-        await this.spotifyApi.addTracksToPlaylist(playlistId, chunk);
+
+      const { body: createBody } = await this._webApiRequest(
+        'POST',
+        '/v1/me/playlists',
+        {
+          name: organizedName,
+          description: 'Generated by TEMPO Music Bingo - Game Of Tones Output Playlist',
+          public: false,
+        },
+        'createTemporaryPlaylist'
+      );
+      const playlistId = createBody && createBody.id;
+      if (!playlistId) {
+        throw new Error('Create playlist: missing id in response');
       }
+
+      await this.addTracksToPlaylist(playlistId, trackUris);
       
       console.log(`✅ Created organized playlist: ${organizedName} with ${trackUris.length} tracks`);
       return playlistId;
@@ -1204,27 +1326,24 @@ class SpotifyService {
   async createOutputPlaylist(name, trackUris, description = null) {
     await this._ensureCanCallWebApi('createOutputPlaylist');
     try {
-      // Get current user
-      const userResponse = await this.spotifyApi.getMe();
-      const userId = userResponse.body.id;
-      
       const organizedName = `${GOT_OUTPUT_PLAYLIST_NAME_PREFIX}${name}`;
-      
-      // Create playlist
-      const playlistResponse = await this.spotifyApi.createPlaylist(userId, {
-        name: organizedName,
-        description: description || 'Permanent output playlist from TEMPO Music Bingo',
-        public: false
-      });
-      
-      const playlistId = playlistResponse.body.id;
-      
-      // Add tracks to playlist in chunks (Spotify limit is 100 per request)
-      const chunkSize = 100;
-      for (let i = 0; i < trackUris.length; i += chunkSize) {
-        const chunk = trackUris.slice(i, i + chunkSize);
-        await this.spotifyApi.addTracksToPlaylist(playlistId, chunk);
+
+      const { body: createBody } = await this._webApiRequest(
+        'POST',
+        '/v1/me/playlists',
+        {
+          name: organizedName,
+          description: description || 'Permanent output playlist from TEMPO Music Bingo',
+          public: false,
+        },
+        'createOutputPlaylist'
+      );
+      const playlistId = createBody && createBody.id;
+      if (!playlistId) {
+        throw new Error('Create playlist: missing id in response');
       }
+
+      await this.addTracksToPlaylist(playlistId, trackUris);
       
       console.log(`✅ Created permanent output playlist: ${organizedName} with ${trackUris.length} tracks`);
       return { playlistId, name: organizedName };
@@ -1235,43 +1354,46 @@ class SpotifyService {
     }
   }
 
-  // Get user's Game Of Tones output playlists
+  // Get user's Game Of Tones output playlists (GET /v1/me/playlists, not /users/{id}/playlists)
   async getGameOfTonesPlaylists() {
     await this._ensureCanCallWebApi('getGameOfTonesPlaylists');
     try {
-      // Get current user
-      const userResponse = await this.spotifyApi.getMe();
-      const userId = userResponse.body.id;
-      
-      // Get user's playlists
+      const { spotifyUserId: userId } = await this.getCurrentUserProfileBrief();
+      if (!userId) {
+        throw new Error('Could not resolve current Spotify user');
+      }
+
       const playlists = [];
       let offset = 0;
       const limit = 50;
       
       while (true) {
-        if (offset > 0) {
+        if (offset > 0 && !this._pacingMinIntervalMs) {
           await new Promise((r) => setTimeout(r, 200));
         }
-        const response = await this.spotifyApi.getUserPlaylists(userId, { limit, offset });
-        const batch = response.body.items;
+        const path = `/v1/me/playlists?limit=${limit}&offset=${offset}`;
+        const { body } = await this._webApiGet(path, 'getGameOfTonesPlaylists');
+        const batch = (body && Array.isArray(body.items) ? body.items : []) || [];
         
-        // Only playlists the app created with GOT_OUTPUT_PLAYLIST_NAME_PREFIX
-        const gotPlaylists = batch.filter(playlist =>
-          typeof playlist.name === 'string' &&
-          playlist.name.startsWith(GOT_OUTPUT_PLAYLIST_NAME_PREFIX) &&
-          playlist.owner.id === userId
+        if (batch.length === 0) break;
+
+        const gotPlaylists = batch.filter(
+          (playlist) =>
+            typeof playlist.name === 'string' &&
+            playlist.name.startsWith(GOT_OUTPUT_PLAYLIST_NAME_PREFIX) &&
+            playlist.owner &&
+            playlist.owner.id === userId
         );
         
         playlists.push(...gotPlaylists.map(playlist => ({
           id: playlist.id,
           name: playlist.name,
-          trackCount: playlist.tracks.total,
+          trackCount: this._playlistItemsTotalFromListItem(playlist),
           createdAt: playlist.added_at || 'Unknown',
           description: playlist.description || '',
           external_urls: playlist.external_urls
         })));
         
-        // Check if we have more playlists to fetch
         if (batch.length < limit) break;
         offset += limit;
       }
@@ -1426,18 +1548,33 @@ class SpotifyService {
     }
   }
 
-  // Add tracks to playlist
+  // Add tracks to playlist (POST /v1/playlists/{id}/items; max 100 URIs per request)
   async addTracksToPlaylist(playlistId, trackUris, position = null) {
     await this._ensureCanCallWebApi('addTracksToPlaylist');
     try {
-      const options = {};
-      if (position !== null) {
-        options.position = position;
+      const uris = this._asSpotifyTrackUris(trackUris);
+      if (uris.length === 0) {
+        return null;
       }
-      
-      const response = await this.spotifyApi.addTracksToPlaylist(playlistId, trackUris, options);
-      console.log(`✅ Added ${trackUris.length} tracks to playlist ${playlistId} at position ${position || 'end'}`);
-      return response.body;
+      const id = String(playlistId);
+      const chunkSize = 100;
+      let lastBody = null;
+      for (let i = 0; i < uris.length; i += chunkSize) {
+        const chunk = uris.slice(i, i + chunkSize);
+        const body = { uris: chunk };
+        if (i === 0 && position !== null && position !== undefined) {
+          body.position = position;
+        }
+        const { body: resBody } = await this._webApiRequest(
+          'POST',
+          `/v1/playlists/${encodeURIComponent(id)}/items`,
+          body,
+          'addTracksToPlaylist'
+        );
+        lastBody = resBody;
+      }
+      console.log(`✅ Added ${uris.length} tracks to playlist ${playlistId} at position ${position ?? 'end'}`);
+      return lastBody;
     } catch (error) {
       this._rethrowIfRateLimited(error, 'addTracksToPlaylist');
       console.error('Error adding tracks to playlist:', error);
@@ -1445,16 +1582,30 @@ class SpotifyService {
     }
   }
 
-  // Remove tracks from playlist
+  // Remove tracks from playlist (DELETE /v1/playlists/{id}/items; max 100 per request)
   async removeTracksFromPlaylist(playlistId, trackUris) {
     await this._ensureCanCallWebApi('removeTracksFromPlaylist');
     try {
-      // Convert track URIs to the format expected by removeTracksFromPlaylist
-      const tracksToRemove = trackUris.map(uri => ({ uri }));
-      
-      const response = await this.spotifyApi.removeTracksFromPlaylist(playlistId, tracksToRemove);
-      console.log(`✅ Removed ${trackUris.length} tracks from playlist ${playlistId}`);
-      return response.body;
+      const uris = this._asSpotifyTrackUris(trackUris);
+      if (uris.length === 0) {
+        return null;
+      }
+      const id = String(playlistId);
+      const chunkSize = 100;
+      let lastBody = null;
+      for (let i = 0; i < uris.length; i += chunkSize) {
+        const chunk = uris.slice(i, i + chunkSize);
+        const items = chunk.map((uri) => ({ uri }));
+        const { body: resBody } = await this._webApiRequest(
+          'DELETE',
+          `/v1/playlists/${encodeURIComponent(id)}/items`,
+          { items },
+          'removeTracksFromPlaylist'
+        );
+        lastBody = resBody;
+      }
+      console.log(`✅ Removed ${uris.length} tracks from playlist ${playlistId}`);
+      return lastBody;
     } catch (error) {
       this._rethrowIfRateLimited(error, 'removeTracksFromPlaylist');
       console.error('Error removing tracks from playlist:', error);
@@ -1482,4 +1633,10 @@ class SpotifyService {
   }
 }
 
+Object.assign(SpotifyService, {
+  SPOTIFY_SEARCH_LIMIT_DEFAULT,
+  SPOTIFY_SEARCH_LIMIT_MAX,
+  clampSearchLimit,
+  normalizeSearchOffset,
+});
 module.exports = SpotifyService; 

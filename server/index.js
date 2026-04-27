@@ -8199,7 +8199,9 @@ app.post('/api/spotify/delete-playlists', async (req, res) => {
 // Search for tracks
 app.get('/api/spotify/search-tracks', async (req, res) => {
   try {
-    const { q, limit = 20 } = req.query;
+    const { q, limit: limitQ, offset: offsetQ } = req.query;
+    const limit = SpotifyService.clampSearchLimit(limitQ);
+    const offset = SpotifyService.normalizeSearchOffset(offsetQ);
     
     if (!hostSpotifyHasTokens(req)) {
       return res.status(401).json({ error: 'Spotify not connected' });
@@ -8211,7 +8213,7 @@ app.get('/api/spotify/search-tracks', async (req, res) => {
     
     await spotifyForRequest(req).ensureValidToken();
     
-    const tracks = await spotifyForRequest(req).searchTracks(q, parseInt(limit));
+    const tracks = await spotifyForRequest(req).searchTracks(q, limit, offset);
     
     res.json({
       success: true,

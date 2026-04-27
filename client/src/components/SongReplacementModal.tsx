@@ -73,15 +73,21 @@ const SongReplacementModal: React.FC<SongReplacementModalProps> = ({
 
     setIsSearching(true);
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_BASE || ''}/api/spotify/search-tracks?q=${encodeURIComponent(query)}&limit=20`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setSearchResults(data.tracks || []);
-      } else {
-        console.error('Search failed:', data.error);
-        setSearchResults([]);
+      const base = `${process.env.REACT_APP_API_BASE || ''}/api/spotify/search-tracks?q=${encodeURIComponent(query)}&limit=10`;
+      const [r0, r1] = await Promise.all([fetch(`${base}&offset=0`), fetch(`${base}&offset=10`)]);
+      const d0 = await r0.json();
+      const d1 = await r1.json();
+      const byId = new Map<string, Song>();
+      for (const data of [d0, d1]) {
+        if (data.success && Array.isArray(data.tracks)) {
+          for (const t of data.tracks) {
+            if (t && t.id) byId.set(t.id, t);
+          }
+        } else if (!data.success) {
+          console.error('Search failed:', data.error);
+        }
       }
+      setSearchResults(Array.from(byId.values()).slice(0, 20));
     } catch (error) {
       console.error('Error searching songs:', error);
       setSearchResults([]);
