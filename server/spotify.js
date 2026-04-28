@@ -183,6 +183,28 @@ class SpotifyService {
     }
   }
 
+  /**
+   * Track count on playlist list rows (/me/playlists, search simplified objects).
+   * Spotify prefers `items.total`; older responses use `tracks.total`.
+   */
+  _playlistItemsTotalFromListItem(playlist) {
+    if (!playlist || typeof playlist !== 'object') return 0;
+    let ref = null;
+    if (
+      playlist.items != null &&
+      typeof playlist.items === 'object' &&
+      !Array.isArray(playlist.items) &&
+      Object.prototype.hasOwnProperty.call(playlist.items, 'total')
+    ) {
+      ref = playlist.items;
+    } else if (playlist.tracks != null && typeof playlist.tracks === 'object') {
+      ref = playlist.tracks;
+    }
+    if (!ref) return 0;
+    const n = Number(ref.total);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  }
+
   // Get user's playlists
   async getUserPlaylists() {
     await this.ensureValidToken();
@@ -204,14 +226,17 @@ class SpotifyService {
         if (items.length < limit) break;
       }
       
-      return playlists.map(playlist => ({
+      return playlists.map((playlist) => ({
         id: playlist.id,
         name: playlist.name,
         description: playlist.description,
-        tracks: playlist.tracks.total,
+        tracks: this._playlistItemsTotalFromListItem(playlist),
         public: playlist.public,
         collaborative: playlist.collaborative,
-        owner: playlist.owner.display_name
+        owner:
+          playlist.owner && playlist.owner.display_name != null
+            ? playlist.owner.display_name
+            : 'Unknown',
       }));
     } catch (error) {
       console.error('Error getting user playlists:', error);
@@ -510,15 +535,18 @@ class SpotifyService {
     
     try {
       const response = await this.spotifyApi.searchPlaylists(query, { limit });
-      return response.body.playlists.items.map(playlist => ({
+      return response.body.playlists.items.map((playlist) => ({
         id: playlist.id,
         name: playlist.name,
         description: playlist.description,
-        tracks: playlist.tracks.total,
+        tracks: this._playlistItemsTotalFromListItem(playlist),
         public: playlist.public,
         collaborative: playlist.collaborative,
-        owner: playlist.owner.display_name,
-        images: playlist.images
+        owner:
+          playlist.owner && playlist.owner.display_name != null
+            ? playlist.owner.display_name
+            : 'Unknown',
+        images: playlist.images,
       }));
     } catch (error) {
       console.error('Error searching playlists:', error);
@@ -745,13 +773,13 @@ class SpotifyService {
           playlist.owner.id === userId
         );
         
-        playlists.push(...gotPlaylists.map(playlist => ({
+        playlists.push(...gotPlaylists.map((playlist) => ({
           id: playlist.id,
           name: playlist.name,
-          trackCount: playlist.tracks.total,
+          trackCount: this._playlistItemsTotalFromListItem(playlist),
           createdAt: playlist.added_at || 'Unknown',
           description: playlist.description || '',
-          external_urls: playlist.external_urls
+          external_urls: playlist.external_urls,
         })));
         
         // Check if we have more playlists to fetch
