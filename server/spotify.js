@@ -15,16 +15,128 @@ const webApi = require('./spotifyWebApiMeter');
 const GOT_OUTPUT_PLAYLIST_NAME_PREFIX = 'Game Of Tones Output - ';
 
 /**
- * Spotify may send Retry-After of 86400+ seconds when restricting an app; honoring that
- * in-process would block every Web API call for 24h and the host UI shows no playlists.
- * We still back off, but cap so the server can retry after a few minutes (logging the raw value).
- * This is not a "wait half a day" mode — TEMPO never enforces Spotify’s long Retry-After; it only
- * spaces *this server’s* requests. (Playlist track lists are also cached to avoid duplicate pagination.)
+ * Spotify sends Retry-After from seconds (often 1) up to 86400+ when rate-limiting.
+ * Capping quarantine too low (historically 8 min) caused TEMPO to resume Web API calls while Spotify
+ * was still throttling → repeated 429s and escalating Retry-After (hours). Default: honor up to 24h.
+ * Set SPOTIFY_QUARANTINE_MAX_MS=28800000 for 8h, or SPOTIFY_QUARANTINE_MAX_MS=480000 for 8min (debug only).
  */
-const SPOTIFY_QUARANTINE_MAX_MS = 8 * 60 * 1000;
+function readSpotifyQuarantineMaxMs() {
+  const raw = process.env.SPOTIFY_QUARANTINE_MAX_MS;
+  if (raw === '0' || raw === '') return 24 * 60 * 60 * 1000;
+  const n = parseInt(String(raw), 10);
+  if (!Number.isFinite(n) || n < 60_000) return 24 * 60 * 60 * 1000;
+  return Math.min(48 * 60 * 60 * 1000, n);
+}
+const SPOTIFY_QUARANTINE_MAX_MS = readSpotifyQuarantineMaxMs();
+
+/** Suppress routine Spotify success logs when MISSION_CRITICAL_LOGS=1; keep console.error (incl. [SPOTIFY_429_DIAGNOSTIC]). */
+function missionCriticalLogsOnlySpotify() {
+  const v = process.env.MISSION_CRITICAL_LOGS;
+  return v === '1' || String(v || '').toLowerCase() === 'true';
+}
+function routineSpotifyLog(...args) {
+  if (missionCriticalLogsOnlySpotify()) return;
+  console.log(...args);
+}
 
 /** Full getPlaylistTracks() results, reused when the host loads tracks then finalizes (halves /items load). */
 const PLAYLIST_TRACKS_CACHE_TTL_MS = 25 * 60 * 1000;
+
+/** After any 429 quarantine, multiply pacing interval briefly so we ease back into traffic. */
+const SPOTIFY_POST_429_PACING_BOOST_MS = 3 * 60 * 1000;
+const SPOTIFY_POST_429_PACING_MULTIPLIER = 2;
+
+/** GET …/playlists/{id}/items — Spotify OpenAPI `QueryLimit` maximum is 50 (shared parameter). */
+const PLAYLIST_ITEMS_PAGE_LIMIT_MAX = 50;
+
+/** DELETE /v1/me/library — max playlist (and other) URIs per request (OpenAPI). */
+const LIBRARY_DELETE_URIS_MAX = 40;
+
+/**
+ * Code-path label → likely Spotify REST target (429 diagnostics). Raw HTTP calls also pass httpMethod+httpPath in meta.
+ */
+const SPOTIFY_SOURCE_ROUTE_HINT = {
+  getUserPlaylists: 'GET /v1/me/playlists',
+  getPlaylistItems: 'GET /v1/playlists/{playlist_id}/items',
+  getPlaylistSnapshot: 'GET /v1/playlists/{playlist_id}?fields=snapshot_id',
+  getPlaylistMetadataBrief: 'GET /v1/playlists/{playlist_id}',
+  getPlaylistTracks: 'GET /v1/playlists/{playlist_id}/items (paginated)',
+  removePlaylistLibrary: 'DELETE /v1/me/library',
+  getCurrentUserProfileBrief: 'GET /v1/me',
+  getCurrentPlaybackState: 'GET /v1/me/player',
+  startPlayback: 'PUT /v1/me/player/play',
+  pausePlayback: 'PUT /v1/me/player/pause',
+  transferPlayback: 'PUT /v1/me/player',
+  resumePlayback: 'PUT /v1/me/player/play',
+  nextTrack: 'POST /v1/me/player/next',
+  previousTrack: 'POST /v1/me/player/previous',
+  getUserDevices: 'GET /v1/me/player/devices',
+  getCurrentTrack: 'GET /v1/me/player/currently-playing',
+  searchPlaylists: 'GET /v1/search (type=playlist)',
+  searchTracks: 'GET /v1/search (type=track)',
+  setVolume: 'PUT /v1/me/player/volume',
+  seekToPosition: 'PUT /v1/me/player/seek',
+  setShuffleState: 'PUT /v1/me/player/shuffle',
+  setRepeatState: 'PUT /v1/me/player/repeat',
+  createTemporaryPlaylist: 'POST /v1/me/playlists + …/items',
+  createOutputPlaylist: 'POST /v1/me/playlists + …/items',
+  getGameOfTonesPlaylists: 'GET /v1/me/playlists',
+  startPlaybackFromPlaylist: 'PUT /v1/me/player/play (context_uri)',
+  addToQueue: 'POST /v1/me/player/queue',
+  getCurrentUserProfile: 'GET /v1/me',
+  addTracksToPlaylist: 'POST /v1/playlists/{playlist_id}/items',
+  removeTracksFromPlaylist: 'DELETE /v1/playlists/{playlist_id}/items',
+  replaceTrackInPlaylist: 'DELETE+POST /v1/playlists/{playlist_id}/items',
+  _transferPlaybackDirect: 'PUT /v1/me/player',
+};
+
+/** @param {Record<string, string>} h */
+function spotifyPickDiagnosticHeaders(h) {
+  if (!h || typeof h !== 'object') return {};
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const k of ['retry-after', 'Retry-After', 'x-request-id', 'spotify-correlation-id']) {
+    if (h[k] != null && String(h[k]).trim() !== '') {
+      out[k] = String(h[k]).slice(0, 220);
+    }
+  }
+  return out;
+}
+
+/** @param {string} pathWithQuery */
+function spotifyTruncateApiPath(pathWithQuery, max = 900) {
+  const s = String(pathWithQuery || '');
+  if (s.length <= max) return s;
+  return `${s.slice(0, max)}…`;
+}
+
+/**
+ * @param {string} source
+ * @param {{ httpMethod?: string, httpPath?: string }} [meta]
+ */
+function inferSpotify429Route(source, meta) {
+  if (meta && meta.httpMethod && meta.httpPath) {
+    const q = spotifyTruncateApiPath(meta.httpPath);
+    return `${String(meta.httpMethod).toUpperCase()} https://api.spotify.com${q}`;
+  }
+  const s = String(source || 'unknown');
+  if (s.startsWith('withRetries:')) {
+    const inner = s.slice('withRetries:'.length);
+    const hint = SPOTIFY_SOURCE_ROUTE_HINT[inner];
+    return hint ? `retry_wrap:${hint}` : `retry_wrap:${inner}`;
+  }
+  const baseLabel = s.includes(':') ? s.split(':')[0] : s;
+  return SPOTIFY_SOURCE_ROUTE_HINT[baseLabel] || SPOTIFY_SOURCE_ROUTE_HINT[s] || `unmapped_source:${s}`;
+}
+
+/** Extra pause between GET …/items pages inside one playlist (reduces burst 429s). */
+function readPlaylistItemsPageGapMs() {
+  const raw = process.env.SPOTIFY_PLAYLIST_ITEMS_PAGE_GAP_MS;
+  const n = parseInt(raw != null && raw !== '' ? raw : '400', 10);
+  if (!Number.isFinite(n) || n < 0) return 400;
+  return Math.min(5000, n);
+}
+const PLAYLIST_ITEMS_PAGE_GAP_MS = readPlaylistItemsPageGapMs();
 
 /**
  * February 2026 Web API (Development Mode) — Search endpoint limits.
@@ -48,13 +160,13 @@ function normalizeSearchOffset(n) {
  * Minimum ms between *starts* of api.spotify.com calls for one SpotifyService (one user token).
  * Serializes traffic to avoid bursty parallel requests — the main avoidable cause of 429.
  * SPOTIFY_WEB_API_MIN_INTERVAL_MS=0 disables (emergency only).
- * Default 400 (~2.5 req/s max for that user from this process).
+ * Default 550 (~1.8 req/s max for that user from this process).
  */
 function readWebApiPacingMinMs() {
   const raw = process.env.SPOTIFY_WEB_API_MIN_INTERVAL_MS;
   if (raw === '0') return 0;
-  const n = parseInt(raw != null && raw !== '' ? raw : '400', 10);
-  if (!Number.isFinite(n) || n < 0) return 400;
+  const n = parseInt(raw != null && raw !== '' ? raw : '550', 10);
+  if (!Number.isFinite(n) || n < 0) return 550;
   return Math.min(10_000, n);
 }
 
@@ -104,6 +216,10 @@ class SpotifyService {
     this._pacingMinIntervalMs = readWebApiPacingMinMs();
     this._paceQueueTail = Promise.resolve();
     this._nextWebApiSlotAt = 0;
+    /** After 429, temporarily increase spacing between calls (see SPOTIFY_POST_429_*). */
+    this._pacingBoostUntil = 0;
+    /** Last api.spotify.com 429 incident (structured); survives clearRateLimitQuarantine() for forensics. */
+    this._last429Incident = null;
   }
 
   // Classify common Spotify Web API errors
@@ -132,39 +248,78 @@ class SpotifyService {
 
   /**
    * Apply backoff from 429. Honors Retry-After (often 86400s = 24h when Spotify restrains the app).
-   * Call from any Web API method that receives 429.
+   * `meta.httpMethod` + `meta.httpPath` identify raw HTTP calls; SDK-only paths use `source` + SPOTIFY_SOURCE_ROUTE_HINT.
+   * Emits JSON line `[SPOTIFY_429_DIAGNOSTIC]` on every occurrence (Railway logs / grep).
    */
-  applyRateLimitQuarantine(error, source) {
+  applyRateLimitQuarantine(error, source, meta = {}) {
     if (!this.isRateLimitError(error)) return;
     const raSec = this.getRetryAfterSecFromError(error);
+    const routeHint = inferSpotify429Route(source, meta);
+    const hdrDiag = spotifyPickDiagnosticHeaders(error?.headers);
+    const eb = error?.body?.error;
+    const spotifyMsg =
+      eb && (eb.message != null || eb.reason != null)
+        ? String(eb.message != null ? eb.message : eb.reason)
+        : null;
+    const spotifyErrStatus = eb?.status != null ? eb.status : error?.statusCode;
+
+    const now = Date.now();
+    const rawWaitMs =
+      raSec > 0 ? Math.min(86400 * 1000, raSec * 1000) : Math.min(3600 * 1000, 60_000);
+    const waitMs = Math.min(rawWaitMs, SPOTIFY_QUARANTINE_MAX_MS);
+    const capped = rawWaitMs > SPOTIFY_QUARANTINE_MAX_MS;
+    const effectiveSec = Math.max(1, Math.round(waitMs / 1000));
+
+    this._quarantineSource = String(source);
+    this._quarantineSpotifyRetryAfterSec = raSec > 0 ? raSec : null;
+    this._quarantineEffectiveCooldownSec = effectiveSec;
+    this._quarantineCapped = capped;
+    this._spotifyQuarantineUntil = Math.max(this._spotifyQuarantineUntil || 0, now + waitMs);
+    this._playbackStateBackoffUntil = Math.max(this._playbackStateBackoffUntil || 0, now + waitMs);
+    this._pacingBoostUntil = Math.max(this._pacingBoostUntil || 0, now + SPOTIFY_POST_429_PACING_BOOST_MS);
+
+    this._last429Incident = {
+      occurredAtIso: new Date().toISOString(),
+      sourceLabel: String(source),
+      routeHint,
+      httpMethod: meta.httpMethod || null,
+      httpPath: meta.httpPath ? spotifyTruncateApiPath(meta.httpPath) : null,
+      retryAfterSecFromHeader: raSec,
+      effectiveCooldownSec: effectiveSec,
+      quarantineCappedToEnvMax: capped,
+      spotifyErrorMessage: spotifyMsg,
+      spotifyErrorStatus: spotifyErrStatus != null ? Number(spotifyErrStatus) : null,
+      responseHeadersDiagnostic: hdrDiag,
+      clientIdPrefix: this._pipelineClientIdPrefix,
+      credentialMode: this._pipelineCredentialMode,
+      humanReadableSource: this._describeQuarantineSource(source),
+      why:
+        'Spotify returned HTTP 429 for this call site. TEMPO reads Retry-After, applies in-process quarantine (may cap via SPOTIFY_QUARANTINE_MAX_MS), and temporarily increases pacing. Find routeHint / httpPath for the exact api.spotify.com surface.',
+    };
+
+    console.error('[SPOTIFY_429_DIAGNOSTIC]', JSON.stringify(this._last429Incident));
+
     if (pl.isEnabled() && pl.shouldLogQuarantine429ToPipeline()) {
       pl.log('quarantine_429', {
         source: String(source),
         client_id_prefix: this._pipelineClientIdPrefix,
         cred_mode: this._pipelineCredentialMode,
         spotify_retry_after_s: String(raSec),
+        route_hint: routeHint.slice(0, 400),
+        spotify_error:
+          spotifyMsg != null && spotifyMsg !== ''
+            ? spotifyMsg.slice(0, 400)
+            : '',
       });
     }
-    const now = Date.now();
-    const rawWaitMs =
-      raSec > 0
-        ? Math.min(86400 * 1000, raSec * 1000)
-        : Math.min(3600 * 1000, 60_000);
-    const waitMs = Math.min(rawWaitMs, SPOTIFY_QUARANTINE_MAX_MS);
-    const capped = rawWaitMs > SPOTIFY_QUARANTINE_MAX_MS;
-    this._quarantineSource = String(source);
-    this._quarantineSpotifyRetryAfterSec = raSec > 0 ? raSec : null;
-    this._quarantineEffectiveCooldownSec = Math.max(1, Math.round(waitMs / 1000));
-    this._quarantineCapped = capped;
-    this._spotifyQuarantineUntil = Math.max(this._spotifyQuarantineUntil || 0, now + waitMs);
-    this._playbackStateBackoffUntil = Math.max(this._playbackStateBackoffUntil || 0, now + waitMs);
-    if (now - (this._lastGlobal429LogAt || 0) > 120_000) {
+
+    if (!missionCriticalLogsOnlySpotify() && now - (this._lastGlobal429LogAt || 0) > 120_000) {
       this._lastGlobal429LogAt = now;
       const untilIso = new Date(this._spotifyQuarantineUntil).toISOString();
       console.warn(
         `⚠️ Spotify 429 [${source}] — pausing API calls until ${untilIso} (Retry-After from Spotify: ${
           raSec || 'n/a'
-        }s${capped ? `; capped to ${SPOTIFY_QUARANTINE_MAX_MS / 1000}s for in-process backoff` : ''}). If this persists, check the app status in Spotify Developer Dashboard.`
+        }s${capped ? `; capped to ${SPOTIFY_QUARANTINE_MAX_MS / 1000}s for in-process backoff` : ''}). See [SPOTIFY_429_DIAGNOSTIC] JSON above/below for route + headers.`
       );
     }
   }
@@ -184,6 +339,8 @@ class SpotifyService {
       getPlaylistItems: 'Reading playlist track pages (GET /v1/playlists/…/items)',
       getPlaylistMetadataBrief: 'Loading playlist details',
       getPlaylistTracks: 'Loading a playlist’s full track list',
+      getPlaylistSnapshot: 'Playlist version id (GET /v1/playlists/… snapshot_id)',
+      removePlaylistLibrary: 'Removing playlists from library (DELETE /v1/me/library)',
       getCurrentUserProfileBrief: 'Spotify user profile (GET /v1/me)',
       getCurrentPlaybackState: 'Current playback / player state',
     };
@@ -199,8 +356,9 @@ class SpotifyService {
    * or clearRateLimitQuarantine().
    */
   getWebApiQuarantineInfo() {
+    const incident = this._last429Incident || null;
     if (!this.isQuarantined()) {
-      return { active: false };
+      return { active: false, last429Incident: incident };
     }
     return {
       active: true,
@@ -209,8 +367,9 @@ class SpotifyService {
       sourceDescription: this._describeQuarantineSource(this._quarantineSource),
       spotifyRetryAfterSec: this._quarantineSpotifyRetryAfterSec,
       effectiveCooldownSec: this._quarantineEffectiveCooldownSec,
-      inProcessMaxCooldownSec: Math.floor(SPOTIFY_QUARANTINE_MAX_MS / 1000),
+      inProcessMaxCooldownSec: Math.ceil(SPOTIFY_QUARANTINE_MAX_MS / 1000),
       spotifyRetryCapped: this._quarantineCapped === true,
+      last429Incident: incident,
     };
   }
 
@@ -220,6 +379,7 @@ class SpotifyService {
    */
   clearRateLimitQuarantine() {
     this._spotifyQuarantineUntil = 0;
+    this._pacingBoostUntil = 0;
     this._quarantineSource = null;
     this._quarantineSpotifyRetryAfterSec = null;
     this._quarantineEffectiveCooldownSec = null;
@@ -242,9 +402,9 @@ class SpotifyService {
     await this.ensureValidToken();
   }
 
-  _rethrowIfRateLimited(error, label) {
+  _rethrowIfRateLimited(error, label, meta = {}) {
     if (this.isRateLimitError(error)) {
-      this.applyRateLimitQuarantine(error, label);
+      this.applyRateLimitQuarantine(error, label, meta);
     }
   }
 
@@ -253,7 +413,10 @@ class SpotifyService {
    */
   async _paceBeforeWebApiRequest() {
     if (!this._pacingMinIntervalMs) return;
-    const min = this._pacingMinIntervalMs;
+    let min = this._pacingMinIntervalMs;
+    if (Date.now() < (this._pacingBoostUntil || 0)) {
+      min = Math.min(10_000, Math.floor(min * SPOTIFY_POST_429_PACING_MULTIPLIER));
+    }
     const run = async () => {
       const now = Date.now();
       const wait = Math.max(0, (this._nextWebApiSlotAt || 0) - now);
@@ -383,7 +546,8 @@ class SpotifyService {
             if (sc === 429 || this.isRateLimitError(err)) {
               this.applyRateLimitQuarantine(
                 { statusCode: 429, headers: res.headers, body: body || {} },
-                label
+                label,
+                { httpMethod: 'GET', httpPath: path }
               );
             }
             reject(err);
@@ -468,7 +632,8 @@ class SpotifyService {
             if (sc === 429 || this.isRateLimitError(err)) {
               this.applyRateLimitQuarantine(
                 { statusCode: 429, headers: res.headers, body: body || {} },
-                label
+                label,
+                { httpMethod: String(method).toUpperCase(), httpPath: path }
               );
             }
             reject(err);
@@ -489,9 +654,10 @@ class SpotifyService {
 
   /**
    * GET /v1/playlists/{id}/items — see https://developer.spotify.com/documentation/web-api/reference/get-playlists-items
+   * (`QueryLimit` in https://developer.spotify.com/reference/web-api/open-api-schema.yaml — max 50.)
    */
-  async _fetchPlaylistItemsPage(playlistId, { limit = 100, offset = 0, market = null } = {}) {
-    const cap = Math.min(100, Math.max(1, limit));
+  async _fetchPlaylistItemsPage(playlistId, { limit = PLAYLIST_ITEMS_PAGE_LIMIT_MAX, offset = 0, market = null } = {}) {
+    const cap = Math.min(PLAYLIST_ITEMS_PAGE_LIMIT_MAX, Math.max(1, limit));
     const q = new URLSearchParams();
     q.set('limit', String(cap));
     q.set('offset', String(offset));
@@ -569,7 +735,7 @@ class SpotifyService {
   // Handle authorization callback
   async handleCallback(code, redirectUriOverride) {
     try {
-      console.log('Handling Spotify callback with code:', code.substring(0, 20) + '...');
+      routineSpotifyLog('Handling Spotify callback with code:', code.substring(0, 20) + '...');
       const target = redirectUriOverride || this.defaultRedirectUri;
       const prev =
         typeof this.spotifyApi.getRedirectURI === 'function'
@@ -582,7 +748,7 @@ class SpotifyService {
       } finally {
         this.spotifyApi.setRedirectURI(prev);
       }
-      console.log('Successfully got tokens from Spotify');
+      routineSpotifyLog('Successfully got tokens from Spotify');
       this.accessToken = data.body.access_token;
       this.refreshToken = data.body.refresh_token;
       this.tokenExpirationTime = Date.now() + (data.body.expires_in * 1000);
@@ -758,6 +924,20 @@ class SpotifyService {
     };
   }
 
+  /**
+   * Lightweight playlist version check — GET /v1/playlists/{id}?fields=snapshot_id (OpenAPI).
+   * Used to skip full GET …/items pagination when the playlist has not changed since we cached tracks.
+   */
+  async _getPlaylistSnapshotId(playlistId) {
+    await this._ensureCanCallWebApi('getPlaylistSnapshot');
+    const id = String(playlistId || '').trim();
+    if (!id) throw new Error('playlist id required');
+    const path = `/v1/playlists/${encodeURIComponent(id)}?fields=${encodeURIComponent('snapshot_id')}`;
+    const { body } = await this._webApiGet(path, 'getPlaylistSnapshot');
+    if (!body || typeof body !== 'object' || body.snapshot_id == null) return null;
+    return String(body.snapshot_id);
+  }
+
   // Get user's playlists
   async getUserPlaylists() {
     await this._ensureCanCallWebApi('getUserPlaylists');
@@ -787,7 +967,7 @@ class SpotifyService {
         if (items.length === 0) break;
 
         raw.push(...items);
-        offset += limit;
+        offset += items.length;
 
         if (items.length < limit) break;
       }
@@ -837,51 +1017,90 @@ class SpotifyService {
     await this._ensureCanCallWebApi('getPlaylistTracks');
 
     const cacheKey = String(playlistId);
-    const cached = this._playlistTracksCache.get(cacheKey);
     const now = Date.now();
-    if (cached && now - cached.at < PLAYLIST_TRACKS_CACHE_TTL_MS && Array.isArray(cached.tracks)) {
-      const name = playlistInfo?.name || 'Unknown Playlist';
-      return cached.tracks.map((t) => ({
-        ...t,
-        sourcePlaylistId: playlistId,
-        sourcePlaylistName: name,
-      }));
+
+    let snapshotId = null;
+    try {
+      snapshotId = await this._getPlaylistSnapshotId(playlistId);
+    } catch {
+      /* non-fatal — omit snapshot skip optimization */
+    }
+
+    const cached = this._playlistTracksCache.get(cacheKey);
+    const mapRow = (t) => ({
+      ...t,
+      sourcePlaylistId: playlistId,
+      sourcePlaylistName: playlistInfo?.name || 'Unknown Playlist',
+    });
+
+    if (
+      snapshotId &&
+      cached &&
+      cached.snapshotId === snapshotId &&
+      Array.isArray(cached.tracks)
+    ) {
+      return cached.tracks.map(mapRow);
+    }
+
+    if (
+      !snapshotId &&
+      cached &&
+      now - cached.at < PLAYLIST_TRACKS_CACHE_TTL_MS &&
+      Array.isArray(cached.tracks)
+    ) {
+      return cached.tracks.map(mapRow);
     }
 
     try {
       const tracks = [];
       let offset = 0;
-      const limit = 100;
-      
+      const pageLimit = PLAYLIST_ITEMS_PAGE_LIMIT_MAX;
+
       while (true) {
-        const page = await this._fetchPlaylistItemsPage(playlistId, { limit, offset });
-        const items = page.items || [];
-        
-        if (items.length === 0) break;
-        
+        const page = await this._fetchPlaylistItemsPage(playlistId, { limit: pageLimit, offset });
+        /** Raw rows from Spotify — advance `offset` by this length even when some rows lack `track` (deleted/null). */
+        const rawItems = page.items || [];
+
+        if (rawItems.length === 0) break;
+
         // Filter out non-track items and map to our format
-        const validTracks = items
-          .filter(item => item.track && item.track.id)
-          .map(item => ({
+        const validTracks = rawItems
+          .filter((item) => item.track && item.track.id)
+          .map((item) => ({
             id: item.track.id,
             name: item.track.name,
-            artist: item.track.artists.map(artist => artist.name).join(', '),
+            artist: item.track.artists.map((artist) => artist.name).join(', '),
             album: item.track.album.name,
             duration: item.track.duration_ms,
             uri: item.track.uri,
             previewUrl: item.track.preview_url || null,
             explicit: item.track.explicit === true,
             sourcePlaylistId: playlistId,
-            sourcePlaylistName: playlistInfo?.name || 'Unknown Playlist'
+            sourcePlaylistName: playlistInfo?.name || 'Unknown Playlist',
           }));
-        
+
         tracks.push(...validTracks);
-        offset += limit;
-        
-        if (items.length < limit) break;
+        offset += rawItems.length;
+
+        if (rawItems.length < pageLimit) break;
+        if (PLAYLIST_ITEMS_PAGE_GAP_MS > 0) {
+          await new Promise((r) => setTimeout(r, PLAYLIST_ITEMS_PAGE_GAP_MS));
+        }
       }
 
-      this._playlistTracksCache.set(cacheKey, { at: now, tracks });
+      let snapStore = snapshotId;
+      if (!snapStore) {
+        try {
+          snapStore = await this._getPlaylistSnapshotId(playlistId);
+        } catch {
+          snapStore = null;
+        }
+      }
+      this._playlistTracksCache.set(cacheKey, {
+        at: Date.now(),
+        tracks,
+        snapshotId: snapStore || null,
+      });
       return tracks;
     } catch (error) {
       this._rethrowIfRateLimited(error, 'getPlaylistTracks');
@@ -930,14 +1149,14 @@ class SpotifyService {
     await this._ensureCanCallWebApi('transferPlayback');
     try {
       await this.spotifyApi.transferMyPlayback({ deviceIds: [deviceId], play });
-      console.log(`🔀 Transferred playback to device ${deviceId} (play=${play})`);
+      routineSpotifyLog(`🔀 Transferred playback to device ${deviceId} (play=${play})`);
     } catch (error) {
       this._rethrowIfRateLimited(error, 'transferPlayback');
       const msg = error?.body?.error?.message || error?.message || '';
       console.warn('⚠️ transferMyPlayback failed:', msg);
       // Fallback: send raw request if Spotify complains about JSON shape
       if (/Malformed json/i.test(msg)) {
-        console.log('🔧 Falling back to direct HTTP transfer request');
+        routineSpotifyLog('🔧 Falling back to direct HTTP transfer request');
         const ok = await this._transferPlaybackDirect(deviceId, !!play);
         if (ok) return;
       }
@@ -961,18 +1180,26 @@ class SpotifyService {
         }
       }, (res) => {
         if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-          console.log('✅ Direct transfer success');
+          routineSpotifyLog('✅ Direct transfer success');
           resolve(true);
         } else {
           let data = '';
           res.on('data', chunk => data += chunk);
           res.on('end', () => {
             if (res.statusCode === 429) {
-              const err = new Error('Direct transfer rate limited');
-              err.statusCode = 429;
-              const ra = res.headers && (res.headers['retry-after'] || res.headers['Retry-After']);
-              err.headers = { 'retry-after': ra != null ? String(ra) : '3600' };
-              this.applyRateLimitQuarantine(err, '_transferPlaybackDirect');
+              const syn = new Error('Direct transfer rate limited');
+              syn.statusCode = 429;
+              syn.headers = res.headers || {};
+              syn.body = {};
+              try {
+                syn.body = data ? JSON.parse(data) : {};
+              } catch {
+                syn.body = { _parseError: true };
+              }
+              this.applyRateLimitQuarantine(syn, '_transferPlaybackDirect', {
+                httpMethod: 'PUT',
+                httpPath: '/v1/me/player',
+              });
             }
             console.error('❌ Direct transfer failed:', res.statusCode, data);
             reject(new Error(`Direct transfer failed: ${res.statusCode} ${data}`));
@@ -991,7 +1218,7 @@ class SpotifyService {
     
     try {
       await this.spotifyApi.play({ device_id: deviceId });
-      console.log(`▶️ Resumed playback on ${deviceId}`);
+      routineSpotifyLog(`▶️ Resumed playback on ${deviceId}`);
     } catch (error) {
       this._rethrowIfRateLimited(error, 'resumePlayback');
       console.error('Error resuming playback:', error);
@@ -1019,9 +1246,9 @@ class SpotifyService {
       const response = await this.spotifyApi.getMyDevices();
       const devices = response.body.devices;
       if (process.env.NODE_ENV !== 'production' || process.env.DEBUG) {
-        console.log(`Found ${devices.length} devices from Spotify API`);
+        routineSpotifyLog(`Found ${devices.length} devices from Spotify API`);
         devices.forEach((device) => {
-          console.log(`- ${device.name} (${device.type}) - Active: ${device.is_active}`);
+          routineSpotifyLog(`- ${device.name} (${device.type}) - Active: ${device.is_active}`);
         });
       }
       return devices;
@@ -1041,7 +1268,7 @@ class SpotifyService {
     try {
       const devices = await this.getUserDevices();
       if (devices.length === 0) {
-        console.log('No devices available for activation');
+        routineSpotifyLog('No devices available for activation');
         return { success: false, message: 'No devices available' };
       }
       const deviceId = devices[0].id;
@@ -1050,9 +1277,9 @@ class SpotifyService {
         await this.transferPlayback(deviceId, false);
         try { await this.setShuffleState(false, deviceId); } catch (_) {}
         try { await this.setRepeatState('off', deviceId); } catch (_) {}
-        console.log(`Successfully asserted control on device without playback: ${deviceName}`);
+        routineSpotifyLog(`Successfully asserted control on device without playback: ${deviceName}`);
       } catch (_) {
-        console.log(`Could not assert control on ${deviceName}, but device is available`);
+        routineSpotifyLog(`Could not assert control on ${deviceName}, but device is available`);
       }
       return { success: true, device: devices[0] };
     } catch (error) {
@@ -1161,7 +1388,7 @@ class SpotifyService {
     
     try {
       await this.spotifyApi.setVolume(volume, { device_id: deviceId });
-      console.log(`✅ Volume set to ${volume}% on device ${deviceId}`);
+      routineSpotifyLog(`✅ Volume set to ${volume}% on device ${deviceId}`);
     } catch (error) {
       this._rethrowIfRateLimited(error, 'setVolume');
       console.error('Error setting volume:', error);
@@ -1176,7 +1403,7 @@ class SpotifyService {
     try {
       // Spotify API expects milliseconds
       await this.spotifyApi.seek(position, { device_id: deviceId });
-      console.log(`✅ Seeked to ${position}ms on device ${deviceId}`);
+      routineSpotifyLog(`✅ Seeked to ${position}ms on device ${deviceId}`);
     } catch (error) {
       this._rethrowIfRateLimited(error, 'seekToPosition');
       console.error('Error seeking:', error);
@@ -1228,7 +1455,7 @@ class SpotifyService {
     await this._ensureCanCallWebApi('setShuffleState');
     try {
       await this.spotifyApi.setShuffle(state, { device_id: deviceId });
-      console.log(`✅ Shuffle ${state ? 'enabled' : 'disabled'} on device ${deviceId || '(default)'}`);
+      routineSpotifyLog(`✅ Shuffle ${state ? 'enabled' : 'disabled'} on device ${deviceId || '(default)'}`);
     } catch (error) {
       this._rethrowIfRateLimited(error, 'setShuffleState');
       console.error('Error setting shuffle state:', error);
@@ -1241,7 +1468,7 @@ class SpotifyService {
     await this._ensureCanCallWebApi('setRepeatState');
     try {
       await this.spotifyApi.setRepeat(state, { device_id: deviceId });
-      console.log(`✅ Repeat set to ${state} on device ${deviceId || '(default)'}`);
+      routineSpotifyLog(`✅ Repeat set to ${state} on device ${deviceId || '(default)'}`);
     } catch (error) {
       this._rethrowIfRateLimited(error, 'setRepeatState');
       console.error('Error setting repeat state:', error);
@@ -1284,7 +1511,7 @@ class SpotifyService {
           break;
         }
       }
-      console.log(`🧹 Queue clearing attempted on device ${deviceId}`);
+      routineSpotifyLog(`🧹 Queue clearing attempted on device ${deviceId}`);
     } catch (error) {
       console.warn('⚠️ Queue clearing failed (non-fatal):', error?.message || error);
     }
@@ -1313,7 +1540,7 @@ class SpotifyService {
 
       await this.addTracksToPlaylist(playlistId, trackUris);
       
-      console.log(`✅ Created organized playlist: ${organizedName} with ${trackUris.length} tracks`);
+      routineSpotifyLog(`✅ Created organized playlist: ${organizedName} with ${trackUris.length} tracks`);
       return playlistId;
     } catch (error) {
       this._rethrowIfRateLimited(error, 'createTemporaryPlaylist');
@@ -1345,7 +1572,7 @@ class SpotifyService {
 
       await this.addTracksToPlaylist(playlistId, trackUris);
       
-      console.log(`✅ Created permanent output playlist: ${organizedName} with ${trackUris.length} tracks`);
+      routineSpotifyLog(`✅ Created permanent output playlist: ${organizedName} with ${trackUris.length} tracks`);
       return { playlistId, name: organizedName };
     } catch (error) {
       this._rethrowIfRateLimited(error, 'createOutputPlaylist');
@@ -1394,11 +1621,11 @@ class SpotifyService {
           external_urls: playlist.external_urls
         })));
         
+        offset += batch.length;
         if (batch.length < limit) break;
-        offset += limit;
       }
       
-      console.log(`✅ Found ${playlists.length} Game Of Tones output playlists`);
+      routineSpotifyLog(`✅ Found ${playlists.length} Game Of Tones output playlists`);
       return playlists;
     } catch (error) {
       this._rethrowIfRateLimited(error, 'getGameOfTonesPlaylists');
@@ -1424,10 +1651,45 @@ class SpotifyService {
     });
     const deleted = results.filter((r) => r.success).length;
     const failed = results.filter((r) => !r.success).length;
-    console.log(
+    routineSpotifyLog(
       `🧹 Auto-cleared ${deleted} prior GOT output playlist(s) (${failed} failed)`
     );
     return { deleted, failed, results };
+  }
+
+  /**
+   * Remove playlists from the user's library (February 2026: DELETE /v1/me/library?uris=…).
+   * OpenAPI: max 40 URIs per request. Replaces legacy unfollowPlaylist → DELETE …/followers.
+   */
+  async removePlaylistUrisFromLibrary(playlistIds, label = 'removePlaylistLibrary') {
+    await this._ensureCanCallWebApi(label);
+    const ids = (Array.isArray(playlistIds) ? playlistIds : [])
+      .map((id) => String(id || '').trim())
+      .filter(Boolean);
+    if (!ids.length) return;
+
+    for (let i = 0; i < ids.length; i += LIBRARY_DELETE_URIS_MAX) {
+      const chunk = ids.slice(i, i + LIBRARY_DELETE_URIS_MAX);
+      const uris = chunk.map((id) => `spotify:playlist:${id}`).join(',');
+      const q = new URLSearchParams();
+      q.set('uris', uris);
+      try {
+        await this._webApiRequest(
+          'DELETE',
+          `/v1/me/library?${q.toString()}`,
+          null,
+          `${label}:${i}`
+        );
+      } catch (err) {
+        console.warn(
+          `⚠️ DELETE /v1/me/library failed (${label}); falling back to unfollowPlaylist:`,
+          err?.message || err
+        );
+        for (const id of chunk) {
+          await this.spotifyApi.unfollowPlaylist(id);
+        }
+      }
+    }
   }
 
   // Delete multiple playlists.
@@ -1436,13 +1698,15 @@ class SpotifyService {
   async deleteMultiplePlaylists(playlistIds, options = {}) {
     const { requireGotOutputPrefix = false } = options;
     await this._ensureCanCallWebApi('deleteMultiplePlaylists');
-    const results = [];
 
     let userId = null;
     if (requireGotOutputPrefix) {
       const userResponse = await this.spotifyApi.getMe();
       userId = userResponse.body.id;
     }
+
+    const results = [];
+    const validatedIds = [];
 
     for (const playlistId of playlistIds) {
       try {
@@ -1453,7 +1717,7 @@ class SpotifyService {
             results.push({
               playlistId,
               success: false,
-              error: 'Playlist not owned by current user'
+              error: 'Playlist not owned by current user',
             });
             continue;
           }
@@ -1467,16 +1731,30 @@ class SpotifyService {
               error:
                 'Not a GOT output playlist (name must start with: ' +
                 JSON.stringify(GOT_OUTPUT_PLAYLIST_NAME_PREFIX) +
-                ')'
+                ')',
             });
             continue;
           }
         }
-        await this.spotifyApi.unfollowPlaylist(playlistId);
-        results.push({ playlistId, success: true });
-        console.log(`✅ Deleted playlist: ${playlistId}`);
+        validatedIds.push(playlistId);
       } catch (error) {
-        console.error(`❌ Failed to delete playlist ${playlistId}:`, error);
+        console.error(`❌ Failed to validate/delete playlist ${playlistId}:`, error);
+        results.push({ playlistId, success: false, error: error.message });
+      }
+    }
+
+    if (!validatedIds.length) {
+      return results;
+    }
+
+    try {
+      await this.removePlaylistUrisFromLibrary(validatedIds, 'deleteMultiplePlaylists');
+      for (const playlistId of validatedIds) {
+        routineSpotifyLog(`✅ Deleted playlist: ${playlistId}`);
+        results.push({ playlistId, success: true });
+      }
+    } catch (error) {
+      for (const playlistId of validatedIds) {
         results.push({ playlistId, success: false, error: error.message });
       }
     }
@@ -1488,8 +1766,8 @@ class SpotifyService {
   async deleteTemporaryPlaylist(playlistId) {
     await this._ensureCanCallWebApi('deleteTemporaryPlaylist');
     try {
-      await this.spotifyApi.unfollowPlaylist(playlistId);
-      console.log(`✅ Deleted temporary playlist: ${playlistId}`);
+      await this.removePlaylistUrisFromLibrary([playlistId], 'deleteTemporaryPlaylist');
+      routineSpotifyLog(`✅ Deleted temporary playlist: ${playlistId}`);
     } catch (error) {
       console.warn('⚠️ Error deleting temporary playlist (non-fatal):', error);
     }
@@ -1507,7 +1785,7 @@ class SpotifyService {
         position_ms: positionMs
       });
       
-      console.log(`✅ Started playlist playback: track ${trackIndex} at ${positionMs}ms`);
+      routineSpotifyLog(`✅ Started playlist playback: track ${trackIndex} at ${positionMs}ms`);
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlaybackFromPlaylist');
       console.error('Error starting playback from playlist:', error);
@@ -1520,7 +1798,7 @@ class SpotifyService {
     await this._ensureCanCallWebApi('addToQueue');
     try {
       await this.spotifyApi.addToQueue(uri, { device_id: deviceId });
-      console.log(`✅ Added to queue: ${uri} on device ${deviceId || '(default)'}`);
+      routineSpotifyLog(`✅ Added to queue: ${uri} on device ${deviceId || '(default)'}`);
     } catch (error) {
       this._rethrowIfRateLimited(error, 'addToQueue');
       console.error('Error adding to queue:', error);
@@ -1573,7 +1851,7 @@ class SpotifyService {
         );
         lastBody = resBody;
       }
-      console.log(`✅ Added ${uris.length} tracks to playlist ${playlistId} at position ${position ?? 'end'}`);
+      routineSpotifyLog(`✅ Added ${uris.length} tracks to playlist ${playlistId} at position ${position ?? 'end'}`);
       return lastBody;
     } catch (error) {
       this._rethrowIfRateLimited(error, 'addTracksToPlaylist');
@@ -1604,7 +1882,7 @@ class SpotifyService {
         );
         lastBody = resBody;
       }
-      console.log(`✅ Removed ${uris.length} tracks from playlist ${playlistId}`);
+      routineSpotifyLog(`✅ Removed ${uris.length} tracks from playlist ${playlistId}`);
       return lastBody;
     } catch (error) {
       this._rethrowIfRateLimited(error, 'removeTracksFromPlaylist');
@@ -1623,7 +1901,7 @@ class SpotifyService {
       // Then add the new track at the specified position
       await this.addTracksToPlaylist(playlistId, [newTrackUri], position);
       
-      console.log(`✅ Replaced track in playlist ${playlistId}: ${oldTrackUri} -> ${newTrackUri} at position ${position || 'end'}`);
+      routineSpotifyLog(`✅ Replaced track in playlist ${playlistId}: ${oldTrackUri} -> ${newTrackUri} at position ${position || 'end'}`);
       return { success: true };
     } catch (error) {
       this._rethrowIfRateLimited(error, 'replaceTrackInPlaylist');

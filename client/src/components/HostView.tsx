@@ -2120,7 +2120,7 @@ const HostView: React.FC = () => {
 
       if (listToSend.length === 0) {
         window.alert(
-          'No songs could be loaded from your playlists. Spotify’s Web API may be rate limiting this app (429). Wait a few minutes, use Refresh on the library, or try again. Cards can still be built on the server; if the list below stays empty, refresh this page or reconnect Spotify.'
+          'No songs could be loaded from your playlists. Spotify may be rate limiting this app (429). Wait for cooldown, use Refresh on your library, then try again. If this persists, check Spotify Developer Dashboard quota.'
         );
         return false;
       }
@@ -2146,15 +2146,34 @@ const HostView: React.FC = () => {
 
       return await new Promise<boolean>((resolve) => {
         const timeoutMs = 25000;
-        const t = window.setTimeout(() => {
+        const cleanup = () => {
+          window.clearTimeout(t);
           socket.off('mix-finalized', onFinalized);
+          socket.off('finalize-mix-failed', onFailed);
+        };
+
+        const t = window.setTimeout(() => {
+          cleanup();
           console.warn('finalize-mix timed out');
           resolve(false);
         }, timeoutMs);
 
+        const onFailed = (payload: { message?: string; code?: string }) => {
+          cleanup();
+          const msg =
+            payload?.message ||
+            'Finalize failed. Check Spotify connection or wait if rate-limited.';
+          showHostAckNotification({
+            id: 'finalize-mix-failed',
+            title: 'Could not finalize mix',
+            variant: 'warning',
+            message: msg,
+          });
+          resolve(false);
+        };
+
         const onFinalized = (data: any) => {
-          window.clearTimeout(t);
-          socket.off('mix-finalized', onFinalized);
+          cleanup();
           console.log('Mix finalized:', data);
           setMixFinalized(true);
           setTimeout(() => {
@@ -2165,6 +2184,7 @@ const HostView: React.FC = () => {
 
         lastFinalizeMixSongListRef.current = listToSend;
         socket.on('mix-finalized', onFinalized);
+        socket.on('finalize-mix-failed', onFailed);
         socket.emit('finalize-mix', {
           roomId: roomId,
           playlists: selectedPlaylists,
@@ -3109,7 +3129,7 @@ const HostView: React.FC = () => {
             return [];
           }
           if (i > 0) {
-            await new Promise((r) => setTimeout(r, 300));
+            await new Promise((r) => setTimeout(r, 450));
           }
           const playlist = toFetch[i];
           const qs = new URLSearchParams();

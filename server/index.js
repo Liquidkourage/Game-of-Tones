@@ -108,9 +108,20 @@ if (process.env.DATABASE_URL) {
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
   });
-  console.log('🗄️ Database connection initialized');
+  routineServerLog('🗄️ Database connection initialized');
 } else {
-  console.log('⚠️ No DATABASE_URL found - using file-based storage (not persistent on Railway)');
+  routineServerLog('⚠️ No DATABASE_URL found - using file-based storage (not persistent on Railway)');
+}
+
+/** When MISSION_CRITICAL_LOGS=1 (or true), suppress routine logs; keep console.error and Spotify [SPOTIFY_429_DIAGNOSTIC]. */
+function missionCriticalLogsOnly() {
+  const v = process.env.MISSION_CRITICAL_LOGS;
+  return v === '1' || String(v || '').toLowerCase() === 'true';
+}
+
+function routineServerLog(...args) {
+  if (missionCriticalLogsOnly()) return;
+  console.log(...args);
 }
 
 // Enhanced logging with production optimization
@@ -133,23 +144,25 @@ class Logger {
 
   // Production-safe logging methods
   log(message, throttleKey = null, maxPerMinute = 30) {
-    if (this.quietMode) return;
+    if (this.quietMode || missionCriticalLogsOnly()) return;
     if (throttleKey && !this.throttle(throttleKey, maxPerMinute)) return;
-    console.log(message);
+    routineServerLog(message);
   }
 
   // Debug logs are suppressed in production unless explicitly enabled
   debug(message, throttleKey = null, maxPerMinute = 5) {
+    if (missionCriticalLogsOnly()) return;
     if (this.isProduction && !process.env.DEBUG) return;
     if (throttleKey && !this.throttle(throttleKey, maxPerMinute)) return;
-    console.log(`[DEBUG] ${message}`);
+    routineServerLog(`[DEBUG] ${message}`);
   }
 
   // Info logs are throttled more aggressively in production
   info(message, throttleKey = null, maxPerMinute = 10) {
+    if (missionCriticalLogsOnly()) return;
     const limit = this.isProduction ? Math.min(maxPerMinute, 5) : maxPerMinute;
     if (throttleKey && !this.throttle(throttleKey, limit)) return;
-    console.log(message);
+    routineServerLog(message);
   }
 
   warn(message, throttleKey = null, maxPerMinute = 10) {
@@ -197,17 +210,17 @@ function validateEnvironment() {
     }
   }
 
-  console.log('✅ Environment validation passed');
+  routineServerLog('✅ Environment validation passed');
 }
 
 // Validate environment before starting
 validateEnvironment();
 if (spotifyPipelineLog.isEnabled()) {
-  console.log(
+  routineServerLog(
     '📣 TEMPO_SPOTIFY_PIPELINE_LOG: ON — structured logs for host user → org credentials → tokens → Spotify (no secrets).'
   );
   if (spotifyPipelineLog.isWebApiLogEnabled()) {
-    console.log('📣 TEMPO_SPOTIFY_LOG_WEBAPI: ON — logs each api.spotify.com path + HTTP status (verbose).');
+    routineServerLog('📣 TEMPO_SPOTIFY_LOG_WEBAPI: ON — logs each api.spotify.com path + HTTP status (verbose).');
   }
 }
 
@@ -218,7 +231,7 @@ const QUIET_MODE = process.env.QUIET_MODE === '1'; // Reduce logging for product
 const server = http.createServer(app);
 const clientBuildPath = path.join(__dirname, '..', 'client', 'build');
 const hasClientBuild = fs.existsSync(clientBuildPath);
-console.log('NODE_ENV:', process.env.NODE_ENV, 'Client build exists:', hasClientBuild, 'at', clientBuildPath);
+routineServerLog('NODE_ENV:', process.env.NODE_ENV, 'Client build exists:', hasClientBuild, 'at', clientBuildPath);
 
 // CORS configuration
 const isProduction = process.env.NODE_ENV === 'production';
@@ -250,9 +263,9 @@ const corsAllowedOrigins = [...new Set([...allowedOrigins, publicAppOriginForCor
 // Log CORS configuration for debugging
 if (isProduction) {
   if (allowAllCors) {
-    console.log('🔓 CORS: Allowing ALL origins (*)');
+    routineServerLog('🔓 CORS: Allowing ALL origins (*)');
   } else {
-    console.log('🔒 CORS: Restricting to origins:', corsAllowedOrigins);
+    routineServerLog('🔒 CORS: Restricting to origins:', corsAllowedOrigins);
   }
 }
 
@@ -328,7 +341,7 @@ function loadTokens() {
   try {
     // First try environment variables (for Railway deployment persistence)
     if (process.env.SPOTIFY_ACCESS_TOKEN && process.env.SPOTIFY_REFRESH_TOKEN) {
-      console.log('🌍 Loaded Spotify tokens from environment variables');
+      routineServerLog('🌍 Loaded Spotify tokens from environment variables');
       return {
         accessToken: process.env.SPOTIFY_ACCESS_TOKEN,
         refreshToken: process.env.SPOTIFY_REFRESH_TOKEN,
@@ -339,7 +352,7 @@ function loadTokens() {
     // Fallback to file (for local development)
     if (fs.existsSync(TOKEN_FILE)) {
       const tokenData = JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));
-      console.log('📁 Loaded Spotify tokens from file');
+      routineServerLog('📁 Loaded Spotify tokens from file');
       return tokenData;
     }
   } catch (error) {
@@ -356,10 +369,10 @@ function saveTokens(tokens) {
     logger.debug('💾 Saved Spotify tokens to file', 'save-tokens');
     
     // Log environment variable instructions for Railway deployment
-    console.log('🚀 To persist Spotify tokens across Railway deployments, set these environment variables:');
-    console.log(`   SPOTIFY_ACCESS_TOKEN=${tokens.accessToken}`);
-    console.log(`   SPOTIFY_REFRESH_TOKEN=${tokens.refreshToken}`);
-    console.log('   Add these in your Railway project settings under "Variables"');
+    routineServerLog('🚀 To persist Spotify tokens across Railway deployments, set these environment variables:');
+    routineServerLog(`   SPOTIFY_ACCESS_TOKEN=${tokens.accessToken}`);
+    routineServerLog(`   SPOTIFY_REFRESH_TOKEN=${tokens.refreshToken}`);
+    routineServerLog('   Add these in your Railway project settings under "Variables"');
     
   } catch (error) {
     console.error('❌ Error saving tokens to file:', error);
@@ -412,7 +425,7 @@ function loadSavedDeviceForRoom(roomId) {
 function saveDevice(device) {
   try {
     fs.writeFileSync(DEVICE_FILE, JSON.stringify(device, null, 2), 'utf8');
-    console.log('💾 Saved device to file:', device.name);
+    routineServerLog('💾 Saved device to file:', device.name);
   } catch (error) {
     console.error('❌ Error saving device to file:', error);
   }
@@ -422,7 +435,7 @@ function saveDeviceForUser(uid, device) {
   try {
     const file = deviceFileForUserId(uid);
     fs.writeFileSync(file, JSON.stringify(device, null, 2), 'utf8');
-    console.log(`💾 Saved device for host user ${uid}:`, device.name);
+    routineServerLog(`💾 Saved device for host user ${uid}:`, device.name);
   } catch (error) {
     console.error('❌ Error saving device for user:', error);
   }
@@ -434,15 +447,15 @@ function clearRoomTimer(roomId) {
     const room = rooms.get(roomId);
     const currentTime = Date.now();
     if (VERBOSE) {
-    console.log(`🔍 TIMER CLEARED - Room: ${roomId}, Time: ${currentTime}`);
-    console.log(`🔍 Reason: Manual interruption (skip/pause/previous)`);
-    console.log(`🔍 Current Song: ${room?.currentSong?.name} by ${room?.currentSong?.artist}`);
-    console.log(`🔍 Stack trace:`, new Error().stack?.split('\n').slice(1, 4).join('\n'));
+    routineServerLog(`🔍 TIMER CLEARED - Room: ${roomId}, Time: ${currentTime}`);
+    routineServerLog(`🔍 Reason: Manual interruption (skip/pause/previous)`);
+    routineServerLog(`🔍 Current Song: ${room?.currentSong?.name} by ${room?.currentSong?.artist}`);
+    routineServerLog(`🔍 Stack trace:`, new Error().stack?.split('\n').slice(1, 4).join('\n'));
     }
     
     clearTimeout(roomTimers.get(roomId));
     roomTimers.delete(roomId);
-    console.log(`⏰ Cleared timer for room: ${roomId}`);
+    routineServerLog(`⏰ Cleared timer for room: ${roomId}`);
   }
 }
 
@@ -458,34 +471,34 @@ function setRoomTimer(roomId, callback, delay) {
     const room = rooms.get(roomId);
     const currentTime = Date.now();
     if (VERBOSE) {
-    console.log(`🔍 TIMER FIRED - Room: ${roomId}, Time: ${currentTime}, Expected Duration: ${delay}ms, Actual Duration: ${actualDelay}ms`);
-    console.log(`🔍 Room State - GameState: ${room?.gameState}, CurrentSongIndex: ${room?.currentSongIndex}, TotalSongs: ${room?.playlistSongs?.length}`);
-    console.log(`🔍 Current Song - ${room?.currentSong?.name} by ${room?.currentSong?.artist}`);
-    console.log(`🔍 Room exists: ${!!room}, Room ID: ${room?.id}`);
+    routineServerLog(`🔍 TIMER FIRED - Room: ${roomId}, Time: ${currentTime}, Expected Duration: ${delay}ms, Actual Duration: ${actualDelay}ms`);
+    routineServerLog(`🔍 Room State - GameState: ${room?.gameState}, CurrentSongIndex: ${room?.currentSongIndex}, TotalSongs: ${room?.playlistSongs?.length}`);
+    routineServerLog(`🔍 Current Song - ${room?.currentSong?.name} by ${room?.currentSong?.artist}`);
+    routineServerLog(`🔍 Room exists: ${!!room}, Room ID: ${room?.id}`);
     }
     
     roomTimers.delete(roomId);
-    if (VERBOSE) console.log(`🔍 About to execute callback for room ${roomId}`);
+    if (VERBOSE) routineServerLog(`🔍 About to execute callback for room ${roomId}`);
     callback();
-    if (VERBOSE) console.log(`🔍 Callback executed for room ${roomId}`);
+    if (VERBOSE) routineServerLog(`🔍 Callback executed for room ${roomId}`);
   }, actualDelay);
   
   roomTimers.set(roomId, timerId);
-  console.log(`⏰ Set timer for room ${roomId}: ${actualDelay}ms (${actualDelay/1000}s)`);
+  routineServerLog(`⏰ Set timer for room ${roomId}: ${actualDelay}ms (${actualDelay/1000}s)`);
 }
 
 // Play song at specific index without changing the index
 async function playSongAtIndex(roomId, deviceId, songIndex) {
-  console.log(`🎵 Playing song at index ${songIndex} for room:`, roomId);
+  routineServerLog(`🎵 Playing song at index ${songIndex} for room:`, roomId);
   const room = rooms.get(roomId);
   if (!room || room.gameState !== 'playing' || !room.playlistSongs) {
-    console.log('❌ Cannot play song: Room not in playing state or no playlist songs');
+    routineServerLog('❌ Cannot play song: Room not in playing state or no playlist songs');
     return;
   }
 
   try {
     const song = room.playlistSongs[songIndex];
-    console.log(`🎵 Playing song ${songIndex + 1}/${room.playlistSongs.length}: ${song.name} by ${song.artist}`);
+    routineServerLog(`🎵 Playing song ${songIndex + 1}/${room.playlistSongs.length}: ${song.name} by ${song.artist}`);
 
     // STRICT device control: use provided device or saved device only
     let targetDeviceId = deviceId;
@@ -493,7 +506,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       const savedDevice = loadSavedDeviceForRoom(roomId);
       if (savedDevice) {
         targetDeviceId = savedDevice.id;
-        console.log(`🎵 Using saved device for song: ${savedDevice.name}`);
+        routineServerLog(`🎵 Using saved device for song: ${savedDevice.name}`);
       }
     }
     if (!targetDeviceId) {
@@ -507,11 +520,11 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     } catch (e) {
       console.warn('⚠️ Transfer playback failed (will still try play):', e?.message || e);
     }
-    console.log(`🎵 Starting playback on device: ${targetDeviceId}`);
+    routineServerLog(`🎵 Starting playback on device: ${targetDeviceId}`);
 
     try {
       const startTime = Date.now();
-      console.log(`🎵 Starting playback at ${startTime} - Song: ${song.name} by ${song.artist}`);
+      routineServerLog(`🎵 Starting playback at ${startTime} - Song: ${song.name} by ${song.artist}`);
       // Enforce deterministic playback mode for direct index plays
       try { await spotifyFor(roomId).setShuffleState(false, targetDeviceId); } catch (_) {}
       try { await spotifyFor(roomId).setRepeatState('off', targetDeviceId); } catch (_) {}
@@ -539,7 +552,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       }
       await spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${song.id}`], startMs);
       const endTime = Date.now();
-      console.log(`✅ Successfully started playback on device: ${targetDeviceId} (took ${endTime - startTime}ms)`);
+      routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId} (took ${endTime - startTime}ms)`);
       
       // Stabilization delay to prevent context hijacks from volume changes
       await new Promise(resolve => setTimeout(resolve, 800));
@@ -548,7 +561,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
         try {
           const initialVolume = room.volume || 100;
         await spotifyFor(roomId).withRetries('setVolume(index)', () => spotifyFor(roomId).setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
-        console.log(`🔊 Set initial volume to ${initialVolume}%`);
+        routineServerLog(`🔊 Set initial volume to ${initialVolume}%`);
         } catch (volumeError) {
         console.warn('⚠️ Volume setting failed, continuing anyway:', volumeError?.message || volumeError);
       }
@@ -598,7 +611,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     // Send real-time player card updates to host
     sendPlayerCardUpdates(roomId, true); // Immediate update on game start
 
-    console.log(`✅ Playing song in room ${roomId}: ${song.name} by ${song.artist} on device ${targetDeviceId}`);
+    routineServerLog(`✅ Playing song in room ${roomId}: ${song.name} by ${song.artist} on device ${targetDeviceId}`);
 
     // Use simplified progression system
     startSimpleProgression(roomId, targetDeviceId, room.snippetLength);
@@ -755,7 +768,7 @@ class MultiTenantSpotifyManager {
       const refreshToken = process.env[`${envPrefix}SPOTIFY_REFRESH_TOKEN`];
       
       if (accessToken && refreshToken) {
-        console.log(`🌍 Loaded Spotify tokens for ${organizationId} from environment variables`);
+        routineServerLog(`🌍 Loaded Spotify tokens for ${organizationId} from environment variables`);
         const tokens = {
           accessToken,
           refreshToken,
@@ -764,7 +777,7 @@ class MultiTenantSpotifyManager {
         
         // Migrate to database for future persistence
         await saveTokensToDatabase(organizationId, tokens);
-        console.log(`🔄 Migrated ${organizationId} tokens to database`);
+        routineServerLog(`🔄 Migrated ${organizationId} tokens to database`);
         
         return tokens;
       }
@@ -776,11 +789,11 @@ class MultiTenantSpotifyManager {
         
       if (fs.existsSync(tokenFile)) {
         const tokenData = JSON.parse(fs.readFileSync(tokenFile, 'utf8'));
-        console.log(`📁 Loaded Spotify tokens for ${organizationId} from file`);
+        routineServerLog(`📁 Loaded Spotify tokens for ${organizationId} from file`);
         
         // Migrate to database for future persistence
         await saveTokensToDatabase(organizationId, tokenData);
-        console.log(`🔄 Migrated ${organizationId} tokens from file to database`);
+        routineServerLog(`🔄 Migrated ${organizationId} tokens from file to database`);
         
         return tokenData;
       }
@@ -796,7 +809,7 @@ class MultiTenantSpotifyManager {
       const dbSaved = await saveTokensToDatabase(organizationId, tokens);
       
       if (dbSaved) {
-        console.log(`✅ Tokens for ${organizationId} saved to database - will persist across deployments`);
+        routineServerLog(`✅ Tokens for ${organizationId} saved to database - will persist across deployments`);
       } else {
         // Fallback to file (for local development)
         const tokenFile = organizationId === this.defaultOrg ? 
@@ -804,7 +817,7 @@ class MultiTenantSpotifyManager {
           path.join(__dirname, `spotify_tokens_${organizationId.toLowerCase()}.json`);
           
         fs.writeFileSync(tokenFile, JSON.stringify(tokens, null, 2), 'utf8');
-        console.log(`📁 Tokens for ${organizationId} saved to file (local development only)`);
+        routineServerLog(`📁 Tokens for ${organizationId} saved to file (local development only)`);
       }
       
     } catch (error) {
@@ -828,7 +841,7 @@ class MultiTenantSpotifyManager {
           
         if (fs.existsSync(tokenFile)) {
           fs.unlinkSync(tokenFile);
-          console.log(`✅ Removed token file for ${organizationId}`);
+          routineServerLog(`✅ Removed token file for ${organizationId}`);
         }
       } catch (error) {
         console.error(`❌ Error removing token file for ${organizationId}:`, error);
@@ -906,7 +919,7 @@ async function initializeDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    console.log('✅ Database tables initialized');
+    routineServerLog('✅ Database tables initialized');
     return true;
   } catch (error) {
     console.error('❌ Database initialization failed:', error);
@@ -931,7 +944,7 @@ async function saveTokensToDatabase(organizationId, tokens) {
         updated_at = CURRENT_TIMESTAMP
     `, [organizationId, tokens.accessToken, tokens.refreshToken, expiresAt]);
     
-    console.log(`💾 Saved Spotify tokens for ${organizationId} to database`);
+    routineServerLog(`💾 Saved Spotify tokens for ${organizationId} to database`);
     return true;
   } catch (error) {
     console.error(`❌ Failed to save tokens for ${organizationId}:`, error);
@@ -950,7 +963,7 @@ async function loadTokensFromDatabase(organizationId) {
     
     if (result.rows.length > 0) {
       const row = result.rows[0];
-      console.log(`📁 Loaded Spotify tokens for ${organizationId} from database`);
+      routineServerLog(`📁 Loaded Spotify tokens for ${organizationId} from database`);
       return {
         accessToken: row.access_token,
         refreshToken: row.refresh_token,
@@ -969,7 +982,7 @@ async function deleteTokensFromDatabase(organizationId) {
   
   try {
     await db.query('DELETE FROM spotify_tokens WHERE organization_id = $1', [organizationId]);
-    console.log(`🗑️ Deleted Spotify tokens for ${organizationId} from database`);
+    routineServerLog(`🗑️ Deleted Spotify tokens for ${organizationId} from database`);
     return true;
   } catch (error) {
     console.error(`❌ Failed to delete tokens for ${organizationId}:`, error);
@@ -1045,7 +1058,7 @@ const multiTenantSpotify = new MultiTenantSpotifyManager();
   const defaultTokens = loadTokens();
   if (defaultTokens) {
     await multiTenantSpotify.setTokens('DEFAULT', defaultTokens);
-    console.log('✅ Restored default Spotify connection from saved tokens');
+    routineServerLog('✅ Restored default Spotify connection from saved tokens');
   }
 })();
 
@@ -1178,13 +1191,13 @@ function startSimpleContextMonitor(roomId, deviceId) {
         try {
           // Immediately transfer playback back to the correct device
           await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
-          console.log(`✅ Transferred playback back to locked device: ${targetDeviceId}`);
+          routineServerLog(`✅ Transferred playback back to locked device: ${targetDeviceId}`);
           
           // Small delay then verify it worked
           await new Promise(resolve => setTimeout(resolve, 500));
           const verifyState = await spotifyFor(roomId).getCurrentPlaybackState();
           if (verifyState?.device?.id === targetDeviceId) {
-            console.log(`✅ Device lock restored successfully`);
+            routineServerLog(`✅ Device lock restored successfully`);
           } else {
             console.warn(`⚠️ Device transfer may have failed - still on ${verifyState?.device?.id}`);
           }
@@ -1223,7 +1236,7 @@ function startSimpleContextMonitor(roomId, deviceId) {
       }
       // Case 2: Same track restarted from beginning (back button pressed)
       else if (currentTrackId === expectedTrackId && progress < 3000 && room.currentSongStartMs > 0) {
-        console.log(`🔄 Track restart detected. Restoring original start position: ${room.currentSongStartMs}ms`);
+        routineServerLog(`🔄 Track restart detected. Restoring original start position: ${room.currentSongStartMs}ms`);
         
         try {
           // Ensure we're on the correct device first
@@ -1250,7 +1263,7 @@ function startSimpleProgression(roomId, deviceId, snippetLengthSeconds) {
   const room = rooms.get(roomId);
   if (!room) return;
   
-  console.log(`⏰ Starting simple progression: ${snippetLengthSeconds}s per song`);
+  routineServerLog(`⏰ Starting simple progression: ${snippetLengthSeconds}s per song`);
   
   // Clear any existing timer
   clearRoomTimer(roomId);
@@ -1260,7 +1273,7 @@ function startSimpleProgression(roomId, deviceId, snippetLengthSeconds) {
   
   // Set timer for exact snippet duration
   setRoomTimer(roomId, async () => {
-    console.log(`⏰ Timer fired - advancing to next song`);
+    routineServerLog(`⏰ Timer fired - advancing to next song`);
     
     // Immediately advance to next song (don't pause first to avoid dead air)
     await playNextSongSimple(roomId, deviceId);
@@ -1269,17 +1282,17 @@ function startSimpleProgression(roomId, deviceId, snippetLengthSeconds) {
 
 // NEW: Simplified song progression without complex verification
 async function playNextSongSimple(roomId, deviceId) {
-  console.log('🎵 Simple next song for room:', roomId);
+  routineServerLog('🎵 Simple next song for room:', roomId);
   const room = rooms.get(roomId);
   
   if (!room || room.gameState !== 'playing' || !room.playlistSongs) {
-    console.log('❌ Cannot advance: invalid room state');
+    routineServerLog('❌ Cannot advance: invalid room state');
     return;
   }
 
   // Check if we're at the end
   if (room.currentSongIndex + 1 >= room.playlistSongs.length) {
-    console.log('🏁 Playlist complete. Ending game.');
+    routineServerLog('🏁 Playlist complete. Ending game.');
     room.gameState = 'ended';
     clearRoomTimer(roomId);
     clearPlaybackWatcher(roomId);
@@ -1301,7 +1314,7 @@ async function playNextSongSimple(roomId, deviceId) {
   const nextSong = room.playlistSongs[room.currentSongIndex];
   
   if (!nextSong) {
-    console.log('❌ No next song found');
+    routineServerLog('❌ No next song found');
     return;
   }
 
@@ -1331,8 +1344,8 @@ async function playNextSongSimple(roomId, deviceId) {
     // Track called song
     room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
     room.calledSongIds.push(nextSong.id);
-    console.log(`📝 SIMPLE PLAYBACK: Marked song as played: ${nextSong.name} (${nextSong.id}) - Total played: ${room.calledSongIds.length}`);
-    console.log(`📋 SIMPLE PLAYBACK: Current calledSongIds array:`, room.calledSongIds);
+    routineServerLog(`📝 SIMPLE PLAYBACK: Marked song as played: ${nextSong.name} (${nextSong.id}) - Total played: ${room.calledSongIds.length}`);
+    routineServerLog(`📋 SIMPLE PLAYBACK: Current calledSongIds array:`, room.calledSongIds);
 
   // Update current song and store original start position
   room.currentSong = {
@@ -1344,21 +1357,21 @@ async function playNextSongSimple(roomId, deviceId) {
   room.currentSongStartMs = startMs; // Store for restart correction
 
   try {
-    console.log(`🎵 Starting playback for: ${nextSong.name} by ${nextSong.artist} at ${startMs}ms`);
+    routineServerLog(`🎵 Starting playback for: ${nextSong.name} by ${nextSong.artist} at ${startMs}ms`);
     
     // Brief delay to ensure smooth transition without dead air
     await new Promise(resolve => setTimeout(resolve, 100));
     
     // Simple playlist playback with enhanced logging
     if (room.temporaryPlaylistId) {
-      console.log(`🎼 Using playlist context: ${room.temporaryPlaylistId}, track ${room.currentSongIndex}`);
+      routineServerLog(`🎼 Using playlist context: ${room.temporaryPlaylistId}, track ${room.currentSongIndex}`);
       await spotifyFor(roomId).startPlaybackFromPlaylist(deviceId, room.temporaryPlaylistId, room.currentSongIndex, startMs);
     } else {
-      console.log(`🎵 Using individual track: ${nextSong.id}`);
+      routineServerLog(`🎵 Using individual track: ${nextSong.id}`);
       await spotifyFor(roomId).startPlayback(deviceId, [`spotify:track:${nextSong.id}`], startMs);
     }
 
-    console.log(`✅ Playback started successfully for: ${nextSong.name}`);
+    routineServerLog(`✅ Playback started successfully for: ${nextSong.name}`);
 
     // Emit song update
     io.to(roomId).emit('song-playing', {
@@ -1409,12 +1422,12 @@ async function playNextSongSimple(roomId, deviceId) {
     };
     
     io.to(roomId).emit('room-state', syncPayload);
-    console.log(`🔄 Synced room-state after song start: ${playedSongIds.length} played songs`);
+    routineServerLog(`🔄 Synced room-state after song start: ${playedSongIds.length} played songs`);
 
     // Send real-time player card updates to host
     sendPlayerCardUpdates(roomId, true); // Immediate update on game start
 
-    console.log(`✅ Simple advance: ${nextSong.name} by ${nextSong.artist}`);
+    routineServerLog(`✅ Simple advance: ${nextSong.name} by ${nextSong.artist}`);
 
     // Start simple progression for next song
     startSimpleProgression(roomId, deviceId, room.snippetLength);
@@ -1425,15 +1438,15 @@ async function playNextSongSimple(roomId, deviceId) {
     
     // Try to resume playback if it got stuck in paused state
     try {
-      console.log('🔄 Attempting to resume playback after song advance failure...');
+      routineServerLog('🔄 Attempting to resume playback after song advance failure...');
       await spotifyFor(roomId).resumePlayback(deviceId);
-      console.log('✅ Resume attempt completed');
+      routineServerLog('✅ Resume attempt completed');
     } catch (resumeError) {
       console.warn('⚠️ Failed to resume playback:', resumeError?.message);
     }
     
     // Try to continue with next song after delay
-    console.log('🔄 Retrying song advance in 3 seconds...');
+    routineServerLog('🔄 Retrying song advance in 3 seconds...');
     setTimeout(() => playNextSongSimple(roomId, deviceId), 3000);
   }
 }
@@ -1512,7 +1525,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           } catch {}
           // Use playlist context for correction if available
           if (room.temporaryPlaylistId && room.currentSongIndex !== undefined) {
-            console.log(`🎼 Watchdog correcting via playlist context at index ${room.currentSongIndex}`);
+            routineServerLog(`🎼 Watchdog correcting via playlist context at index ${room.currentSongIndex}`);
             await spotifyFor(roomId).startPlaybackFromPlaylist(deviceId, room.temporaryPlaylistId, room.currentSongIndex, expectedProgress);
           } else {
             await spotifyFor(roomId).startPlayback(deviceId, [`spotify:track:${expectedId}`], expectedProgress);
@@ -1630,7 +1643,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
       const snippetLimitMs = snippetMs * 0.95; // Allow 5% buffer for timing variations
       if (room.temporaryPlaylistId && isPlaying && progress > snippetLimitMs) {
         try {
-          console.log(`⏸️ AGGRESSIVE PAUSE: Progress ${progress}ms exceeds snippet limit ${snippetLimitMs}ms. Pausing to prevent auto-advance.`);
+          routineServerLog(`⏸️ AGGRESSIVE PAUSE: Progress ${progress}ms exceeds snippet limit ${snippetLimitMs}ms. Pausing to prevent auto-advance.`);
           await spotifyFor(roomId).pausePlayback(deviceId);
           // Let timer handle the next song transition
         } catch (e) {
@@ -1644,7 +1657,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
         if (now - rptLast > 20000) {
           room._lastRepeatEnforceAtMs = now;
           try {
-            console.log(`🔄 Enforcing repeat 'track' mode (was: ${state?.repeat_state})`);
+            routineServerLog(`🔄 Enforcing repeat 'track' mode (was: ${state?.repeat_state})`);
             await spotifyFor(roomId).setRepeatState('track', deviceId);
           } catch (e) {
             console.warn('⚠️ Failed to enforce repeat mode:', e?.message);
@@ -1822,7 +1835,7 @@ io.on('connection', (socket) => {
       
       // Log organization info
       if (organizationId !== 'DEFAULT') {
-        console.log(`🏢 Room ${roomId} created for organization ${organizationId} with license ${licenseKey}`);
+        routineServerLog(`🏢 Room ${roomId} created for organization ${organizationId} with license ${licenseKey}`);
       }
     }
 
@@ -1860,7 +1873,7 @@ io.on('connection', (socket) => {
         room.host = socket.id;
         if (clientId) room.hostClientId = clientId;
         effectiveIsHost = true;
-        console.log(`Set ${playerName} as host for room: ${roomId}`);
+        routineServerLog(`Set ${playerName} as host for room: ${roomId}`);
       } else if (room.host === socket.id) {
         effectiveIsHost = true;
       } else {
@@ -1874,12 +1887,12 @@ io.on('connection', (socket) => {
           }
           room.host = socket.id;
           effectiveIsHost = true;
-          console.log(`Host reconnected (clientId) for room ${roomId}`);
+          routineServerLog(`Host reconnected (clientId) for room ${roomId}`);
         } else if (!oldHostConnected) {
           room.host = socket.id;
           if (clientId) room.hostClientId = clientId;
           effectiveIsHost = true;
-          console.log(`New host claimed room ${roomId} (previous host disconnected)`);
+          routineServerLog(`New host claimed room ${roomId} (previous host disconnected)`);
         } else {
           /** Active host socket still connected, but room is host-owned and joiner is that owner (e.g. "Continue" after modal, new tab, or clientId mismatch). Allow takeover. */
           const ownerUid = room.ownerUserId != null ? Number(room.ownerUserId) : null;
@@ -1895,7 +1908,7 @@ io.on('connection', (socket) => {
             room.host = socket.id;
             if (clientId) room.hostClientId = clientId;
             effectiveIsHost = true;
-            console.log(`Host takeover by room owner (uid ${ownerUid}) for room ${roomId}`);
+            routineServerLog(`Host takeover by room owner (uid ${ownerUid}) for room ${roomId}`);
           } else {
             effectiveIsHost = false;
             console.warn(`Host claim rejected for ${playerName} — room ${roomId} already has an active host`);
@@ -1933,14 +1946,14 @@ io.on('connection', (socket) => {
     if (effectiveIsHost) {
       for (const [pid, p] of room.players) {
         if (pid !== socket.id && p.isHost) {
-          console.log(`Removing old host entry for ${p.name} (${pid})`);
+          routineServerLog(`Removing old host entry for ${p.name} (${pid})`);
           p.isHost = false;
         }
       }
     }
     
-    console.log(`Player ${playerName} joined room ${roomId}. Total players: ${room.players.size}`);
-    console.log(`Room host: ${room.host}, Current socket: ${socket.id}`);
+    routineServerLog(`Player ${playerName} joined room ${roomId}. Total players: ${room.players.size}`);
+    routineServerLog(`Room host: ${room.host}, Current socket: ${socket.id}`);
     
     // Emit player joined event to all players in the room
     io.to(roomId).emit('player-joined', {
@@ -1963,14 +1976,14 @@ io.on('connection', (socket) => {
     });
 
     // Log available devices for debugging
-    console.log('Available devices:', Array.from(room.players.values()).map(p => p.name));
+    routineServerLog('Available devices:', Array.from(room.players.values()).map(p => p.name));
 
     // If a game is already in progress or mix is finalized, provide the joining player with state
     (async () => {
       try {
         // HOST RECONNECTION: Send comprehensive state sync
         if (effectiveIsHost) {
-          console.log(`🔄 Host reconnecting - sending full state sync for ${playerName}`);
+          routineServerLog(`🔄 Host reconnecting - sending full state sync for ${playerName}`);
           
           // Send current game state
           const playedSongIds = Array.isArray(room.calledSongIds) ? [...room.calledSongIds] : [];
@@ -2021,7 +2034,7 @@ io.on('connection', (socket) => {
           // Note: Pending verifications are sent to all hosts when bingo is called,
           // so if host reconnects during verification, they'll receive it via the normal flow
           
-          console.log(`✅ Host reconnection state sync complete for ${playerName}`);
+          routineServerLog(`✅ Host reconnection state sync complete for ${playerName}`);
         } else {
           // Non-host player: Emit current song to sync display timing
           if (room.currentSong && room.snippetLength) {
@@ -2060,7 +2073,7 @@ io.on('connection', (socket) => {
           io.to(socket.id).emit('bingo-card', existingCard);
         } else if (room.playlistSongs?.length || room.playlists?.length || room.finalizedPlaylists?.length) {
           // Generate card for any player (host or not) if playlists exist
-          console.log(`🎲 Generating bingo card for ${effectiveIsHost ? 'host' : 'player'} ${playerName}`);
+          routineServerLog(`🎲 Generating bingo card for ${effectiveIsHost ? 'host' : 'player'} ${playerName}`);
           const card = await generateBingoCardForPlayer(roomId, socket.id);
           if (card && clientId) {
             if (!room.clientCards) room.clientCards = new Map();
@@ -2076,11 +2089,11 @@ io.on('connection', (socket) => {
   // Start game
   socket.on('finalize-mix', async (data) => {
     const { roomId, playlists, songList, freeSpace } = data;
-    console.log('🎵 Finalizing mix for room:', roomId);
+    routineServerLog('🎵 Finalizing mix for room:', roomId);
     
     const room = rooms.get(roomId);
     if (!room) {
-      console.log('❌ Room not found for mix finalization');
+      routineServerLog('❌ Room not found for mix finalization');
       return;
     }
 
@@ -2092,58 +2105,84 @@ io.on('connection', (socket) => {
     const socketIsRoomHost = roomHostId === currentSocketId;
     const isCurrentHost = socketIsRoomHost || playerIsHost;
     
-    console.log(`🔍 Host validation - Room: ${roomId}, Socket: ${currentSocketId}, Room Host: ${roomHostId}, Player Found: ${!!player}, Player isHost: ${!!playerIsHost}, Valid: ${isCurrentHost}`);
+    routineServerLog(`🔍 Host validation - Room: ${roomId}, Socket: ${currentSocketId}, Room Host: ${roomHostId}, Player Found: ${!!player}, Player isHost: ${!!playerIsHost}, Valid: ${isCurrentHost}`);
     
     if (!isCurrentHost) {
-      console.log('❌ Only host can finalize mix');
+      routineServerLog('❌ Only host can finalize mix');
       socket.emit('error', { message: 'Only the host can finalize the mix' });
       return;
     }
 
+    if (socket.hostUserId != null && room.ownerUserId == null) {
+      room.ownerUserId = socket.hostUserId;
+    }
+
     // Prevent duplicate finalization
     if (room.mixFinalized) {
-      console.log('⚠️ Mix already finalized for room:', roomId);
+      routineServerLog('⚠️ Mix already finalized for room:', roomId);
       socket.emit('mix-finalized', { playlists: room.finalizedPlaylists });
       return;
     }
 
     try {
+      if (!Array.isArray(songList) || songList.length === 0) {
+        console.warn('⚠️ finalize-mix rejected: empty songList');
+        socket.emit('finalize-mix-failed', {
+          code: 'empty_song_list',
+          message:
+            'No songs were loaded from Spotify for your playlists. Wait out rate limits, refresh your library, then finalize again.',
+        });
+        return;
+      }
+
       // Persist finalized data, including host-ordered song list if provided
       room.finalizedPlaylists = playlists;
-      room.finalizedSongOrder = Array.isArray(songList) ? songList : null;
+      room.finalizedSongOrder = songList;
       room.freeSpaceEnabled = !!freeSpace;
-      
-      // Store the full song objects for song replacement functionality
-      if (Array.isArray(songList) && songList.length > 0) {
-        console.log('📋 Received songList for finalization:', {
-          length: songList.length,
-          hasPlaylistInfo: songList.length > 0 ? !!songList[0]?.sourcePlaylistId : false,
-          firstSong: songList.length > 0 ? {
-            id: songList[0].id,
-            name: songList[0].name,
-            sourcePlaylistId: songList[0].sourcePlaylistId,
-            sourcePlaylistName: songList[0].sourcePlaylistName
-          } : null
+
+      routineServerLog('📋 Received songList for finalization:', {
+        length: songList.length,
+        hasPlaylistInfo: !!songList[0]?.sourcePlaylistId,
+        firstSong: {
+          id: songList[0].id,
+          name: songList[0].name,
+          sourcePlaylistId: songList[0].sourcePlaylistId,
+          sourcePlaylistName: songList[0].sourcePlaylistName,
+        },
+      });
+
+      room.finalizedSongs = songList;
+      routineServerLog(`📝 Stored ${songList.length} finalized songs for room ${roomId}`);
+
+      const bingoOk = await generateBingoCards(roomId, playlists, room.finalizedSongOrder || null);
+      if (!bingoOk) {
+        room.finalizedPlaylists = null;
+        room.finalizedSongOrder = null;
+        room.finalizedSongs = null;
+        room.freeSpaceEnabled = false;
+        socket.emit('finalize-mix-failed', {
+          code: 'bingo_generation_failed',
+          message:
+            'Could not generate bingo cards (Spotify rate limit or missing playlist tracks). Wait for cooldown, reconnect Spotify, then finalize again.',
         });
-        
-        room.finalizedSongs = songList; // Store full song objects with sourcePlaylistId, etc.
-        console.log(`📝 Stored ${songList.length} finalized songs for room ${roomId}`);
-      } else {
-        console.log('⚠️ No songList received or empty songList for finalization');
+        return;
       }
-      
-      // Generate bingo cards for all players (respect host order where applicable)
-      await generateBingoCards(roomId, playlists, room.finalizedSongOrder || null);
-      
-      // Update room state to indicate mix is finalized
+
       room.mixFinalized = true;
-      
-      // Notify all players that mix is finalized
+
       io.to(roomId).emit('mix-finalized', { playlists });
-      
-      console.log('✅ Mix finalized for room:', roomId);
+
+      routineServerLog('✅ Mix finalized for room:', roomId);
     } catch (error) {
       console.error('❌ Error finalizing mix:', error);
+      room.finalizedPlaylists = null;
+      room.finalizedSongOrder = null;
+      room.finalizedSongs = null;
+      room.freeSpaceEnabled = false;
+      socket.emit('finalize-mix-failed', {
+        code: 'server_error',
+        message: error && error.message ? String(error.message) : 'Finalize failed on server.',
+      });
     }
   });
 
@@ -2164,7 +2203,7 @@ io.on('connection', (socket) => {
         room.customPattern = undefined;
       }
       io.to(roomId).emit('pattern-updated', { pattern: room.pattern, customMask: Array.from(room.customPattern || []) });
-      console.log(`🎯 Pattern set to ${room.pattern} for room ${roomId}`);
+      routineServerLog(`🎯 Pattern set to ${room.pattern} for room ${roomId}`);
     } catch (e) {
       console.error('❌ Error setting pattern:', e?.message || e);
     }
@@ -2180,7 +2219,7 @@ io.on('connection', (socket) => {
       if (!isCurrentHost) return;
       room.hybridInPersonPlusOnline = !!hybridInPersonPlusOnline;
       io.to(roomId).emit('hybrid-mode-updated', { hybridInPersonPlusOnline: room.hybridInPersonPlusOnline });
-      console.log(`🌐 Hybrid in-person+online for room ${roomId}: ${room.hybridInPersonPlusOnline}`);
+      routineServerLog(`🌐 Hybrid in-person+online for room ${roomId}: ${room.hybridInPersonPlusOnline}`);
     } catch (e) {
       console.error('❌ Error setting hybrid mode:', e?.message || e);
     }
@@ -2201,7 +2240,7 @@ io.on('connection', (socket) => {
       
       // Broadcast to all clients in room
       io.to(roomId).emit('public-display-font-size-updated', { fontSize: validFontSize });
-      console.log(`📏 Public display font size set to ${validFontSize}x for room ${roomId}`);
+      routineServerLog(`📏 Public display font size set to ${validFontSize}x for room ${roomId}`);
     } catch (e) {
       console.error('❌ Error setting public display font size:', e?.message || e);
     }
@@ -2219,7 +2258,7 @@ io.on('connection', (socket) => {
       const next = m === 'grouped' || m === '1x75' ? 'grouped' : m === '5x15' || m === 'columns' ? '5x15' : 'auto';
       room.publicDisplayCallListMode = next;
       io.to(roomId).emit('public-display-call-list-mode-updated', { mode: next });
-      console.log(`🖥️ Public display call list mode for room ${roomId}: ${next}`);
+      routineServerLog(`🖥️ Public display call list mode for room ${roomId}: ${next}`);
     } catch (e) {
       console.error('❌ Error setting public display call list mode:', e?.message || e);
     }
@@ -2236,14 +2275,14 @@ io.on('connection', (socket) => {
     const player = room.players.get(socket.id);
     if (!player) {
       console.error(`❌ Player not found for socket ${socket.id} in room ${roomId}`);
-      console.log(`Room has players:`, Array.from(room.players.keys()));
+      routineServerLog(`Room has players:`, Array.from(room.players.keys()));
       socket.emit('bingo-result', { success: false, reason: 'Player not found in room' });
       return;
     }
     if (player.inPerson === undefined) player.inPerson = true;
     if (!player.bingoCard) {
       console.error(`❌ Player ${player.name} (${socket.id}) has no bingo card`);
-      console.log(`Room bingo cards:`, Array.from(room.bingoCards?.keys() || []));
+      routineServerLog(`Room bingo cards:`, Array.from(room.bingoCards?.keys() || []));
       socket.emit('bingo-result', { success: false, reason: 'No bingo card assigned. Please refresh and rejoin.' });
       return;
     }
@@ -2293,7 +2332,7 @@ io.on('connection', (socket) => {
           patternType: validationResult.type || room.pattern,
           timestamp: Date.now()
         });
-        console.log(`🌐 Remote hybrid bingo (unofficial) for ${player.name}`);
+        routineServerLog(`🌐 Remote hybrid bingo (unofficial) for ${player.name}`);
       } else {
         socket.emit('bingo-result', {
           success: false,
@@ -2319,16 +2358,16 @@ io.on('connection', (socket) => {
             const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
             if (deviceId) {
               await spotifyFor(roomId).pausePlayback(deviceId);
-              console.log(`⏸️ Spotify paused for bingo verification by ${player.name}`);
+              routineServerLog(`⏸️ Spotify paused for bingo verification by ${player.name}`);
             } else {
-              console.log(`⚠️ No device ID available for pausing during bingo verification`);
+              routineServerLog(`⚠️ No device ID available for pausing during bingo verification`);
             }
           } catch (error) {
-            console.log(`⚠️ Failed to pause Spotify during bingo verification: ${error.message}`);
+            routineServerLog(`⚠️ Failed to pause Spotify during bingo verification: ${error.message}`);
           }
         })();
         
-        console.log(`🛑 Game auto-paused for bingo verification by ${player.name}`);
+        routineServerLog(`🛑 Game auto-paused for bingo verification by ${player.name}`);
       }
       
       // Current song already added to calledSongIds before validation above
@@ -2463,7 +2502,7 @@ io.on('connection', (socket) => {
           if (hostSocket) {
             hostSocket.emit('bingo-verification-needed', verificationData);
             hostsFound++;
-            console.log(`📤 Sent bingo verification to host: ${playerData.name} (${playerId})`);
+            routineServerLog(`📤 Sent bingo verification to host: ${playerData.name} (${playerId})`);
           } else {
             console.warn(`⚠️ Host socket not found for ${playerData.name} (${playerId}) - may have disconnected`);
           }
@@ -2475,12 +2514,12 @@ io.on('connection', (socket) => {
         const fallbackHostSocket = io.sockets.sockets.get(room.host);
         if (fallbackHostSocket) {
           fallbackHostSocket.emit('bingo-verification-needed', verificationData);
-          console.log(`📤 Sent bingo verification to fallback host (${room.host})`);
+          routineServerLog(`📤 Sent bingo verification to fallback host (${room.host})`);
         } else {
           console.error(`❌ CRITICAL: No host sockets found! Room host: ${room.host}, Hosts in players: ${Array.from(room.players.entries()).filter(([_, p]) => p.isHost).map(([id, p]) => `${p.name}(${id})`).join(', ')}`);
           // Emit to room as last resort - host should still receive it
           io.to(roomId).emit('bingo-verification-needed', verificationData);
-          console.log(`📤 Emitted bingo verification to entire room as fallback`);
+          routineServerLog(`📤 Emitted bingo verification to entire room as fallback`);
         }
       }
       
@@ -2493,7 +2532,7 @@ io.on('connection', (socket) => {
     } else {
       // INVALID BINGO: Still send to host for verification (host can reject)
       // This allows players to attempt bingo calls even with invalid marks
-      console.log(`⚠️ Invalid bingo call from ${player.name}, but sending to host for verification`);
+      routineServerLog(`⚠️ Invalid bingo call from ${player.name}, but sending to host for verification`);
       
       // AUTO-PAUSE the game for host verification even if invalid
       if (room.gameState === 'playing') {
@@ -2506,14 +2545,14 @@ io.on('connection', (socket) => {
             const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
             if (deviceId) {
               await spotifyFor(roomId).pausePlayback(deviceId);
-              console.log(`⏸️ Spotify paused for invalid bingo verification by ${player.name}`);
+              routineServerLog(`⏸️ Spotify paused for invalid bingo verification by ${player.name}`);
             }
           } catch (error) {
-            console.log(`⚠️ Failed to pause Spotify during bingo verification: ${error.message}`);
+            routineServerLog(`⚠️ Failed to pause Spotify during bingo verification: ${error.message}`);
           }
         })();
         
-        console.log(`🛑 Game auto-paused for invalid bingo verification by ${player.name}`);
+        routineServerLog(`🛑 Game auto-paused for invalid bingo verification by ${player.name}`);
       }
       
       // Build played songs list
@@ -2574,7 +2613,7 @@ io.on('connection', (socket) => {
           if (hostSocket) {
             hostSocket.emit('bingo-verification-needed', verificationData);
             hostsFound++;
-            console.log(`📤 Sent invalid bingo verification to host: ${playerData.name} (${playerId})`);
+            routineServerLog(`📤 Sent invalid bingo verification to host: ${playerData.name} (${playerId})`);
           }
         }
       });
@@ -2583,10 +2622,10 @@ io.on('connection', (socket) => {
         const fallbackHostSocket = io.sockets.sockets.get(room.host);
         if (fallbackHostSocket) {
           fallbackHostSocket.emit('bingo-verification-needed', verificationData);
-          console.log(`📤 Sent invalid bingo verification to fallback host (${room.host})`);
+          routineServerLog(`📤 Sent invalid bingo verification to fallback host (${room.host})`);
         } else {
           io.to(roomId).emit('bingo-verification-needed', verificationData);
-          console.log(`📤 Emitted invalid bingo verification to entire room as fallback`);
+          routineServerLog(`📤 Emitted invalid bingo verification to entire room as fallback`);
         }
       }
       
@@ -2640,7 +2679,7 @@ io.on('connection', (socket) => {
         if (p.name === bodyPlayerName && !p.isHost) {
           player = p;
           resolvedPlayerId = pid;
-          console.log(`verify-bingo: resolved "${bodyPlayerName}" by name → socket ${pid}`);
+          routineServerLog(`verify-bingo: resolved "${bodyPlayerName}" by name → socket ${pid}`);
           break;
         }
       }
@@ -2658,7 +2697,7 @@ io.on('connection', (socket) => {
     
     if (approved) {
       // APPROVED: Confirm the win and resume/end game
-      console.log(`✅ Host approved bingo for ${player.name}`);
+      routineServerLog(`✅ Host approved bingo for ${player.name}`);
       
       // Current song already marked as played during bingo call
       
@@ -2726,14 +2765,14 @@ io.on('connection', (socket) => {
           const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
           if (deviceId) {
             await spotifyFor(roomId).pausePlayback(deviceId);
-            console.log(`⏸️ Spotify paused - round complete`);
+            routineServerLog(`⏸️ Spotify paused - round complete`);
           }
         } catch (error) {
           console.warn(`⚠️ Failed to pause Spotify on round complete: ${error.message}`);
         }
       })();
       
-      console.log(`🏁 Round complete - ${player.name} wins! Waiting for host decision...`);
+      routineServerLog(`🏁 Round complete - ${player.name} wins! Waiting for host decision...`);
       
       // Store round winner
       if (!room.roundWinners) room.roundWinners = [];
@@ -2766,7 +2805,7 @@ io.on('connection', (socket) => {
               }
             });
             hostsNotified++;
-            console.log(`📤 Sent round-complete notification to host: ${playerData.name} (${hostSocketId})`);
+            routineServerLog(`📤 Sent round-complete notification to host: ${playerData.name} (${hostSocketId})`);
           }
         }
       });
@@ -2789,7 +2828,7 @@ io.on('connection', (socket) => {
               changePlaylists: true
             }
           });
-          console.log(`📤 Sent round-complete notification to fallback host (${room.host})`);
+          routineServerLog(`📤 Sent round-complete notification to fallback host (${room.host})`);
         } else {
           // Last resort: emit to entire room
           io.to(roomId).emit('bingo-verified', { 
@@ -2806,7 +2845,7 @@ io.on('connection', (socket) => {
               changePlaylists: true
             }
           });
-          console.log(`📤 Emitted round-complete notification to entire room as last resort`);
+          routineServerLog(`📤 Emitted round-complete notification to entire room as last resort`);
         }
       }
       
@@ -2821,7 +2860,7 @@ io.on('connection', (socket) => {
       
     } else {
       // REJECTED: Remove from winners, notify player, resume game
-      console.log(`❌ Host rejected bingo for ${player.name}: ${reason}`);
+      routineServerLog(`❌ Host rejected bingo for ${player.name}: ${reason}`);
       
       // Remove from winners list (drop both stale and resolved ids after reconnect)
       room.winners = room.winners.filter(w => w.playerId !== playerId && w.playerId !== resolvedPlayerId);
@@ -2853,19 +2892,19 @@ io.on('connection', (socket) => {
             const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
             if (deviceId) {
               await spotifyFor(roomId).resumePlayback(deviceId);
-              console.log(`▶️ Spotify resumed after rejecting ${player.name}'s bingo`);
+              routineServerLog(`▶️ Spotify resumed after rejecting ${player.name}'s bingo`);
             } else {
-              console.log(`⚠️ No device ID available for resuming after bingo rejection`);
+              routineServerLog(`⚠️ No device ID available for resuming after bingo rejection`);
             }
             // Now start the progression timer for the remainder of the current song
             startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
           } catch (error) {
-            console.log(`⚠️ Failed to resume Spotify after bingo rejection: ${error.message}`);
+            routineServerLog(`⚠️ Failed to resume Spotify after bingo rejection: ${error.message}`);
             // Still start progression timer as fallback
             startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
           }
         })();
-        console.log(`▶️ Game resumed after rejecting ${player.name}'s bingo`);
+        routineServerLog(`▶️ Game resumed after rejecting ${player.name}'s bingo`);
         
         // Notify all clients that game has resumed
         io.to(roomId).emit('game-resumed', { reason: 'Bingo rejected, game continues' });
@@ -2885,7 +2924,7 @@ io.on('connection', (socket) => {
     
     // Only resume if game is paused for verification
     if (room.gameState === 'paused_for_verification') {
-      console.log(`▶️ Host manually resuming game from paused_for_verification state`);
+      routineServerLog(`▶️ Host manually resuming game from paused_for_verification state`);
       room.gameState = 'playing';
       
       // Resume Spotify playback
@@ -2894,12 +2933,12 @@ io.on('connection', (socket) => {
           const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
           if (deviceId) {
             await spotifyFor(roomId).resumePlayback(deviceId);
-            console.log(`▶️ Spotify resumed after manual resume`);
+            routineServerLog(`▶️ Spotify resumed after manual resume`);
           }
           // Start progression timer for the remainder of the current song
           startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
         } catch (error) {
-          console.log(`⚠️ Failed to resume Spotify: ${error.message}`);
+          routineServerLog(`⚠️ Failed to resume Spotify: ${error.message}`);
           // Still start progression timer as fallback
           startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
         }
@@ -2907,9 +2946,9 @@ io.on('connection', (socket) => {
       
       // Notify all clients that game has resumed
       io.to(roomId).emit('game-resumed', { reason: 'Host manually resumed game' });
-      console.log(`✅ Game manually resumed by host`);
+      routineServerLog(`✅ Game manually resumed by host`);
     } else {
-      console.log(`⚠️ Cannot manually resume: game state is ${room.gameState}, expected paused_for_verification`);
+      routineServerLog(`⚠️ Cannot manually resume: game state is ${room.gameState}, expected paused_for_verification`);
     }
   });
 
@@ -2928,7 +2967,7 @@ io.on('connection', (socket) => {
       if (room.gameState === 'paused_for_verification') {
         room.gameState = 'playing';
         startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
-        console.log(`▶️ Host chose to continue game after bingo verification`);
+        routineServerLog(`▶️ Host chose to continue game after bingo verification`);
         
         io.to(roomId).emit('game-resumed', { reason: 'Host continued after bingo' });
       }
@@ -2936,7 +2975,7 @@ io.on('connection', (socket) => {
       // End the current round
       room.gameState = 'ended';
       clearRoomTimer(roomId);
-      console.log(`🏁 Host ended game after bingo verification`);
+      routineServerLog(`🏁 Host ended game after bingo verification`);
       
       io.to(roomId).emit('game-ended', { reason: 'Host ended after bingo', winners: room.winners });
     }
@@ -2952,7 +2991,7 @@ io.on('connection', (socket) => {
     const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
     if (!isHost) return;
     
-    console.log(`🚨 EMERGENCY STOP requested for room ${roomId}`);
+    routineServerLog(`🚨 EMERGENCY STOP requested for room ${roomId}`);
     
     // Immediate stop
     clearRoomTimer(roomId);
@@ -2962,10 +3001,10 @@ io.on('connection', (socket) => {
       try {
         if (room.selectedDeviceId) {
           await spotifyApi.pause();
-          console.log('🛑 Emergency stop: Spotify paused');
+          routineServerLog('🛑 Emergency stop: Spotify paused');
         }
       } catch (error) {
-        console.log('Emergency stop: Spotify pause failed (continuing anyway)');
+        routineServerLog('Emergency stop: Spotify pause failed (continuing anyway)');
       }
     })();
     
@@ -2983,7 +3022,7 @@ io.on('connection', (socket) => {
     const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
     if (!isHost) return;
     
-    console.log(`🔄 Host restarting game for room ${roomId}`);
+    routineServerLog(`🔄 Host restarting game for room ${roomId}`);
     
     // Stop any current playback
     clearRoomTimer(roomId);
@@ -3024,7 +3063,7 @@ io.on('connection', (socket) => {
       }
     });
     
-    console.log(`✅ Game restarted successfully for room ${roomId}`);
+    routineServerLog(`✅ Game restarted successfully for room ${roomId}`);
   });
 
   // NEW: Host starts next round after a bingo win (FULL RESET to setup)
@@ -3052,10 +3091,10 @@ io.on('connection', (socket) => {
       console.warn(`⚠️ start-next-round: Unexpected game state ${room.gameState} for room ${roomId}. Forcing reset anyway...`);
       // Don't return - allow the reset to proceed to fix stuck states
     } else {
-      console.log(`✅ start-next-round: Game state is ${room.gameState} - proceeding with reset`);
+      routineServerLog(`✅ start-next-round: Game state is ${room.gameState} - proceeding with reset`);
     }
     
-    console.log(`🔄 Host starting FRESH round ${(room.roundWinners?.length || 0) + 1} for room ${roomId}`);
+    routineServerLog(`🔄 Host starting FRESH round ${(room.roundWinners?.length || 0) + 1} for room ${roomId}`);
     
     // CRITICAL: Clean up all active timers and watchers BEFORE reset
     clearRoomTimer(roomId);
@@ -3068,7 +3107,7 @@ io.on('connection', (socket) => {
         const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
         if (deviceId) {
           await spotifyFor(roomId).pausePlayback(deviceId);
-          console.log(`⏸️ Spotify paused before round reset`);
+          routineServerLog(`⏸️ Spotify paused before round reset`);
         }
       } catch (error) {
         console.warn(`⚠️ Failed to pause Spotify before reset: ${error.message}`);
@@ -3137,7 +3176,7 @@ io.on('connection', (socket) => {
       room.temporaryPlaylistId = null;
     }
     
-    console.log(`🔄 Room ${roomId} reset to setup state, keeping ${room.players.size} players and Spotify connection`);
+    routineServerLog(`🔄 Room ${roomId} reset to setup state, keeping ${room.players.size} players and Spotify connection`);
     
     // Notify all clients that we're starting fresh
     io.to(roomId).emit('next-round-reset', {
@@ -3168,7 +3207,7 @@ io.on('connection', (socket) => {
       resetToSetup: true
     });
     
-    console.log(`✅ Fresh round ${roundWinnersToKeep.length + 1} setup ready for room ${roomId}`);
+    routineServerLog(`✅ Fresh round ${roundWinnersToKeep.length + 1} setup ready for room ${roomId}`);
   });
 
   // NEW: Host ends the entire multi-round game session
@@ -3181,7 +3220,7 @@ io.on('connection', (socket) => {
     const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
     if (!isHost) return;
     
-    console.log(`🏁 Host ending game session for room ${roomId}`);
+    routineServerLog(`🏁 Host ending game session for room ${roomId}`);
     
     // Stop any current playback and clean up
     clearRoomTimer(roomId);
@@ -3214,7 +3253,7 @@ io.on('connection', (socket) => {
       finalMessage: `Game session complete! ${room.roundWinners?.length || 0} rounds played.`
     });
     
-    console.log(`✅ Game session ended for room ${roomId} after ${room.roundWinners?.length || 0} rounds`);
+    routineServerLog(`✅ Game session ended for room ${roomId} after ${room.roundWinners?.length || 0} rounds`);
   });
 
   // Client requests a state sync (useful if they joined before start or missed events)
@@ -3223,11 +3262,11 @@ io.on('connection', (socket) => {
       const { roomId } = data;
       const room = rooms.get(roomId);
       if (!room) {
-        console.log(`🔄 SYNC-STATE: Room ${roomId} not found`);
+        routineServerLog(`🔄 SYNC-STATE: Room ${roomId} not found`);
         return;
       }
       
-      console.log(`🔄 SYNC-STATE: Sending state to ${socket.id} for room ${roomId}`);
+      routineServerLog(`🔄 SYNC-STATE: Sending state to ${socket.id} for room ${roomId}`);
       
       // Build played songs list that includes current song if it exists
       const playedSongIds = Array.isArray(room.calledSongIds) ? [...room.calledSongIds] : [];
@@ -3290,7 +3329,7 @@ io.on('connection', (socket) => {
       }
       
       io.to(socket.id).emit('room-state', payload);
-      console.log(`✅ SYNC-STATE: Sent comprehensive state (${payload.totalPlayedCount} played songs, ${payload.playerCount} players)`);
+      routineServerLog(`✅ SYNC-STATE: Sent comprehensive state (${payload.totalPlayedCount} played songs, ${payload.playerCount} players)`);
     } catch (e) {
       console.error('❌ SYNC-STATE error:', e?.message || e);
     }
@@ -3331,9 +3370,9 @@ io.on('connection', (socket) => {
       }
       
       socket.emit('player-cards-update', playerCardsData);
-      console.log(`📋 Sent ${Object.keys(playerCardsData).length} player cards to host in room ${roomId}`);
-      console.log(`📋 CalledSongIds being sent:`, room.calledSongIds);
-      console.log(`📋 CalledSongIds length:`, room.calledSongIds?.length || 0);
+      routineServerLog(`📋 Sent ${Object.keys(playerCardsData).length} player cards to host in room ${roomId}`);
+      routineServerLog(`📋 CalledSongIds being sent:`, room.calledSongIds);
+      routineServerLog(`📋 CalledSongIds length:`, room.calledSongIds?.length || 0);
     } catch (e) {
       console.error('❌ Error sending player cards:', e?.message || e);
     }
@@ -3357,7 +3396,7 @@ io.on('connection', (socket) => {
       // Queue cleared by removing pre-queue system
       room.round = (room.round || 0) + 1;
       io.to(roomId).emit('round-reset', { round: room.round });
-      console.log(`🔄 New round started for room ${roomId} (round ${room.round})`);
+      routineServerLog(`🔄 New round started for room ${roomId} (round ${room.round})`);
     } catch (e) {
       console.error('❌ Error starting new round:', e?.message || e);
     }
@@ -3375,7 +3414,7 @@ io.on('connection', (socket) => {
       if (!isCurrentHost) return;
       room.superStrictLock = !!enabled;
       io.to(roomId).emit('super-strict-updated', { enabled: room.superStrictLock });
-      console.log(`🔒 Super-Strict Lock set to ${room.superStrictLock} for room ${roomId}`);
+      routineServerLog(`🔒 Super-Strict Lock set to ${room.superStrictLock} for room ${roomId}`);
       // Restart simple context monitor (no aggressive pausing)
       if (room.gameState === 'playing') {
         startSimpleContextMonitor(roomId, room.selectedDeviceId);
@@ -3386,24 +3425,24 @@ io.on('connection', (socket) => {
   });
 
   socket.on('start-game', async (data) => {
-    console.log('🎮 Start game event received:', data);
+    routineServerLog('🎮 Start game event received:', data);
     const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = 'none', pattern: incomingPattern, freeSpace } = data;
     const room = rooms.get(roomId);
     
-    console.log('🔍 Room found:', !!room);
-    console.log('🔍 Room host:', room?.host);
-    console.log('🔍 Socket ID:', socket.id);
-    console.log('🔍 Is host:', room?.host === socket.id);
-    console.log('🔍 Available rooms:', Array.from(rooms.keys()));
-    console.log('🔍 Room players:', Array.from(room?.players.entries() || []).map(([id, player]) => `${player.name}(${player.isHost ? 'host' : 'player'})`));
+    routineServerLog('🔍 Room found:', !!room);
+    routineServerLog('🔍 Room host:', room?.host);
+    routineServerLog('🔍 Socket ID:', socket.id);
+    routineServerLog('🔍 Is host:', room?.host === socket.id);
+    routineServerLog('🔍 Available rooms:', Array.from(rooms.keys()));
+    routineServerLog('🔍 Room players:', Array.from(room?.players.entries() || []).map(([id, player]) => `${player.name}(${player.isHost ? 'host' : 'player'})`));
     
     // Check if this socket is the host (either by room.host or by player.isHost)
     const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
-    console.log('🔍 Is current host check:', { roomHost: room?.host, socketId: socket.id, playerIsHost: room?.players.get(socket.id)?.isHost, isCurrentHost });
+    routineServerLog('🔍 Is current host check:', { roomHost: room?.host, socketId: socket.id, playerIsHost: room?.players.get(socket.id)?.isHost, isCurrentHost });
     
     if (room && isCurrentHost) {
       try {
-        console.log('✅ Starting game for room:', roomId);
+        routineServerLog('✅ Starting game for room:', roomId);
       room.gameState = 'playing';
       room.snippetLength = snippetLength;
       room.playlists = playlists;
@@ -3421,7 +3460,7 @@ io.on('connection', (socket) => {
         } catch {}
         room.pattern = room.pattern || 'line';
 
-        console.log('🎵 Generating bingo cards...');
+        routineServerLog('🎵 Generating bingo cards...');
         // If mix is already finalized and cards exist, do NOT regenerate to avoid reshuffle
         if (!room.mixFinalized || !room.bingoCards || room.bingoCards.size === 0) {
           if (freeSpace !== undefined) {
@@ -3438,22 +3477,22 @@ io.on('connection', (socket) => {
           const playlistsToUse = room.finalizedPlaylists && room.finalizedPlaylists.length > 0 
             ? room.finalizedPlaylists 
             : playlists;
-          console.log(`📋 Using ${room.finalizedPlaylists ? 'finalized' : 'regular'} playlists for card generation`);
-          console.log(`📋 Playlist order: ${playlistsToUse.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
+          routineServerLog(`📋 Using ${room.finalizedPlaylists ? 'finalized' : 'regular'} playlists for card generation`);
+          routineServerLog(`📋 Playlist order: ${playlistsToUse.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
           // If mix was finalized, reuse finalized song order to enforce 1x75 deterministically
           await generateBingoCards(roomId, playlistsToUse, room.finalizedSongOrder || null);
           
           // CRITICAL: Auto-set pattern to 'full_card' for 1x75 mode if pattern wasn't explicitly set
           if (room.oneBySeventyFivePool && room.oneBySeventyFivePool.length === 75 && !incomingPattern) {
-            console.log('🎯 1x75 mode detected: Auto-setting pattern to full_card');
+            routineServerLog('🎯 1x75 mode detected: Auto-setting pattern to full_card');
             room.pattern = 'full_card';
           }
         } else {
-          console.log('🛑 Skipping card regeneration (mix finalized and cards already exist)');
+          routineServerLog('🛑 Skipping card regeneration (mix finalized and cards already exist)');
           
           // Also check for 1x75 mode when cards already exist
           if (room.oneBySeventyFivePool && room.oneBySeventyFivePool.length === 75 && !incomingPattern && room.pattern === 'line') {
-            console.log('🎯 1x75 mode detected (existing cards): Auto-setting pattern to full_card');
+            routineServerLog('🎯 1x75 mode detected (existing cards): Auto-setting pattern to full_card');
             room.pattern = 'full_card';
           }
           
@@ -3466,12 +3505,12 @@ io.on('connection', (socket) => {
           });
           
           if (playersWithoutCards.length > 0) {
-            console.log(`🎲 Generating cards for ${playersWithoutCards.length} late-joining players:`, playersWithoutCards.map(p => p.playerName));
+            routineServerLog(`🎲 Generating cards for ${playersWithoutCards.length} late-joining players:`, playersWithoutCards.map(p => p.playerName));
             for (const { playerId, playerName } of playersWithoutCards) {
               try {
                 const card = await generateBingoCardForPlayer(roomId, playerId);
                 if (card) {
-                  console.log(`✅ Generated bingo card for late-joiner: ${playerName}`);
+                  routineServerLog(`✅ Generated bingo card for late-joiner: ${playerName}`);
                 }
               } catch (error) {
                 console.error(`❌ Failed to generate card for ${playerName}:`, error);
@@ -3491,7 +3530,7 @@ io.on('connection', (socket) => {
         
         // Emit fiveby15 columns if computed during card generation (AFTER game-started so display can sync)
         if (room.fiveByFifteenColumnsIds) {
-          console.log(`📊 Emitting fiveby15-pool with ${room.fiveByFifteenColumnsIds.length} columns`);
+          routineServerLog(`📊 Emitting fiveby15-pool with ${room.fiveByFifteenColumnsIds.length} columns`);
           io.to(roomId).emit('fiveby15-pool', { 
             columns: room.fiveByFifteenColumnsIds, 
             names: room.fiveByFifteenPlaylistNames || [],
@@ -3505,23 +3544,23 @@ io.on('connection', (socket) => {
           io.to(roomId).emit('fiveby15-map', { idToColumn: idToCol });
         }
       
-        console.log('🎵 Starting automatic playback...');
+        routineServerLog('🎵 Starting automatic playback...');
         // Start automatic playback with the client's shuffled song list
         await startAutomaticPlayback(roomId, playlists, deviceId, songList);
         
-        console.log('✅ Game state set and playback attempt triggered');
+        routineServerLog('✅ Game state set and playback attempt triggered');
       } catch (error) {
         console.error('❌ Error starting game:', error);
         socket.emit('error', { message: 'Failed to start game' });
       }
     } else {
-      console.log('❌ Cannot start game: Room not found or not host');
-      console.log('🔍 Room details:', room);
-      console.log('🔍 Socket details:', { id: socket.id, roomId });
+      routineServerLog('❌ Cannot start game: Room not found or not host');
+      routineServerLog('🔍 Room details:', room);
+      routineServerLog('🔍 Socket details:', { id: socket.id, roomId });
       
       // Try to recreate the room if it doesn't exist
       if (!room) {
-        console.log('🔄 Attempting to recreate room:', roomId);
+        routineServerLog('🔄 Attempting to recreate room:', roomId);
         const newRoom = {
           id: roomId,
           host: socket.id,
@@ -3542,7 +3581,7 @@ io.on('connection', (socket) => {
         // Try starting the game again
         setTimeout(async () => {
           try {
-            console.log('🔄 Retrying game start for recreated room:', roomId);
+            routineServerLog('🔄 Retrying game start for recreated room:', roomId);
             newRoom.gameState = 'playing';
             newRoom.snippetLength = snippetLength;
             newRoom.playlists = playlists;
@@ -3559,11 +3598,11 @@ io.on('connection', (socket) => {
             if (!newRoom.mixFinalized || !newRoom.bingoCards || newRoom.bingoCards.size === 0) {
               await generateBingoCards(roomId, playlists, newRoom.finalizedSongOrder || null);
             } else {
-              console.log('🛑 Skipping card regeneration after room recreation');
+              routineServerLog('🛑 Skipping card regeneration after room recreation');
             }
             await startAutomaticPlayback(roomId, playlists, deviceId, songList);
             
-            console.log('✅ Game state set and playback attempt triggered after room recreation');
+            routineServerLog('✅ Game state set and playback attempt triggered after room recreation');
           } catch (error) {
             console.error('❌ Error starting game after room recreation:', error);
             socket.emit('error', { message: 'Failed to start game after room recreation' });
@@ -3605,7 +3644,7 @@ io.on('connection', (socket) => {
       }
       
       io.to(roomId).emit('game-ended', { roomId });
-      console.log(`🛑 Game ended gracefully for room ${roomId}`);
+      routineServerLog(`🛑 Game ended gracefully for room ${roomId}`);
     } catch (e) {
       console.error('❌ Error ending game:', e?.message || e);
     }
@@ -3641,7 +3680,7 @@ io.on('connection', (socket) => {
       room.finalizedSongOrder = null;
       room.bingoCards = new Map();
       io.to(roomId).emit('game-reset', { roomId });
-      console.log(`🔁 Game reset for room ${roomId}`);
+      routineServerLog(`🔁 Game reset for room ${roomId}`);
     } catch (e) {
       console.error('❌ Error resetting game:', e?.message || e);
     }
@@ -3654,7 +3693,7 @@ io.on('connection', (socket) => {
     
     if (room && room.host === socket.id) {
       try {
-        console.log('⏭️ Skipping to next song in room:', roomId);
+        routineServerLog('⏭️ Skipping to next song in room:', roomId);
         // Clear existing timer and immediately play next song under our control
         clearRoomTimer(roomId);
         await playNextSong(roomId, room.selectedDeviceId);
@@ -3672,9 +3711,9 @@ io.on('connection', (socket) => {
     if (room && room.host === socket.id) {
       try {
         const pauseTime = Date.now();
-        console.log(`⏸️ PAUSE REQUESTED - Room: ${roomId}, Time: ${pauseTime}`);
-        console.log(`⏸️ Current Song: ${room.currentSong?.name} by ${room.currentSong?.artist}`);
-        console.log(`⏸️ Game State: ${room.gameState}`);
+        routineServerLog(`⏸️ PAUSE REQUESTED - Room: ${roomId}, Time: ${pauseTime}`);
+        routineServerLog(`⏸️ Current Song: ${room.currentSong?.name} by ${room.currentSong?.artist}`);
+        routineServerLog(`⏸️ Game State: ${room.gameState}`);
         
         // Clear the timer when pausing
         clearRoomTimer(roomId);
@@ -3696,7 +3735,7 @@ io.on('connection', (socket) => {
           const state = await spotifyFor(roomId).getCurrentPlaybackState();
           const isPlaying = !!state?.is_playing;
           if (!isPlaying) {
-            console.log('⏸️ Already paused according to playback state — treating as success');
+            routineServerLog('⏸️ Already paused according to playback state — treating as success');
           room.gameState = 'paused';
           io.to(roomId).emit('playback-paused');
             return;
@@ -3727,7 +3766,7 @@ io.on('connection', (socket) => {
         }
         room.gameState = 'paused';
         io.to(roomId).emit('playback-paused');
-        console.log('✅ Playback paused successfully');
+        routineServerLog('✅ Playback paused successfully');
       } catch (error) {
         const msg = error?.body?.error?.message || error?.message || 'Failed to pause song';
         console.error('❌ Error pausing song:', msg);
@@ -3757,7 +3796,7 @@ io.on('connection', (socket) => {
     
     if (room && room.host === socket.id) {
       try {
-        console.log('▶️ Resuming song in room:', roomId);
+        routineServerLog('▶️ Resuming song in room:', roomId);
         const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
         if (!deviceId) {
           console.error('❌ No device found for resume');
@@ -3773,20 +3812,20 @@ io.on('connection', (socket) => {
           }
 
           if (resumePosition !== undefined) {
-            console.log(`🎯 Resuming from position: ${resumePosition}ms`);
+            routineServerLog(`🎯 Resuming from position: ${resumePosition}ms`);
           await spotifyFor(roomId).resumePlayback(deviceId);
           await spotifyFor(roomId).seekToPosition(resumePosition, deviceId);
-            console.log(`✅ Resumed and seeked to position: ${resumePosition}ms`);
+            routineServerLog(`✅ Resumed and seeked to position: ${resumePosition}ms`);
           } else {
           await spotifyFor(roomId).resumePlayback(deviceId);
-            console.log('✅ Playback resumed successfully');
+            routineServerLog('✅ Playback resumed successfully');
           }
           
           // Restore volume to match room's saved volume or default to 100%
           try {
             const targetVolume = room.volume || 100;
             await spotifyFor(roomId).setVolume(targetVolume, deviceId);
-            console.log(`🔊 Restored volume to ${targetVolume}% on resume`);
+            routineServerLog(`🔊 Restored volume to ${targetVolume}% on resume`);
           } catch (volumeError) {
             console.warn('⚠️ Failed to restore volume on resume:', volumeError?.message || volumeError);
           }
@@ -3834,7 +3873,7 @@ io.on('connection', (socket) => {
     
     if (room && room.host === socket.id) {
       try {
-        console.log(`⏮️ Previous button clicked at position: ${currentPosition}ms in room:`, roomId);
+        routineServerLog(`⏮️ Previous button clicked at position: ${currentPosition}ms in room:`, roomId);
         
         // Clear existing timer
         clearRoomTimer(roomId);
@@ -3842,14 +3881,14 @@ io.on('connection', (socket) => {
         // If we're in the first second of the song, go to previous song
         // Otherwise, restart the current song from the beginning
         if (currentPosition <= 1000) {
-          console.log('📍 Position ≤ 1 second, going to previous song');
+          routineServerLog('📍 Position ≤ 1 second, going to previous song');
           if (room.playlistSongs && room.currentSongIndex > 0) {
             room.currentSongIndex = room.currentSongIndex - 1;
           } else if (room.playlistSongs) {
             room.currentSongIndex = room.playlistSongs.length - 1;
           }
         } else {
-          console.log('📍 Position > 1 second, restarting current song');
+          routineServerLog('📍 Position > 1 second, restarting current song');
           // Keep the same song index, just restart it
         }
         
@@ -3868,12 +3907,12 @@ io.on('connection', (socket) => {
     
     if (room && room.host === socket.id) {
       try {
-        console.log('🔀 Shuffling playlist in room:', roomId);
+        routineServerLog('🔀 Shuffling playlist in room:', roomId);
         if (room.playlistSongs) {
           // Use proper Fisher-Yates shuffle function
           room.playlistSongs = properShuffle(room.playlistSongs);
           room.currentSongIndex = 0;
-          console.log('✅ Playlist shuffled successfully with proper Fisher-Yates algorithm');
+          routineServerLog('✅ Playlist shuffled successfully with proper Fisher-Yates algorithm');
           io.to(roomId).emit('playlist-shuffled');
         }
       } catch (error) {
@@ -3890,7 +3929,7 @@ io.on('connection', (socket) => {
     if (room && room.host === socket.id) {
       try {
         room.repeatMode = !room.repeatMode;
-        console.log(`🔁 Repeat mode ${room.repeatMode ? 'enabled' : 'disabled'} in room:`, roomId);
+        routineServerLog(`🔁 Repeat mode ${room.repeatMode ? 'enabled' : 'disabled'} in room:`, roomId);
         io.to(roomId).emit('repeat-toggled', { repeatMode: room.repeatMode });
       } catch (error) {
         console.error('❌ Error toggling repeat:', error);
@@ -3927,7 +3966,7 @@ io.on('connection', (socket) => {
           const lastPlayedId = room.calledSongIds[room.calledSongIds.length - 1];
           song = room.playlistSongs.find(s => s.id === lastPlayedId);
           if (song) {
-            console.log(`📣 Reveal-call: Using last played song as fallback: "${song.name}"`);
+            routineServerLog(`📣 Reveal-call: Using last played song as fallback: "${song.name}"`);
           }
         }
         
@@ -3936,7 +3975,7 @@ io.on('connection', (socket) => {
           const index = Math.min(room.currentSongIndex, room.playlistSongs.length - 1);
           song = room.playlistSongs[index];
           if (song) {
-            console.log(`📣 Reveal-call: Using song at currentSongIndex ${index} as fallback: "${song.name}"`);
+            routineServerLog(`📣 Reveal-call: Using song at currentSongIndex ${index} as fallback: "${song.name}"`);
           }
         }
         
@@ -3944,7 +3983,7 @@ io.on('connection', (socket) => {
         if (!song) {
           song = room.playlistSongs[0];
           if (song) {
-            console.log(`📣 Reveal-call: Using first song in playlist as fallback: "${song.name}"`);
+            routineServerLog(`📣 Reveal-call: Using first song in playlist as fallback: "${song.name}"`);
           }
         }
       }
@@ -3953,7 +3992,7 @@ io.on('connection', (socket) => {
         console.warn(`⚠️ Reveal-call: No song available in room ${roomId}. GameState: ${room.gameState}, CurrentSongIndex: ${room.currentSongIndex}, PlaylistSongs: ${room.playlistSongs?.length || 0}, CalledSongIds: ${room.calledSongIds?.length || 0}`);
         return;
       }
-      console.log(`📣 Reveal-call: Revealing ${hint} for song "${song.name}" by ${song.artist} in room ${roomId}`);
+      routineServerLog(`📣 Reveal-call: Revealing ${hint} for song "${song.name}" by ${song.artist} in room ${roomId}`);
       // Build payload according to hint level
       let payload = {
         roomId,
@@ -3972,7 +4011,7 @@ io.on('connection', (socket) => {
       }
       // Emit one event; clients choose what to show
       io.to(roomId).emit('call-revealed', payload);
-      if (VERBOSE) console.log('📣 Call revealed:', payload);
+      if (VERBOSE) routineServerLog('📣 Call revealed:', payload);
     } catch (e) {
       console.error('❌ Error revealing call:', e?.message || e);
     }
@@ -3988,7 +4027,7 @@ io.on('connection', (socket) => {
       if (!isCurrentHost) return;
       const ts = Date.now();
       io.to(roomId).emit('force-refresh', { ts, reason });
-      if (VERBOSE) console.log(`🔁 Force refresh broadcast to room ${roomId} (reason=${reason})`);
+      if (VERBOSE) routineServerLog(`🔁 Force refresh broadcast to room ${roomId} (reason=${reason})`);
     } catch (e) {
       console.error('❌ Error forcing refresh:', e?.message || e);
     }
@@ -4000,7 +4039,7 @@ io.on('connection', (socket) => {
     
     if (room && room.host === socket.id) {
       try {
-        console.log(`🔊 Setting volume to ${volume}% in room:`, roomId);
+        routineServerLog(`🔊 Setting volume to ${volume}% in room:`, roomId);
         // TODO: Implement volume control via Spotify API
         room.volume = volume;
         io.to(roomId).emit('volume-changed', { volume });
@@ -4017,7 +4056,7 @@ io.on('connection', (socket) => {
     
     if (room && room.host === socket.id) {
       try {
-        console.log(`⏱️ Seeking to position ${position}ms in room:`, roomId);
+        routineServerLog(`⏱️ Seeking to position ${position}ms in room:`, roomId);
         // TODO: Implement seek via Spotify API
         io.to(roomId).emit('song-seeked', { position });
       } catch (error) {
@@ -4109,7 +4148,7 @@ io.on('connection', (socket) => {
           const validationResult = validateBingoForPattern(card, room);
           if (validationResult.valid && !player.patternComplete) {
             player.patternComplete = true; // Use separate flag for pattern completion
-            console.log(`🎯 Player ${player.name} completed bingo pattern but hasn't called it yet`);
+            routineServerLog(`🎯 Player ${player.name} completed bingo pattern but hasn't called it yet`);
             
             // Send notification to player that they can call bingo
             socket.emit('pattern-complete', {
@@ -4119,7 +4158,7 @@ io.on('connection', (socket) => {
           } else if (!validationResult.valid && player.patternComplete) {
             // Reset pattern completion flag if pattern is no longer valid (e.g., player unmarked a square)
             player.patternComplete = false;
-            console.log(`🎯 Player ${player.name} no longer has a valid bingo pattern`);
+            routineServerLog(`🎯 Player ${player.name} no longer has a valid bingo pattern`);
             
             // Notify player that pattern is no longer complete
             socket.emit('pattern-complete', {
@@ -4139,7 +4178,7 @@ io.on('connection', (socket) => {
       // Hide other screens first, then show rules
       io.to(roomId).emit('display-hide-splash');
       io.to(roomId).emit('display-show-rules');
-      console.log(`📋 Rules screen shown for room ${roomId}`);
+      routineServerLog(`📋 Rules screen shown for room ${roomId}`);
     }
   });
 
@@ -4149,7 +4188,7 @@ io.on('connection', (socket) => {
       // Hide other screens first, then show splash
       io.to(roomId).emit('display-hide-rules');
       io.to(roomId).emit('display-show-splash');
-      console.log(`🎬 Splash screen shown for room ${roomId}`);
+      routineServerLog(`🎬 Splash screen shown for room ${roomId}`);
     }
   });
 
@@ -4159,7 +4198,7 @@ io.on('connection', (socket) => {
       // Hide all overlay screens to show main display (which is the call list)
       io.to(roomId).emit('display-hide-rules');
       io.to(roomId).emit('display-hide-splash');
-      console.log(`🎵 Main display (call list) shown for room ${roomId}`);
+      routineServerLog(`🎵 Main display (call list) shown for room ${roomId}`);
     }
   });
 
@@ -4172,7 +4211,7 @@ io.on('connection', (socket) => {
     const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
     if (!isCurrentHost) return;
     
-    console.log(`🔤 Letter reset requested for public display in room ${roomId}`);
+    routineServerLog(`🔤 Letter reset requested for public display in room ${roomId}`);
     io.to(roomId).emit('display-reset-letters');
   });
 
@@ -4181,7 +4220,7 @@ io.on('connection', (socket) => {
     const { songId, customTitle } = data;
     if (songId && customTitle) {
       customSongTitles.set(songId, customTitle);
-      console.log(`✏️ Custom title set for song ${songId}: "${customTitle}"`);
+      routineServerLog(`✏️ Custom title set for song ${songId}: "${customTitle}"`);
       // Broadcast to all clients in all rooms
       io.emit('custom-song-title-updated', { songId, customTitle });
     }
@@ -4203,7 +4242,7 @@ io.on('connection', (socket) => {
 
   // Handle disconnection
   socket.on('disconnect', () => {
-    console.log(`User disconnected: ${socket.id}`);
+    routineServerLog(`User disconnected: ${socket.id}`);
     
     // Find and remove player from all rooms
     for (const [roomId, room] of rooms.entries()) {
@@ -4211,7 +4250,7 @@ io.on('connection', (socket) => {
         const player = room.players.get(socket.id);
         room.players.delete(socket.id);
         
-        console.log(`Player ${player.name} left room ${roomId}`);
+        routineServerLog(`Player ${player.name} left room ${roomId}`);
         
         // If the host disconnected, assign a new host or end the game
         if (room.host === socket.id) {
@@ -4219,11 +4258,11 @@ io.on('connection', (socket) => {
             // Assign the first remaining player as host
             const newHost = room.players.values().next().value;
             room.host = newHost.id;
-            console.log(`Assigned ${newHost.name} as new host for room ${roomId}`);
+            routineServerLog(`Assigned ${newHost.name} as new host for room ${roomId}`);
           } else {
             // No players left, remove the room
             rooms.delete(roomId);
-            console.log(`Removed empty room: ${roomId}`);
+            routineServerLog(`Removed empty room: ${roomId}`);
           }
         }
         
@@ -4275,43 +4314,99 @@ function resetBingoCardMarks(card) {
   }
 }
 
+/** Dedupe songs by Spotify track id (order-preserving). */
+function dedupeSongsByIdPreserveOrder(arr) {
+  const seen = new Set();
+  const out = [];
+  for (const s of arr) {
+    if (s && s.id && !seen.has(s.id)) {
+      seen.add(s.id);
+      out.push(s);
+    }
+  }
+  return out;
+}
+
+/**
+ * When the host already fetched tracks client-side, partition finalize songList by sourcePlaylistId
+ * so generateBingoCards skips redundant GET /v1/playlists/{id}/items pagination (major 429 source).
+ */
+function playlistsWithSongsFromHostSongOrder(playlists, songOrder) {
+  if (!Array.isArray(playlists) || playlists.length === 0) return null;
+  if (!Array.isArray(songOrder) || songOrder.length === 0) return null;
+  const byPid = new Map();
+  for (const s of songOrder) {
+    if (!s || typeof s !== 'object' || !s.id) return null;
+    const pid = s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : '';
+    if (!pid) return null;
+    if (!byPid.has(pid)) byPid.set(pid, []);
+    byPid.get(pid).push(s);
+  }
+  const rows = [];
+  for (let i = 0; i < playlists.length; i++) {
+    const pl = playlists[i];
+    const pid = String(pl.id);
+    const songs = dedupeSongsByIdPreserveOrder(byPid.get(pid) || []);
+    rows.push({ ...pl, songs, originalIndex: i });
+  }
+  if (!rows.every((r) => r.songs.length > 0)) return null;
+  return rows;
+}
+
 async function generateBingoCards(roomId, playlists, songOrder = null) {
-  console.log('🎲 Generating bingo cards for room:', roomId);
+  routineServerLog('🎲 Generating bingo cards for room:', roomId);
   const room = rooms.get(roomId);
   if (!room) {
-    console.log('❌ Room not found for bingo card generation');
-    return;
+    routineServerLog('❌ Room not found for bingo card generation');
+    return false;
+  }
+
+  if (room.ownerUserId == null && room.host) {
+    const hs = io.sockets.sockets.get(room.host);
+    if (hs && hs.hostUserId != null) {
+      room.ownerUserId = hs.hostUserId;
+      routineServerLog(`📌 Room ${roomId}: ownerUserId=${room.ownerUserId} (from host socket — Spotify org key)`);
+    }
   }
 
   const org = spotifyOrgForRoom(room);
   const tokensOk = await multiTenantSpotify.ensureOrgTokensLoaded(org);
   if (!tokensOk) {
     console.error('❌ Cannot generate bingo cards: Spotify not connected for this host');
-    return;
+    return false;
   }
 
   try {
-    console.log('📋 Fetching songs from playlists...');
-    console.log(`📋 Playlist order received: ${playlists.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
-    // Fetch songs from each playlist
-    const playlistsWithSongs = [];
-    for (let i = 0; i < playlists.length; i++) {
-      const playlist = playlists[i];
-      try {
-        console.log(`📋 [${i + 1}/${playlists.length}] Fetching songs for playlist: ${playlist.name}`);
-        const songs = await spotifyFor(roomId).getPlaylistTracks(playlist.id, playlist);
-        console.log(`✅ Found ${songs.length} songs in playlist: ${playlist.name}`);
-        playlistsWithSongs.push({ ...playlist, songs, originalIndex: i });
-      } catch (error) {
-        console.error(`❌ Error fetching songs for playlist ${playlist.id}:`, error);
-        playlistsWithSongs.push({ ...playlist, songs: [], originalIndex: i });
+    routineServerLog(`📋 Playlist order received: ${playlists.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
+
+    let playlistsWithSongs = playlistsWithSongsFromHostSongOrder(playlists, songOrder);
+
+    if (playlistsWithSongs) {
+      const trackTotal = playlistsWithSongs.reduce((n, pl) => n + (Array.isArray(pl.songs) ? pl.songs.length : 0), 0);
+      routineServerLog(
+        `📋 Using host-provided track lists (${trackTotal} songs) — skipping Spotify /items pagination for bingo`
+      );
+    } else {
+      routineServerLog('📋 Fetching songs from playlists via Spotify Web API...');
+      playlistsWithSongs = [];
+      for (let i = 0; i < playlists.length; i++) {
+        const playlist = playlists[i];
+        try {
+          routineServerLog(`📋 [${i + 1}/${playlists.length}] Fetching songs for playlist: ${playlist.name}`);
+          const songs = await spotifyFor(roomId).getPlaylistTracks(playlist.id, playlist);
+          routineServerLog(`✅ Found ${songs.length} songs in playlist: ${playlist.name}`);
+          playlistsWithSongs.push({ ...playlist, songs, originalIndex: i });
+        } catch (error) {
+          console.error(`❌ Error fetching songs for playlist ${playlist.id}:`, error);
+          playlistsWithSongs.push({ ...playlist, songs: [], originalIndex: i });
+        }
       }
     }
 
     const useFreeSpace = !!room.freeSpaceEnabled;
     const songsNeededPerCard = useFreeSpace ? 24 : 25;
     if (useFreeSpace) {
-      console.log('🆓 Free space enabled: center square (2-2) is FREE (24 song squares per card)');
+      routineServerLog('🆓 Free space enabled: center square (2-2) is FREE (24 song squares per card)');
     }
 
     // Helper: dedup by ID preserving order
@@ -4332,7 +4427,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
     // For 5x15 mode, we need to remove duplicates ACROSS playlists
     let perListGloballyUnique = perListUnique;
     if (perListUnique.length === 5) {
-      console.log('🔍 Checking for cross-playlist duplicates in 5x15 mode...');
+      routineServerLog('🔍 Checking for cross-playlist duplicates in 5x15 mode...');
       const globalSeen = new Set();
       const warnings = [];
       
@@ -4369,28 +4464,28 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
               uniqueSongs.push(song);
               replacementsFound.push(song);
               replacementsAdded++;
-              console.log(`✅ Replacement found for playlist "${pl.name}": "${song.name}" by ${song.artist}`);
+              routineServerLog(`✅ Replacement found for playlist "${pl.name}": "${song.name}" by ${song.artist}`);
             }
           }
           
           if (duplicatesFound.length > 0) {
-            console.log(`⚠️ Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
+            routineServerLog(`⚠️ Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
             duplicatesFound.forEach(dup => {
-              console.log(`   - Duplicate: "${dup.name}" by ${dup.artist}`);
+              routineServerLog(`   - Duplicate: "${dup.name}" by ${dup.artist}`);
             });
           }
           
           if (replacementsFound.length > 0) {
-            console.log(`✅ Playlist "${pl.name}" had ${replacementsFound.length} replacement songs added`);
+            routineServerLog(`✅ Playlist "${pl.name}" had ${replacementsFound.length} replacement songs added`);
             replacementsFound.forEach(rep => {
-              console.log(`   + Replacement: "${rep.name}" by ${rep.artist}`);
+              routineServerLog(`   + Replacement: "${rep.name}" by ${rep.artist}`);
             });
           }
         } else if (duplicatesFound.length > 0) {
           // Log duplicates even if we don't need replacements
-          console.log(`⚠️ Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
+          routineServerLog(`⚠️ Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
           duplicatesFound.forEach(dup => {
-            console.log(`   - Duplicate: "${dup.name}" by ${dup.artist}`);
+            routineServerLog(`   - Duplicate: "${dup.name}" by ${dup.artist}`);
           });
         }
         
@@ -4423,7 +4518,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
         const totalDuplicates = perListGloballyUnique.reduce((sum, pl) => sum + (pl.duplicatesRemoved || 0), 0);
         const totalReplacements = perListGloballyUnique.reduce((sum, pl) => sum + (pl.replacementsAdded || 0), 0);
         if (totalDuplicates > 0 || totalReplacements > 0) {
-          console.log(`✅ Successfully processed duplicates: ${totalDuplicates} removed, ${totalReplacements} replaced. All playlists still have ≥15 unique songs.`);
+          routineServerLog(`✅ Successfully processed duplicates: ${totalDuplicates} removed, ${totalReplacements} replaced. All playlists still have ≥15 unique songs.`);
           io.to(roomId).emit('deduplication-success', {
             totalDuplicatesRemoved: totalDuplicates,
             totalReplacementsAdded: totalReplacements,
@@ -4449,14 +4544,14 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       mode = '5x15';
     }
 
-    console.log(`🎯 Card generation mode: ${mode}`);
+    routineServerLog(`🎯 Card generation mode: ${mode}`);
 
     // If 5x15, compute and broadcast fixed 5 columns × 15 songs for the display
     if (mode === '5x15') {
       try {
-        console.log(`🎯 5x15 Mode: Assigning columns based on playlist order:`);
+        routineServerLog(`🎯 5x15 Mode: Assigning columns based on playlist order:`);
         perListGloballyUnique.forEach((pl, idx) => {
-          console.log(`   Column ${idx} (left-to-right position ${idx + 1}): ${pl.name}`);
+          routineServerLog(`   Column ${idx} (left-to-right position ${idx + 1}): ${pl.name}`);
         });
         
         const fiveCols = [];
@@ -4467,7 +4562,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           const src = properShuffle(perListGloballyUnique[col].songs).slice(0, 15);
           fiveCols.push(src);
           colNames.push(perListGloballyUnique[col].name || `Column ${col+1}`);
-          console.log(`   ✅ Column ${col} assigned to playlist: ${perListGloballyUnique[col].name}`);
+          routineServerLog(`   ✅ Column ${col} assigned to playlist: ${perListGloballyUnique[col].name}`);
           src.forEach(s => {
             if (s && s.id) metaMap[s.id] = { name: s.name, artist: s.artist, explicit: s.explicit === true };
           });
@@ -4481,9 +4576,9 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           const globalOrder = properShuffle(fiveCols.flat().map(s => s.id));
           // Deduplicate IDs to prevent duplicates in output playlist
           roomRef.finalizedSongOrder = [...new Set(globalOrder)];
-          console.log(`📊 Final column assignment for display:`);
+          routineServerLog(`📊 Final column assignment for display:`);
           colNames.forEach((name, idx) => {
-            console.log(`   Column ${idx} (left-to-right position ${idx + 1}): "${name}"`);
+            routineServerLog(`   Column ${idx} (left-to-right position ${idx + 1}): "${name}"`);
           });
           
           io.to(roomId).emit('fiveby15-pool', { columns: roomRef.fiveByFifteenColumnsIds, names: colNames, meta: metaMap });
@@ -4518,7 +4613,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
     const buildGlobalPool = () => {
       // CRITICAL FIX: Never use host-provided songOrder for bingo cards in fallback mode
       // This was causing massive bias - cards were limited to songs that would play early
-      console.log('🎲 Building INDEPENDENT global pool for bingo cards (ignoring playback order)');
+      routineServerLog('🎲 Building INDEPENDENT global pool for bingo cards (ignoring playback order)');
       const map = new Map();
       // Use globally deduplicated pools to ensure no cross-playlist duplicates
       for (const pl of perListGloballyUnique) {
@@ -4543,18 +4638,18 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       let base = [];
       if (Array.isArray(songOrder) && songOrder.length > 0) {
         // CRITICAL: Use the host-provided order for PERFECT alignment with playback
-        console.log('🎯 1x75: Using client songList order for perfect playback/card alignment');
+        routineServerLog('🎯 1x75: Using client songList order for perfect playback/card alignment');
         const allowed = new Set(perListUnique[0].songs.map(s => s.id));
         base = dedup(songOrder.filter(s => allowed.has(s.id))).slice(0, 75);
       } else {
         // Fallback: server-side shuffle (should rarely happen)
-        console.log('🎯 1x75: Using server-side shuffle (no client songList provided)');
+        routineServerLog('🎯 1x75: Using server-side shuffle (no client songList provided)');
         base = properShuffle(perListUnique[0].songs).slice(0, 75);
       }
       const roomRef = rooms.get(roomId);
       if (roomRef) {
         roomRef.oneBySeventyFivePool = base.map(s => ({ id: s.id }));
-        console.log(`✅ 1x75: Stored ${base.length} songs in oneBySeventyFivePool for card/playback alignment`);
+        routineServerLog(`✅ 1x75: Stored ${base.length} songs in oneBySeventyFivePool for card/playback alignment`);
         io.to(roomId).emit('oneby75-pool', { ids: base.map(s => s.id) });
         try {
           if (base.length > 0) {
@@ -4589,11 +4684,11 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
 
   const cards = new Map();
     if (!room.clientCards) room.clientCards = new Map();
-  console.log(`👥 Generating cards for ${room.players.size} players`);
+  routineServerLog(`👥 Generating cards for ${room.players.size} players`);
 
   for (const [playerId, player] of room.players) {
     try {
-      console.log(`🎲 Generating card for player: ${player.name} (${playerId})`);
+      routineServerLog(`🎲 Generating card for player: ${player.name} (${playerId})`);
       let chosen25 = [];
       if (mode === '1x75') {
         // Use the same base computed above to ensure consistency
@@ -4623,7 +4718,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           }
           if (colPicks.length < need) { ok = false; break; }
           columns.push(colPicks);
-          console.log(`🎯 Card for ${player.name}: Column ${col} (${playlistName}) - ${colPicks.length} songs selected`);
+          routineServerLog(`🎯 Card for ${player.name}: Column ${col} (${playlistName}) - ${colPicks.length} songs selected`);
         }
         if (!ok) {
           console.error(`❌ 5x15 mode failed for player ${player.name} - insufficient unique songs per column`);
@@ -4643,7 +4738,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
               }
             }
           }
-          console.log(`✅ Card for ${player.name}: Built with columns in order: ${columns.map((_, idx) => perListGloballyUnique[idx].name).join(', ')}`);
+          routineServerLog(`✅ Card for ${player.name}: Built with columns in order: ${columns.map((_, idx) => perListGloballyUnique[idx].name).join(', ')}`);
         }
       } else {
         const pool = buildGlobalPool();
@@ -4654,7 +4749,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
         // CRITICAL: Use completely independent shuffle for bingo cards
         // This ensures fair randomness separate from playback order
         chosen25 = properShuffle(pool).slice(0, songsNeededPerCard);
-        console.log(`🎲 Generated TRULY FAIR blackout card for ${player.name} from ${pool.length} song pool`);
+        routineServerLog(`🎲 Generated TRULY FAIR blackout card for ${player.name} from ${pool.length} song pool`);
       }
 
       // Build card
@@ -4688,8 +4783,8 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
     }
 
     const uniqueOnCard = new Set(card.squares.map(q => q.songId));
-      console.log(`✅ Generated card for ${player.name} with ${uniqueOnCard.size} unique songs (mode=${mode})`);
-      console.log(`🎲 Card generation method: ${mode === '5x15' ? '5x15 column-based' : mode === '1x75' ? '1x75 pool-based' : 'global pool'}`);
+      routineServerLog(`✅ Generated card for ${player.name} with ${uniqueOnCard.size} unique songs (mode=${mode})`);
+      routineServerLog(`🎲 Card generation method: ${mode === '5x15' ? '5x15 column-based' : mode === '1x75' ? '1x75 pool-based' : 'global pool'}`);
 
       if (!room.bingoCards) room.bingoCards = new Map();
     player.bingoCard = card;
@@ -4707,11 +4802,13 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
   }
 
   room.bingoCards = cards;
-  console.log(`✅ Generated ${cards.size} bingo cards for room ${roomId}`);
-  console.log(`📋 Players with cards: ${Array.from(cards.keys()).map(id => room.players.get(id)?.name || id).join(', ')}`);
-  console.log(`⚠️ Players without cards: ${Array.from(room.players.keys()).filter(id => !cards.has(id)).map(id => room.players.get(id)?.name || id).join(', ') || 'None'}`);
+  routineServerLog(`✅ Generated ${cards.size} bingo cards for room ${roomId}`);
+  routineServerLog(`📋 Players with cards: ${Array.from(cards.keys()).map(id => room.players.get(id)?.name || id).join(', ')}`);
+  routineServerLog(`⚠️ Players without cards: ${Array.from(room.players.keys()).filter(id => !cards.has(id)).map(id => room.players.get(id)?.name || id).join(', ') || 'None'}`);
+    return cards.size > 0;
   } catch (error) {
     console.error('❌ Error generating bingo cards:', error);
+    return false;
   }
 }
 
@@ -4725,8 +4822,8 @@ async function generateBingoCardForPlayer(roomId, playerId) {
     ? room.finalizedPlaylists 
     : room.playlists;
   if (!Array.isArray(playlists)) return;
-  console.log(`📋 Late-join card generation using ${room.finalizedPlaylists ? 'finalized' : 'regular'} playlists`);
-  console.log(`📋 Playlist order: ${playlists.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
+  routineServerLog(`📋 Late-join card generation using ${room.finalizedPlaylists ? 'finalized' : 'regular'} playlists`);
+  routineServerLog(`📋 Playlist order: ${playlists.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
   
   // Build a single card using the same 1x75 / 5x15 logic used for all players
   try {
@@ -4760,7 +4857,7 @@ async function generateBingoCardForPlayer(roomId, playerId) {
     // For 5x15 mode, apply global deduplication (same logic as main card generation)
     let perListGloballyUnique = perListUnique;
     if (perListUnique.length === 5) {
-      console.log('🔍 Late-join: Checking for cross-playlist duplicates in 5x15 mode...');
+      routineServerLog('🔍 Late-join: Checking for cross-playlist duplicates in 5x15 mode...');
       const globalSeen = new Set();
       
       perListGloballyUnique = perListUnique.map((pl, index) => {
@@ -4796,18 +4893,18 @@ async function generateBingoCardForPlayer(roomId, playerId) {
               uniqueSongs.push(song);
               replacementsFound.push(song);
               replacementsAdded++;
-              console.log(`✅ Late-join replacement found for playlist "${pl.name}": "${song.name}" by ${song.artist}`);
+              routineServerLog(`✅ Late-join replacement found for playlist "${pl.name}": "${song.name}" by ${song.artist}`);
             }
           }
           
           if (duplicatesFound.length > 0) {
-            console.log(`⚠️ Late-join: Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
+            routineServerLog(`⚠️ Late-join: Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
           }
           if (replacementsFound.length > 0) {
-            console.log(`✅ Late-join: Playlist "${pl.name}" had ${replacementsFound.length} replacement songs added`);
+            routineServerLog(`✅ Late-join: Playlist "${pl.name}" had ${replacementsFound.length} replacement songs added`);
           }
         } else if (duplicatesFound.length > 0) {
-          console.log(`⚠️ Late-join: Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
+          routineServerLog(`⚠️ Late-join: Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
         }
         
         return {
@@ -4822,12 +4919,12 @@ async function generateBingoCardForPlayer(roomId, playerId) {
     let mode = 'fallback';
     if (perListGloballyUnique.length === 1 && perListGloballyUnique[0].songs.length >= 75) mode = '1x75';
     if (perListGloballyUnique.length === 5 && perListGloballyUnique.every(pl => pl.songs.length >= 15)) mode = '5x15';
-    console.log(`🎯 Late-join card mode: ${mode}`);
+    routineServerLog(`🎯 Late-join card mode: ${mode}`);
 
     const buildGlobalPool = () => {
       // CRITICAL FIX: Never use finalizedSongOrder for bingo cards in fallback mode
       // This was causing massive bias - cards were limited to songs that would play early
-      console.log('🎲 Late-join: Building INDEPENDENT global pool for bingo card (ignoring playback order)');
+      routineServerLog('🎲 Late-join: Building INDEPENDENT global pool for bingo card (ignoring playback order)');
       const map = new Map();
       // Use globally deduplicated pools to ensure no cross-playlist duplicates
       for (const pl of perListGloballyUnique) { for (const s of pl.songs) { if (!map.has(s.id)) map.set(s.id, s); } }
@@ -4892,7 +4989,7 @@ async function generateBingoCardForPlayer(roomId, playerId) {
       if (!ensureEnough(pool.length)) return;
       // CRITICAL: Use completely independent shuffle for late-join bingo cards
       chosen25 = properShuffle(pool).slice(0, songsNeededPerCard);
-      console.log(`🎲 Generated TRULY FAIR late-join card from ${pool.length} song pool`);
+      routineServerLog(`🎲 Generated TRULY FAIR late-join card from ${pool.length} song pool`);
     }
 
     const card = { id: playerId, squares: [] };
@@ -4928,10 +5025,10 @@ async function generateBingoCardForPlayer(roomId, playerId) {
 }
 
 async function startAutomaticPlayback(roomId, playlists, deviceId, songList = null) {
-  console.log('🎵 Starting automatic playback for room:', roomId);
+  routineServerLog('🎵 Starting automatic playback for room:', roomId);
   const room = rooms.get(roomId);
   if (!room) {
-    console.log('❌ Room not found for automatic playback');
+    routineServerLog('❌ Room not found for automatic playback');
     return;
   }
 
@@ -4959,34 +5056,34 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         const isIdArray = typeof room.finalizedSongOrder[0] === 'string';
         if (isIdArray) {
           // If it's IDs, map them to full song objects from songList
-          console.log('📋 Using finalizedSongOrder (IDs) to reorder songList');
+          routineServerLog('📋 Using finalizedSongOrder (IDs) to reorder songList');
           const idToSong = new Map(songList.map(s => [s.id, s]));
           const mapped = room.finalizedSongOrder.map(id => idToSong.get(id)).filter(Boolean);
           allSongs = mapped.length > 0 ? mapped : songList;
         } else {
           // If it's full objects, use them directly (they're already in the correct order)
-          console.log('📋 Using finalizedSongOrder (full objects) directly');
+          routineServerLog('📋 Using finalizedSongOrder (full objects) directly');
           allSongs = room.finalizedSongOrder;
         }
       } else if (Array.isArray(room.oneBySeventyFivePool) && room.oneBySeventyFivePool.length > 0) {
         // CRITICAL FIX: For 1x75 mode, use the EXACT same 75-song pool as bingo cards
-        console.log('📋 1x75 detected: using server-side 75-song pool to match bingo cards EXACTLY');
+        routineServerLog('📋 1x75 detected: using server-side 75-song pool to match bingo cards EXACTLY');
         const idToSong = new Map(songList.map(s => [s.id, s]));
         const mapped = room.oneBySeventyFivePool.map(poolItem => idToSong.get(poolItem.id)).filter(Boolean);
         allSongs = mapped.length > 0 ? mapped : songList;
       } else {
       // Use the song list provided by the client (already shuffled)
-      console.log(`📋 Using client-provided song list with ${songList.length} songs`);
+      routineServerLog(`📋 Using client-provided song list with ${songList.length} songs`);
       allSongs = songList;
       }
     } else {
       // Fallback: fetch songs from playlists (for backward compatibility)
-      console.log('📋 Fetching songs from playlists for playback...');
+      routineServerLog('📋 Fetching songs from playlists for playback...');
       for (const playlist of playlists) {
         try {
-          console.log(`📋 Fetching songs for playlist: ${playlist.name}`);
+          routineServerLog(`📋 Fetching songs for playlist: ${playlist.name}`);
           const songs = await spotifyFor(roomId).getPlaylistTracks(playlist.id, playlist);
-          console.log(`✅ Found ${songs.length} songs in playlist: ${playlist.name}`);
+          routineServerLog(`✅ Found ${songs.length} songs in playlist: ${playlist.name}`);
           perListFetched.push({ id: playlist.id, name: playlist.name, songs });
           allSongs.push(...songs);
         } catch (error) {
@@ -5011,7 +5108,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       // Apply global deduplication for 5x15 mode (same logic as card generation)
       let perListGloballyUnique = perListUnique;
       if (perListUnique.length === 5) {
-        console.log('🔍 Playback: Applying cross-playlist deduplication for 5x15 mode...');
+        routineServerLog('🔍 Playback: Applying cross-playlist deduplication for 5x15 mode...');
         const globalSeen = new Set();
         
         perListGloballyUnique = perListUnique.map((pl, index) => {
@@ -5047,18 +5144,18 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
                 uniqueSongs.push(song);
                 replacementsFound.push(song);
                 replacementsAdded++;
-                console.log(`✅ Playback replacement found for playlist "${pl.name}": "${song.name}" by ${song.artist}`);
+                routineServerLog(`✅ Playback replacement found for playlist "${pl.name}": "${song.name}" by ${song.artist}`);
               }
             }
             
             if (duplicatesFound.length > 0) {
-              console.log(`⚠️ Playback: Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
+              routineServerLog(`⚠️ Playback: Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
             }
             if (replacementsFound.length > 0) {
-              console.log(`✅ Playback: Playlist "${pl.name}" had ${replacementsFound.length} replacement songs added`);
+              routineServerLog(`✅ Playback: Playlist "${pl.name}" had ${replacementsFound.length} replacement songs added`);
             }
           } else if (duplicatesFound.length > 0) {
-            console.log(`⚠️ Playback: Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
+            routineServerLog(`⚠️ Playback: Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
           }
           
           return {
@@ -5106,10 +5203,10 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           if (isIdArray) {
             const idToSong = new Map(allSongs.map(s => [s.id, s]));
             allSongs = room.finalizedSongOrder.map(id => idToSong.get(id)).filter(Boolean);
-            console.log('🎼 Using finalized 5x15 global shuffled order (75 songs) from IDs');
+            routineServerLog('🎼 Using finalized 5x15 global shuffled order (75 songs) from IDs');
           } else {
             allSongs = room.finalizedSongOrder;
-            console.log('🎼 Using finalized 5x15 global shuffled order (75 songs) from full objects');
+            routineServerLog('🎼 Using finalized 5x15 global shuffled order (75 songs) from full objects');
           }
         }
       } catch (e) {
@@ -5117,7 +5214,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       }
     }
 
-    console.log(`📊 Total songs available: ${allSongs.length}`);
+    routineServerLog(`📊 Total songs available: ${allSongs.length}`);
 
     if (allSongs.length === 0) {
       console.error('❌ No songs available for playback');
@@ -5133,7 +5230,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       const orderedSongs = room.finalizedSongOrder
         .map(id => {
           if (seenIds.has(id)) {
-            console.log(`⚠️ Skipping duplicate ID in finalizedSongOrder: ${id}`);
+            routineServerLog(`⚠️ Skipping duplicate ID in finalizedSongOrder: ${id}`);
             return null;
           }
           seenIds.add(id);
@@ -5141,7 +5238,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         })
         .filter(Boolean);
       if (orderedSongs.length > 0) {
-        console.log(`🎯 Reordering allSongs to match finalizedSongOrder (${orderedSongs.length} unique songs)`);
+        routineServerLog(`🎯 Reordering allSongs to match finalizedSongOrder (${orderedSongs.length} unique songs)`);
         allSongs = orderedSongs;
       }
     }
@@ -5150,8 +5247,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     room.playlistSongs = allSongs;
     room.currentSongIndex = 0;
     room.gameState = 'playing';
-    console.log(`📝 Stored ${allSongs.length} songs in room ${roomId} for ordered playback`);
-    console.log(`📋 First 5 songs in order: ${allSongs.slice(0, 5).map(s => `${s.name} (${s.id})`).join(', ')}`);
+    routineServerLog(`📝 Stored ${allSongs.length} songs in room ${roomId} for ordered playback`);
+    routineServerLog(`📋 First 5 songs in order: ${allSongs.slice(0, 5).map(s => `${s.name} (${s.id})`).join(', ')}`);
     
     // Create temporary playlist for context-based playback to prevent hijacks
     try {
@@ -5166,8 +5263,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       const trackUris = allSongs.map(song => `spotify:track:${song.id}`);
       const playlistName = `TEMPO Bingo Room ${roomId} - ${new Date().toISOString().slice(0,16)}`;
       room.temporaryPlaylistId = await spotifyFor(roomId).createTemporaryPlaylist(playlistName, trackUris);
-      console.log(`🎼 Created temporary playlist for context: ${room.temporaryPlaylistId}`);
-      console.log(`📋 Playlist track order (first 5): ${trackUris.slice(0, 5).join(', ')}`);
+      routineServerLog(`🎼 Created temporary playlist for context: ${room.temporaryPlaylistId}`);
+      routineServerLog(`📋 Playlist track order (first 5): ${trackUris.slice(0, 5).join(', ')}`);
     } catch (error) {
       console.warn('⚠️ Failed to create temporary playlist, falling back to individual track playback:', error);
       room.temporaryPlaylistId = null;
@@ -5175,7 +5272,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     
     // Play the first song from the list
     const firstSong = allSongs[0];
-    console.log(`🎵 Playing song 1/${allSongs.length}: ${firstSong.name} by ${firstSong.artist}`);
+    routineServerLog(`🎵 Playing song 1/${allSongs.length}: ${firstSong.name} by ${firstSong.artist}`);
 
     // Use provided deviceId or fall back to saved device (STRICT-ONLY: no other fallback)
     let targetDeviceId = deviceId;
@@ -5183,7 +5280,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       const savedDevice = loadSavedDeviceForRoom(roomId);
       if (savedDevice) {
         targetDeviceId = savedDevice.id;
-        console.log(`🎵 Using saved device for playback: ${savedDevice.name}`);
+        routineServerLog(`🎵 Using saved device for playback: ${savedDevice.name}`);
       }
     }
     // Strict-only: if still no device, abort
@@ -5193,14 +5290,14 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       return;
     }
 
-    console.log(`🎵 Starting playback on device: ${targetDeviceId}`);
+    routineServerLog(`🎵 Starting playback on device: ${targetDeviceId}`);
 
     try {
       // Ensure device reports in current devices list; try to activate if needed
       const devices = await spotifyFor(roomId).getUserDevices();
       const deviceInList = devices.find(d => d.id === targetDeviceId);
       if (!deviceInList) {
-        console.log('⚠️ Locked device not in list; attempting activation...');
+        routineServerLog('⚠️ Locked device not in list; attempting activation...');
         await spotifyFor(roomId).activateDevice(targetDeviceId);
       }
 
@@ -5234,16 +5331,16 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           }
         }
       }
-      console.log(`🎯 Starting first song with randomized offset: ${startMs}ms (${Math.floor(startMs/1000)}s)`);
+      routineServerLog(`🎯 Starting first song with randomized offset: ${startMs}ms (${Math.floor(startMs/1000)}s)`);
       
       // Use playlist context if available, otherwise fall back to individual track
       if (room.temporaryPlaylistId) {
-        console.log(`🎼 Playing from temporary playlist context: ${room.temporaryPlaylistId}`);
+        routineServerLog(`🎼 Playing from temporary playlist context: ${room.temporaryPlaylistId}`);
         await spotifyFor(roomId).withRetries('startPlaybackFromPlaylist(initial)', () => spotifyFor(roomId).startPlaybackFromPlaylist(targetDeviceId, room.temporaryPlaylistId, 0, startMs), { attempts: 3, backoffMs: 400 });
       } else {
         await spotifyFor(roomId).withRetries('startPlayback(initial)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
       }
-      console.log(`✅ Successfully started playback on device: ${targetDeviceId}`);
+      routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId}`);
       try { 
         const r = rooms.get(roomId); 
         if (r) {
@@ -5259,7 +5356,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       try {
         const initialVolume = room.volume || 100;
         await spotifyFor(roomId).withRetries('setVolume(initial)', () => spotifyFor(roomId).setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
-        console.log(`🔊 Set initial volume to ${initialVolume}%`);
+        routineServerLog(`🔊 Set initial volume to ${initialVolume}%`);
       } catch (volumeError) {
         console.error('❌ Error setting initial volume:', volumeError);
       }
@@ -5267,20 +5364,20 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       console.error('❌ Error starting playback in strict mode:', playbackError);
       const message = playbackError?.body?.error?.message || playbackError?.message || '';
       if (/token expired/i.test(message)) {
-        console.log('🔄 Token expired, refreshing and retrying...');
+        routineServerLog('🔄 Token expired, refreshing and retrying...');
         try {
           await spotifyFor(roomId).refreshAccessToken();
           // Re-check device after refresh
           const devicesAfter = await spotifyFor(roomId).getUserDevices();
           const stillMissing = !devicesAfter.find(d => d.id === targetDeviceId);
           if (stillMissing) {
-            console.log('⚠️ Locked device still missing after refresh; attempting activation...');
+            routineServerLog('⚠️ Locked device still missing after refresh; attempting activation...');
             await spotifyFor(roomId).activateDevice(targetDeviceId);
           }
           await spotifyFor(roomId).withRetries('transferPlayback(after-refresh)', () => spotifyFor(roomId).transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
           // Skip-based queue clearing removed to avoid context hijacks
           await spotifyFor(roomId).withRetries('startPlayback(after-refresh)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
-          console.log(`✅ Successfully started playback after token refresh`);
+          routineServerLog(`✅ Successfully started playback after token refresh`);
           try { const r = rooms.get(roomId); if (r) r.songStartAtMs = Date.now() - (startMs || 0); } catch {}
           
           // Stabilization delay to prevent context hijacks from volume changes
@@ -5290,7 +5387,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           try {
             const initialVolume = room.volume || 100;
             await spotifyFor(roomId).withRetries('setVolume(after-refresh)', () => spotifyFor(roomId).setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
-            console.log(`🔊 Set initial volume to ${initialVolume}% after token refresh`);
+            routineServerLog(`🔊 Set initial volume to ${initialVolume}% after token refresh`);
           } catch (volumeError) {
             console.error('❌ Error setting initial volume after token refresh:', volumeError);
           }
@@ -5328,7 +5425,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
 
   
 
-    console.log(`✅ Started automatic playback in room ${roomId}: ${firstSong.name} by ${firstSong.artist} on device ${targetDeviceId}`);
+    routineServerLog(`✅ Started automatic playback in room ${roomId}: ${firstSong.name} by ${firstSong.artist} on device ${targetDeviceId}`);
 
     room.playlistSongs = allSongs;
     room.currentSongIndex = 0;
@@ -5359,7 +5456,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       }
       if (!playing || !correctTrack) {
         // Attempt to correct to the intended track once using the same randomized offset
-        console.log(`🔧 Verification failed (playing=${playing}, correctTrack=${correctTrack}), correcting with startMs=${startMs}ms`);
+        routineServerLog(`🔧 Verification failed (playing=${playing}, correctTrack=${correctTrack}), correcting with startMs=${startMs}ms`);
         try { 
           if (room.temporaryPlaylistId) {
             await spotifyFor(roomId).startPlaybackFromPlaylist(targetDeviceId, room.temporaryPlaylistId, 0, startMs);
@@ -5377,7 +5474,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     }
 
     // NEW: Use simplified timer-based progression
-    console.log(`🚀 Starting simplified playback control for room ${roomId}`);
+    routineServerLog(`🚀 Starting simplified playback control for room ${roomId}`);
     startSimpleProgression(roomId, targetDeviceId, room.snippetLength);
 
   } catch (error) {
@@ -5386,12 +5483,12 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
 }
 
 async function playNextSong(roomId, deviceId) {
-  console.log('🎵 PLAY NEXT SONG CALLED for room:', roomId, 'deviceId:', deviceId);
+  routineServerLog('🎵 PLAY NEXT SONG CALLED for room:', roomId, 'deviceId:', deviceId);
   const room = rooms.get(roomId);
   if (!room || room.gameState !== 'playing' || !room.playlistSongs) {
-    console.log(`❌ Cannot play next song: Room not in playing state or no playlist songs`);
-    console.log(`❌ Room exists: ${!!room}, GameState: ${room?.gameState}, HasPlaylistSongs: ${!!room?.playlistSongs}`);
-    console.log(`❌ Room details: ${JSON.stringify({
+    routineServerLog(`❌ Cannot play next song: Room not in playing state or no playlist songs`);
+    routineServerLog(`❌ Room exists: ${!!room}, GameState: ${room?.gameState}, HasPlaylistSongs: ${!!room?.playlistSongs}`);
+    routineServerLog(`❌ Room details: ${JSON.stringify({
       gameState: room?.gameState,
       currentSongIndex: room?.currentSongIndex,
       playlistSongsLength: room?.playlistSongs?.length,
@@ -5404,11 +5501,11 @@ async function playNextSong(roomId, deviceId) {
     // Handle repeat mode / end-of-playlist (prevent wrap for 1x75)
     if (room.repeatMode) {
       // Stay on the same song
-      console.log('🔁 Repeat mode: staying on current song');
+      routineServerLog('🔁 Repeat mode: staying on current song');
     } else {
       // If we're at the end, end the game instead of wrapping
       if (room.currentSongIndex + 1 >= room.playlistSongs.length) {
-        console.log('🏁 Playlist complete. Ending game for room', roomId);
+        routineServerLog('🏁 Playlist complete. Ending game for room', roomId);
         room.gameState = 'ended';
         clearRoomTimer(roomId);
         try {
@@ -5432,7 +5529,7 @@ async function playNextSong(roomId, deviceId) {
     }
     
     const nextSong = room.playlistSongs[room.currentSongIndex];
-    console.log(`🎵 Playing song ${room.currentSongIndex + 1}/${room.playlistSongs.length}: ${nextSong.name} by ${nextSong.artist}`);
+    routineServerLog(`🎵 Playing song ${room.currentSongIndex + 1}/${room.playlistSongs.length}: ${nextSong.name} by ${nextSong.artist}`);
 
     // STRICT device control: use provided device or saved device only
     let targetDeviceId = deviceId;
@@ -5440,7 +5537,7 @@ async function playNextSong(roomId, deviceId) {
       const savedDevice = loadSavedDeviceForRoom(roomId);
       if (savedDevice) {
         targetDeviceId = savedDevice.id;
-        console.log(`🎵 Using saved device for next song: ${savedDevice.name}`);
+        routineServerLog(`🎵 Using saved device for next song: ${savedDevice.name}`);
       }
     }
     if (!targetDeviceId) {
@@ -5457,7 +5554,7 @@ async function playNextSong(roomId, deviceId) {
         const currentDeviceId = current?.device?.id;
         if (currentDeviceId === targetDeviceId) {
           needTransfer = false;
-          if (VERBOSE) console.log('🔒 Already on locked device; skipping transfer');
+          if (VERBOSE) routineServerLog('🔒 Already on locked device; skipping transfer');
         }
       } catch (_) {}
       if (needTransfer) {
@@ -5467,19 +5564,19 @@ async function playNextSong(roomId, deviceId) {
     } catch (e) {
       console.warn('⚠️ Transfer playback failed (will still try play):', e?.message || e);
     }
-    console.log(`🎵 Starting playback on device: ${targetDeviceId}`);
+    routineServerLog(`🎵 Starting playback on device: ${targetDeviceId}`);
 
     try {
       // Ensure device still visible; attempt activation if not
       const devices = await spotifyFor(roomId).getUserDevices();
       const deviceInList = devices.find(d => d.id === targetDeviceId);
       if (!deviceInList) {
-        console.log('⚠️ Locked device not in list before next song; attempting activation...');
+        routineServerLog('⚠️ Locked device not in list before next song; attempting activation...');
         await spotifyFor(roomId).activateDevice(targetDeviceId);
       }
 
       const playbackStartTime = Date.now();
-      console.log(`🎵 Starting Spotify playback for: ${nextSong.name}`);
+      routineServerLog(`🎵 Starting Spotify playback for: ${nextSong.name}`);
       // Enforce deterministic playback mode on each advance with delays
       try { await spotifyFor(roomId).withRetries('setShuffle(false,next)', () => spotifyFor(roomId).setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
       await new Promise(resolve => setTimeout(resolve, 200));
@@ -5510,13 +5607,13 @@ async function playNextSong(roomId, deviceId) {
       }
       // Use playlist context if available, otherwise fall back to individual track
       if (room.temporaryPlaylistId) {
-        console.log(`🎼 Playing next song from playlist context at index ${room.currentSongIndex}`);
+        routineServerLog(`🎼 Playing next song from playlist context at index ${room.currentSongIndex}`);
         await spotifyFor(roomId).withRetries('startPlaybackFromPlaylist(next)', () => spotifyFor(roomId).startPlaybackFromPlaylist(targetDeviceId, room.temporaryPlaylistId, room.currentSongIndex, startMs), { attempts: 3, backoffMs: 400 });
       } else {
         await spotifyFor(roomId).withRetries('startPlayback(next)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${nextSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
       }
       const playbackEndTime = Date.now();
-      console.log(`✅ Successfully started playback on device: ${targetDeviceId}`);
+      routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId}`);
       
       // Stabilization delay to prevent context hijacks from volume changes
       await new Promise(resolve => setTimeout(resolve, 800));
@@ -5525,7 +5622,7 @@ async function playNextSong(roomId, deviceId) {
             try {
               const initialVolume = room.volume || 100;
         await spotifyFor(roomId).withRetries('setVolume(next)', () => spotifyFor(roomId).setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
-        console.log(`🔊 Set initial volume to ${initialVolume}%`);
+        routineServerLog(`🔊 Set initial volume to ${initialVolume}%`);
             } catch (volumeError) {
         console.warn('⚠️ Volume setting failed, continuing anyway:', volumeError?.message || volumeError);
       }
@@ -5577,7 +5674,7 @@ async function playNextSong(roomId, deviceId) {
     // Send real-time player card updates to host
     sendPlayerCardUpdates(roomId, true); // Immediate update on game start
 
-    console.log(`✅ Playing next song in room ${roomId}: ${nextSong.name} by ${nextSong.artist} on device ${targetDeviceId}`);
+    routineServerLog(`✅ Playing next song in room ${roomId}: ${nextSong.name} by ${nextSong.artist} on device ${targetDeviceId}`);
 
     // Verify playback actually started and is the correct track; attempt resume/correct if needed
     try {
@@ -5626,11 +5723,11 @@ async function playNextSong(roomId, deviceId) {
     // Start watchdog to recover from stalls, and schedule next song
     // Use full snippet duration for consistency with initial song timer
     const playbackDuration = room.snippetLength * 1000;
-    console.log(`⏰ Setting next song timer for room ${roomId}: ${playbackDuration}ms (${room.snippetLength}s full duration)`);
+    routineServerLog(`⏰ Setting next song timer for room ${roomId}: ${playbackDuration}ms (${room.snippetLength}s full duration)`);
     setRoomTimer(roomId, async () => {
       const transitionTime = Date.now();
-      if (VERBOSE) console.log(`🔄 TRANSITION STARTING - Room: ${roomId}, Time: ${transitionTime}`);
-      if (VERBOSE) console.log(`🔄 Song ending: ${nextSong.name} by ${nextSong.artist}`);
+      if (VERBOSE) routineServerLog(`🔄 TRANSITION STARTING - Room: ${roomId}, Time: ${transitionTime}`);
+      if (VERBOSE) routineServerLog(`🔄 Song ending: ${nextSong.name} by ${nextSong.artist}`);
       
       // Skip-based queue clearing removed to avoid context hijacks
       clearRoomTimer(roomId);
@@ -5718,7 +5815,7 @@ function sendPlayerCardUpdatesNow(roomId) {
       }
     });
     
-    console.log(`📋 Real-time update: Sent ${Object.keys(playerCardsData).length} player cards to host(s) in room ${roomId}`);
+    routineServerLog(`📋 Real-time update: Sent ${Object.keys(playerCardsData).length} player cards to host(s) in room ${roomId}`);
   } catch (e) {
     console.error('❌ Error sending real-time player card updates:', e?.message || e);
   }
@@ -7306,13 +7403,13 @@ app.get('/api/spotify/callback', async (req, res) => {
       const copt = organizationsStore.getCredentialOptionsForUser(parsed.userId);
       const envCid = String(process.env.SPOTIFY_CLIENT_ID || '').trim();
       if (copt && copt.clientId) {
-        console.log(
+        routineServerLog(
           `[Spotify OAuth] user_${parsed.userId} token exchange: ORGANIZATION row client_id prefix ${String(
             copt.clientId
           ).slice(0, 8)}… (must match secret in same row; TEMPO_ORG_CREDENTIALS_KEY must match encrypt step)`
         );
       } else {
-        console.log(
+        routineServerLog(
           `[Spotify OAuth] user_${parsed.userId} token exchange: server ENV SPOTIFY_CLIENT_ID/SECRET${
             envCid
               ? ` (client_id prefix ${envCid.slice(0, 8)}…)`
@@ -7459,19 +7556,19 @@ function logSpotifyPlaylistSuccessProof(orgId, svc, { spotifyListTotal, playlist
     (async () => {
       try {
         const me = await svc.getCurrentUserProfileBrief();
-        console.log(
+        routineServerLog(
           `${base} | account_proof=GET /v1/me spotify_user_id=${me.spotifyUserId || 'n/a'} display_name=${JSON.stringify(
             me.displayName || ''
           )} product=${me.product || 'n/a'} country=${me.country || 'n/a'}`
         );
       } catch (e) {
         console.warn(`Spotify account proof (GET /v1/me) failed for ${orgId}:`, e?.message || e);
-        console.log(base);
+        routineServerLog(base);
       }
     })();
     return;
   }
-  console.log(base);
+  routineServerLog(base);
 }
 
 app.get('/api/spotify/playlists', async (req, res) => {
@@ -7641,7 +7738,7 @@ app.get('/api/spotify/devices', async (req, res) => {
         webApiQuarantine: spotifyReq.getWebApiQuarantineInfo(),
       });
     }
-    console.log(`📱 Fetching available Spotify devices (org ${orgId})...`);
+    routineServerLog(`📱 Fetching available Spotify devices (org ${orgId})...`);
     const devices = await spotifyForRequest(req).getUserDevices();
     let currentPlayback = null;
     try {
@@ -7652,20 +7749,20 @@ app.get('/api/spotify/devices', async (req, res) => {
     const savedDevice = loadSavedDeviceForUser(uid);
     
     if (devices.length === 0) {
-      console.log('⚠️  No devices found - user may need to open Spotify on a device');
+      routineServerLog('⚠️  No devices found - user may need to open Spotify on a device');
     } else {
-      console.log(`✅ Found ${devices.length} devices:`);
+      routineServerLog(`✅ Found ${devices.length} devices:`);
       devices.forEach(device => {
         const status = device.is_active ? '🟢 Active' : '⚪ Inactive';
         const isSaved = savedDevice && savedDevice.id === device.id ? ' 💾 Saved' : '';
-        console.log(`  - ${device.name} (${device.type}) ${status}${isSaved}`);
+        routineServerLog(`  - ${device.name} (${device.type}) ${status}${isSaved}`);
       });
     }
     
     // If we have a saved device but it's not in the current list, add it
     let allDevices = [...devices];
     if (savedDevice && !devices.find(d => d.id === savedDevice.id)) {
-      console.log(`📁 Adding saved device to list: ${savedDevice.name}`);
+      routineServerLog(`📁 Adding saved device to list: ${savedDevice.name}`);
       allDevices.push({
         ...savedDevice,
         is_active: false,
@@ -7700,7 +7797,7 @@ app.post('/api/spotify/save-device', async (req, res) => {
     }
 
     saveDeviceForUser(uid, device);
-    console.log(`💾 Device saved: ${device.name} (${device.id})`);
+    routineServerLog(`💾 Device saved: ${device.name} (${device.id})`);
     
     res.json({ 
       success: true, 
@@ -7760,14 +7857,14 @@ app.post('/api/spotify/transfer', async (req, res) => {
       return res.status(400).json({ success: false, error: 'deviceId required' });
     }
 
-    console.log(`🔀 Transfer request to device ${deviceId} (play=${!!play})`);
+    routineServerLog(`🔀 Transfer request to device ${deviceId} (play=${!!play})`);
     await spotifyForRequest(req).ensureValidToken();
 
     // Verify device presence; attempt activation if missing
     const devices = await spotifyForRequest(req).getUserDevices();
     const found = devices.find(d => d.id === deviceId);
     if (!found) {
-      console.log('⚠️ Target device not in list; attempting activation...');
+      routineServerLog('⚠️ Target device not in list; attempting activation...');
       const activated = await spotifyForRequest(req).activateDevice(deviceId);
       if (!activated) {
         return res.status(404).json({ success: false, error: 'Device not available; open Spotify on that device and try again' });
@@ -7775,7 +7872,7 @@ app.post('/api/spotify/transfer', async (req, res) => {
     }
 
     await spotifyForRequest(req).transferPlayback(deviceId, !!play);
-    console.log(`✅ Transferred playback to ${deviceId}`);
+    routineServerLog(`✅ Transferred playback to ${deviceId}`);
 
     // Return diagnostic info to help verify account/device context
     let profile = null;
@@ -7903,20 +8000,20 @@ app.post('/api/spotify/force-device', async (req, res) => {
       return res.status(401).json({ error: 'Spotify not connected' });
     }
 
-    console.log('🔄 Attempting to force device detection...');
+    routineServerLog('🔄 Attempting to force device detection...');
     
     // Use the enhanced forceDeviceActivation method
     const result = await spotifyForRequest(req).forceDeviceActivation();
     
     if (result.success) {
-      console.log(`✅ Device activated: ${result.device.name}`);
+      routineServerLog(`✅ Device activated: ${result.device.name}`);
       res.json({ 
         success: true, 
         message: `Device activated: ${result.device.name}`,
         device: result.device
       });
     } else {
-      console.log('❌ No devices available for activation');
+      routineServerLog('❌ No devices available for activation');
       res.status(404).json({ 
         success: false, 
         error: 'No devices available for activation',
@@ -7945,7 +8042,7 @@ app.post('/api/spotify/refresh', async (req, res) => {
       return res.status(401).json({ error: 'No refresh token available' });
     }
 
-    console.log('🔄 Refreshing Spotify access token for', orgId);
+    routineServerLog('🔄 Refreshing Spotify access token for', orgId);
     const svc = multiTenantSpotify.getService(orgId);
     await svc.refreshAccessToken();
     await multiTenantSpotify.setTokens(orgId, {
@@ -7955,7 +8052,7 @@ app.post('/api/spotify/refresh', async (req, res) => {
     });
     svc.clearRateLimitQuarantine();
 
-    console.log('✅ Spotify access token refreshed successfully');
+    routineServerLog('✅ Spotify access token refreshed successfully');
     res.json({ success: true, message: 'Spotify connection refreshed' });
   } catch (error) {
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
@@ -7977,7 +8074,7 @@ app.post('/api/spotify/volume', async (req, res) => {
       return res.status(400).json({ error: 'Invalid volume level (0-100)' });
     }
     
-    console.log(`🔊 Setting volume to ${volume}% on device: ${deviceId}`);
+    routineServerLog(`🔊 Setting volume to ${volume}% on device: ${deviceId}`);
     
     await spotifyForRequest(req).ensureValidToken();
     await spotifyForRequest(req).setVolume(volume, deviceId);
@@ -7987,11 +8084,11 @@ app.post('/api/spotify/volume', async (req, res) => {
       const room = rooms.get(roomId);
       if (room) {
         room.volume = volume;
-        console.log(`💾 Saved volume ${volume}% to room ${roomId}`);
+        routineServerLog(`💾 Saved volume ${volume}% to room ${roomId}`);
       }
     }
     
-    console.log('✅ Volume set successfully');
+    routineServerLog('✅ Volume set successfully');
     res.json({ success: true, message: 'Volume updated' });
   } catch (error) {
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
@@ -8013,12 +8110,12 @@ app.post('/api/spotify/seek', async (req, res) => {
       return res.status(400).json({ error: 'Invalid position' });
     }
     
-    console.log(`⏩ Seeking to position ${position}ms on device: ${deviceId}`);
+    routineServerLog(`⏩ Seeking to position ${position}ms on device: ${deviceId}`);
     
     await spotifyForRequest(req).ensureValidToken();
     await spotifyForRequest(req).seekToPosition(position, deviceId);
     
-    console.log('✅ Seek successful');
+    routineServerLog('✅ Seek successful');
     res.json({ success: true, message: 'Seek completed' });
   } catch (error) {
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
@@ -8154,25 +8251,25 @@ app.get('/api/spotify/got-playlists', async (req, res) => {
 
 // Delete multiple playlists
 app.post('/api/spotify/delete-playlists', async (req, res) => {
-  console.log('🗑️ Delete playlists request received');
+  routineServerLog('🗑️ Delete playlists request received');
   try {
     const { playlistIds } = req.body;
-    console.log('🗑️ Request body:', { playlistIds: playlistIds?.length ? `${playlistIds.length} playlists` : 'none' });
+    routineServerLog('🗑️ Request body:', { playlistIds: playlistIds?.length ? `${playlistIds.length} playlists` : 'none' });
     
     if (!hostSpotifyHasTokens(req)) {
-      console.log('❌ Spotify not connected');
+      routineServerLog('❌ Spotify not connected');
       return res.status(401).json({ error: 'Spotify not connected' });
     }
     
     if (!playlistIds || !Array.isArray(playlistIds) || playlistIds.length === 0) {
-      console.log('❌ Invalid playlistIds:', playlistIds);
+      routineServerLog('❌ Invalid playlistIds:', playlistIds);
       return res.status(400).json({ error: 'playlistIds array required' });
     }
     
-    console.log('🔑 Ensuring valid token...');
+    routineServerLog('🔑 Ensuring valid token...');
     await spotifyForRequest(req).ensureValidToken();
     
-    console.log('🗑️ Deleting playlists...');
+    routineServerLog('🗑️ Deleting playlists...');
     const results = await spotifyForRequest(req).deleteMultiplePlaylists(playlistIds, {
       requireGotOutputPrefix: true
     });
@@ -8180,7 +8277,7 @@ app.post('/api/spotify/delete-playlists', async (req, res) => {
     const successful = results.filter(r => r.success).length;
     const failed = results.filter(r => !r.success).length;
     
-    console.log(`✅ Delete results: ${successful} successful, ${failed} failed`);
+    routineServerLog(`✅ Delete results: ${successful} successful, ${failed} failed`);
     
     res.json({
       success: true,
@@ -8258,7 +8355,7 @@ app.post('/api/spotify/replace-song', async (req, res) => {
     if (!oldSong && room.finalizedSongOrder) {
       // For finalizedSongOrder, we need to find the song in the original song list
       // This is a bit tricky since finalizedSongOrder only contains IDs
-      console.log('🔍 Searching in finalizedSongOrder for song:', oldSongId);
+      routineServerLog('🔍 Searching in finalizedSongOrder for song:', oldSongId);
     }
     
     // If not found, check oneBySeventyFivePool (for 1x75 mode)
@@ -8280,8 +8377,8 @@ app.post('/api/spotify/replace-song', async (req, res) => {
     }
     
     if (!oldSong) {
-      console.log('❌ Song not found in any room data structure:', oldSongId);
-      console.log('📊 Room data structures available:', {
+      routineServerLog('❌ Song not found in any room data structure:', oldSongId);
+      routineServerLog('📊 Room data structures available:', {
         hasPlaylistSongs: !!room.playlistSongs,
         playlistSongsLength: room.playlistSongs?.length || 0,
         hasFinalizedSongOrder: !!room.finalizedSongOrder,
@@ -8321,7 +8418,7 @@ app.post('/api/spotify/replace-song', async (req, res) => {
           `spotify:track:${newSongId}`,
           position
         );
-        console.log(`✅ Replaced song in original playlist: ${oldSong.sourcePlaylistName}`);
+        routineServerLog(`✅ Replaced song in original playlist: ${oldSong.sourcePlaylistName}`);
       } catch (error) {
         console.error('❌ Failed to replace song in original playlist:', error);
         // Continue with local replacement even if Spotify update fails
@@ -8337,7 +8434,7 @@ app.post('/api/spotify/replace-song', async (req, res) => {
       if (songIndex !== -1) {
         room.playlistSongs[songIndex] = newSong;
         updatedInAnyStructure = true;
-        console.log(`✅ Updated song in room.playlistSongs at index ${songIndex}`);
+        routineServerLog(`✅ Updated song in room.playlistSongs at index ${songIndex}`);
       }
     }
     
@@ -8347,7 +8444,7 @@ app.post('/api/spotify/replace-song', async (req, res) => {
       if (orderIndex !== -1) {
         room.finalizedSongOrder[orderIndex] = newSongId;
         updatedInAnyStructure = true;
-        console.log(`✅ Updated song ID in room.finalizedSongOrder at index ${orderIndex}`);
+        routineServerLog(`✅ Updated song ID in room.finalizedSongOrder at index ${orderIndex}`);
       }
     }
     
@@ -8357,7 +8454,7 @@ app.post('/api/spotify/replace-song', async (req, res) => {
       if (poolIndex !== -1) {
         room.oneBySeventyFivePool[poolIndex] = newSong;
         updatedInAnyStructure = true;
-        console.log(`✅ Updated song in room.oneBySeventyFivePool at index ${poolIndex}`);
+        routineServerLog(`✅ Updated song in room.oneBySeventyFivePool at index ${poolIndex}`);
       }
     }
     
@@ -8368,7 +8465,7 @@ app.post('/api/spotify/replace-song', async (req, res) => {
         if (colIndex !== -1) {
           room.fiveByFifteenColumns[col][colIndex] = newSong;
           updatedInAnyStructure = true;
-          console.log(`✅ Updated song in room.fiveByFifteenColumns[${col}] at index ${colIndex}`);
+          routineServerLog(`✅ Updated song in room.fiveByFifteenColumns[${col}] at index ${colIndex}`);
         }
       }
     }
@@ -8379,12 +8476,12 @@ app.post('/api/spotify/replace-song', async (req, res) => {
       if (finalizedIndex !== -1) {
         room.finalizedSongs[finalizedIndex] = newSong;
         updatedInAnyStructure = true;
-        console.log(`✅ Updated song in room.finalizedSongs at index ${finalizedIndex}`);
+        routineServerLog(`✅ Updated song in room.finalizedSongs at index ${finalizedIndex}`);
       }
     }
     
     if (!updatedInAnyStructure) {
-      console.log('⚠️ Song was found but not updated in any data structure');
+      routineServerLog('⚠️ Song was found but not updated in any data structure');
     }
     
     // Broadcast the song replacement to all clients
@@ -8394,7 +8491,7 @@ app.post('/api/spotify/replace-song', async (req, res) => {
       position: songIndex
     });
     
-    console.log(`✅ Song replaced successfully: ${oldSong.name} -> ${newSong.name}`);
+    routineServerLog(`✅ Song replaced successfully: ${oldSong.name} -> ${newSong.name}`);
     
     res.json({
       success: true,
@@ -8413,18 +8510,18 @@ app.post('/api/spotify/replace-song', async (req, res) => {
 // AI-powered song suggestions for playlists
 app.post('/api/spotify/suggest-songs', async (req, res) => {
   try {
-    console.log('🤖 AI suggestion request received');
-    console.log('🤖 Request body keys:', Object.keys(req.body || {}));
+    routineServerLog('🤖 AI suggestion request received');
+    routineServerLog('🤖 Request body keys:', Object.keys(req.body || {}));
     try {
-      console.log('🤖 Request body:', JSON.stringify(req.body, null, 2));
+      routineServerLog('🤖 Request body:', JSON.stringify(req.body, null, 2));
     } catch (jsonError) {
-      console.log('🤖 Request body (stringify failed):', req.body);
-      console.log('🤖 JSON stringify error:', jsonError.message);
+      routineServerLog('🤖 Request body (stringify failed):', req.body);
+      routineServerLog('🤖 JSON stringify error:', jsonError.message);
     }
     
     const { playlistId, playlistName, existingSongs, targetCount } = req.body || {};
     
-    console.log('🤖 Extracted values:', { 
+    routineServerLog('🤖 Extracted values:', { 
       playlistId, 
       playlistName, 
       existingSongsCount: existingSongs?.length || 0, 
@@ -8432,14 +8529,14 @@ app.post('/api/spotify/suggest-songs', async (req, res) => {
     });
     
     if (!hostSpotifyHasTokens(req)) {
-      console.log('🤖 Returning Spotify not connected error');
+      routineServerLog('🤖 Returning Spotify not connected error');
       return res.status(401).json({ error: 'Spotify not connected' });
     }
     
     await spotifyForRequest(req).ensureValidToken();
     
-    console.log(`🤖 Generating AI suggestions for playlist: "${playlistName}"`);
-    console.log(`📊 Current songs: ${existingSongs?.length || 0}, Target: ${targetCount}`);
+    routineServerLog(`🤖 Generating AI suggestions for playlist: "${playlistName}"`);
+    routineServerLog(`📊 Current songs: ${existingSongs?.length || 0}, Target: ${targetCount}`);
     
     // Analyze playlist name for themes and keywords
     const spotifySvc = spotifyForRequest(req);
@@ -8516,7 +8613,7 @@ async function generateSmartSuggestions(playlistName, existingSongs = [], target
   // Generate search queries based on analysis
   const searchQueries = generateSearchQueries(analysis, existingAnalysis);
   
-  console.log(`🔍 Generated ${searchQueries.length} search strategies for "${playlistName}"`);
+  routineServerLog(`🔍 Generated ${searchQueries.length} search strategies for "${playlistName}"`);
   
   // Search for songs using multiple strategies
   const allSuggestions = [];
@@ -8524,7 +8621,7 @@ async function generateSmartSuggestions(playlistName, existingSongs = [], target
   
   for (const query of searchQueries.slice(0, 5)) { // Limit to 5 strategies to avoid rate limits
     try {
-      console.log(`🎵 Searching: "${query.query}" (${query.strategy})`);
+      routineServerLog(`🎵 Searching: "${query.query}" (${query.strategy})`);
       const results = await spotifyService.searchTracks(query.query, 10);
       
       const filteredResults = results
@@ -8550,7 +8647,7 @@ async function generateSmartSuggestions(playlistName, existingSongs = [], target
   // Return top suggestions
   const topSuggestions = rankedSuggestions.slice(0, Math.min(songsNeeded * 2, 20));
   
-  console.log(`✅ Generated ${topSuggestions.length} ranked suggestions`);
+  routineServerLog(`✅ Generated ${topSuggestions.length} ranked suggestions`);
   
   return {
     theme: analysis.primaryTheme,
@@ -8961,12 +9058,12 @@ app.post('/api/spotify/resume', async (req, res) => {
       return res.status(401).json({ error: 'Spotify not connected' });
     }
     
-    console.log(`▶️ Resuming playback on device: ${deviceId}`);
+    routineServerLog(`▶️ Resuming playback on device: ${deviceId}`);
     
     await spotifyForRequest(req).ensureValidToken();
     await spotifyForRequest(req).resumePlayback(deviceId);
     
-    console.log('✅ Playback resumed successfully');
+    routineServerLog('✅ Playback resumed successfully');
     res.json({ success: true, message: 'Playback resumed' });
   } catch (error) {
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
@@ -8977,7 +9074,7 @@ app.post('/api/spotify/resume', async (req, res) => {
 
 // Keep device active with periodic activation
 function startDeviceKeepAlive() {
-  console.log('🔋 Starting device keep-alive (every 10 minutes)...');
+  routineServerLog('🔋 Starting device keep-alive (every 10 minutes)...');
   
   setInterval(async () => {
     try {
@@ -8992,11 +9089,11 @@ function startDeviceKeepAlive() {
         if (!hasActiveGames) {
         await activatePreferredDevice();
         } else {
-          console.log('🎵 Skipping device activation - games are actively playing');
+          routineServerLog('🎵 Skipping device activation - games are actively playing');
         }
       }
     } catch (error) {
-      console.log('⚠️ Device keep-alive failed (this is normal if no active session)');
+      routineServerLog('⚠️ Device keep-alive failed (this is normal if no active session)');
     }
   }, 10 * 60 * 1000); // Every 10 minutes (5 was often enough activation; halves token/device churn)
 }
@@ -9005,8 +9102,8 @@ function startDeviceKeepAlive() {
 const PORT = process.env.PORT || 7093;
 server.listen(PORT, async () => {
   console.log(`🎵 TEMPO - Music Bingo server running on port ${PORT}`);
-  console.log('🎮 Ready for some musical bingo action!');
-  console.log('🚀 Cache-busting fix deployed - version 2.0');
+  routineServerLog('🎮 Ready for some musical bingo action!');
+  routineServerLog('🚀 Cache-busting fix deployed - version 2.0');
   
   // Initialize database
   await initializeDatabase();
@@ -9023,7 +9120,7 @@ server.listen(PORT, async () => {
   }
 
   if (usersStore.isApprovedHostsOnlyMode()) {
-    console.log(
+    routineServerLog(
       '🔒 TEMPO_APPROVED_HOSTS_ONLY: only allowlisted emails may sign in as hosts, create rooms, or join as host (see TEMPO_HOST_ALLOWLIST_EMAILS + host_allowlist).'
     );
   }
@@ -9037,7 +9134,7 @@ server.listen(PORT, async () => {
 
 // Auto-connect to Spotify on server startup (SIMPLIFIED FOR TONIGHT)
 async function autoConnectSpotify() {
-  console.log('🔄 Attempting automatic Spotify connection (single-tenant mode)...');
+  routineServerLog('🔄 Attempting automatic Spotify connection (single-tenant mode)...');
   
   try {
     // Use DEFAULT organization for everyone
@@ -9046,19 +9143,19 @@ async function autoConnectSpotify() {
       try {
         const defaultService = multiTenantSpotify.getService('DEFAULT');
         await defaultService.ensureValidToken();
-        console.log('✅ Restored DEFAULT Spotify connection from saved tokens');
+        routineServerLog('✅ Restored DEFAULT Spotify connection from saved tokens');
         
         // Activate preferred device
         await activatePreferredDevice();
-        console.log('🎵 Ready to serve playlists and control playback');
+        routineServerLog('🎵 Ready to serve playlists and control playback');
         return true;
       } catch (error) {
-        console.log('❌ DEFAULT tokens are invalid, clearing...');
+        routineServerLog('❌ DEFAULT tokens are invalid, clearing...');
         multiTenantSpotify.clearOrgTokens('DEFAULT');
       }
     }
     
-    console.log('⚠️ Manual Spotify connection required');
+    routineServerLog('⚠️ Manual Spotify connection required');
     return false;
   } catch (error) {
     console.error('❌ Error in auto-connect:', error);
@@ -9072,14 +9169,14 @@ async function activatePreferredDevice() {
     if (typeof spotifyServiceDefault.isQuarantined === 'function' && spotifyServiceDefault.isQuarantined()) {
       return;
     }
-    console.log('🔧 Activating preferred device...');
+    routineServerLog('🔧 Activating preferred device...');
     
     // Get available devices
     const devices = await spotifyServiceDefault.getUserDevices();
     const savedDevice = loadSavedDevice();
     
     if (devices.length === 0) {
-      console.log('⚠️ No devices available, will activate when needed');
+      routineServerLog('⚠️ No devices available, will activate when needed');
       return;
     }
     
@@ -9088,14 +9185,14 @@ async function activatePreferredDevice() {
     if (savedDevice) {
       targetDevice = devices.find(d => d.id === savedDevice.id);
       if (targetDevice) {
-        console.log(`🎯 Found saved device: ${targetDevice.name}`);
+        routineServerLog(`🎯 Found saved device: ${targetDevice.name}`);
       }
     }
     
     // If saved device not found, use first available
     if (!targetDevice && devices.length > 0) {
       targetDevice = devices[0];
-      console.log(`🎯 Using first available device: ${targetDevice.name}`);
+      routineServerLog(`🎯 Using first available device: ${targetDevice.name}`);
     }
     
     if (targetDevice) {
@@ -9104,9 +9201,9 @@ async function activatePreferredDevice() {
         await spotifyServiceDefault.transferPlayback(targetDevice.id, false);
         try { await spotifyServiceDefault.setShuffleState(false, targetDevice.id); } catch (_) {}
         try { await spotifyServiceDefault.setRepeatState('off', targetDevice.id); } catch (_) {}
-        console.log(`✅ Asserted control on device without playback: ${targetDevice.name}`);
+        routineServerLog(`✅ Asserted control on device without playback: ${targetDevice.name}`);
           } catch (error) {
-        console.log(`⚠️ Could not assert control on ${targetDevice.name}, but device is available`);
+        routineServerLog(`⚠️ Could not assert control on ${targetDevice.name}, but device is available`);
       }
     }
   } catch (error) {

@@ -2,6 +2,8 @@
  * Opt-in verbose logging for the host → org → credentials → token → Spotify API pipeline.
  * Enable with TEMPO_SPOTIFY_PIPELINE_LOG=1 (or "true"). Never logs secrets, refresh tokens, or access tokens.
  *
+ * TEMPO_SPOTIFY_429_LOG_ALL=1 — log every quarantine_429 pipeline line (no 5s throttle); use when isolating 429 bursts.
+ *
  * For per-request Web API line logs (api.spotify.com paths + status), also set TEMPO_SPOTIFY_LOG_WEBAPI=1
  * (only effective when TEMPO_SPOTIFY_PIPELINE_LOG is on). Can be noisy.
  *
@@ -46,7 +48,11 @@ function shouldLogWebApiResponseStatus(statusCode) {
 }
 
 function shouldLogQuarantine429ToPipeline() {
-  if (!isEnabled()) return true;
+  const logAll =
+    process.env.TEMPO_SPOTIFY_429_LOG_ALL === '1' ||
+    String(process.env.TEMPO_SPOTIFY_429_LOG_ALL || '').toLowerCase() === 'true';
+  if (logAll) return true;
+  if (!isEnabled()) return false;
   const now = Date.now();
   if (now - lastQuarantine429PipelineLogAt < QUARANTINE_429_LOG_THROTTLE_MS) {
     return false;
