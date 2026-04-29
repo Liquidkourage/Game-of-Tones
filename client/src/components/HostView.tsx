@@ -3136,7 +3136,8 @@ const HostView: React.FC = () => {
           if (playlist.name) qs.set('playlistName', playlist.name);
           const q = qs.toString();
           const response = await hostFetch(
-            `${API_BASE || ''}/api/spotify/playlist-tracks/${playlist.id}${q ? `?${q}` : ''}`
+            `${API_BASE || ''}/api/spotify/playlist-tracks/${playlist.id}${q ? `?${q}` : ''}`,
+            { cache: 'no-store' }
           );
           const data = (await response.json()) as { success?: boolean; tracks?: Song[] };
 

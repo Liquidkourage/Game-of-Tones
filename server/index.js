@@ -8182,7 +8182,10 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
     }
     
     const tracks = await svc.getPlaylistTracks(playlistId, playlistInfo);
-    
+
+    // Dynamic per-host Spotify data — discourage proxy/browser caching of playlist payloads (was showing as 304 + tiny transfer in DevTools).
+    res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+
     res.json({
       success: true,
       tracks: tracks
