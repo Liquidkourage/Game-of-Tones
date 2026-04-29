@@ -3084,7 +3084,14 @@ const HostView: React.FC = () => {
             (s) => s.sourcePlaylistId && selectedIds.has(s.sourcePlaylistId)
           );
 
-      const toFetch = selectedPlaylists.filter((p) => !fullyLoadedPlaylistIdsRef.current.has(p.id));
+      let toFetch = selectedPlaylists.filter((p) => !fullyLoadedPlaylistIdsRef.current.has(p.id));
+
+      // Ref says every selected playlist was fetched, but we have no tracks in memory (reconnect, room
+      // lifecycle, etc.). Refetch instead of returning [] with no network calls — avoids Finalize Mix alert.
+      if (toFetch.length === 0 && kept.length === 0 && selectedPlaylists.length > 0) {
+        fullyLoadedPlaylistIdsRef.current.clear();
+        toFetch = selectedPlaylists.filter((p) => !fullyLoadedPlaylistIdsRef.current.has(p.id));
+      }
 
       const dedupeAndShuffle = (songs: Song[]) => {
         const seen = new Set<string>();
