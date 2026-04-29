@@ -2104,22 +2104,23 @@ const HostView: React.FC = () => {
 
 
 
+  /** True while finalizeMix is loading tracks or waiting on socket — blocks overlapping finalize (shared finalize generation ref) and debounced setlist rebuilds. */
+  const finalizeMixInFlightRef = useRef(false);
+
   /** Returns true when server confirms mix-finalized (or already finalized on client). */
   const finalizeMix = async (): Promise<boolean> => {
     if (!socket || selectedPlaylists.length === 0) return false;
     if (mixFinalized) return true;
 
+    if (finalizeMixInFlightRef.current) {
+      addLog('Finalize already in progress…', 'info');
+      return false;
+    }
+    finalizeMixInFlightRef.current = true;
+
     try {
-      let listToSend: Song[] = songList;
-      if (listToSend.length > 0 && !listToSend[0]?.sourcePlaylistId) {
-        console.log('?? Songs missing playlist info, regenerating...');
-        const regen = await generateSongList({ force: true, reason: 'finalize' });
-        listToSend = regen;
-        await new Promise((resolve) => setTimeout(resolve, 200));
-      } else if (listToSend.length === 0) {
-        addLog('Loading tracks from playlists before finalizing…', 'info');
-        listToSend = await generateSongList({ reason: 'finalize' });
-      }
+      addLog('Loading tracks from playlists before finalizing…', 'info');
+      const listToSend = await generateSongList({ force: true, reason: 'finalize' });
 
       if (listToSend.length === 0) {
         window.alert(
@@ -2198,6 +2199,8 @@ const HostView: React.FC = () => {
     } catch (error) {
       console.error('Error finalizing mix:', error);
       return false;
+    } finally {
+      finalizeMixInFlightRef.current = false;
     }
   };
 
@@ -3626,6 +3629,7 @@ const HostView: React.FC = () => {
   // Build master setlist when selection changes. Debounced: ticking several playlists in a row = one import wave; incremental fetch only requests new picks.
   useEffect(() => {
     const t = window.setTimeout(() => {
+      if (finalizeMixInFlightRef.current) return;
       void generateSongList({ reason: 'selection' });
     }, 750);
     return () => window.clearTimeout(t);
