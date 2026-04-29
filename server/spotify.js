@@ -170,6 +170,51 @@ function readWebApiPacingMinMs() {
   return Math.min(10_000, n);
 }
 
+/**
+ * One row from GET /v1/playlists/{id}/items (`PlaylistTrackObject`).
+ * Spotify deprecated the nested field name `track` — responses now expose track-or-episode on **`item`**.
+ * Older payloads still use `track`; some rows have neither (removed catalog entry).
+ * @see https://developer.spotify.com/documentation/web-api/reference/get-playlists-items
+ * @param {Record<string, unknown>} row
+ * @param {string} playlistId
+ * @param {{ name?: string } | null} playlistInfo
+ */
+function mapPlaylistItemRowToHostSong(row, playlistId, playlistInfo) {
+  const tr = row && (row.track ?? row.item);
+  if (!tr || typeof tr !== 'object' || !tr.id) return null;
+
+  const episodeLike =
+    tr.type === 'episode' ||
+    (typeof tr.uri === 'string' && tr.uri.includes(':episode:'));
+
+  let artistStr = 'Unknown Artist';
+  if (Array.isArray(tr.artists) && tr.artists.length > 0) {
+    artistStr = tr.artists.map((a) => (a && a.name ? String(a.name) : '')).filter(Boolean).join(', ');
+  } else if (episodeLike && tr.show && typeof tr.show.name === 'string') {
+    artistStr = tr.show.name;
+  }
+
+  let albumName = 'Unknown Album';
+  if (tr.album && typeof tr.album.name === 'string') {
+    albumName = tr.album.name;
+  } else if (episodeLike && tr.show && typeof tr.show.name === 'string') {
+    albumName = tr.show.name;
+  }
+
+  return {
+    id: tr.id,
+    name: typeof tr.name === 'string' ? tr.name : '(unknown)',
+    artist: artistStr,
+    album: albumName,
+    duration: typeof tr.duration_ms === 'number' ? tr.duration_ms : 0,
+    uri: typeof tr.uri === 'string' ? tr.uri : '',
+    previewUrl: tr.preview_url != null ? tr.preview_url : null,
+    explicit: tr.explicit === true,
+    sourcePlaylistId: playlistId,
+    sourcePlaylistName: playlistInfo?.name || 'Unknown Playlist',
+  };
+}
+
 class SpotifyService {
   /**
    * @param {undefined | null | { clientId: string; clientSecret: string }} options - If object with id+secret, use tenant's Spotify Developer app; else env SPOTIFY_*.
@@ -1073,26 +1118,15 @@ class SpotifyService {
           break;
         }
 
-        // Filter out non-track items and map to our format
+        // PlaylistTrackObject: use `item` (preferred) or deprecated `track`
         const validTracks = rawItems
-          .filter((item) => item.track && item.track.id)
-          .map((item) => ({
-            id: item.track.id,
-            name: item.track.name,
-            artist: item.track.artists.map((artist) => artist.name).join(', '),
-            album: item.track.album.name,
-            duration: item.track.duration_ms,
-            uri: item.track.uri,
-            previewUrl: item.track.preview_url || null,
-            explicit: item.track.explicit === true,
-            sourcePlaylistId: playlistId,
-            sourcePlaylistName: playlistInfo?.name || 'Unknown Playlist',
-          }));
+          .map((row) => mapPlaylistItemRowToHostSong(row, playlistId, playlistInfo))
+          .filter(Boolean);
 
         tracks.push(...validTracks);
         if (offset === 0 && rawItems.length > 0 && validTracks.length === 0) {
           console.warn(
-            `[getPlaylistTracks] playlist ${playlistId}: ${rawItems.length} row(s) on first page but none pass track.id filter (removed tracks / episodes-only page?)`
+            `[getPlaylistTracks] playlist ${playlistId}: ${rawItems.length} row(s) on first page but none mapped (removed-only playlist?)`
           );
         }
         offset += rawItems.length;
