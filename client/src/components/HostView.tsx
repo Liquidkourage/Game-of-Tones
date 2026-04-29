@@ -3180,6 +3180,20 @@ const HostView: React.FC = () => {
     [selectedPlaylists, isSpotifyConnected]
   );
 
+  /** Always latest generateSongList — debounced effect must not depend on this callback (identity churn retriggers → duplicate playlist-tracks waves). */
+  const generateSongListRef = useRef(generateSongList);
+  generateSongListRef.current = generateSongList;
+
+  /** Stable when the same playlist IDs are selected but `selectedPlaylists` array reference is replaced (socket / state sync). */
+  const playlistSelectionKey = useMemo(
+    () =>
+      [...selectedPlaylists]
+        .map((p) => p.id)
+        .sort((a, b) => String(a).localeCompare(String(b)))
+        .join('|'),
+    [selectedPlaylists]
+  );
+
   // Advanced playback functions
   const [volumeTimeout, setVolumeTimeout] = useState<NodeJS.Timeout | null>(null);
 
@@ -3626,14 +3640,15 @@ const HostView: React.FC = () => {
     return () => clearInterval(playbackSyncInterval);
   }, [currentSong, isPlaying, isPausedByInterface]);
 
-  // Build master setlist when selection changes. Debounced: ticking several playlists in a row = one import wave; incremental fetch only requests new picks.
+  // Build master setlist when selection changes. Debounced: ticking several playlists in a row = one import wave.
+  // Depends on playlistSelectionKey + isSpotifyConnected only — NOT generateSongList — so callback identity churn does not reschedule this effect (was causing 3× identical playlist-tracks bursts).
   useEffect(() => {
     const t = window.setTimeout(() => {
       if (finalizeMixInFlightRef.current) return;
-      void generateSongList({ reason: 'selection' });
+      void generateSongListRef.current({ reason: 'selection' });
     }, 750);
     return () => window.clearTimeout(t);
-  }, [selectedPlaylists, isSpotifyConnected, generateSongList]);
+  }, [playlistSelectionKey, isSpotifyConnected]);
   
   // Keyboard shortcuts
   useEffect(() => {
