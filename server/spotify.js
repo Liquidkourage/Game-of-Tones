@@ -661,7 +661,8 @@ class SpotifyService {
     const q = new URLSearchParams();
     q.set('limit', String(cap));
     q.set('offset', String(offset));
-    q.set('additional_types', 'track');
+    // Omit additional_types — default items are tracks. Explicit additional_types=track has correlated with
+    // empty `items` / odd shaping on some Web API responses; episodes are filtered out downstream anyway.
     if (market) q.set('market', market);
     const path = `/v1/playlists/${encodeURIComponent(playlistId)}/items?${q.toString()}`;
     const { body } = await this._webApiGet(path, 'getPlaylistItems');
@@ -1037,7 +1038,8 @@ class SpotifyService {
       snapshotId &&
       cached &&
       cached.snapshotId === snapshotId &&
-      Array.isArray(cached.tracks)
+      Array.isArray(cached.tracks) &&
+      cached.tracks.length > 0
     ) {
       return cached.tracks.map(mapRow);
     }
@@ -1046,7 +1048,8 @@ class SpotifyService {
       !snapshotId &&
       cached &&
       now - cached.at < PLAYLIST_TRACKS_CACHE_TTL_MS &&
-      Array.isArray(cached.tracks)
+      Array.isArray(cached.tracks) &&
+      cached.tracks.length > 0
     ) {
       return cached.tracks.map(mapRow);
     }
@@ -1061,7 +1064,14 @@ class SpotifyService {
         /** Raw rows from Spotify — advance `offset` by this length even when some rows lack `track` (deleted/null). */
         const rawItems = page.items || [];
 
-        if (rawItems.length === 0) break;
+        if (rawItems.length === 0) {
+          if (offset === 0) {
+            console.warn(
+              `[getPlaylistTracks] playlist ${playlistId}: Spotify returned empty items[] at offset 0 (check playlist id and OAuth scopes)`
+            );
+          }
+          break;
+        }
 
         // Filter out non-track items and map to our format
         const validTracks = rawItems
@@ -1080,6 +1090,11 @@ class SpotifyService {
           }));
 
         tracks.push(...validTracks);
+        if (offset === 0 && rawItems.length > 0 && validTracks.length === 0) {
+          console.warn(
+            `[getPlaylistTracks] playlist ${playlistId}: ${rawItems.length} row(s) on first page but none pass track.id filter (removed tracks / episodes-only page?)`
+          );
+        }
         offset += rawItems.length;
 
         if (rawItems.length < pageLimit) break;
