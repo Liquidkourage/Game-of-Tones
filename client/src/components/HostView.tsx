@@ -1068,13 +1068,16 @@ const HostView: React.FC = () => {
   const songListRef = useRef<Song[]>([]);
   /** Playlist ids we have already fully loaded track lists for. */
   const fullyLoadedPlaylistIdsRef = useRef<Set<string>>(new Set());
-  /** Bumped to cancel in-flight generateSongList and drop stale cache. */
+  /** Bumped to cancel in-flight generateSongList from selection/debounce — does not invalidate Finalize Mix (see finalizeSetlistGenerationRef). */
   const setlistBuildGenerationRef = useRef(0);
+  /** Finalize Mix builds use this alone so the 750ms debounced `generateSongList` cannot bump generation mid-fetch and yield an empty list + false rate-limit alert. */
+  const finalizeSetlistGenerationRef = useRef(0);
   useEffect(() => {
     songListRef.current = songList;
   }, [songList]);
   const invalidateSetlistBuildCache = useCallback(() => {
     setlistBuildGenerationRef.current += 1;
+    finalizeSetlistGenerationRef.current += 1;
     fullyLoadedPlaylistIdsRef.current.clear();
   }, []);
 
@@ -2110,12 +2113,12 @@ const HostView: React.FC = () => {
       let listToSend: Song[] = songList;
       if (listToSend.length > 0 && !listToSend[0]?.sourcePlaylistId) {
         console.log('?? Songs missing playlist info, regenerating...');
-        const regen = await generateSongList({ force: true });
+        const regen = await generateSongList({ force: true, reason: 'finalize' });
         listToSend = regen;
         await new Promise((resolve) => setTimeout(resolve, 200));
       } else if (listToSend.length === 0) {
         addLog('Loading tracks from playlists before finalizing…', 'info');
-        listToSend = await generateSongList();
+        listToSend = await generateSongList({ reason: 'finalize' });
       }
 
       if (listToSend.length === 0) {
@@ -3052,7 +3055,7 @@ const HostView: React.FC = () => {
 
   // Generate and shuffle song list from selected playlists. Only fetches tracks for newly selected playlists (avoids re-downloading the whole library on each click). Use { force: true } to refetch all.
   const generateSongList = useCallback(
-    async (opts?: { force?: boolean }): Promise<Song[]> => {
+    async (opts?: { force?: boolean; reason?: 'selection' | 'finalize' }): Promise<Song[]> => {
       if (!isSpotifyConnected) {
         console.warn('Cannot generate song list: Spotify not connected');
         setSongList([]);
@@ -3068,8 +3071,10 @@ const HostView: React.FC = () => {
       if (opts?.force) {
         fullyLoadedPlaylistIdsRef.current.clear();
       }
-      setlistBuildGenerationRef.current += 1;
-      const myBuild = setlistBuildGenerationRef.current;
+      const genRef =
+        opts?.reason === 'finalize' ? finalizeSetlistGenerationRef : setlistBuildGenerationRef;
+      genRef.current += 1;
+      const myBuild = genRef.current;
 
       const selectedIds = new Set(selectedPlaylists.map((p) => p.id));
       Array.from(fullyLoadedPlaylistIdsRef.current).forEach((id) => {
@@ -3110,7 +3115,7 @@ const HostView: React.FC = () => {
         return shuffledSongs;
       };
 
-      if (setlistBuildGenerationRef.current !== myBuild) {
+      if (genRef.current !== myBuild) {
         return [];
       }
 
@@ -3120,7 +3125,7 @@ const HostView: React.FC = () => {
           return [];
         }
         const shuffledSongs = dedupeAndShuffle(kept);
-        if (setlistBuildGenerationRef.current !== myBuild) {
+        if (genRef.current !== myBuild) {
           return [];
         }
         setSongList(shuffledSongs);
@@ -3132,7 +3137,7 @@ const HostView: React.FC = () => {
         let allSongs: Song[] = [...kept];
 
         for (let i = 0; i < toFetch.length; i++) {
-          if (setlistBuildGenerationRef.current !== myBuild) {
+          if (genRef.current !== myBuild) {
             return [];
           }
           if (i > 0) {
@@ -3148,7 +3153,7 @@ const HostView: React.FC = () => {
           );
           const data = (await response.json()) as { success?: boolean; tracks?: Song[] };
 
-          if (setlistBuildGenerationRef.current !== myBuild) {
+          if (genRef.current !== myBuild) {
             return [];
           }
           if (data.success && data.tracks) {
@@ -3158,7 +3163,7 @@ const HostView: React.FC = () => {
         }
 
         const shuffledSongs = dedupeAndShuffle(allSongs);
-        if (setlistBuildGenerationRef.current !== myBuild) {
+        if (genRef.current !== myBuild) {
           return [];
         }
         setSongList(shuffledSongs);
@@ -3621,7 +3626,7 @@ const HostView: React.FC = () => {
   // Build master setlist when selection changes. Debounced: ticking several playlists in a row = one import wave; incremental fetch only requests new picks.
   useEffect(() => {
     const t = window.setTimeout(() => {
-      void generateSongList();
+      void generateSongList({ reason: 'selection' });
     }, 750);
     return () => window.clearTimeout(t);
   }, [selectedPlaylists, isSpotifyConnected, generateSongList]);
