@@ -102,12 +102,17 @@ function isCatalogFeatureConfigured() {
   return parseCatalogAllowlistEntries().length > 0;
 }
 
-/** @type {{ key: string, entries: { id: string, label?: string }[], at: number } | null} */
+/**
+ * @typedef {{ id: string, label?: string, tracksFromList?: number }} CatalogAllowlistEntry
+ * `tracksFromList` when set from GET /v1/me/playlists lets pack summaries skip per-playlist metadata.
+ */
+
+/** @type {{ key: string, entries: CatalogAllowlistEntry[], at: number } | null} */
 let catalogAllowlistResolveCache = null;
 
 /**
  * Static entries plus optional prefix-discovered playlists (catalog token’s /me/playlists).
- * @returns {Promise<{ id: string, label?: string }[]>}
+ * @returns {Promise<CatalogAllowlistEntry[]>}
  */
 async function resolveCatalogAllowlistEntries() {
   const prefix = getCatalogPlaylistNamePrefix();
@@ -150,7 +155,7 @@ async function resolveCatalogAllowlistEntries() {
   }
 
   const { playlists } = await svc.getUserPlaylists();
-  /** @type {{ id: string, label?: string }[]} */
+  /** @type {CatalogAllowlistEntry[]} */
   const prefixEntries = [];
   for (let i = 0; i < playlists.length; i++) {
     const p = playlists[i];
@@ -158,7 +163,8 @@ async function resolveCatalogAllowlistEntries() {
     if (!catalogPlaylistNameStartsWithPrefix(name, prefix, ignoreCase)) continue;
     const oid = p.ownerId != null ? String(p.ownerId) : '';
     if (ownerOnly && catalogSpotifyUserId && oid !== catalogSpotifyUserId) continue;
-    prefixEntries.push({ id: String(p.id).trim(), label: name });
+    const tracksFromList = Math.max(0, Number(p.tracks) || 0);
+    prefixEntries.push({ id: String(p.id).trim(), label: name, tracksFromList });
   }
 
   const mergedMap = new Map();
@@ -167,6 +173,18 @@ async function resolveCatalogAllowlistEntries() {
   }
   for (const e of prefixEntries) {
     if (!mergedMap.has(e.id)) mergedMap.set(e.id, e);
+  }
+  /** Enrich static ids with track totals from list rows when the same playlist appears in prefix results. */
+  for (const e of prefixEntries) {
+    const cur = mergedMap.get(e.id);
+    if (
+      cur &&
+      typeof e.tracksFromList === 'number' &&
+      Number.isFinite(e.tracksFromList) &&
+      cur.tracksFromList == null
+    ) {
+      mergedMap.set(e.id, { ...cur, tracksFromList: e.tracksFromList });
+    }
   }
   const merged = [...mergedMap.values()];
 
@@ -224,10 +242,52 @@ async function loadCatalogPackSummariesForApi() {
   const entries = await resolveCatalogAllowlistEntries();
   const svc = await ensureCatalogAccessToken();
   const out = [];
+  let loggedQuarantineBulk = false;
+  let loggedQuarantineCatch = false;
+
+  const summaryFromListRow = (entry) => {
+    const label = entry.label != null ? String(entry.label).trim() : '';
+    const tr = entry.tracksFromList;
+    if (!label || typeof tr !== 'number' || !Number.isFinite(tr)) return null;
+    return {
+      id: entry.id,
+      name: label,
+      tracks: Math.max(0, Math.floor(tr)),
+      catalog: true,
+    };
+  };
+
   for (let i = 0; i < entries.length; i++) {
-    const { id, label } = entries[i];
+    const entry = entries[i];
+    const { id, label } = entry;
+
+    if (svc.isQuarantined()) {
+      if (!loggedQuarantineBulk) {
+        loggedQuarantineBulk = true;
+        console.warn(
+          `[catalog] pack summaries: Spotify quarantine active (~${svc.getQuarantineRemainingSec()}s); skipping metadata calls`
+        );
+      }
+      const fromList = summaryFromListRow(entry);
+      out.push(
+        fromList || {
+          id,
+          name: label || `Playlist ${id}`,
+          tracks: 0,
+          catalog: true,
+        }
+      );
+      continue;
+    }
+
+    const fromListFirst = summaryFromListRow(entry);
+    if (fromListFirst) {
+      out.push(fromListFirst);
+      continue;
+    }
+
     if (i > 0) {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 400));
     }
     try {
       const meta = await svc.getPlaylistMetadataBrief(id);
@@ -238,13 +298,27 @@ async function loadCatalogPackSummariesForApi() {
         catalog: true,
       });
     } catch (e) {
-      console.warn(`[catalog] metadata failed for ${id}:`, e && e.message ? e.message : e);
-      out.push({
-        id,
-        name: label || `Playlist ${id}`,
-        tracks: 0,
-        catalog: true,
-      });
+      const msg = e && e.message ? String(e.message) : String(e);
+      const quarantined = msg.includes('quarantined');
+      if (quarantined) {
+        if (!loggedQuarantineCatch) {
+          loggedQuarantineCatch = true;
+          console.warn(
+            `[catalog] metadata halted (${msg}); ~${svc.getQuarantineRemainingSec()}s quarantine — using list fallbacks for remaining packs`
+          );
+        }
+      } else {
+        console.warn(`[catalog] metadata failed for ${id}:`, msg);
+      }
+      const fromList = summaryFromListRow(entry);
+      out.push(
+        fromList || {
+          id,
+          name: label || `Playlist ${id}`,
+          tracks: 0,
+          catalog: true,
+        }
+      );
     }
   }
   return out;
