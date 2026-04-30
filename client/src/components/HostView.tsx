@@ -838,7 +838,9 @@ const HostView: React.FC = () => {
         );
         
         setPlaylists(allPlaylists);
-        scheduleCatalogPacksLoad(2800);
+        // Fresh library fetch: load Official packs shortly after (another GET /me/playlists on catalog token).
+        // Stale/cache response: Spotify is already rate-limiting — defer catalog to avoid an immediate second burst (same app quota); Official packs still loads after cooldown.
+        scheduleCatalogPacksLoad(data.fromSpotifyListCache === true ? 60_000 : 2800);
         // Reset filter to GoT-only by default when playlists are reloaded
         setShowAllPlaylists(false);
         // Don't set visiblePlaylists here - let the useEffect handle it to ensure consistency

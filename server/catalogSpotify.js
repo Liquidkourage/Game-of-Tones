@@ -127,6 +127,16 @@ async function resolveCatalogAllowlistEntries() {
     return { entries: staticEntries, meta: {} };
   }
 
+  const svc = await ensureCatalogAccessToken();
+  if (typeof svc.isQuarantined === 'function' && svc.isQuarantined()) {
+    const rem = typeof svc.getQuarantineRemainingSec === 'function' ? svc.getQuarantineRemainingSec() : null;
+    const fallback = staticEntries.map((row) => ({ id: row.id, ...(row.label ? { label: row.label } : {}) }));
+    console.warn(
+      `[catalog] prefix discovery skipped — catalog Spotify quarantined${rem != null ? ` (~${rem}s)` : ''}; using static allowlist only`
+    );
+    return { entries: fallback, meta: { prefixSkippedDueToSpotify: true } };
+  }
+
   const ownerOnly = getCatalogPrefixOwnerOnlyDefaultTrue();
   const ignoreCase = getCatalogPrefixIgnoreCase();
   const staticKey = staticEntries
@@ -148,7 +158,6 @@ async function resolveCatalogAllowlistEntries() {
     };
   }
 
-  const svc = await ensureCatalogAccessToken();
   let catalogSpotifyUserId = null;
   let playlists;
 
