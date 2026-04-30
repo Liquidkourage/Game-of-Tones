@@ -7500,7 +7500,7 @@ app.get('/api/spotify/callback', async (req, res) => {
   }
 });
 
-// --- YouTube Data API v3 (host playlists; browser playback is a separate milestone) ---
+// --- YouTube Music (library via Google APIs; host playback in browser is a separate milestone) ---
 app.get('/api/youtube/music/status', (req, res) => {
   try {
     const uid = hostAuth.getHostUserIdFromRequest(req);
@@ -7528,7 +7528,7 @@ app.get('/api/youtube/music/callback', async (req, res) => {
     return res.status(503).json({
       success: false,
       error: 'youtube_music_not_configured',
-      message: 'Server is missing YouTube OAuth credentials.',
+      message: 'Server is missing YouTube Music OAuth credentials.',
     });
   }
 
@@ -7562,7 +7562,7 @@ app.get('/api/youtube/music/callback', async (req, res) => {
       const path = room ? `/host/${encodeURIComponent(room)}` : '/';
       return res.redirect(302, `${appBase}${path}?youtube_music=connected`);
     }
-    res.json({ success: true, message: 'YouTube connected' });
+    res.json({ success: true, message: 'YouTube Music connected' });
   } catch (error) {
     console.error('❌ YouTube Music callback failed:', error?.message || error);
     if (shouldRedirectBrowser) {
@@ -7570,7 +7570,7 @@ app.get('/api/youtube/music/callback', async (req, res) => {
     }
     res.status(500).json({
       success: false,
-      error: 'Failed to connect YouTube',
+      error: 'Failed to connect YouTube Music',
       message: typeof error?.message === 'string' ? error.message : 'token_exchange_failed',
     });
   }
@@ -7585,7 +7585,7 @@ app.use('/api/youtube/music', (req, res, next) => {
     return res.status(401).json({
       error: 'login_required',
       loginUrl: '/api/auth/google',
-      message: 'Sign in with Google to connect YouTube for this host.',
+      message: 'Sign in with Google to connect YouTube Music for this host.',
     });
   }
   next();
@@ -7600,7 +7600,8 @@ app.get('/api/youtube/music/auth-url', (req, res) => {
     return res.status(503).json({
       success: false,
       error: 'youtube_music_not_configured',
-      message: 'Set YOUTUBE_MUSIC_GOOGLE_CLIENT_ID and YOUTUBE_MUSIC_GOOGLE_CLIENT_SECRET.',
+      message:
+        'Set YOUTUBE_MUSIC_GOOGLE_CLIENT_ID and YOUTUBE_MUSIC_GOOGLE_CLIENT_SECRET for YouTube Music hosting.',
     });
   }
   const roomId = typeof req.query.roomId === 'string' ? req.query.roomId.trim() : '';
@@ -7608,7 +7609,7 @@ app.get('/api/youtube/music/auth-url', (req, res) => {
     const url = youtubeMusic.generateAuthUrl(uid, roomId || null);
     res.json({ success: true, url });
   } catch (e) {
-    console.error('YouTube auth-url:', e?.message || e);
+    console.error('YouTube Music auth-url:', e?.message || e);
     res.status(500).json({ success: false, error: 'auth_url_failed' });
   }
 });
@@ -7625,10 +7626,10 @@ app.get('/api/youtube/music/playlists', async (req, res) => {
       return res.status(401).json({
         success: false,
         error: 'youtube_not_connected',
-        message: 'Connect YouTube first.',
+        message: 'Connect YouTube Music first.',
       });
     }
-    console.error('YouTube playlists:', e?.message || e);
+    console.error('YouTube Music playlists:', e?.message || e);
     res.status(500).json({ success: false, error: 'playlists_failed' });
   }
 });

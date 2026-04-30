@@ -9,7 +9,7 @@ export const API_BASE: string =
 export const SOCKET_URL: string =
   (process.env.REACT_APP_SOCKET_URL as string | undefined) || defaultOrigin || '';
 
-/** Host Connection modal: Google OAuth + Data API for YouTube playlists (playback wiring comes later). */
+/** Host Connection modal: Google OAuth + library APIs for YouTube Music (playback wiring comes later). */
 export const ENABLE_YOUTUBE_MUSIC =
   process.env.REACT_APP_ENABLE_YOUTUBE_MUSIC === '1' ||
   process.env.REACT_APP_ENABLE_YOUTUBE_MUSIC === 'true';

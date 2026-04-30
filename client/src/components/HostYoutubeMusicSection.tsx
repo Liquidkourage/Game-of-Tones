@@ -10,8 +10,8 @@ type StatusPayload = {
 };
 
 /**
- * Optional host-only slice: link Google account with YouTube readonly scope for playlist listing.
- * Feature-flagged via REACT_APP_ENABLE_YOUTUBE_MUSIC; server needs YouTube OAuth env vars.
+ * Optional host-only slice: link Google account for YouTube Music library access (readonly OAuth scope).
+ * Feature-flagged via REACT_APP_ENABLE_YOUTUBE_MUSIC; server needs Google OAuth env vars for Music/library APIs.
  */
 export function HostYoutubeMusicSection({ roomId }: { roomId: string }) {
   const [status, setStatus] = useState<StatusPayload | null>(null);
@@ -98,10 +98,10 @@ export function HostYoutubeMusicSection({ roomId }: { roomId: string }) {
     >
       <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <Youtube className="w-6 h-6" style={{ color: '#ff4444' }} aria-hidden />
-        YouTube (library)
+        YouTube Music
       </h2>
       <p className="host-spotify-guide" style={{ marginBottom: 12 }}>
-        Connect the Google account that owns your YouTube playlists. Used for playlist metadata via the YouTube Data API;
+        Connect the same Google account you use in <strong>YouTube Music</strong>. We sync your Music library playlists for hosting;
         in-browser playback is wired separately.
       </p>
       {error ? (
@@ -112,16 +112,21 @@ export function HostYoutubeMusicSection({ roomId }: { roomId: string }) {
       {!connected ? (
         <button className="spotify-connect-btn btn" type="button" disabled={busy} onClick={() => void connectYoutube()}>
           <Youtube className="btn-icon spotify-btn-icon" aria-hidden />
-          {busy ? 'Connecting…' : 'Connect YouTube'}
+          {busy ? 'Connecting…' : 'Connect YouTube Music'}
         </button>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          <div className="spotify-connection-led" role="status" title="YouTube linked" aria-label="YouTube linked">
+          <div
+            className="spotify-connection-led"
+            role="status"
+            title="YouTube Music linked"
+            aria-label="YouTube Music linked"
+          >
             <span className="spotify-connection-led__dot" aria-hidden />
-            <span className="spotify-connection-led__label">YouTube linked</span>
+            <span className="spotify-connection-led__label">YouTube Music linked</span>
           </div>
           <button className="disconnect-btn btn" type="button" disabled={busy} onClick={() => void disconnectYoutube()}>
-            Disconnect YouTube
+            Disconnect YouTube Music
           </button>
         </div>
       )}
@@ -134,16 +139,16 @@ export function HostYoutubeMusicSection({ roomId }: { roomId: string }) {
           lineHeight: 1.45,
         }}
       >
-        Playlist listing uses the{' '}
+        Library access uses Google&apos;s{' '}
         <a
           href="https://developers.google.com/youtube/v3"
           target="_blank"
           rel="noreferrer"
           style={{ color: 'inherit', textDecoration: 'underline' }}
         >
-          YouTube Data API
-        </a>
-        . Subject to Google API Services User Data Policy.
+          YouTube Data API v3
+        </a>{' '}
+        (the supported interface for third-party playlist sync with YouTube Music). Subject to Google API Services User Data Policy.
       </p>
     </div>
   );

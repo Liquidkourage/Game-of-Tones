@@ -1,5 +1,5 @@
 /**
- * Host-only YouTube integration (library sync via YouTube Data API v3).
+ * Host-only YouTube Music integration (library/playlists via Google YouTube Data API v3 — the supported surface for third-party library access).
  * Env: YOUTUBE_MUSIC_GOOGLE_CLIENT_ID, YOUTUBE_MUSIC_GOOGLE_CLIENT_SECRET,
  * optional YOUTUBE_MUSIC_REDIRECT_URI (defaults to PUBLIC_APP_ORIGIN + /api/youtube/music/callback).
  *
@@ -76,7 +76,7 @@ async function handleCallback(code, hostUserId) {
   const oauth2 = createOAuth2Client();
   const { tokens } = await oauth2.getToken(code);
   if (!tokens.access_token) {
-    const err = new Error('YouTube OAuth returned no access_token');
+    const err = new Error('YouTube Music OAuth returned no access_token');
     /** @type {any} */ (err).statusCode = 502;
     throw err;
   }
@@ -113,7 +113,7 @@ function getOAuthClientForHost(hostUserId) {
 async function listMyPlaylists(hostUserId) {
   const oauth2 = getOAuthClientForHost(hostUserId);
   if (!oauth2) {
-    const err = new Error('YouTube not connected for this host');
+    const err = new Error('YouTube Music not connected for this host');
     /** @type {any} */ (err).statusCode = 401;
     throw err;
   }

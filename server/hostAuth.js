@@ -92,7 +92,7 @@ function verifySpotifyOAuthState(token) {
   }
 }
 
-/** Short-lived JWT for YouTube Data API OAuth `state` (host user + optional room redirect). */
+/** Short-lived JWT for YouTube Music library OAuth `state` (host user + optional room redirect). */
 function signYoutubeMusicOAuthState({ userId, roomId }) {
   const payload = { typ: 'ytm_oauth', uid: userId, rid: roomId || null };
   return jwt.sign(payload, getJwtSecret(), { expiresIn: '15m' });
