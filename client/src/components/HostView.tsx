@@ -63,6 +63,8 @@ interface Playlist {
   owner?: string;
   /** Set after a full playlist-tracks fetch for this id in this session (Finalize / setlist build). */
   hasExplicitTracks?: boolean;
+  /** Track list loaded via server catalog token (LK-owned allowlisted playlists). */
+  catalog?: boolean;
 }
 
 /** In-process Web API 429 cool-down (from GET /api/spotify/status and error bodies). */
@@ -247,6 +249,23 @@ const HostView: React.FC = () => {
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [selectedPlaylists, setSelectedPlaylists] = useState<Playlist[]>([]);
+  /** Official packs (server allowlist + catalog Spotify refresh token). */
+  const [catalogPackOptions, setCatalogPackOptions] = useState<Playlist[]>([]);
+  const [catalogPacksConfigured, setCatalogPacksConfigured] = useState(false);
+  const [selectedCatalogPlaylists, setSelectedCatalogPlaylists] = useState<Playlist[]>([]);
+
+  /** Personal selection first, then catalog-only ids (append). Dedupes by id. */
+  const mixPlaylistSelection = useMemo(() => {
+    const out: Playlist[] = [...selectedPlaylists];
+    const ids = new Set(selectedPlaylists.map((p) => p.id));
+    for (const c of selectedCatalogPlaylists) {
+      if (!ids.has(c.id)) {
+        out.push({ ...c, catalog: true });
+        ids.add(c.id);
+      }
+    }
+    return out;
+  }, [selectedPlaylists, selectedCatalogPlaylists]);
   const [snippetLength, setSnippetLength] = useState(() => {
     const saved = localStorage.getItem('game-snippet-length');
     return saved ? parseInt(saved) : 30;
@@ -870,6 +889,42 @@ const HostView: React.FC = () => {
     };
   }, []);
 
+  /** Server-side catalog packs (Google session only; optional env on Railway). */
+  useEffect(() => {
+    if (!hostAuthBootstrapDone) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await hostFetch(`${API_BASE || ''}/api/spotify/catalog/packs`);
+        if (cancelled || !res.ok) return;
+        const data = (await res.json()) as {
+          success?: boolean;
+          configured?: boolean;
+          packs?: Array<{ id: string; name: string; tracks: number; catalog?: boolean }>;
+        };
+        if (cancelled || !data.success) return;
+        setCatalogPacksConfigured(data.configured === true);
+        const packs = data.packs || [];
+        setCatalogPackOptions(
+          packs.map((row) => ({
+            id: row.id,
+            name: row.name || 'Catalog pack',
+            tracks: Math.max(0, Number(row.tracks) || 0),
+            catalog: true,
+          }))
+        );
+      } catch {
+        if (!cancelled) {
+          setCatalogPacksConfigured(false);
+          setCatalogPackOptions([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hostAuthBootstrapDone]);
+
   // Update visible playlists when rounds change to exclude newly assigned playlists, or when filter mode changes
   useEffect(() => {
     if (playlists && playlists.length > 0) {
@@ -1108,6 +1163,7 @@ const HostView: React.FC = () => {
       setWebApiQuarantine({ active: false });
       setSongList([]);
       invalidateSetlistBuildCache();
+      setSelectedCatalogPlaylists([]);
     } catch (error) {
       console.error('Error disconnecting Spotify:', error);
     }
@@ -1441,6 +1497,7 @@ const HostView: React.FC = () => {
       setMixFinalized(false);
       setPlaylists([]);
       setSelectedPlaylists([]);
+      setSelectedCatalogPlaylists([]);
       setPattern('line');
       setSnippetLength(30);
       setRandomStarts('none');
@@ -2127,7 +2184,7 @@ const HostView: React.FC = () => {
 
   /** Returns true when server confirms mix-finalized (or already finalized on client). */
   const finalizeMix = async (): Promise<boolean> => {
-    if (!socket || selectedPlaylists.length === 0) return false;
+    if (!socket || mixPlaylistSelection.length === 0) return false;
     if (mixFinalized) return true;
 
     if (finalizeMixInFlightRef.current) {
@@ -2162,8 +2219,8 @@ const HostView: React.FC = () => {
 
       // Include current host-side songList ordering to enforce 1x75 pool deterministically
       console.log('?? Finalizing mix - Playlist order being sent to server:');
-      selectedPlaylists.forEach((p, i) => {
-        console.log(`   ${i + 1}. ${p.name} (will be column ${i})`);
+      mixPlaylistSelection.forEach((p, i) => {
+        console.log(`   ${i + 1}. ${p.name}${p.catalog ? ' (catalog)' : ''} (will be column ${i})`);
       });
 
       return await new Promise<boolean>((resolve) => {
@@ -2209,7 +2266,7 @@ const HostView: React.FC = () => {
         socket.on('finalize-mix-failed', onFailed);
         socket.emit('finalize-mix', {
           roomId: roomId,
-          playlists: selectedPlaylists,
+          playlists: mixPlaylistSelection,
           songList: listToSend,
           freeSpace: freeSpaceEnabled
         });
@@ -2223,8 +2280,8 @@ const HostView: React.FC = () => {
   };
 
   const startGame = async () => {
-    if (selectedPlaylists.length === 0) {
-      alert('Please select at least one playlist');
+    if (mixPlaylistSelection.length === 0) {
+      alert('Please select at least one playlist or official catalog pack');
       return;
     }
 
@@ -2275,11 +2332,11 @@ const HostView: React.FC = () => {
         return;
       }
 
-      console.log('Starting game with playlists:', selectedPlaylists);
+      console.log('Starting game with playlists:', mixPlaylistSelection);
       setIsStartingGame(true);
       socket.emit('start-game', {
         roomId,
-        playlists: selectedPlaylists,
+        playlists: mixPlaylistSelection,
         snippetLength,
         deviceId: selectedDevice.id, // Require the selected device ID
         songList: songListForStart, // Send the shuffled song list to ensure server uses same order
@@ -2791,6 +2848,7 @@ const HostView: React.FC = () => {
       
       // Clear selected playlists and reset game state
       setSelectedPlaylists([]);
+      setSelectedCatalogPlaylists([]);
       setMixFinalized(false);
       setSongList([]);
       invalidateSetlistBuildCache();
@@ -3083,7 +3141,7 @@ const HostView: React.FC = () => {
         fullyLoadedPlaylistIdsRef.current.clear();
         return [];
       }
-      if (selectedPlaylists.length === 0) {
+      if (mixPlaylistSelection.length === 0) {
         fullyLoadedPlaylistIdsRef.current.clear();
         setSongList([]);
         return [];
@@ -3097,7 +3155,7 @@ const HostView: React.FC = () => {
       genRef.current += 1;
       const myBuild = genRef.current;
 
-      const selectedIds = new Set(selectedPlaylists.map((p) => p.id));
+      const selectedIds = new Set(mixPlaylistSelection.map((p) => p.id));
       Array.from(fullyLoadedPlaylistIdsRef.current).forEach((id) => {
         if (!selectedIds.has(id)) {
           fullyLoadedPlaylistIdsRef.current.delete(id);
@@ -3110,13 +3168,13 @@ const HostView: React.FC = () => {
             (s) => s.sourcePlaylistId && selectedIds.has(s.sourcePlaylistId)
           );
 
-      let toFetch = selectedPlaylists.filter((p) => !fullyLoadedPlaylistIdsRef.current.has(p.id));
+      let toFetch = mixPlaylistSelection.filter((p) => !fullyLoadedPlaylistIdsRef.current.has(p.id));
 
       // Ref says every selected playlist was fetched, but we have no tracks in memory (reconnect, room
       // lifecycle, etc.). Refetch instead of returning [] with no network calls — avoids Finalize Mix alert.
-      if (toFetch.length === 0 && kept.length === 0 && selectedPlaylists.length > 0) {
+      if (toFetch.length === 0 && kept.length === 0 && mixPlaylistSelection.length > 0) {
         fullyLoadedPlaylistIdsRef.current.clear();
-        toFetch = selectedPlaylists.filter((p) => !fullyLoadedPlaylistIdsRef.current.has(p.id));
+        toFetch = mixPlaylistSelection.filter((p) => !fullyLoadedPlaylistIdsRef.current.has(p.id));
       }
 
       const dedupeAndShuffle = (songs: Song[]) => {
@@ -3168,10 +3226,11 @@ const HostView: React.FC = () => {
           const qs = new URLSearchParams();
           if (playlist.name) qs.set('playlistName', playlist.name);
           const q = qs.toString();
-          const response = await hostFetch(
-            `${API_BASE || ''}/api/spotify/playlist-tracks/${playlist.id}${q ? `?${q}` : ''}`,
-            { cache: 'no-store' }
-          );
+          const catalog = playlist.catalog === true;
+          const url = catalog
+            ? `${API_BASE || ''}/api/spotify/catalog/playlist/${playlist.id}${q ? `?${q}` : ''}`
+            : `${API_BASE || ''}/api/spotify/playlist-tracks/${playlist.id}${q ? `?${q}` : ''}`;
+          const response = await hostFetch(url, { cache: 'no-store' });
           const data = (await response.json()) as { success?: boolean; tracks?: Song[] };
 
           if (genRef.current !== myBuild) {
@@ -3180,7 +3239,9 @@ const HostView: React.FC = () => {
           if (data.success && data.tracks) {
             allSongs.push(...data.tracks);
             fullyLoadedPlaylistIdsRef.current.add(playlist.id);
-            applyPlaylistExplicitKnowledge(playlist.id, data.tracks, setPlaylists, setSelectedPlaylists);
+            if (!catalog) {
+              applyPlaylistExplicitKnowledge(playlist.id, data.tracks, setPlaylists, setSelectedPlaylists);
+            }
           }
         }
 
@@ -3196,21 +3257,21 @@ const HostView: React.FC = () => {
         return [];
       }
     },
-    [selectedPlaylists, isSpotifyConnected, setPlaylists, setSelectedPlaylists]
+    [mixPlaylistSelection, isSpotifyConnected, setPlaylists, setSelectedPlaylists]
   );
 
   /** Always latest generateSongList — debounced effect must not depend on this callback (identity churn retriggers → duplicate playlist-tracks waves). */
   const generateSongListRef = useRef(generateSongList);
   generateSongListRef.current = generateSongList;
 
-  /** Stable when the same playlist IDs are selected but `selectedPlaylists` array reference is replaced (socket / state sync). */
+  /** Stable when the same playlist IDs are selected but selection arrays are replaced (socket / state sync). */
   const playlistSelectionKey = useMemo(
     () =>
-      [...selectedPlaylists]
+      [...mixPlaylistSelection]
         .map((p) => p.id)
         .sort((a, b) => String(a).localeCompare(String(b)))
         .join('|'),
-    [selectedPlaylists]
+    [mixPlaylistSelection]
   );
 
   // Advanced playback functions
@@ -3552,7 +3613,7 @@ const HostView: React.FC = () => {
         body: JSON.stringify({
           name: playlistName,
           trackIds: trackIds,
-          description: `Output playlist from TEMPO Music Bingo - Room ${roomId} - ${selectedPlaylists.map(p => p.name).join(', ')}`
+          description: `Output playlist from TEMPO Music Bingo - Room ${roomId} - ${mixPlaylistSelection.map(p => p.name).join(', ')}`
         }),
       });
 
@@ -3570,7 +3631,7 @@ const HostView: React.FC = () => {
       addLog(`? Failed to create output playlist: ${errorMessage}`, 'error');
       alert(`Failed to create playlist: ${errorMessage}`);
     }
-  }, [songList, roomId, selectedPlaylists, addLog]);
+  }, [songList, roomId, mixPlaylistSelection, addLog]);
 
   // Format time helper
   const formatTime = (milliseconds: number) => {
@@ -4756,6 +4817,54 @@ const HostView: React.FC = () => {
                         After Tempo loads tracks for playlists you include in the mix (selection debounce or Finalize), any playlist that contains a Spotify explicit song shows{' '}
                         <SpotifyExplicitBadge size="sm" title="At least one explicit track in this playlist" /> next to its song count — no extra Spotify calls beyond that load.
                       </p>
+                      {catalogPacksConfigured && catalogPackOptions.length > 0 ? (
+                        <div
+                          style={{
+                            padding: '12px 14px',
+                            borderRadius: 10,
+                            border: '1px solid rgba(120, 180, 255, 0.35)',
+                            background: 'rgba(60, 120, 200, 0.12)',
+                          }}
+                        >
+                          <p style={{ margin: '0 0 6px', fontSize: '0.82rem', color: '#b8dcff', fontWeight: 700 }}>
+                            Official packs (catalog)
+                          </p>
+                          <p style={{ margin: '0 0 12px', fontSize: '0.76rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
+                            Loaded with Tempo&apos;s allowlisted Spotify account — not your personal library token. Your Spotify is still used for playback. Appended after your own playlist selections.
+                          </p>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {catalogPackOptions.map((pack) => {
+                              const isSel = selectedCatalogPlaylists.some((p) => p.id === pack.id);
+                              return (
+                                <label
+                                  key={pack.id}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 10,
+                                    cursor: 'pointer',
+                                    fontSize: '0.88rem',
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isSel}
+                                    onChange={() => {
+                                      setSelectedCatalogPlaylists((prev) =>
+                                        isSel ? prev.filter((p) => p.id !== pack.id) : [...prev, { ...pack, catalog: true }]
+                                      );
+                                    }}
+                                  />
+                                  <span style={{ color: '#fff', flex: 1, minWidth: 0 }}>{pack.name}</span>
+                                  <span style={{ color: '#8899aa', fontSize: '0.78rem', flexShrink: 0 }}>
+                                    {pack.tracks} songs
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
 
                         <div style={{ 
@@ -5229,7 +5338,7 @@ const HostView: React.FC = () => {
                      <button 
                        className="control-button finalize-mix"
                        onClick={finalizeMix}
-                       disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
+                       disabled={mixPlaylistSelection.length === 0 || isSpotifyConnecting}
                      >
                        <ListChecks className="w-4 h-4" aria-hidden />
                        Finalize Mix
@@ -5245,7 +5354,7 @@ const HostView: React.FC = () => {
                    )}
                   <button
                     onClick={startGame}
-                    disabled={selectedPlaylists.length === 0 || isSpotifyConnecting}
+                    disabled={mixPlaylistSelection.length === 0 || isSpotifyConnecting}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -5255,15 +5364,15 @@ const HostView: React.FC = () => {
                       fontWeight: 900,
                       letterSpacing: '0.02em',
                       borderRadius: 12,
-                      border: (selectedPlaylists.length === 0 || isSpotifyConnecting) ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(0,255,136,0.6)',
-                      color: (selectedPlaylists.length === 0 || isSpotifyConnecting) ? '#c8c8c8' : '#0b0e12',
-                      background: (selectedPlaylists.length === 0 || isSpotifyConnecting)
+                      border: (mixPlaylistSelection.length === 0 || isSpotifyConnecting) ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(0,255,136,0.6)',
+                      color: (mixPlaylistSelection.length === 0 || isSpotifyConnecting) ? '#c8c8c8' : '#0b0e12',
+                      background: (mixPlaylistSelection.length === 0 || isSpotifyConnecting)
                         ? 'rgba(255,255,255,0.08)'
                         : 'linear-gradient(180deg, #00ff88 0%, #00cc6d 100%)',
-                      boxShadow: (selectedPlaylists.length === 0 || isSpotifyConnecting)
+                      boxShadow: (mixPlaylistSelection.length === 0 || isSpotifyConnecting)
                         ? 'none'
                         : '0 10px 30px rgba(0,255,136,0.25), inset 0 1px 0 rgba(255,255,255,0.4)',
-                      cursor: (selectedPlaylists.length === 0 || isSpotifyConnecting) ? 'not-allowed' : 'pointer',
+                      cursor: (mixPlaylistSelection.length === 0 || isSpotifyConnecting) ? 'not-allowed' : 'pointer',
                       opacity: (isSpotifyConnecting) ? 0.8 : 1
                     }}
                   >
@@ -5393,8 +5502,8 @@ const HostView: React.FC = () => {
                       lineHeight: 1.45,
                       maxWidth: 520,
                     }}>
-                      {selectedPlaylists.length === 0
-                        ? 'Use Connection in the header for Spotify, then the Manager tab to select playlists for this round. Return here to finalize or start the game.'
+                      {mixPlaylistSelection.length === 0
+                        ? 'Use Connection in the header for Spotify, then the Manager tab to select playlists (and optional official packs) for this round. Return here to finalize or start the game.'
                         : 'Tap Finalize Mix or Start Game to build the bingo song pool from your selected playlists.'}
                     </p>
                   </div>

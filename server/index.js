@@ -15,6 +15,7 @@ const usersStore = require('./users');
 const organizationsStore = require('./organizations');
 const credentialCrypto = require('./credentialCrypto');
 const spotifyPipelineLog = require('./spotifyPipelineLog');
+const catalogSpotify = require('./catalogSpotify');
 
 // Song title cleaning utility
 function cleanSongTitle(title) {
@@ -1254,7 +1255,7 @@ function startSimpleContextMonitor(roomId, deviceId) {
       // Ignore monitor errors to prevent spam
     }
   }, 12_000); // Polling /v1/me/player (was 6s; 12s cuts API volume ~in half, slower device-context detection)
-
+  
   roomPlaybackWatchers.set(roomId, intervalId);
 }
 
@@ -1656,11 +1657,11 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
         const rptLast = room._lastRepeatEnforceAtMs || 0;
         if (now - rptLast > 20000) {
           room._lastRepeatEnforceAtMs = now;
-          try {
+        try {
             routineServerLog(`🔄 Enforcing repeat 'track' mode (was: ${state?.repeat_state})`);
             await spotifyFor(roomId).setRepeatState('track', deviceId);
-          } catch (e) {
-            console.warn('⚠️ Failed to enforce repeat mode:', e?.message);
+        } catch (e) {
+          console.warn('⚠️ Failed to enforce repeat mode:', e?.message);
           }
         }
       }
@@ -1805,7 +1806,7 @@ io.on('connection', (socket) => {
     logger.info(`Player ${playerName} (${wantsHost ? 'host' : 'player'}) joining room: ${roomId}`, 'player-join');
 
     let organizationId = 'DEFAULT';
-
+    
     // Create room if it doesn't exist
     if (!rooms.has(roomId)) {
       logger.info(`Creating new room: ${roomId} for organization: ${organizationId}`, 'room-create');
@@ -1934,7 +1935,7 @@ io.on('connection', (socket) => {
     };
     
     room.players.set(socket.id, player);
-
+    
     if (room.ownerUserId != null && db) {
       try {
         await resolveRoomVenueBranding(room);
@@ -2139,14 +2140,14 @@ io.on('connection', (socket) => {
       room.finalizedPlaylists = playlists;
       room.finalizedSongOrder = songList;
       room.freeSpaceEnabled = !!freeSpace;
-
+      
       routineServerLog('📋 Received songList for finalization:', {
-        length: songList.length,
+          length: songList.length,
         hasPlaylistInfo: !!songList[0]?.sourcePlaylistId,
         firstSong: {
-          id: songList[0].id,
-          name: songList[0].name,
-          sourcePlaylistId: songList[0].sourcePlaylistId,
+            id: songList[0].id,
+            name: songList[0].name,
+            sourcePlaylistId: songList[0].sourcePlaylistId,
           sourcePlaylistName: songList[0].sourcePlaylistName,
         },
       });
@@ -2169,9 +2170,9 @@ io.on('connection', (socket) => {
       }
 
       room.mixFinalized = true;
-
+      
       io.to(roomId).emit('mix-finalized', { playlists });
-
+      
       routineServerLog('✅ Mix finalized for room:', roomId);
     } catch (error) {
       console.error('❌ Error finalizing mix:', error);
@@ -2342,7 +2343,7 @@ io.on('connection', (socket) => {
       }
       return;
     }
-
+    
     // Get winning pattern positions for verification display
     const winningPatternPositions = getWinningPatternPositions(player.bingoCard, room, validationResult);
     
@@ -2739,7 +2740,7 @@ io.on('connection', (socket) => {
           })),
         };
       }
-
+      
       // NOW emit the actual winner event for public display
       io.to(roomId).emit('bingo-called', { 
         playerId: resolvedPlayerId, 
@@ -4389,16 +4390,16 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
     } else {
       routineServerLog('📋 Fetching songs from playlists via Spotify Web API...');
       playlistsWithSongs = [];
-      for (let i = 0; i < playlists.length; i++) {
-        const playlist = playlists[i];
-        try {
+    for (let i = 0; i < playlists.length; i++) {
+      const playlist = playlists[i];
+      try {
           routineServerLog(`📋 [${i + 1}/${playlists.length}] Fetching songs for playlist: ${playlist.name}`);
           const songs = await spotifyFor(roomId).getPlaylistTracks(playlist.id, playlist);
           routineServerLog(`✅ Found ${songs.length} songs in playlist: ${playlist.name}`);
-          playlistsWithSongs.push({ ...playlist, songs, originalIndex: i });
-        } catch (error) {
-          console.error(`❌ Error fetching songs for playlist ${playlist.id}:`, error);
-          playlistsWithSongs.push({ ...playlist, songs: [], originalIndex: i });
+        playlistsWithSongs.push({ ...playlist, songs, originalIndex: i });
+      } catch (error) {
+        console.error(`❌ Error fetching songs for playlist ${playlist.id}:`, error);
+        playlistsWithSongs.push({ ...playlist, songs: [], originalIndex: i });
         }
       }
     }
@@ -4680,7 +4681,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       } catch (e) {
         console.warn('⚠️ Failed to emit finalized-order for fallback mode:', e?.message || e);
       }
-    }
+  }
 
   const cards = new Map();
     if (!room.clientCards) room.clientCards = new Map();
@@ -4734,9 +4735,9 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
                 const idxInCol = row < 2 ? row : row - 1;
                 chosen25.push(columns[2][idxInCol]);
               } else {
-                chosen25.push(columns[col][row]);
-              }
+              chosen25.push(columns[col][row]);
             }
+          }
           }
           routineServerLog(`✅ Card for ${player.name}: Built with columns in order: ${columns.map((_, idx) => perListGloballyUnique[idx].name).join(', ')}`);
         }
@@ -4754,9 +4755,9 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
 
       // Build card
       const card = { id: playerId, squares: [] };
-      let idx = 0;
-      for (let row = 0; row < 5; row++) {
-        for (let col = 0; col < 5; col++) {
+    let idx = 0;
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 5; col++) {
           if (useFreeSpace && row === 2 && col === 2) {
             card.squares.push(makeFreeSpaceSquare());
             continue;
@@ -4766,16 +4767,16 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
             console.error(`❌ Invalid song at position ${row}-${col} for player ${player.name}`);
             continue;
           }
-          card.squares.push({
-            position: `${row}-${col}`,
-            songId: s.id,
-            songName: s.name,
-            customSongName: customSongTitles.get(s.id) || cleanSongTitle(s.name),
-            artistName: s.artist,
-            marked: false
-          });
-        }
+        card.squares.push({
+          position: `${row}-${col}`,
+          songId: s.id,
+          songName: s.name,
+          customSongName: customSongTitles.get(s.id) || cleanSongTitle(s.name),
+          artistName: s.artist,
+          marked: false
+        });
       }
+    }
 
       if (card.squares.length < 25) {
         console.error(`❌ Card incomplete for player ${player.name}: only ${card.squares.length}/25 squares`);
@@ -4979,7 +4980,7 @@ async function generateBingoCardForPlayer(roomId, playerId) {
               const idxInCol = row < 2 ? row : row - 1;
               chosen25.push(columns[2][idxInCol]);
             } else {
-              chosen25.push(columns[col][row]);
+            chosen25.push(columns[col][row]);
             }
           }
         }
@@ -7097,7 +7098,7 @@ app.get('/api/spotify/status', async (req, res) => {
       await svc.ensureValidToken();
     } catch (e) {
       console.error('Spotify status ensureValidToken:', e?.message || e);
-      return res.json({
+      return res.json({ 
         connected: true,
         hasTokens: true,
         organizationId: orgId,
@@ -7108,7 +7109,7 @@ app.get('/api/spotify/status', async (req, res) => {
     return res.json({ connected: true, hasTokens: true, organizationId: orgId, webApiQuarantine });
   } catch (error) {
     console.error('Spotify status error:', error);
-    res.status(500).json({
+    res.status(500).json({ 
       connected: false,
       hasTokens: false,
       error: 'Status check failed',
@@ -7270,12 +7271,12 @@ app.get('/api/spotify/tokens', (req, res) => {
   }
   const tok = multiTenantSpotify.getTokens(`user_${uid}`);
   if (!tok || !tok.accessToken || !tok.refreshToken) {
-    return res.status(404).json({
+    return res.status(404).json({ 
       error: 'No Spotify tokens for this host. Connect Spotify from the host screen first.',
     });
   }
-
-  res.json({
+  
+  res.json({ 
     success: true,
     message: 'These tokens belong to the signed-in host Spotify account (user-specific).',
     envVars: {
@@ -7293,7 +7294,7 @@ app.get('/api/spotify/tokens', (req, res) => {
 app.post('/api/spotify/clear', async (req, res) => {
   try {
     const uid = hostAuth.getHostUserIdFromRequest(req);
-    spotifyTokens = null;
+  spotifyTokens = null;
     if (uid != null) {
       await multiTenantSpotify.clearOrgTokens(`user_${uid}`);
       try {
@@ -7309,7 +7310,7 @@ app.post('/api/spotify/clear', async (req, res) => {
         const devFile = deviceFileForUserId(uid);
         if (fs.existsSync(devFile)) fs.unlinkSync(devFile);
       } catch (_) {}
-    } else {
+      } else {
       await multiTenantSpotify.clearOrgTokens('DEFAULT');
       if (spotifyServiceDefault && typeof spotifyServiceDefault.setTokens === 'function') {
         spotifyServiceDefault.setTokens(null, null);
@@ -7319,7 +7320,7 @@ app.post('/api/spotify/clear', async (req, res) => {
       if (fs.existsSync(TOKEN_FILE)) fs.unlinkSync(TOKEN_FILE);
     } catch (_) {}
     spotifyTokens = multiTenantSpotify.getTokens('DEFAULT');
-    res.json({ success: true, message: 'Spotify tokens cleared' });
+  res.json({ success: true, message: 'Spotify tokens cleared' });
   } catch (error) {
     console.error('❌ Error in /api/spotify/clear:', error);
     res.status(500).json({ success: false, error: 'Failed to clear tokens' });
@@ -7368,11 +7369,11 @@ function spotifyCallbackUserMessage(err) {
 
 app.get('/api/spotify/callback', async (req, res) => {
   const { code, state } = req.query;
-
+  
   const appBase = publicAppOrigin();
   const wantsJson = spotifyCallbackWantsJson(req);
   const shouldRedirectBrowser = appBase && !wantsJson;
-
+  
   if (!code) {
     if (shouldRedirectBrowser) {
       return res.redirect(302, `${appBase}/?spotify_error=missing_code`);
@@ -7449,8 +7450,8 @@ app.get('/api/spotify/callback', async (req, res) => {
       }
     } else {
       await multiTenantSpotify.setTokens('DEFAULT', tokens);
-      spotifyTokens = tokens;
-      saveTokens(tokens);
+    spotifyTokens = tokens;
+    saveTokens(tokens);
       if (spotifyPipelineLog.isEnabled()) {
         spotifyPipelineLog.log('oauth_callback_tokens_stored', { org_key: 'DEFAULT' });
       }
@@ -7586,7 +7587,7 @@ app.get('/api/spotify/playlists', async (req, res) => {
     }
     const orgTokens = multiTenantSpotify.getTokens(orgId);
     if (!orgTokens) {
-      return res.status(401).json({
+      return res.status(401).json({ 
         error: `Spotify not connected for ${orgId}`,
         organizationId: orgId,
       });
@@ -7640,8 +7641,8 @@ app.get('/api/spotify/playlists', async (req, res) => {
     await saveHostPlaylistListCache(orgId, { playlists, spotifyListTotal });
     logSpotifyPlaylistSuccessProof(orgId, svc, { spotifyListTotal, playlists });
 
-    res.json({
-      success: true,
+    res.json({ 
+      success: true, 
       playlists,
       organizationId: orgId,
       /** Spotify PagingObject total from /v1/me/playlists (same account as the access token). */
@@ -7795,7 +7796,7 @@ app.post('/api/spotify/save-device', async (req, res) => {
     if (uid == null) {
       return res.status(401).json({ error: 'login_required' });
     }
-
+    
     saveDeviceForUser(uid, device);
     routineServerLog(`💾 Device saved: ${device.name} (${device.id})`);
     
@@ -8169,15 +8170,15 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
     if (nameFromClient) {
       playlistInfo = { id: playlistId, name: nameFromClient };
     } else {
-      try {
+    try {
         const playlistResponse = await svc.spotifyApi.getPlaylist(playlistId);
-        playlistInfo = {
-          id: playlistResponse.body.id,
-          name: playlistResponse.body.name
-        };
-      } catch (error) {
-        console.warn('⚠️ Could not fetch playlist info for', playlistId, ':', error.message);
-        // Continue without playlist info
+      playlistInfo = {
+        id: playlistResponse.body.id,
+        name: playlistResponse.body.name
+      };
+    } catch (error) {
+      console.warn('⚠️ Could not fetch playlist info for', playlistId, ':', error.message);
+      // Continue without playlist info
       }
     }
     
@@ -8185,7 +8186,7 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
 
     // Dynamic per-host Spotify data — discourage proxy/browser caching of playlist payloads (was showing as 304 + tiny transfer in DevTools).
     res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
-
+    
     res.json({
       success: true,
       tracks: tracks
@@ -8194,6 +8195,65 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('❌ Error getting playlist tracks:', error);
     res.status(500).json({ error: 'Failed to get playlist tracks' });
+  }
+});
+
+/**
+ * LK-owned catalog Spotify account — playlist summaries (allowlisted ids only).
+ * Host Google session required; does not use the host’s Spotify token.
+ */
+app.get('/api/spotify/catalog/packs', async (req, res) => {
+  try {
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    if (uid == null) {
+      return res.status(401).json({ error: 'login_required', message: 'Sign in with Google first.' });
+    }
+    if (!catalogSpotify.isCatalogFeatureConfigured()) {
+      return res.json({ success: true, configured: false, packs: [] });
+    }
+    const packs = await catalogSpotify.loadCatalogPackSummariesForApi();
+    res.json({ success: true, configured: true, packs });
+  } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
+    console.error('GET /api/spotify/catalog/packs:', error);
+    res.status(500).json({ error: 'catalog_packs_failed', message: error?.message || 'Failed to load catalog packs' });
+  }
+});
+
+/**
+ * Full track list for an allowlisted catalog playlist (catalog Spotify token — not host token).
+ */
+app.get('/api/spotify/catalog/playlist/:playlistId/tracks', async (req, res) => {
+  try {
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    if (uid == null) {
+      return res.status(401).json({ error: 'login_required', message: 'Sign in with Google first.' });
+    }
+    const { playlistId } = req.params;
+    const q = req.query || {};
+    const rawName = q.playlistName != null ? q.playlistName : q.name;
+    const nameFromClient =
+      rawName != null && String(rawName).trim() !== '' ? String(rawName).trim() : '';
+    const playlistInfo = nameFromClient ? { id: playlistId, name: nameFromClient } : null;
+    const tracks = await catalogSpotify.fetchCatalogPlaylistTracks(playlistId, playlistInfo);
+    res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+    res.json({
+      success: true,
+      tracks,
+      source: 'tempo_catalog',
+    });
+  } catch (error) {
+    if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
+    const sc = Number(error?.statusCode ?? error?.body?.error?.status ?? 0);
+    const msg = error?.message || String(error);
+    if (sc === 400) {
+      return res.status(400).json({ error: 'catalog_allowlist', message: msg });
+    }
+    if (sc === 503) {
+      return res.status(503).json({ error: 'catalog_unconfigured', message: msg });
+    }
+    console.error('GET /api/spotify/catalog/playlist/:playlistId/tracks:', error);
+    res.status(500).json({ error: 'catalog_tracks_failed', message: msg });
   }
 });
 
@@ -9127,7 +9187,7 @@ server.listen(PORT, async () => {
       '🔒 TEMPO_APPROVED_HOSTS_ONLY: only allowlisted emails may sign in as hosts, create rooms, or join as host (see TEMPO_HOST_ALLOWLIST_EMAILS + host_allowlist).'
     );
   }
-
+  
   // Auto-connect to Spotify
   await autoConnectSpotify();
   
