@@ -285,6 +285,8 @@ const HostView: React.FC = () => {
   const [winners, setWinners] = useState<Player[]>([]);
   const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
   const [isSpotifyConnecting, setIsSpotifyConnecting] = useState(false);
+  /** Mirrors isSpotifyConnected for callbacks declared above sync effects (catalog schedule, socket reconnect). */
+  const isSpotifyConnectedRef = useRef(false);
   const [pendingVerification, setPendingVerification] = useState<any>(null);
   const [gamePaused, setGamePaused] = useState(false);
   const [mixFinalized, setMixFinalized] = useState(false);
@@ -708,6 +710,7 @@ const HostView: React.FC = () => {
       }
       catalogPacksLoadDebounceRef.current = setTimeout(() => {
         catalogPacksLoadDebounceRef.current = null;
+        if (!isSpotifyConnectedRef.current) return;
         void loadCatalogPacks();
       }, delayMs);
     },
@@ -997,11 +1000,17 @@ const HostView: React.FC = () => {
     };
   }, []);
 
-  /** Server-side catalog packs — stagger after bootstrap so we don’t stack /me/playlists on host + catalog back-to-back. */
+  /** After Spotify status is known: mark catalog as skipped without hitting Spotify when host has not connected Spotify. */
   useEffect(() => {
-    if (!hostAuthBootstrapDone) return;
-    scheduleCatalogPacksLoad(3200);
-  }, [hostAuthBootstrapDone, scheduleCatalogPacksLoad]);
+    if (!hostAuthBootstrapDone || !spotifyInitialCheckDone) return;
+    if (isSpotifyConnected) return;
+    setCatalogPacksProbeDone(true);
+    setCatalogPacksFetchOk(false);
+    setCatalogPacksConfigured(false);
+    setCatalogPackOptions([]);
+    setCatalogPacksFetchUnauthorized(false);
+    setCatalogPrefixDiscoverySkipped(false);
+  }, [hostAuthBootstrapDone, spotifyInitialCheckDone, isSpotifyConnected]);
 
   // Update visible playlists when rounds change to exclude newly assigned playlists, or when filter mode changes
   useEffect(() => {
@@ -1207,8 +1216,6 @@ const HostView: React.FC = () => {
     }
   }, []);
 
-  /** Mirrors connection state for unload handlers (avoid stale closures). */
-  const isSpotifyConnectedRef = useRef(false);
   /** Back off host polling of /api/spotify/current-playback when server returns 429. */
   const spotifyPollBackoffUntilRef = useRef(0);
   /** Throttle getUserPlaylists on socket reconnect to avoid piling on Spotify (429) next to OAuth / status checks. */
@@ -1234,6 +1241,10 @@ const HostView: React.FC = () => {
 
   const disconnectSpotify = useCallback(async () => {
     try {
+      if (catalogPacksLoadDebounceRef.current != null) {
+        clearTimeout(catalogPacksLoadDebounceRef.current);
+        catalogPacksLoadDebounceRef.current = null;
+      }
       await hostFetch(`${API_BASE || ''}/api/spotify/clear`, { method: 'POST' });
       setIsSpotifyConnected(false);
       setPlaylists([]);
@@ -1789,6 +1800,7 @@ const HostView: React.FC = () => {
         }
       }
       (async () => {
+        if (!isSpotifyConnectedRef.current) return;
         const now = Date.now();
         if (now - lastLoadPlaylistsOnSocketReconnectAtRef.current > 90_000) {
           lastLoadPlaylistsOnSocketReconnectAtRef.current = now;
@@ -3748,6 +3760,7 @@ const HostView: React.FC = () => {
     if (!currentSong) return;
     const playbackSyncInterval = setInterval(async () => {
       try {
+        if (!isSpotifyConnectedRef.current) return;
         if (Date.now() < spotifyPollBackoffUntilRef.current) return;
         const resp = await hostFetch(`${API_BASE || ''}/api/spotify/current-playback`);
         if (resp.status === 429) {
