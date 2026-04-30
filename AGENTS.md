@@ -1,5 +1,9 @@
 # Agent / assistant conventions (Game of Tones)
 
+## People
+
+- **Jay** (repo owner / primary collaborator): use **she/her** pronouns.
+
 ## Speed vs. safety
 
 - **Prefer** `cd client && npm run typecheck` (or from repo root: `npm run client:typecheck`) to catch TS errors. **~seconds**, not a full webpack production build.
