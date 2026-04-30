@@ -2,7 +2,7 @@
 
 ## People
 
-- **Jay** (repo owner / primary collaborator): use **she/her** pronouns.
+- **Jay** (repo owner / primary collaborator): address her as **you** in replies; **she/her** if third-person reference is needed.
 
 ## Speed vs. safety
 
