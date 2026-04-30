@@ -616,6 +616,33 @@ const HostView: React.FC = () => {
     };
   }, [hostAckNotification]);
 
+  /** Official packs — uses Google host session; safe to call whenever playlists refresh too (rail against stale bundles / bootstrap timing). */
+  const loadCatalogPacks = useCallback(async () => {
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/spotify/catalog/packs`);
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        success?: boolean;
+        configured?: boolean;
+        packs?: Array<{ id: string; name: string; tracks: number; catalog?: boolean }>;
+      };
+      if (!data.success) return;
+      setCatalogPacksConfigured(data.configured === true);
+      const packs = data.packs || [];
+      setCatalogPackOptions(
+        packs.map((row) => ({
+          id: row.id,
+          name: row.name || 'Catalog pack',
+          tracks: Math.max(0, Number(row.tracks) || 0),
+          catalog: true,
+        }))
+      );
+    } catch {
+      setCatalogPacksConfigured(false);
+      setCatalogPackOptions([]);
+    }
+  }, []);
+
   const loadPlaylists = useCallback(async () => {
     try {
       const assignedForQuery = eventRoundsRef.current
@@ -697,6 +724,7 @@ const HostView: React.FC = () => {
         );
         
         setPlaylists(allPlaylists);
+        void loadCatalogPacks();
         // Reset filter to GoT-only by default when playlists are reloaded
         setShowAllPlaylists(false);
         // Don't set visiblePlaylists here - let the useEffect handle it to ensure consistency
@@ -719,7 +747,7 @@ const HostView: React.FC = () => {
       setSpotifyMyPlaylistsTotal(null);
       console.error('Error loading playlists:', error);
     }
-  }, [showHostAckNotification]);
+  }, [showHostAckNotification, loadCatalogPacks]);
 
   const addPlaylistByLink = useCallback(async () => {
     setPlaylistByLinkError(null);
@@ -889,41 +917,11 @@ const HostView: React.FC = () => {
     };
   }, []);
 
-  /** Server-side catalog packs (Google session only; optional env on Railway). */
+  /** Server-side catalog packs — after host JWT bootstrap (also refreshed whenever playlists load successfully). */
   useEffect(() => {
     if (!hostAuthBootstrapDone) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await hostFetch(`${API_BASE || ''}/api/spotify/catalog/packs`);
-        if (cancelled || !res.ok) return;
-        const data = (await res.json()) as {
-          success?: boolean;
-          configured?: boolean;
-          packs?: Array<{ id: string; name: string; tracks: number; catalog?: boolean }>;
-        };
-        if (cancelled || !data.success) return;
-        setCatalogPacksConfigured(data.configured === true);
-        const packs = data.packs || [];
-        setCatalogPackOptions(
-          packs.map((row) => ({
-            id: row.id,
-            name: row.name || 'Catalog pack',
-            tracks: Math.max(0, Number(row.tracks) || 0),
-            catalog: true,
-          }))
-        );
-      } catch {
-        if (!cancelled) {
-          setCatalogPacksConfigured(false);
-          setCatalogPackOptions([]);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [hostAuthBootstrapDone]);
+    void loadCatalogPacks();
+  }, [hostAuthBootstrapDone, loadCatalogPacks]);
 
   // Update visible playlists when rounds change to exclude newly assigned playlists, or when filter mode changes
   useEffect(() => {
