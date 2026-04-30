@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Youtube } from 'lucide-react';
-import { API_BASE } from '../config';
+import { API_BASE, ENABLE_YOUTUBE_MUSIC } from '../config';
 import { hostFetch } from '../utils/hostFetch';
 
 type StatusPayload = {
@@ -10,8 +10,8 @@ type StatusPayload = {
 };
 
 /**
- * Optional host-only slice: link Google account for YouTube Music library access (readonly OAuth scope).
- * Feature-flagged via REACT_APP_ENABLE_YOUTUBE_MUSIC; server needs Google OAuth env vars for Music/library APIs.
+ * Host-only YouTube Music library OAuth + playlists (readonly scope).
+ * Renders when REACT_APP_ENABLE_YOUTUBE_MUSIC is set at build time, or when the host mounts this after server reports configured (see HostView).
  */
 export function HostYoutubeMusicSection({ roomId }: { roomId: string }) {
   const [status, setStatus] = useState<StatusPayload | null>(null);
@@ -109,6 +109,7 @@ export function HostYoutubeMusicSection({ roomId }: { roomId: string }) {
   }
 
   if (statusFetchFailed) {
+    if (!ENABLE_YOUTUBE_MUSIC) return null;
     return (
       <div className="host-youtube-music-section" style={shellStyle}>
         <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -127,6 +128,7 @@ export function HostYoutubeMusicSection({ roomId }: { roomId: string }) {
   }
 
   if (!status?.configured) {
+    if (!ENABLE_YOUTUBE_MUSIC) return null;
     return (
       <div className="host-youtube-music-section" style={shellStyle}>
         <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

@@ -377,6 +377,9 @@ const HostView: React.FC = () => {
   /** In-person + online: only in-person verified bingos end the round / prize */
   const [hybridInPersonPlusOnline, setHybridInPersonPlusOnline] = useState(false);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
+  /** Server has YTM OAuth env; shows Connection UI even when REACT_APP_ENABLE_YOUTUBE_MUSIC was not set at client build time. */
+  const [ytMusicServerConfigured, setYtMusicServerConfigured] = useState(false);
+  const showYoutubeMusicInConnectionModal = ENABLE_YOUTUBE_MUSIC || ytMusicServerConfigured;
   const [spotifyInitialCheckDone, setSpotifyInitialCheckDone] = useState(false);
   const initialConnectionPromptRef = useRef(false);
   const prevSpotifyConnectedRef = useRef<boolean | undefined>(undefined);
@@ -419,6 +422,25 @@ const HostView: React.FC = () => {
   useEffect(() => {
     eventRoundsRef.current = eventRounds;
   }, [eventRounds]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await hostFetch(`${API_BASE || ''}/api/youtube/music/status?_=${Date.now()}`, {
+          cache: 'no-store',
+        });
+        const data = (await r.json().catch(() => ({}))) as { configured?: boolean };
+        if (!cancelled && data.configured === true) setYtMusicServerConfigured(true);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const [currentRoundIndex, setCurrentRoundIndex] = useState<number>(-1);
   
   // License key management
@@ -4266,7 +4288,7 @@ const HostView: React.FC = () => {
         </a>
         .
       </p>
-      {ENABLE_YOUTUBE_MUSIC ? <HostYoutubeMusicSection roomId={roomId || ''} /> : null}
+      {showYoutubeMusicInConnectionModal ? <HostYoutubeMusicSection roomId={roomId || ''} /> : null}
     </motion.div>
   );
 
@@ -6141,7 +6163,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
           >
             <div className="host-connection-modal__header">
               <h2 id="host-connection-modal-title">
-                {ENABLE_YOUTUBE_MUSIC ? 'Playback & connections' : 'Spotify & device'}
+                {showYoutubeMusicInConnectionModal ? 'Playback & connections' : 'Spotify & device'}
               </h2>
               <button
                 type="button"
