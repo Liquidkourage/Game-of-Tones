@@ -15,6 +15,11 @@
  * - TEMPO_CATALOG_SPOTIFY_CLIENT_ID / TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET — optional; default SPOTIFY_*
  *
  * Catalog OAuth must use the same Spotify Developer app as the refresh token was issued for.
+ *
+ * Rate limits: catalog prefix mode calls GET /v1/me/playlists on the catalog token. If that token uses
+ * the same Spotify app (client_id) as hosts, traffic stacks on one quota — prefer a second Developer app +
+ * TEMPO_CATALOG_SPOTIFY_CLIENT_ID / SECRET for catalog only. When discovery fails (429), Tempo falls back
+ * to static allowlist ids only until the next request (no stale cache of an empty prefix list).
  */
 
 const SpotifyService = require('./spotify');
@@ -142,19 +147,35 @@ async function resolveCatalogAllowlistEntries() {
 
   const svc = await ensureCatalogAccessToken();
   let catalogSpotifyUserId = null;
-  if (ownerOnly) {
-    const prof = await svc.getCurrentUserProfileBrief();
-    catalogSpotifyUserId = prof.spotifyUserId;
-    if (!catalogSpotifyUserId) {
-      console.warn(
-        '[catalog] PREFIX_OWNER_ONLY set but GET /v1/me returned no user id; using static allowlist only'
-      );
-      catalogAllowlistResolveCache = { key: cacheKey, entries: staticEntries, at: now };
-      return staticEntries;
+  let playlists;
+
+  try {
+    if (ownerOnly) {
+      const prof = await svc.getCurrentUserProfileBrief();
+      catalogSpotifyUserId = prof.spotifyUserId;
+      if (!catalogSpotifyUserId) {
+        console.warn(
+          '[catalog] PREFIX_OWNER_ONLY set but GET /v1/me returned no user id; using static allowlist only'
+        );
+        catalogAllowlistResolveCache = { key: cacheKey, entries: staticEntries, at: now };
+        return staticEntries;
+      }
     }
+    playlists = (await svc.getUserPlaylists()).playlists;
+  } catch (e) {
+    const msg = e && e.message ? String(e.message) : String(e);
+    const rl =
+      (typeof svc.isRateLimitError === 'function' && svc.isRateLimitError(e)) ||
+      msg.includes('quarantined') ||
+      msg.includes('429');
+    console.warn(
+      `[catalog] catalog Spotify Web API blocked (${rl ? 'rate limit / quarantine' : 'error'}); prefix discovery skipped — using static allowlist only. ${msg.slice(0, 200)}`
+    );
+    /** Do not cache: retry prefix discovery on the next /catalog/packs call after Spotify recovers. */
+    const fallback = staticEntries.map((row) => ({ id: row.id, ...(row.label ? { label: row.label } : {}) }));
+    return fallback;
   }
 
-  const { playlists } = await svc.getUserPlaylists();
   /** @type {CatalogAllowlistEntry[]} */
   const prefixEntries = [];
   for (let i = 0; i < playlists.length; i++) {
