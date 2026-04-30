@@ -8211,15 +8211,19 @@ app.get('/api/spotify/catalog/packs', async (req, res) => {
     if (!catalogSpotify.isCatalogFeatureConfigured()) {
       return res.json({ success: true, configured: false, packs: [] });
     }
-    const packs = await catalogSpotify.loadCatalogPackSummariesForApi();
+    const catalogResult = await catalogSpotify.loadCatalogPackSummariesForApi();
+    const packs = catalogResult.packs;
+    const catalogPrefixDiscoverySkipped = catalogResult.catalogPrefixDiscoverySkipped === true;
     if (packs.length === 0) {
       routineServerLog(
-        '[catalog] GET /api/spotify/catalog/packs: configured but 0 packs — check TEMPO_CATALOG_PLAYLIST_NAME_PREFIX / allowlist / playlist names on the catalog Spotify account'
+        catalogPrefixDiscoverySkipped
+          ? '[catalog] GET /api/spotify/catalog/packs: 0 packs — prefix discovery skipped (Spotify rate limit / quarantine); use static ids or retry later'
+          : '[catalog] GET /api/spotify/catalog/packs: configured but 0 packs — check TEMPO_CATALOG_PLAYLIST_NAME_PREFIX / allowlist / playlist names on the catalog Spotify account'
       );
     } else {
       routineServerLog(`[catalog] GET /api/spotify/catalog/packs: returning ${packs.length} pack(s)`);
     }
-    res.json({ success: true, configured: true, packs });
+    res.json({ success: true, configured: true, packs, catalogPrefixDiscoverySkipped });
   } catch (error) {
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('GET /api/spotify/catalog/packs:', error);

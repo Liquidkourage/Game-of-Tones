@@ -258,6 +258,8 @@ const HostView: React.FC = () => {
   const [catalogPacksFetchOk, setCatalogPacksFetchOk] = useState(false);
   /** Last /packs returned 401 (needs Google host session). */
   const [catalogPacksFetchUnauthorized, setCatalogPacksFetchUnauthorized] = useState(false);
+  /** Server skipped prefix crawl (e.g. Spotify 429) — empty packs is not always “wrong prefix”. */
+  const [catalogPrefixDiscoverySkipped, setCatalogPrefixDiscoverySkipped] = useState(false);
   const [selectedCatalogPlaylists, setSelectedCatalogPlaylists] = useState<Playlist[]>([]);
   /** Debounce catalog /packs so it doesn’t fire in the same burst as host GET /v1/me/playlists (reduces Spotify 429). */
   const catalogPacksLoadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -633,6 +635,7 @@ const HostView: React.FC = () => {
         setCatalogPacksConfigured(false);
         setCatalogPackOptions([]);
         setCatalogPacksFetchUnauthorized(res.status === 401);
+        setCatalogPrefixDiscoverySkipped(false);
         return;
       }
       setCatalogPacksFetchUnauthorized(false);
@@ -640,15 +643,18 @@ const HostView: React.FC = () => {
         success?: boolean;
         configured?: boolean;
         packs?: Array<{ id: string; name: string; tracks: number; catalog?: boolean }>;
+        catalogPrefixDiscoverySkipped?: boolean;
       };
       if (!data.success) {
         setCatalogPacksFetchOk(false);
         setCatalogPacksConfigured(false);
         setCatalogPackOptions([]);
+        setCatalogPrefixDiscoverySkipped(false);
         return;
       }
       setCatalogPacksFetchOk(true);
       setCatalogPacksConfigured(data.configured === true);
+      setCatalogPrefixDiscoverySkipped(data.catalogPrefixDiscoverySkipped === true);
       const packs = data.packs || [];
       setCatalogPackOptions(
         packs.map((row) => ({
@@ -663,6 +669,7 @@ const HostView: React.FC = () => {
       setCatalogPacksConfigured(false);
       setCatalogPackOptions([]);
       setCatalogPacksFetchUnauthorized(false);
+      setCatalogPrefixDiscoverySkipped(false);
     } finally {
       setCatalogPacksProbeDone(true);
     }
@@ -4941,6 +4948,28 @@ const HostView: React.FC = () => {
                                   );
                                 })}
                               </div>
+                            ) : catalogPrefixDiscoverySkipped ? (
+                              <p
+                                style={{
+                                  margin: 0,
+                                  fontSize: '0.78rem',
+                                  color: 'rgba(255,255,255,0.65)',
+                                  lineHeight: 1.5,
+                                }}
+                              >
+                                <strong style={{ color: '#ffc857' }}>Spotify blocked catalog discovery</strong> (rate limit /
+                                quarantine on the Web API). Tempo could not list playlists for the{' '}
+                                <strong style={{ color: '#c8dcff' }}>catalog</strong> token, so{' '}
+                                <strong style={{ color: '#c8dcff' }}>prefix-based packs</strong> won&apos;t appear until Spotify
+                                accepts <code style={{ fontSize: '0.72rem' }}>GET /v1/me/playlists</code> again. This is the same
+                                quota pressure as the library warning above if host and catalog share one Spotify app.{' '}
+                                <strong style={{ color: '#c8dcff' }}>Workarounds:</strong> set{' '}
+                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> or{' '}
+                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code> (no listing call); or use
+                                a <strong style={{ color: '#c8dcff' }}>second Spotify Developer app</strong> for catalog (
+                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_SPOTIFY_CLIENT_ID</code>
+                                ). Reload Official packs after cooldown.
+                              </p>
                             ) : (
                               <p
                                 style={{

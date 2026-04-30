@@ -112,19 +112,19 @@ function isCatalogFeatureConfigured() {
  * `tracksFromList` when set from GET /v1/me/playlists lets pack summaries skip per-playlist metadata.
  */
 
-/** @type {{ key: string, entries: CatalogAllowlistEntry[], at: number } | null} */
+/** @type {{ key: string, entries: CatalogAllowlistEntry[], meta?: { prefixSkippedDueToSpotify?: boolean }, at: number } | null} */
 let catalogAllowlistResolveCache = null;
 
 /**
  * Static entries plus optional prefix-discovered playlists (catalog token’s /me/playlists).
- * @returns {Promise<CatalogAllowlistEntry[]>}
+ * @returns {Promise<{ entries: CatalogAllowlistEntry[], meta: { prefixSkippedDueToSpotify?: boolean } }>}
  */
 async function resolveCatalogAllowlistEntries() {
   const prefix = getCatalogPlaylistNamePrefix();
   const staticEntries = parseCatalogAllowlistEntries();
 
   if (!prefix) {
-    return staticEntries;
+    return { entries: staticEntries, meta: {} };
   }
 
   const ownerOnly = getCatalogPrefixOwnerOnlyDefaultTrue();
@@ -142,7 +142,10 @@ async function resolveCatalogAllowlistEntries() {
     catalogAllowlistResolveCache.key === cacheKey &&
     now - catalogAllowlistResolveCache.at < ttl
   ) {
-    return catalogAllowlistResolveCache.entries;
+    return {
+      entries: catalogAllowlistResolveCache.entries,
+      meta: catalogAllowlistResolveCache.meta || {},
+    };
   }
 
   const svc = await ensureCatalogAccessToken();
@@ -157,8 +160,8 @@ async function resolveCatalogAllowlistEntries() {
         console.warn(
           '[catalog] PREFIX_OWNER_ONLY set but GET /v1/me returned no user id; using static allowlist only'
         );
-        catalogAllowlistResolveCache = { key: cacheKey, entries: staticEntries, at: now };
-        return staticEntries;
+        catalogAllowlistResolveCache = { key: cacheKey, entries: staticEntries, meta: {}, at: now };
+        return { entries: staticEntries, meta: {} };
       }
     }
     playlists = (await svc.getUserPlaylists()).playlists;
@@ -173,7 +176,7 @@ async function resolveCatalogAllowlistEntries() {
     );
     /** Do not cache: retry prefix discovery on the next /catalog/packs call after Spotify recovers. */
     const fallback = staticEntries.map((row) => ({ id: row.id, ...(row.label ? { label: row.label } : {}) }));
-    return fallback;
+    return { entries: fallback, meta: { prefixSkippedDueToSpotify: true } };
   }
 
   /** @type {CatalogAllowlistEntry[]} */
@@ -209,8 +212,8 @@ async function resolveCatalogAllowlistEntries() {
   }
   const merged = [...mergedMap.values()];
 
-  catalogAllowlistResolveCache = { key: cacheKey, entries: merged, at: now };
-  return merged;
+  catalogAllowlistResolveCache = { key: cacheKey, entries: merged, meta: {}, at: now };
+  return { entries: merged, meta: {} };
 }
 
 let catalogServiceSingleton = null;
@@ -234,7 +237,7 @@ function getCatalogSpotifyService() {
 /** @param {string} playlistId */
 async function assertCatalogPlaylistAllowlisted(playlistId) {
   const id = String(playlistId || '').trim();
-  const entries = await resolveCatalogAllowlistEntries();
+  const { entries } = await resolveCatalogAllowlistEntries();
   const allowed = new Set(entries.map((e) => e.id));
   if (!id || !allowed.has(id)) {
     const err = new Error('Playlist not in Tempo catalog allowlist');
@@ -257,10 +260,10 @@ async function ensureCatalogAccessToken() {
 }
 
 /**
- * @returns {Promise<{ id: string, name: string, tracks: number, catalog: true }[]>}
+ * @returns {Promise<{ packs: { id: string, name: string, tracks: number, catalog: true }[], catalogPrefixDiscoverySkipped?: boolean }>}
  */
 async function loadCatalogPackSummariesForApi() {
-  const entries = await resolveCatalogAllowlistEntries();
+  const { entries, meta } = await resolveCatalogAllowlistEntries();
   const svc = await ensureCatalogAccessToken();
   const out = [];
   let loggedQuarantineBulk = false;
@@ -342,7 +345,10 @@ async function loadCatalogPackSummariesForApi() {
       );
     }
   }
-  return out;
+  return {
+    packs: out,
+    catalogPrefixDiscoverySkipped: meta.prefixSkippedDueToSpotify === true,
+  };
 }
 
 /**
