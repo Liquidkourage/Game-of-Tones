@@ -15,19 +15,30 @@ type StatusPayload = {
  */
 export function HostYoutubeMusicSection({ roomId }: { roomId: string }) {
   const [status, setStatus] = useState<StatusPayload | null>(null);
+  const [statusReady, setStatusReady] = useState(false);
+  const [statusFetchFailed, setStatusFetchFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refreshStatus = useCallback(async () => {
+    setStatusFetchFailed(false);
+    setStatusReady(false);
     try {
       const r = await hostFetch(`${API_BASE || ''}/api/youtube/music/status?_=${Date.now()}`, {
         cache: 'no-store',
       });
       const data = (await r.json().catch(() => ({}))) as StatusPayload;
-      if (!r.ok) return;
+      if (!r.ok) {
+        setStatus(null);
+        setStatusFetchFailed(true);
+        return;
+      }
       setStatus(data);
     } catch {
-      /* ignore */
+      setStatus(null);
+      setStatusFetchFailed(true);
+    } finally {
+      setStatusReady(true);
     }
   }, []);
 
@@ -83,19 +94,63 @@ export function HostYoutubeMusicSection({ roomId }: { roomId: string }) {
     }
   }, [refreshStatus]);
 
-  if (!status?.configured) return null;
+  const shellStyle = {
+    marginTop: 22,
+    paddingTop: 18,
+    borderTop: '1px solid rgba(255,255,255,0.08)',
+  } as const;
+
+  if (!statusReady) {
+    return (
+      <div className="host-youtube-music-section" style={{ ...shellStyle, opacity: 0.75, fontSize: '0.88rem' }}>
+        Checking YouTube Music availability…
+      </div>
+    );
+  }
+
+  if (statusFetchFailed) {
+    return (
+      <div className="host-youtube-music-section" style={shellStyle}>
+        <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Youtube className="w-6 h-6" style={{ color: '#ff4444' }} aria-hidden />
+          YouTube Music
+        </h2>
+        <p className="host-spotify-guide">
+          Couldn&apos;t load YouTube Music status from this host. Use a build that includes the server routes (deploy latest),
+          or check your network.
+        </p>
+        <button className="btn-secondary btn" type="button" onClick={() => void refreshStatus()}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (!status?.configured) {
+    return (
+      <div className="host-youtube-music-section" style={shellStyle}>
+        <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Youtube className="w-6 h-6" style={{ color: '#ff4444' }} aria-hidden />
+          YouTube Music
+        </h2>
+        <p className="host-spotify-guide">
+          This deployment hasn&apos;t configured YouTube Music OAuth yet. Add{' '}
+          <code style={{ fontSize: '0.82em', whiteSpace: 'nowrap' }}>YOUTUBE_MUSIC_GOOGLE_CLIENT_ID</code> and{' '}
+          <code style={{ fontSize: '0.82em', whiteSpace: 'nowrap' }}>YOUTUBE_MUSIC_GOOGLE_CLIENT_SECRET</code> to the{' '}
+          <strong>server</strong> environment (e.g. Railway), redeploy, then register redirect URI{' '}
+          <code style={{ fontSize: '0.78em', wordBreak: 'break-all' }}>
+            …/api/youtube/music/callback
+          </code>{' '}
+          on your Google Cloud OAuth client.
+        </p>
+      </div>
+    );
+  }
 
   const connected = !!status.connected;
 
   return (
-    <div
-      className="host-youtube-music-section"
-      style={{
-        marginTop: 22,
-        paddingTop: 18,
-        borderTop: '1px solid rgba(255,255,255,0.08)',
-      }}
-    >
+    <div className="host-youtube-music-section" style={shellStyle}>
       <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <Youtube className="w-6 h-6" style={{ color: '#ff4444' }} aria-hidden />
         YouTube Music
