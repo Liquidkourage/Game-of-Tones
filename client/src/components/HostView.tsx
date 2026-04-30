@@ -186,6 +186,9 @@ function applyPlaylistExplicitKnowledge(
   setSelectedPlaylists(merge);
 }
 
+/** Cap staggered library probes per effect run (explicit badges); avoids huge burst if “All my playlists” is large. */
+const EXPLICIT_LIBRARY_PROBE_MAX = 80;
+
 /** Persisted before Spotify/Google redirects so return URL without ?name= still shows the right host label. */
 const HOST_DISPLAY_NAME_KEY = 'tempo_host_display_name';
 
@@ -1086,6 +1089,8 @@ const HostView: React.FC = () => {
   const songListRef = useRef<Song[]>([]);
   /** Playlist ids we have already fully loaded track lists for. */
   const fullyLoadedPlaylistIdsRef = useRef<Set<string>>(new Set());
+  /** Invalidates in-flight background explicit-label probes when visible library changes. */
+  const explicitLibraryProbeGenerationRef = useRef(0);
   /** Bumped to cancel in-flight generateSongList from selection/debounce — does not invalidate Finalize Mix (see finalizeSetlistGenerationRef). */
   const setlistBuildGenerationRef = useRef(0);
   /** Finalize Mix builds use this alone so the 750ms debounced `generateSongList` cannot bump generation mid-fetch and yield an empty list + false rate-limit alert. */
@@ -3668,7 +3673,58 @@ const HostView: React.FC = () => {
     }, 750);
     return () => window.clearTimeout(t);
   }, [playlistSelectionKey, isSpotifyConnected]);
-  
+
+  /**
+   * Background explicit badges for playlist rows: fetch playlist-tracks (staggered) without touching
+   * fullyLoadedPlaylistIdsRef / song list — fixes “no E labels” when nothing is checked for the mix yet.
+   */
+  useEffect(() => {
+    if (!isSpotifyConnected) return;
+    explicitLibraryProbeGenerationRef.current += 1;
+    const gen = explicitLibraryProbeGenerationRef.current;
+    let cancelled = false;
+    const pending = visiblePlaylists
+      .filter((p) => p.hasExplicitTracks === undefined)
+      .slice(0, EXPLICIT_LIBRARY_PROBE_MAX);
+    if (pending.length === 0) return;
+
+    void (async () => {
+      for (let i = 0; i < pending.length; i++) {
+        if (cancelled || explicitLibraryProbeGenerationRef.current !== gen) return;
+        while (finalizeMixInFlightRef.current && !cancelled) {
+          await new Promise((r) => setTimeout(r, 400));
+        }
+        if (cancelled || explicitLibraryProbeGenerationRef.current !== gen) return;
+        const playlist = pending[i];
+        if (i > 0) {
+          await new Promise((r) => setTimeout(r, 450));
+        }
+        if (cancelled || explicitLibraryProbeGenerationRef.current !== gen) return;
+        try {
+          const qs = new URLSearchParams();
+          if (playlist.name) qs.set('playlistName', playlist.name);
+          const q = qs.toString();
+          const response = await hostFetch(
+            `${API_BASE || ''}/api/spotify/playlist-tracks/${playlist.id}${q ? `?${q}` : ''}`,
+            { cache: 'no-store' }
+          );
+          if (!response.ok) continue;
+          const data = (await response.json()) as { success?: boolean; tracks?: Song[] };
+          if (cancelled || explicitLibraryProbeGenerationRef.current !== gen) return;
+          if (data.success && Array.isArray(data.tracks)) {
+            applyPlaylistExplicitKnowledge(playlist.id, data.tracks, setPlaylists, setSelectedPlaylists);
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visiblePlaylists, isSpotifyConnected, setPlaylists, setSelectedPlaylists]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (event: KeyboardEvent) => {
@@ -4753,8 +4809,9 @@ const HostView: React.FC = () => {
                         <input type="search" placeholder="Search playlists by name…" value={playlistQuery} onChange={(e) => setPlaylistQuery(e.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.35)', color: '#fff', flex: '1 1 220px', minWidth: 180 }} />
                       </div>
                       <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)', margin: 0, lineHeight: 1.45, maxWidth: 640 }}>
-                        When Tempo loads tracks for your selected mix, any playlist that contains a Spotify explicit song shows{' '}
-                        <SpotifyExplicitBadge size="sm" title="At least one explicit track in this playlist" /> next to its track count.
+                        Tempo scans visible playlists in the background (staggered Spotify track loads — same endpoint as building a mix) and shows{' '}
+                        <SpotifyExplicitBadge size="sm" title="At least one explicit track in this playlist" /> next to the song count when Spotify marks any track explicit.
+                        Very large libraries cap at {EXPLICIT_LIBRARY_PROBE_MAX} playlists per pass.
                       </p>
                     </div>
 
