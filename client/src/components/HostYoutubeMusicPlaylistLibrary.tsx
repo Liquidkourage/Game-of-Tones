@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Youtube, RefreshCw } from 'lucide-react';
 import { API_BASE } from '../config';
 import { hostFetch } from '../utils/hostFetch';
@@ -62,6 +62,9 @@ export function HostYoutubeMusicPlaylistLibrary({
   const [status, setStatus] = useState<StatusPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Set after a successful GET /playlists while connected (`null` = no successful list fetch yet). */
+  const [ytPlaylistCountFromApi, setYtPlaylistCountFromApi] = useState<number | null>(null);
+  const refreshGenRef = useRef(0);
 
   const pushMixRows = useCallback(
     (rows: YoutubeMixPlaylistRow[]) => {
@@ -71,17 +74,24 @@ export function HostYoutubeMusicPlaylistLibrary({
   );
 
   const refresh = useCallback(async () => {
+    const myGen = ++refreshGenRef.current;
+    const stale = () => myGen !== refreshGenRef.current;
+
     setLoading(true);
     setError(null);
     let waitingForHostSession = false;
+
     try {
       const sr = await hostFetch(`${API_BASE || ''}/api/youtube/music/status?_=${Date.now()}`, {
         cache: 'no-store',
       });
+      if (stale()) return;
+
       const sdata = (await sr.json().catch(() => ({}))) as StatusPayload & { error?: string };
       if (!sr.ok) {
         setStatus(null);
         pushMixRows([]);
+        setYtPlaylistCountFromApi(null);
         setError(
           sdata.error === 'login_required'
             ? 'Sign in as host first, then refresh.'
@@ -93,16 +103,18 @@ export function HostYoutubeMusicPlaylistLibrary({
 
       if (!sdata.configured) {
         pushMixRows([]);
+        setYtPlaylistCountFromApi(null);
         return;
       }
 
       if (!sdata.connected) {
         pushMixRows([]);
+        setYtPlaylistCountFromApi(null);
         return;
       }
 
       if (!hostSessionReady) {
-        pushMixRows([]);
+        // Do not clear parent rows — a follow-up refresh runs when the session is ready; clearing here caused an empty table + misleading “success” copy.
         waitingForHostSession = true;
         return;
       }
@@ -110,6 +122,8 @@ export function HostYoutubeMusicPlaylistLibrary({
       const pr = await hostFetch(`${API_BASE || ''}/api/youtube/music/playlists?_=${Date.now()}`, {
         cache: 'no-store',
       });
+      if (stale()) return;
+
       const pdata = (await pr.json().catch(() => ({}))) as {
         success?: boolean;
         playlists?: ApiPlaylist[];
@@ -119,6 +133,7 @@ export function HostYoutubeMusicPlaylistLibrary({
 
       if (!pr.ok) {
         pushMixRows([]);
+        setYtPlaylistCountFromApi(null);
         if (pr.status === 401 && pdata.error === 'youtube_not_connected') {
           setError(null);
           setStatus({ ...sdata, connected: false });
@@ -134,18 +149,27 @@ export function HostYoutubeMusicPlaylistLibrary({
 
       if (!pdata.success) {
         pushMixRows([]);
+        setYtPlaylistCountFromApi(null);
         setError(pdata.message || pdata.error || 'Could not load playlists.');
         return;
       }
 
       const list = Array.isArray(pdata.playlists) ? pdata.playlists : [];
-      pushMixRows(mapApiToMixRows(list));
+      // Drop rows missing ids so they never disappear in the host table filter (`pid !== ''`).
+      const usable = list.filter((row) => row && String(row.id || '').trim() !== '');
+      if (stale()) return;
+      pushMixRows(mapApiToMixRows(usable));
+      setYtPlaylistCountFromApi(usable.length);
     } catch {
+      if (stale()) return;
       setStatus(null);
       pushMixRows([]);
+      setYtPlaylistCountFromApi(null);
       setError('Network error loading YouTube Music playlists.');
     } finally {
-      setLoading(waitingForHostSession);
+      if (!stale()) {
+        setLoading(waitingForHostSession);
+      }
     }
   }, [pushMixRows, hostSessionReady]);
 
@@ -225,6 +249,10 @@ export function HostYoutubeMusicPlaylistLibrary({
           <button type="button" className="btn-secondary" style={{ fontSize: '0.78rem', marginLeft: 8 }} onClick={() => void refresh()}>
             Retry
           </button>
+        </p>
+      ) : ytPlaylistCountFromApi === 0 ? (
+        <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255, 214, 160, 0.95)', lineHeight: 1.5 }}>
+          <strong style={{ color: '#ffd27a' }}>Connected, but YouTube returned 0 playlists.</strong> Create a playlist on the same Google account in YouTube / YouTube Music, then tap Refresh. If you expected branded-channel playlists, open Connection and reconnect YouTube Music on this host account.
         </p>
       ) : (
         <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255,255,255,0.72)', lineHeight: 1.5 }}>

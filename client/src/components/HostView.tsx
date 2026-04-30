@@ -203,7 +203,7 @@ function normalizeSpotifyPlaylistId(id: unknown): string {
 
 /** GoT mix library filter (same rules as visible playlist effect). YouTube Music playlists always pass through. */
 function filterBasePlaylistsForMix(playlists: Playlist[], showAllPlaylists: boolean): Playlist[] {
-  const ytm = playlists.filter((p: Playlist) => p.youtubeMusic === true);
+  const ytm = playlists.filter((p: Playlist) => !!p.youtubeMusic);
   const rest = playlists.filter((p: Playlist) => !p.youtubeMusic);
   let spotifyPart: Playlist[];
   if (!showAllPlaylists) {
