@@ -20,6 +20,14 @@ RUN cd client && npm install --no-audit --no-fund --no-optional --ignore-scripts
 
 # Copy full source and build client
 COPY . .
+# CRA inlines REACT_APP_* at webpack compile time. Railway variables must be declared as ARG here
+# so they are available in this RUN layer (runtime-only injection does not rewrite an existing bundle).
+ARG REACT_APP_API_BASE
+ARG REACT_APP_SOCKET_URL
+ARG REACT_APP_ENABLE_YOUTUBE_MUSIC
+ENV REACT_APP_API_BASE=$REACT_APP_API_BASE \
+    REACT_APP_SOCKET_URL=$REACT_APP_SOCKET_URL \
+    REACT_APP_ENABLE_YOUTUBE_MUSIC=$REACT_APP_ENABLE_YOUTUBE_MUSIC
 # CRA: skip source maps + ESLint plugin during webpack (lint locally / CI with npm run client:typecheck + eslint)
 ENV GENERATE_SOURCEMAP=false \
     DISABLE_ESLINT_PLUGIN=true
