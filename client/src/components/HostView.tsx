@@ -4763,10 +4763,17 @@ const HostView: React.FC = () => {
                   </div>
                 </div>
 
-          {/* Music & rounds: planner + playlists */}
-          {isSpotifyConnected && (
+          {/* Music & rounds: planner + playlists — show when Spotify is linked OR YouTube Music OAuth is available on server */}
+          {(isSpotifyConnected || showYoutubeMusicInConnectionModal) && (
             <div className="host-manager-music host-manager-section">
               <h2 className="host-manager-music__title">Music &amp; rounds</h2>
+              {!isSpotifyConnected && showYoutubeMusicInConnectionModal ? (
+                <p style={{ fontSize: '0.84rem', color: '#b8c4cc', margin: '0 0 14px', lineHeight: 1.5, maxWidth: 720 }}>
+                  Spotify isn&apos;t connected or your library didn&apos;t load (for example rate limits). Your{' '}
+                  <strong style={{ color: '#ffb4b4' }}>YouTube Music</strong> playlists still appear below. Use{' '}
+                  <strong style={{ color: '#fff' }}>Connection</strong> to link Spotify when you need the Spotify playlist grid and devices.
+                </p>
+              ) : null}
             <RoundPlanner
               rounds={eventRounds}
               onUpdateRounds={handleUpdateRounds}
