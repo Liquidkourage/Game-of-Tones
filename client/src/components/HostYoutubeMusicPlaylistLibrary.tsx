@@ -20,14 +20,47 @@ type ApiPlaylist = {
   };
 };
 
+/** Rows merged into HostView playlist library (`youtubeMusic: true`). */
+export type YoutubeMixPlaylistRow = {
+  id: string;
+  name: string;
+  tracks: number;
+  description?: string;
+  youtubeMusic?: boolean;
+};
+
+function mapApiToMixRows(api: ApiPlaylist[]): YoutubeMixPlaylistRow[] {
+  return api.map((pl) => ({
+    id: pl.id,
+    name: pl.title || '',
+    tracks:
+      pl.itemCount != null && Number.isFinite(Number(pl.itemCount))
+        ? Math.max(0, Number(pl.itemCount))
+        : 0,
+    description: pl.description,
+    youtubeMusic: true as const,
+  }));
+}
+
+type Props = {
+  /** Pushes YouTube playlists into the main library table (merged with Spotify). */
+  onMixPlaylistsChange?: (rows: YoutubeMixPlaylistRow[]) => void;
+};
+
 /**
- * Manager tab: lists YouTube Music library playlists when the server has OAuth configured and the host has connected.
+ * Loads YouTube Music library playlists and forwards them to HostView for the shared playlist table (mix + round buckets).
  */
-export function HostYoutubeMusicPlaylistLibrary() {
+export function HostYoutubeMusicPlaylistLibrary({ onMixPlaylistsChange }: Props) {
   const [status, setStatus] = useState<StatusPayload | null>(null);
-  const [playlists, setPlaylists] = useState<ApiPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const pushMixRows = useCallback(
+    (rows: YoutubeMixPlaylistRow[]) => {
+      onMixPlaylistsChange?.(rows);
+    },
+    [onMixPlaylistsChange]
+  );
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -39,19 +72,19 @@ export function HostYoutubeMusicPlaylistLibrary() {
       const sdata = (await sr.json().catch(() => ({}))) as StatusPayload;
       if (!sr.ok) {
         setStatus(null);
-        setPlaylists([]);
+        pushMixRows([]);
         setError('Could not load YouTube Music status.');
         return;
       }
       setStatus(sdata);
 
       if (!sdata.configured) {
-        setPlaylists([]);
+        pushMixRows([]);
         return;
       }
 
       if (!sdata.connected) {
-        setPlaylists([]);
+        pushMixRows([]);
         return;
       }
 
@@ -66,7 +99,7 @@ export function HostYoutubeMusicPlaylistLibrary() {
       };
 
       if (!pr.ok) {
-        setPlaylists([]);
+        pushMixRows([]);
         if (pr.status === 401 && pdata.error === 'youtube_not_connected') {
           setError(null);
           setStatus({ ...sdata, connected: false });
@@ -77,20 +110,21 @@ export function HostYoutubeMusicPlaylistLibrary() {
       }
 
       if (!pdata.success) {
-        setPlaylists([]);
+        pushMixRows([]);
         setError(pdata.message || pdata.error || 'Could not load playlists.');
         return;
       }
 
-      setPlaylists(Array.isArray(pdata.playlists) ? pdata.playlists : []);
+      const list = Array.isArray(pdata.playlists) ? pdata.playlists : [];
+      pushMixRows(mapApiToMixRows(list));
     } catch {
       setStatus(null);
-      setPlaylists([]);
+      pushMixRows([]);
       setError('Network error loading YouTube Music playlists.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pushMixRows]);
 
   useEffect(() => {
     void refresh();
@@ -109,7 +143,7 @@ export function HostYoutubeMusicPlaylistLibrary() {
         maxWidth: 920,
       }}
     >
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 8 }}>
         <h4
           style={{
             margin: 0,
@@ -122,7 +156,7 @@ export function HostYoutubeMusicPlaylistLibrary() {
           }}
         >
           <Youtube className="w-5 h-5" style={{ color: '#ff4444' }} aria-hidden />
-          YouTube Music playlists
+          YouTube Music
         </h4>
         <button
           type="button"
@@ -139,75 +173,24 @@ export function HostYoutubeMusicPlaylistLibrary() {
 
       {!status.connected ? (
         <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255,220,220,0.88)', lineHeight: 1.5 }}>
-          Connect YouTube Music under <strong style={{ color: '#fff' }}>Connection</strong> in the header to load your library
-          playlists here. Playback from these lists is still being wired into the game.
+          Connect YouTube Music under <strong style={{ color: '#fff' }}>Connection</strong> to merge your playlists into the{' '}
+          <strong style={{ color: '#fff' }}>Playlist library</strong> table below (mix checkboxes and round buckets). Item fetch uses
+          video ids; in-player playback is still being wired.
         </p>
       ) : loading ? (
         <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)' }}>Loading playlists…</p>
       ) : error ? (
-        <p style={{ margin: '0 0 10px', fontSize: '0.82rem', color: '#ff9e9e', lineHeight: 1.5 }}>
+        <p style={{ margin: 0, fontSize: '0.82rem', color: '#ff9e9e', lineHeight: 1.5 }}>
           {error}{' '}
           <button type="button" className="btn-secondary" style={{ fontSize: '0.78rem', marginLeft: 8 }} onClick={() => void refresh()}>
             Retry
           </button>
         </p>
-      ) : playlists.length === 0 ? (
-        <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
-          No playlists returned for this Google account (create one in YouTube Music / YouTube and refresh).
-        </p>
       ) : (
-        <ul
-          style={{
-            listStyle: 'none',
-            margin: 0,
-            padding: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8,
-            maxHeight: 280,
-            overflowY: 'auto',
-          }}
-        >
-          {playlists.map((pl) => {
-            const thumb = pl.thumbnails?.medium?.url || pl.thumbnails?.default?.url;
-            const countLabel =
-              pl.itemCount != null && Number.isFinite(pl.itemCount) ? `${pl.itemCount} videos` : 'Videos —';
-            return (
-              <li
-                key={pl.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: '8px 10px',
-                  borderRadius: 8,
-                  background: 'rgba(0,0,0,0.25)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                }}
-              >
-                {thumb ? (
-                  <img src={thumb} alt="" width={56} height={56} style={{ borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
-                ) : (
-                  <div
-                    style={{
-                      width: 56,
-                      height: 56,
-                      borderRadius: 6,
-                      background: 'rgba(255,255,255,0.06)',
-                      flexShrink: 0,
-                    }}
-                  />
-                )}
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#fff', lineHeight: 1.35 }}>{pl.title}</div>
-                  <div style={{ fontSize: '0.74rem', color: '#8899aa', marginTop: 2 }}>
-                    {countLabel} · <span style={{ fontFamily: 'monospace', fontSize: '0.68rem' }}>{pl.id}</span>
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255,255,255,0.72)', lineHeight: 1.5 }}>
+          Your YouTube playlists appear in the table below with other sources. Track counts come from YouTube; finalize loads each playlist&apos;s
+          videos into the bingo pool.
+        </p>
       )}
     </div>
   );

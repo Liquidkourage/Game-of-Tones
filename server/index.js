@@ -7634,6 +7634,42 @@ app.get('/api/youtube/music/playlists', async (req, res) => {
   }
 });
 
+/** Full video list for a host-owned playlist (same shape as Spotify playlist-tracks `tracks`). */
+app.get('/api/youtube/music/playlist/:playlistId/items', async (req, res) => {
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  if (!uid) return res.status(401).json({ error: 'login_required' });
+  const { playlistId } = req.params;
+  const q = req.query || {};
+  const rawName = q.playlistName != null ? q.playlistName : q.name;
+  const playlistName =
+    rawName != null && String(rawName).trim() !== '' ? String(rawName).trim() : '';
+  try {
+    const tracks = await youtubeMusic.listPlaylistItems(uid, playlistId, {
+      playlistName,
+    });
+    res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+    res.json({ success: true, tracks });
+  } catch (e) {
+    const sc = e && e.statusCode;
+    if (sc === 401) {
+      return res.status(401).json({
+        success: false,
+        error: 'youtube_not_connected',
+        message: 'Connect YouTube Music first.',
+      });
+    }
+    if (sc === 400) {
+      return res.status(400).json({
+        success: false,
+        error: 'bad_request',
+        message: e.message || 'Invalid playlist id.',
+      });
+    }
+    console.error('YouTube Music playlist items:', e?.message || e);
+    res.status(500).json({ success: false, error: 'playlist_items_failed' });
+  }
+});
+
 app.post('/api/youtube/music/disconnect', (req, res) => {
   const uid = hostAuth.getHostUserIdFromRequest(req);
   if (!uid) return res.status(401).json({ error: 'login_required' });

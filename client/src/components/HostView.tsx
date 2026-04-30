@@ -48,7 +48,7 @@ import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
 import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModal';
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
-import { HostYoutubeMusicPlaylistLibrary } from './HostYoutubeMusicPlaylistLibrary';
+import { HostYoutubeMusicPlaylistLibrary, type YoutubeMixPlaylistRow } from './HostYoutubeMusicPlaylistLibrary';
 import RoundPlanner from './RoundPlanner';
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
@@ -67,6 +67,8 @@ interface Playlist {
   hasExplicitTracks?: boolean;
   /** Track list loaded via server catalog token (LK-owned allowlisted playlists). */
   catalog?: boolean;
+  /** User library via YouTube Music / YouTube Data API (playlist items are videos). */
+  youtubeMusic?: boolean;
 }
 
 /** In-process Web API 429 cool-down (from GET /api/spotify/status and error bodies). */
@@ -199,10 +201,13 @@ function normalizeSpotifyPlaylistId(id: unknown): string {
   return String(id).trim();
 }
 
-/** GoT mix library filter (same rules as visible playlist effect). */
+/** GoT mix library filter (same rules as visible playlist effect). YouTube Music playlists always pass through. */
 function filterBasePlaylistsForMix(playlists: Playlist[], showAllPlaylists: boolean): Playlist[] {
+  const ytm = playlists.filter((p: Playlist) => p.youtubeMusic === true);
+  const rest = playlists.filter((p: Playlist) => !p.youtubeMusic);
+  let spotifyPart: Playlist[];
   if (!showAllPlaylists) {
-    return playlists.filter((p: Playlist) => {
+    spotifyPart = rest.filter((p: Playlist) => {
       const nameLower = p.name.toLowerCase();
       if (nameLower.includes('game of tones output') || nameLower.includes('gameoftones output')) {
         return false;
@@ -211,8 +216,10 @@ function filterBasePlaylistsForMix(playlists: Playlist[], showAllPlaylists: bool
       const containsGameOfTones = nameLower.includes('game of tones') || nameLower.includes('gameoftones');
       return startsWithGot || containsGameOfTones;
     });
+  } else {
+    spotifyPart = rest;
   }
-  return playlists;
+  return [...spotifyPart, ...ytm];
 }
 
 const HostView: React.FC = () => {
@@ -250,6 +257,8 @@ const HostView: React.FC = () => {
   const [gameState, setGameState] = useState<'waiting' | 'playing' | 'ended'>('waiting');
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  /** YouTube Music playlists (API); merged into Playlist library table and Round planner. */
+  const [youtubeMusicPlaylists, setYoutubeMusicPlaylists] = useState<Playlist[]>([]);
   const [selectedPlaylists, setSelectedPlaylists] = useState<Playlist[]>([]);
   /** Official packs (server allowlist + catalog Spotify refresh token). */
   const [catalogPackOptions, setCatalogPackOptions] = useState<Playlist[]>([]);
@@ -278,6 +287,16 @@ const HostView: React.FC = () => {
     }
     return out;
   }, [selectedPlaylists, selectedCatalogPlaylists]);
+
+  /** Mix includes at least one playlist that uses the host Spotify token (not catalog-only or YouTube Music). */
+  const mixNeedsHostSpotify = useMemo(
+    () =>
+      mixPlaylistSelection.some(
+        (p) => p.youtubeMusic !== true && p.catalog !== true
+      ),
+    [mixPlaylistSelection]
+  );
+
   const [snippetLength, setSnippetLength] = useState(() => {
     const saved = localStorage.getItem('game-snippet-length');
     return saved ? parseInt(saved) : 30;
@@ -285,6 +304,18 @@ const HostView: React.FC = () => {
   const [winners, setWinners] = useState<Player[]>([]);
   const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
   const [isSpotifyConnecting, setIsSpotifyConnecting] = useState(false);
+  /** Finalize / Start Game require Spotify only when the mix includes non-catalog Spotify playlists. */
+  const mixGameActionsBlocked = useMemo(
+    () =>
+      mixPlaylistSelection.length === 0 ||
+      (mixNeedsHostSpotify && (!isSpotifyConnected || isSpotifyConnecting)),
+    [
+      mixPlaylistSelection.length,
+      mixNeedsHostSpotify,
+      isSpotifyConnected,
+      isSpotifyConnecting,
+    ]
+  );
   /** Mirrors isSpotifyConnected for callbacks declared above sync effects (catalog schedule, socket reconnect). */
   const isSpotifyConnectedRef = useRef(false);
   const [pendingVerification, setPendingVerification] = useState<any>(null);
@@ -928,34 +959,62 @@ const HostView: React.FC = () => {
     return rows;
   }, [filteredPlaylists, playlistSort]);
 
+  /** Spotify + YouTube Music rows so round buckets resolve dragged ids from either source. */
+  const playlistsForRoundPlanner = useMemo(() => {
+    const m = new Map<string, Playlist>();
+    for (const p of playlists) {
+      const id = normalizeSpotifyPlaylistId(p.id);
+      if (id) m.set(id, p);
+    }
+    for (const p of youtubeMusicPlaylists) {
+      const id = normalizeSpotifyPlaylistId(p.id);
+      if (id) m.set(id, p);
+    }
+    return Array.from(m.values());
+  }, [playlists, youtubeMusicPlaylists]);
+
   /** Shown when the library table has no rows (search, filter, or all assigned to rounds). */
   const playlistLibraryEmptyMessage = useMemo(() => {
     const q = playlistQuery.trim();
     if (q) return 'No playlists match your search.';
-    if (spotifyMyPlaylistsTotal === 0) {
-      return 'Spotify reports 0 playlists for the connected account. In the Spotify app, create a named playlist, then use Refresh. (Liked Songs is not always listed the same as user playlists.)';
-    }
-    if (!playlists.length) {
-      if (spotifyMyPlaylistsTotal != null && spotifyMyPlaylistsTotal > 0) {
-        return 'Spotify has playlists, but this list hides names that start with "TEMPO". Rename those in Spotify or add other playlists to use the host library here.';
+    const merged = [...playlists, ...youtubeMusicPlaylists];
+    const base = filterBasePlaylistsForMix(merged, showAllPlaylists);
+    const visibleApprox = base.filter((p) => {
+      const pid = normalizeSpotifyPlaylistId(p.id);
+      return pid !== '' && !assignedPlaylistIds.has(pid);
+    });
+    if (merged.length === 0) {
+      if (isSpotifyConnected && spotifyMyPlaylistsTotal === 0) {
+        return 'Spotify reports 0 playlists for the connected account. Create playlists in Spotify or connect YouTube Music under Connection, then refresh.';
       }
-      return 'No available playlists.';
+      return 'No playlists loaded yet. Connect Spotify and/or YouTube Music under Connection, then refresh your library.';
     }
-    const base = filterBasePlaylistsForMix(playlists, showAllPlaylists);
-    if (base.length === 0) {
-      if (!showAllPlaylists) {
+    if (visibleApprox.length === 0) {
+      const spotifyBase = filterBasePlaylistsForMix(playlists, showAllPlaylists);
+      if (
+        playlists.length > 0 &&
+        spotifyBase.length === 0 &&
+        !showAllPlaylists &&
+        youtubeMusicPlaylists.length === 0
+      ) {
         return `Spotify returned ${playlists.length} playlist(s), but none match GoT picks (name starts with "GoT" or contains "Game of Tones"). Use "All my playlists" to see your full library.`;
       }
-      return 'No available playlists.';
-    }
-    const hasUnassigned = base.some(
-      (p) => !assignedPlaylistIds.has(normalizeSpotifyPlaylistId(p.id))
-    );
-    if (!hasUnassigned) {
-      return 'Every playlist in this view is already assigned to a round. Remove one from a round or add playlists in Spotify.';
+      return 'Every playlist in this view is already assigned to a round (or filtered out). Remove one from a round bucket, widen filters, or add playlists.';
     }
     return 'No available playlists.';
-  }, [playlistQuery, playlists, showAllPlaylists, assignedPlaylistIds, spotifyMyPlaylistsTotal]);
+  }, [
+    playlistQuery,
+    playlists,
+    youtubeMusicPlaylists,
+    showAllPlaylists,
+    assignedPlaylistIds,
+    spotifyMyPlaylistsTotal,
+    isSpotifyConnected,
+  ]);
+
+  const handleYoutubeMusicMixPlaylistsChange = useCallback((rows: YoutubeMixPlaylistRow[]) => {
+    setYoutubeMusicPlaylists(rows);
+  }, []);
 
   const togglePlaylistSort = useCallback((key: 'name' | 'tracks') => {
     setPlaylistSort((prev) => {
@@ -1014,17 +1073,18 @@ const HostView: React.FC = () => {
 
   // Update visible playlists when rounds change to exclude newly assigned playlists, or when filter mode changes
   useEffect(() => {
-    if (playlists && playlists.length > 0) {
-      const basePlaylists = filterBasePlaylistsForMix(playlists, showAllPlaylists);
+    const merged = [...playlists, ...youtubeMusicPlaylists];
+    if (merged.length > 0) {
+      const basePlaylists = filterBasePlaylistsForMix(merged, showAllPlaylists);
       const availablePlaylists = basePlaylists.filter((p: Playlist) => {
         const pid = normalizeSpotifyPlaylistId(p.id);
         return pid !== '' && !assignedPlaylistIds.has(pid);
       });
       setVisiblePlaylists(availablePlaylists);
-    } else if (playlists && playlists.length === 0) {
+    } else {
       setVisiblePlaylists([]);
     }
-  }, [assignedPlaylistIds, playlists, showAllPlaylists]);
+  }, [assignedPlaylistIds, playlists, youtubeMusicPlaylists, showAllPlaylists]);
 
   // Auto-switch tabs based on game state (do not depend on eventRounds � round-bucket updates
   // should not yank the host back to Manager; see handleStartRound ? Game tab).
@@ -2289,7 +2349,7 @@ const HostView: React.FC = () => {
 
       if (listToSend.length === 0) {
         window.alert(
-          'No songs could be loaded from your playlists. Spotify may be rate limiting this app (429). Wait for cooldown, use Refresh on your library, then try again. If this persists, check Spotify Developer Dashboard quota.'
+          'No songs could be loaded from your playlists. Check Spotify and/or YouTube Music under Connection, refresh your library, fix any disconnects, and wait out API rate limits before retrying.'
         );
         return false;
       }
@@ -2310,7 +2370,9 @@ const HostView: React.FC = () => {
       // Include current host-side songList ordering to enforce 1x75 pool deterministically
       console.log('?? Finalizing mix - Playlist order being sent to server:');
       mixPlaylistSelection.forEach((p, i) => {
-        console.log(`   ${i + 1}. ${p.name}${p.catalog ? ' (catalog)' : ''} (will be column ${i})`);
+        console.log(
+          `   ${i + 1}. ${p.name}${p.catalog ? ' (catalog)' : ''}${p.youtubeMusic ? ' (YouTube)' : ''} (will be column ${i})`
+        );
       });
 
       return await new Promise<boolean>((resolve) => {
@@ -3225,15 +3287,16 @@ const HostView: React.FC = () => {
   // Generate and shuffle song list from selected playlists. Only fetches tracks for newly selected playlists (avoids re-downloading the whole library on each click). Use { force: true } to refetch all.
   const generateSongList = useCallback(
     async (opts?: { force?: boolean; reason?: 'selection' | 'finalize' }): Promise<Song[]> => {
-      if (!isSpotifyConnected) {
-        console.warn('Cannot generate song list: Spotify not connected');
-        setSongList([]);
-        fullyLoadedPlaylistIdsRef.current.clear();
-        return [];
-      }
       if (mixPlaylistSelection.length === 0) {
         fullyLoadedPlaylistIdsRef.current.clear();
         setSongList([]);
+        return [];
+      }
+
+      if (mixNeedsHostSpotify && !isSpotifyConnected) {
+        console.warn('Cannot generate song list: Spotify not connected for selected playlists');
+        setSongList([]);
+        fullyLoadedPlaylistIdsRef.current.clear();
         return [];
       }
 
@@ -3317,7 +3380,10 @@ const HostView: React.FC = () => {
           if (playlist.name) qs.set('playlistName', playlist.name);
           const q = qs.toString();
           const catalog = playlist.catalog === true;
-          const url = catalog
+          const yt = playlist.youtubeMusic === true;
+          const url = yt
+            ? `${API_BASE || ''}/api/youtube/music/playlist/${encodeURIComponent(playlist.id)}/items${q ? `?${q}` : ''}`
+            : catalog
             ? `${API_BASE || ''}/api/spotify/catalog/playlist/${playlist.id}${q ? `?${q}` : ''}`
             : `${API_BASE || ''}/api/spotify/playlist-tracks/${playlist.id}${q ? `?${q}` : ''}`;
           const response = await hostFetch(url, { cache: 'no-store' });
@@ -3329,7 +3395,7 @@ const HostView: React.FC = () => {
           if (data.success && data.tracks) {
             allSongs.push(...data.tracks);
             fullyLoadedPlaylistIdsRef.current.add(playlist.id);
-            if (!catalog) {
+            if (!catalog && !yt) {
               applyPlaylistExplicitKnowledge(playlist.id, data.tracks, setPlaylists, setSelectedPlaylists);
             }
           }
@@ -3347,7 +3413,7 @@ const HostView: React.FC = () => {
         return [];
       }
     },
-    [mixPlaylistSelection, isSpotifyConnected, setPlaylists, setSelectedPlaylists]
+    [mixPlaylistSelection, mixNeedsHostSpotify, isSpotifyConnected, setPlaylists, setSelectedPlaylists]
   );
 
   /** Always latest generateSongList — debounced effect must not depend on this callback (identity churn retriggers → duplicate playlist-tracks waves). */
@@ -3812,14 +3878,14 @@ const HostView: React.FC = () => {
   }, [currentSong, isPlaying, isPausedByInterface]);
 
   // Build master setlist when selection changes. Debounced: ticking several playlists in a row = one import wave.
-  // Depends on playlistSelectionKey + isSpotifyConnected only — NOT generateSongList — so callback identity churn does not reschedule this effect (was causing 3× identical playlist-tracks bursts).
+  // Depends on playlistSelectionKey + Spotify connectivity gates + mixNeedsHostSpotify — NOT generateSongList — so callback identity churn does not reschedule this effect (was causing 3× identical playlist-tracks bursts).
   useEffect(() => {
     const t = window.setTimeout(() => {
       if (finalizeMixInFlightRef.current) return;
       void generateSongListRef.current({ reason: 'selection' });
     }, 750);
     return () => window.clearTimeout(t);
-  }, [playlistSelectionKey, isSpotifyConnected]);
+  }, [playlistSelectionKey, isSpotifyConnected, mixNeedsHostSpotify]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -4790,7 +4856,7 @@ const HostView: React.FC = () => {
             <RoundPlanner
               rounds={eventRounds}
               onUpdateRounds={handleUpdateRounds}
-              playlists={playlists}
+              playlists={playlistsForRoundPlanner}
               currentRound={currentRoundIndex}
               onStartRound={handleStartRound}
               gameState={gameState}
@@ -4811,7 +4877,7 @@ const HostView: React.FC = () => {
                       <strong style={{ color: '#fff' }}>finalize the bingo pool</strong> (song source for the game). You can still{' '}
                       <strong style={{ color: '#fff' }}>drag any row</strong> into round buckets for round-specific setup.
                     </p>
-                    <HostYoutubeMusicPlaylistLibrary />
+                    <HostYoutubeMusicPlaylistLibrary onMixPlaylistsChange={handleYoutubeMusicMixPlaylistsChange} />
                     {spotifyListCacheInfo ? (
                       <div
                         style={{
@@ -5230,18 +5296,40 @@ const HostView: React.FC = () => {
                                   color: isAcceptable ? '#00ff88' : '#fff',
                                 }}>
                                   {stripGoTPrefix ? p.name.replace(/^GoT\s*[-�:]*\s*/i, '') : p.name}
-                                  {!showAllPlaylists && stripGoTPrefix && (/^got\s*[-�:]*\s*/i.test(p.name) || p.name.toLowerCase().includes('game of tones') || p.name.toLowerCase().includes('gameoftones')) && (
-                                    <span style={{
-                                      fontSize: '0.7rem',
-                                      padding: '2px 6px',
-                                      borderRadius: '4px',
-                                      background: 'rgba(0, 255, 136, 0.2)',
-                                      color: '#00ff88',
-                                      border: '1px solid rgba(0, 255, 136, 0.3)'
-                                    }}>
-                                      GoT
+                                  {p.youtubeMusic ? (
+                                    <span
+                                      style={{
+                                        fontSize: '0.7rem',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        background: 'rgba(255, 68, 68, 0.18)',
+                                        color: '#ffb4b4',
+                                        border: '1px solid rgba(255, 68, 68, 0.35)',
+                                      }}
+                                      title="YouTube Music playlist (items are videos)"
+                                    >
+                                      YT
                                     </span>
-                                  )}
+                                  ) : null}
+                                  {!p.youtubeMusic &&
+                                    !showAllPlaylists &&
+                                    stripGoTPrefix &&
+                                    (/^got\s*[-�:]*\s*/i.test(p.name) ||
+                                      p.name.toLowerCase().includes('game of tones') ||
+                                      p.name.toLowerCase().includes('gameoftones')) && (
+                                      <span
+                                        style={{
+                                          fontSize: '0.7rem',
+                                          padding: '2px 6px',
+                                          borderRadius: '4px',
+                                          background: 'rgba(0, 255, 136, 0.2)',
+                                          color: '#00ff88',
+                                          border: '1px solid rgba(0, 255, 136, 0.3)',
+                                        }}
+                                      >
+                                        GoT
+                                      </span>
+                                    )}
                                 </span>
                                 {(() => {
                                   const plain = p.description ? stripPlaylistDescriptionHtml(p.description) : '';
@@ -5268,14 +5356,35 @@ const HostView: React.FC = () => {
                                 }}
                               >
                                 <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-                                  {p.hasExplicitTracks === true && (
+                                  {!p.youtubeMusic && p.hasExplicitTracks === true && (
                                     <SpotifyExplicitBadge size="sm" title="This playlist includes at least one Spotify explicit track" />
                                   )}
-                                  <span>{trackCount} songs</span>
+                                  <span>
+                                    {trackCount} {p.youtubeMusic ? 'videos' : 'songs'}
+                                  </span>
                                 </span>
                               </span>
                               {isInsufficient && (
-                                <span style={{ fontSize: '0.72rem', color: '#ffb347', whiteSpace: 'nowrap', padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,179,71,0.35)', background: 'rgba(255,179,71,0.08)', flexShrink: 0, paddingTop: 6 }} title="Need at least 15 tracks for a standard round; add songs in Spotify">Need 15+</span>
+                                <span
+                                  style={{
+                                    fontSize: '0.72rem',
+                                    color: '#ffb347',
+                                    whiteSpace: 'nowrap',
+                                    padding: '4px 8px',
+                                    borderRadius: 6,
+                                    border: '1px solid rgba(255,179,71,0.35)',
+                                    background: 'rgba(255,179,71,0.08)',
+                                    flexShrink: 0,
+                                    paddingTop: 6,
+                                  }}
+                                  title={
+                                    p.youtubeMusic
+                                      ? 'Need at least 15 videos for a standard round'
+                                      : 'Need at least 15 tracks for a standard round; add songs in Spotify'
+                                  }
+                                >
+                                  Need 15+
+                                </span>
                               )}
                             </div>
                           );
@@ -5513,7 +5622,7 @@ const HostView: React.FC = () => {
                      <button 
                        className="control-button finalize-mix"
                        onClick={finalizeMix}
-                       disabled={mixPlaylistSelection.length === 0 || isSpotifyConnecting}
+                       disabled={mixGameActionsBlocked}
                      >
                        <ListChecks className="w-4 h-4" aria-hidden />
                        Finalize Mix
@@ -5529,7 +5638,7 @@ const HostView: React.FC = () => {
                    )}
                   <button
                     onClick={startGame}
-                    disabled={mixPlaylistSelection.length === 0 || isSpotifyConnecting}
+                    disabled={mixGameActionsBlocked}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -5539,20 +5648,20 @@ const HostView: React.FC = () => {
                       fontWeight: 900,
                       letterSpacing: '0.02em',
                       borderRadius: 12,
-                      border: (mixPlaylistSelection.length === 0 || isSpotifyConnecting) ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(0,255,136,0.6)',
-                      color: (mixPlaylistSelection.length === 0 || isSpotifyConnecting) ? '#c8c8c8' : '#0b0e12',
-                      background: (mixPlaylistSelection.length === 0 || isSpotifyConnecting)
+                      border: mixGameActionsBlocked ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(0,255,136,0.6)',
+                      color: mixGameActionsBlocked ? '#c8c8c8' : '#0b0e12',
+                      background: mixGameActionsBlocked
                         ? 'rgba(255,255,255,0.08)'
                         : 'linear-gradient(180deg, #00ff88 0%, #00cc6d 100%)',
-                      boxShadow: (mixPlaylistSelection.length === 0 || isSpotifyConnecting)
+                      boxShadow: mixGameActionsBlocked
                         ? 'none'
                         : '0 10px 30px rgba(0,255,136,0.25), inset 0 1px 0 rgba(255,255,255,0.4)',
-                      cursor: (mixPlaylistSelection.length === 0 || isSpotifyConnecting) ? 'not-allowed' : 'pointer',
-                      opacity: (isSpotifyConnecting) ? 0.8 : 1
+                      cursor: mixGameActionsBlocked ? 'not-allowed' : 'pointer',
+                      opacity: isSpotifyConnecting && mixNeedsHostSpotify ? 0.8 : 1
                     }}
                   >
                     <Play className="btn-icon" />
-                    {isSpotifyConnecting ? 'Connecting Spotify...' : 'Start Game'}
+                    {isSpotifyConnecting && mixNeedsHostSpotify ? 'Connecting Spotify...' : 'Start Game'}
                   </button>
                   <p style={{ marginTop: 10, fontSize: '0.78rem', color: '#9a9a9a', maxWidth: 520, lineHeight: 1.4 }}>
                     Start Game will <strong style={{ color: '#cfcfcf' }}>finalize the mix automatically</strong> if you have not tapped Finalize Mix yet

@@ -16,6 +16,8 @@ interface Playlist {
   name: string;
   tracks: number;
   description?: string;
+  /** Present when row comes from YouTube Music merge (drag/drop resolution). */
+  youtubeMusic?: boolean;
 }
 
 interface EventRound {

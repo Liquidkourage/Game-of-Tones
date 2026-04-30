@@ -145,6 +145,67 @@ async function listMyPlaylists(hostUserId) {
 }
 
 /**
+ * Playlist items as `{ id, name, artist, sourcePlaylistId, sourcePlaylistName? }` for host setlists (video id as track id).
+ * @param {number} hostUserId
+ * @param {string} playlistId
+ * @param {{ playlistName?: string }} [options]
+ */
+async function listPlaylistItems(hostUserId, playlistId, options = {}) {
+  const oauth2 = getOAuthClientForHost(hostUserId);
+  if (!oauth2) {
+    const err = new Error('YouTube Music not connected for this host');
+    /** @type {any} */ (err).statusCode = 401;
+    throw err;
+  }
+
+  const pid = String(playlistId || '').trim();
+  if (!pid) {
+    const err = new Error('Missing playlist id');
+    /** @type {any} */ (err).statusCode = 400;
+    throw err;
+  }
+
+  const playlistName =
+    options.playlistName != null && String(options.playlistName).trim() !== ''
+      ? String(options.playlistName).trim()
+      : '';
+
+  const tracks = [];
+  let pageToken = '';
+  for (;;) {
+    const url = new URL('https://www.googleapis.com/youtube/v3/playlistItems');
+    url.searchParams.set('part', 'snippet,contentDetails');
+    url.searchParams.set('playlistId', pid);
+    url.searchParams.set('maxResults', '50');
+    if (pageToken) url.searchParams.set('pageToken', pageToken);
+
+    const { data } = await oauth2.request({ url: url.toString() });
+    const items = Array.isArray(data.items) ? data.items : [];
+    for (const it of items) {
+      const vid =
+        it.snippet?.resourceId?.videoId || it.contentDetails?.videoId || '';
+      if (!vid) continue;
+      const title = it.snippet?.title || '';
+      if (title === 'Deleted video' || title === 'Private video') continue;
+      const artist =
+        it.snippet?.videoOwnerChannelTitle ||
+        it.snippet?.channelTitle ||
+        '';
+      tracks.push({
+        id: vid,
+        name: title,
+        artist,
+        sourcePlaylistId: pid,
+        ...(playlistName ? { sourcePlaylistName: playlistName } : {}),
+      });
+    }
+    pageToken = typeof data.nextPageToken === 'string' ? data.nextPageToken : '';
+    if (!pageToken) break;
+  }
+  return tracks;
+}
+
+/**
  * @param {number} hostUserId
  */
 function clearHost(hostUserId) {
@@ -159,5 +220,6 @@ module.exports = {
   handleCallback,
   hasCredentials,
   listMyPlaylists,
+  listPlaylistItems,
   clearHost,
 };
