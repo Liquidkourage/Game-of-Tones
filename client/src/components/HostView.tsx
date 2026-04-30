@@ -4817,7 +4817,7 @@ const HostView: React.FC = () => {
                         After Tempo loads tracks for playlists you include in the mix (selection debounce or Finalize), any playlist that contains a Spotify explicit song shows{' '}
                         <SpotifyExplicitBadge size="sm" title="At least one explicit track in this playlist" /> next to its song count — no extra Spotify calls beyond that load.
                       </p>
-                      {catalogPacksConfigured && catalogPackOptions.length > 0 ? (
+                      {catalogPacksConfigured ? (
                         <div
                           style={{
                             padding: '12px 14px',
@@ -4832,37 +4832,59 @@ const HostView: React.FC = () => {
                           <p style={{ margin: '0 0 12px', fontSize: '0.76rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
                             Loaded with Tempo&apos;s allowlisted Spotify account — not your personal library token. Your Spotify is still used for playback. Appended after your own playlist selections.
                           </p>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            {catalogPackOptions.map((pack) => {
-                              const isSel = selectedCatalogPlaylists.some((p) => p.id === pack.id);
-                              return (
-                                <label
-                                  key={pack.id}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 10,
-                                    cursor: 'pointer',
-                                    fontSize: '0.88rem',
-                                  }}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={isSel}
-                                    onChange={() => {
-                                      setSelectedCatalogPlaylists((prev) =>
-                                        isSel ? prev.filter((p) => p.id !== pack.id) : [...prev, { ...pack, catalog: true }]
-                                      );
+                          {catalogPackOptions.length > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              {catalogPackOptions.map((pack) => {
+                                const isSel = selectedCatalogPlaylists.some((p) => p.id === pack.id);
+                                return (
+                                  <label
+                                    key={pack.id}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 10,
+                                      cursor: 'pointer',
+                                      fontSize: '0.88rem',
                                     }}
-                                  />
-                                  <span style={{ color: '#fff', flex: 1, minWidth: 0 }}>{pack.name}</span>
-                                  <span style={{ color: '#8899aa', fontSize: '0.78rem', flexShrink: 0 }}>
-                                    {pack.tracks} songs
-                                  </span>
-                                </label>
-                              );
-                            })}
-                          </div>
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isSel}
+                                      onChange={() => {
+                                        setSelectedCatalogPlaylists((prev) =>
+                                          isSel ? prev.filter((p) => p.id !== pack.id) : [...prev, { ...pack, catalog: true }]
+                                        );
+                                      }}
+                                    />
+                                    <span style={{ color: '#fff', flex: 1, minWidth: 0 }}>{pack.name}</span>
+                                    <span style={{ color: '#8899aa', fontSize: '0.78rem', flexShrink: 0 }}>
+                                      {pack.tracks} songs
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p
+                              style={{
+                                margin: 0,
+                                fontSize: '0.78rem',
+                                color: 'rgba(255,255,255,0.65)',
+                                lineHeight: 1.5,
+                              }}
+                            >
+                              No catalog packs matched yet. If you use{' '}
+                              <strong style={{ color: '#c8dcff' }}>TEMPO_CATALOG_PLAYLIST_NAME_PREFIX</strong>, playlist
+                              titles on the <strong style={{ color: '#c8dcff' }}>catalog</strong> Spotify account must{' '}
+                              <strong style={{ color: '#c8dcff' }}>start with that exact prefix</strong> (e.g.{' '}
+                              <code style={{ fontSize: '0.72rem' }}>GoT Friday Hits</code>, not{' '}
+                              <code style={{ fontSize: '0.72rem' }}>Music Bingo - …</code>
+                              ). Or set{' '}
+                              <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> /{' '}
+                              <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code>. New matches can take
+                              up to the prefix cache window unless the server restarts.
+                            </p>
+                          )}
                         </div>
                       ) : null}
                     </div>

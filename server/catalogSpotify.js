@@ -8,6 +8,7 @@
  * - TEMPO_CATALOG_PLAYLISTS_JSON — e.g. [{"id":"abc","label":"Pack name"}] (label optional)
  * - TEMPO_CATALOG_PLAYLIST_NAME_PREFIX — non-empty: discover packs from GET /v1/me/playlists whose
  *   name starts with this string (merged with static allowlist above; dedupe by id, static wins labels).
+ * - TEMPO_CATALOG_PLAYLIST_NAME_PREFIX_IGNORE_CASE — true: prefix match is case-insensitive (GoT vs got).
  * - TEMPO_CATALOG_PREFIX_OWNER_ONLY — default true: prefix matches must be owned by the catalog user
  *   (avoids followed playlists that 403 on /items).
  * - TEMPO_CATALOG_PREFIX_CACHE_MS — ms to cache prefix discovery (default 300000).
@@ -64,6 +65,19 @@ function isCatalogPrefixMode() {
   return getCatalogPlaylistNamePrefix() !== '';
 }
 
+function getCatalogPrefixIgnoreCase() {
+  return parseEnvBool(process.env.TEMPO_CATALOG_PLAYLIST_NAME_PREFIX_IGNORE_CASE, false);
+}
+
+/** @param {string} name @param {string} prefix */
+function catalogPlaylistNameStartsWithPrefix(name, prefix, ignoreCase) {
+  const n = String(name || '');
+  const p = String(prefix || '');
+  if (!p) return false;
+  if (ignoreCase) return n.toLowerCase().startsWith(p.toLowerCase());
+  return n.startsWith(p);
+}
+
 function parseEnvBool(raw, defaultVal) {
   if (raw == null || String(raw).trim() === '') return defaultVal;
   const s = String(raw).trim().toLowerCase();
@@ -104,11 +118,12 @@ async function resolveCatalogAllowlistEntries() {
   }
 
   const ownerOnly = getCatalogPrefixOwnerOnlyDefaultTrue();
+  const ignoreCase = getCatalogPrefixIgnoreCase();
   const staticKey = staticEntries
     .map((e) => e.id)
     .sort()
     .join(',');
-  const cacheKey = `${prefix}|${ownerOnly ? '1' : '0'}|${staticKey}`;
+  const cacheKey = `${prefix}|${ignoreCase ? 'ic1' : 'ic0'}|${ownerOnly ? '1' : '0'}|${staticKey}`;
   const ttl = getCatalogPrefixCacheMs();
   const now = Date.now();
   if (
@@ -140,7 +155,7 @@ async function resolveCatalogAllowlistEntries() {
   for (let i = 0; i < playlists.length; i++) {
     const p = playlists[i];
     const name = p.name != null ? String(p.name) : '';
-    if (!name.startsWith(prefix)) continue;
+    if (!catalogPlaylistNameStartsWithPrefix(name, prefix, ignoreCase)) continue;
     const oid = p.ownerId != null ? String(p.ownerId) : '';
     if (ownerOnly && catalogSpotifyUserId && oid !== catalogSpotifyUserId) continue;
     prefixEntries.push({ id: String(p.id).trim(), label: name });

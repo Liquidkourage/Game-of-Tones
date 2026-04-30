@@ -8212,6 +8212,13 @@ app.get('/api/spotify/catalog/packs', async (req, res) => {
       return res.json({ success: true, configured: false, packs: [] });
     }
     const packs = await catalogSpotify.loadCatalogPackSummariesForApi();
+    if (packs.length === 0) {
+      routineServerLog(
+        '[catalog] GET /api/spotify/catalog/packs: configured but 0 packs — check TEMPO_CATALOG_PLAYLIST_NAME_PREFIX / allowlist / playlist names on the catalog Spotify account'
+      );
+    } else {
+      routineServerLog(`[catalog] GET /api/spotify/catalog/packs: returning ${packs.length} pack(s)`);
+    }
     res.json({ success: true, configured: true, packs });
   } catch (error) {
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
