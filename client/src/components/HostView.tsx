@@ -259,6 +259,8 @@ const HostView: React.FC = () => {
   /** Last /packs returned 401 (needs Google host session). */
   const [catalogPacksFetchUnauthorized, setCatalogPacksFetchUnauthorized] = useState(false);
   const [selectedCatalogPlaylists, setSelectedCatalogPlaylists] = useState<Playlist[]>([]);
+  /** Debounce catalog /packs so it doesn’t fire in the same burst as host GET /v1/me/playlists (reduces Spotify 429). */
+  const catalogPacksLoadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** Personal selection first, then catalog-only ids (append). Dedupes by id. */
   const mixPlaylistSelection = useMemo(() => {
@@ -666,6 +668,30 @@ const HostView: React.FC = () => {
     }
   }, []);
 
+  /** Wait after host library Spotify traffic before hitting catalog (same app quota; catalog runs another full /me/playlists). */
+  const scheduleCatalogPacksLoad = useCallback(
+    (delayMs: number) => {
+      if (catalogPacksLoadDebounceRef.current != null) {
+        clearTimeout(catalogPacksLoadDebounceRef.current);
+        catalogPacksLoadDebounceRef.current = null;
+      }
+      catalogPacksLoadDebounceRef.current = setTimeout(() => {
+        catalogPacksLoadDebounceRef.current = null;
+        void loadCatalogPacks();
+      }, delayMs);
+    },
+    [loadCatalogPacks]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (catalogPacksLoadDebounceRef.current != null) {
+        clearTimeout(catalogPacksLoadDebounceRef.current);
+        catalogPacksLoadDebounceRef.current = null;
+      }
+    };
+  }, []);
+
   const loadPlaylists = useCallback(async () => {
     try {
       const assignedForQuery = eventRoundsRef.current
@@ -747,7 +773,7 @@ const HostView: React.FC = () => {
         );
         
         setPlaylists(allPlaylists);
-        void loadCatalogPacks();
+        scheduleCatalogPacksLoad(2800);
         // Reset filter to GoT-only by default when playlists are reloaded
         setShowAllPlaylists(false);
         // Don't set visiblePlaylists here - let the useEffect handle it to ensure consistency
@@ -770,7 +796,7 @@ const HostView: React.FC = () => {
       setSpotifyMyPlaylistsTotal(null);
       console.error('Error loading playlists:', error);
     }
-  }, [showHostAckNotification, loadCatalogPacks]);
+  }, [showHostAckNotification, scheduleCatalogPacksLoad]);
 
   const addPlaylistByLink = useCallback(async () => {
     setPlaylistByLinkError(null);
@@ -940,11 +966,11 @@ const HostView: React.FC = () => {
     };
   }, []);
 
-  /** Server-side catalog packs — after host JWT bootstrap (also refreshed whenever playlists load successfully). */
+  /** Server-side catalog packs — stagger after bootstrap so we don’t stack /me/playlists on host + catalog back-to-back. */
   useEffect(() => {
     if (!hostAuthBootstrapDone) return;
-    void loadCatalogPacks();
-  }, [hostAuthBootstrapDone, loadCatalogPacks]);
+    scheduleCatalogPacksLoad(3200);
+  }, [hostAuthBootstrapDone, scheduleCatalogPacksLoad]);
 
   // Update visible playlists when rounds change to exclude newly assigned playlists, or when filter mode changes
   useEffect(() => {
