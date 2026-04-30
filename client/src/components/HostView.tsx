@@ -48,6 +48,7 @@ import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
 import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModal';
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
+import { HostYoutubeMusicPlaylistLibrary } from './HostYoutubeMusicPlaylistLibrary';
 import RoundPlanner from './RoundPlanner';
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
@@ -4790,6 +4791,7 @@ const HostView: React.FC = () => {
                       <strong style={{ color: '#fff' }}>finalize the bingo pool</strong> (song source for the game). You can still{' '}
                       <strong style={{ color: '#fff' }}>drag any row</strong> into round buckets for round-specific setup.
                     </p>
+                    <HostYoutubeMusicPlaylistLibrary />
                     {spotifyListCacheInfo ? (
                       <div
                         style={{
