@@ -16,6 +16,7 @@ const organizationsStore = require('./organizations');
 const credentialCrypto = require('./credentialCrypto');
 const spotifyPipelineLog = require('./spotifyPipelineLog');
 const catalogSpotify = require('./catalogSpotify');
+const youtubeMusic = require('./youtubeMusic');
 
 // Song title cleaning utility
 function cleanSongTitle(title) {
@@ -7353,6 +7354,22 @@ function roomIdFromSpotifyStatePayload(state) {
   }
 }
 
+function roomIdFromYoutubeMusicStatePayload(state) {
+  if (!state || typeof state !== 'string') return '';
+  try {
+    const parts = String(state).split('.');
+    if (parts.length < 2) return '';
+    const seg = parts[1];
+    const pad = seg.length % 4 === 0 ? '' : '='.repeat(4 - (seg.length % 4));
+    const b64 = seg.replace(/-/g, '+').replace(/_/g, '/') + pad;
+    const json = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
+    if (json.typ !== 'ytm_oauth' || json.rid == null || json.rid === '') return '';
+    return String(json.rid).trim();
+  } catch {
+    return '';
+  }
+}
+
 /** User-safe detail for client when token exchange or OAuth pre-check fails. */
 function spotifyCallbackUserMessage(err) {
   const body = err?.body;
@@ -7481,6 +7498,146 @@ app.get('/api/spotify/callback', async (req, res) => {
       message: detail,
     });
   }
+});
+
+// --- YouTube Data API v3 (host playlists; browser playback is a separate milestone) ---
+app.get('/api/youtube/music/status', (req, res) => {
+  try {
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    res.json({
+      success: true,
+      configured: youtubeMusic.isConfigured(),
+      connected: uid != null && youtubeMusic.hasCredentials(uid),
+    });
+  } catch (_) {
+    res.status(500).json({ success: false, error: 'status_failed' });
+  }
+});
+
+app.get('/api/youtube/music/callback', async (req, res) => {
+  const { code, state } = req.query;
+
+  const appBase = publicAppOrigin();
+  const wantsJson = spotifyCallbackWantsJson(req);
+  const shouldRedirectBrowser = appBase && !wantsJson;
+
+  if (!youtubeMusic.isConfigured()) {
+    if (shouldRedirectBrowser) {
+      return res.redirect(302, `${appBase}/?youtube_music_error=not_configured`);
+    }
+    return res.status(503).json({
+      success: false,
+      error: 'youtube_music_not_configured',
+      message: 'Server is missing YouTube OAuth credentials.',
+    });
+  }
+
+  if (!code) {
+    if (shouldRedirectBrowser) {
+      return res.redirect(302, `${appBase}/?youtube_music_error=missing_code`);
+    }
+    return res.status(400).json({ error: 'Authorization code required' });
+  }
+
+  const rawState = state != null ? String(state).trim() : '';
+  const parsed = rawState ? hostAuth.verifyYoutubeMusicOAuthState(rawState) : null;
+  if (!parsed) {
+    if (shouldRedirectBrowser) {
+      return res.redirect(302, `${appBase}/?youtube_music_error=state`);
+    }
+    return res.status(400).json({
+      success: false,
+      error: 'oauth_state_expired',
+      message:
+        'The Google sign-in page was open too long, or the session was invalid. Close this tab, go back to the host room, and connect again.',
+    });
+  }
+
+  try {
+    await youtubeMusic.handleCallback(String(code), parsed.userId);
+    if (shouldRedirectBrowser) {
+      const room =
+        (parsed.roomId && String(parsed.roomId)) ||
+        (rawState ? roomIdFromYoutubeMusicStatePayload(rawState) : '');
+      const path = room ? `/host/${encodeURIComponent(room)}` : '/';
+      return res.redirect(302, `${appBase}${path}?youtube_music=connected`);
+    }
+    res.json({ success: true, message: 'YouTube connected' });
+  } catch (error) {
+    console.error('❌ YouTube Music callback failed:', error?.message || error);
+    if (shouldRedirectBrowser) {
+      return res.redirect(302, `${appBase}/?youtube_music_error=1`);
+    }
+    res.status(500).json({
+      success: false,
+      error: 'Failed to connect YouTube',
+      message: typeof error?.message === 'string' ? error.message : 'token_exchange_failed',
+    });
+  }
+});
+
+app.use('/api/youtube/music', (req, res, next) => {
+  const full = (req.originalUrl || req.url || '').split('?')[0];
+  if (full.includes('/api/youtube/music/callback')) return next();
+  if (req.method === 'GET' && full.endsWith('/status')) return next();
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  if (!uid) {
+    return res.status(401).json({
+      error: 'login_required',
+      loginUrl: '/api/auth/google',
+      message: 'Sign in with Google to connect YouTube for this host.',
+    });
+  }
+  next();
+});
+
+app.get('/api/youtube/music/auth-url', (req, res) => {
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  if (!uid) {
+    return res.status(401).json({ error: 'login_required', loginUrl: '/api/auth/google' });
+  }
+  if (!youtubeMusic.isConfigured()) {
+    return res.status(503).json({
+      success: false,
+      error: 'youtube_music_not_configured',
+      message: 'Set YOUTUBE_MUSIC_GOOGLE_CLIENT_ID and YOUTUBE_MUSIC_GOOGLE_CLIENT_SECRET.',
+    });
+  }
+  const roomId = typeof req.query.roomId === 'string' ? req.query.roomId.trim() : '';
+  try {
+    const url = youtubeMusic.generateAuthUrl(uid, roomId || null);
+    res.json({ success: true, url });
+  } catch (e) {
+    console.error('YouTube auth-url:', e?.message || e);
+    res.status(500).json({ success: false, error: 'auth_url_failed' });
+  }
+});
+
+app.get('/api/youtube/music/playlists', async (req, res) => {
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  if (!uid) return res.status(401).json({ error: 'login_required' });
+  try {
+    const playlists = await youtubeMusic.listMyPlaylists(uid);
+    res.json({ success: true, playlists });
+  } catch (e) {
+    const sc = e && e.statusCode;
+    if (sc === 401) {
+      return res.status(401).json({
+        success: false,
+        error: 'youtube_not_connected',
+        message: 'Connect YouTube first.',
+      });
+    }
+    console.error('YouTube playlists:', e?.message || e);
+    res.status(500).json({ success: false, error: 'playlists_failed' });
+  }
+});
+
+app.post('/api/youtube/music/disconnect', (req, res) => {
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  if (!uid) return res.status(401).json({ error: 'login_required' });
+  youtubeMusic.clearHost(uid);
+  res.json({ success: true });
 });
 
 function isSpotifyHttp429(e) {

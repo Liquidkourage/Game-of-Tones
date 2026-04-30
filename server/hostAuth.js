@@ -92,6 +92,24 @@ function verifySpotifyOAuthState(token) {
   }
 }
 
+/** Short-lived JWT for YouTube Data API OAuth `state` (host user + optional room redirect). */
+function signYoutubeMusicOAuthState({ userId, roomId }) {
+  const payload = { typ: 'ytm_oauth', uid: userId, rid: roomId || null };
+  return jwt.sign(payload, getJwtSecret(), { expiresIn: '15m' });
+}
+
+function verifyYoutubeMusicOAuthState(token) {
+  try {
+    const p = jwt.verify(token, getJwtSecret());
+    if (p.typ !== 'ytm_oauth' || p.uid == null) return null;
+    const id = parseInt(p.uid, 10);
+    if (!Number.isFinite(id)) return null;
+    return { userId: id, roomId: p.rid ? String(p.rid) : null };
+  } catch {
+    return null;
+  }
+}
+
 function parseCookies(header) {
   const out = {};
   if (!header || typeof header !== 'string') return out;
@@ -211,6 +229,8 @@ module.exports = {
   getHostSessionTokenFromHandshake,
   signSpotifyOAuthState,
   verifySpotifyOAuthState,
+  signYoutubeMusicOAuthState,
+  verifyYoutubeMusicOAuthState,
   parseCookies,
   getHostUserIdFromRequest,
   sessionCookieOptions,

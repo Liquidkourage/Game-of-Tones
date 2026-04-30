@@ -41,12 +41,13 @@ import {
   Radio,
 } from 'lucide-react';
 import io from 'socket.io-client';
-import { API_BASE, SOCKET_URL } from '../config';
+import { API_BASE, SOCKET_URL, ENABLE_YOUTUBE_MUSIC } from '../config';
 import { hostFetch, getHostJwt, setHostJwt, clearHostJwt, apiOrigin, browserGoogleLoginUrl } from '../utils/hostFetch';
 import { BingoPattern, PATTERN_OPTIONS, BINGO_PATTERNS, getPatternDisplayName, getSavedCustomPatterns, saveCustomPattern, SavedCustomPattern } from '../patternDefinitions';
 import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
 import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModal';
+import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
 import RoundPlanner from './RoundPlanner';
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
@@ -4265,6 +4266,7 @@ const HostView: React.FC = () => {
         </a>
         .
       </p>
+      {ENABLE_YOUTUBE_MUSIC ? <HostYoutubeMusicSection roomId={roomId || ''} /> : null}
     </motion.div>
   );
 
@@ -6138,7 +6140,9 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
             onClick={(e) => e.stopPropagation()}
           >
             <div className="host-connection-modal__header">
-              <h2 id="host-connection-modal-title">Spotify & device</h2>
+              <h2 id="host-connection-modal-title">
+                {ENABLE_YOUTUBE_MUSIC ? 'Playback & connections' : 'Spotify & device'}
+              </h2>
               <button
                 type="button"
                 className="host-connection-modal__close"
