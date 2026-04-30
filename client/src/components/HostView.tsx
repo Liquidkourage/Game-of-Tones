@@ -61,6 +61,8 @@ interface Playlist {
   public?: boolean;
   collaborative?: boolean;
   owner?: string;
+  /** Set after a full playlist-tracks fetch for this id in this session (Finalize / setlist build). */
+  hasExplicitTracks?: boolean;
 }
 
 /** In-process Web API 429 cool-down (from GET /api/spotify/status and error bodies). */
@@ -166,6 +168,22 @@ function stripPlaylistDescriptionHtml(raw: string): string {
 /** Match public display: trim optional "GoT" playlist prefix for column headers. */
 function stripGotPlaylistPrefix(raw: string): string {
   return raw.replace(/^\s*GoT\s*[-�:]*\s*/i, '').trim();
+}
+
+/** After a full playlist-tracks fetch: playlist row shows E if any track is Spotify-explicit (no extra API). */
+function applyPlaylistExplicitKnowledge(
+  playlistId: string,
+  tracks: Array<{ explicit?: boolean }>,
+  setPlaylists: React.Dispatch<React.SetStateAction<Playlist[]>>,
+  setSelectedPlaylists: React.Dispatch<React.SetStateAction<Playlist[]>>
+) {
+  const hasExplicit = tracks.some((t) => t.explicit === true);
+  const merge = (prev: Playlist[]) =>
+    prev.map((pl) =>
+      String(pl.id) === String(playlistId) ? { ...pl, hasExplicitTracks: hasExplicit } : pl
+    );
+  setPlaylists(merge);
+  setSelectedPlaylists(merge);
 }
 
 /** Persisted before Spotify/Google redirects so return URL without ?name= still shows the right host label. */
@@ -3162,6 +3180,7 @@ const HostView: React.FC = () => {
           if (data.success && data.tracks) {
             allSongs.push(...data.tracks);
             fullyLoadedPlaylistIdsRef.current.add(playlist.id);
+            applyPlaylistExplicitKnowledge(playlist.id, data.tracks, setPlaylists, setSelectedPlaylists);
           }
         }
 
@@ -3177,7 +3196,7 @@ const HostView: React.FC = () => {
         return [];
       }
     },
-    [selectedPlaylists, isSpotifyConnected]
+    [selectedPlaylists, isSpotifyConnected, setPlaylists, setSelectedPlaylists]
   );
 
   /** Always latest generateSongList — debounced effect must not depend on this callback (identity churn retriggers → duplicate playlist-tracks waves). */
@@ -4733,6 +4752,10 @@ const HostView: React.FC = () => {
                       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, maxWidth: 560, width: '100%' }}>
                         <input type="search" placeholder="Search playlists by name…" value={playlistQuery} onChange={(e) => setPlaylistQuery(e.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.35)', color: '#fff', flex: '1 1 220px', minWidth: 180 }} />
                       </div>
+                      <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)', margin: 0, lineHeight: 1.45, maxWidth: 640 }}>
+                        When Tempo loads tracks for your selected mix, any playlist that contains a Spotify explicit song shows{' '}
+                        <SpotifyExplicitBadge size="sm" title="At least one explicit track in this playlist" /> next to its track count.
+                      </p>
                     </div>
 
                         <div style={{ 
@@ -4960,7 +4983,12 @@ const HostView: React.FC = () => {
                                   textAlign: 'right',
                                 }}
                               >
-                                <span>{trackCount} songs</span>
+                                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                                  {p.hasExplicitTracks === true && (
+                                    <SpotifyExplicitBadge size="sm" title="This playlist includes at least one Spotify explicit track" />
+                                  )}
+                                  <span>{trackCount} songs</span>
+                                </span>
                               </span>
                               {isInsufficient && (
                                 <span style={{ fontSize: '0.72rem', color: '#ffb347', whiteSpace: 'nowrap', padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,179,71,0.35)', background: 'rgba(255,179,71,0.08)', flexShrink: 0, paddingTop: 6 }} title="Need at least 15 tracks for a standard round; add songs in Spotify">Need 15+</span>
