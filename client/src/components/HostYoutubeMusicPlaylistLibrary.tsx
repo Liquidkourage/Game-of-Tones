@@ -45,12 +45,20 @@ function mapApiToMixRows(api: ApiPlaylist[]): YoutubeMixPlaylistRow[] {
 type Props = {
   /** Pushes YouTube playlists into the main library table (merged with Spotify). */
   onMixPlaylistsChange?: (rows: YoutubeMixPlaylistRow[]) => void;
+  /** Wait until host JWT/session bootstrap finished so playlist requests don’t 401 before `/api/auth/me` syncs storage. */
+  hostSessionReady?: boolean;
+  /** Bump after OAuth return (`?youtube_music=connected`) to refetch playlists immediately. */
+  refreshNonce?: number;
 };
 
 /**
  * Loads YouTube Music library playlists and forwards them to HostView for the shared playlist table (mix + round buckets).
  */
-export function HostYoutubeMusicPlaylistLibrary({ onMixPlaylistsChange }: Props) {
+export function HostYoutubeMusicPlaylistLibrary({
+  onMixPlaylistsChange,
+  hostSessionReady = true,
+  refreshNonce = 0,
+}: Props) {
   const [status, setStatus] = useState<StatusPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,15 +73,20 @@ export function HostYoutubeMusicPlaylistLibrary({ onMixPlaylistsChange }: Props)
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
+    let waitingForHostSession = false;
     try {
       const sr = await hostFetch(`${API_BASE || ''}/api/youtube/music/status?_=${Date.now()}`, {
         cache: 'no-store',
       });
-      const sdata = (await sr.json().catch(() => ({}))) as StatusPayload;
+      const sdata = (await sr.json().catch(() => ({}))) as StatusPayload & { error?: string };
       if (!sr.ok) {
         setStatus(null);
         pushMixRows([]);
-        setError('Could not load YouTube Music status.');
+        setError(
+          sdata.error === 'login_required'
+            ? 'Sign in as host first, then refresh.'
+            : 'Could not load YouTube Music status.'
+        );
         return;
       }
       setStatus(sdata);
@@ -85,6 +98,12 @@ export function HostYoutubeMusicPlaylistLibrary({ onMixPlaylistsChange }: Props)
 
       if (!sdata.connected) {
         pushMixRows([]);
+        return;
+      }
+
+      if (!hostSessionReady) {
+        pushMixRows([]);
+        waitingForHostSession = true;
         return;
       }
 
@@ -105,6 +124,10 @@ export function HostYoutubeMusicPlaylistLibrary({ onMixPlaylistsChange }: Props)
           setStatus({ ...sdata, connected: false });
           return;
         }
+        if (pr.status === 401 && (pdata.error === 'login_required' || !pdata.error)) {
+          setError('Host session missing — finish Google sign-in or reload the page, then refresh.');
+          return;
+        }
         setError(pdata.message || pdata.error || 'Could not load playlists.');
         return;
       }
@@ -122,15 +145,13 @@ export function HostYoutubeMusicPlaylistLibrary({ onMixPlaylistsChange }: Props)
       pushMixRows([]);
       setError('Network error loading YouTube Music playlists.');
     } finally {
-      setLoading(false);
+      setLoading(waitingForHostSession);
     }
-  }, [pushMixRows]);
+  }, [pushMixRows, hostSessionReady]);
 
   useEffect(() => {
     void refresh();
-  }, [refresh]);
-
-  if (!status?.configured) return null;
+  }, [refresh, refreshNonce]);
 
   return (
     <div
@@ -162,7 +183,7 @@ export function HostYoutubeMusicPlaylistLibrary({ onMixPlaylistsChange }: Props)
           type="button"
           className="btn-secondary"
           style={{ fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          disabled={loading || !status.configured}
+          disabled={loading || !hostSessionReady}
           onClick={() => void refresh()}
           title="Reload status and playlists"
         >
@@ -171,11 +192,30 @@ export function HostYoutubeMusicPlaylistLibrary({ onMixPlaylistsChange }: Props)
         </button>
       </div>
 
-      {!status.connected ? (
+      {!hostSessionReady ? (
+        <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255,255,255,0.72)', lineHeight: 1.5 }}>
+          Finishing host sign-in… YouTube playlists load here right after your session is ready.
+        </p>
+      ) : error && !status ? (
+        <p style={{ margin: 0, fontSize: '0.82rem', color: '#ff9e9e', lineHeight: 1.5 }}>
+          {error}{' '}
+          <button type="button" className="btn-secondary" style={{ fontSize: '0.78rem', marginLeft: 8 }} onClick={() => void refresh()}>
+            Retry
+          </button>
+        </p>
+      ) : status && status.configured === false ? (
+        <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255,220,220,0.88)', lineHeight: 1.5 }}>
+          This deployment has{' '}
+          <strong style={{ color: '#fff' }}>not</strong> set YouTube Music OAuth (
+          <code style={{ fontSize: '0.72rem' }}>YOUTUBE_MUSIC_GOOGLE_CLIENT_ID</code> /{' '}
+          <code style={{ fontSize: '0.72rem' }}>YOUTUBE_MUSIC_GOOGLE_CLIENT_SECRET</code>). Add those on the API host and redeploy to merge
+          YouTube playlists into the library below.
+        </p>
+      ) : status && !status.connected ? (
         <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255,220,220,0.88)', lineHeight: 1.5 }}>
           Connect YouTube Music under <strong style={{ color: '#fff' }}>Connection</strong> to merge your playlists into the{' '}
-          <strong style={{ color: '#fff' }}>Playlist library</strong> table below (mix checkboxes and round buckets). Item fetch uses
-          video ids; in-player playback is still being wired.
+          <strong style={{ color: '#fff' }}>Playlist library</strong> table below (mix checkboxes and round buckets). Item fetch uses video ids;
+          in-player playback is still being wired.
         </p>
       ) : loading ? (
         <p style={{ margin: 0, fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)' }}>Loading playlists…</p>

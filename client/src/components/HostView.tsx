@@ -413,6 +413,8 @@ const HostView: React.FC = () => {
   const [showConnectionModal, setShowConnectionModal] = useState(false);
   /** Server has YTM OAuth env; shows Connection UI even when REACT_APP_ENABLE_YOUTUBE_MUSIC was not set at client build time. */
   const [ytMusicServerConfigured, setYtMusicServerConfigured] = useState(false);
+  /** Bump so HostYoutubeMusicPlaylistLibrary refetches after Google OAuth return (?youtube_music=connected). */
+  const [ytMusicLibraryRefreshNonce, setYtMusicLibraryRefreshNonce] = useState(0);
   const showYoutubeMusicInConnectionModal = ENABLE_YOUTUBE_MUSIC || ytMusicServerConfigured;
   const [spotifyInitialCheckDone, setSpotifyInitialCheckDone] = useState(false);
   const initialConnectionPromptRef = useRef(false);
@@ -473,7 +475,7 @@ const HostView: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hostAuthBootstrapDone]);
 
   const [currentRoundIndex, setCurrentRoundIndex] = useState<number>(-1);
   
@@ -1200,6 +1202,15 @@ const HostView: React.FC = () => {
       setIsLoadingDevices(false);
     }
   }, []);
+
+  /** After YouTube Music OAuth redirect (?youtube_music=connected), strip param and refetch merged library playlists. */
+  useEffect(() => {
+    if (searchParams.get('youtube_music') !== 'connected') return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('youtube_music');
+    setSearchParams(next, { replace: true });
+    setYtMusicLibraryRefreshNonce((n) => n + 1);
+  }, [searchParams, setSearchParams]);
 
   /** After server-side Spotify OAuth redirect (?spotify=connected), refresh status and clean URL. */
   useEffect(() => {
@@ -4879,7 +4890,11 @@ const HostView: React.FC = () => {
                       <strong style={{ color: '#fff' }}>finalize the bingo pool</strong> (song source for the game). You can still{' '}
                       <strong style={{ color: '#fff' }}>drag any row</strong> into round buckets for round-specific setup.
                     </p>
-                    <HostYoutubeMusicPlaylistLibrary onMixPlaylistsChange={handleYoutubeMusicMixPlaylistsChange} />
+                    <HostYoutubeMusicPlaylistLibrary
+                      hostSessionReady={hostAuthBootstrapDone}
+                      refreshNonce={ytMusicLibraryRefreshNonce}
+                      onMixPlaylistsChange={handleYoutubeMusicMixPlaylistsChange}
+                    />
                     {spotifyListCacheInfo ? (
                       <div
                         style={{
