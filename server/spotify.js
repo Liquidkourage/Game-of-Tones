@@ -1038,6 +1038,9 @@ class SpotifyService {
         tracks: this._playlistItemsTotalFromListItem(playlist),
         public: playlist.public,
         collaborative: playlist.collaborative,
+        /** Spotify user id of playlist owner — for catalog prefix filters (followed ≠ readable /items). */
+        ownerId:
+          playlist.owner && playlist.owner.id != null ? String(playlist.owner.id) : null,
         owner:
           playlist.owner && playlist.owner.display_name != null
             ? playlist.owner.display_name

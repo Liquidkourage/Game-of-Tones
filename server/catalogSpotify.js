@@ -6,6 +6,11 @@
  * - TEMPO_CATALOG_SPOTIFY_REFRESH_TOKEN (required if catalog used)
  * - TEMPO_CATALOG_PLAYLIST_IDS — comma-separated Spotify playlist ids, OR
  * - TEMPO_CATALOG_PLAYLISTS_JSON — e.g. [{"id":"abc","label":"Pack name"}] (label optional)
+ * - TEMPO_CATALOG_PLAYLIST_NAME_PREFIX — non-empty: discover packs from GET /v1/me/playlists whose
+ *   name starts with this string (merged with static allowlist above; dedupe by id, static wins labels).
+ * - TEMPO_CATALOG_PREFIX_OWNER_ONLY — default true: prefix matches must be owned by the catalog user
+ *   (avoids followed playlists that 403 on /items).
+ * - TEMPO_CATALOG_PREFIX_CACHE_MS — ms to cache prefix discovery (default 300000).
  * - TEMPO_CATALOG_SPOTIFY_CLIENT_ID / TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET — optional; default SPOTIFY_*
  *
  * Catalog OAuth must use the same Spotify Developer app as the refresh token was issued for.
@@ -48,8 +53,110 @@ function hasCatalogRefreshToken() {
   return !!(rt && String(rt).trim());
 }
 
+/** @returns {string} trimmed prefix or '' */
+function getCatalogPlaylistNamePrefix() {
+  const v = process.env.TEMPO_CATALOG_PLAYLIST_NAME_PREFIX;
+  if (v == null || String(v).trim() === '') return '';
+  return String(v).trim();
+}
+
+function isCatalogPrefixMode() {
+  return getCatalogPlaylistNamePrefix() !== '';
+}
+
+function parseEnvBool(raw, defaultVal) {
+  if (raw == null || String(raw).trim() === '') return defaultVal;
+  const s = String(raw).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(s)) return true;
+  if (['0', 'false', 'no', 'off'].includes(s)) return false;
+  return defaultVal;
+}
+
+function getCatalogPrefixOwnerOnlyDefaultTrue() {
+  return parseEnvBool(process.env.TEMPO_CATALOG_PREFIX_OWNER_ONLY, true);
+}
+
+function getCatalogPrefixCacheMs() {
+  const n = Number(process.env.TEMPO_CATALOG_PREFIX_CACHE_MS);
+  if (Number.isFinite(n) && n >= 0) return n;
+  return 300000;
+}
+
 function isCatalogFeatureConfigured() {
-  return hasCatalogRefreshToken() && parseCatalogAllowlistEntries().length > 0;
+  if (!hasCatalogRefreshToken()) return false;
+  if (isCatalogPrefixMode()) return true;
+  return parseCatalogAllowlistEntries().length > 0;
+}
+
+/** @type {{ key: string, entries: { id: string, label?: string }[], at: number } | null} */
+let catalogAllowlistResolveCache = null;
+
+/**
+ * Static entries plus optional prefix-discovered playlists (catalog token’s /me/playlists).
+ * @returns {Promise<{ id: string, label?: string }[]>}
+ */
+async function resolveCatalogAllowlistEntries() {
+  const prefix = getCatalogPlaylistNamePrefix();
+  const staticEntries = parseCatalogAllowlistEntries();
+
+  if (!prefix) {
+    return staticEntries;
+  }
+
+  const ownerOnly = getCatalogPrefixOwnerOnlyDefaultTrue();
+  const staticKey = staticEntries
+    .map((e) => e.id)
+    .sort()
+    .join(',');
+  const cacheKey = `${prefix}|${ownerOnly ? '1' : '0'}|${staticKey}`;
+  const ttl = getCatalogPrefixCacheMs();
+  const now = Date.now();
+  if (
+    ttl > 0 &&
+    catalogAllowlistResolveCache &&
+    catalogAllowlistResolveCache.key === cacheKey &&
+    now - catalogAllowlistResolveCache.at < ttl
+  ) {
+    return catalogAllowlistResolveCache.entries;
+  }
+
+  const svc = await ensureCatalogAccessToken();
+  let catalogSpotifyUserId = null;
+  if (ownerOnly) {
+    const prof = await svc.getCurrentUserProfileBrief();
+    catalogSpotifyUserId = prof.spotifyUserId;
+    if (!catalogSpotifyUserId) {
+      console.warn(
+        '[catalog] PREFIX_OWNER_ONLY set but GET /v1/me returned no user id; using static allowlist only'
+      );
+      catalogAllowlistResolveCache = { key: cacheKey, entries: staticEntries, at: now };
+      return staticEntries;
+    }
+  }
+
+  const { playlists } = await svc.getUserPlaylists();
+  /** @type {{ id: string, label?: string }[]} */
+  const prefixEntries = [];
+  for (let i = 0; i < playlists.length; i++) {
+    const p = playlists[i];
+    const name = p.name != null ? String(p.name) : '';
+    if (!name.startsWith(prefix)) continue;
+    const oid = p.ownerId != null ? String(p.ownerId) : '';
+    if (ownerOnly && catalogSpotifyUserId && oid !== catalogSpotifyUserId) continue;
+    prefixEntries.push({ id: String(p.id).trim(), label: name });
+  }
+
+  const mergedMap = new Map();
+  for (const e of staticEntries) {
+    mergedMap.set(e.id, { id: e.id, ...(e.label ? { label: e.label } : {}) });
+  }
+  for (const e of prefixEntries) {
+    if (!mergedMap.has(e.id)) mergedMap.set(e.id, e);
+  }
+  const merged = [...mergedMap.values()];
+
+  catalogAllowlistResolveCache = { key: cacheKey, entries: merged, at: now };
+  return merged;
 }
 
 let catalogServiceSingleton = null;
@@ -71,9 +178,10 @@ function getCatalogSpotifyService() {
 }
 
 /** @param {string} playlistId */
-function assertCatalogPlaylistAllowlisted(playlistId) {
+async function assertCatalogPlaylistAllowlisted(playlistId) {
   const id = String(playlistId || '').trim();
-  const allowed = new Set(parseCatalogAllowlistEntries().map((e) => e.id));
+  const entries = await resolveCatalogAllowlistEntries();
+  const allowed = new Set(entries.map((e) => e.id));
   if (!id || !allowed.has(id)) {
     const err = new Error('Playlist not in Tempo catalog allowlist');
     err.statusCode = 400;
@@ -98,7 +206,7 @@ async function ensureCatalogAccessToken() {
  * @returns {Promise<{ id: string, name: string, tracks: number, catalog: true }[]>}
  */
 async function loadCatalogPackSummariesForApi() {
-  const entries = parseCatalogAllowlistEntries();
+  const entries = await resolveCatalogAllowlistEntries();
   const svc = await ensureCatalogAccessToken();
   const out = [];
   for (let i = 0; i < entries.length; i++) {
@@ -131,7 +239,7 @@ async function loadCatalogPackSummariesForApi() {
  * @param {string} playlistId
  */
 async function fetchCatalogPlaylistTracks(playlistId, playlistInfo = null) {
-  assertCatalogPlaylistAllowlisted(playlistId);
+  await assertCatalogPlaylistAllowlisted(playlistId);
   const svc = await ensureCatalogAccessToken();
   return svc.getPlaylistTracks(String(playlistId).trim(), playlistInfo);
 }
@@ -139,6 +247,7 @@ async function fetchCatalogPlaylistTracks(playlistId, playlistInfo = null) {
 module.exports = {
   isCatalogFeatureConfigured,
   parseCatalogAllowlistEntries,
+  resolveCatalogAllowlistEntries,
   loadCatalogPackSummariesForApi,
   fetchCatalogPlaylistTracks,
   assertCatalogPlaylistAllowlisted,
