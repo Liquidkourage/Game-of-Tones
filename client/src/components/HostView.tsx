@@ -252,6 +252,12 @@ const HostView: React.FC = () => {
   /** Official packs (server allowlist + catalog Spotify refresh token). */
   const [catalogPackOptions, setCatalogPackOptions] = useState<Playlist[]>([]);
   const [catalogPacksConfigured, setCatalogPacksConfigured] = useState(false);
+  /** After first catalog /packs response attempt (success or failure). */
+  const [catalogPacksProbeDone, setCatalogPacksProbeDone] = useState(false);
+  /** True only when /packs returned 200 with success (then configured reflects server env). */
+  const [catalogPacksFetchOk, setCatalogPacksFetchOk] = useState(false);
+  /** Last /packs returned 401 (needs Google host session). */
+  const [catalogPacksFetchUnauthorized, setCatalogPacksFetchUnauthorized] = useState(false);
   const [selectedCatalogPlaylists, setSelectedCatalogPlaylists] = useState<Playlist[]>([]);
 
   /** Personal selection first, then catalog-only ids (append). Dedupes by id. */
@@ -620,13 +626,26 @@ const HostView: React.FC = () => {
   const loadCatalogPacks = useCallback(async () => {
     try {
       const res = await hostFetch(`${API_BASE || ''}/api/spotify/catalog/packs`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        setCatalogPacksFetchOk(false);
+        setCatalogPacksConfigured(false);
+        setCatalogPackOptions([]);
+        setCatalogPacksFetchUnauthorized(res.status === 401);
+        return;
+      }
+      setCatalogPacksFetchUnauthorized(false);
       const data = (await res.json()) as {
         success?: boolean;
         configured?: boolean;
         packs?: Array<{ id: string; name: string; tracks: number; catalog?: boolean }>;
       };
-      if (!data.success) return;
+      if (!data.success) {
+        setCatalogPacksFetchOk(false);
+        setCatalogPacksConfigured(false);
+        setCatalogPackOptions([]);
+        return;
+      }
+      setCatalogPacksFetchOk(true);
       setCatalogPacksConfigured(data.configured === true);
       const packs = data.packs || [];
       setCatalogPackOptions(
@@ -638,8 +657,12 @@ const HostView: React.FC = () => {
         }))
       );
     } catch {
+      setCatalogPacksFetchOk(false);
       setCatalogPacksConfigured(false);
       setCatalogPackOptions([]);
+      setCatalogPacksFetchUnauthorized(false);
+    } finally {
+      setCatalogPacksProbeDone(true);
     }
   }, []);
 
@@ -4815,76 +4838,107 @@ const HostView: React.FC = () => {
                         After Tempo loads tracks for playlists you include in the mix (selection debounce or Finalize), any playlist that contains a Spotify explicit song shows{' '}
                         <SpotifyExplicitBadge size="sm" title="At least one explicit track in this playlist" /> next to its song count — no extra Spotify calls beyond that load.
                       </p>
-                      {catalogPacksConfigured ? (
-                        <div
-                          style={{
-                            padding: '12px 14px',
-                            borderRadius: 10,
-                            border: '1px solid rgba(120, 180, 255, 0.35)',
-                            background: 'rgba(60, 120, 200, 0.12)',
-                          }}
-                        >
-                          <p style={{ margin: '0 0 6px', fontSize: '0.82rem', color: '#b8dcff', fontWeight: 700 }}>
-                            Official packs (catalog)
+                      <div
+                        style={{
+                          padding: '12px 14px',
+                          borderRadius: 10,
+                          border: '1px solid rgba(120, 180, 255, 0.35)',
+                          background: 'rgba(60, 120, 200, 0.12)',
+                        }}
+                      >
+                        <p style={{ margin: '0 0 6px', fontSize: '0.82rem', color: '#b8dcff', fontWeight: 700 }}>
+                          Official packs (catalog)
+                        </p>
+                        {!catalogPacksProbeDone ? (
+                          <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+                            Contacting server…
                           </p>
-                          <p style={{ margin: '0 0 12px', fontSize: '0.76rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
-                            Loaded with Tempo&apos;s allowlisted Spotify account — not your personal library token. Your Spotify is still used for playback. Appended after your own playlist selections.
+                        ) : !catalogPacksFetchOk ? (
+                          <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+                            {catalogPacksFetchUnauthorized ? (
+                              <>
+                                Host session required — sign in with <strong style={{ color: '#c8dcff' }}>Google</strong> as
+                                host, then retry <strong style={{ color: '#c8dcff' }}>Refresh</strong> on your library (or reload).
+                              </>
+                            ) : (
+                              <>
+                                Couldn&apos;t load Official packs (network or server error). Reload the page or use{' '}
+                                <strong style={{ color: '#c8dcff' }}>Retry loading playlists</strong> above if Spotify failed.
+                              </>
+                            )}
                           </p>
-                          {catalogPackOptions.length > 0 ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                              {catalogPackOptions.map((pack) => {
-                                const isSel = selectedCatalogPlaylists.some((p) => p.id === pack.id);
-                                return (
-                                  <label
-                                    key={pack.id}
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: 10,
-                                      cursor: 'pointer',
-                                      fontSize: '0.88rem',
-                                    }}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={isSel}
-                                      onChange={() => {
-                                        setSelectedCatalogPlaylists((prev) =>
-                                          isSel ? prev.filter((p) => p.id !== pack.id) : [...prev, { ...pack, catalog: true }]
-                                        );
-                                      }}
-                                    />
-                                    <span style={{ color: '#fff', flex: 1, minWidth: 0 }}>{pack.name}</span>
-                                    <span style={{ color: '#8899aa', fontSize: '0.78rem', flexShrink: 0 }}>
-                                      {pack.tracks} songs
-                                    </span>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <p
-                              style={{
-                                margin: 0,
-                                fontSize: '0.78rem',
-                                color: 'rgba(255,255,255,0.65)',
-                                lineHeight: 1.5,
-                              }}
-                            >
-                              No catalog packs matched yet. If you use{' '}
-                              <strong style={{ color: '#c8dcff' }}>TEMPO_CATALOG_PLAYLIST_NAME_PREFIX</strong>, playlist
-                              titles on the <strong style={{ color: '#c8dcff' }}>catalog</strong> Spotify account must{' '}
-                              <strong style={{ color: '#c8dcff' }}>start with that exact prefix</strong> (e.g.{' '}
-                              <code style={{ fontSize: '0.72rem' }}>GoT Friday Hits</code>, not{' '}
-                              <code style={{ fontSize: '0.72rem' }}>Music Bingo - …</code>
-                              ). Or set{' '}
-                              <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> /{' '}
-                              <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code>. New matches can take
-                              up to the prefix cache window unless the server restarts.
+                        ) : !catalogPacksConfigured ? (
+                          <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+                            <strong style={{ color: '#c8dcff' }}>Not enabled on this server.</strong> Set{' '}
+                            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_SPOTIFY_REFRESH_TOKEN</code> plus{' '}
+                            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_NAME_PREFIX</code> or{' '}
+                            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> /{' '}
+                            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code> on the API host (e.g.
+                            Railway), then redeploy. Your <strong style={{ color: '#c8dcff' }}>GoT picks</strong> list above is
+                            only your personal Spotify library — it is not the catalog.
+                          </p>
+                        ) : (
+                          <>
+                            <p style={{ margin: '0 0 12px', fontSize: '0.76rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
+                              Loaded with Tempo&apos;s allowlisted Spotify account — not your personal library token. Your
+                              Spotify is still used for playback. Appended after your own playlist selections.
                             </p>
-                          )}
-                        </div>
-                      ) : null}
+                            {catalogPackOptions.length > 0 ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {catalogPackOptions.map((pack) => {
+                                  const isSel = selectedCatalogPlaylists.some((p) => p.id === pack.id);
+                                  return (
+                                    <label
+                                      key={pack.id}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 10,
+                                        cursor: 'pointer',
+                                        fontSize: '0.88rem',
+                                      }}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={isSel}
+                                        onChange={() => {
+                                          setSelectedCatalogPlaylists((prev) =>
+                                            isSel ? prev.filter((p) => p.id !== pack.id) : [...prev, { ...pack, catalog: true }]
+                                          );
+                                        }}
+                                      />
+                                      <span style={{ color: '#fff', flex: 1, minWidth: 0 }}>{pack.name}</span>
+                                      <span style={{ color: '#8899aa', fontSize: '0.78rem', flexShrink: 0 }}>
+                                        {pack.tracks} songs
+                                      </span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <p
+                                style={{
+                                  margin: 0,
+                                  fontSize: '0.78rem',
+                                  color: 'rgba(255,255,255,0.65)',
+                                  lineHeight: 1.5,
+                                }}
+                              >
+                                No catalog packs matched yet. If you use{' '}
+                                <strong style={{ color: '#c8dcff' }}>TEMPO_CATALOG_PLAYLIST_NAME_PREFIX</strong>, playlist
+                                titles on the <strong style={{ color: '#c8dcff' }}>catalog</strong> Spotify account must{' '}
+                                <strong style={{ color: '#c8dcff' }}>start with that exact prefix</strong> (e.g.{' '}
+                                <code style={{ fontSize: '0.72rem' }}>GoT Friday Hits</code>, not{' '}
+                                <code style={{ fontSize: '0.72rem' }}>Music Bingo - …</code>
+                                ). Or set{' '}
+                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> /{' '}
+                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code>. New matches can take
+                                up to the prefix cache window unless the server restarts.
+                              </p>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
 
                         <div style={{ 
