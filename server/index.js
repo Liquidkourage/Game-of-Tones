@@ -286,6 +286,24 @@ const helmetCspDirectives = {
 };
 delete helmetCspDirectives['frame-ancestors'];
 helmetCspDirectives.frameAncestors = ["'self'", 'https://synapse.liquidkourage.com'];
+
+// YouTube IFrame API + embedded player (host playback for YouTube Music tracks)
+helmetCspDirectives['script-src'] = [
+  ...(helmetCspDirectives['script-src'] || ["'self'"]),
+  'https://www.youtube.com',
+  'https://s.ytimg.com',
+];
+helmetCspDirectives['frame-src'] = [
+  "'self'",
+  'https://www.youtube.com',
+  'https://www.youtube-nocookie.com',
+];
+helmetCspDirectives['img-src'] = [
+  ...(helmetCspDirectives['img-src'] || ["'self'"]),
+  'https://i.ytimg.com',
+  'https://yt3.ggpht.com',
+];
+
 app.use(
   helmet({
     frameguard: false,
