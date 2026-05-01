@@ -1,19 +1,43 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 declare global {
   interface Window {
-    YT?: { Player: new (el: HTMLElement, opts: Record<string, unknown>) => YtPlayer };
+    YT?: {
+      Player: new (el: HTMLElement, opts: Record<string, unknown>) => YtPlayer;
+      PlayerState?: { PLAYING: number; PAUSED: number; BUFFERING: number; CUED: number };
+    };
     onYouTubeIframeAPIReady?: () => void;
   }
 }
 
+/** YouTube iframe API player surface we use */
 type YtPlayer = {
   destroy?: () => void;
   setVolume?: (n: number) => void;
   seekTo?: (sec: number, allowSeekAhead?: boolean) => void;
   playVideo?: () => void;
   pauseVideo?: () => void;
+  unMute?: () => void;
+  mute?: () => void;
 };
+
+const SESSION_AUDIO_KEY = 'got_host_youtube_audio_unlocked';
+
+function readHostYoutubeAudioUnlocked(): boolean {
+  try {
+    return sessionStorage.getItem(SESSION_AUDIO_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeHostYoutubeAudioUnlocked() {
+  try {
+    sessionStorage.setItem(SESSION_AUDIO_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+}
 
 let iframeApiPromise: Promise<void> | null = null;
 
@@ -43,6 +67,10 @@ function ensureYoutubeIframeApi(): Promise<void> {
   return iframeApiPromise;
 }
 
+function playingState(): number {
+  return window.YT?.PlayerState?.PLAYING ?? 1;
+}
+
 export type HostYoutubeIframePlayerProps = {
   videoId: string | null;
   /** Playback offset from video start (seconds). */
@@ -54,7 +82,8 @@ export type HostYoutubeIframePlayerProps = {
 };
 
 /**
- * Host-only audio via YouTube IFrame API (Option 1). Visible mini player so the host can confirm audio/output device.
+ * Host-only audio via YouTube IFrame API. Browsers usually block unmuted autoplay until a user gesture;
+ * we offer a one-time-per-session tap target and call unMute/play explicitly.
  */
 export function HostYoutubeIframePlayer({
   videoId,
@@ -65,9 +94,16 @@ export function HostYoutubeIframePlayer({
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YtPlayer | null>(null);
   const pauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const volumeRef = useRef(volume);
+  const snippetStartedRef = useRef(false);
+  const [showSoundGate, setShowSoundGate] = useState(false);
+
+  volumeRef.current = volume;
 
   useEffect(() => {
     if (!videoId) {
+      setShowSoundGate(false);
+      snippetStartedRef.current = false;
       if (pauseTimerRef.current) {
         clearTimeout(pauseTimerRef.current);
         pauseTimerRef.current = null;
@@ -81,6 +117,9 @@ export function HostYoutubeIframePlayer({
       if (containerRef.current) containerRef.current.innerHTML = '';
       return;
     }
+
+    setShowSoundGate(!readHostYoutubeAudioUnlocked());
+    snippetStartedRef.current = false;
 
     let cancelled = false;
 
@@ -103,9 +142,11 @@ export function HostYoutubeIframePlayer({
       containerRef.current.appendChild(mountEl);
 
       const startInt = Math.max(0, Math.floor(startSeconds));
+      const origin =
+        typeof window !== 'undefined' && window.location?.origin ? window.location.origin : undefined;
 
       playerRef.current = new window.YT.Player(mountEl, {
-        height: '120',
+        height: '360',
         width: '100%',
         videoId,
         playerVars: {
@@ -113,22 +154,36 @@ export function HostYoutubeIframePlayer({
           controls: 1,
           rel: 0,
           start: startInt,
+          playsinline: 1,
+          ...(origin ? { origin } : {}),
         },
         events: {
           onReady: (ev: { target: YtPlayer }) => {
             const p = ev.target;
+            playerRef.current = p;
             try {
-              const vol = Math.round(Math.min(100, Math.max(0, volume)));
+              const vol = Math.round(Math.min(100, Math.max(0, volumeRef.current)));
+              p.unMute?.();
               p.setVolume?.(vol);
               p.seekTo?.(Math.max(0, startSeconds), true);
               p.playVideo?.();
             } catch {
               /* ignore */
             }
+          },
+          onStateChange: (ev: { target: YtPlayer; data: number }) => {
+            if (cancelled) return;
+            if (ev.data !== playingState()) return;
+            if (snippetStartedRef.current) return;
+            snippetStartedRef.current = true;
+            if (pauseTimerRef.current) {
+              clearTimeout(pauseTimerRef.current);
+              pauseTimerRef.current = null;
+            }
             const ms = Math.max(400, Math.ceil(snippetSeconds * 1000));
             pauseTimerRef.current = setTimeout(() => {
               try {
-                p.pauseVideo?.();
+                ev.target.pauseVideo?.();
               } catch {
                 /* ignore */
               }
@@ -152,7 +207,23 @@ export function HostYoutubeIframePlayer({
       playerRef.current = null;
       if (containerRef.current) containerRef.current.innerHTML = '';
     };
-  }, [videoId, startSeconds, snippetSeconds, volume]);
+  }, [videoId, startSeconds, snippetSeconds]);
+
+  const applyUserAudioUnlock = () => {
+    writeHostYoutubeAudioUnlocked();
+    setShowSoundGate(false);
+    const p = playerRef.current;
+    if (!p) return;
+    try {
+      const vol = Math.round(Math.min(100, Math.max(0, volume)));
+      p.unMute?.();
+      p.setVolume?.(vol);
+      p.seekTo?.(Math.max(0, startSeconds), true);
+      p.playVideo?.();
+    } catch {
+      /* ignore */
+    }
+  };
 
   return (
     <div
@@ -163,17 +234,50 @@ export function HostYoutubeIframePlayer({
         position: 'fixed',
         right: 16,
         bottom: 16,
-        width: 280,
-        maxWidth: '42vw',
+        width: 320,
+        maxWidth: 'min(92vw, 420px)',
         zIndex: 60,
         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
         borderRadius: 8,
         overflow: 'hidden',
         background: '#0a0a0a',
-        border: '1px solid rgba(255, 255, 255, 0.08)',
+        border: '1px solid rgba(255, 255, 255, 0.12)',
       }}
     >
-      <div ref={containerRef} style={{ width: '100%', minHeight: 120 }} />
+      <div style={{ position: 'relative', width: '100%' }}>
+        <div ref={containerRef} style={{ width: '100%', aspectRatio: '16 / 9', minHeight: 180 }} />
+        {videoId && showSoundGate ? (
+          <button
+            type="button"
+            onClick={applyUserAudioUnlock}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              margin: 0,
+              padding: '12px 14px',
+              border: 'none',
+              borderRadius: 0,
+              cursor: 'pointer',
+              background: 'linear-gradient(145deg, rgba(15,15,18,0.92), rgba(35,35,42,0.88))',
+              color: '#f2f2f4',
+              fontSize: '0.95rem',
+              fontWeight: 600,
+              lineHeight: 1.35,
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+            }}
+          >
+            <span>Tap here for sound</span>
+            <span style={{ fontWeight: 400, fontSize: '0.8rem', opacity: 0.85 }}>
+              Browsers block autoplay audio until you interact once. After this, clips should play with audio for this session.
+            </span>
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
