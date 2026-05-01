@@ -16,6 +16,7 @@ import CallbackGoogle from './components/CallbackGoogle';
 import AdminPage from './components/AdminPage';
 import DisplayHeaderInfo from './components/DisplayHeaderInfo';
 import ErrorBoundary from './components/ErrorBoundary';
+import HostYoutubePlaybackWindow from './components/HostYoutubePlaybackWindow';
 
 function AppHeader() {
   const location = useLocation();
@@ -106,11 +107,12 @@ function AppHeader() {
 function App() {
   const location = useLocation();
   const isDisplay = /^\/display(\/.+|$)/.test(location.pathname);
+  const isYoutubeHostPlayback = /^\/youtube-host-playback(\/.+|$)/.test(location.pathname);
   const isAdmin = location.pathname === '/admin';
   return (
     <div className="App">
       <div className="app-container">
-        {!isAdmin && <AppHeader />}
+        {!isAdmin && !isYoutubeHostPlayback && <AppHeader />}
         {isDisplay && <div style={{ height: 73 }} />}
         <main className="app-main">
           <ErrorBoundary>
@@ -138,6 +140,7 @@ function App() {
               } />
               <Route path="/display" element={<PublicDisplay />} />
               <Route path="/display/:roomId" element={<PublicDisplay />} />
+              <Route path="/youtube-host-playback/:roomId" element={<HostYoutubePlaybackWindow />} />
               <Route path="/callback" element={<SpotifyCallback />} />
               <Route path="/callback-google" element={<CallbackGoogle />} />
               <Route path="/admin" element={<AdminPage />} />

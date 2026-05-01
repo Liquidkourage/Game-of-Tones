@@ -53,6 +53,7 @@ import { HostYoutubeIframePlayer } from './HostYoutubeIframePlayer';
 import RoundPlanner from './RoundPlanner';
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
+import { getYoutubeHostPlaybackChannelName } from '../utils/youtubeHostPlaybackChannel';
 import { validateSongTitle, validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
 import './HostView.css';
 
@@ -630,6 +631,14 @@ const HostView: React.FC = () => {
     snippetSeconds: number;
   } | null>(null);
 
+  const youtubePlaybackBcRef = useRef<BroadcastChannel | null>(null);
+  const youtubeHostPlaybackBroadcastRef = useRef(youtubeHostPlayback);
+  youtubeHostPlaybackBroadcastRef.current = youtubeHostPlayback;
+  const youtubePlaybackVolumeRef = useRef(playbackState.volume);
+  youtubePlaybackVolumeRef.current = playbackState.volume;
+  const [youtubePlaybackPopupOpen, setYoutubePlaybackPopupOpen] = useState(false);
+  const youtubePlaybackPopupRef = useRef<Window | null>(null);
+
   const [isSeeking, setIsSeeking] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [previousVolume, setPreviousVolume] = useState(100);
@@ -724,6 +733,74 @@ const HostView: React.FC = () => {
     }, 4000);
     return () => clearInterval(id);
   }, [isSpotifyConnected, webApiQuarantine.active, refreshSpotifyQuarantineFromStatus]);
+
+  const openYoutubeHostPlaybackWindow = useCallback(() => {
+    if (!roomId) return;
+    const path = `/youtube-host-playback/${encodeURIComponent(roomId)}`;
+    const url = `${window.location.origin}${path}`;
+    const features = 'popup=yes,width=820,height=580';
+    const w = window.open(url, 'gotYoutubeHostPlayback', features);
+    if (!w) {
+      showToast('Browser blocked the playback window. Allow popups for this site.', 'warn');
+      return;
+    }
+    youtubePlaybackPopupRef.current = w;
+    setYoutubePlaybackPopupOpen(true);
+    try {
+      w.focus();
+    } catch {
+      /* ignore */
+    }
+  }, [roomId, showToast]);
+
+  useEffect(() => {
+    if (!roomId) return;
+    const ch = new BroadcastChannel(getYoutubeHostPlaybackChannelName(roomId));
+    youtubePlaybackBcRef.current = ch;
+    const onMessage = (ev: MessageEvent) => {
+      const d = ev.data as { type?: string } | null;
+      if (!d || d.type !== 'REQUEST_SYNC') return;
+      ch.postMessage({
+        type: 'playback',
+        payload: youtubeHostPlaybackBroadcastRef.current,
+      });
+      ch.postMessage({ type: 'volume', volume: youtubePlaybackVolumeRef.current });
+    };
+    ch.addEventListener('message', onMessage);
+    return () => {
+      ch.removeEventListener('message', onMessage);
+      ch.close();
+      if (youtubePlaybackBcRef.current === ch) {
+        youtubePlaybackBcRef.current = null;
+      }
+    };
+  }, [roomId]);
+
+  useEffect(() => {
+    youtubePlaybackBcRef.current?.postMessage({
+      type: 'playback',
+      payload: youtubeHostPlayback,
+    });
+  }, [youtubeHostPlayback]);
+
+  useEffect(() => {
+    youtubePlaybackBcRef.current?.postMessage({
+      type: 'volume',
+      volume: playbackState.volume,
+    });
+  }, [playbackState.volume]);
+
+  useEffect(() => {
+    if (!youtubePlaybackPopupOpen) return;
+    const id = window.setInterval(() => {
+      const w = youtubePlaybackPopupRef.current;
+      if (!w || w.closed) {
+        youtubePlaybackPopupRef.current = null;
+        setYoutubePlaybackPopupOpen(false);
+      }
+    }, 700);
+    return () => clearInterval(id);
+  }, [youtubePlaybackPopupOpen]);
 
   useEffect(() => {
     if (!hostAckNotification) return;
@@ -2500,7 +2577,7 @@ const HostView: React.FC = () => {
           cleanup();
           const msg =
             payload?.message ||
-            'Finalize failed. Check Spotify connection or wait if rate-limited.';
+            'Finalize failed. Check playlist loading (YouTube Music / Spotify), connection, or wait if the service is rate-limiting.';
           showHostAckNotification({
             id: 'finalize-mix-failed',
             title: 'Could not finalize mix',
@@ -4444,6 +4521,15 @@ const HostView: React.FC = () => {
                 event or work account). You only need a normal Spotify login — not a developer account. After this, pick a{' '}
                 <strong>playback device</strong> below.
               </p>
+              {showYoutubeMusicInConnectionModal ? (
+                <p
+                  className="host-spotify-guide"
+                  style={{ marginTop: 10, fontSize: '0.84rem', color: 'rgba(220,230,240,0.88)' }}
+                >
+                  <strong style={{ color: '#cfcfcf' }}>YouTube-only show?</strong> You can skip Spotify if every playlist in your mix is from{' '}
+                  <strong style={{ color: '#cfcfcf' }}>YouTube Music</strong> (link Google under Music &amp; rounds). Spotify is only required when the mix includes Spotify playlists or catalog packs that need it.
+                </p>
+              ) : null}
               <div className="spotify-connection-section">
                 {spotifyError && (
                   <div className="spotify-error">
@@ -4519,12 +4605,14 @@ const HostView: React.FC = () => {
 
   return (
     <div className="host-view">
-      <HostYoutubeIframePlayer
-        videoId={youtubeHostPlayback?.videoId ?? null}
-        startSeconds={(youtubeHostPlayback?.startMs ?? 0) / 1000}
-        snippetSeconds={youtubeHostPlayback?.snippetSeconds ?? snippetLength}
-        volume={playbackState.volume}
-      />
+      {!youtubePlaybackPopupOpen ? (
+        <HostYoutubeIframePlayer
+          videoId={youtubeHostPlayback?.videoId ?? null}
+          startSeconds={(youtubeHostPlayback?.startMs ?? 0) / 1000}
+          snippetSeconds={youtubeHostPlayback?.snippetSeconds ?? snippetLength}
+          volume={playbackState.volume}
+        />
+      ) : null}
       <HostAcknowledgeModal
         open={hostAckNotification != null}
         title={hostAckNotification?.title ?? ''}
@@ -4634,9 +4722,7 @@ const HostView: React.FC = () => {
                   <div style={{ display: 'none' }}>License validation disabled for tonight</div>
                 )}
 
-                <div
-                  className={`host-manager-grid${isSpotifyConnected ? ' host-manager-grid--split' : ''}`}
-                >
+                <div className="host-manager-grid host-manager-grid--split">
                     <section className="host-manager-section host-manager-grid__full">
                 <label
                   style={{
@@ -4677,9 +4763,8 @@ const HostView: React.FC = () => {
                 </label>
                     </section>
 
-          {/* Pattern Selection */}
-          {isSpotifyConnected && (
-            <div className="host-manager-grid__primary">
+          {/* Pattern Selection — applies to every mix (Spotify, YouTube Music, catalog-only, hybrid). */}
+          <div className="host-manager-grid__primary">
             <motion.div 
               className="pattern-section host-manager-section"
               initial={{ opacity: 0 }}
@@ -4834,7 +4919,6 @@ const HostView: React.FC = () => {
               </div>
             </motion.div>
             </div>
-          )}
                   <div className="host-manager-grid__secondary">
           <motion.div
             className="host-manager-section host-manager-section--display font-size-section"
@@ -5019,6 +5103,36 @@ const HostView: React.FC = () => {
                 </option>
               ))}
             </select>
+            {showYoutubeMusicInConnectionModal ? (
+              <>
+                <div className="host-manager-display__divider" style={{ marginTop: 14 }} />
+                <p className="host-manager-display__sub">YouTube playback window</p>
+                <p style={{ fontSize: '0.78rem', color: '#9a9a9a', marginBottom: 10, lineHeight: 1.4, maxWidth: 520 }}>
+                  Separate window for clip audio so you can keep the projector tab focused. Allow popups for this site.
+                  The corner mini-player is hidden while this window stays open.
+                </p>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={openYoutubeHostPlaybackWindow}
+                  style={{
+                    fontSize: '0.9rem',
+                    padding: '10px 16px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <AppWindow className="w-4 h-4" aria-hidden />
+                  Open YouTube playback window
+                </button>
+                {youtubePlaybackPopupOpen ? (
+                  <p style={{ marginTop: 10, fontSize: '0.78rem', color: '#6fdfae', lineHeight: 1.4 }}>
+                    Playback window is open — use that window for reliable sound while you run the display elsewhere.
+                  </p>
+                ) : null}
+              </>
+            ) : null}
           </motion.div>
                   </div>
                 </div>
@@ -5972,7 +6086,7 @@ const HostView: React.FC = () => {
                       maxWidth: 520,
                     }}>
                       {mixPlaylistSelection.length === 0
-                        ? 'Use Connection in the header for Spotify, then the Manager tab to select playlists (and optional official packs) for this round. Return here to finalize or start the game.'
+                        ? 'Use Connection for Spotify and/or YouTube Music as needed, then the Manager tab to select playlists (and optional catalog packs). YouTube-only mixes do not require Spotify. Return here to finalize or start the game.'
                         : 'Tap Finalize Mix or Start Game to build the bingo song pool from your selected playlists.'}
                     </p>
                   </div>
