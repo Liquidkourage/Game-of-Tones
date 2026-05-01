@@ -374,11 +374,14 @@ const PublicDisplay: React.FC = () => {
       setConnectionStatus('connected');
       setReconnectAttempts(0);
       
-      // Join room as display
-      newSocket.emit('join-room', { roomId, playerName: 'Display', isHost: false });
-      
-      // Request current state sync
-      newSocket.emit('sync-state', { roomId });
+      // Join room as display (avoid joining literal "undefined" if route params are not ready yet)
+      if (!roomId) {
+        console.warn('🖥️ PublicDisplay: connect fired before roomId is available; skipping join-room');
+      } else {
+        newSocket.emit('join-room', { roomId, playerName: 'Display', isHost: false });
+        newSocket.emit('sync-state', { roomId });
+      }
+
       setLastSyncTime(Date.now());
       
       ensureGrid();
@@ -394,9 +397,11 @@ const PublicDisplay: React.FC = () => {
       console.log('🖥️ PublicDisplay: Reconnected successfully');
       setConnectionStatus('connected');
       setReconnectAttempts(0);
-      
-      // Re-sync state after reconnection
-      newSocket.emit('sync-state', { roomId });
+
+      if (roomId) {
+        newSocket.emit('join-room', { roomId, playerName: 'Display', isHost: false });
+        newSocket.emit('sync-state', { roomId });
+      }
       setLastSyncTime(Date.now());
     });
 

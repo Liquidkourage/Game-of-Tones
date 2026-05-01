@@ -5027,6 +5027,99 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
   }
 }
 
+/** Merge playback/finalized caches into full song rows for late-join cards. */
+function buildCanonicalSongMapFromRoom(room) {
+  const map = new Map();
+  function addSong(s) {
+    if (!s || !s.id) return;
+    if (!map.has(s.id)) map.set(s.id, s);
+  }
+  function ingestObjects(arr) {
+    if (!Array.isArray(arr)) return;
+    for (const entry of arr) {
+      if (entry && typeof entry === 'object' && entry.id) addSong(entry);
+    }
+  }
+  ingestObjects(room.playlistSongs);
+  ingestObjects(room.finalizedSongs);
+  ingestObjects(room.finalizedSongOrder);
+
+  const meta =
+    room.fiveByFifteenMeta && typeof room.fiveByFifteenMeta === 'object' ? room.fiveByFifteenMeta : null;
+  function rowFromMeta(id) {
+    const m = meta && meta[id];
+    if (!m) return null;
+    return {
+      id,
+      name: m.name || '',
+      artist: m.artist || '',
+      explicit: m.explicit === true,
+      youtubeMusic: m.youtubeMusic === true,
+    };
+  }
+  function resolveBareId(id) {
+    if (typeof id !== 'string' || map.has(id)) return;
+    const fromMeta = rowFromMeta(id);
+    if (fromMeta) addSong(fromMeta);
+  }
+  if (Array.isArray(room.finalizedSongOrder)) {
+    for (const entry of room.finalizedSongOrder) {
+      if (typeof entry === 'string') resolveBareId(entry);
+    }
+  }
+  if (Array.isArray(room.oneBySeventyFivePool)) {
+    for (const entry of room.oneBySeventyFivePool) {
+      const id = typeof entry === 'string' ? entry : entry?.id;
+      if (id) resolveBareId(id);
+    }
+  }
+  return map;
+}
+
+function songsForPlaylistFromRoomCache(room, playlistId) {
+  const pid = String(playlistId);
+  const map = buildCanonicalSongMapFromRoom(room);
+  const out = [];
+  for (const s of map.values()) {
+    if (s.sourcePlaylistId != null && String(s.sourcePlaylistId) === pid) out.push(s);
+  }
+  return out;
+}
+
+async function fetchTracksForLateJoinPlaylist(roomId, room, playlist) {
+  const cached = songsForPlaylistFromRoomCache(room, playlist.id);
+  if (cached.length > 0) {
+    routineServerLog(`📋 Late-join: ${cached.length} cached tracks for playlist "${playlist.name}" (${playlist.id})`);
+    return cached;
+  }
+  if (playlist.youtubeMusic === true) {
+    const uid = room.ownerUserId;
+    if (uid != null && youtubeMusic.hasCredentials(uid)) {
+      try {
+        const tracks = await youtubeMusic.listPlaylistItems(uid, String(playlist.id), {
+          playlistName: playlist.name || '',
+        });
+        routineServerLog(`📋 Late-join: fetched ${tracks.length} YouTube tracks for "${playlist.name}"`);
+        return tracks;
+      } catch (e) {
+        console.error(`❌ Late-join YouTube fetch failed for ${playlist.id}:`, e?.message || e);
+        return [];
+      }
+    }
+    routineServerLog(
+      `⚠️ Late-join: YouTube playlist "${playlist.name}" — no cached tracks and no YouTube token in memory for host`
+    );
+    return [];
+  }
+  try {
+    const songs = await spotifyFor(roomId).getPlaylistTracks(playlist.id, playlist);
+    return songs;
+  } catch (error) {
+    console.error(`❌ Error fetching Spotify songs for playlist ${playlist.id}:`, error);
+    return [];
+  }
+}
+
 // Generate a single bingo card for one player (if they join mid-game)
 async function generateBingoCardForPlayer(roomId, playerId) {
   const room = rooms.get(roomId);
@@ -5042,20 +5135,27 @@ async function generateBingoCardForPlayer(roomId, playerId) {
   
   // Build a single card using the same 1x75 / 5x15 logic used for all players
   try {
-    // Fetch per-playlist songs and de-duplicate per list
+    const useFreeSpace = !!room.freeSpaceEnabled;
+    const songsNeededPerCard = useFreeSpace ? 24 : 25;
+
     const playlistsWithSongs = [];
     for (const playlist of playlists) {
-      try {
-        const songs = await spotifyFor(roomId).getPlaylistTracks(playlist.id, playlist);
-        playlistsWithSongs.push({ ...playlist, songs });
-      } catch (error) {
-        console.error(`❌ Error fetching songs for playlist ${playlist.id}:`, error);
-        playlistsWithSongs.push({ ...playlist, songs: [] });
+      const songs = await fetchTracksForLateJoinPlaylist(roomId, room, playlist);
+      playlistsWithSongs.push({ ...playlist, songs });
+    }
+
+    let totalFetched = playlistsWithSongs.reduce((n, pl) => n + (Array.isArray(pl.songs) ? pl.songs.length : 0), 0);
+    if (totalFetched === 0) {
+      const flat = Array.from(buildCanonicalSongMapFromRoom(room).values());
+      const plMeta = Array.isArray(room.finalizedPlaylists) ? room.finalizedPlaylists : room.playlists;
+      const hinted = applyYoutubePlaybackHints(Array.isArray(plMeta) ? plMeta : [], flat);
+      if (hinted.length >= songsNeededPerCard) {
+        routineServerLog(`🎯 Late-join: using flat room song cache (${hinted.length} tracks, no per-playlist split)`);
+        playlistsWithSongs.length = 0;
+        playlistsWithSongs.push({ id: '__room_flat__', name: 'Room song cache', songs: hinted });
       }
     }
 
-    const useFreeSpace = !!room.freeSpaceEnabled;
-    const songsNeededPerCard = useFreeSpace ? 24 : 25;
     const dedup = (arr) => {
       const seen = new Set();
       const out = [];
