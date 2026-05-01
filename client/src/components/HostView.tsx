@@ -742,20 +742,57 @@ const HostView: React.FC = () => {
     if (!roomId) return;
     const path = `/youtube-host-playback/${encodeURIComponent(roomId)}`;
     const url = `${window.location.origin}${path}`;
-    const features = 'popup=yes,width=820,height=580';
-    const w = window.open(url, 'gotYoutubeHostPlayback', features);
-    if (!w) {
-      showToast('Browser blocked the playback window. Allow popups for this site.', 'warn');
+    const name = `ytPlayback_${roomId}_${Date.now()}`;
+    const sw = typeof window.screen?.availWidth === 'number' ? window.screen.availWidth : 1280;
+    const sh = typeof window.screen?.availHeight === 'number' ? window.screen.availHeight : 800;
+    const ww = Math.min(940, Math.max(480, sw - 48));
+    const wh = Math.min(780, Math.max(420, sh - 72));
+    const left = Math.max(0, Math.round((sw - ww) / 2));
+    const top = Math.max(0, Math.round((sh - wh) / 5));
+    const features = `width=${ww},height=${wh},left=${left},top=${top},scrollbars=yes,resizable=yes`;
+
+    const registerWindow = (win: Window | null): boolean => {
+      if (!win) return false;
+      try {
+        if (win.closed) return false;
+      } catch {
+        return false;
+      }
+      youtubePlaybackPopupRef.current = win;
+      setYoutubePlaybackPopupOpen(true);
+      try {
+        win.focus();
+      } catch {
+        /* ignore */
+      }
+      return true;
+    };
+
+    let win = window.open(url, name, features);
+    let opened = registerWindow(win);
+    if (!opened) {
+      win = window.open(url, '_blank');
+      opened = registerWindow(win);
+    }
+
+    if (!opened) {
+      showToast(
+        'Could not open playback (often blocked popups). Allow popups for this site and try again.',
+        'warn'
+      );
+      addLog(`YouTube playback — open manually in a new tab: ${url}`, 'info');
       return;
     }
-    youtubePlaybackPopupRef.current = w;
-    setHideYoutubeCornerPlayer(true);
-    setYoutubePlaybackPopupOpen(true);
-    try {
-      w.focus();
-    } catch {
-      /* ignore */
-    }
+
+    window.setTimeout(() => {
+      const cur = youtubePlaybackPopupRef.current;
+      if (!cur || cur.closed) return;
+      try {
+        cur.focus();
+      } catch {
+        /* ignore */
+      }
+    }, 400);
   }, [roomId, showToast]);
 
   useEffect(() => {

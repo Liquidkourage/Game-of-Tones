@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { HostYoutubeIframePlayer } from './HostYoutubeIframePlayer';
 import {
@@ -15,7 +15,7 @@ export default function HostYoutubePlaybackWindow() {
   const [playback, setPlayback] = useState<YoutubeHostPlaybackPayload>(null);
   const [volume, setVolume] = useState(100);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!roomId) return;
     const ch = new BroadcastChannel(getYoutubeHostPlaybackChannelName(roomId));
 
