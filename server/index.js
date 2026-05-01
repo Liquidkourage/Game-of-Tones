@@ -4574,13 +4574,6 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
     }
   }
 
-  const org = spotifyOrgForRoom(room);
-  const tokensOk = await multiTenantSpotify.ensureOrgTokensLoaded(org);
-  if (!tokensOk) {
-    console.error('❌ Cannot generate bingo cards: Spotify not connected for this host');
-    return false;
-  }
-
   try {
     routineServerLog(`📋 Playlist order received: ${playlists.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
 
@@ -4592,18 +4585,54 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
         `📋 Using host-provided track lists (${trackTotal} songs) — skipping Spotify /items pagination for bingo`
       );
     } else {
-      routineServerLog('📋 Fetching songs from playlists via Spotify Web API...');
-      playlistsWithSongs = [];
-    for (let i = 0; i < playlists.length; i++) {
-      const playlist = playlists[i];
-      try {
-          routineServerLog(`📋 [${i + 1}/${playlists.length}] Fetching songs for playlist: ${playlist.name}`);
-          const songs = await spotifyFor(roomId).getPlaylistTracks(playlist.id, playlist);
-          routineServerLog(`✅ Found ${songs.length} songs in playlist: ${playlist.name}`);
-        playlistsWithSongs.push({ ...playlist, songs, originalIndex: i });
-      } catch (error) {
-        console.error(`❌ Error fetching songs for playlist ${playlist.id}:`, error);
-        playlistsWithSongs.push({ ...playlist, songs: [], originalIndex: i });
+      const ytOnly =
+        (Array.isArray(playlists) && playlists.length > 0 && playlists.every((p) => p && p.youtubeMusic === true)) ||
+        (Array.isArray(songOrder) &&
+          songOrder.length > 0 &&
+          songOrder.every((s) => s && typeof s === 'object' && s.youtubeMusic === true));
+
+      if (ytOnly) {
+        const uid = room.ownerUserId;
+        if (uid == null || !youtubeMusic.hasCredentials(uid)) {
+          console.error('❌ Cannot generate bingo cards: YouTube Music not connected for this host');
+          return false;
+        }
+        routineServerLog('📋 Fetching songs from playlists via YouTube Data API...');
+        playlistsWithSongs = [];
+        for (let i = 0; i < playlists.length; i++) {
+          const playlist = playlists[i];
+          try {
+            routineServerLog(`📋 [${i + 1}/${playlists.length}] Fetching YouTube items for playlist: ${playlist.name}`);
+            const songs = await youtubeMusic.listPlaylistItems(uid, String(playlist.id), {
+              playlistName: playlist.name || '',
+            });
+            routineServerLog(`✅ Found ${songs.length} videos in playlist: ${playlist.name}`);
+            playlistsWithSongs.push({ ...playlist, songs, originalIndex: i });
+          } catch (error) {
+            console.error(`❌ Error fetching YouTube playlist ${playlist.id}:`, error);
+            playlistsWithSongs.push({ ...playlist, songs: [], originalIndex: i });
+          }
+        }
+      } else {
+        const org = spotifyOrgForRoom(room);
+        const tokensOk = await multiTenantSpotify.ensureOrgTokensLoaded(org);
+        if (!tokensOk) {
+          console.error('❌ Cannot generate bingo cards: Spotify not connected for this host');
+          return false;
+        }
+        routineServerLog('📋 Fetching songs from playlists via Spotify Web API...');
+        playlistsWithSongs = [];
+        for (let i = 0; i < playlists.length; i++) {
+          const playlist = playlists[i];
+          try {
+            routineServerLog(`📋 [${i + 1}/${playlists.length}] Fetching songs for playlist: ${playlist.name}`);
+            const songs = await spotifyFor(roomId).getPlaylistTracks(playlist.id, playlist);
+            routineServerLog(`✅ Found ${songs.length} songs in playlist: ${playlist.name}`);
+            playlistsWithSongs.push({ ...playlist, songs, originalIndex: i });
+          } catch (error) {
+            console.error(`❌ Error fetching songs for playlist ${playlist.id}:`, error);
+            playlistsWithSongs.push({ ...playlist, songs: [], originalIndex: i });
+          }
         }
       }
     }
