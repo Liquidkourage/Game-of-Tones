@@ -4634,9 +4634,10 @@ const HostView: React.FC = () => {
                   <div style={{ display: 'none' }}>License validation disabled for tonight</div>
                 )}
 
-                <div className="host-manager-grid">
-                  <div className="host-manager-grid__primary">
-                    <section className="host-manager-section">
+                <div
+                  className={`host-manager-grid${isSpotifyConnected ? ' host-manager-grid--split' : ''}`}
+                >
+                    <section className="host-manager-section host-manager-grid__full">
                 <label
                   style={{
                     display: 'flex',
@@ -4678,6 +4679,7 @@ const HostView: React.FC = () => {
 
           {/* Pattern Selection */}
           {isSpotifyConnected && (
+            <div className="host-manager-grid__primary">
             <motion.div 
               className="pattern-section host-manager-section"
               initial={{ opacity: 0 }}
@@ -4831,8 +4833,8 @@ const HostView: React.FC = () => {
                   )}
               </div>
             </motion.div>
+            </div>
           )}
-                  </div>
                   <div className="host-manager-grid__secondary">
           <motion.div
             className="host-manager-section host-manager-section--display font-size-section"

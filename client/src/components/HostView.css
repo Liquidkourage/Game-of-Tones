@@ -683,14 +683,20 @@
   align-items: start;
 }
 
+/* Hybrid mode strip spans full width; avoids an empty half-column when pattern UI is hidden */
+.host-manager-grid__full {
+  grid-column: 1 / -1;
+}
+
 .host-manager-grid__primary,
 .host-manager-grid__secondary {
   min-width: 0;
 }
 
 @media (min-width: 960px) {
-  .host-manager-grid {
-    grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr);
+  /* Two columns only when Bingo Pattern sits beside Public display */
+  .host-manager-grid--split {
+    grid-template-columns: minmax(280px, 1fr) minmax(300px, 1.4fr);
   }
 }
 
