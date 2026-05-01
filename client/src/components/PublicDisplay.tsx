@@ -152,15 +152,8 @@ const PublicDisplay: React.FC = () => {
   const [pattern, setPattern] = useState<string>('full_card');
   const [countdownMs, setCountdownMs] = useState<number>(0);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
-  /** Song id the snippet countdown belongs to — reveal at end uses this (not `currentSong`, which may advance early). */
+  /** Snippet countdown label only (current clip timer). */
   const snippetCountdownSongIdRef = useRef<string | null>(null);
-  /** Mirrors played songs list for reveal fallback when idMeta is stale or incomplete. */
-  const playedSongsSnapshotRef = useRef<Song[]>([]);
-  /**
-   * Track-end mode: ids whose snippet timer has finished — render full title/artist (letter sequence +
-   * baseline cannot represent “show everything for this row” without missing shared letters).
-   */
-  const trackEndUnmaskedIdsRef = useRef<Set<string>>(new Set());
   const [totalPlayedCount, setTotalPlayedCount] = useState<number>(0);
   const [isVerificationPending, setIsVerificationPending] = useState<boolean>(false);
   const isVerificationPendingRef = useRef<boolean>(false);
@@ -192,17 +185,6 @@ const PublicDisplay: React.FC = () => {
   useEffect(() => {
     titleRevealModeRef.current = titleRevealMode;
   }, [titleRevealMode]);
-
-  useEffect(() => {
-    if (titleRevealMode !== 'track_end') {
-      trackEndUnmaskedIdsRef.current.clear();
-      setRevealLayoutNonce((n) => n + 1);
-    }
-  }, [titleRevealMode]);
-
-  useEffect(() => {
-    playedSongsSnapshotRef.current = gameState.playedSongs;
-  }, [gameState.playedSongs]);
 
   useEffect(() => {
     if (!gameState.isPlaying) {
@@ -263,47 +245,6 @@ const PublicDisplay: React.FC = () => {
       console.warn('Failed to persist revealed letters:', e);
     }
   };
-
-  /** Append every A–Z / 0–9 from this song's title+artist after its baseline (idempotent). */
-  function revealFullLettersForSong(songId: string) {
-    let meta = idMetaRef.current[songId];
-    const hit = playedSongsSnapshotRef.current.find((s) => s.id === songId);
-    if (hit && (hit.name || hit.artist)) {
-      const curLen = ((meta?.name || '') + (meta?.artist || '')).trim().length;
-      const hitLen = ((hit.name || '') + (hit.artist || '')).trim().length;
-      const metaThin =
-        !meta ||
-        meta.name === 'Unknown' ||
-        (!meta.name?.trim() && !meta.artist?.trim());
-      if (metaThin || hitLen > curLen) {
-        meta = {
-          name: hit.name?.trim() ? hit.name : meta?.name || '',
-          artist: hit.artist?.trim() ? hit.artist : meta?.artist || '',
-        };
-        idMetaRef.current[songId] = meta;
-      }
-    }
-    if (!meta || (!meta.name?.trim() && !meta.artist?.trim())) return;
-    const baseline = songBaselineRef.current[songId] ?? 0;
-    const visible = new Set(revealSequenceRef.current.slice(baseline));
-    const combined = `${meta.name || ''} ${meta.artist || ''}`.toUpperCase();
-    let added = false;
-    for (let i = 0; i < combined.length; i++) {
-      const ch = combined[i];
-      if (/^[A-Z0-9]$/.test(ch) && !visible.has(ch)) {
-        revealSequenceRef.current.push(ch);
-        visible.add(ch);
-        added = true;
-      }
-    }
-    if (added) {
-      persistRevealedLetters();
-      setRevealLayoutNonce((n) => n + 1);
-    }
-  }
-
-  const revealFullLettersForSongRef = useRef(revealFullLettersForSong);
-  revealFullLettersForSongRef.current = revealFullLettersForSong;
 
   const playedSeqRef = useRef<Record<string, number>>({});
   const playedSeqCounterRef = useRef<number>(0);
@@ -916,17 +857,13 @@ const PublicDisplay: React.FC = () => {
       }
       
       setTotalPlayedCount(prev => (typeof data.currentIndex === 'number' ? (data.currentIndex + 1) : prev + 1));
-      setGameState(prev => {
-        const playedSongs = [...prev.playedSongs, song];
-        playedSongsSnapshotRef.current = playedSongs;
-        return {
-          ...prev,
-          isPlaying: true,
-          currentSong: song,
-          snippetLength: Number(data.snippetLength) || prev.snippetLength,
-          playedSongs,
-        };
-      });
+      setGameState(prev => ({
+        ...prev,
+        isPlaying: true,
+        currentSong: song,
+        snippetLength: Number(data.snippetLength) || prev.snippetLength,
+        playedSongs: [...prev.playedSongs, song],
+      }));
       // Track played order for reveal lag
       {
         // Record a stable per-song play sequence for sorting within columns
@@ -1015,11 +952,6 @@ const PublicDisplay: React.FC = () => {
           persistRevealedLetters(); // Persist baseline change
           console.log(`📝 Set baseline for song ${song.id} to ${currentBaseline} (reset=${isResettingRef.current})`);
         }
-        queueMicrotask(() => {
-          if (titleRevealModeRef.current === 'track_start') {
-            revealFullLettersForSongRef.current(song.id);
-          }
-        });
       }
       // reset countdown timer
       if (countdownRef.current) {
@@ -1032,18 +964,6 @@ const PublicDisplay: React.FC = () => {
       countdownRef.current = setInterval(() => {
         setCountdownMs((ms) => {
           const next = Math.max(0, ms - 100);
-          if (ms > 0 && next === 0) {
-            const endedId = snippetCountdownSongIdRef.current;
-            if (
-              endedId &&
-              titleRevealModeRef.current === 'track_end' &&
-              !isVerificationPendingRef.current
-            ) {
-              trackEndUnmaskedIdsRef.current.add(endedId);
-              setRevealLayoutNonce((n) => n + 1);
-              queueMicrotask(() => revealFullLettersForSongRef.current(endedId));
-            }
-          }
           if (next === 0 && countdownRef.current) {
             clearInterval(countdownRef.current);
             countdownRef.current = null;
@@ -1080,7 +1000,6 @@ const PublicDisplay: React.FC = () => {
       playedSeqRef.current = {} as any;
       playedSeqCounterRef.current = 0;
       snippetCountdownSongIdRef.current = null;
-      trackEndUnmaskedIdsRef.current.clear();
       // Clear persisted state for new game
       try {
         localStorage.removeItem(`display_revealed_letters_${roomId}`);
@@ -1123,7 +1042,6 @@ const PublicDisplay: React.FC = () => {
       // Songs that start after reset will get baseline = revealSequenceRef.length (which is now 0)
       const resetBaseline = revealSequenceRef.current.length; // Should be 0 after clearing, but use current for safety
       revealSequenceRef.current = [];
-      trackEndUnmaskedIdsRef.current.clear();
       
       // Recalculate baselines for all currently played songs
       // Set baseline to the length BEFORE clearing (so they don't show letters revealed after reset)
@@ -1295,7 +1213,6 @@ const PublicDisplay: React.FC = () => {
       setShowWinnerBanner(false);
       setWinnerName('');
       snippetCountdownSongIdRef.current = null;
-      trackEndUnmaskedIdsRef.current.clear();
       
       // Clear reveal state
       revealSequenceRef.current = [];
@@ -1338,7 +1255,6 @@ const PublicDisplay: React.FC = () => {
       setWinnerName('');
       setIsVerificationPending(false);
       snippetCountdownSongIdRef.current = null;
-      trackEndUnmaskedIdsRef.current.clear();
       
       // Clear all reveal state
       revealSequenceRef.current = [];
@@ -1372,7 +1288,6 @@ const PublicDisplay: React.FC = () => {
       resetPlayedTrackingRefs();
       ensureGrid();
       snippetCountdownSongIdRef.current = null;
-      trackEndUnmaskedIdsRef.current.clear();
       console.log('🔁 Game reset (display)');
       revealSequenceRef.current = [];
       songBaselineRef.current = {};
@@ -1492,16 +1407,6 @@ const PublicDisplay: React.FC = () => {
     
     return () => clearInterval(syncInterval);
   }, [socket, gameState.isPlaying, roomId]);
-
-  // Mid-session reconnect / room-state: ensure track-start titles show without a new song-playing event
-  useEffect(() => {
-    if (titleRevealMode !== 'track_start') return;
-    if (!gameState.isPlaying || !gameState.currentSong?.id) return;
-    if (isVerificationPending) return;
-    const sid = gameState.currentSong.id;
-    if (songBaselineRef.current[sid] === undefined) return;
-    revealFullLettersForSongRef.current(sid);
-  }, [titleRevealMode, gameState.isPlaying, gameState.currentSong?.id, isVerificationPending]);
 
   // Time-based letter reveal at host-configurable interval (weighted by unrevealed frequency across played songs)
   useEffect(() => {
@@ -1812,6 +1717,80 @@ const PublicDisplay: React.FC = () => {
         })}
       </span>
     );
+  };
+
+  /** Track-start / track-end use play index vs current clip — no letter-mask tiles on those modes. */
+  type CallSongRevealUi =
+    | { kind: 'masked'; revealedSet: Set<string> }
+    | { kind: 'plain' }
+    | { kind: 'playing_placeholder' };
+
+  const getCallSongRevealUi = (songId: string): CallSongRevealUi => {
+    if (titleRevealMode === 'letter') {
+      const baseline = songBaselineRef.current[songId] ?? 0;
+      return {
+        kind: 'masked',
+        revealedSet: new Set(revealSequenceRef.current.slice(baseline)),
+      };
+    }
+
+    const order = playedOrderRef.current;
+    const songIdx = order.indexOf(songId);
+
+    let curIdx = -1;
+    const cid = gameState.currentSong?.id;
+    if (cid) curIdx = order.indexOf(cid);
+    if (curIdx < 0 && typeof currentIndexRef.current === 'number' && currentIndexRef.current >= 0) {
+      curIdx = currentIndexRef.current;
+    }
+
+    if (titleRevealMode === 'track_start') {
+      if (songIdx < 0) return { kind: 'playing_placeholder' };
+      if (curIdx >= 0) {
+        return songIdx <= curIdx ? { kind: 'plain' } : { kind: 'playing_placeholder' };
+      }
+      return { kind: 'plain' };
+    }
+
+    if (titleRevealMode === 'track_end') {
+      if (songIdx < 0) return { kind: 'playing_placeholder' };
+      if (curIdx >= 0) {
+        return songIdx < curIdx ? { kind: 'plain' } : { kind: 'playing_placeholder' };
+      }
+      return { kind: 'playing_placeholder' };
+    }
+
+    const baseline = songBaselineRef.current[songId] ?? 0;
+    return {
+      kind: 'masked',
+      revealedSet: new Set(revealSequenceRef.current.slice(baseline)),
+    };
+  };
+
+  const renderCallSongLines = (
+    songId: string,
+    meta: { name: string; artist: string },
+    maskFn: (text: string, set: Set<string>, highlightChar: string | null) => React.ReactNode,
+  ): { title: React.ReactNode; artist: React.ReactNode | null } => {
+    const ui = getCallSongRevealUi(songId);
+    if (ui.kind === 'plain') {
+      return {
+        title: <span>{meta.name || 'Unknown'}</span>,
+        artist: meta.artist ? <span>{meta.artist}</span> : null,
+      };
+    }
+    if (ui.kind === 'playing_placeholder') {
+      return {
+        title: (
+          <span style={{ opacity: 0.92, fontWeight: 800, letterSpacing: '0.06em' }}>Playing…</span>
+        ),
+        artist: null,
+      };
+    }
+    return {
+      title: maskFn(meta.name || 'Unknown', ui.revealedSet, revealToast),
+      artist: maskFn(meta.artist || '', ui.revealedSet, revealToast),
+    };
   };
 
   // Function to get the overall pattern name
@@ -2197,20 +2176,7 @@ const PublicDisplay: React.FC = () => {
                   const poolIdx = Array.isArray(oneBy75Ids) ? oneBy75Ids.indexOf(id) : -1;
                   const meta = idMetaRef.current[id] || { name: '', artist: '' };
                   const isCurrent = gameState.currentSong?.id === id;
-                  const trackEndShowFull =
-                    titleRevealMode === 'track_end' && trackEndUnmaskedIdsRef.current.has(id);
-                  const baseline = songBaselineRef.current[id] ?? 0;
-                  const revealedForThisSong = new Set(revealSequenceRef.current.slice(baseline));
-                  const title = trackEndShowFull ? (
-                    <span>{meta?.name || 'Unknown'}</span>
-                  ) : (
-                    renderMaskedText(meta?.name || 'Unknown', revealedForThisSong, revealToast)
-                  );
-                  const artist = trackEndShowFull ? (
-                    meta?.artist ? <span>{meta.artist}</span> : null
-                  ) : (
-                    renderMaskedText(meta?.artist || '', revealedForThisSong, revealToast)
-                  );
+                  const { title, artist } = renderCallSongLines(id, meta, renderMaskedText);
                   return (
                     <motion.div
                       key={id + '-' + ri}
@@ -2396,20 +2362,6 @@ const PublicDisplay: React.FC = () => {
     const shouldScroll = total > visibleCols;
     // Duplicate first N for smooth wrap
     const extendedGroups: string[][] = shouldScroll ? [...visibleGroups, ...visibleGroups.slice(0, visibleCols)] : visibleGroups;
-    // Wheel-of-Fortune style: use the dynamically built revealed sequence
-    const currentRevealed = new Set(revealSequenceRef.current);
-
-    const maskByLetterSet = (text: string, set: Set<string>) => {
-      if (!text) return '';
-      const chars = Array.from(text);
-      return chars.map((ch) => {
-        const u = ch.toUpperCase();
-        if (/^[A-Z0-9]$/.test(u)) {
-          return set.has(u) ? ch : '•';
-        }
-        return ch;
-      }).join('');
-    };
 
     // Each column is 1/3 of the viewport width; compute translate as percentage
     const wrap = shouldScroll ? total : 1;
@@ -2432,23 +2384,9 @@ const PublicDisplay: React.FC = () => {
                   {group.map((id) => {
                     const poolIdx = idsToUse.indexOf(id);
                     const playedIdx = playedOrderRef.current.indexOf(id);
-                    const meta = idMetaRef.current[id];
+                    const meta = idMetaRef.current[id] || { name: '', artist: '' };
                     const isCurrent = gameState.currentSong?.id === id;
-                    // Use baseline for that song so letters revealed before it started are not shown
-                    const trackEndShowFull =
-                      titleRevealMode === 'track_end' && trackEndUnmaskedIdsRef.current.has(id);
-                    const baseline = songBaselineRef.current[id] ?? 0;
-                    const revealedForThisSong = new Set(revealSequenceRef.current.slice(baseline));
-                    const title = trackEndShowFull ? (
-                      <span>{meta?.name || 'Unknown'}</span>
-                    ) : (
-                      renderMaskedText(meta?.name || 'Unknown', revealedForThisSong, revealToast)
-                    );
-                    const artist = trackEndShowFull ? (
-                      meta?.artist ? <span>{meta.artist}</span> : null
-                    ) : (
-                      renderMaskedText(meta?.artist || '', revealedForThisSong, revealToast)
-                    );
+                    const { title, artist } = renderCallSongLines(id, meta, renderMaskedText);
                     return (
                       <motion.div
                         key={id}
@@ -3837,23 +3775,33 @@ const PublicDisplay: React.FC = () => {
                   <div className="now-playing-banner" style={{ marginTop: 6, fontSize: '0.95rem' }}>
                     Now Playing: {(() => {
                       const cid = gameState.currentSong!.id;
-                      const bannerPlain =
-                        titleRevealMode === 'track_end' && trackEndUnmaskedIdsRef.current.has(cid);
-                      const baseline = songBaselineRef.current[cid] ?? 0;
-                      const curRev = new Set(revealSequenceRef.current.slice(baseline));
-                      const title = bannerPlain ? (
-                        <span>{gameState.currentSong!.name}</span>
-                      ) : (
-                        renderMaskedText(gameState.currentSong!.name, curRev, revealToast)
-                      );
-                      const artist = bannerPlain ? (
-                        gameState.currentSong!.artist ? <span>{gameState.currentSong!.artist}</span> : null
-                      ) : (
-                        renderMaskedText(gameState.currentSong!.artist || '', curRev, revealToast)
-                      );
+                      const ui = getCallSongRevealUi(cid);
+                      if (ui.kind === 'plain') {
+                        return (
+                          <span>
+                            <span>{gameState.currentSong!.name}</span>
+                            {gameState.currentSong!.artist ? (
+                              <>
+                                {' — '}
+                                <span>{gameState.currentSong!.artist}</span>
+                              </>
+                            ) : null}
+                          </span>
+                        );
+                      }
+                      if (ui.kind === 'playing_placeholder') {
+                        return (
+                          <span style={{ opacity: 0.92 }}>
+                            <span style={{ fontWeight: 800, letterSpacing: '0.05em' }}>Playing…</span>
+                            <span style={{ opacity: 0.72, marginLeft: 8 }}>(call reveals next)</span>
+                          </span>
+                        );
+                      }
                       return (
                         <span>
-                          {title} — {artist}
+                          {renderMaskedText(gameState.currentSong!.name, ui.revealedSet, revealToast)}
+                          {' — '}
+                          {renderMaskedText(gameState.currentSong!.artist || '', ui.revealedSet, revealToast)}
                         </span>
                       );
                     })()}
