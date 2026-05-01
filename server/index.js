@@ -4457,13 +4457,26 @@ io.on('connection', (socket) => {
         
         routineServerLog(`Player ${player.name} left room ${roomId}`);
         
-        // If the host disconnected, assign a new host or end the game
+        // If the host disconnected, promote another HOST-role socket only — never the TV Display client.
         if (room.host === socket.id) {
           if (room.players.size > 0) {
-            // Assign the first remaining player as host
-            const newHost = room.players.values().next().value;
-            room.host = newHost.id;
-            routineServerLog(`Assigned ${newHost.name} as new host for room ${roomId}`);
+            const nmLower = (n) => String(n || '').trim().toLowerCase();
+            const candidates = Array.from(room.players.values()).filter(
+              (p) =>
+                p &&
+                p.isHost === true &&
+                nmLower(p.name) !== 'display'
+            );
+            if (candidates.length > 0) {
+              const newHost = candidates[0];
+              room.host = newHost.id;
+              routineServerLog(`Assigned ${newHost.name} as new host for room ${roomId}`);
+            } else {
+              room.host = null;
+              routineServerLog(
+                `Host disconnected from room ${roomId}; host cleared until a host reconnects (players unchanged)`
+              );
+            }
           } else {
             // No players left, remove the room
             rooms.delete(roomId);
