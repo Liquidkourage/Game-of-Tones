@@ -2520,7 +2520,7 @@ const HostView: React.FC = () => {
       return;
     }
 
-    if (!selectedDevice) {
+    if (mixNeedsHostSpotify && !selectedDevice) {
       alert(
         'Please select a Spotify playback device first.\n\nOpen Connection (header button), pick a device in Playback device, or open Spotify on your target device and tap Refresh devices.'
       );
@@ -2532,7 +2532,7 @@ const HostView: React.FC = () => {
       return;
     }
 
-    if (!isSpotifyConnected) {
+    if (mixNeedsHostSpotify && !isSpotifyConnected) {
       alert('Spotify is not connected. Open Connection in the header and connect Spotify first.');
       return;
     }
@@ -2545,7 +2545,11 @@ const HostView: React.FC = () => {
           : lastFinalizeMixSongListRef.current ?? [];
 
     if (resolveSongListForStart().length === 0) {
-      alert('No songs loaded from playlists. Ensure Spotify is connected and playlists have tracks, then try again.');
+      alert(
+        mixNeedsHostSpotify
+          ? 'No songs loaded from playlists. Ensure Spotify is connected and playlists have tracks, then try again.'
+          : 'No songs loaded. Open Connection and connect YouTube Music if needed, load playlists, then try Finalize Mix or Start Game again.'
+      );
       return;
     }
 
@@ -2573,7 +2577,7 @@ const HostView: React.FC = () => {
         roomId,
         playlists: mixPlaylistSelection,
         snippetLength,
-        deviceId: selectedDevice.id, // Require the selected device ID
+        deviceId: mixNeedsHostSpotify && selectedDevice ? selectedDevice.id : undefined,
         songList: songListForStart, // Send the shuffled song list to ensure server uses same order
         randomStarts,
         pattern,
