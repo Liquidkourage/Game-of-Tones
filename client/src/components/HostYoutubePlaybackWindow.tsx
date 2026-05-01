@@ -19,16 +19,6 @@ export default function HostYoutubePlaybackWindow() {
     if (!roomId) return;
     const ch = new BroadcastChannel(getYoutubeHostPlaybackChannelName(roomId));
 
-    const notifyActive = () => {
-      try {
-        ch.postMessage({ type: 'POPUP_ACTIVE' });
-      } catch {
-        /* ignore */
-      }
-    };
-    notifyActive();
-    const pingIv = window.setInterval(notifyActive, 10000);
-
     const onMessage = (ev: MessageEvent) => {
       const d = ev.data as { type?: string; payload?: YoutubeHostPlaybackPayload; volume?: number } | null;
       if (!d || typeof d !== 'object') return;
@@ -37,11 +27,29 @@ export default function HostYoutubePlaybackWindow() {
     };
     ch.addEventListener('message', onMessage);
 
-    try {
-      ch.postMessage({ type: 'REQUEST_SYNC' });
-    } catch {
-      /* ignore */
-    }
+    const requestSync = () => {
+      try {
+        ch.postMessage({ type: 'REQUEST_SYNC' });
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const notifyActive = () => {
+      try {
+        ch.postMessage({ type: 'POPUP_ACTIVE' });
+      } catch {
+        /* ignore */
+      }
+    };
+
+    requestSync();
+    queueMicrotask(requestSync);
+    window.setTimeout(requestSync, 120);
+    window.setTimeout(requestSync, 500);
+
+    notifyActive();
+    const pingIv = window.setInterval(notifyActive, 10000);
 
     const onUnload = () => {
       try {

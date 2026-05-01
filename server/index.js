@@ -1225,6 +1225,16 @@ function letterRevealIntervalSecForRoom(room) {
   return clampLetterRevealIntervalSec(room?.letterRevealIntervalSec ?? DEFAULT_LETTER_REVEAL_INTERVAL_SEC);
 }
 
+const DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE = 'letter';
+
+/** How projector shows song titles: letter-by-letter, full at clip start, or full at clip end. */
+function publicDisplayTitleRevealModeForRoom(room) {
+  const m = String(room?.publicDisplayTitleRevealMode || '').toLowerCase().replace(/-/g, '_');
+  if (m === 'track_start' || m === 'beginning' || m === 'start') return 'track_start';
+  if (m === 'track_end' || m === 'end') return 'track_end';
+  return DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE;
+}
+
 const YOUTUBE_FALLBACK_DURATION_MS = 10 * 60 * 1000;
 
 function computeSnippetRandomStartMs(room, song) {
@@ -1287,6 +1297,7 @@ function syncRoomStateAfterSongStart(roomId, room) {
     publicDisplayFontSize: room.publicDisplayFontSize || 1.0,
     publicDisplayCallListMode: room.publicDisplayCallListMode || 'auto',
     letterRevealIntervalSec: letterRevealIntervalSecForRoom(room),
+    publicDisplayTitleRevealMode: publicDisplayTitleRevealModeForRoom(room),
     venueBranding: venueBrandingForRoom(room),
     playedSongs: playedSongIds
       .map((songId) => {
@@ -1626,6 +1637,7 @@ async function playNextSongSimple(roomId, deviceId) {
       publicDisplayFontSize: room.publicDisplayFontSize || 1.0,
       publicDisplayCallListMode: room.publicDisplayCallListMode || 'auto',
       letterRevealIntervalSec: letterRevealIntervalSecForRoom(room),
+      publicDisplayTitleRevealMode: publicDisplayTitleRevealModeForRoom(room),
       venueBranding: venueBrandingForRoom(room),
       playedSongs: playedSongIds.map(songId => {
         const foundSong = room.playlistSongs?.find(s => s.id === songId);
@@ -2051,6 +2063,7 @@ io.on('connection', (socket) => {
         pattern: 'line', // Default pattern
         customPattern: undefined, // Will be set when custom pattern is chosen
         letterRevealIntervalSec: DEFAULT_LETTER_REVEAL_INTERVAL_SEC,
+        publicDisplayTitleRevealMode: DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE,
         createdAt: new Date().toISOString()
       };
       rooms.set(roomId, newRoom);
@@ -2231,6 +2244,7 @@ io.on('connection', (socket) => {
             publicDisplayFontSize: room.publicDisplayFontSize || 1.0,
             publicDisplayCallListMode: room.publicDisplayCallListMode || 'auto',
             letterRevealIntervalSec: letterRevealIntervalSecForRoom(room),
+            publicDisplayTitleRevealMode: publicDisplayTitleRevealModeForRoom(room),
             venueBranding: venueBrandingForRoom(room),
           });
           
@@ -2503,6 +2517,30 @@ io.on('connection', (socket) => {
       routineServerLog(`🔤 Public display letter reveal interval for room ${roomId}: ${clamped}s`);
     } catch (e) {
       console.error('❌ Error setting letter reveal interval:', e?.message || e);
+    }
+  });
+
+  // Host: projector title masking — letter timing vs full title at clip start/end
+  socket.on('set-public-display-title-reveal-mode', (data = {}) => {
+    try {
+      const { roomId, mode } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost =
+        room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+      if (!isCurrentHost) return;
+      const m = String(mode || '').toLowerCase().replace(/-/g, '_');
+      const next =
+        m === 'track_start' || m === 'beginning' || m === 'start'
+          ? 'track_start'
+          : m === 'track_end' || m === 'end'
+            ? 'track_end'
+            : 'letter';
+      room.publicDisplayTitleRevealMode = next;
+      io.to(roomId).emit('public-display-title-reveal-mode-updated', { mode: next });
+      routineServerLog(`🖥️ Public display title reveal mode for room ${roomId}: ${next}`);
+    } catch (e) {
+      console.error('❌ Error setting title reveal mode:', e?.message || e);
     }
   });
 
@@ -3530,6 +3568,7 @@ io.on('connection', (socket) => {
         publicDisplayFontSize: room.publicDisplayFontSize || 1.0,
         publicDisplayCallListMode: room.publicDisplayCallListMode || 'auto',
         letterRevealIntervalSec: letterRevealIntervalSecForRoom(room),
+        publicDisplayTitleRevealMode: publicDisplayTitleRevealModeForRoom(room),
         venueBranding: venueBrandingForRoom(room),
         // Include played songs for PublicDisplay sync (includes current song)
         playedSongs: playedSongIds.map(songId => {
@@ -3818,6 +3857,7 @@ io.on('connection', (socket) => {
           pattern: 'line', // Default pattern
           customPattern: undefined, // Will be set when custom pattern is chosen
           letterRevealIntervalSec: DEFAULT_LETTER_REVEAL_INTERVAL_SEC,
+          publicDisplayTitleRevealMode: DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE,
         };
         rooms.set(roomId, newRoom);
         socket.join(roomId);

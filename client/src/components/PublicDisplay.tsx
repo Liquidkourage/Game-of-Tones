@@ -20,6 +20,10 @@ import {
 } from 'lucide-react';
 import { API_BASE } from '../config';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
+import {
+  normalizePublicDisplayTitleRevealMode,
+  type PublicDisplayTitleRevealMode,
+} from '../utils/publicDisplayTitleReveal';
 
 interface GameState {
   isPlaying: boolean;
@@ -148,6 +152,8 @@ const PublicDisplay: React.FC = () => {
   const [pattern, setPattern] = useState<string>('full_card');
   const [countdownMs, setCountdownMs] = useState<number>(0);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
+  /** Previous countdown sample — detect transition to 0 for “full title at end of track”. */
+  const prevCountdownForTrackEndRef = useRef<number | null>(null);
   const [totalPlayedCount, setTotalPlayedCount] = useState<number>(0);
   const [isVerificationPending, setIsVerificationPending] = useState<boolean>(false);
   // Flag to prevent auto-reveal during reset operations
@@ -166,6 +172,16 @@ const PublicDisplay: React.FC = () => {
   const [callListMode, setCallListMode] = useState<'auto' | 'grouped' | '5x15'>('auto');
   /** Seconds between random letter picks on the projector (server default 15; clamped 5–120). */
   const [letterRevealIntervalSec, setLetterRevealIntervalSec] = useState<number>(15);
+  /** How masked titles fill in: timed letters, full at track start, or full at track end. */
+  const [titleRevealMode, setTitleRevealMode] = useState<PublicDisplayTitleRevealMode>('letter');
+  const titleRevealModeRef = useRef<PublicDisplayTitleRevealMode>('letter');
+  /** Bumped when reveal refs mutate so masked call lists re-render. */
+  const [, setRevealLayoutNonce] = useState(0);
+
+  useEffect(() => {
+    titleRevealModeRef.current = titleRevealMode;
+  }, [titleRevealMode]);
+
   const columnCallListLayout = useMemo((): boolean => {
     if (callListMode === 'grouped') return false;
     if (callListMode === '5x15') return true;
@@ -219,6 +235,32 @@ const PublicDisplay: React.FC = () => {
       console.warn('Failed to persist revealed letters:', e);
     }
   };
+
+  /** Append every A–Z / 0–9 from this song's title+artist after its baseline (idempotent). */
+  function revealFullLettersForSong(songId: string) {
+    const meta = idMetaRef.current[songId];
+    if (!meta) return;
+    const baseline = songBaselineRef.current[songId] ?? 0;
+    const visible = new Set(revealSequenceRef.current.slice(baseline));
+    const combined = `${meta.name || ''} ${meta.artist || ''}`.toUpperCase();
+    let added = false;
+    for (let i = 0; i < combined.length; i++) {
+      const ch = combined[i];
+      if (/^[A-Z0-9]$/.test(ch) && !visible.has(ch)) {
+        revealSequenceRef.current.push(ch);
+        visible.add(ch);
+        added = true;
+      }
+    }
+    if (added) {
+      persistRevealedLetters();
+      setRevealLayoutNonce((n) => n + 1);
+    }
+  }
+
+  const revealFullLettersForSongRef = useRef(revealFullLettersForSong);
+  revealFullLettersForSongRef.current = revealFullLettersForSong;
+
   const playedSeqRef = useRef<Record<string, number>>({});
   const playedSeqCounterRef = useRef<number>(0);
   // Carousel state for grouped 15x5 columns (show 3 at a time)
@@ -509,6 +551,10 @@ const PublicDisplay: React.FC = () => {
             const sec = Math.round(payload.letterRevealIntervalSec);
             setLetterRevealIntervalSec(Math.min(120, Math.max(5, sec)));
           }
+
+          if (payload.publicDisplayTitleRevealMode !== undefined) {
+            setTitleRevealMode(normalizePublicDisplayTitleRevealMode(payload.publicDisplayTitleRevealMode));
+          }
           
           // CRITICAL: Sync currentIndexRef from server state (needed for proper display on refresh)
           if (typeof payload.currentSongIndex === 'number') {
@@ -640,6 +686,12 @@ const PublicDisplay: React.FC = () => {
       if (typeof data?.intervalSec === 'number' && Number.isFinite(data.intervalSec)) {
         const sec = Math.round(data.intervalSec);
         setLetterRevealIntervalSec(Math.min(120, Math.max(5, sec)));
+      }
+    });
+
+    newSocket.on('public-display-title-reveal-mode-updated', (data: any) => {
+      if (data?.mode !== undefined) {
+        setTitleRevealMode(normalizePublicDisplayTitleRevealMode(data.mode));
       }
     });
 
@@ -916,6 +968,11 @@ const PublicDisplay: React.FC = () => {
           persistRevealedLetters(); // Persist baseline change
           console.log(`📝 Set baseline for song ${song.id} to ${currentBaseline} (reset=${isResettingRef.current})`);
         }
+        queueMicrotask(() => {
+          if (titleRevealModeRef.current === 'track_start') {
+            revealFullLettersForSongRef.current(song.id);
+          }
+        });
       }
       // reset countdown timer
       if (countdownRef.current) {
@@ -1271,7 +1328,8 @@ const PublicDisplay: React.FC = () => {
           }
         }));
         
-        // Update reveal sequence for wheel of fortune masking
+        // Update reveal sequence for wheel of fortune masking (letter-by-letter mode only)
+        if (titleRevealModeRef.current === 'letter') {
         try {
           const { hint, songName, artistName } = payload;
           const lettersToReveal: string[] = [];
@@ -1336,6 +1394,8 @@ const PublicDisplay: React.FC = () => {
         } catch (error) {
           console.error('Error showing reveal toast:', error);
         }
+        }
+
       }
     });
 
@@ -1364,15 +1424,57 @@ const PublicDisplay: React.FC = () => {
     return () => clearInterval(syncInterval);
   }, [socket, gameState.isPlaying, roomId]);
 
+  // Full title at end of clip (client countdown hits zero)
+  useEffect(() => {
+    const prev = prevCountdownForTrackEndRef.current;
+    if (prevCountdownForTrackEndRef.current === null) {
+      prevCountdownForTrackEndRef.current = countdownMs;
+      return;
+    }
+    prevCountdownForTrackEndRef.current = countdownMs;
+    if (titleRevealMode !== 'track_end') return;
+    if (!gameState.isPlaying || !gameState.currentSong?.id) return;
+    if (isVerificationPending) return;
+    if (!(prev !== null && prev > 0 && countdownMs === 0)) return;
+    revealFullLettersForSongRef.current(gameState.currentSong.id);
+  }, [
+    countdownMs,
+    titleRevealMode,
+    gameState.isPlaying,
+    gameState.currentSong?.id,
+    isVerificationPending,
+  ]);
+
+  useEffect(() => {
+    if (!gameState.isPlaying) {
+      prevCountdownForTrackEndRef.current = null;
+    }
+  }, [gameState.isPlaying]);
+
+  // Mid-session reconnect / room-state: ensure track-start titles show without a new song-playing event
+  useEffect(() => {
+    if (titleRevealMode !== 'track_start') return;
+    if (!gameState.isPlaying || !gameState.currentSong?.id) return;
+    if (isVerificationPending) return;
+    const sid = gameState.currentSong.id;
+    if (songBaselineRef.current[sid] === undefined) return;
+    revealFullLettersForSongRef.current(sid);
+  }, [titleRevealMode, gameState.isPlaying, gameState.currentSong?.id, isVerificationPending]);
+
   // Time-based letter reveal at host-configurable interval (weighted by unrevealed frequency across played songs)
   useEffect(() => {
     console.log('🎡 Auto-reveal effect triggered:', {
       isPlaying: gameState.isPlaying,
       isVerificationPending,
       letterRevealIntervalSec,
+      titleRevealMode,
     });
     if (!gameState.isPlaying || isVerificationPending) {
       console.log('🎡 Auto-reveal disabled:', !gameState.isPlaying ? 'game not playing' : 'verification pending');
+      return;
+    }
+    if (titleRevealMode !== 'letter') {
+      console.log('🎡 Auto-reveal disabled: title reveal mode is not letter-by-letter');
       return;
     }
     const ms = Math.max(5000, letterRevealIntervalSec * 1000);
@@ -1442,7 +1544,7 @@ const PublicDisplay: React.FC = () => {
       console.log('🎡 Auto-reveal interval cleared');
       clearInterval(interval);
     };
-  }, [gameState.isPlaying, isVerificationPending, letterRevealIntervalSec]);
+  }, [gameState.isPlaying, isVerificationPending, letterRevealIntervalSec, titleRevealMode]);
 
   // Auto-advance the 15x5 grouped columns carousel (1x75 grouped layout only)
   useEffect(() => {

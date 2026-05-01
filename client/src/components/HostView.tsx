@@ -49,10 +49,14 @@ import SongTitleEditModal from './SongTitleEditModal';
 import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModal';
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
 import { HostYoutubeMusicPlaylistLibrary, type YoutubeMixPlaylistRow } from './HostYoutubeMusicPlaylistLibrary';
-import { HostYoutubeIframePlayer } from './HostYoutubeIframePlayer';
+import { HostYoutubeIframePlayer, primeYoutubeHostPlaybackAudioUnlock } from './HostYoutubeIframePlayer';
 import RoundPlanner from './RoundPlanner';
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
+import {
+  normalizePublicDisplayTitleRevealMode,
+  type PublicDisplayTitleRevealMode,
+} from '../utils/publicDisplayTitleReveal';
 import { getYoutubeHostPlaybackChannelName } from '../utils/youtubeHostPlaybackChannel';
 import { validateSongTitle, validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
 import './HostView.css';
@@ -395,6 +399,9 @@ const HostView: React.FC = () => {
   const [publicDisplayCallListMode, setPublicDisplayCallListMode] = useState<'auto' | 'grouped' | '5x15'>('auto');
   /** Seconds between random letter reveals on the public display (server clamps 5–120). */
   const [letterRevealIntervalSec, setLetterRevealIntervalSec] = useState<number>(15);
+  /** Projector: masked titles fill in by timed letters vs full at clip start/end. */
+  const [publicDisplayTitleRevealMode, setPublicDisplayTitleRevealMode] =
+    useState<PublicDisplayTitleRevealMode>('letter');
 
   // Handler to update public display font size
   const updatePublicDisplayFontSize = (newSize: number) => {
@@ -415,6 +422,12 @@ const HostView: React.FC = () => {
     setLetterRevealIntervalSec(clamped);
     if (socket && roomId) {
       socket.emit('set-public-display-letter-reveal-interval', { roomId, intervalSec: clamped });
+    }
+  };
+  const updatePublicDisplayTitleRevealMode = (mode: PublicDisplayTitleRevealMode) => {
+    setPublicDisplayTitleRevealMode(mode);
+    if (socket && roomId) {
+      socket.emit('set-public-display-title-reveal-mode', { roomId, mode });
     }
   };
   const [selectedCustomPattern, setSelectedCustomPattern] = useState<SavedCustomPattern | null>(null);
@@ -760,6 +773,7 @@ const HostView: React.FC = () => {
       }
       youtubePlaybackPopupRef.current = win;
       setYoutubePlaybackPopupOpen(true);
+      primeYoutubeHostPlaybackAudioUnlock();
       try {
         win.focus();
       } catch {
@@ -813,6 +827,11 @@ const HostView: React.FC = () => {
       if (d.type === 'POPUP_ACTIVE') {
         lastYtPopupPingRef.current = Date.now();
         setHideYoutubeCornerPlayer(true);
+        ch.postMessage({
+          type: 'playback',
+          payload: youtubeHostPlaybackBroadcastRef.current,
+        });
+        ch.postMessage({ type: 'volume', volume: youtubePlaybackVolumeRef.current });
         return;
       }
       if (d.type === 'POPUP_CLOSING') {
@@ -1985,6 +2004,12 @@ const HostView: React.FC = () => {
       }
     });
 
+    newSocket.on('public-display-title-reveal-mode-updated', (data: any) => {
+      if (data?.mode !== undefined) {
+        setPublicDisplayTitleRevealMode(normalizePublicDisplayTitleRevealMode(data.mode));
+      }
+    });
+
     newSocket.on('room-state', (payload: any) => {
       if (
         payload?.publicDisplayCallListMode === 'grouped' ||
@@ -2002,6 +2027,9 @@ const HostView: React.FC = () => {
       ) {
         const sec = Math.round(payload.letterRevealIntervalSec);
         setLetterRevealIntervalSec(Math.min(120, Math.max(5, sec)));
+      }
+      if (payload?.publicDisplayTitleRevealMode !== undefined) {
+        setPublicDisplayTitleRevealMode(normalizePublicDisplayTitleRevealMode(payload.publicDisplayTitleRevealMode));
       }
     });
 
@@ -5144,16 +5172,55 @@ const HostView: React.FC = () => {
               })}
             </div>
             <div className="host-manager-display__divider" style={{ marginTop: 14 }} />
+            <p className="host-manager-display__sub">Reveal titles on projector</p>
+            <p style={{ fontSize: '0.78rem', color: '#9a9a9a', marginBottom: 10, lineHeight: 1.4, maxWidth: 520 }}>
+              Controls how song titles and artists appear on the public display call list (masked squares vs full text).
+            </p>
+            <select
+              id="title-reveal-mode"
+              aria-label="When to reveal full song titles on the public display"
+              value={publicDisplayTitleRevealMode}
+              onChange={(e) =>
+                updatePublicDisplayTitleRevealMode(normalizePublicDisplayTitleRevealMode(e.target.value))
+              }
+              style={{
+                fontSize: '0.92rem',
+                padding: '10px 14px',
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.25)',
+                background: 'rgba(0,0,0,0.35)',
+                color: '#fff',
+                minWidth: 280,
+                maxWidth: '100%',
+                cursor: 'pointer',
+                marginBottom: 12,
+              }}
+            >
+              <option value="letter">By letter (timed reveals)</option>
+              <option value="track_start">Beginning of track (full title)</option>
+              <option value="track_end">End of track (full title)</option>
+            </select>
+            <div className="host-manager-display__divider" style={{ marginTop: 4 }} />
             <p className="host-manager-display__sub">Letter reveal timer</p>
             <p style={{ fontSize: '0.78rem', color: '#9a9a9a', marginBottom: 10, lineHeight: 1.4, maxWidth: 520 }}>
-              While the round is playing, the projector periodically reveals one random letter from played titles and artists.
-              Pick how often that happens (does not run during bingo verification).
+              {publicDisplayTitleRevealMode === 'letter' ? (
+                <>
+                  While the round is playing, the projector periodically reveals one random letter from played titles and
+                  artists. Pick how often that happens (does not run during bingo verification).
+                </>
+              ) : (
+                <>
+                  Timed letter reveals are off while using beginning-of-track or end-of-track mode. Use{' '}
+                  <strong style={{ color: '#c8c8c8' }}>By letter</strong> to bring back periodic reveals.
+                </>
+              )}
             </p>
             <select
               id="letter-reveal-interval"
               aria-label="Seconds between automatic letter reveals on the public display"
               value={letterRevealIntervalSec}
               onChange={(e) => updatePublicDisplayLetterRevealInterval(Number(e.target.value))}
+              disabled={publicDisplayTitleRevealMode !== 'letter'}
               style={{
                 fontSize: '0.92rem',
                 padding: '10px 14px',
@@ -5162,7 +5229,8 @@ const HostView: React.FC = () => {
                 background: 'rgba(0,0,0,0.35)',
                 color: '#fff',
                 minWidth: 160,
-                cursor: 'pointer',
+                cursor: publicDisplayTitleRevealMode === 'letter' ? 'pointer' : 'not-allowed',
+                opacity: publicDisplayTitleRevealMode === 'letter' ? 1 : 0.45,
               }}
             >
               {[5, 10, 15, 20, 30, 45, 60, 90, 120].map((sec) => (

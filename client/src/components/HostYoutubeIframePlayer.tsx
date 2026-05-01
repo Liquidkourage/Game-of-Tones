@@ -37,7 +37,9 @@ let silentKeepAliveAudio: HTMLAudioElement | null = null;
 
 function readHostYoutubeAudioUnlocked(): boolean {
   try {
-    return sessionStorage.getItem(SESSION_AUDIO_KEY) === '1';
+    if (localStorage.getItem(SESSION_AUDIO_KEY) === '1') return true;
+    if (sessionStorage.getItem(SESSION_AUDIO_KEY) === '1') return true;
+    return false;
   } catch {
     return false;
   }
@@ -45,10 +47,16 @@ function readHostYoutubeAudioUnlocked(): boolean {
 
 function writeHostYoutubeAudioUnlocked() {
   try {
+    localStorage.setItem(SESSION_AUDIO_KEY, '1');
     sessionStorage.setItem(SESSION_AUDIO_KEY, '1');
   } catch {
     /* ignore */
   }
+}
+
+/** Same-origin tabs share this via localStorage so the playback window skips “tap for sound” after host opens it. */
+export function primeYoutubeHostPlaybackAudioUnlock() {
+  writeHostYoutubeAudioUnlocked();
 }
 
 function startYoutubeAudioKeepAlive() {
@@ -195,6 +203,8 @@ export function HostYoutubeIframePlayer({
     tryOnce();
     window.setTimeout(tryOnce, 90);
     window.setTimeout(tryOnce, 320);
+    window.setTimeout(tryOnce, 750);
+    window.setTimeout(tryOnce, 1600);
   };
 
   useEffect(() => {
