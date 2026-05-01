@@ -19,6 +19,8 @@ type YtPlayer = {
   pauseVideo?: () => void;
   unMute?: () => void;
   mute?: () => void;
+  /** YouTube IFrame API — use to avoid seeking when resuming after tab/window focus. */
+  getPlayerState?: () => number;
   loadVideoById?: (
     videoId: string | { videoId: string; startSeconds?: number },
     startSeconds?: number,
@@ -93,6 +95,28 @@ function ensureYoutubeIframeApi(): Promise<void> {
 
 function playingState(): number {
   return window.YT?.PlayerState?.PLAYING ?? 1;
+}
+
+/** Resume without seek — focus/visibility must not restart the snippet from `startSeconds`. */
+function resumePlaybackSoft(p: YtPlayer, volumePct: number) {
+  const vol = Math.round(Math.min(100, Math.max(0, volumePct)));
+  try {
+    p.unMute?.();
+    p.setVolume?.(vol);
+    const PS = window.YT?.PlayerState;
+    const PLAYING = PS?.PLAYING ?? 1;
+    const PAUSED = PS?.PAUSED ?? 2;
+    const BUFFERING = PS?.BUFFERING ?? 3;
+    const CUED = PS?.CUED ?? 5;
+    const st = typeof p.getPlayerState === 'function' ? p.getPlayerState() : undefined;
+    if (st === PAUSED || st === BUFFERING || st === CUED || st === undefined) {
+      p.playVideo?.();
+    } else if (st !== PLAYING) {
+      p.playVideo?.();
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 function destroyYoutubePlayer(
@@ -288,7 +312,7 @@ export function HostYoutubeIframePlayer({
       if (!readHostYoutubeAudioUnlocked()) return;
       const p = playerRef.current;
       if (!p) return;
-      kickPlayback(p, startSeconds, clipGenerationRef.current);
+      resumePlaybackSoft(p, volumeRef.current);
     };
     document.addEventListener('visibilitychange', resumeIfPossible);
     window.addEventListener('focus', resumeIfPossible);
@@ -296,7 +320,7 @@ export function HostYoutubeIframePlayer({
       document.removeEventListener('visibilitychange', resumeIfPossible);
       window.removeEventListener('focus', resumeIfPossible);
     };
-  }, [videoId, startSeconds]);
+  }, [videoId]);
 
   const applyUserAudioUnlock = () => {
     writeHostYoutubeAudioUnlocked();

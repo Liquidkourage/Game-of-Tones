@@ -18,6 +18,17 @@ export default function HostYoutubePlaybackWindow() {
   useEffect(() => {
     if (!roomId) return;
     const ch = new BroadcastChannel(getYoutubeHostPlaybackChannelName(roomId));
+
+    const notifyActive = () => {
+      try {
+        ch.postMessage({ type: 'POPUP_ACTIVE' });
+      } catch {
+        /* ignore */
+      }
+    };
+    notifyActive();
+    const pingIv = window.setInterval(notifyActive, 10000);
+
     const onMessage = (ev: MessageEvent) => {
       const d = ev.data as { type?: string; payload?: YoutubeHostPlaybackPayload; volume?: number } | null;
       if (!d || typeof d !== 'object') return;
@@ -25,8 +36,26 @@ export default function HostYoutubePlaybackWindow() {
       if (d.type === 'volume' && typeof d.volume === 'number') setVolume(d.volume);
     };
     ch.addEventListener('message', onMessage);
-    ch.postMessage({ type: 'REQUEST_SYNC' });
+
+    try {
+      ch.postMessage({ type: 'REQUEST_SYNC' });
+    } catch {
+      /* ignore */
+    }
+
+    const onUnload = () => {
+      try {
+        ch.postMessage({ type: 'POPUP_CLOSING' });
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener('pagehide', onUnload);
+
     return () => {
+      window.removeEventListener('pagehide', onUnload);
+      onUnload();
+      window.clearInterval(pingIv);
       ch.removeEventListener('message', onMessage);
       ch.close();
     };

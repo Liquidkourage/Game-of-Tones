@@ -638,6 +638,10 @@ const HostView: React.FC = () => {
   youtubePlaybackVolumeRef.current = playbackState.volume;
   const [youtubePlaybackPopupOpen, setYoutubePlaybackPopupOpen] = useState(false);
   const youtubePlaybackPopupRef = useRef<Window | null>(null);
+  /** Last POPUP_ACTIVE ping from `/youtube-host-playback` — lets host hide corner player for manual tabs too. */
+  const lastYtPopupPingRef = useRef(0);
+  /** Corner iframe hidden while external playback window is active (popup or same-browser tab). */
+  const [hideYoutubeCornerPlayer, setHideYoutubeCornerPlayer] = useState(false);
 
   const [isSeeking, setIsSeeking] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -745,6 +749,7 @@ const HostView: React.FC = () => {
       return;
     }
     youtubePlaybackPopupRef.current = w;
+    setHideYoutubeCornerPlayer(true);
     setYoutubePlaybackPopupOpen(true);
     try {
       w.focus();
@@ -759,12 +764,23 @@ const HostView: React.FC = () => {
     youtubePlaybackBcRef.current = ch;
     const onMessage = (ev: MessageEvent) => {
       const d = ev.data as { type?: string } | null;
-      if (!d || d.type !== 'REQUEST_SYNC') return;
-      ch.postMessage({
-        type: 'playback',
-        payload: youtubeHostPlaybackBroadcastRef.current,
-      });
-      ch.postMessage({ type: 'volume', volume: youtubePlaybackVolumeRef.current });
+      if (!d || typeof d !== 'object') return;
+      if (d.type === 'REQUEST_SYNC') {
+        ch.postMessage({
+          type: 'playback',
+          payload: youtubeHostPlaybackBroadcastRef.current,
+        });
+        ch.postMessage({ type: 'volume', volume: youtubePlaybackVolumeRef.current });
+        return;
+      }
+      if (d.type === 'POPUP_ACTIVE') {
+        lastYtPopupPingRef.current = Date.now();
+        setHideYoutubeCornerPlayer(true);
+        return;
+      }
+      if (d.type === 'POPUP_CLOSING') {
+        setHideYoutubeCornerPlayer(false);
+      }
     };
     ch.addEventListener('message', onMessage);
     return () => {
@@ -801,6 +817,21 @@ const HostView: React.FC = () => {
     }, 700);
     return () => clearInterval(id);
   }, [youtubePlaybackPopupOpen]);
+
+  /** If the playback page dies without POPUP_CLOSING, restore the corner player after pings stop. */
+  useEffect(() => {
+    if (!hideYoutubeCornerPlayer) return;
+    const id = window.setInterval(() => {
+      const w = youtubePlaybackPopupRef.current;
+      const openedPopupOk = w != null && !w.closed;
+      const pingOk = Date.now() - lastYtPopupPingRef.current < 16000;
+      if (openedPopupOk || pingOk) return;
+      setHideYoutubeCornerPlayer(false);
+      setYoutubePlaybackPopupOpen(false);
+      youtubePlaybackPopupRef.current = null;
+    }, 3000);
+    return () => clearInterval(id);
+  }, [hideYoutubeCornerPlayer]);
 
   useEffect(() => {
     if (!hostAckNotification) return;
@@ -4605,7 +4636,7 @@ const HostView: React.FC = () => {
 
   return (
     <div className="host-view">
-      {!youtubePlaybackPopupOpen ? (
+      {!hideYoutubeCornerPlayer ? (
         <HostYoutubeIframePlayer
           videoId={youtubeHostPlayback?.videoId ?? null}
           startSeconds={(youtubeHostPlayback?.startMs ?? 0) / 1000}
@@ -5126,9 +5157,10 @@ const HostView: React.FC = () => {
                   <AppWindow className="w-4 h-4" aria-hidden />
                   Open YouTube playback window
                 </button>
-                {youtubePlaybackPopupOpen ? (
+                {hideYoutubeCornerPlayer ? (
                   <p style={{ marginTop: 10, fontSize: '0.78rem', color: '#6fdfae', lineHeight: 1.4 }}>
-                    Playback window is open — use that window for reliable sound while you run the display elsewhere.
+                    Dedicated playback window is active — the corner mini-player is off so only one copy plays. Close that
+                    window or tab to use the corner player again.
                   </p>
                 ) : null}
               </>
