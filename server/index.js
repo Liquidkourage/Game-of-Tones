@@ -502,6 +502,29 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     const song = room.playlistSongs[songIndex];
     routineServerLog(`🎵 Playing song ${songIndex + 1}/${room.playlistSongs.length}: ${song.name} by ${song.artist}`);
 
+    if (songUsesYoutubePlayback(song)) {
+      const startMs = computeSnippetRandomStartMs(room, song);
+      room.currentSongStartMs = startMs;
+      room.currentSong = {
+        id: song.id,
+        name: song.name,
+        artist: song.artist,
+        explicit: song.explicit === true,
+        youtubeMusic: true,
+      };
+      try {
+        const r = rooms.get(roomId);
+        if (r) r.songStartAtMs = Date.now() - (startMs || 0);
+      } catch {}
+      io.to(roomId).emit('song-playing', buildSongPlayingPayload(room, song, songIndex));
+      sendPlayerCardUpdates(roomId, true);
+      routineServerLog(`✅ YouTube snippet (host browser): ${song.name}`);
+      const saved = loadSavedDeviceForRoom(roomId);
+      const dev = deviceId || (saved && saved.id) || '';
+      startSimpleProgression(roomId, dev, room.snippetLength);
+      return;
+    }
+
     // STRICT device control: use provided device or saved device only
     let targetDeviceId = deviceId;
     if (!targetDeviceId) {
@@ -1123,6 +1146,95 @@ function spotifyFor(roomId) {
   return multiTenantSpotify.getService(spotifyOrgForRoom(room));
 }
 
+/** True when playback uses host browser YouTube iframe (not Spotify Web API transport). */
+function songUsesYoutubePlayback(song) {
+  return !!(song && song.youtubeMusic === true);
+}
+
+const YOUTUBE_FALLBACK_DURATION_MS = 10 * 60 * 1000;
+
+function computeSnippetRandomStartMs(room, song) {
+  if (!room.randomStarts || room.randomStarts === 'none') return 0;
+  const snippetMs = (room.snippetLength || 30) * 1000;
+  const bufferMs = 1500;
+  const durationMs =
+    Number.isFinite(song.duration) && Number(song.duration) > 0
+      ? Math.max(0, Number(song.duration))
+      : YOUTUBE_FALLBACK_DURATION_MS;
+  let startMs = 0;
+  if (room.randomStarts === 'early') {
+    const maxStartMs = 90000;
+    const safeWindow = Math.min(maxStartMs, Math.max(0, durationMs - snippetMs - bufferMs));
+    if (safeWindow > 3000) startMs = Math.floor(Math.random() * safeWindow);
+  } else if (room.randomStarts === 'random') {
+    const safeWindow = Math.max(0, durationMs - snippetMs - bufferMs - 30000);
+    if (safeWindow > 3000) startMs = Math.floor(Math.random() * safeWindow);
+  }
+  return startMs;
+}
+
+function buildSongPlayingPayload(room, song, currentIndex) {
+  const yt = songUsesYoutubePlayback(song);
+  const startMs = room.currentSongStartMs || 0;
+  const payload = {
+    songId: song.id,
+    songName: song.name,
+    customSongName: customSongTitles.get(song.id) || cleanSongTitle(song.name),
+    artistName: song.artist,
+    explicit: song.explicit === true,
+    snippetLength: room.snippetLength,
+    currentIndex,
+    totalSongs: room.playlistSongs.length,
+    previewUrl: song.previewUrl || null,
+    youtubeMusic: yt,
+  };
+  if (yt) {
+    payload.youtubeVideoId = song.id;
+    payload.startMs = startMs;
+  }
+  return payload;
+}
+
+function syncRoomStateAfterSongStart(roomId, room) {
+  const playedSongIds = Array.isArray(room.calledSongIds) ? [...room.calledSongIds] : [];
+  if (room.currentSong && room.currentSong.id && !playedSongIds.includes(room.currentSong.id)) {
+    playedSongIds.push(room.currentSong.id);
+  }
+  const syncPayload = {
+    isPlaying: room.gameState === 'playing',
+    pattern: room.pattern || 'line',
+    customMask: Array.from(room.customPattern || []),
+    currentSong: room.currentSong || null,
+    snippetLength: room.snippetLength || 30,
+    playerCount: getNonHostPlayerCount(room),
+    gameState: room.gameState,
+    winners: room.winners || [],
+    roundWinners: room.roundWinners || [],
+    publicDisplayFontSize: room.publicDisplayFontSize || 1.0,
+    publicDisplayCallListMode: room.publicDisplayCallListMode || 'auto',
+    venueBranding: venueBrandingForRoom(room),
+    playedSongs: playedSongIds
+      .map((songId) => {
+        const foundSong = room.playlistSongs?.find((s) => s.id === songId);
+        return foundSong
+          ? {
+              id: foundSong.id,
+              name: foundSong.name,
+              artist: foundSong.artist,
+            }
+          : null;
+      })
+      .filter(Boolean),
+    playedSongIds,
+    totalPlayedCount: playedSongIds.length,
+    currentSongIndex: room.currentSongIndex || 0,
+    totalSongs: room.playlistSongs?.length || 0,
+    syncTimestamp: Date.now(),
+  };
+  io.to(roomId).emit('room-state', syncPayload);
+  routineServerLog(`🔄 Synced room-state after song start: ${playedSongIds.length} played songs`);
+}
+
 // Helper function to get organization from room
 function getOrganizationFromRoom(roomId) {
   const room = rooms.get(roomId);
@@ -1179,6 +1291,13 @@ function startSimpleContextMonitor(roomId, deviceId) {
         clearPlaybackWatcher(roomId); 
         return; 
       }
+
+      const idx = room.currentSongIndex;
+      const activeSong =
+        Array.isArray(room.playlistSongs) && typeof idx === 'number' && idx >= 0
+          ? room.playlistSongs[idx]
+          : null;
+      if (songUsesYoutubePlayback(activeSong)) return;
       
       // Get current playback state to check device
       const spMon = spotifyFor(roomId);
@@ -1317,6 +1436,30 @@ async function playNextSongSimple(roomId, deviceId) {
   
   if (!nextSong) {
     routineServerLog('❌ No next song found');
+    return;
+  }
+
+  if (songUsesYoutubePlayback(nextSong)) {
+    const startMsYt = computeSnippetRandomStartMs(room, nextSong);
+    room.currentSongStartMs = startMsYt;
+    room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
+    room.calledSongIds.push(nextSong.id);
+    room.currentSong = {
+      id: nextSong.id,
+      name: nextSong.name,
+      artist: nextSong.artist,
+      explicit: nextSong.explicit === true,
+      youtubeMusic: true,
+    };
+    try {
+      const r = rooms.get(roomId);
+      if (r) r.songStartAtMs = Date.now() - (startMsYt || 0);
+    } catch {}
+    io.to(roomId).emit('song-playing', buildSongPlayingPayload(room, nextSong, room.currentSongIndex));
+    syncRoomStateAfterSongStart(roomId, room);
+    sendPlayerCardUpdates(roomId, true);
+    routineServerLog(`✅ Simple advance (YouTube): ${nextSong.name}`);
+    startSimpleProgression(roomId, deviceId, room.snippetLength);
     return;
   }
 
@@ -5035,19 +5178,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
   }
 
   const org = spotifyOrgForRoom(room);
-  const tokensOk = await multiTenantSpotify.ensureOrgTokensLoaded(org);
-  if (!tokensOk) {
-    console.error('❌ Cannot start playback: Spotify not connected for this host (no tokens in memory or DB)');
-    io.to(roomId).emit('playback-error', {
-      message: 'Spotify is not connected for this host. Open Connection and connect Spotify, then try Start Game again.',
-    });
-    return;
-  }
 
   try {
-    // Ensure token is valid before proceeding
-    await spotifyFor(roomId).ensureValidToken();
-    
     let allSongs = [];
     const perListFetched = [];
     
@@ -5244,7 +5376,23 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         allSongs = orderedSongs;
       }
     }
-    
+
+    const needsSpotifyTransport = allSongs.some((s) => !songUsesYoutubePlayback(s));
+    const playlistHasYoutube = allSongs.some((s) => songUsesYoutubePlayback(s));
+    if (needsSpotifyTransport) {
+      const tokensOk = await multiTenantSpotify.ensureOrgTokensLoaded(org);
+      if (!tokensOk) {
+        console.error('❌ Cannot start playback: Spotify not connected for this host (no tokens in memory or DB)');
+        io.to(roomId).emit('playback-error', {
+          message: 'Spotify is not connected for this host. Open Connection and connect Spotify, then try Start Game again.',
+        });
+        return;
+      }
+      await spotifyFor(roomId).ensureValidToken();
+    } else {
+      routineServerLog('🎬 YouTube-only mix — Spotify Web API not required for playback transport');
+    }
+
     // Store the song list in the room for ordered playback
     room.playlistSongs = allSongs;
     room.currentSongIndex = 0;
@@ -5252,40 +5400,70 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     routineServerLog(`📝 Stored ${allSongs.length} songs in room ${roomId} for ordered playback`);
     routineServerLog(`📋 First 5 songs in order: ${allSongs.slice(0, 5).map(s => `${s.name} (${s.id})`).join(', ')}`);
     
-    // Create temporary playlist for context-based playback to prevent hijacks
-    try {
+    // Temporary Spotify playlist only when every row is Spotify URIs (mixed YT lists break index ↔ URI alignment).
+    if (needsSpotifyTransport && !playlistHasYoutube) {
       try {
-        await spotifyFor(roomId).deleteAllGameOfTonesOutputPlaylists();
-      } catch (clearErr) {
-        console.warn(
-          '⚠️ Could not auto-clear prior GOT output playlists (non-fatal):',
-          clearErr?.message || clearErr
-        );
+        try {
+          await spotifyFor(roomId).deleteAllGameOfTonesOutputPlaylists();
+        } catch (clearErr) {
+          console.warn(
+            '⚠️ Could not auto-clear prior GOT output playlists (non-fatal):',
+            clearErr?.message || clearErr
+          );
+        }
+        const trackUris = allSongs.map((song) => `spotify:track:${song.id}`);
+        const playlistName = `TEMPO Bingo Room ${roomId} - ${new Date().toISOString().slice(0, 16)}`;
+        room.temporaryPlaylistId = await spotifyFor(roomId).createTemporaryPlaylist(playlistName, trackUris);
+        routineServerLog(`🎼 Created temporary playlist for context: ${room.temporaryPlaylistId}`);
+        routineServerLog(`📋 Playlist track order (first 5): ${trackUris.slice(0, 5).join(', ')}`);
+      } catch (error) {
+        console.warn('⚠️ Failed to create temporary playlist, falling back to individual track playback:', error);
+        room.temporaryPlaylistId = null;
       }
-      const trackUris = allSongs.map(song => `spotify:track:${song.id}`);
-      const playlistName = `TEMPO Bingo Room ${roomId} - ${new Date().toISOString().slice(0,16)}`;
-      room.temporaryPlaylistId = await spotifyFor(roomId).createTemporaryPlaylist(playlistName, trackUris);
-      routineServerLog(`🎼 Created temporary playlist for context: ${room.temporaryPlaylistId}`);
-      routineServerLog(`📋 Playlist track order (first 5): ${trackUris.slice(0, 5).join(', ')}`);
-    } catch (error) {
-      console.warn('⚠️ Failed to create temporary playlist, falling back to individual track playback:', error);
+    } else {
       room.temporaryPlaylistId = null;
+      if (playlistHasYoutube && needsSpotifyTransport) {
+        routineServerLog('🎬 Mixed Spotify + YouTube list — skipping temporary Spotify playlist (per-track playback)');
+      }
     }
-    
+
     // Play the first song from the list
     const firstSong = allSongs[0];
     routineServerLog(`🎵 Playing song 1/${allSongs.length}: ${firstSong.name} by ${firstSong.artist}`);
 
-    // Use provided deviceId or fall back to saved device (STRICT-ONLY: no other fallback)
     let targetDeviceId = deviceId;
-    if (!targetDeviceId) {
+    if (!targetDeviceId && needsSpotifyTransport) {
       const savedDevice = loadSavedDeviceForRoom(roomId);
       if (savedDevice) {
         targetDeviceId = savedDevice.id;
         routineServerLog(`🎵 Using saved device for playback: ${savedDevice.name}`);
       }
     }
-    // Strict-only: if still no device, abort
+
+    if (songUsesYoutubePlayback(firstSong)) {
+      const startMsYt = computeSnippetRandomStartMs(room, firstSong);
+      room.currentSongStartMs = startMsYt;
+      room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
+      room.calledSongIds.push(firstSong.id);
+      room.currentSong = {
+        id: firstSong.id,
+        name: firstSong.name,
+        artist: firstSong.artist,
+        explicit: firstSong.explicit === true,
+        youtubeMusic: true,
+      };
+      try {
+        const r = rooms.get(roomId);
+        if (r) r.songStartAtMs = Date.now() - (startMsYt || 0);
+      } catch {}
+      io.to(roomId).emit('song-playing', buildSongPlayingPayload(room, firstSong, 0));
+      syncRoomStateAfterSongStart(roomId, room);
+      sendPlayerCardUpdates(roomId, true);
+      routineServerLog(`✅ Started automatic playback (YouTube host browser): ${firstSong.name} by ${firstSong.artist}`);
+      startSimpleProgression(roomId, targetDeviceId || '', room.snippetLength);
+      return;
+    }
+
     if (!targetDeviceId) {
       console.error('❌ Strict mode: no locked device available for playback');
       io.to(roomId).emit('playback-error', { message: 'Locked device not available. Open Spotify on your chosen device or reselect in Host.' });
@@ -5294,6 +5472,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
 
     routineServerLog(`🎵 Starting playback on device: ${targetDeviceId}`);
 
+    let startMs = 0;
     try {
       // Ensure device reports in current devices list; try to activate if needed
       const devices = await spotifyFor(roomId).getUserDevices();
@@ -5312,7 +5491,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       await new Promise(resolve => setTimeout(resolve, 200));
       // Use explicit device_id and uris as fallback in case transfer isn't picked up
       // Randomized start position within track when enabled and safe
-      let startMs = 0;
+      startMs = 0;
       if (room.randomStarts && room.randomStarts !== 'none' && Number.isFinite(firstSong.duration)) {
         const dur = Math.max(0, Number(firstSong.duration));
         const snippetMs = room.snippetLength * 1000;
@@ -5380,7 +5559,13 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           // Skip-based queue clearing removed to avoid context hijacks
           await spotifyFor(roomId).withRetries('startPlayback(after-refresh)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
           routineServerLog(`✅ Successfully started playback after token refresh`);
-          try { const r = rooms.get(roomId); if (r) r.songStartAtMs = Date.now() - (startMs || 0); } catch {}
+          try {
+            const r = rooms.get(roomId);
+            if (r) {
+              r.songStartAtMs = Date.now() - (startMs || 0);
+              r.currentSongStartMs = startMs;
+            }
+          } catch {}
           
           // Stabilization delay to prevent context hijacks from volume changes
           await new Promise(resolve => setTimeout(resolve, 800));
@@ -5410,27 +5595,14 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       id: firstSong.id,
       name: firstSong.name,
       artist: firstSong.artist,
-      explicit: firstSong.explicit === true
+      explicit: firstSong.explicit === true,
     };
 
-    io.to(roomId).emit('song-playing', {
-      songId: firstSong.id,
-      songName: firstSong.name,
-      customSongName: customSongTitles.get(firstSong.id) || cleanSongTitle(firstSong.name),
-      artistName: firstSong.artist,
-      explicit: firstSong.explicit === true,
-      snippetLength: room.snippetLength,
-      currentIndex: 0,
-      totalSongs: allSongs.length,
-      previewUrl: (allSongs[0]?.previewUrl) || null
-    });
-
-  
+    io.to(roomId).emit('song-playing', buildSongPlayingPayload(room, firstSong, 0));
+    syncRoomStateAfterSongStart(roomId, room);
+    sendPlayerCardUpdates(roomId, true);
 
     routineServerLog(`✅ Started automatic playback in room ${roomId}: ${firstSong.name} by ${firstSong.artist} on device ${targetDeviceId}`);
-
-    room.playlistSongs = allSongs;
-    room.currentSongIndex = 0;
 
     // Verify playback actually started and is the correct track; attempt resume/correct if needed
     try {
@@ -5532,6 +5704,35 @@ async function playNextSong(roomId, deviceId) {
     
     const nextSong = room.playlistSongs[room.currentSongIndex];
     routineServerLog(`🎵 Playing song ${room.currentSongIndex + 1}/${room.playlistSongs.length}: ${nextSong.name} by ${nextSong.artist}`);
+
+    if (songUsesYoutubePlayback(nextSong)) {
+      const startMsYt = computeSnippetRandomStartMs(room, nextSong);
+      room.currentSongStartMs = startMsYt;
+      room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
+      room.calledSongIds.push(nextSong.id);
+      room.currentSong = {
+        id: nextSong.id,
+        name: nextSong.name,
+        artist: nextSong.artist,
+        explicit: nextSong.explicit === true,
+        youtubeMusic: true,
+      };
+      try {
+        const r = rooms.get(roomId);
+        if (r) r.songStartAtMs = Date.now() - (startMsYt || 0);
+      } catch {}
+      io.to(roomId).emit('song-playing', buildSongPlayingPayload(room, nextSong, room.currentSongIndex));
+      syncRoomStateAfterSongStart(roomId, room);
+      sendPlayerCardUpdates(roomId, true);
+      routineServerLog(`✅ Playing next song (YouTube host browser): ${nextSong.name}`);
+      const devPass = deviceId || room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id || '';
+      const playbackDuration = room.snippetLength * 1000;
+      setRoomTimer(roomId, async () => {
+        clearRoomTimer(roomId);
+        playNextSong(roomId, devPass);
+      }, playbackDuration);
+      return;
+    }
 
     // STRICT device control: use provided device or saved device only
     let targetDeviceId = deviceId;

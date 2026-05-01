@@ -49,6 +49,7 @@ import SongTitleEditModal from './SongTitleEditModal';
 import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModal';
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
 import { HostYoutubeMusicPlaylistLibrary, type YoutubeMixPlaylistRow } from './HostYoutubeMusicPlaylistLibrary';
+import { HostYoutubeIframePlayer } from './HostYoutubeIframePlayer';
 import RoundPlanner from './RoundPlanner';
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
@@ -109,6 +110,8 @@ interface Song {
   duration?: number; // Make duration optional
   /** Spotify: track has explicit content */
   explicit?: boolean;
+  /** Playback uses host YouTube iframe (video id in `id`). */
+  youtubeMusic?: boolean;
   sourcePlaylistId?: string;
   sourcePlaylistName?: string;
 }
@@ -610,7 +613,14 @@ const HostView: React.FC = () => {
     queue: [],
     currentQueueIndex: 0
   });
-   
+
+  /** Server-driven YouTube snippet playback in this browser (audio for YTM rows). */
+  const [youtubeHostPlayback, setYoutubeHostPlayback] = useState<{
+    videoId: string;
+    startMs: number;
+    snippetSeconds: number;
+  } | null>(null);
+
   const [isSeeking, setIsSeeking] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [previousVolume, setPreviousVolume] = useState(100);
@@ -1566,6 +1576,20 @@ const HostView: React.FC = () => {
     });
 
     newSocket.on('song-playing', (data: any) => {
+      const yt =
+        data.youtubeMusic === true &&
+        typeof data.youtubeVideoId === 'string' &&
+        data.youtubeVideoId.length > 0;
+      if (yt) {
+        setYoutubeHostPlayback({
+          videoId: data.youtubeVideoId,
+          startMs: typeof data.startMs === 'number' ? data.startMs : 0,
+          snippetSeconds: typeof data.snippetLength === 'number' ? data.snippetLength : 30,
+        });
+      } else {
+        setYoutubeHostPlayback(null);
+      }
+
       setCurrentSong({
         id: data.songId,
         name: data.songName,
@@ -1596,12 +1620,13 @@ const HostView: React.FC = () => {
       setIsPausedByInterface(false);
       
       console.log('Song playing:', data);
-      addLog(`Now playing: ${data.songName} � ${data.artistName}`, 'info');
+      addLog(`Now playing: ${data.songName} — ${data.artistName}`, 'info');
       
-      // Sync volume when song starts playing to ensure it matches interface
-      setTimeout(() => {
-        syncVolumeToSpotify();
-      }, 500);
+      if (!yt) {
+        setTimeout(() => {
+          syncVolumeToSpotify();
+        }, 500);
+      }
       schedulePlayerCardsRefresh(550);
     });
 
@@ -1655,6 +1680,7 @@ const HostView: React.FC = () => {
       setGamePaused(false);
       setIsPlaying(false);
       setGameState('ended');
+      setYoutubeHostPlayback(null);
       void disconnectSpotify();
     });
 
@@ -1668,6 +1694,7 @@ const HostView: React.FC = () => {
       setGamePaused(false);
       setPendingVerification(null);
       setCurrentSong(null);
+      setYoutubeHostPlayback(null);
       addLog('Game restarted by host', 'info');
     });
 
@@ -3455,7 +3482,10 @@ const HostView: React.FC = () => {
             return [];
           }
           if (data.success && data.tracks) {
-            allSongs.push(...data.tracks);
+            const rows = yt
+              ? data.tracks.map((t) => ({ ...t, youtubeMusic: true as const }))
+              : data.tracks;
+            allSongs.push(...rows);
             fullyLoadedPlaylistIdsRef.current.add(playlist.id);
             if (!catalog && !yt) {
               applyPlaylistExplicitKnowledge(playlist.id, data.tracks, setPlaylists, setSelectedPlaylists);
@@ -4461,6 +4491,12 @@ const HostView: React.FC = () => {
 
   return (
     <div className="host-view">
+      <HostYoutubeIframePlayer
+        videoId={youtubeHostPlayback?.videoId ?? null}
+        startSeconds={(youtubeHostPlayback?.startMs ?? 0) / 1000}
+        snippetSeconds={youtubeHostPlayback?.snippetSeconds ?? snippetLength}
+        volume={playbackState.volume}
+      />
       <HostAcknowledgeModal
         open={hostAckNotification != null}
         title={hostAckNotification?.title ?? ''}

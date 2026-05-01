@@ -195,6 +195,7 @@ async function listPlaylistItems(hostUserId, playlistId, options = {}) {
         id: vid,
         name: title,
         artist,
+        youtubeMusic: true,
         sourcePlaylistId: pid,
         ...(playlistName ? { sourcePlaylistName: playlistName } : {}),
       });
