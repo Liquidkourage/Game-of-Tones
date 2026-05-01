@@ -156,6 +156,11 @@ const PublicDisplay: React.FC = () => {
   const snippetCountdownSongIdRef = useRef<string | null>(null);
   /** Mirrors played songs list for reveal fallback when idMeta is stale or incomplete. */
   const playedSongsSnapshotRef = useRef<Song[]>([]);
+  /**
+   * Track-end mode: ids whose snippet timer has finished — render full title/artist (letter sequence +
+   * baseline cannot represent “show everything for this row” without missing shared letters).
+   */
+  const trackEndUnmaskedIdsRef = useRef<Set<string>>(new Set());
   const [totalPlayedCount, setTotalPlayedCount] = useState<number>(0);
   const [isVerificationPending, setIsVerificationPending] = useState<boolean>(false);
   const isVerificationPendingRef = useRef<boolean>(false);
@@ -186,6 +191,13 @@ const PublicDisplay: React.FC = () => {
 
   useEffect(() => {
     titleRevealModeRef.current = titleRevealMode;
+  }, [titleRevealMode]);
+
+  useEffect(() => {
+    if (titleRevealMode !== 'track_end') {
+      trackEndUnmaskedIdsRef.current.clear();
+      setRevealLayoutNonce((n) => n + 1);
+    }
   }, [titleRevealMode]);
 
   useEffect(() => {
@@ -1027,6 +1039,8 @@ const PublicDisplay: React.FC = () => {
               titleRevealModeRef.current === 'track_end' &&
               !isVerificationPendingRef.current
             ) {
+              trackEndUnmaskedIdsRef.current.add(endedId);
+              setRevealLayoutNonce((n) => n + 1);
               queueMicrotask(() => revealFullLettersForSongRef.current(endedId));
             }
           }
@@ -1066,6 +1080,7 @@ const PublicDisplay: React.FC = () => {
       playedSeqRef.current = {} as any;
       playedSeqCounterRef.current = 0;
       snippetCountdownSongIdRef.current = null;
+      trackEndUnmaskedIdsRef.current.clear();
       // Clear persisted state for new game
       try {
         localStorage.removeItem(`display_revealed_letters_${roomId}`);
@@ -1108,6 +1123,7 @@ const PublicDisplay: React.FC = () => {
       // Songs that start after reset will get baseline = revealSequenceRef.length (which is now 0)
       const resetBaseline = revealSequenceRef.current.length; // Should be 0 after clearing, but use current for safety
       revealSequenceRef.current = [];
+      trackEndUnmaskedIdsRef.current.clear();
       
       // Recalculate baselines for all currently played songs
       // Set baseline to the length BEFORE clearing (so they don't show letters revealed after reset)
@@ -1278,6 +1294,8 @@ const PublicDisplay: React.FC = () => {
       resetPlayedTrackingRefs();
       setShowWinnerBanner(false);
       setWinnerName('');
+      snippetCountdownSongIdRef.current = null;
+      trackEndUnmaskedIdsRef.current.clear();
       
       // Clear reveal state
       revealSequenceRef.current = [];
@@ -1320,6 +1338,7 @@ const PublicDisplay: React.FC = () => {
       setWinnerName('');
       setIsVerificationPending(false);
       snippetCountdownSongIdRef.current = null;
+      trackEndUnmaskedIdsRef.current.clear();
       
       // Clear all reveal state
       revealSequenceRef.current = [];
@@ -1353,6 +1372,7 @@ const PublicDisplay: React.FC = () => {
       resetPlayedTrackingRefs();
       ensureGrid();
       snippetCountdownSongIdRef.current = null;
+      trackEndUnmaskedIdsRef.current.clear();
       console.log('🔁 Game reset (display)');
       revealSequenceRef.current = [];
       songBaselineRef.current = {};
@@ -2177,10 +2197,20 @@ const PublicDisplay: React.FC = () => {
                   const poolIdx = Array.isArray(oneBy75Ids) ? oneBy75Ids.indexOf(id) : -1;
                   const meta = idMetaRef.current[id] || { name: '', artist: '' };
                   const isCurrent = gameState.currentSong?.id === id;
+                  const trackEndShowFull =
+                    titleRevealMode === 'track_end' && trackEndUnmaskedIdsRef.current.has(id);
                   const baseline = songBaselineRef.current[id] ?? 0;
                   const revealedForThisSong = new Set(revealSequenceRef.current.slice(baseline));
-                  const title = renderMaskedText(meta?.name || 'Unknown', revealedForThisSong, revealToast);
-                  const artist = renderMaskedText(meta?.artist || '', revealedForThisSong, revealToast);
+                  const title = trackEndShowFull ? (
+                    <span>{meta?.name || 'Unknown'}</span>
+                  ) : (
+                    renderMaskedText(meta?.name || 'Unknown', revealedForThisSong, revealToast)
+                  );
+                  const artist = trackEndShowFull ? (
+                    meta?.artist ? <span>{meta.artist}</span> : null
+                  ) : (
+                    renderMaskedText(meta?.artist || '', revealedForThisSong, revealToast)
+                  );
                   return (
                     <motion.div
                       key={id + '-' + ri}
@@ -2405,11 +2435,20 @@ const PublicDisplay: React.FC = () => {
                     const meta = idMetaRef.current[id];
                     const isCurrent = gameState.currentSong?.id === id;
                     // Use baseline for that song so letters revealed before it started are not shown
+                    const trackEndShowFull =
+                      titleRevealMode === 'track_end' && trackEndUnmaskedIdsRef.current.has(id);
                     const baseline = songBaselineRef.current[id] ?? 0;
-                    // Show only letters revealed AFTER this song started
                     const revealedForThisSong = new Set(revealSequenceRef.current.slice(baseline));
-                    const title = renderMaskedText(meta?.name || 'Unknown', revealedForThisSong, revealToast);
-                    const artist = renderMaskedText(meta?.artist || '', revealedForThisSong, revealToast);
+                    const title = trackEndShowFull ? (
+                      <span>{meta?.name || 'Unknown'}</span>
+                    ) : (
+                      renderMaskedText(meta?.name || 'Unknown', revealedForThisSong, revealToast)
+                    );
+                    const artist = trackEndShowFull ? (
+                      meta?.artist ? <span>{meta.artist}</span> : null
+                    ) : (
+                      renderMaskedText(meta?.artist || '', revealedForThisSong, revealToast)
+                    );
                     return (
                       <motion.div
                         key={id}
@@ -3797,9 +3836,21 @@ const PublicDisplay: React.FC = () => {
                 {showNowPlaying && gameState.currentSong && (
                   <div className="now-playing-banner" style={{ marginTop: 6, fontSize: '0.95rem' }}>
                     Now Playing: {(() => {
-                      const currentRevealed = new Set(revealSequenceRef.current);
-                      const title = renderMaskedText(gameState.currentSong.name, currentRevealed, revealToast);
-                      const artist = renderMaskedText(gameState.currentSong.artist, currentRevealed, revealToast);
+                      const cid = gameState.currentSong!.id;
+                      const bannerPlain =
+                        titleRevealMode === 'track_end' && trackEndUnmaskedIdsRef.current.has(cid);
+                      const baseline = songBaselineRef.current[cid] ?? 0;
+                      const curRev = new Set(revealSequenceRef.current.slice(baseline));
+                      const title = bannerPlain ? (
+                        <span>{gameState.currentSong!.name}</span>
+                      ) : (
+                        renderMaskedText(gameState.currentSong!.name, curRev, revealToast)
+                      );
+                      const artist = bannerPlain ? (
+                        gameState.currentSong!.artist ? <span>{gameState.currentSong!.artist}</span> : null
+                      ) : (
+                        renderMaskedText(gameState.currentSong!.artist || '', curRev, revealToast)
+                      );
                       return (
                         <span>
                           {title} — {artist}
