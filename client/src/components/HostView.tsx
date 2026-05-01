@@ -1564,6 +1564,7 @@ const HostView: React.FC = () => {
               name: o.name,
               artist: o.artist,
               explicit: o.explicit === true,
+              youtubeMusic: o.youtubeMusic === true,
             }))
           : [];
         if (arr.length > 0) {

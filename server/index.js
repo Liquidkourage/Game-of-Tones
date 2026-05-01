@@ -1151,6 +1151,48 @@ function songUsesYoutubePlayback(song) {
   return !!(song && song.youtubeMusic === true);
 }
 
+/** Spotify track ids are 22-char base62; YouTube video ids are often 11 chars. */
+function looksLikeSpotifyTrackId(id) {
+  const s = String(id || '');
+  return s.length === 22 && /^[a-zA-Z0-9]{22}$/.test(s);
+}
+
+function looksLikeYoutubeVideoId(id) {
+  const s = String(id || '');
+  return s.length === 11 && /^[a-zA-Z0-9_-]{11}$/.test(s);
+}
+
+/**
+ * Host payloads sometimes omit `youtubeMusic` on tracks; 5x15 card generation also replaces
+ * finalizedSongOrder with ids only. Recover flags from playlist rows and/or id shape.
+ */
+function applyYoutubePlaybackHints(playlists, songs) {
+  if (!Array.isArray(songs) || songs.length === 0) return songs;
+  const ytPlaylistIds = new Set(
+    (Array.isArray(playlists) ? playlists : [])
+      .filter((p) => p && p.youtubeMusic === true)
+      .map((p) => String(p.id))
+  );
+  let tagged = 0;
+  const out = songs.map((s) => {
+    if (!s || s.youtubeMusic === true) return s;
+    const pid = s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : '';
+    if (pid && ytPlaylistIds.has(pid)) {
+      tagged++;
+      return { ...s, youtubeMusic: true };
+    }
+    if (!looksLikeSpotifyTrackId(s.id) && looksLikeYoutubeVideoId(s.id)) {
+      tagged++;
+      return { ...s, youtubeMusic: true };
+    }
+    return s;
+  });
+  if (tagged > 0) {
+    routineServerLog(`🎬 Tagged ${tagged} song row(s) as YouTube playback (playlist metadata and/or id shape)`);
+  }
+  return out;
+}
+
 const YOUTUBE_FALLBACK_DURATION_MS = 10 * 60 * 1000;
 
 function computeSnippetRandomStartMs(room, song) {
@@ -4709,7 +4751,14 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           colNames.push(perListGloballyUnique[col].name || `Column ${col+1}`);
           routineServerLog(`   ✅ Column ${col} assigned to playlist: ${perListGloballyUnique[col].name}`);
           src.forEach(s => {
-            if (s && s.id) metaMap[s.id] = { name: s.name, artist: s.artist, explicit: s.explicit === true };
+            if (s && s.id) {
+              metaMap[s.id] = {
+                name: s.name,
+                artist: s.artist,
+                explicit: s.explicit === true,
+                youtubeMusic: s.youtubeMusic === true,
+              };
+            }
           });
         }
         const roomRef = rooms.get(roomId);
@@ -4744,6 +4793,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
                 name: m?.name || '',
                 artist: m?.artist || '',
                 explicit: m?.explicit === true,
+                youtubeMusic: m?.youtubeMusic === true,
               };
             });
             io.to(roomId).emit('finalized-order', { order: orderWithMeta });
@@ -4803,6 +4853,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
               name: s.name || '',
               artist: s.artist || '',
               explicit: s.explicit === true,
+              youtubeMusic: s.youtubeMusic === true,
             }));
             io.to(roomId).emit('finalized-order', { order: orderWithMeta });
           }
@@ -4819,6 +4870,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
             name: s.name || '',
             artist: s.artist || '',
             explicit: s.explicit === true,
+            youtubeMusic: s.youtubeMusic === true,
           }));
           io.to(roomId).emit('finalized-order', { order: orderWithMeta });
         }
@@ -5312,7 +5364,16 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
             const picks = pool.slice(0, 15); // Take first 15 from shuffled deduplicated pool
             built.push(picks);
             colNames.push(perListGloballyUnique[col].name || `Column ${col + 1}`);
-            picks.forEach(s => { if (s && s.id) metaMap[s.id] = { name: s.name, artist: s.artist }; });
+            picks.forEach(s => {
+              if (s && s.id) {
+                metaMap[s.id] = {
+                  name: s.name,
+                  artist: s.artist,
+                  explicit: s.explicit === true,
+                  youtubeMusic: s.youtubeMusic === true,
+                };
+              }
+            });
           }
           fiveCols = built.map(col => col.map(s => ({ id: s.id })));
           room.fiveByFifteenColumns = fiveCols;
@@ -5362,7 +5423,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       // Deduplicate finalizedSongOrder IDs to prevent duplicate songs in output playlist
       const seenIds = new Set();
       const orderedSongs = room.finalizedSongOrder
-        .map(id => {
+        .map((entry) => {
+          const id = typeof entry === 'string' ? entry : entry && entry.id;
+          if (!id) return null;
           if (seenIds.has(id)) {
             routineServerLog(`⚠️ Skipping duplicate ID in finalizedSongOrder: ${id}`);
             return null;
@@ -5376,6 +5439,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         allSongs = orderedSongs;
       }
     }
+
+    allSongs = applyYoutubePlaybackHints(playlists, allSongs);
 
     const needsSpotifyTransport = allSongs.some((s) => !songUsesYoutubePlayback(s));
     const playlistHasYoutube = allSongs.some((s) => songUsesYoutubePlayback(s));
