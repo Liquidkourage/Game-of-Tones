@@ -4101,10 +4101,17 @@ const HostView: React.FC = () => {
     setEventRounds(updatedRounds);
     setCurrentRoundIndex(roundIndex);
 
-    // Update selected playlists to match the round
-    const roundPlaylists = playlists.filter(p => round.playlistIds.includes(p.id));
-    if (roundPlaylists.length > 0) {
-      setSelectedPlaylists(roundPlaylists);
+    // Update selected playlists to match the round (Spotify + YouTube Music + catalog packs).
+    const idSet = new Set((round.playlistIds || []).map((id) => String(id)));
+    const fromLibrary = playlistsForRoundPlanner.filter((p) => idSet.has(String(p.id)));
+    const libraryIdSet = new Set(fromLibrary.map((p) => String(p.id)));
+    const fromCatalog = catalogPackOptions.filter(
+      (p) => idSet.has(String(p.id)) && !libraryIdSet.has(String(p.id))
+    );
+
+    if (fromLibrary.length > 0 || fromCatalog.length > 0) {
+      setSelectedPlaylists(fromLibrary);
+      setSelectedCatalogPlaylists(fromCatalog.map((p) => ({ ...p, catalog: true })));
       const playlistNames = round.playlistNames.join(', ');
       addLog(`Started ${round.name}: ${playlistNames}`, 'info');
     }
@@ -4118,7 +4125,7 @@ const HostView: React.FC = () => {
 
     // Next step is Finalize mix / Start game on the Game tab
     setActiveTab('play');
-  }, [eventRounds, currentRoundIndex, playlists, roomId]);
+  }, [eventRounds, currentRoundIndex, playlistsForRoundPlanner, catalogPackOptions, roomId, addLog]);
 
   // Advanced round management functions
   const jumpToRound = useCallback((roundIndex: number) => {
