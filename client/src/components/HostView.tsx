@@ -195,6 +195,26 @@ function applyPlaylistExplicitKnowledge(
 /** Persisted before Spotify/Google redirects so return URL without ?name= still shows the right host label. */
 const HOST_DISPLAY_NAME_KEY = 'tempo_host_display_name';
 
+/** When set this tab session, host UI may call Spotify Web API routes; cleared on Disconnect Spotify. */
+const HOST_SPOTIFY_WEB_ENABLED_KEY = 'tempo_host_spotify_web_enabled';
+
+function readHostSpotifyWebEnabled(): boolean {
+  try {
+    return sessionStorage.getItem(HOST_SPOTIFY_WEB_ENABLED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeHostSpotifyWebEnabled(enabled: boolean): void {
+  try {
+    if (enabled) sessionStorage.setItem(HOST_SPOTIFY_WEB_ENABLED_KEY, '1');
+    else sessionStorage.removeItem(HOST_SPOTIFY_WEB_ENABLED_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Spotify playlist ids are strings; rounds/API may store numbers — normalize for Set lookups. */
 function normalizeSpotifyPlaylistId(id: unknown): string {
   if (id == null || id === '') return '';
@@ -656,6 +676,7 @@ const HostView: React.FC = () => {
   );
 
   const refreshSpotifyQuarantineFromStatus = useCallback(async () => {
+    if (!readHostSpotifyWebEnabled()) return;
     try {
       const response = await hostFetch(`${API_BASE || ''}/api/spotify/status?_=${Date.now()}`);
       const data = (await response.json()) as { webApiQuarantine?: unknown };
@@ -687,6 +708,15 @@ const HostView: React.FC = () => {
 
   /** Official packs — uses Google host session; safe to call whenever playlists refresh too (rail against stale bundles / bootstrap timing). */
   const loadCatalogPacks = useCallback(async () => {
+    if (!readHostSpotifyWebEnabled()) {
+      setCatalogPacksProbeDone(true);
+      setCatalogPacksFetchOk(false);
+      setCatalogPacksConfigured(false);
+      setCatalogPackOptions([]);
+      setCatalogPacksFetchUnauthorized(false);
+      setCatalogPrefixDiscoverySkipped(false);
+      return;
+    }
     try {
       const res = await hostFetch(`${API_BASE || ''}/api/spotify/catalog/packs`);
       if (!res.ok) {
@@ -760,6 +790,7 @@ const HostView: React.FC = () => {
   }, []);
 
   const loadPlaylists = useCallback(async () => {
+    if (!readHostSpotifyWebEnabled()) return;
     try {
       const assignedForQuery = eventRoundsRef.current
         .flatMap((r) => r.playlistIds || [])
@@ -872,6 +903,10 @@ const HostView: React.FC = () => {
     const raw = playlistByLinkInput.trim();
     if (!raw) {
       setPlaylistByLinkError('Paste a playlist link or id.');
+      return;
+    }
+    if (!readHostSpotifyWebEnabled()) {
+      setPlaylistByLinkError('Connect Spotify from Connection first.');
       return;
     }
     setPlaylistByLinkLoading(true);
@@ -1105,11 +1140,12 @@ const HostView: React.FC = () => {
   /** After first Spotify status check: prompt once if not connected. */
   useEffect(() => {
     if (!spotifyInitialCheckDone || isSpotifyConnected) return;
+    if (showYoutubeMusicInConnectionModal) return;
     if (!initialConnectionPromptRef.current) {
       initialConnectionPromptRef.current = true;
       setShowConnectionModal(true);
     }
-  }, [spotifyInitialCheckDone, isSpotifyConnected]);
+  }, [spotifyInitialCheckDone, isSpotifyConnected, showYoutubeMusicInConnectionModal]);
 
   /** Spotify disconnected ? reopen modal; reconnected ? close. */
   useEffect(() => {
@@ -1152,6 +1188,7 @@ const HostView: React.FC = () => {
   }, []);
 
   const loadDevices = useCallback(async () => {
+    if (!readHostSpotifyWebEnabled()) return;
     try {
       setIsLoadingDevices(true);
       console.log('Loading Spotify devices...');
@@ -1215,6 +1252,7 @@ const HostView: React.FC = () => {
   /** After server-side Spotify OAuth redirect (?spotify=connected), refresh status and clean URL. */
   useEffect(() => {
     if (searchParams.get('spotify') !== 'connected') return;
+    writeHostSpotifyWebEnabled(true);
     const ac = new AbortController();
     const next = new URLSearchParams(searchParams);
     next.delete('spotify');
@@ -1271,6 +1309,7 @@ const HostView: React.FC = () => {
   }, [searchParams, setSearchParams, loadPlaylists, loadDevices]);
 
   const fetchPlaybackState = useCallback(async () => {
+    if (!readHostSpotifyWebEnabled()) return;
     try {
       const resp = await hostFetch(`${API_BASE || ''}/api/spotify/current-playback`);
       if (!resp.ok) {
@@ -1314,6 +1353,7 @@ const HostView: React.FC = () => {
 
   const disconnectSpotify = useCallback(async () => {
     try {
+      writeHostSpotifyWebEnabled(false);
       if (catalogPacksLoadDebounceRef.current != null) {
         clearTimeout(catalogPacksLoadDebounceRef.current);
         catalogPacksLoadDebounceRef.current = null;
@@ -1341,6 +1381,10 @@ const HostView: React.FC = () => {
   const saveSelectedDevice = useCallback(async () => {
     if (!selectedDevice) {
       alert('Please select a device first');
+      return;
+    }
+    if (!readHostSpotifyWebEnabled()) {
+      alert('Connect Spotify from Connection first.');
       return;
     }
 
@@ -2107,28 +2151,6 @@ const HostView: React.FC = () => {
         setHybridInPersonPlusOnline(data.hybridInPersonPlusOnline);
       }
       addLog(`Joined room ${roomId} successfully`, 'info');
-      
-      // Force check Spotify status after joining room
-      setTimeout(async () => {
-        console.log('?? Rechecking Spotify status after room join...');
-        try {
-          const cacheBuster = Date.now();
-          const response = await hostFetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
-          const data = (await response.json()) as { connected?: boolean; webApiQuarantine?: unknown };
-          console.log('?? Recheck response:', data);
-          console.log('?? Recheck response details:', JSON.stringify(data, null, 2));
-          if (data.webApiQuarantine != null) {
-            setWebApiQuarantine(normalizeWebApiQuarantine(data.webApiQuarantine));
-          }
-          if (data.connected) {
-            console.log('? Spotify found connected after room join!');
-            setIsSpotifyConnected(true);
-            setIsSpotifyConnecting(false);
-          }
-        } catch (error) {
-          console.error('Error rechecking Spotify status:', error);
-        }
-      }, 1000);
     });
 
     // Join as host after the socket is connected so the handshake runs first; re-read JWT at emit time.
@@ -2160,6 +2182,13 @@ const HostView: React.FC = () => {
           }
         } catch {
           /* ignore */
+        }
+        if (!readHostSpotifyWebEnabled()) {
+          console.log('Spotify Web API deferred until host connects from Connection.');
+          setIsSpotifyConnected(false);
+          setIsSpotifyConnecting(false);
+          setSpotifyInitialCheckDone(true);
+          return;
         }
         console.log('Host view loaded, checking Spotify status...');
         // Add cache-busting parameter to force fresh request
@@ -2231,7 +2260,8 @@ const HostView: React.FC = () => {
       console.log('Initiating Spotify connection...');
       setIsSpotifyConnecting(true);
       setSpotifyError(null);
-      
+      writeHostSpotifyWebEnabled(true);
+
       // Check if Spotify is already connected (with cache-busting)
       const cacheBuster = Date.now();
       const statusResponse = await hostFetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
@@ -3381,6 +3411,12 @@ const HostView: React.FC = () => {
       try {
         let allSongs: Song[] = [...kept];
 
+        const needsHostSpotifyApi = toFetch.some((p) => !p.youtubeMusic);
+        if (needsHostSpotifyApi && !readHostSpotifyWebEnabled()) {
+          setSongList([]);
+          return [];
+        }
+
         for (let i = 0; i < toFetch.length; i++) {
           if (genRef.current !== myBuild) {
             return [];
@@ -3448,6 +3484,7 @@ const HostView: React.FC = () => {
 
   // Function to fetch current Spotify volume
   const fetchCurrentVolume = useCallback(async () => {
+    if (!readHostSpotifyWebEnabled()) return;
     try {
       const resp = await hostFetch(`${API_BASE || ''}/api/spotify/current-playback`);
       if (!resp.ok) return;
@@ -3464,6 +3501,7 @@ const HostView: React.FC = () => {
 
   // Function to ensure Spotify volume matches interface volume
   const syncVolumeToSpotify = useCallback(async () => {
+    if (!readHostSpotifyWebEnabled()) return;
     if (!selectedDevice?.id) return;
     
     try {
@@ -3495,6 +3533,10 @@ const HostView: React.FC = () => {
   const transferToSelectedDevice = useCallback(async () => {
     if (!selectedDevice) {
       alert('Please select a device first');
+      return;
+    }
+    if (!readHostSpotifyWebEnabled()) {
+      alert('Connect Spotify from Connection first.');
       return;
     }
     try {
@@ -3530,6 +3572,7 @@ const HostView: React.FC = () => {
         alert('Select a Spotify device first');
         return;
       }
+      if (!readHostSpotifyWebEnabled()) return;
       // Try to regain control and auto-play on selected device
       await hostFetch(`${API_BASE || ''}/api/spotify/transfer`, {
         method: 'POST',
@@ -3581,6 +3624,7 @@ const HostView: React.FC = () => {
     // Debounce the actual volume change to prevent rapid API calls
     const timeout = setTimeout(async () => {
       try {
+        if (!readHostSpotifyWebEnabled()) return;
         console.log(`?? Setting volume to ${newVolume}% on Spotify`);
         const response = await hostFetch(`${API_BASE || ''}/api/spotify/volume`, {
           method: 'POST',
@@ -3617,6 +3661,7 @@ const HostView: React.FC = () => {
       setIsMuted(false);
       
       try {
+        if (!readHostSpotifyWebEnabled()) return;
         console.log(`?? Unmuting, setting volume to ${previousVolume}%`);
         const response = await hostFetch(`${API_BASE || ''}/api/spotify/volume`, {
           method: 'POST',
@@ -3648,6 +3693,7 @@ const HostView: React.FC = () => {
       setIsMuted(true);
       
       try {
+        if (!readHostSpotifyWebEnabled()) return;
         console.log(`?? Muting, setting volume to 0%`);
         const response = await hostFetch(`${API_BASE || ''}/api/spotify/volume`, {
           method: 'POST',
@@ -3678,6 +3724,7 @@ const HostView: React.FC = () => {
   const handleSeek = useCallback(async (newTime: number) => {
     setPlaybackState(prev => ({ ...prev, currentTime: newTime }));
     
+    if (!readHostSpotifyWebEnabled()) return;
     try {
         const response = await hostFetch(`${API_BASE || ''}/api/spotify/seek`, {
         method: 'POST',
@@ -3772,6 +3819,11 @@ const HostView: React.FC = () => {
     const playlistName = prompt('Enter a name for your output playlist:', `Bingo ${roomId} - ${new Date().toLocaleDateString()}`);
     if (!playlistName) return;
 
+    if (!readHostSpotifyWebEnabled()) {
+      alert('Connect Spotify from Connection first.');
+      return;
+    }
+
     try {
       const trackIds = songList.map(song => song.id);
       const response = await hostFetch(`${API_BASE || ''}/api/spotify/create-output-playlist`, {
@@ -3840,6 +3892,7 @@ const HostView: React.FC = () => {
     const playbackSyncInterval = setInterval(async () => {
       try {
         if (!isSpotifyConnectedRef.current) return;
+        if (!readHostSpotifyWebEnabled()) return;
         if (Date.now() < spotifyPollBackoffUntilRef.current) return;
         const resp = await hostFetch(`${API_BASE || ''}/api/spotify/current-playback`);
         if (resp.status === 429) {
@@ -3973,6 +4026,7 @@ const HostView: React.FC = () => {
     let cancelled = false;
     const t = setTimeout(async () => {
       if (cancelled) return;
+      if (!readHostSpotifyWebEnabled()) return;
       try {
         const resp = await hostFetch(`${API_BASE || ''}/api/spotify/current-playback`);
         if (!resp.ok) return;

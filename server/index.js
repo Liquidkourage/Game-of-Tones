@@ -7022,6 +7022,7 @@ app.use('/api/spotify', async (req, res, next) => {
   const rel = (req.path || '').split('?')[0] || full.replace(/^.*\/api\/spotify/, '') || full;
   if (full.includes('/api/spotify/callback') || rel === '/callback' || rel.endsWith('/callback')) return next();
   if (req.method === 'GET' && (full.endsWith('/api/spotify/status') || rel === '/status')) return next();
+  if (req.method === 'GET' && (full.endsWith('/api/spotify/link-state') || rel === '/link-state')) return next();
   const uid = hostAuth.getHostUserIdFromRequest(req);
   if (!uid) {
     return res.status(401).json({
@@ -7116,6 +7117,24 @@ app.get('/api/spotify/status', async (req, res) => {
       error: 'Status check failed',
       webApiQuarantine: { active: false },
     });
+  }
+});
+
+/** Token presence only — no ensureValidToken / no Spotify HTTP (for UI before host opts into Web API). */
+app.get('/api/spotify/link-state', async (req, res) => {
+  try {
+    const uid = hostAuth.getHostUserIdFromRequest(req);
+    if (!uid) {
+      return res.status(401).json({ error: 'login_required', linked: false });
+    }
+    if (db) await organizationsStore.primeTenantSpotifyCredentials(db, multiTenantSpotify, uid);
+    const orgId = `user_${uid}`;
+    const tok = multiTenantSpotify.getTokens(orgId);
+    const linked = !!(tok && (tok.accessToken || tok.refreshToken));
+    return res.json({ linked, organizationId: orgId });
+  } catch (error) {
+    console.error('Spotify link-state error:', error);
+    res.status(500).json({ linked: false, error: 'link_state_failed' });
   }
 });
 
