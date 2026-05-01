@@ -186,15 +186,29 @@ export function HostYoutubeIframePlayer({
   volumeRef.current = volume;
   snippetSecondsRef.current = snippetSeconds;
 
-  const kickPlayback = (p: YtPlayer, startSec: number, genAtKick: number) => {
+  /**
+   * Unmute + play; optionally seek once on the first attempt only.
+   * Repeated seekTo on every retry replays the start of the clip (audible stutter).
+   */
+  const kickPlayback = (
+    p: YtPlayer,
+    startSec: number,
+    genAtKick: number,
+    opts?: { skipSeek?: boolean },
+  ) => {
     const vol = Math.round(Math.min(100, Math.max(0, volumeRef.current)));
+    let didSeek = false;
     const tryOnce = () => {
       if (genAtKick !== clipGenerationRef.current) return;
       if (playerRef.current !== p) return;
       try {
         p.unMute?.();
         p.setVolume?.(vol);
-        p.seekTo?.(Math.max(0, startSec), true);
+        const allowSeek = !opts?.skipSeek && !didSeek;
+        if (allowSeek) {
+          p.seekTo?.(Math.max(0, startSec), true);
+          didSeek = true;
+        }
         p.playVideo?.();
       } catch {
         /* ignore */
@@ -240,8 +254,8 @@ export function HostYoutubeIframePlayer({
 
       if (playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
         try {
-          playerRef.current.loadVideoById(videoId, startInt);
-          kickPlayback(playerRef.current, startSeconds, clipGen);
+          playerRef.current.loadVideoById({ videoId, startSeconds: startInt });
+          kickPlayback(playerRef.current, startSeconds, clipGen, { skipSeek: true });
         } catch {
           /* ignore */
         }
@@ -274,7 +288,7 @@ export function HostYoutubeIframePlayer({
           onReady: (ev: { target: YtPlayer }) => {
             const p = ev.target;
             playerRef.current = p;
-            kickPlayback(p, startSeconds, clipGen);
+            kickPlayback(p, startSeconds, clipGen, { skipSeek: true });
           },
           onStateChange: (ev: { target: YtPlayer; data: number }) => {
             if (asyncInitCancelledRef.current) return;

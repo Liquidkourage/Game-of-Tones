@@ -152,10 +152,16 @@ const PublicDisplay: React.FC = () => {
   const [pattern, setPattern] = useState<string>('full_card');
   const [countdownMs, setCountdownMs] = useState<number>(0);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
-  /** Previous countdown sample — detect transition to 0 for “full title at end of track”. */
-  const prevCountdownForTrackEndRef = useRef<number | null>(null);
+  /** Song id the snippet countdown belongs to — reveal at end uses this (not `currentSong`, which may advance early). */
+  const snippetCountdownSongIdRef = useRef<string | null>(null);
+  /** Mirrors played songs list for reveal fallback when idMeta is stale or incomplete. */
+  const playedSongsSnapshotRef = useRef<Song[]>([]);
   const [totalPlayedCount, setTotalPlayedCount] = useState<number>(0);
   const [isVerificationPending, setIsVerificationPending] = useState<boolean>(false);
+  const isVerificationPendingRef = useRef<boolean>(false);
+  useEffect(() => {
+    isVerificationPendingRef.current = isVerificationPending;
+  }, [isVerificationPending]);
   // Flag to prevent auto-reveal during reset operations
   const isResettingRef = useRef<boolean>(false);
   // Visible carousel columns (default 3; can be overridden via ?cols=5)
@@ -181,6 +187,16 @@ const PublicDisplay: React.FC = () => {
   useEffect(() => {
     titleRevealModeRef.current = titleRevealMode;
   }, [titleRevealMode]);
+
+  useEffect(() => {
+    playedSongsSnapshotRef.current = gameState.playedSongs;
+  }, [gameState.playedSongs]);
+
+  useEffect(() => {
+    if (!gameState.isPlaying) {
+      snippetCountdownSongIdRef.current = null;
+    }
+  }, [gameState.isPlaying]);
 
   const columnCallListLayout = useMemo((): boolean => {
     if (callListMode === 'grouped') return false;
@@ -238,8 +254,24 @@ const PublicDisplay: React.FC = () => {
 
   /** Append every A–Z / 0–9 from this song's title+artist after its baseline (idempotent). */
   function revealFullLettersForSong(songId: string) {
-    const meta = idMetaRef.current[songId];
-    if (!meta) return;
+    let meta = idMetaRef.current[songId];
+    const hit = playedSongsSnapshotRef.current.find((s) => s.id === songId);
+    if (hit && (hit.name || hit.artist)) {
+      const curLen = ((meta?.name || '') + (meta?.artist || '')).trim().length;
+      const hitLen = ((hit.name || '') + (hit.artist || '')).trim().length;
+      const metaThin =
+        !meta ||
+        meta.name === 'Unknown' ||
+        (!meta.name?.trim() && !meta.artist?.trim());
+      if (metaThin || hitLen > curLen) {
+        meta = {
+          name: hit.name?.trim() ? hit.name : meta?.name || '',
+          artist: hit.artist?.trim() ? hit.artist : meta?.artist || '',
+        };
+        idMetaRef.current[songId] = meta;
+      }
+    }
+    if (!meta || (!meta.name?.trim() && !meta.artist?.trim())) return;
     const baseline = songBaselineRef.current[songId] ?? 0;
     const visible = new Set(revealSequenceRef.current.slice(baseline));
     const combined = `${meta.name || ''} ${meta.artist || ''}`.toUpperCase();
@@ -872,14 +904,17 @@ const PublicDisplay: React.FC = () => {
       }
       
       setTotalPlayedCount(prev => (typeof data.currentIndex === 'number' ? (data.currentIndex + 1) : prev + 1));
-      setGameState(prev => ({
-        ...prev,
-        isPlaying: true,
-        currentSong: song,
-        snippetLength: Number(data.snippetLength) || prev.snippetLength,
-        // Don't limit playedSongs - we need all songs for fallback display mode
-        playedSongs: [...prev.playedSongs, song]
-      }));
+      setGameState(prev => {
+        const playedSongs = [...prev.playedSongs, song];
+        playedSongsSnapshotRef.current = playedSongs;
+        return {
+          ...prev,
+          isPlaying: true,
+          currentSong: song,
+          snippetLength: Number(data.snippetLength) || prev.snippetLength,
+          playedSongs,
+        };
+      });
       // Track played order for reveal lag
       {
         // Record a stable per-song play sequence for sorting within columns
@@ -980,10 +1015,21 @@ const PublicDisplay: React.FC = () => {
         countdownRef.current = null;
       }
       const total = (Number(data.snippetLength) || 30) * 1000;
+      snippetCountdownSongIdRef.current = song.id;
       setCountdownMs(total);
       countdownRef.current = setInterval(() => {
         setCountdownMs((ms) => {
           const next = Math.max(0, ms - 100);
+          if (ms > 0 && next === 0) {
+            const endedId = snippetCountdownSongIdRef.current;
+            if (
+              endedId &&
+              titleRevealModeRef.current === 'track_end' &&
+              !isVerificationPendingRef.current
+            ) {
+              queueMicrotask(() => revealFullLettersForSongRef.current(endedId));
+            }
+          }
           if (next === 0 && countdownRef.current) {
             clearInterval(countdownRef.current);
             countdownRef.current = null;
@@ -1019,6 +1065,7 @@ const PublicDisplay: React.FC = () => {
       songBaselineRef.current = {};
       playedSeqRef.current = {} as any;
       playedSeqCounterRef.current = 0;
+      snippetCountdownSongIdRef.current = null;
       // Clear persisted state for new game
       try {
         localStorage.removeItem(`display_revealed_letters_${roomId}`);
@@ -1272,6 +1319,7 @@ const PublicDisplay: React.FC = () => {
       setShowWinnerBanner(false);
       setWinnerName('');
       setIsVerificationPending(false);
+      snippetCountdownSongIdRef.current = null;
       
       // Clear all reveal state
       revealSequenceRef.current = [];
@@ -1304,6 +1352,7 @@ const PublicDisplay: React.FC = () => {
       setTotalPlayedCount(0);
       resetPlayedTrackingRefs();
       ensureGrid();
+      snippetCountdownSongIdRef.current = null;
       console.log('🔁 Game reset (display)');
       revealSequenceRef.current = [];
       songBaselineRef.current = {};
@@ -1423,33 +1472,6 @@ const PublicDisplay: React.FC = () => {
     
     return () => clearInterval(syncInterval);
   }, [socket, gameState.isPlaying, roomId]);
-
-  // Full title at end of clip (client countdown hits zero)
-  useEffect(() => {
-    const prev = prevCountdownForTrackEndRef.current;
-    if (prevCountdownForTrackEndRef.current === null) {
-      prevCountdownForTrackEndRef.current = countdownMs;
-      return;
-    }
-    prevCountdownForTrackEndRef.current = countdownMs;
-    if (titleRevealMode !== 'track_end') return;
-    if (!gameState.isPlaying || !gameState.currentSong?.id) return;
-    if (isVerificationPending) return;
-    if (!(prev !== null && prev > 0 && countdownMs === 0)) return;
-    revealFullLettersForSongRef.current(gameState.currentSong.id);
-  }, [
-    countdownMs,
-    titleRevealMode,
-    gameState.isPlaying,
-    gameState.currentSong?.id,
-    isVerificationPending,
-  ]);
-
-  useEffect(() => {
-    if (!gameState.isPlaying) {
-      prevCountdownForTrackEndRef.current = null;
-    }
-  }, [gameState.isPlaying]);
 
   // Mid-session reconnect / room-state: ensure track-start titles show without a new song-playing event
   useEffect(() => {
