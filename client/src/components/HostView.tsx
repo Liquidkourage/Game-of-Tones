@@ -392,6 +392,8 @@ const HostView: React.FC = () => {
   const [publicDisplayFontSize, setPublicDisplayFontSize] = useState<number>(1.0); // Multiplier for public display font sizes
   /** Matches server / public display: 5×15 BINGO columns vs 1×75 carousel vs mix/URL default. */
   const [publicDisplayCallListMode, setPublicDisplayCallListMode] = useState<'auto' | 'grouped' | '5x15'>('auto');
+  /** Seconds between random letter reveals on the public display (server clamps 5–120). */
+  const [letterRevealIntervalSec, setLetterRevealIntervalSec] = useState<number>(15);
 
   // Handler to update public display font size
   const updatePublicDisplayFontSize = (newSize: number) => {
@@ -405,6 +407,13 @@ const HostView: React.FC = () => {
     setPublicDisplayCallListMode(mode);
     if (socket && roomId) {
       socket.emit('set-public-display-call-list-mode', { roomId, mode });
+    }
+  };
+  const updatePublicDisplayLetterRevealInterval = (intervalSec: number) => {
+    const clamped = Math.min(120, Math.max(5, Math.round(intervalSec)));
+    setLetterRevealIntervalSec(clamped);
+    if (socket && roomId) {
+      socket.emit('set-public-display-letter-reveal-interval', { roomId, intervalSec: clamped });
     }
   };
   const [selectedCustomPattern, setSelectedCustomPattern] = useState<SavedCustomPattern | null>(null);
@@ -1824,6 +1833,13 @@ const HostView: React.FC = () => {
       }
     });
 
+    newSocket.on('public-display-letter-reveal-interval-updated', (data: any) => {
+      if (typeof data?.intervalSec === 'number' && Number.isFinite(data.intervalSec)) {
+        const sec = Math.round(data.intervalSec);
+        setLetterRevealIntervalSec(Math.min(120, Math.max(5, sec)));
+      }
+    });
+
     newSocket.on('room-state', (payload: any) => {
       if (
         payload?.publicDisplayCallListMode === 'grouped' ||
@@ -1834,6 +1850,13 @@ const HostView: React.FC = () => {
       }
       if (typeof payload?.publicDisplayFontSize === 'number') {
         setPublicDisplayFontSize(payload.publicDisplayFontSize);
+      }
+      if (
+        typeof payload?.letterRevealIntervalSec === 'number' &&
+        Number.isFinite(payload.letterRevealIntervalSec)
+      ) {
+        const sec = Math.round(payload.letterRevealIntervalSec);
+        setLetterRevealIntervalSec(Math.min(120, Math.max(5, sec)));
       }
     });
 
@@ -4966,6 +4989,34 @@ const HostView: React.FC = () => {
                 );
               })}
             </div>
+            <div className="host-manager-display__divider" style={{ marginTop: 14 }} />
+            <p className="host-manager-display__sub">Letter reveal timer</p>
+            <p style={{ fontSize: '0.78rem', color: '#9a9a9a', marginBottom: 10, lineHeight: 1.4, maxWidth: 520 }}>
+              While the round is playing, the projector periodically reveals one random letter from played titles and artists.
+              Pick how often that happens (does not run during bingo verification).
+            </p>
+            <select
+              id="letter-reveal-interval"
+              aria-label="Seconds between automatic letter reveals on the public display"
+              value={letterRevealIntervalSec}
+              onChange={(e) => updatePublicDisplayLetterRevealInterval(Number(e.target.value))}
+              style={{
+                fontSize: '0.92rem',
+                padding: '10px 14px',
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.25)',
+                background: 'rgba(0,0,0,0.35)',
+                color: '#fff',
+                minWidth: 160,
+                cursor: 'pointer',
+              }}
+            >
+              {[5, 10, 15, 20, 30, 45, 60, 90, 120].map((sec) => (
+                <option key={sec} value={sec}>
+                  {sec} seconds
+                </option>
+              ))}
+            </select>
           </motion.div>
                   </div>
                 </div>

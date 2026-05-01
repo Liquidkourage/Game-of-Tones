@@ -1211,6 +1211,20 @@ function applyYoutubePlaybackHints(playlists, songs) {
   return out;
 }
 
+const DEFAULT_LETTER_REVEAL_INTERVAL_SEC = 15;
+const MIN_LETTER_REVEAL_INTERVAL_SEC = 5;
+const MAX_LETTER_REVEAL_INTERVAL_SEC = 120;
+
+function clampLetterRevealIntervalSec(raw) {
+  const n = Math.round(Number(raw));
+  if (!Number.isFinite(n)) return DEFAULT_LETTER_REVEAL_INTERVAL_SEC;
+  return Math.min(MAX_LETTER_REVEAL_INTERVAL_SEC, Math.max(MIN_LETTER_REVEAL_INTERVAL_SEC, n));
+}
+
+function letterRevealIntervalSecForRoom(room) {
+  return clampLetterRevealIntervalSec(room?.letterRevealIntervalSec ?? DEFAULT_LETTER_REVEAL_INTERVAL_SEC);
+}
+
 const YOUTUBE_FALLBACK_DURATION_MS = 10 * 60 * 1000;
 
 function computeSnippetRandomStartMs(room, song) {
@@ -1272,6 +1286,7 @@ function syncRoomStateAfterSongStart(roomId, room) {
     roundWinners: room.roundWinners || [],
     publicDisplayFontSize: room.publicDisplayFontSize || 1.0,
     publicDisplayCallListMode: room.publicDisplayCallListMode || 'auto',
+    letterRevealIntervalSec: letterRevealIntervalSecForRoom(room),
     venueBranding: venueBrandingForRoom(room),
     playedSongs: playedSongIds
       .map((songId) => {
@@ -1610,6 +1625,7 @@ async function playNextSongSimple(roomId, deviceId) {
       roundWinners: room.roundWinners || [],
       publicDisplayFontSize: room.publicDisplayFontSize || 1.0,
       publicDisplayCallListMode: room.publicDisplayCallListMode || 'auto',
+      letterRevealIntervalSec: letterRevealIntervalSecForRoom(room),
       venueBranding: venueBrandingForRoom(room),
       playedSongs: playedSongIds.map(songId => {
         const foundSong = room.playlistSongs?.find(s => s.id === songId);
@@ -2034,6 +2050,7 @@ io.on('connection', (socket) => {
         superStrictLock: false,
         pattern: 'line', // Default pattern
         customPattern: undefined, // Will be set when custom pattern is chosen
+        letterRevealIntervalSec: DEFAULT_LETTER_REVEAL_INTERVAL_SEC,
         createdAt: new Date().toISOString()
       };
       rooms.set(roomId, newRoom);
@@ -2211,7 +2228,9 @@ io.on('connection', (socket) => {
             playlists: room.finalizedPlaylists || room.playlists || [],
             selectedDeviceId: room.selectedDeviceId || null,
             hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline,
+            publicDisplayFontSize: room.publicDisplayFontSize || 1.0,
             publicDisplayCallListMode: room.publicDisplayCallListMode || 'auto',
+            letterRevealIntervalSec: letterRevealIntervalSecForRoom(room),
             venueBranding: venueBrandingForRoom(room),
           });
           
@@ -2466,6 +2485,24 @@ io.on('connection', (socket) => {
       routineServerLog(`🖥️ Public display call list mode for room ${roomId}: ${next}`);
     } catch (e) {
       console.error('❌ Error setting public display call list mode:', e?.message || e);
+    }
+  });
+
+  // Host: interval between automatic letter reveals on the public display (seconds)
+  socket.on('set-public-display-letter-reveal-interval', (data = {}) => {
+    try {
+      const { roomId, intervalSec } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost =
+        room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+      if (!isCurrentHost) return;
+      const clamped = clampLetterRevealIntervalSec(intervalSec);
+      room.letterRevealIntervalSec = clamped;
+      io.to(roomId).emit('public-display-letter-reveal-interval-updated', { intervalSec: clamped });
+      routineServerLog(`🔤 Public display letter reveal interval for room ${roomId}: ${clamped}s`);
+    } catch (e) {
+      console.error('❌ Error setting letter reveal interval:', e?.message || e);
     }
   });
 
@@ -3492,6 +3529,7 @@ io.on('connection', (socket) => {
         roundWinners: room.roundWinners || [],
         publicDisplayFontSize: room.publicDisplayFontSize || 1.0,
         publicDisplayCallListMode: room.publicDisplayCallListMode || 'auto',
+        letterRevealIntervalSec: letterRevealIntervalSecForRoom(room),
         venueBranding: venueBrandingForRoom(room),
         // Include played songs for PublicDisplay sync (includes current song)
         playedSongs: playedSongIds.map(songId => {
@@ -3778,7 +3816,8 @@ io.on('connection', (socket) => {
           playlistSongs: [],
           currentSongIndex: 0,
           pattern: 'line', // Default pattern
-          customPattern: undefined // Will be set when custom pattern is chosen
+          customPattern: undefined, // Will be set when custom pattern is chosen
+          letterRevealIntervalSec: DEFAULT_LETTER_REVEAL_INTERVAL_SEC,
         };
         rooms.set(roomId, newRoom);
         socket.join(roomId);

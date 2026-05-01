@@ -164,6 +164,8 @@ const PublicDisplay: React.FC = () => {
   const [fiveBy15Columns, setFiveBy15Columns] = useState<string[][] | null>(null);
   /** Host override: 5×15 BINGO columns, 1×75 carousel, or follow mix/URL. */
   const [callListMode, setCallListMode] = useState<'auto' | 'grouped' | '5x15'>('auto');
+  /** Seconds between random letter picks on the projector (server default 15; clamped 5–120). */
+  const [letterRevealIntervalSec, setLetterRevealIntervalSec] = useState<number>(15);
   const columnCallListLayout = useMemo((): boolean => {
     if (callListMode === 'grouped') return false;
     if (callListMode === '5x15') return true;
@@ -499,6 +501,14 @@ const PublicDisplay: React.FC = () => {
           ) {
             setCallListMode(payload.publicDisplayCallListMode);
           }
+
+          if (
+            typeof payload.letterRevealIntervalSec === 'number' &&
+            Number.isFinite(payload.letterRevealIntervalSec)
+          ) {
+            const sec = Math.round(payload.letterRevealIntervalSec);
+            setLetterRevealIntervalSec(Math.min(120, Math.max(5, sec)));
+          }
           
           // CRITICAL: Sync currentIndexRef from server state (needed for proper display on refresh)
           if (typeof payload.currentSongIndex === 'number') {
@@ -623,6 +633,13 @@ const PublicDisplay: React.FC = () => {
       const m = data?.mode;
       if (m === 'grouped' || m === '5x15' || m === 'auto') {
         setCallListMode(m);
+      }
+    });
+
+    newSocket.on('public-display-letter-reveal-interval-updated', (data: any) => {
+      if (typeof data?.intervalSec === 'number' && Number.isFinite(data.intervalSec)) {
+        const sec = Math.round(data.intervalSec);
+        setLetterRevealIntervalSec(Math.min(120, Math.max(5, sec)));
       }
     });
 
@@ -1347,14 +1364,19 @@ const PublicDisplay: React.FC = () => {
     return () => clearInterval(syncInterval);
   }, [socket, gameState.isPlaying, roomId]);
 
-  // Time-based letter reveal every 10 seconds (weighted by unrevealed frequency across played songs)
+  // Time-based letter reveal at host-configurable interval (weighted by unrevealed frequency across played songs)
   useEffect(() => {
-    console.log('🎡 Auto-reveal effect triggered:', { isPlaying: gameState.isPlaying, isVerificationPending });
+    console.log('🎡 Auto-reveal effect triggered:', {
+      isPlaying: gameState.isPlaying,
+      isVerificationPending,
+      letterRevealIntervalSec,
+    });
     if (!gameState.isPlaying || isVerificationPending) {
       console.log('🎡 Auto-reveal disabled:', !gameState.isPlaying ? 'game not playing' : 'verification pending');
       return;
     }
-    console.log('🎡 Auto-reveal enabled, starting 15s interval');
+    const ms = Math.max(5000, letterRevealIntervalSec * 1000);
+    console.log(`🎡 Auto-reveal enabled, starting ${letterRevealIntervalSec}s interval`);
     const interval = setInterval(() => {
       // BUG #3 FIX: Skip auto-reveal if reset is in progress
       if (isResettingRef.current) {
@@ -1415,12 +1437,12 @@ const PublicDisplay: React.FC = () => {
       } catch (err) {
         console.error('🎡 Auto-reveal error:', err);
       }
-    }, 15000);
+    }, ms);
     return () => {
       console.log('🎡 Auto-reveal interval cleared');
       clearInterval(interval);
     };
-  }, [gameState.isPlaying, isVerificationPending]);
+  }, [gameState.isPlaying, isVerificationPending, letterRevealIntervalSec]);
 
   // Auto-advance the 15x5 grouped columns carousel (1x75 grouped layout only)
   useEffect(() => {
