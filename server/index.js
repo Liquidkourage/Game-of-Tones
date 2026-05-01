@@ -7017,6 +7017,32 @@ function collectSpotifySpaRedirectUrisForAdmin() {
 }
 
 // Spotify API Routes — hosts must be signed in (Google JWT); each host uses their own Spotify tokens (user_${id}).
+/** HttpOnly cookie: host explicitly opted into Spotify Web API this browser session (survives new tabs vs sessionStorage). */
+const SPOTIFY_WEB_SESSION_COOKIE = 'TempoHostSpotifyWeb';
+
+function spotifyWebSessionCookieOpts() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 90 * 24 * 3600 * 1000,
+    path: '/',
+  };
+}
+
+function hasSpotifyWebSessionCookie(req) {
+  return req.cookies && String(req.cookies[SPOTIFY_WEB_SESSION_COOKIE] || '') === '1';
+}
+
+function clearSpotifyWebSessionCookie(res) {
+  res.clearCookie(SPOTIFY_WEB_SESSION_COOKIE, {
+    path: '/',
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+  });
+}
+
 app.use('/api/spotify', async (req, res, next) => {
   const full = (req.originalUrl || req.url || '').split('?')[0];
   const rel = (req.path || '').split('?')[0] || full.replace(/^.*\/api\/spotify/, '') || full;
@@ -7031,6 +7057,20 @@ app.use('/api/spotify', async (req, res, next) => {
       message: 'Sign in with Google to use Spotify as a host.',
     });
   }
+
+  const tailNorm = String(rel || '/').replace(/^\/+/, '');
+  const exemptNoWebSession =
+    (req.method === 'POST' && tailNorm === 'clear') ||
+    (req.method === 'POST' && tailNorm === 'web-session/start') ||
+    (req.method === 'GET' && tailNorm === 'auth');
+
+  if (!exemptNoWebSession && !hasSpotifyWebSessionCookie(req)) {
+    return res.status(403).json({
+      error: 'spotify_web_session_required',
+      message: 'Open Connection and use Connect Spotify before loading your Spotify library.',
+    });
+  }
+
   try {
     if (db) await organizationsStore.primeTenantSpotifyCredentials(db, multiTenantSpotify, uid);
   } catch (e) {
@@ -7085,6 +7125,19 @@ app.get('/api/spotify/auth', async (req, res) => {
   }
 });
 
+/** Marks this browser as allowed to call Spotify Web API routes until Disconnect (HttpOnly cookie). */
+app.post('/api/spotify/web-session/start', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    res.cookie(SPOTIFY_WEB_SESSION_COOKIE, '1', spotifyWebSessionCookieOpts());
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Spotify web-session/start:', error?.message || error);
+    res.status(500).json({ ok: false, error: 'web_session_start_failed' });
+  }
+});
+
 app.get('/api/spotify/status', async (req, res) => {
   try {
     const uid = hostAuth.getHostUserIdFromRequest(req);
@@ -7096,11 +7149,20 @@ app.get('/api/spotify/status', async (req, res) => {
     }
     const svc = multiTenantSpotify.getService(orgId);
     const webApiQuarantine = svc.getWebApiQuarantineInfo();
+    if (!hasSpotifyWebSessionCookie(req)) {
+      return res.json({
+        connected: false,
+        hasTokens: true,
+        organizationId: orgId,
+        webApiQuarantine,
+        spotifyWebSessionRequired: true,
+      });
+    }
     try {
       await svc.ensureValidToken();
     } catch (e) {
       console.error('Spotify status ensureValidToken:', e?.message || e);
-      return res.json({ 
+      return res.json({
         connected: true,
         hasTokens: true,
         organizationId: orgId,
@@ -7336,6 +7398,7 @@ app.post('/api/spotify/clear', async (req, res) => {
         spotifyServiceDefault.setTokens(null, null);
       }
     }
+    clearSpotifyWebSessionCookie(res);
     try {
       if (fs.existsSync(TOKEN_FILE)) fs.unlinkSync(TOKEN_FILE);
     } catch (_) {}
@@ -7498,9 +7561,11 @@ app.get('/api/spotify/callback', async (req, res) => {
         (parsed?.roomId && String(parsed.roomId)) ||
         (state ? roomIdFromSpotifyStatePayload(String(state)) : '');
       const path = room ? `/host/${encodeURIComponent(room)}` : '/';
+      res.cookie(SPOTIFY_WEB_SESSION_COOKIE, '1', spotifyWebSessionCookieOpts());
       return res.redirect(302, `${appBase}${path}?spotify=connected`);
     }
 
+    res.cookie(SPOTIFY_WEB_SESSION_COOKIE, '1', spotifyWebSessionCookieOpts());
     res.json({ success: true, message: 'Spotify connected' });
   } catch (error) {
     const detail = spotifyCallbackUserMessage(error);

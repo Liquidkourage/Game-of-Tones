@@ -215,6 +215,15 @@ function writeHostSpotifyWebEnabled(enabled: boolean): void {
   }
 }
 
+async function postSpotifyWebSessionStart(): Promise<boolean> {
+  try {
+    const r = await hostFetch(`${API_BASE || ''}/api/spotify/web-session/start`, { method: 'POST' });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Spotify playlist ids are strings; rounds/API may store numbers — normalize for Set lookups. */
 function normalizeSpotifyPlaylistId(id: unknown): string {
   if (id == null || id === '') return '';
@@ -1252,7 +1261,6 @@ const HostView: React.FC = () => {
   /** After server-side Spotify OAuth redirect (?spotify=connected), refresh status and clean URL. */
   useEffect(() => {
     if (searchParams.get('spotify') !== 'connected') return;
-    writeHostSpotifyWebEnabled(true);
     const ac = new AbortController();
     const next = new URLSearchParams(searchParams);
     next.delete('spotify');
@@ -1265,7 +1273,9 @@ const HostView: React.FC = () => {
       if (data.webApiQuarantine != null) {
         setWebApiQuarantine(normalizeWebApiQuarantine(data.webApiQuarantine));
       }
-      return data.connected === true;
+      const ok = data.connected === true;
+      writeHostSpotifyWebEnabled(ok);
+      return ok;
     };
 
     let deviceRetryTimer: number | null = null;
@@ -2183,18 +2193,12 @@ const HostView: React.FC = () => {
         } catch {
           /* ignore */
         }
-        if (!readHostSpotifyWebEnabled()) {
-          console.log('Spotify Web API deferred until host connects from Connection.');
-          setIsSpotifyConnected(false);
-          setIsSpotifyConnecting(false);
-          setSpotifyInitialCheckDone(true);
-          return;
-        }
         console.log('Host view loaded, checking Spotify status...');
         // Add cache-busting parameter to force fresh request
         const cacheBuster = Date.now();
         const response = await hostFetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
         const data = (await response.json()) as { connected?: boolean; webApiQuarantine?: unknown };
+        writeHostSpotifyWebEnabled(data.connected === true);
         if (data.webApiQuarantine != null) {
           setWebApiQuarantine(normalizeWebApiQuarantine(data.webApiQuarantine));
         }
@@ -2260,6 +2264,15 @@ const HostView: React.FC = () => {
       console.log('Initiating Spotify connection...');
       setIsSpotifyConnecting(true);
       setSpotifyError(null);
+      const sessionOk = await postSpotifyWebSessionStart();
+      if (!sessionOk) {
+        writeHostSpotifyWebEnabled(false);
+        setSpotifyError(
+          'Could not start Spotify session on the server. Sign out and sign back in, then try Connect Spotify again.'
+        );
+        setIsSpotifyConnecting(false);
+        return;
+      }
       writeHostSpotifyWebEnabled(true);
 
       // Check if Spotify is already connected (with cache-busting)
