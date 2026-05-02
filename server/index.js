@@ -3620,9 +3620,23 @@ io.on('connection', (socket) => {
       if (room.ownerUserId != null && db) {
         try {
           await resolveRoomVenueBranding(room);
+          const b = room.venueBranding;
+          routineServerLog(
+            `🎨 SYNC-STATE venue: room ${roomId} ownerUserId=${room.ownerUserId} ` +
+              `${b ? `logo=${!!b.logoUrl} title=${!!b.eventTitle}` : 'branding=null'}`
+          );
+          try {
+            io.to(roomId).emit('venue-branding', { venueBranding: venueBrandingForRoom(room) });
+          } catch (emitErr) {
+            console.error('sync-state venue-branding emit:', emitErr?.message || emitErr);
+          }
         } catch (e) {
           console.error('sync-state resolveRoomVenueBranding:', e?.message || e);
         }
+      } else {
+        routineServerLog(
+          `🎨 SYNC-STATE venue skipped: room ${roomId} ownerUserId=${room.ownerUserId ?? 'null'} db=${!!db}`
+        );
       }
 
       routineServerLog(`🔄 SYNC-STATE: Sending state to ${socket.id} for room ${roomId}`);
