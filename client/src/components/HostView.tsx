@@ -124,7 +124,7 @@ interface Song {
   sourcePlaylistName?: string;
   /** Full YouTube `snippet.title` when loaded from Data API; finalize reconciliation uses this. */
   youtubeRawTitle?: string;
-  /** True when server matched this row via iTunes Search at finalize (YouTube mix). */
+  /** Canonical title/artist from optional iTunes pass + disk cache at finalize. */
   catalogDisplayVerified?: boolean;
 }
 
@@ -3269,6 +3269,8 @@ const HostView: React.FC = () => {
                   songName: square.songName,
                   artistName: square.artistName,
                   youtubeMusic: square.youtubeMusic === true,
+                  youtubeRawTitle: square.youtubeRawTitle,
+                  catalogDisplayVerified: square.catalogDisplayVerified === true,
                   isFreeSpace: isFree,
                 });
                 const cellTitle = `${cellVis.title}${cellVis.artist ? ` — ${cellVis.artist}` : ''}`;
@@ -7171,6 +7173,8 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                       songName: square.songName,
                       artistName: square.artistName,
                       youtubeMusic: square.youtubeMusic === true,
+                      youtubeRawTitle: square.youtubeRawTitle,
+                      catalogDisplayVerified: square.catalogDisplayVerified === true,
                       isFreeSpace: isBingoFreeSpaceSquare(square),
                     });
                     const verCellTitle = `${verCellVis.title}${verCellVis.artist ? ` — ${verCellVis.artist}` : ''}`;
@@ -7278,6 +7282,8 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                     songName: square.songName,
                     artistName: square.artistName,
                     youtubeMusic: square.youtubeMusic === true,
+                    youtubeRawTitle: square.youtubeRawTitle,
+                    catalogDisplayVerified: square.catalogDisplayVerified === true,
                     isFreeSpace: isBingoFreeSpaceSquare(square),
                   });
                   

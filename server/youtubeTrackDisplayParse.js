@@ -9,6 +9,39 @@
  */
 
 /**
+ * Strip trailing promotional / format noise common on music uploads (before dash/pipe splits).
+ * Conservative: only suffix patterns, repeated until stable.
+ * @param {string} rawTitle
+ * @returns {string}
+ */
+function preprocessYoutubeVideoTitleLine(rawTitle) {
+  let s = String(rawTitle || '').trim();
+  if (!s) return s;
+  for (let iter = 0; iter < 8; iter++) {
+    const before = s;
+    // " | Official Video", " | Lyrics", etc.
+    s = s.replace(
+      /\s+(\||\u007c|\uff5c)\s*(official[^|]*|lyrics?[^|]*|lyric\s*video[^|]*|audio[^|]*|music\s*video[^|]*|mv\b[^|]*|video\b[^|]*)\s*$/i,
+      '',
+    );
+    s = s.replace(/\s+\/\s*(official[^/]*|lyrics?[^/]*|audio[^/]*)\s*$/i, '');
+    // Trailing (Official Video) or [Lyric Video]
+    s = s.replace(
+      /\s*[\(\[]\s*(official|lyric|lyrics?|audio\s*only|music\s*video|\bmv\b)\b[^)\]]*[\)\]]\s*$/i,
+      '',
+    );
+    // Japanese 「MV」 / 【歌詞】 style trailers
+    s = s.replace(/\s*【[^】]{0,48}】\s*$/u, '');
+    s = s.replace(/\s*「[^」]{0,48}」\s*$/u, '');
+    // " HD" / " | 4K" at end
+    s = s.replace(/\s+(\||\u007c)\s*(HD|4K|HQ)(\s*video)?\s*$/i, '');
+    s = s.replace(/\s+\(?\s*HD\s*\)?\s*$/i, '');
+    if (s === before) break;
+  }
+  return s.trim();
+}
+
+/**
  * @param {string} rawTitle
  * @returns {{ title: string; artist: string }}
  */
@@ -16,7 +49,8 @@ function parseYoutubeVideoTitleForDisplay(rawTitle) {
   const raw = String(rawTitle || '').trim();
   if (!raw) return { title: '', artist: '' };
 
-  const normalized = raw.replace(/\u2013|\u2014|\u2212/g, '-');
+  const cleaned = preprocessYoutubeVideoTitleLine(raw);
+  const normalized = cleaned.replace(/\u2013|\u2014|\u2212/g, '-');
 
   const officialRe =
     /\b(official\s*(video|audio|mv|lyric|lyrics)?|lyric\s*video|audio\s*only|m\/v)\b|\(official[^)]*\)|\[official[^]]*\]|\(lyrics?\)/i;
@@ -81,4 +115,4 @@ function parseYoutubeVideoTitleForDisplay(rawTitle) {
   return { title: normalized, artist: '' };
 }
 
-module.exports = { parseYoutubeVideoTitleForDisplay };
+module.exports = { parseYoutubeVideoTitleForDisplay, preprocessYoutubeVideoTitleLine };

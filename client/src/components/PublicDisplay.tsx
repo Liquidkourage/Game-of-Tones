@@ -817,6 +817,8 @@ const PublicDisplay: React.FC = () => {
       customSongName?: string;
       artistName?: string;
       youtubeMusic?: boolean;
+      youtubeRawTitle?: string;
+      catalogDisplayVerified?: boolean;
       marked?: boolean;
       isFreeSpace?: boolean;
     }>;
@@ -1372,6 +1374,8 @@ const PublicDisplay: React.FC = () => {
           songName: s.songName,
           artistName: s.artistName,
           youtubeMusic: s.youtubeMusic === true,
+          youtubeRawTitle: s.youtubeRawTitle,
+          catalogDisplayVerified: s.catalogDisplayVerified === true,
           isFreeSpace: s.isFreeSpace === true,
         });
         return {
@@ -3277,6 +3281,8 @@ const PublicDisplay: React.FC = () => {
                         songName: sq.songName,
                         artistName: sq.artistName,
                         youtubeMusic: sq.youtubeMusic === true,
+                        youtubeRawTitle: sq.youtubeRawTitle,
+                        catalogDisplayVerified: sq.catalogDisplayVerified === true,
                         isFreeSpace: sq.isFreeSpace === true,
                       })
                     : { title: '', artist: '' };

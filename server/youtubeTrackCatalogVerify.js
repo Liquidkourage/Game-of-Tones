@@ -6,10 +6,10 @@
  * Strategy (learnings: Spotify quota lockouts, iTunes rate limits, 75+ row pools):
  * 1) **Heuristic** — Data API `snippet.title` parsed (never channel) in `youtubeMusic.js`; each row carries `youtubeRawTitle`.
  * 2) **Disk cache** — `youtubeMetadataCache.js` keys `videoId + country + titleFingerprint` → last good iTunes hit; avoids repeat traffic across finalizes.
- * 3) **iTunes Search only** — no Spotify Web API; one GET per *uncached* unique video, paced; one backoff retry on 429.
+ * 3) **iTunes Search (optional)** — opt-in via env; no Spotify. Heavy finalize pools hit rate limits; prefer local parse when possible.
  *
  * Env:
- * - TEMPO_YT_CATALOG_VERIFY — default on; 0/false/off to skip remote (cache still read if useful — skipped when verify off entirely)
+ * - TEMPO_YT_CATALOG_VERIFY — default **off**; set 1/true/on to enable iTunes enrichment at finalize
  * - TEMPO_YT_VERIFY_MIN_INTERVAL_MS — default 400
  * - TEMPO_YT_VERIFY_SCORE_MIN — default 0.5
  * - TEMPO_YT_VERIFY_SEARCH_LIMIT — default 8, max 25
@@ -204,10 +204,7 @@ async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
 
   if (!Array.isArray(songList) || songList.length === 0) return songList;
 
-  if (!parseEnvBool(process.env.TEMPO_YT_CATALOG_VERIFY, true)) {
-    log('skipped — TEMPO_YT_CATALOG_VERIFY disabled');
-    return songList;
-  }
+  const remoteEnabled = parseEnvBool(process.env.TEMPO_YT_CATALOG_VERIFY, false);
 
   const country = getItunesCountry();
   const minIv = getMinIntervalMs();
@@ -257,6 +254,10 @@ async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
     if (cached && cached.name) {
       idToMeta.set(id, { name: cached.name, artist: cached.artist || '' });
       cacheHits++;
+      continue;
+    }
+
+    if (!remoteEnabled) {
       continue;
     }
 
@@ -336,7 +337,13 @@ async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
   }
 
   if (idToMeta.size === 0) {
-    log(`no upgrades — ${noMatch} no/low match; ${cacheHits} cache miss; ${haltedQuota} rate-limit halt`);
+    if (cacheHits === 0 && !remoteEnabled) {
+      log(
+        'YouTube metadata: remote verify off (TEMPO_YT_CATALOG_VERIFY); using title-line heuristics only — no disk cache hits for this pool',
+      );
+    } else {
+      log(`no upgrades — ${noMatch} no/low match; ${cacheHits} cache miss; ${haltedQuota} rate-limit halt`);
+    }
     return songList;
   }
 
@@ -354,7 +361,8 @@ async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
   });
 
   log(
-    `reconciled ${idToMeta.size} unique video(s): ${upgraded} iTunes, ${cacheHits} cache, ${noMatch} heuristic, ${haltedQuota} halted`,
+    `reconciled ${idToMeta.size} unique video(s): ${upgraded} iTunes, ${cacheHits} cache, ${noMatch} heuristic, ${haltedQuota} halted` +
+      (remoteEnabled ? '' : '; iTunes opt-in off'),
   );
   return out;
 }

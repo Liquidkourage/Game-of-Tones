@@ -5233,6 +5233,12 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           customSongName: customSongTitles.get(s.id) || cleanSongTitle(s.name),
           artistName: s.artist,
           youtubeMusic: s.youtubeMusic === true,
+          ...(s.youtubeMusic === true &&
+          typeof s.youtubeRawTitle === 'string' &&
+          s.youtubeRawTitle.trim() !== ''
+            ? { youtubeRawTitle: s.youtubeRawTitle.trim() }
+            : {}),
+          ...(s.youtubeMusic === true && s.catalogDisplayVerified ? { catalogDisplayVerified: true } : {}),
           marked: false
         });
       }
@@ -5390,6 +5396,12 @@ function buildPrintableCardFromChosen(chosen25, useFreeSpace, index) {
         customSongName: customSongTitles.get(s.id) || cleanSongTitle(s.name),
         artistName: s.artist || '',
         youtubeMusic: s.youtubeMusic === true,
+        ...(s.youtubeMusic === true &&
+        typeof s.youtubeRawTitle === 'string' &&
+        s.youtubeRawTitle.trim() !== ''
+          ? { youtubeRawTitle: s.youtubeRawTitle.trim() }
+          : {}),
+        ...(s.youtubeMusic === true && s.catalogDisplayVerified ? { catalogDisplayVerified: true } : {}),
         marked: false,
       });
     }
@@ -5694,6 +5706,12 @@ async function generateBingoCardForPlayer(roomId, playerId) {
           customSongName: customSongTitles.get(s.id) || cleanSongTitle(s.name),
           artistName: s.artist,
           youtubeMusic: s.youtubeMusic === true,
+          ...(s.youtubeMusic === true &&
+          typeof s.youtubeRawTitle === 'string' &&
+          s.youtubeRawTitle.trim() !== ''
+            ? { youtubeRawTitle: s.youtubeRawTitle.trim() }
+            : {}),
+          ...(s.youtubeMusic === true && s.catalogDisplayVerified ? { catalogDisplayVerified: true } : {}),
           marked: false
         });
       }

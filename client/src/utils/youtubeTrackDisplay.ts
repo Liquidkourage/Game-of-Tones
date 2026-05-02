@@ -4,11 +4,36 @@
  */
 
 import { cleanSongTitle } from './songTitleCleaner';
+
+function preprocessYoutubeVideoTitleLine(rawTitle: string): string {
+  let s = String(rawTitle || '').trim();
+  if (!s) return s;
+  for (let iter = 0; iter < 8; iter++) {
+    const before = s;
+    s = s.replace(
+      /\s+(\||\u007c|\uff5c)\s*(official[^|]*|lyrics?[^|]*|lyric\s*video[^|]*|audio[^|]*|music\s*video[^|]*|mv\b[^|]*|video\b[^|]*)\s*$/i,
+      '',
+    );
+    s = s.replace(/\s+\/\s*(official[^/]*|lyrics?[^/]*|audio[^/]*)\s*$/i, '');
+    s = s.replace(
+      /\s*[\(\[]\s*(official|lyric|lyrics?|audio\s*only|music\s*video|\bmv\b)\b[^)\]]*[\)\]]\s*$/i,
+      '',
+    );
+    s = s.replace(/\s*【[^】]{0,48}】\s*/u, '');
+    s = s.replace(/\s*「[^」]{0,48}」\s*/u, '');
+    s = s.replace(/\s+(\||\u007c)\s*(HD|4K|HQ)(\s*video)?\s*$/i, '');
+    s = s.replace(/\s+\(?\s*HD\s*\)?\s*$/i, '');
+    if (s === before) break;
+  }
+  return s.trim();
+}
+
 export function parseYoutubeVideoTitleForDisplay(rawTitle: string): { title: string; artist: string } {
   const raw = String(rawTitle || '').trim();
   if (!raw) return { title: '', artist: '' };
 
-  const normalized = raw.replace(/\u2013|\u2014|\u2212/g, '-');
+  const cleaned = preprocessYoutubeVideoTitleLine(raw);
+  const normalized = cleaned.replace(/\u2013|\u2014|\u2212/g, '-');
 
   const officialRe =
     /\b(official\s*(video|audio|mv|lyric|lyrics)?|lyric\s*video|audio\s*only|m\/v)\b|\(official[^)]*\)|\[official[^]]*\]|\(lyrics?\)/i;
@@ -74,16 +99,26 @@ export function parseYoutubeVideoTitleForDisplay(rawTitle: string): { title: str
 /**
  * Host setlist / pool rows: server sends split title + artist for new YT tracks; re-parse from `name`
  * when `artist` still looks like an upload channel (legacy rows).
+ * Prefer `youtubeRawTitle` when present (full Data API title line).
  */
 export function youtubeTrackDisplayFields(song: {
   name?: string;
   artist?: string;
   youtubeMusic?: boolean;
+  youtubeRawTitle?: string;
+  catalogDisplayVerified?: boolean;
 }): { title: string; artist: string } {
   if (!song.youtubeMusic) {
     return { title: song.name || '', artist: song.artist || '' };
   }
-  const rawName = String(song.name || '').trim();
+  if (song.catalogDisplayVerified && String(song.name || '').trim()) {
+    return {
+      title: String(song.name || '').trim(),
+      artist: String(song.artist || '').trim(),
+    };
+  }
+  const line = String(song.youtubeRawTitle || song.name || '').trim();
+  const rawName = line;
   const storedArtist = String(song.artist || '').trim();
   const parsed = parseYoutubeVideoTitleForDisplay(rawName);
   const channely =
@@ -106,6 +141,8 @@ export function youtubeBingoSquareDisplay(sq: {
   songName?: string;
   artistName?: string;
   youtubeMusic?: boolean;
+  youtubeRawTitle?: string;
+  catalogDisplayVerified?: boolean;
   isFreeSpace?: boolean;
 }): { title: string; artist: string } {
   if (sq.isFreeSpace) return { title: 'FREE', artist: '' };
@@ -119,6 +156,8 @@ export function youtubeBingoSquareDisplay(sq: {
     name: sq.songName,
     artist: sq.artistName,
     youtubeMusic: true,
+    youtubeRawTitle: sq.youtubeRawTitle,
+    catalogDisplayVerified: sq.catalogDisplayVerified,
   });
   return {
     title: sq.customSongName || cleanSongTitle(ytf.title),
