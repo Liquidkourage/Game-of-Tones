@@ -111,20 +111,11 @@ function AppHeader() {
           }}>by Liquid Kourage</span>
           {isDisplay &&
             displayVenueBranding &&
-            (displayVenueBranding.logoUrl ||
-              displayVenueBranding.eventTitle ||
-              displayVenueBranding.sponsorLine) && (
+            (displayVenueBranding.eventTitle || displayVenueBranding.sponsorLine) && (
               <span className="app-header__display-co-brand" aria-label="Venue branding">
                 <span className="app-header__display-co-divider" aria-hidden>
                   |
                 </span>
-                {displayVenueBranding.logoUrl ? (
-                  <img
-                    src={displayVenueBranding.logoUrl}
-                    alt={displayVenueBranding.eventTitle || 'Venue'}
-                    className="app-header__display-co-logo"
-                  />
-                ) : null}
                 {displayVenueBranding.eventTitle ? (
                   <span className="app-header__display-co-text">{displayVenueBranding.eventTitle}</span>
                 ) : null}

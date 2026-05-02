@@ -144,14 +144,6 @@ body {
   user-select: none;
 }
 
-.app-header__display-co-logo {
-  max-height: clamp(34px, 5vmin, 50px);
-  max-width: min(36vw, 190px);
-  width: auto;
-  object-fit: contain;
-  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.45));
-}
-
 .app-header__display-co-text {
   font-size: clamp(0.85rem, 2vmin, 1.2rem);
   font-weight: 800;
@@ -1901,8 +1893,8 @@ body {
 }
 
 .public-display-venue-watermark img {
-  max-width: min(88%, 76vmin);
-  max-height: min(88%, 56vmin);
+  max-width: min(132%, 114vmin);
+  max-height: min(132%, 84vmin);
   width: auto;
   height: auto;
   object-fit: contain;
