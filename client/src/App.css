@@ -1510,6 +1510,21 @@ body {
   background: rgba(0, 0, 0, 0.25);
 }
 
+/**
+ * Splash uses position:fixed; z-index:2000 and covers the whole viewport, so the normal
+ * in-flow venue bar sits underneath and looks like “no logo”. Pin the bar above the splash
+ * while the intro overlay is open (below the app header spacer ~73px).
+ */
+.public-display-venue-bar--over-splash {
+  position: fixed;
+  top: clamp(70px, 11vmin, 92px);
+  left: 0;
+  right: 0;
+  z-index: 2100;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
 .public-display-venue-logo {
   max-height: clamp(36px, 6vmin, 72px);
   max-width: min(40vw, 280px);

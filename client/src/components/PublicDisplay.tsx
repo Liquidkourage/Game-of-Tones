@@ -2586,7 +2586,9 @@ const PublicDisplay: React.FC = () => {
     >
       {venueBranding &&
         (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine) && (
-          <div className="public-display-venue-bar">
+          <div
+            className={`public-display-venue-bar${showSplash ? ' public-display-venue-bar--over-splash' : ''}`}
+          >
             {venueBranding.logoUrl ? (
               <img src={venueBranding.logoUrl} alt="" className="public-display-venue-logo" />
             ) : null}
