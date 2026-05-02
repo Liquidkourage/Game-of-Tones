@@ -127,6 +127,21 @@ const PublicDisplay: React.FC = () => {
     primaryColor?: string;
     accentColor?: string;
   } | null>(null);
+
+  /** Same tab’s origin — correct for QR and “go to this site” when hosted on a licensee domain. */
+  const playerJoinOrigin = useMemo(
+    () => (typeof window !== 'undefined' ? window.location.origin : ''),
+    [],
+  );
+  const playerJoinHost = useMemo(
+    () => (typeof window !== 'undefined' ? window.location.host : ''),
+    [],
+  );
+  const playerJoinUrl = useMemo(
+    () => (roomId && playerJoinOrigin ? `${playerJoinOrigin}/player/${roomId}` : ''),
+    [roomId, playerJoinOrigin],
+  );
+
   // Splash/intro overlay (can disable with ?splash=0)
   const splashEnabled = (searchParams.get('splash') !== '0');
   const [showSplash, setShowSplash] = useState<boolean>(splashEnabled);
@@ -3034,6 +3049,59 @@ const PublicDisplay: React.FC = () => {
                 margin: '0 auto',
               }}
             >
+            {(venueBranding?.logoUrl ||
+              venueBranding?.eventTitle ||
+              venueBranding?.sponsorLine) && (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 'clamp(6px, 1.2vmin, 14px)',
+                  marginBottom: 'clamp(14px, 2.5vmin, 32px)',
+                }}
+              >
+                {venueBranding?.logoUrl ? (
+                  <img
+                    src={venueBranding.logoUrl}
+                    alt={venueBranding.eventTitle || ''}
+                    style={{
+                      maxWidth: 'min(72vw, 520px)',
+                      maxHeight: 'clamp(56px, 12vh, 140px)',
+                      width: 'auto',
+                      height: 'auto',
+                      objectFit: 'contain',
+                      filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.45))',
+                    }}
+                  />
+                ) : null}
+                {venueBranding?.eventTitle ? (
+                  <div
+                    style={{
+                      fontSize: 'clamp(1.1rem, min(3vmin, 2.4vh), 2rem)',
+                      fontWeight: 800,
+                      color: 'rgba(245,250,255,0.96)',
+                      textAlign: 'center',
+                      letterSpacing: '0.04em',
+                    }}
+                  >
+                    {venueBranding.eventTitle}
+                  </div>
+                ) : null}
+                {venueBranding?.sponsorLine ? (
+                  <div
+                    style={{
+                      fontSize: 'clamp(0.95rem, min(2.5vmin, 2vh), 1.35rem)',
+                      fontWeight: 600,
+                      color: 'rgba(200,215,225,0.88)',
+                      textAlign: 'center',
+                    }}
+                  >
+                    {venueBranding.sponsorLine}
+                  </div>
+                ) : null}
+              </div>
+            )}
             <div style={{ textAlign: 'center', marginBottom: 'clamp(10px, 2vmin, 28px)' }}>
               <div
                 style={{
@@ -3274,7 +3342,7 @@ const PublicDisplay: React.FC = () => {
                       border: '1px solid rgba(255,255,255,0.2)',
                       boxShadow: '0 16px 44px rgba(0,0,0,0.5)',
                     }}
-                    src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
+                    src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent(playerJoinUrl)}`}
                   />
                   <div
                     style={{
@@ -3393,7 +3461,7 @@ const PublicDisplay: React.FC = () => {
                         borderBottom: 'none',
                       }}
                     >
-                      tempo.liquidkourage.com
+                      {playerJoinHost || 'this site'}
                     </span>
                   </div>
                 </div>
@@ -3892,7 +3960,7 @@ const PublicDisplay: React.FC = () => {
                         borderRadius: 8, 
                         border: '1px solid rgba(255,255,255,0.15)' 
                       }}
-                      src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/player/' + roomId)}`}
+                      src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent(playerJoinUrl)}`}
                     />
                     <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#ddd', lineHeight: 1 }}>Scan to join</div>
                 </div>
