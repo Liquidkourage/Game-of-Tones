@@ -1505,32 +1505,31 @@ body {
   justify-content: center;
   gap: clamp(8px, 1.5vmin, 20px);
   flex-wrap: wrap;
-  padding: clamp(6px, 1vmin, 14px) clamp(12px, 2vmin, 28px);
+  padding: clamp(8px, 1.2vmin, 16px) clamp(14px, 2.2vmin, 32px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.28);
+  flex-shrink: 0;
+}
+
+/* Top strip during main call list only: readable on a wall but secondary to song grid. */
+.public-display-venue-logo {
+  max-height: clamp(48px, min(11vmin, 10vh), 160px);
+  max-width: min(56vw, 480px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.35));
 }
 
 /**
- * Splash uses position:fixed; z-index:2000 and covers the whole viewport, so the normal
- * in-flow venue bar sits underneath and looks like “no logo”. Pin the bar above the splash
- * while the intro overlay is open (below the app header spacer ~73px).
+ * Splash + rules: hero logo scaled to compete with TEMPO balls
+ * (balls use ~clamp(72px, min(18vmin, 14vh), 220px)).
  */
-.public-display-venue-bar--over-splash {
-  position: fixed;
-  top: clamp(70px, 11vmin, 92px);
-  left: 0;
-  right: 0;
-  z-index: 2100;
-  pointer-events: none;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+.public-display-venue-logo--hero {
+  max-height: clamp(96px, min(22vmin, 20vh), 280px);
+  max-width: min(90vw, 800px);
+  filter: drop-shadow(0 10px 28px rgba(0, 0, 0, 0.5));
 }
-
-.public-display-venue-logo {
-  max-height: clamp(36px, 6vmin, 72px);
-  max-width: min(40vw, 280px);
-  object-fit: contain;
-}
-
 .public-display-venue-text {
   display: flex;
   flex-direction: column;

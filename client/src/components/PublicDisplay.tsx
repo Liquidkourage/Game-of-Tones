@@ -62,6 +62,77 @@ interface BingoSquare {
   position: { row: number; col: number };
 }
 
+type PublicDisplayVenueBrandingState = {
+  eventTitle?: string;
+  sponsorLine?: string;
+  footerText?: string;
+  runbookUrl?: string;
+  logoUrl?: string;
+  primaryColor?: string;
+  accentColor?: string;
+};
+
+/** Large licensee block for splash + rules (wall-readable vs. TEMPO balls). */
+function PublicDisplayVenueBrandingHero({
+  branding,
+  marginBottom,
+}: {
+  branding: PublicDisplayVenueBrandingState;
+  marginBottom: string;
+}) {
+  if (!(branding.logoUrl || branding.eventTitle || branding.sponsorLine)) return null;
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 'clamp(8px, 1.8vmin, 18px)',
+        marginBottom,
+        width: '100%',
+        maxWidth: 'min(96vw, 920px)',
+        marginLeft: 'auto',
+        marginRight: 'auto',
+      }}
+    >
+      {branding.logoUrl ? (
+        <img
+          src={branding.logoUrl}
+          alt={branding.eventTitle || 'Venue'}
+          className="public-display-venue-logo public-display-venue-logo--hero"
+        />
+      ) : null}
+      {branding.eventTitle ? (
+        <div
+          style={{
+            fontSize: 'clamp(1.35rem, min(4vmin, 3.2vh), 2.5rem)',
+            fontWeight: 800,
+            color: 'rgba(245,250,255,0.98)',
+            textAlign: 'center',
+            letterSpacing: '0.04em',
+            lineHeight: 1.15,
+          }}
+        >
+          {branding.eventTitle}
+        </div>
+      ) : null}
+      {branding.sponsorLine ? (
+        <div
+          style={{
+            fontSize: 'clamp(1.05rem, min(2.8vmin, 2.3vh), 1.6rem)',
+            fontWeight: 600,
+            color: 'rgba(200,215,225,0.9)',
+            textAlign: 'center',
+            lineHeight: 1.25,
+          }}
+        >
+          {branding.sponsorLine}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /**
  * How many of the 15 fixed 5-song bands in the 1×75 pool have at least one played song.
  * Must stay in sync with renderOneBy75GroupedColumns (carousel auto-advance used to read a stale pool from closure).
@@ -118,15 +189,7 @@ const PublicDisplay: React.FC = () => {
     };
   }, []);
   const [roomInfo, setRoomInfo] = useState<{ id: string; playerCount: number } | null>(null);
-  const [venueBranding, setVenueBranding] = useState<{
-    eventTitle?: string;
-    sponsorLine?: string;
-    footerText?: string;
-    runbookUrl?: string;
-    logoUrl?: string;
-    primaryColor?: string;
-    accentColor?: string;
-  } | null>(null);
+  const [venueBranding, setVenueBranding] = useState<PublicDisplayVenueBrandingState | null>(null);
 
   /** Same tab’s origin — correct for QR and “go to this site” when hosted on a licensee domain. */
   const playerJoinOrigin = useMemo(
@@ -2585,10 +2648,10 @@ const PublicDisplay: React.FC = () => {
       }
     >
       {venueBranding &&
-        (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine) && (
-          <div
-            className={`public-display-venue-bar${showSplash ? ' public-display-venue-bar--over-splash' : ''}`}
-          >
+        (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine) &&
+        !showSplash &&
+        !showRules && (
+          <div className="public-display-venue-bar">
             {venueBranding.logoUrl ? (
               <img src={venueBranding.logoUrl} alt="" className="public-display-venue-logo" />
             ) : null}
@@ -3063,59 +3126,12 @@ const PublicDisplay: React.FC = () => {
                 margin: '0 auto',
               }}
             >
-            {(venueBranding?.logoUrl ||
-              venueBranding?.eventTitle ||
-              venueBranding?.sponsorLine) && (
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 'clamp(6px, 1.2vmin, 14px)',
-                  marginBottom: 'clamp(14px, 2.5vmin, 32px)',
-                }}
-              >
-                {venueBranding?.logoUrl ? (
-                  <img
-                    src={venueBranding.logoUrl}
-                    alt={venueBranding.eventTitle || ''}
-                    style={{
-                      maxWidth: 'min(72vw, 520px)',
-                      maxHeight: 'clamp(56px, 12vh, 140px)',
-                      width: 'auto',
-                      height: 'auto',
-                      objectFit: 'contain',
-                      filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.45))',
-                    }}
-                  />
-                ) : null}
-                {venueBranding?.eventTitle ? (
-                  <div
-                    style={{
-                      fontSize: 'clamp(1.1rem, min(3vmin, 2.4vh), 2rem)',
-                      fontWeight: 800,
-                      color: 'rgba(245,250,255,0.96)',
-                      textAlign: 'center',
-                      letterSpacing: '0.04em',
-                    }}
-                  >
-                    {venueBranding.eventTitle}
-                  </div>
-                ) : null}
-                {venueBranding?.sponsorLine ? (
-                  <div
-                    style={{
-                      fontSize: 'clamp(0.95rem, min(2.5vmin, 2vh), 1.35rem)',
-                      fontWeight: 600,
-                      color: 'rgba(200,215,225,0.88)',
-                      textAlign: 'center',
-                    }}
-                  >
-                    {venueBranding.sponsorLine}
-                  </div>
-                ) : null}
-              </div>
-            )}
+            {venueBranding ? (
+              <PublicDisplayVenueBrandingHero
+                branding={venueBranding}
+                marginBottom="clamp(18px, 3vmin, 42px)"
+              />
+            ) : null}
             <div style={{ textAlign: 'center', marginBottom: 'clamp(10px, 2vmin, 28px)' }}>
               <div
                 style={{
@@ -3580,15 +3596,21 @@ const PublicDisplay: React.FC = () => {
               />
             </div>
 
-            <div
-              style={{
-                position: 'relative',
-                zIndex: 1,
-                textAlign: 'center',
-                maxWidth: 'min(98vw, 1600px)',
-                width: '100%',
-              }}
-            >
+              <div
+                style={{
+                  position: 'relative',
+                  zIndex: 1,
+                  textAlign: 'center',
+                  maxWidth: 'min(98vw, 1600px)',
+                  width: '100%',
+                }}
+              >
+              {venueBranding ? (
+                <PublicDisplayVenueBrandingHero
+                  branding={venueBranding}
+                  marginBottom="clamp(1rem, 2.8vmin, 2.25rem)"
+                />
+              ) : null}
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
