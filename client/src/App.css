@@ -1624,8 +1624,8 @@ body {
 
 .public-display-splash-hero-slot .public-display-venue-logo--hero {
   max-width: 100%;
-  /* Track enlarged splash QR cap (readable on wide projectors). */
-  max-height: clamp(180px, min(40vmin, 36svh), 520px);
+  /* Large on wall displays; stay roughly in family with splash QR. */
+  max-height: clamp(240px, min(52vmin, 48svh), 720px);
 }
 
 /* Splash: combined join card — fills join column; side-by-side when wide. */
@@ -1770,17 +1770,20 @@ body {
     flex: 1 1 0;
     min-width: 0;
     min-height: 0;
-    align-items: stretch;
-    text-align: left;
+    align-items: center;
+    text-align: center;
     border-left: 1px solid rgba(255, 255, 255, 0.12);
     padding: clamp(12px, 2vmin, 26px) clamp(14px, 2.2vmin, 28px) clamp(12px, 2vmin, 26px)
       clamp(14px, 2.2vmin, 28px);
-    justify-content: space-between;
+    justify-content: center;
+    gap: clamp(10px, 1.4vmin, 18px);
   }
 
   .public-display-splash-join-card__manual:not(.public-display-splash-join-card__manual--solo)
   .public-display-splash-join-card__eyebrow {
     font-size: clamp(0.92rem, min(2.55vmin, 2.25vh), 1.2rem);
+    align-self: center;
+    width: 100%;
   }
 
   .public-display-splash-join-card__manual--solo {
@@ -1792,18 +1795,10 @@ body {
   }
 
   .public-display-splash-join-card__manual .public-display-splash-join-url-scroller {
-    justify-content: flex-start;
-  }
-
-  .public-display-splash-join-card__manual .public-display-splash-join-url-scroller span {
-    text-align: left;
-  }
-
-  .public-display-splash-join-card__manual--solo .public-display-splash-join-url-scroller {
     justify-content: center;
   }
 
-  .public-display-splash-join-card__manual--solo .public-display-splash-join-url-scroller span {
+  .public-display-splash-join-card__manual .public-display-splash-join-url-scroller span {
     text-align: center;
   }
 }

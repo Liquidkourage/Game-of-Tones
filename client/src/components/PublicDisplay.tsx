@@ -3463,6 +3463,8 @@ const PublicDisplay: React.FC = () => {
                         letterSpacing: '0.18em',
                         textTransform: 'uppercase',
                         lineHeight: 1.15,
+                        width: '100%',
+                        textAlign: 'center',
                       }}
                     >
                       OR
@@ -3473,7 +3475,7 @@ const PublicDisplay: React.FC = () => {
                         minWidth: 0,
                         display: 'flex',
                         flexDirection: 'column',
-                        alignItems: 'stretch',
+                        alignItems: 'center',
                         gap: 'clamp(8px, 1.4vmin, 14px)',
                       }}
                     >
@@ -3483,6 +3485,7 @@ const PublicDisplay: React.FC = () => {
                           fontWeight: 700,
                           color: 'rgba(240,248,255,0.98)',
                           lineHeight: 1.2,
+                          textAlign: 'center',
                         }}
                       >
                         Go to
@@ -3546,6 +3549,7 @@ const PublicDisplay: React.FC = () => {
                         lineHeight: 1.25,
                         marginTop: 'clamp(4px, 0.65vmin, 10px)',
                         width: '100%',
+                        textAlign: 'center',
                       }}
                     >
                       And enter room code
