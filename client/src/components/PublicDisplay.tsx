@@ -3059,8 +3059,8 @@ const PublicDisplay: React.FC = () => {
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'center',
-              padding: 'clamp(8px, 1.2vmin, 28px)',
+              justifyContent: 'flex-start',
+              padding: 'clamp(16px, 2.5vmin, 40px) clamp(8px, 1.2vmin, 28px) clamp(28px, 4vmin, 64px)',
               overflowX: 'hidden',
               overflowY: 'auto',
               boxSizing: 'border-box',
@@ -3124,40 +3124,13 @@ const PublicDisplay: React.FC = () => {
             <div
               style={{
                 display: 'flex',
-                flexDirection: 'row',
-                flexWrap: 'wrap',
-                gap: 'clamp(20px, 3.5vmin, 48px)',
+                flexDirection: 'column',
                 alignItems: 'stretch',
-                justifyContent: 'center',
                 width: '100%',
+                gap: 'clamp(16px, 2.75vmin, 40px)',
               }}
             >
-              {venueBranding &&
-              (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine) ? (
-                <div
-                  style={{
-                    flex: '1 1 340px',
-                    maxWidth: 960,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                  }}
-                >
-                  <PublicDisplayVenueBrandingHero branding={venueBranding} marginBottom="0" />
-                </div>
-              ) : null}
-              <div
-                style={{
-                  flex: '2 1 320px',
-                  minWidth: 260,
-                  maxWidth: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                }}
-              >
-            <div style={{ textAlign: 'center', marginBottom: 'clamp(10px, 2vmin, 28px)' }}>
+            <div style={{ textAlign: 'center', width: '100%', marginBottom: 'clamp(6px, 1.2vmin, 18px)' }}>
               <div
                 style={{
                   fontSize: 'clamp(5rem, 11vw, 9rem)',
@@ -3362,8 +3335,50 @@ const PublicDisplay: React.FC = () => {
             <div
               style={{
                 display: 'flex',
+                flexDirection: 'row',
+                flexWrap: 'wrap',
+                gap: 'clamp(20px, 3.5vmin, 48px)',
+                alignItems: 'flex-start',
+                justifyContent: 'center',
+                width: '100%',
+                minWidth: 0,
+              }}
+            >
+              {venueBranding &&
+              (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine) ? (
+                <div
+                  style={{
+                    flex: '1 1 340px',
+                    maxWidth: 960,
+                    minWidth: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'flex-start',
+                    alignItems: 'center',
+                  }}
+                >
+                  <PublicDisplayVenueBrandingHero branding={venueBranding} marginBottom="0" />
+                </div>
+              ) : null}
+              <div
+                style={{
+                  flex:
+                    venueBranding &&
+                    (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine)
+                      ? '2 1 320px'
+                      : '1 1 100%',
+                  minWidth: 260,
+                  maxWidth: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                }}
+              >
+            <div
+              style={{
+                display: 'flex',
                 gap: 'clamp(12px, 2.5vmin, 40px)',
-                alignItems: 'stretch',
+                alignItems: 'flex-start',
                 justifyContent: 'center',
                 flexWrap: 'wrap',
                 width: '100%',
@@ -3379,10 +3394,12 @@ const PublicDisplay: React.FC = () => {
                     background: 'linear-gradient(145deg, rgba(0,255,180,0.14) 0%, rgba(20,40,55,0.45) 100%)',
                     border: 'max(2px, 0.25vmin) solid rgba(0,255,200,0.4)',
                     borderRadius: 'clamp(18px, 2.5vmin, 26px)',
-                    padding: 'clamp(12px, 2.5vmin, 28px)',
-                    width: 'min(720px, 92vw, 46vh)',
+                    padding:
+                      'clamp(20px, 3.2vmin, 40px) clamp(18px, 3vmin, 36px) clamp(16px, 2.8vmin, 32px)',
+                    width: 'min(720px, 92vw)',
                     maxWidth: '100%',
                     textAlign: 'center',
+                    boxSizing: 'border-box',
                     boxShadow:
                       '0 0 0 1px rgba(255,255,255,0.08) inset, 0 24px 56px rgba(0,0,0,0.4), 0 0 50px rgba(0,255,200,0.1)',
                   }}
@@ -3392,7 +3409,8 @@ const PublicDisplay: React.FC = () => {
                       style={{
                         display: 'flex',
                         justifyContent: 'center',
-                        marginBottom: 'clamp(8px, 1.5vmin, 14px)',
+                        marginTop: 'clamp(2px, 0.6vmin, 8px)',
+                        marginBottom: 'clamp(10px, 1.8vmin, 18px)',
                       }}
                     >
                       <img
@@ -3402,18 +3420,30 @@ const PublicDisplay: React.FC = () => {
                       />
                     </div>
                   ) : null}
+                  <div
+                    style={{
+                      width: '100%',
+                      maxWidth: '100%',
+                      boxSizing: 'border-box',
+                      paddingLeft: 'clamp(6px, 1.2vmin, 16px)',
+                      paddingRight: 'clamp(6px, 1.2vmin, 16px)',
+                    }}
+                  >
                   <img
                     alt="Join QR"
                     style={{
                       width: '100%',
+                      maxWidth: '100%',
                       aspectRatio: '1/1',
                       objectFit: 'contain',
+                      verticalAlign: 'middle',
                       borderRadius: 'clamp(12px, 2vmin, 18px)',
                       border: '1px solid rgba(255,255,255,0.2)',
                       boxShadow: '0 16px 44px rgba(0,0,0,0.5)',
                     }}
                     src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent(playerJoinUrl)}`}
                   />
+                  </div>
                   <div
                     style={{
                       fontSize: 'clamp(1.35rem, min(3.4vmin, 2.8vh), 2.85rem)',
@@ -3562,7 +3592,8 @@ const PublicDisplay: React.FC = () => {
                 </div>
               </motion.div>
             </div>
-              </div>
+            </div>
+            </div>
             </div>
             </div>
           </motion.div>
