@@ -77,11 +77,14 @@ function PublicDisplayVenueBrandingHero({
   branding,
   marginBottom,
   fillSlot = false,
+  compact = false,
 }: {
   branding: PublicDisplayVenueBrandingState;
   marginBottom: string;
   /** When true, expand to parent height and vertically center content (splash left column). */
   fillSlot?: boolean;
+  /** Smaller logo/type for space-constrained overlays (e.g. rules). */
+  compact?: boolean;
 }) {
   if (!(branding.logoUrl || branding.eventTitle || branding.sponsorLine)) return null;
   return (
@@ -91,10 +94,10 @@ function PublicDisplayVenueBrandingHero({
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: fillSlot ? 'center' : undefined,
-        gap: 'clamp(8px, 1.8vmin, 18px)',
+        gap: compact ? 'clamp(4px, 0.75vmin, 10px)' : 'clamp(8px, 1.8vmin, 18px)',
         marginBottom,
         width: '100%',
-        maxWidth: 'min(98vw, 1200px)',
+        maxWidth: compact ? 'min(96vw, 720px)' : 'min(98vw, 1200px)',
         marginLeft: 'auto',
         marginRight: 'auto',
         ...(fillSlot ? { flex: 1, minHeight: 0 } : {}),
@@ -105,12 +108,22 @@ function PublicDisplayVenueBrandingHero({
           src={branding.logoUrl}
           alt={branding.eventTitle || 'Venue'}
           className="public-display-venue-logo public-display-venue-logo--hero"
+          style={
+            compact
+              ? {
+                  maxHeight: 'clamp(52px, min(10vmin, 8.5vh), 108px)',
+                  maxWidth: 'min(78vw, 300px)',
+                }
+              : undefined
+          }
         />
       ) : null}
       {branding.eventTitle ? (
         <div
           style={{
-            fontSize: 'clamp(1.35rem, min(4vmin, 3.2vh), 2.5rem)',
+            fontSize: compact
+              ? 'clamp(0.88rem, min(2.35vmin, 1.9vh), 1.28rem)'
+              : 'clamp(1.35rem, min(4vmin, 3.2vh), 2.5rem)',
             fontWeight: 800,
             color: 'rgba(245,250,255,0.98)',
             textAlign: 'center',
@@ -124,7 +137,9 @@ function PublicDisplayVenueBrandingHero({
       {branding.sponsorLine ? (
         <div
           style={{
-            fontSize: 'clamp(1.05rem, min(2.8vmin, 2.3vh), 1.6rem)',
+            fontSize: compact
+              ? 'clamp(0.78rem, min(2vmin, 1.65vh), 1.05rem)'
+              : 'clamp(1.05rem, min(2.8vmin, 2.3vh), 1.6rem)',
             fontWeight: 600,
             color: 'rgba(200,215,225,0.9)',
             textAlign: 'center',
@@ -3597,9 +3612,10 @@ const PublicDisplay: React.FC = () => {
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: 'clamp(12px, 2.5vmin, 36px)',
-              overflow: 'auto',
+              padding: 'clamp(8px, 1.5vmin, 22px)',
+              overflow: 'hidden',
               boxSizing: 'border-box',
+              maxHeight: '100dvh',
             }}
           >
             <div
@@ -3648,18 +3664,27 @@ const PublicDisplay: React.FC = () => {
             </div>
 
               <div
+                className="public-display-rules-overlay__panel"
                 style={{
                   position: 'relative',
                   zIndex: 1,
                   textAlign: 'center',
                   maxWidth: 'min(98vw, 1600px)',
                   width: '100%',
+                  flex: '1 1 auto',
+                  minHeight: 0,
+                  maxHeight: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
                 }}
               >
               {venueBranding ? (
                 <PublicDisplayVenueBrandingHero
                   branding={venueBranding}
-                  marginBottom="clamp(1rem, 2.8vmin, 2.25rem)"
+                  marginBottom="clamp(0.35rem, 0.9vmin, 0.65rem)"
+                  compact
                 />
               ) : null}
               <motion.div
@@ -3670,15 +3695,16 @@ const PublicDisplay: React.FC = () => {
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 'clamp(10px, 2vmin, 20px)',
-                  marginBottom: 'clamp(1rem, 2.5vmin, 2rem)',
+                  gap: 'clamp(8px, 1.5vmin, 16px)',
+                  marginBottom: 'clamp(0.45rem, 1.2vmin, 0.85rem)',
                   flexWrap: 'wrap',
+                  flexShrink: 0,
                 }}
               >
                 <Sparkles
                   style={{
-                    width: 'clamp(36px, 7vmin, 72px)',
-                    height: 'clamp(36px, 7vmin, 72px)',
+                    width: 'clamp(22px, 4.5vmin, 44px)',
+                    height: 'clamp(22px, 4.5vmin, 44px)',
                     color: '#7bffd9',
                     filter: 'drop-shadow(0 0 20px rgba(0,255,200,0.7))',
                   }}
@@ -3687,7 +3713,7 @@ const PublicDisplay: React.FC = () => {
                 />
                 <div
                   style={{
-                    fontSize: 'clamp(3rem, 10vmin, 7.5rem)',
+                    fontSize: 'clamp(1.65rem, 5.2vmin, 3.85rem)',
                     fontWeight: 1000,
                     letterSpacing: '0.03em',
                     backgroundImage:
@@ -3703,8 +3729,8 @@ const PublicDisplay: React.FC = () => {
                 </div>
                 <Sparkles
                   style={{
-                    width: 'clamp(36px, 7vmin, 72px)',
-                    height: 'clamp(36px, 7vmin, 72px)',
+                    width: 'clamp(22px, 4.5vmin, 44px)',
+                    height: 'clamp(22px, 4.5vmin, 44px)',
                     color: '#7bffd9',
                     filter: 'drop-shadow(0 0 20px rgba(0,255,200,0.7))',
                   }}
@@ -3717,8 +3743,10 @@ const PublicDisplay: React.FC = () => {
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 'clamp(14px, 2.5vmin, 28px)',
-                  marginBottom: 'clamp(1rem, 2.5vmin, 2rem)',
+                  gap: 'clamp(6px, 1.2vmin, 14px)',
+                  marginBottom: 'clamp(0.45rem, 1.2vmin, 0.85rem)',
+                  flex: '0 1 auto',
+                  minHeight: 0,
                 }}
               >
                 {[
@@ -3768,9 +3796,9 @@ const PublicDisplay: React.FC = () => {
                       display: 'grid',
                       gridTemplateColumns: 'auto 1fr',
                       alignItems: 'stretch',
-                      gap: 'clamp(12px, 2.5vmin, 24px)',
-                      padding: 'clamp(16px, 3vmin, 36px) clamp(14px, 2.8vmin, 32px)',
-                      borderRadius: 'clamp(18px, 2.5vmin, 28px)',
+                      gap: 'clamp(8px, 1.5vmin, 16px)',
+                      padding: 'clamp(8px, 1.5vmin, 16px) clamp(10px, 1.8vmin, 20px)',
+                      borderRadius: 'clamp(12px, 2vmin, 20px)',
                       background: step.accent,
                       border: `max(2px, 0.25vmin) solid ${step.borderGlow}`,
                       boxShadow:
@@ -3783,12 +3811,12 @@ const PublicDisplay: React.FC = () => {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        minWidth: 'clamp(52px, 10vmin, 96px)',
-                        width: 'clamp(52px, 10vmin, 96px)',
-                        borderRadius: 'clamp(14px, 2vmin, 22px)',
+                        minWidth: 'clamp(38px, 7vmin, 64px)',
+                        width: 'clamp(38px, 7vmin, 64px)',
+                        borderRadius: 'clamp(10px, 1.6vmin, 16px)',
                         background: 'linear-gradient(160deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.04) 100%)',
                         border: '1px solid rgba(255,255,255,0.25)',
-                        fontSize: 'clamp(1.75rem, 5vmin, 3.5rem)',
+                        fontSize: 'clamp(1.1rem, 3vmin, 1.85rem)',
                         fontWeight: 1000,
                         color: '#fff',
                         textShadow: '0 4px 20px rgba(0,0,0,0.4)',
@@ -3800,10 +3828,10 @@ const PublicDisplay: React.FC = () => {
                     <div>
                       <div
                         style={{
-                          fontSize: 'clamp(1.5rem, 4.2vmin, 3rem)',
+                          fontSize: 'clamp(1rem, 2.75vmin, 1.65rem)',
                           fontWeight: 900,
                           color: '#f2fffb',
-                          marginBottom: 'clamp(0.4rem, 1vmin, 0.75rem)',
+                          marginBottom: 'clamp(0.15rem, 0.55vmin, 0.4rem)',
                           lineHeight: 1.12,
                           textShadow: '0 2px 16px rgba(0,0,0,0.35)',
                         }}
@@ -3812,8 +3840,8 @@ const PublicDisplay: React.FC = () => {
                       </div>
                       <div
                         style={{
-                          fontSize: 'clamp(1.15rem, 2.9vmin, 2.15rem)',
-                          lineHeight: 1.55,
+                          fontSize: 'clamp(0.82rem, 1.95vmin, 1.2rem)',
+                          lineHeight: 1.4,
                           color: 'rgba(250,255,253,0.96)',
                           fontWeight: 600,
                         }}
@@ -3830,19 +3858,20 @@ const PublicDisplay: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: 0.35 }}
                 style={{
-                  padding: 'clamp(16px, 2.8vmin, 28px) clamp(18px, 3vmin, 32px)',
-                  borderRadius: 'clamp(14px, 2vmin, 22px)',
+                  padding: 'clamp(10px, 1.6vmin, 16px) clamp(12px, 2vmin, 20px)',
+                  borderRadius: 'clamp(12px, 1.8vmin, 18px)',
                   background:
                     'linear-gradient(135deg, rgba(255,160,60,0.22) 0%, rgba(80,40,10,0.35) 100%)',
                   border: 'max(2px, 0.2vmin) solid rgba(255,200,120,0.45)',
                   boxShadow: '0 12px 40px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
-                  fontSize: 'clamp(1.1rem, 2.7vmin, 1.95rem)',
-                  lineHeight: 1.5,
+                  fontSize: 'clamp(0.88rem, 2.05vmin, 1.28rem)',
+                  lineHeight: 1.4,
                   color: 'rgba(255,245,220,0.98)',
                   fontWeight: 800,
                   textAlign: 'center',
                   maxWidth: 'min(92vw, 1100px)',
-                  margin: '0 auto clamp(1rem, 2.5vmin, 2rem)',
+                  margin: '0 auto clamp(0.4rem, 1.1vmin, 0.75rem)',
+                  flexShrink: 0,
                 }}
               >
                 ⚠️ Important: only mark songs you&apos;re sure have played. Wrong marks can disqualify your bingo.
@@ -3850,25 +3879,26 @@ const PublicDisplay: React.FC = () => {
 
               <div
                 style={{
-                  fontSize: 'clamp(1.35rem, 3.5vmin, 2.6rem)',
+                  fontSize: 'clamp(1rem, 2.6vmin, 1.65rem)',
                   textAlign: 'center',
                   fontWeight: 800,
                   color: 'rgba(255,255,255,0.94)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 'clamp(8px, 1.5vmin, 16px)',
+                  gap: 'clamp(6px, 1.2vmin, 12px)',
                   flexWrap: 'wrap',
                   textShadow: '0 2px 20px rgba(0,255,170,0.25)',
+                  flexShrink: 0,
                 }}
               >
                 <Music
-                  style={{ width: 'clamp(28px, 5vmin, 48px)', height: 'clamp(28px, 5vmin, 48px)', opacity: 0.95 }}
+                  style={{ width: 'clamp(20px, 3.8vmin, 36px)', height: 'clamp(20px, 3.8vmin, 36px)', opacity: 0.95 }}
                   aria-hidden
                 />
                 Good luck & have fun
                 <Music
-                  style={{ width: 'clamp(28px, 5vmin, 48px)', height: 'clamp(28px, 5vmin, 48px)', opacity: 0.95 }}
+                  style={{ width: 'clamp(20px, 3.8vmin, 36px)', height: 'clamp(20px, 3.8vmin, 36px)', opacity: 0.95 }}
                   aria-hidden
                 />
               </div>
