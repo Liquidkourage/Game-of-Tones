@@ -313,6 +313,46 @@ const PublicDisplay: React.FC = () => {
     };
   }, [venueBranding?.logoUrl]);
 
+  /** HTTP hydrate: fetch branding in parallel with the socket (cuts “blank logo” until join-room completes). */
+  useEffect(() => {
+    if (!roomId) return;
+    let cancelled = false;
+    const url = `${API_BASE || ''}/api/display/${encodeURIComponent(roomId)}/venue-branding`;
+    const merge = (b: PublicDisplayVenueBrandingState | null | undefined) => {
+      if (b == null) return;
+      setVenueBranding((prev) => (prev != null ? prev : b));
+    };
+    (async () => {
+      for (let i = 0; i < 4; i++) {
+        if (cancelled) return;
+        if (i > 0) await new Promise((r) => setTimeout(r, 320));
+        try {
+          const r = await fetch(url);
+          if (!r.ok || cancelled) continue;
+          const data = (await r.json()) as {
+            ok?: boolean;
+            roomExists?: boolean;
+            venueBranding?: PublicDisplayVenueBrandingState | null;
+          };
+          if (cancelled) return;
+          const b = data.venueBranding;
+          if (b != null) {
+            merge(b);
+            if (b.logoUrl || b.eventTitle || b.sponsorLine) break;
+          }
+          if (data.roomExists === false) continue;
+          if (data.roomExists && b == null) continue;
+          break;
+        } catch {
+          /* retry */
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId]);
+
   /** Same tab’s origin — correct for QR and “go to this site” when hosted on a licensee domain. */
   const playerJoinOrigin = useMemo(
     () => (typeof window !== 'undefined' ? window.location.origin : ''),

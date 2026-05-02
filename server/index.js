@@ -6982,6 +6982,39 @@ app.get('/api/rooms/:roomId', (req, res) => {
   }
 });
 
+/**
+ * Public display: venue branding as soon as the room exists (HTTP races the socket join handshake).
+ * No auth — same information shown on the projector splash; logo URL is host-configured public asset.
+ */
+app.get('/api/display/:roomId/venue-branding', async (req, res) => {
+  try {
+    const roomId = String(req.params.roomId || '').trim();
+    if (!roomId || roomId.length > 80) {
+      return res.status(400).json({ error: 'invalid_room_id' });
+    }
+    const room = rooms.get(roomId);
+    if (!room) {
+      return res.json({ ok: true, roomExists: false, venueBranding: null });
+    }
+    try {
+      ensureRoomOwnerFromHostSocket(room);
+      if (room.ownerUserId != null && db) {
+        await resolveRoomVenueBranding(room);
+      }
+    } catch (e) {
+      console.error('GET /api/display/:roomId/venue-branding resolve:', e?.message || e);
+    }
+    return res.json({
+      ok: true,
+      roomExists: true,
+      venueBranding: venueBrandingForRoom(room),
+    });
+  } catch (e) {
+    console.error('GET /api/display/:roomId/venue-branding', e);
+    return res.status(500).json({ error: 'failed' });
+  }
+});
+
 app.post('/api/rooms/:roomId/end', async (req, res) => {
   try {
     const { roomId } = req.params;
