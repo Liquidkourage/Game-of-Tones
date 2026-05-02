@@ -3130,7 +3130,7 @@ const PublicDisplay: React.FC = () => {
                 position: 'relative',
                 zIndex: 1,
                 width: '100%',
-                maxWidth: 'min(98vw, 1900px)',
+                maxWidth: 'min(calc(100vw - clamp(16px, 4vmin, 56px)), 2800px)',
                 minWidth: 0,
                 margin: '0 auto',
                 flex: 1,

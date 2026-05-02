@@ -1588,8 +1588,9 @@ body {
   grid-template-columns: minmax(0, 1fr);
 }
 
+/* Wide join track uses leftover horizontal space (card grows right on large screens). */
 .public-display-splash-bottom--with-hero {
-  grid-template-columns: minmax(0, min(40vw, 460px)) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 2.35fr);
 }
 
 @media (max-width: 780px) {
@@ -1598,12 +1599,11 @@ body {
   }
 }
 
-/* Splash: hero column — matches join row height; inner fillSlot block centers logo. */
+/* Hero column fills grid’s left gutter; logo stack is centered in that full width + row height. */
 .public-display-splash-hero-slot {
   min-width: 0;
-  max-width: min(40vw, 460px);
   width: 100%;
-  justify-self: center;
+  justify-self: stretch;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -1614,7 +1614,6 @@ body {
 }
 
 .public-display-splash-bottom--with-hero .public-display-splash-hero-slot {
-  justify-self: stretch;
   max-width: none;
 }
 
@@ -1625,13 +1624,14 @@ body {
 
 .public-display-splash-hero-slot .public-display-venue-logo--hero {
   max-width: 100%;
-  /* Same cap as splash QR (logo-sized code). */
-  max-height: clamp(160px, min(36vmin, 32svh), 400px);
+  /* Track enlarged splash QR cap (readable on wide projectors). */
+  max-height: clamp(180px, min(40vmin, 36svh), 520px);
 }
 
 /* Splash: combined join card — fills join column; side-by-side when wide. */
+/* `size` so cqh can size the QR against the card’s height on projectors. */
 .public-display-splash-join-card {
-  container-type: inline-size;
+  container-type: size;
   container-name: splash-join;
   flex: 1;
   min-height: 0;
@@ -1676,6 +1676,7 @@ body {
   min-width: 0;
   flex: 0 1 auto;
   justify-content: center;
+  min-height: 0;
 }
 
 .public-display-splash-join-card__manual {
@@ -1696,19 +1697,25 @@ body {
 }
 
 .public-display-splash-join-card__qr-wrap {
-  width: min(100%, min(36vmin, 32svh), 400px);
-  max-width: 100%;
+  width: 100%;
+  max-width: min(100%, min(40vmin, 36svh), 440px);
   margin-left: auto;
   margin-right: auto;
   padding: 0;
   box-sizing: border-box;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .public-display-splash-join-card__qr-wrap img {
   display: block;
   width: 100%;
+  max-width: 100%;
   height: auto;
-  max-height: clamp(160px, min(36vmin, 32svh), 400px);
+  max-height: clamp(176px, min(40vmin, 36svh), 440px);
   aspect-ratio: 1 / 1;
   object-fit: contain;
   border-radius: clamp(10px, 1.6vmin, 16px);
@@ -1740,19 +1747,23 @@ body {
   }
 
   .public-display-splash-join-card__scan {
-    flex: 0 1 42%;
-    max-width: min(400px, 48%);
-    min-width: 0;
-    justify-content: center;
+    flex: 1 1 46%;
+    min-width: min(46%, 220px);
+    max-width: min(58%, 620px);
+    justify-content: flex-start;
+    align-items: center;
   }
 
   .public-display-splash-join-card__qr-wrap {
     width: 100%;
-    max-width: min(100%, min(36vmin, 32svh), 400px);
+    max-width: min(100%, min(48vmin, 68cqh), 560px);
   }
 
   .public-display-splash-join-card__qr-wrap img {
-    max-height: clamp(160px, min(36vmin, 32svh), 400px);
+    max-height: min(
+      clamp(200px, min(44vmin, 38svh), 560px),
+      72cqh
+    );
   }
 
   .public-display-splash-join-card__manual {
