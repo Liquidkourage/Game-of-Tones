@@ -3097,6 +3097,7 @@ io.on('connection', (socket) => {
             songName: s.songName,
             customSongName: s.customSongName,
             artistName: s.artistName,
+            youtubeMusic: s.youtubeMusic === true,
             marked: !!s.marked,
             isFreeSpace: !!s.isFreeSpace,
           })),
@@ -5220,6 +5221,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           songName: s.name,
           customSongName: customSongTitles.get(s.id) || cleanSongTitle(s.name),
           artistName: s.artist,
+          youtubeMusic: s.youtubeMusic === true,
           marked: false
         });
       }
@@ -5376,6 +5378,7 @@ function buildPrintableCardFromChosen(chosen25, useFreeSpace, index) {
         songName: s.name,
         customSongName: customSongTitles.get(s.id) || cleanSongTitle(s.name),
         artistName: s.artist || '',
+        youtubeMusic: s.youtubeMusic === true,
         marked: false,
       });
     }
@@ -5679,6 +5682,7 @@ async function generateBingoCardForPlayer(roomId, playerId) {
           songName: s.name,
           customSongName: customSongTitles.get(s.id) || cleanSongTitle(s.name),
           artistName: s.artist,
+          youtubeMusic: s.youtubeMusic === true,
           marked: false
         });
       }

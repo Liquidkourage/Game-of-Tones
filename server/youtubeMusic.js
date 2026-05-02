@@ -10,6 +10,7 @@
 
 const { OAuth2Client } = require('google-auth-library');
 const hostAuth = require('./hostAuth');
+const { parseYoutubeVideoTitleForDisplay } = require('./youtubeTrackDisplayParse');
 
 const SCOPES = ['https://www.googleapis.com/auth/youtube.readonly'];
 
@@ -185,16 +186,15 @@ async function listPlaylistItems(hostUserId, playlistId, options = {}) {
       const vid =
         it.snippet?.resourceId?.videoId || it.contentDetails?.videoId || '';
       if (!vid) continue;
-      const title = it.snippet?.title || '';
-      if (title === 'Deleted video' || title === 'Private video') continue;
-      const artist =
-        it.snippet?.videoOwnerChannelTitle ||
-        it.snippet?.channelTitle ||
-        '';
+      const rawTitle = it.snippet?.title || '';
+      if (rawTitle === 'Deleted video' || rawTitle === 'Private video') continue;
+      const { title: parsedTitle, artist: parsedArtist } = parseYoutubeVideoTitleForDisplay(rawTitle);
+      const displayName = (parsedTitle || rawTitle).trim() || rawTitle;
+      const displayArtist = (parsedArtist || '').trim();
       tracks.push({
         id: vid,
-        name: title,
-        artist,
+        name: displayName,
+        artist: displayArtist,
         youtubeMusic: true,
         sourcePlaylistId: pid,
         ...(playlistName ? { sourcePlaylistName: playlistName } : {}),

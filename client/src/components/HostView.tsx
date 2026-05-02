@@ -54,6 +54,7 @@ import { HostYoutubeIframePlayer, primeYoutubeHostPlaybackAudioUnlock } from './
 import RoundPlanner from './RoundPlanner';
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
+import { youtubeTrackDisplayFields, youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
 import { buildPrintableBingoPdfBlob } from '../utils/printableBingoPdf';
 import {
   normalizePublicDisplayTitleRevealMode,
@@ -1769,10 +1770,16 @@ const HostView: React.FC = () => {
         setYoutubeHostPlayback(null);
       }
 
-      setCurrentSong({
-        id: data.songId,
+      const ytf = youtubeTrackDisplayFields({
         name: data.songName,
         artist: data.artistName,
+        youtubeMusic: data.youtubeMusic === true,
+      });
+      const displayTitleForUi = getDisplaySongTitle(data.songId, ytf.title);
+      setCurrentSong({
+        id: data.songId,
+        name: displayTitleForUi,
+        artist: ytf.artist,
         explicit: data.explicit === true,
       });
       lastSongEventAtRef.current = Date.now();
@@ -1782,8 +1789,8 @@ const HostView: React.FC = () => {
         isPlaying: true,
         currentSong: {
           id: data.songId,
-          name: data.songName,
-          artist: data.artistName,
+          name: displayTitleForUi,
+          artist: ytf.artist,
           explicit: data.explicit === true,
         },
         duration: data.snippetLength * 1000, // Convert to milliseconds
@@ -1791,7 +1798,7 @@ const HostView: React.FC = () => {
       }));
       setPlayedInOrder(prev => {
         if (prev.find(p => p.id === data.songId)) return prev; // prevent dupes
-        return [...prev, { id: data.songId, name: data.songName, artist: data.artistName }];
+        return [...prev, { id: data.songId, name: displayTitleForUi, artist: ytf.artist }];
       });
       
       // Reset pause tracking for new song
@@ -1799,7 +1806,10 @@ const HostView: React.FC = () => {
       setIsPausedByInterface(false);
       
       console.log('Song playing:', data);
-      addLog(`Now playing: ${data.songName} — ${data.artistName}`, 'info');
+      addLog(
+        `Now playing: ${displayTitleForUi}${ytf.artist ? ` — ${ytf.artist}` : ''}`,
+        'info',
+      );
       
       if (!yt) {
         setTimeout(() => {
@@ -3246,6 +3256,15 @@ const HostView: React.FC = () => {
                   statusText = 'Not played';
                 }
 
+                const cellVis = youtubeBingoSquareDisplay({
+                  customSongName: square.customSongName,
+                  songName: square.songName,
+                  artistName: square.artistName,
+                  youtubeMusic: square.youtubeMusic === true,
+                  isFreeSpace: isFree,
+                });
+                const cellTitle = `${cellVis.title}${cellVis.artist ? ` — ${cellVis.artist}` : ''}`;
+
                 return (
                   <div
                     key={square.position}
@@ -3264,12 +3283,12 @@ const HostView: React.FC = () => {
                       lineHeight: 1.1,
                       overflow: 'hidden'
                     }}
-                    title={`${isFree ? 'FREE' : square.songName} — ${isFree ? '' : square.artistName}\nStatus: ${statusText}`}
+                    title={`${cellTitle}\nStatus: ${statusText}`}
                   >
                     {icon && <span style={{ marginRight: 2 }}>{icon}</span>}
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {(() => {
-                        const label = isFree ? 'FREE' : square.songName;
+                        const label = cellVis.title;
                         return label.length > labelMax ? label.substring(0, labelMax) + '...' : label;
                       })()}
                     </span>
@@ -6429,8 +6448,9 @@ const HostView: React.FC = () => {
                       background: 'rgba(0,0,0,0.2)'
                     }}>
                       {finalizedPoolSongs.map((song: any, index: number) => {
-                        const displayTitle = getDisplaySongTitle(song.id, song.name);
-                        const validation = validateSongTitleSync(displayTitle, song.name);
+                        const ytf = youtubeTrackDisplayFields(song);
+                        const displayTitle = getDisplaySongTitle(song.id, ytf.title);
+                        const validation = validateSongTitleSync(displayTitle, ytf.title);
                         const validationColor = getValidationColor(validation);
                         const validationMessage = getValidationMessage(validation);
                         
@@ -6526,7 +6546,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                                 </span>
                               </div>
                               <div style={{ color: '#b3b3b3', fontSize: '0.8rem' }}>
-                                by {song.artist}
+                                by {ytf.artist}
                                 {validation.warnings.length > 0 && (
                                   <span style={{ 
                                     color: validationColor, 
@@ -7137,6 +7157,15 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                       (pendingVerification.playedSongs?.some((song: any) => song.id === square.songId) ?? false);
                     const isMarked = square.marked === true; // Explicit check for true
                     const isInvalid = isMarked && !wasPlayed;
+
+                    const verCellVis = youtubeBingoSquareDisplay({
+                      customSongName: square.customSongName,
+                      songName: square.songName,
+                      artistName: square.artistName,
+                      youtubeMusic: square.youtubeMusic === true,
+                      isFreeSpace: isBingoFreeSpaceSquare(square),
+                    });
+                    const verCellTitle = `${verCellVis.title}${verCellVis.artist ? ` — ${verCellVis.artist}` : ''}`;
                     
                     let bgColor = 'rgba(255,255,255,0.1)';
                     let borderColor = 'rgba(255,255,255,0.3)';
@@ -7197,14 +7226,14 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                           color: '#fff',
                           fontWeight: isInWinningPattern ? 'bold' : (isMarked ? 'bold' : 'normal')
                         }}
-                        title={`${square.songName} - ${square.artistName}\nMarked: ${isMarked ? 'YES' : 'NO'}\nPlayed: ${wasPlayed ? 'YES' : 'NO'}\n${isInWinningPattern ? 'IN WINNING PATTERN' : 'NOT in pattern'}\n${isInvalid ? 'Invalid mark' : isMarked && wasPlayed ? 'Valid mark' : isMarked ? 'Marked (not played yet)' : 'Not marked'}`}
+                        title={`${verCellTitle}\nMarked: ${isMarked ? 'YES' : 'NO'}\nPlayed: ${wasPlayed ? 'YES' : 'NO'}\n${isInWinningPattern ? 'IN WINNING PATTERN' : 'NOT in pattern'}\n${isInvalid ? 'Invalid mark' : isMarked && wasPlayed ? 'Valid mark' : isMarked ? 'Marked (not played yet)' : 'Not marked'}`}
                       >
                         {icon === 'bad' && <X size={12} aria-hidden style={{ marginBottom: 2 }} />}
                         {icon === 'good' && <Check size={12} aria-hidden style={{ marginBottom: 2, color: '#00ff88' }} />}
                         {icon === 'pending' && <span style={{ fontSize: '0.75rem', marginBottom: 2 }} aria-hidden>○</span>}
                         {icon === 'warn' && <span style={{ fontSize: '0.75rem', marginBottom: 2 }} aria-hidden>!</span>}
                         <span style={{ fontSize: '0.6rem', lineHeight: 1.1 }}>
-                          {square.songName.substring(0, 8)}
+                          {verCellVis.title.substring(0, 8)}
                         </span>
                       </div>
                     );
@@ -7235,6 +7264,14 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                     (pendingVerification.playedSongs?.some((song: any) => song.id === square.songId) ?? false);
                   const isMarked = square.marked;
                   const isInvalid = isMarked && !wasPlayed;
+
+                  const listVis = youtubeBingoSquareDisplay({
+                    customSongName: square.customSongName,
+                    songName: square.songName,
+                    artistName: square.artistName,
+                    youtubeMusic: square.youtubeMusic === true,
+                    isFreeSpace: isBingoFreeSpaceSquare(square),
+                  });
                   
                   return (
                     <div 
@@ -7253,10 +7290,10 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                     >
                       <div style={{ flex: 1 }}>
                         <div style={{ color: '#fff', fontSize: '0.95rem', fontWeight: 'bold', marginBottom: '2px' }}>
-                          {square.songName}
+                          {listVis.title}
                         </div>
                         <div style={{ color: '#ccc', fontSize: '0.85rem' }}>
-                          {square.artistName}
+                          {listVis.artist}
                         </div>
                         <div style={{ color: '#888', fontSize: '0.75rem', marginTop: '4px' }}>
                           Position: {position}

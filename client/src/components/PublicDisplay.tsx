@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { API_BASE } from '../config';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
+import { youtubeBingoSquareDisplay, youtubeTrackDisplayFields } from '../utils/youtubeTrackDisplay';
 import {
   normalizePublicDisplayTitleRevealMode,
   type PublicDisplayTitleRevealMode,
@@ -815,6 +816,7 @@ const PublicDisplay: React.FC = () => {
       songName?: string;
       customSongName?: string;
       artistName?: string;
+      youtubeMusic?: boolean;
       marked?: boolean;
       isFreeSpace?: boolean;
     }>;
@@ -1364,15 +1366,24 @@ const PublicDisplay: React.FC = () => {
     });
 
     newSocket.on('bingo-card', (card: any) => {
-      const squares = (card.squares || []).map((s: any) => ({
-        song: { 
-          id: s.songId, 
-          name: s.customSongName || cleanSongTitle(s.songName), 
-          artist: s.artistName 
-        },
-        isPlayed: false,
-        position: { row: parseInt(s.position.split('-')[0], 10), col: parseInt(s.position.split('-')[1], 10) }
-      }));
+      const squares = (card.squares || []).map((s: any) => {
+        const vis = youtubeBingoSquareDisplay({
+          customSongName: s.customSongName,
+          songName: s.songName,
+          artistName: s.artistName,
+          youtubeMusic: s.youtubeMusic === true,
+          isFreeSpace: s.isFreeSpace === true,
+        });
+        return {
+          song: {
+            id: s.songId,
+            name: vis.title,
+            artist: vis.artist,
+          },
+          isPlayed: false,
+          position: { row: parseInt(s.position.split('-')[0], 10), col: parseInt(s.position.split('-')[1], 10) },
+        };
+      });
       setGameState(prev => ({ ...prev, bingoCard: { squares, size: 5 } }));
     });
 
@@ -1384,10 +1395,15 @@ const PublicDisplay: React.FC = () => {
     });
 
     newSocket.on('song-playing', (data: any) => {
-      const song = { 
-        id: data.songId, 
-        name: data.customSongName || cleanSongTitle(data.songName), 
-        artist: data.artistName 
+      const ytf = youtubeTrackDisplayFields({
+        name: data.songName,
+        artist: data.artistName,
+        youtubeMusic: data.youtubeMusic === true,
+      });
+      const song = {
+        id: data.songId,
+        name: data.customSongName || cleanSongTitle(ytf.title),
+        artist: ytf.artist,
       };
       // cache metadata for reveal lookups
       idMetaRef.current[song.id] = { name: song.name, artist: song.artist };
@@ -3255,10 +3271,17 @@ const PublicDisplay: React.FC = () => {
                   const pos = `${Math.floor(i / 5)}-${i % 5}`;
                   const sq = winnerCardModal.squares.find((s) => s.position === pos);
                   const isPattern = winnerCardModal.winningPositions.includes(pos);
-                  const title = sq?.isFreeSpace
-                    ? 'FREE'
-                    : cleanSongTitle(sq?.customSongName || sq?.songName || '');
-                  const artist = sq?.artistName || '';
+                  const vis = sq
+                    ? youtubeBingoSquareDisplay({
+                        customSongName: sq.customSongName,
+                        songName: sq.songName,
+                        artistName: sq.artistName,
+                        youtubeMusic: sq.youtubeMusic === true,
+                        isFreeSpace: sq.isFreeSpace === true,
+                      })
+                    : { title: '', artist: '' };
+                  const title = sq?.isFreeSpace ? 'FREE' : vis.title;
+                  const artist = sq?.isFreeSpace ? '' : vis.artist;
                   return (
                     <div
                       key={pos}

@@ -4,7 +4,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import io from 'socket.io-client';
 import { SOCKET_URL } from '../config';
 import { Music, Users } from 'lucide-react';
-import { cleanSongTitle } from '../utils/songTitleCleaner';
+import { youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
 import { STANDARD_BINGO_POSITIONS, validateBingoCardGrid } from '../patternDefinitions';
 
 interface BingoSquare {
@@ -14,6 +14,8 @@ interface BingoSquare {
   customSongName?: string;
   artistName: string;
   marked: boolean;
+  /** YouTube Music row — channel is not shown as artist; title split from video title. */
+  youtubeMusic?: boolean;
   /** Server: center square pre-marked for classic bingo */
   isFreeSpace?: boolean;
 }
@@ -799,8 +801,9 @@ const PlayerView: React.FC = () => {
       e.preventDefault();
     }
     if (longPressTimer.current) window.clearTimeout(longPressTimer.current);
-    const title = square.customSongName || cleanSongTitle(square.songName);
-    const artist = square.artistName;
+    const vis = youtubeBingoSquareDisplay(square);
+    const title = vis.title;
+    const artist = vis.artist;
     longPressTimer.current = window.setTimeout(() => {
       const free = square.isFreeSpace || square.songId === '__FREE_SPACE__';
       setLongPressTooltip({
@@ -1358,9 +1361,10 @@ const PlayerView: React.FC = () => {
                 <div className="square-text">
                   {square.isFreeSpace || square.songId === '__FREE_SPACE__'
                     ? 'FREE'
-                    : displayMode === 'title'
-                      ? (square.customSongName || cleanSongTitle(square.songName))
-                      : square.artistName}
+                    : (() => {
+                        const vis = youtubeBingoSquareDisplay(square);
+                        return displayMode === 'title' ? vis.title : vis.artist;
+                      })()}
                 </div>
                 {square.marked && (
                   <motion.div 
