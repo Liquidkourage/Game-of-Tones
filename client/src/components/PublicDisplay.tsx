@@ -3058,7 +3058,7 @@ const PublicDisplay: React.FC = () => {
                 'linear-gradient(155deg, #0f0c24 0%, #152a3d 38%, #0a1628 72%, #06121c 100%)',
               display: 'flex',
               flexDirection: 'column',
-              alignItems: 'center',
+              alignItems: 'stretch',
               justifyContent: 'flex-start',
               padding: 'clamp(16px, 2.5vmin, 40px) clamp(8px, 1.2vmin, 28px) clamp(28px, 4vmin, 64px)',
               overflowX: 'hidden',
@@ -3119,6 +3119,10 @@ const PublicDisplay: React.FC = () => {
                 maxWidth: 'min(98vw, 1900px)',
                 minWidth: 0,
                 margin: '0 auto',
+                flex: 1,
+                minHeight: 0,
+                display: 'flex',
+                flexDirection: 'column',
               }}
             >
             <div
@@ -3128,9 +3132,11 @@ const PublicDisplay: React.FC = () => {
                 alignItems: 'stretch',
                 width: '100%',
                 gap: 'clamp(16px, 2.75vmin, 40px)',
+                flex: 1,
+                minHeight: 0,
               }}
             >
-            <div style={{ textAlign: 'center', width: '100%', marginBottom: 'clamp(6px, 1.2vmin, 18px)' }}>
+            <div style={{ textAlign: 'center', width: '100%', marginBottom: 'clamp(6px, 1.2vmin, 18px)', flexShrink: 0 }}>
               <div
                 style={{
                   fontSize: 'clamp(5rem, 11vw, 9rem)',
@@ -3338,10 +3344,12 @@ const PublicDisplay: React.FC = () => {
                 flexDirection: 'row',
                 flexWrap: 'wrap',
                 gap: 'clamp(20px, 3.5vmin, 48px)',
-                alignItems: 'flex-start',
+                alignItems: 'stretch',
                 justifyContent: 'center',
                 width: '100%',
                 minWidth: 0,
+                flex: 1,
+                minHeight: 0,
               }}
             >
               {venueBranding &&
@@ -3355,6 +3363,7 @@ const PublicDisplay: React.FC = () => {
                     flexDirection: 'column',
                     justifyContent: 'flex-start',
                     alignItems: 'center',
+                    alignSelf: 'flex-start',
                   }}
                 >
                   <PublicDisplayVenueBrandingHero branding={venueBranding} marginBottom="0" />
@@ -3372,13 +3381,19 @@ const PublicDisplay: React.FC = () => {
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'stretch',
+                  alignSelf: 'stretch',
+                  minHeight: 0,
                 }}
               >
             <div
               style={{
                 width: '100%',
-                maxWidth: 'min(1180px, calc(100vw - clamp(12px, 3vw, 40px)))',
+                maxWidth: '100%',
                 minWidth: 0,
+                minHeight: 0,
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
                 margin: '0 auto',
               }}
             >
@@ -3390,6 +3405,10 @@ const PublicDisplay: React.FC = () => {
                 style={{
                   minWidth: 0,
                   width: '100%',
+                  flex: 1,
+                  minHeight: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
                   padding: 'clamp(8px, 1.2vmin, 18px) clamp(10px, 1.5vmin, 20px)',
                   borderRadius: 'clamp(18px, 2.5vmin, 26px)',
                   background:
