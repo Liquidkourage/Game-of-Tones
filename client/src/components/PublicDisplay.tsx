@@ -3428,7 +3428,7 @@ const PublicDisplay: React.FC = () => {
                       <div className="public-display-splash-join-card__eyebrow">Phone or tablet</div>
                       <div
                         style={{
-                          fontSize: 'clamp(1.6rem, min(4.65vmin, 3.95vh), 3.25rem)',
+                          fontSize: 'clamp(1.92rem, min(5.6vmin, 4.75vh), 3.9rem)',
                           fontWeight: 900,
                           color: '#eafff8',
                           letterSpacing: '0.06em',
