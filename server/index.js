@@ -3859,8 +3859,10 @@ io.on('connection', (socket) => {
             : playlists;
           routineServerLog(`📋 Using ${room.finalizedPlaylists ? 'finalized' : 'regular'} playlists for card generation`);
           routineServerLog(`📋 Playlist order: ${playlistsToUse.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
-          // If mix was finalized, reuse finalized song order to enforce 1x75 deterministically
-          await generateBingoCards(roomId, playlistsToUse, room.finalizedSongOrder || null);
+          const songOrderForCards =
+            room.finalizedSongOrder ||
+            (Array.isArray(songList) && songList.length > 0 ? songList : null);
+          await generateBingoCards(roomId, playlistsToUse, songOrderForCards);
           
           // CRITICAL: Auto-set pattern to 'full_card' for 1x75 mode if pattern wasn't explicitly set
           if (room.oneBySeventyFivePool && room.oneBySeventyFivePool.length === 75 && !incomingPattern) {
@@ -3978,7 +3980,10 @@ io.on('connection', (socket) => {
             });
 
             if (!newRoom.mixFinalized || !newRoom.bingoCards || newRoom.bingoCards.size === 0) {
-              await generateBingoCards(roomId, playlists, newRoom.finalizedSongOrder || null);
+              const orderRec =
+                newRoom.finalizedSongOrder ||
+                (Array.isArray(songList) && songList.length > 0 ? songList : null);
+              await generateBingoCards(roomId, playlists, orderRec);
             } else {
               routineServerLog('🛑 Skipping card regeneration after room recreation');
             }
@@ -5926,11 +5931,11 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     routineServerLog(`📝 Stored ${allSongs.length} songs in room ${roomId} for ordered playback`);
     routineServerLog(`📋 First 5 songs in order: ${allSongs.slice(0, 5).map(s => `${s.name} (${s.id})`).join(', ')}`);
     
-    // Temporary Spotify playlist only when every row is Spotify URIs (mixed YT lists break index ↔ URI alignment).
+    // Spotify-only: build a temp playlist in the background for reliable context on song 2+.
+    // Do not await creation before first play — each Web API call is paced (~550ms default), so
+    // create+add-items alone costs >1s before audio; first track uses URIs + repeat 'track' immediately.
     if (needsSpotifyTransport && !playlistHasYoutube) {
       try {
-        // Listing/deleting prior GOT output playlists walks paginated /me/playlists and can take
-        // several seconds. Do not block first playback on it — new playlists use a unique name.
         void spotifyFor(roomId)
           .deleteAllGameOfTonesOutputPlaylists()
           .catch((clearErr) => {
@@ -5941,11 +5946,25 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           });
         const trackUris = allSongs.map((song) => `spotify:track:${song.id}`);
         const playlistName = `TEMPO Bingo Room ${roomId} - ${new Date().toISOString().slice(0, 16)}`;
-        room.temporaryPlaylistId = await spotifyFor(roomId).createTemporaryPlaylist(playlistName, trackUris);
-        routineServerLog(`🎼 Created temporary playlist for context: ${room.temporaryPlaylistId}`);
-        routineServerLog(`📋 Playlist track order (first 5): ${trackUris.slice(0, 5).join(', ')}`);
+        room.temporaryPlaylistId = null;
+        void (async () => {
+          try {
+            const id = await spotifyFor(roomId).createTemporaryPlaylist(playlistName, trackUris);
+            const r = rooms.get(roomId);
+            if (r && r.gameState === 'playing') {
+              r.temporaryPlaylistId = id;
+              routineServerLog(`🎼 Background temp playlist ready: ${id} (${trackUris.length} tracks)`);
+            }
+          } catch (err) {
+            console.warn(
+              '⚠️ Background temp playlist failed (per-track playback continues):',
+              err?.message || err
+            );
+          }
+        })();
+        routineServerLog(`📋 Queued background playlist; first track via URIs (first 5): ${trackUris.slice(0, 5).join(', ')}`);
       } catch (error) {
-        console.warn('⚠️ Failed to create temporary playlist, falling back to individual track playback:', error);
+        console.warn('⚠️ Failed to queue temporary playlist, falling back to individual track playback:', error);
         room.temporaryPlaylistId = null;
       }
     } else {
@@ -6002,20 +6021,28 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
 
     let startMs = 0;
     try {
-      // Ensure device reports in current devices list; try to activate if needed
-      const devices = await spotifyFor(roomId).getUserDevices();
-      const deviceInList = devices.find(d => d.id === targetDeviceId);
-      if (!deviceInList) {
-        routineServerLog('⚠️ Locked device not in list; attempting activation...');
-        await spotifyFor(roomId).activateDevice(targetDeviceId);
+      // Prefer transfer first (saves one paced GET /me/player/devices when the device is already valid).
+      let transferred = false;
+      try {
+        await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
+        transferred = true;
+      } catch (e) {
+        routineServerLog('⚠️ transfer-first failed; resolving device list…', e?.body?.error?.message || e?.message || e);
       }
-
-      await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
+      if (!transferred) {
+        const devices = await spotifyFor(roomId).getUserDevices();
+        const deviceInList = devices.find((d) => d.id === targetDeviceId);
+        if (!deviceInList) {
+          routineServerLog('⚠️ Locked device not in list; attempting activation...');
+          await spotifyFor(roomId).activateDevice(targetDeviceId);
+        }
+        await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
+      }
       // Skip-based queue clearing removed to avoid context hijacks
       // Enforce deterministic playback mode to avoid context/radio fallbacks with delays
       try { await spotifyFor(roomId).withRetries('setShuffle(false)', () => spotifyFor(roomId).setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
       await new Promise(resolve => setTimeout(resolve, 100));
-      // Note: Skip setting repeat to 'off' - startPlaybackFromPlaylist will set it to 'track' to prevent auto-advance
+      // First track always starts via URIs (temp playlist, if any, is still building asynchronously)
       await new Promise(resolve => setTimeout(resolve, 100));
       // Use explicit device_id and uris as fallback in case transfer isn't picked up
       // Randomized start position within track when enabled and safe
@@ -6042,13 +6069,10 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       }
       routineServerLog(`🎯 Starting first song with randomized offset: ${startMs}ms (${Math.floor(startMs/1000)}s)`);
       
-      // Use playlist context if available, otherwise fall back to individual track
-      if (room.temporaryPlaylistId) {
-        routineServerLog(`🎼 Playing from temporary playlist context: ${room.temporaryPlaylistId}`);
-        await spotifyFor(roomId).withRetries('startPlaybackFromPlaylist(initial)', () => spotifyFor(roomId).startPlaybackFromPlaylist(targetDeviceId, room.temporaryPlaylistId, 0, startMs), { attempts: 3, backoffMs: 400 });
-      } else {
-        await spotifyFor(roomId).withRetries('startPlayback(initial)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
-      }
+      await spotifyFor(roomId).withRetries('startPlayback(initial)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
+      try {
+        await spotifyFor(roomId).withRetries('setRepeat(track,initial)', () => spotifyFor(roomId).setRepeatState('track', targetDeviceId), { attempts: 2, backoffMs: 200 });
+      } catch (_) {}
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId}`);
       try { 
         const r = rooms.get(roomId); 
@@ -6086,6 +6110,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           await spotifyFor(roomId).withRetries('transferPlayback(after-refresh)', () => spotifyFor(roomId).transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
           // Skip-based queue clearing removed to avoid context hijacks
           await spotifyFor(roomId).withRetries('startPlayback(after-refresh)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
+          try {
+            await spotifyFor(roomId).withRetries('setRepeat(track,after-refresh)', () => spotifyFor(roomId).setRepeatState('track', targetDeviceId), { attempts: 2, backoffMs: 200 });
+          } catch (_) {}
           routineServerLog(`✅ Successfully started playback after token refresh`);
           try {
             const r = rooms.get(roomId);
@@ -6131,12 +6158,15 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
 
     routineServerLog(`✅ Started automatic playback in room ${roomId}: ${firstSong.name} by ${firstSong.artist} on device ${targetDeviceId}`);
 
+    routineServerLog(`🚀 Starting simplified playback control for room ${roomId}`);
+    startSimpleProgression(roomId, targetDeviceId, room.snippetLength);
+
     // Verify playback actually started and is the correct track; attempt resume/correct if needed
     try {
       let playing = false;
       let correctTrack = false;
-      for (let i = 0; i < 3; i++) {
-        await new Promise(r => setTimeout(r, 280));
+      for (let i = 0; i < 2; i++) {
+        await new Promise(r => setTimeout(r, 220));
         const state = await spotifyFor(roomId).getCurrentPlaybackState();
         playing = !!state?.is_playing;
         const currentId = state?.item?.id;
@@ -6162,7 +6192,10 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           if (room.temporaryPlaylistId) {
             await spotifyFor(roomId).startPlaybackFromPlaylist(targetDeviceId, room.temporaryPlaylistId, 0, startMs);
           } else {
-            await spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs); 
+            await spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs);
+            try {
+              await spotifyFor(roomId).setRepeatState('track', targetDeviceId);
+            } catch (_) {}
           }
         } catch {}
       }
@@ -6173,10 +6206,6 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       console.warn('⚠️ Playback verification error:', e?.message || e);
       io.to(roomId).emit('playback-warning', { message: `Playback verification error: ${e?.message || 'Unknown error'}` });
     }
-
-    // NEW: Use simplified timer-based progression
-    routineServerLog(`🚀 Starting simplified playback control for room ${roomId}`);
-    startSimpleProgression(roomId, targetDeviceId, room.snippetLength);
 
   } catch (error) {
     console.error('❌ Error starting automatic playback:', error);
