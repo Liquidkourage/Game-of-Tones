@@ -1748,7 +1748,7 @@ body {
 
   .public-display-splash-join-card__scan {
     flex: 1 1 46%;
-    min-width: min(46%, 220px);
+    min-width: clamp(200px, 40%, 380px);
     max-width: min(58%, 620px);
     justify-content: flex-start;
     align-items: center;
