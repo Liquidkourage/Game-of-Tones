@@ -2729,31 +2729,38 @@ const HostView: React.FC = () => {
     };
 
     const onOk = (payload: any) => {
-      cleanup();
-      try {
-        const cards = Array.isArray(payload?.cards) ? payload.cards : [];
-        if (cards.length === 0) {
-          window.alert('No cards returned from server.');
-          return;
+      void (async () => {
+        cleanup();
+        try {
+          const cards = Array.isArray(payload?.cards) ? payload.cards : [];
+          if (cards.length === 0) {
+            window.alert('No cards returned from server.');
+            return;
+          }
+          const logoUrl =
+            payload?.venueBranding && typeof payload.venueBranding.logoUrl === 'string'
+              ? payload.venueBranding.logoUrl
+              : undefined;
+          const blob = await buildPrintableBingoPdfBlob(cards, {
+            freeSpace: !!payload?.freeSpace,
+            subtitle: `Room ${roomId}`,
+            logoUrl,
+          });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `tempo-bingo-cards-${roomId}-${Date.now()}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          console.error(e);
+          window.alert('Could not build PDF. Try fewer cards or reload and finalize again.');
+        } finally {
+          setPrintablePdfLoading(false);
         }
-        const blob = buildPrintableBingoPdfBlob(cards, {
-          freeSpace: !!payload?.freeSpace,
-          subtitle: `Room ${roomId}`,
-        });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `tempo-bingo-cards-${roomId}-${Date.now()}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-      } catch (e) {
-        console.error(e);
-        window.alert('Could not build PDF. Try fewer cards or reload and finalize again.');
-      } finally {
-        setPrintablePdfLoading(false);
-      }
+      })();
     };
 
     const onErr = (payload: any) => {

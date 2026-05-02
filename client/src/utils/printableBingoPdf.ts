@@ -44,6 +44,16 @@ const BORDER = { r: 100, g: 100, b: 105 };
 const TITLE_LINE_FACTOR = 1.14;
 const ARTIST_LINE_FACTOR = 1.12;
 
+/** Watermark strength for venue logo on the bingo grid (baked in canvas for reliable PDF output). */
+const GRID_LOGO_OPACITY = 0.2;
+
+export type PrintablePdfOpts = {
+  freeSpace?: boolean;
+  subtitle?: string;
+  /** Venue logo URL (absolute or path) — centered on the 5×5 grid at GRID_LOGO_OPACITY, fit inside grid bounds. */
+  logoUrl?: string | null;
+};
+
 type FitResult = {
   titlePt: number;
   artistPt: number;
@@ -152,16 +162,73 @@ function drawSongCell(
   }
 }
 
+/**
+ * Load image and rasterize at fixed opacity; size fits maxW×maxH (contain). Returns PNG data URL or null.
+ */
+async function loadLogoPngDataUrlForGrid(
+  url: string,
+  maxW: number,
+  maxH: number,
+): Promise<{ dataUrl: string; drawW: number; drawH: number } | null> {
+  const trimmed = String(url || '').trim();
+  if (!trimmed || typeof window === 'undefined') return null;
+
+  let resolved: string;
+  try {
+    resolved = new URL(trimmed, window.location.href).toString();
+  } catch {
+    return null;
+  }
+
+  let bmp: ImageBitmap | null = null;
+  try {
+    const res = await fetch(resolved, {
+      mode: 'cors',
+      credentials: (() => {
+        try {
+          return new URL(resolved).origin === window.location.origin ? 'include' : 'omit';
+        } catch {
+          return 'omit';
+        }
+      })(),
+    });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    bmp = await createImageBitmap(blob);
+    const scale = Math.min(maxW / bmp.width, maxH / bmp.height, 1);
+    const drawW = Math.max(1, Math.round(bmp.width * scale));
+    const drawH = Math.max(1, Math.round(bmp.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = drawW;
+    canvas.height = drawH;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.clearRect(0, 0, drawW, drawH);
+    ctx.globalAlpha = GRID_LOGO_OPACITY;
+    ctx.drawImage(bmp, 0, 0, drawW, drawH);
+    ctx.globalAlpha = 1;
+    return { dataUrl: canvas.toDataURL('image/png'), drawW, drawH };
+  } catch {
+    return null;
+  } finally {
+    try {
+      bmp?.close();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 const BINGO_LETTERS = ['B', 'I', 'N', 'G', 'O'] as const;
 
 /**
  * Multi-page US Letter PDF — one music bingo card per page, print-ready (light / ink-conscious).
  * Outside the grid: centered title only; column headers B–I–N–G–O above the board.
  */
-export function buildPrintableBingoPdfBlob(
+export async function buildPrintableBingoPdfBlob(
   cards: PrintableCard[],
-  _opts?: { freeSpace?: boolean; subtitle?: string },
-): Blob {
+  opts: PrintablePdfOpts = {},
+): Promise<Blob> {
   const doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -179,6 +246,13 @@ export function buildPrintableBingoPdfBlob(
   const cell = Math.min(availW / 5, availH / 5);
   const gridW = cell * 5;
   const gridX = margin + (availW - gridW) / 2;
+
+  const logoUrl = opts.logoUrl != null && String(opts.logoUrl).trim() ? String(opts.logoUrl).trim() : null;
+  let logoForGrid: { dataUrl: string; drawW: number; drawH: number } | null = null;
+  if (logoUrl && cards.length > 0) {
+    logoForGrid = await loadLogoPngDataUrlForGrid(logoUrl, gridW, gridW);
+  }
+  const drawLogoUnderCells = logoForGrid != null;
 
   for (let i = 0; i < cards.length; i++) {
     if (i > 0) doc.addPage();
@@ -199,6 +273,16 @@ export function buildPrintableBingoPdfBlob(
       doc.text(BINGO_LETTERS[c], cx, bingoBaseline, { align: 'center' });
     }
 
+    if (drawLogoUnderCells && logoForGrid) {
+      const ix = gridX + (gridW - logoForGrid.drawW) / 2;
+      const iy = gridTop + (gridW - logoForGrid.drawH) / 2;
+      try {
+        doc.addImage(logoForGrid.dataUrl, 'PNG', ix, iy, logoForGrid.drawW, logoForGrid.drawH);
+      } catch {
+        /* ignore broken image */
+      }
+    }
+
     doc.setDrawColor(BORDER.r, BORDER.g, BORDER.b);
     doc.setLineWidth(0.4);
 
@@ -210,16 +294,20 @@ export function buildPrintableBingoPdfBlob(
         const { title, subtitle } = cellLabel(sq);
 
         if (sq?.isFreeSpace) {
-          doc.setFillColor(PAGE.r, PAGE.g, PAGE.b);
-          doc.rect(x, y, cell, cell, 'FD');
+          if (!drawLogoUnderCells) {
+            doc.setFillColor(PAGE.r, PAGE.g, PAGE.b);
+            doc.rect(x, y, cell, cell, 'FD');
+          }
           doc.setTextColor(INK.r, INK.g, INK.b);
           doc.setFont('helvetica', 'bold');
           const freePt = Math.min(16, cell * 0.15);
           doc.setFontSize(freePt);
           doc.text('FREE', x + cell / 2, y + cell / 2 + freePt * 0.28, { align: 'center' });
         } else {
-          doc.setFillColor(PAGE.r, PAGE.g, PAGE.b);
-          doc.rect(x, y, cell, cell, 'FD');
+          if (!drawLogoUnderCells) {
+            doc.setFillColor(PAGE.r, PAGE.g, PAGE.b);
+            doc.rect(x, y, cell, cell, 'FD');
+          }
           drawSongCell(doc, x, y, cell, title, subtitle);
         }
 

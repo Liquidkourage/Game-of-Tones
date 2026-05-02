@@ -2445,57 +2445,66 @@ io.on('connection', (socket) => {
   });
 
   socket.on('request-printable-cards', (data = {}) => {
-    try {
-      const roomId = data.roomId;
-      const raw = Number(data.count);
-      const count = Number.isFinite(raw) ? Math.min(200, Math.max(1, Math.floor(raw))) : 30;
-      const room = rooms.get(roomId);
-      if (!room) {
-        socket.emit('printable-cards-error', { message: 'Room not found.' });
-        return;
-      }
-      const player = room.players.get(socket.id);
-      const isCurrentHost = room.host === socket.id || !!(player && player.isHost);
-      if (!isCurrentHost) {
-        socket.emit('printable-cards-error', { message: 'Only the host can export printable cards.' });
-        return;
-      }
-      if (!room.mixFinalized) {
-        socket.emit('printable-cards-error', {
-          message: 'Finalize the mix first so the bingo pool is locked.',
-        });
-        return;
-      }
-      const useFreeSpace = !!room.freeSpaceEnabled;
-      const cards = [];
-      for (let i = 0; i < count; i++) {
-        const chosen25 = pickChosen25ForPrintableCard(room);
-        if (!chosen25) {
+    void (async () => {
+      try {
+        const roomId = data.roomId;
+        const raw = Number(data.count);
+        const count = Number.isFinite(raw) ? Math.min(200, Math.max(1, Math.floor(raw))) : 30;
+        const room = rooms.get(roomId);
+        if (!room) {
+          socket.emit('printable-cards-error', { message: 'Room not found.' });
+          return;
+        }
+        const player = room.players.get(socket.id);
+        const isCurrentHost = room.host === socket.id || !!(player && player.isHost);
+        if (!isCurrentHost) {
+          socket.emit('printable-cards-error', { message: 'Only the host can export printable cards.' });
+          return;
+        }
+        if (!room.mixFinalized) {
           socket.emit('printable-cards-error', {
-            message:
-              'Could not build cards from the current room pool. Try finalizing again or check playlist sizes.',
+            message: 'Finalize the mix first so the bingo pool is locked.',
           });
           return;
         }
-        const card = buildPrintableCardFromChosen(chosen25, useFreeSpace, i);
-        if (!card) {
-          socket.emit('printable-cards-error', { message: 'Card build failed.' });
-          return;
+        ensureRoomOwnerFromHostSocket(room);
+        try {
+          await resolveRoomVenueBranding(room);
+        } catch (e) {
+          console.warn('request-printable-cards resolveRoomVenueBranding:', e?.message || e);
         }
-        cards.push(card);
+        const useFreeSpace = !!room.freeSpaceEnabled;
+        const cards = [];
+        for (let i = 0; i < count; i++) {
+          const chosen25 = pickChosen25ForPrintableCard(room);
+          if (!chosen25) {
+            socket.emit('printable-cards-error', {
+              message:
+                'Could not build cards from the current room pool. Try finalizing again or check playlist sizes.',
+            });
+            return;
+          }
+          const card = buildPrintableCardFromChosen(chosen25, useFreeSpace, i);
+          if (!card) {
+            socket.emit('printable-cards-error', { message: 'Card build failed.' });
+            return;
+          }
+          cards.push(card);
+        }
+        socket.emit('printable-cards-result', {
+          cards,
+          roomId,
+          freeSpace: useFreeSpace,
+          venueBranding: venueBrandingForRoom(room),
+        });
+        routineServerLog(`📄 Exported ${count} printable bingo cards for room ${roomId}`);
+      } catch (e) {
+        console.error('request-printable-cards:', e);
+        socket.emit('printable-cards-error', {
+          message: e && e.message ? String(e.message) : 'Export failed.',
+        });
       }
-      socket.emit('printable-cards-result', {
-        cards,
-        roomId,
-        freeSpace: useFreeSpace,
-      });
-      routineServerLog(`📄 Exported ${count} printable bingo cards for room ${roomId}`);
-    } catch (e) {
-      console.error('request-printable-cards:', e);
-      socket.emit('printable-cards-error', {
-        message: e && e.message ? String(e.message) : 'Export failed.',
-      });
-    }
+    })();
   });
 
   // Set game pattern
