@@ -3345,7 +3345,7 @@ const PublicDisplay: React.FC = () => {
                 flexWrap: 'wrap',
                 gap: 'clamp(20px, 3.5vmin, 48px)',
                 alignItems: 'stretch',
-                justifyContent: 'center',
+                justifyContent: 'flex-start',
                 width: '100%',
                 minWidth: 0,
                 flex: 1,
@@ -3354,18 +3354,7 @@ const PublicDisplay: React.FC = () => {
             >
               {venueBranding &&
               (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine) ? (
-                <div
-                  style={{
-                    flex: '0 1 300px',
-                    maxWidth: 520,
-                    minWidth: 0,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'flex-start',
-                    alignItems: 'center',
-                    alignSelf: 'flex-start',
-                  }}
-                >
+                <div className="public-display-splash-hero-slot">
                   <PublicDisplayVenueBrandingHero branding={venueBranding} marginBottom="0" />
                 </div>
               ) : null}
@@ -3374,7 +3363,7 @@ const PublicDisplay: React.FC = () => {
                   flex:
                     venueBranding &&
                     (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine)
-                      ? '2 1 400px'
+                      ? '1 1 320px'
                       : '1 1 100%',
                   minWidth: 0,
                   maxWidth: '100%',
@@ -3383,6 +3372,8 @@ const PublicDisplay: React.FC = () => {
                   alignItems: 'stretch',
                   alignSelf: 'stretch',
                   minHeight: 0,
+                  position: 'relative',
+                  zIndex: 2,
                 }}
               >
             <div
@@ -3407,6 +3398,7 @@ const PublicDisplay: React.FC = () => {
                   width: '100%',
                   flex: 1,
                   minHeight: 0,
+                  maxHeight: 'min(calc(100svh - 10.5rem), 78vh)',
                   display: 'flex',
                   flexDirection: 'column',
                   padding: 'clamp(8px, 1.2vmin, 18px) clamp(10px, 1.5vmin, 20px)',
@@ -3454,7 +3446,7 @@ const PublicDisplay: React.FC = () => {
                     </div>
                     <div
                       style={{
-                        fontSize: 'clamp(1.2rem, min(3.4vmin, 2.8vh), 2.35rem)',
+                        fontSize: 'clamp(1.35rem, min(4.2vmin, 3.6vh), 3rem)',
                         fontWeight: 800,
                         color: 'rgba(230,240,255,0.94)',
                         letterSpacing: '0.18em',
@@ -3471,12 +3463,12 @@ const PublicDisplay: React.FC = () => {
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'stretch',
-                        gap: 'clamp(4px, 0.85vmin, 10px)',
+                        gap: 'clamp(8px, 1.4vmin, 14px)',
                       }}
                     >
                       <span
                         style={{
-                          fontSize: 'clamp(1.05rem, min(3vmin, 2.5vh), 2.1rem)',
+                          fontSize: 'clamp(1.2rem, min(3.6vmin, 3.2vh), 2.65rem)',
                           fontWeight: 700,
                           color: 'rgba(240,248,255,0.98)',
                           lineHeight: 1.2,
@@ -3516,7 +3508,7 @@ const PublicDisplay: React.FC = () => {
                           lang="en"
                           style={{
                             display: 'inline-block',
-                            fontSize: 'clamp(0.9rem, calc(100cqw / 18), 2.5rem)',
+                            fontSize: 'clamp(1.05rem, calc(100cqw / 12), 3.25rem)',
                             fontWeight: 900,
                             lineHeight: 1.15,
                             textShadow: '0 8px 32px rgba(0,0,0,0.45), 0 0 40px rgba(180,210,255,0.12)',
@@ -3535,13 +3527,13 @@ const PublicDisplay: React.FC = () => {
                     </div>
                     <div
                       style={{
-                        fontSize: 'clamp(1rem, min(3.2vmin, 2.6vh), 2.15rem)',
+                        fontSize: 'clamp(1.15rem, min(3.8vmin, 3.4vh), 2.65rem)',
                         fontWeight: 700,
                         opacity: 0.96,
                         letterSpacing: '0.02em',
                         color: 'rgba(230,240,255,0.98)',
                         lineHeight: 1.25,
-                        marginTop: 'clamp(2px, 0.45vmin, 6px)',
+                        marginTop: 'clamp(4px, 0.65vmin, 10px)',
                         width: '100%',
                       }}
                     >
@@ -3550,7 +3542,7 @@ const PublicDisplay: React.FC = () => {
                     <div
                       className="public-display-splash-join-card__room-code"
                       style={{
-                        fontSize: 'clamp(1.65rem, min(7vmin, 6.5vh), 4.25rem)',
+                        fontSize: 'clamp(2rem, min(8.5vmin, 7.5vh), 5.5rem)',
                         fontWeight: 1000,
                         color: '#00ffb0',
                         textShadow: '0 8px 28px rgba(0,255,170,0.55)',

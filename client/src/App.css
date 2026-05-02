@@ -1581,6 +1581,31 @@ body {
   filter: drop-shadow(0 14px 36px rgba(0, 0, 0, 0.55));
 }
 
+/* Splash: hero column — clip decorative overflow; stays out of join card lane. */
+.public-display-splash-hero-slot {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: min(40vw, 460px);
+  min-width: 0;
+  margin-right: clamp(16px, 2.75vmin, 40px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  isolation: isolate;
+}
+
+.public-display-splash-hero-slot > div {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+.public-display-splash-hero-slot .public-display-venue-logo--hero {
+  max-width: 100%;
+  /* Same cap as splash QR (logo-sized code). */
+  max-height: clamp(160px, min(36vmin, 32svh), 400px);
+}
+
 /* Splash: combined join card — fills join column; side-by-side when wide. */
 .public-display-splash-join-card {
   container-type: inline-size;
@@ -1589,6 +1614,9 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  max-height: min(calc(100svh - 10.5rem), 78vh);
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .public-display-splash-join-card__split {
@@ -1645,7 +1673,7 @@ body {
 }
 
 .public-display-splash-join-card__qr-wrap {
-  width: min(100%, min(36vmin, 30vh), 400px);
+  width: min(100%, min(36vmin, 32svh), 400px);
   max-width: 100%;
   margin-left: auto;
   margin-right: auto;
@@ -1657,7 +1685,7 @@ body {
   display: block;
   width: 100%;
   height: auto;
-  max-height: clamp(160px, min(36vmin, 30vh), 400px);
+  max-height: clamp(160px, min(36vmin, 32svh), 400px);
   aspect-ratio: 1 / 1;
   object-fit: contain;
   border-radius: clamp(10px, 1.6vmin, 16px);
@@ -1667,16 +1695,17 @@ body {
 
 .public-display-splash-join-card__room-code {
   width: 100%;
-  max-width: min(100%, 28rem);
+  max-width: 100%;
   margin-left: auto;
   margin-right: auto;
   margin-top: clamp(4px, 0.6vmin, 10px);
-  padding: clamp(8px, 1.1vmin, 14px) clamp(12px, 1.8vmin, 20px);
+  padding: clamp(10px, 1.4vmin, 20px) clamp(14px, 2.2vmin, 28px);
   border-radius: clamp(12px, 1.8vmin, 18px);
   background: rgba(0, 20, 24, 0.55);
   border: 1px solid rgba(0, 255, 200, 0.22);
   box-sizing: border-box;
   text-align: center;
+  flex: 0 0 auto;
 }
 
 @container splash-join (min-width: 520px) {
@@ -1684,39 +1713,48 @@ body {
     flex-direction: row;
     align-items: stretch;
     gap: clamp(10px, 2vmin, 20px);
+    min-height: 0;
   }
 
   .public-display-splash-join-card__scan {
     flex: 0 1 42%;
-    max-width: min(380px, 48%);
+    max-width: min(400px, 48%);
     min-width: 0;
     justify-content: center;
   }
 
   .public-display-splash-join-card__qr-wrap {
     width: 100%;
-    max-width: min(100%, min(34vmin, 42vh), 400px);
+    max-width: min(100%, min(36vmin, 32svh), 400px);
   }
 
   .public-display-splash-join-card__qr-wrap img {
-    max-height: clamp(180px, min(34vmin, 42vh), 400px);
+    max-height: clamp(160px, min(36vmin, 32svh), 400px);
   }
 
   .public-display-splash-join-card__manual {
     flex: 1 1 0;
     min-width: 0;
-    align-items: flex-start;
+    min-height: 0;
+    align-items: stretch;
     text-align: left;
     border-left: 1px solid rgba(255, 255, 255, 0.12);
-    padding-left: clamp(12px, 2vmin, 22px);
-    justify-content: center;
+    padding: clamp(12px, 2vmin, 26px) clamp(14px, 2.2vmin, 28px) clamp(12px, 2vmin, 26px)
+      clamp(14px, 2.2vmin, 28px);
+    justify-content: space-between;
+  }
+
+  .public-display-splash-join-card__manual:not(.public-display-splash-join-card__manual--solo)
+  .public-display-splash-join-card__eyebrow {
+    font-size: clamp(0.72rem, min(2vmin, 1.8vh), 1rem);
   }
 
   .public-display-splash-join-card__manual--solo {
     border-left: none;
-    padding-left: clamp(8px, 1.2vmin, 16px);
+    padding: clamp(10px, 1.6vmin, 22px);
     align-items: center;
     text-align: center;
+    justify-content: center;
   }
 
   .public-display-splash-join-card__manual .public-display-splash-join-url-scroller {
