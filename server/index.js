@@ -2412,7 +2412,7 @@ io.on('connection', (socket) => {
       let songListVerified = songList;
       try {
         songListVerified = await applyYoutubeCatalogTrackVerification(songList, {
-          log: (...a) => routineServerLog('🎼', ...a),
+          log: (...a) => routineServerLog('[yt-metadata]', ...a),
         });
       } catch (e) {
         routineServerLog('⚠️ YouTube metadata verification failed (using heuristic titles):', e?.message || e);

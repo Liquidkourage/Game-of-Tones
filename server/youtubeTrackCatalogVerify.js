@@ -15,6 +15,7 @@
  * - TEMPO_YT_VERIFY_SEARCH_LIMIT — default 8, max 25
  * - TEMPO_YT_VERIFY_ITUNES_COUNTRY — default us
  * - TEMPO_YT_VERIFY_HTTP_UA — optional
+ * - TEMPO_YT_VERIFY_429_BACKOFF_MS — if iTunes 429 has no Retry-After, wait this long before one retry (default 12000)
  */
 
 const { parseYoutubeVideoTitleForDisplay } = require('./youtubeTrackDisplayParse');
@@ -42,6 +43,26 @@ function getScoreMin() {
   const n = Number(process.env.TEMPO_YT_VERIFY_SCORE_MIN);
   if (Number.isFinite(n) && n > 0 && n <= 1) return n;
   return 0.5;
+}
+
+/** When iTunes omits Retry-After on 429 (ms). Clamped 5s–180s. */
+function default429BackoffMs() {
+  const n = Number(process.env.TEMPO_YT_VERIFY_429_BACKOFF_MS);
+  if (Number.isFinite(n) && n >= 3000) return Math.min(180000, Math.floor(n));
+  return 12000;
+}
+
+/**
+ * @param {Headers} headers
+ * @returns {number | null} ms to wait, or null
+ */
+function parseRetryAfterMs(headers) {
+  if (!headers || typeof headers.get !== 'function') return null;
+  const raw = headers.get('Retry-After') || headers.get('retry-after');
+  if (raw == null || String(raw).trim() === '') return null;
+  const sec = parseInt(String(raw).trim(), 10);
+  if (!Number.isFinite(sec) || sec < 0) return null;
+  return clamp(sec * 1000, 5000, 120000);
 }
 
 function getItunesCountry() {
@@ -151,6 +172,8 @@ async function searchItunesTracks(term, limit) {
   if (r.status === 429) {
     const err = new Error('iTunes rate limited (429)');
     /** @type {any} */ (err).statusCode = 429;
+    const raMs = parseRetryAfterMs(r.headers);
+    if (raMs != null) /** @type {any} */ (err).retryAfterMs = raMs;
     throw err;
   }
   if (!r.ok) {
@@ -257,8 +280,16 @@ async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
         const code = e && /** @type {any} */ (e).statusCode;
         if (code === 429 && attempt < 1) {
           attempt++;
-          log('iTunes 429 — single backoff 12s then retry once');
-          await new Promise((r) => setTimeout(r, 12000));
+          const backoffMs =
+            (e && /** @type {any} */ (e).retryAfterMs) != null
+              ? /** @type {any} */ (e).retryAfterMs
+              : default429BackoffMs();
+          const src =
+            (e && /** @type {any} */ (e).retryAfterMs) != null ? 'Retry-After' : 'default';
+          log(
+            `YouTube metadata: iTunes 429 — waiting ${Math.round(backoffMs / 1000)}s (${src}) then one retry`,
+          );
+          await new Promise((r) => setTimeout(r, backoffMs));
           lastCallAt = Date.now();
           continue;
         }
