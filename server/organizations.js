@@ -307,16 +307,40 @@ async function patchOrganizationVenueSettings(db, orgId, patch) {
 async function getVenueBrandingForHostUserId(db, userId) {
   if (!db || userId == null) return null;
   await ensureOrganizationsTable(db);
+  const uid = Number(userId);
+  if (!Number.isFinite(uid)) return null;
   const r = await db.query(
-    `SELECT o.venue_settings
+    `SELECT u.organization_id AS org_id, o.venue_settings
      FROM users u
-     JOIN organizations o ON o.id = u.organization_id
+     LEFT JOIN organizations o ON o.id = u.organization_id
      WHERE u.id = $1`,
-    [userId]
+    [uid]
   );
-  if (r.rows.length === 0) return null;
-  const merged = sanitizeVenueSettings(r.rows[0].venue_settings);
-  return venueBrandingPayloadFromSettings(merged);
+  if (r.rows.length === 0) {
+    console.warn(`[venue-branding] no users row for host user id ${uid} (JWT sub must match users.id)`);
+    return null;
+  }
+  const { org_id: orgId, venue_settings: vs } = r.rows[0];
+  if (orgId == null) {
+    console.warn(
+      `[venue-branding] host user id ${uid} has organization_id NULL — in Admin assign this user to organization id with your logo (e.g. 1)`
+    );
+    return null;
+  }
+  if (vs == null) {
+    console.warn(
+      `[venue-branding] host user id ${uid} points to organization ${orgId} but venue_settings is missing (data issue)`
+    );
+    return null;
+  }
+  const merged = sanitizeVenueSettings(vs);
+  const payload = venueBrandingPayloadFromSettings(merged);
+  if (!payload) {
+    console.warn(
+      `[venue-branding] organization ${orgId} (user ${uid}) has no displayable fields after sanitize — check logoUrl is https or /path`
+    );
+  }
+  return payload;
 }
 
 module.exports = {
