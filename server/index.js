@@ -2424,6 +2424,60 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('request-printable-cards', (data = {}) => {
+    try {
+      const roomId = data.roomId;
+      const raw = Number(data.count);
+      const count = Number.isFinite(raw) ? Math.min(200, Math.max(1, Math.floor(raw))) : 30;
+      const room = rooms.get(roomId);
+      if (!room) {
+        socket.emit('printable-cards-error', { message: 'Room not found.' });
+        return;
+      }
+      const player = room.players.get(socket.id);
+      const isCurrentHost = room.host === socket.id || !!(player && player.isHost);
+      if (!isCurrentHost) {
+        socket.emit('printable-cards-error', { message: 'Only the host can export printable cards.' });
+        return;
+      }
+      if (!room.mixFinalized) {
+        socket.emit('printable-cards-error', {
+          message: 'Finalize the mix first so the bingo pool is locked.',
+        });
+        return;
+      }
+      const useFreeSpace = !!room.freeSpaceEnabled;
+      const cards = [];
+      for (let i = 0; i < count; i++) {
+        const chosen25 = pickChosen25ForPrintableCard(room);
+        if (!chosen25) {
+          socket.emit('printable-cards-error', {
+            message:
+              'Could not build cards from the current room pool. Try finalizing again or check playlist sizes.',
+          });
+          return;
+        }
+        const card = buildPrintableCardFromChosen(chosen25, useFreeSpace, i);
+        if (!card) {
+          socket.emit('printable-cards-error', { message: 'Card build failed.' });
+          return;
+        }
+        cards.push(card);
+      }
+      socket.emit('printable-cards-result', {
+        cards,
+        roomId,
+        freeSpace: useFreeSpace,
+      });
+      routineServerLog(`📄 Exported ${count} printable bingo cards for room ${roomId}`);
+    } catch (e) {
+      console.error('request-printable-cards:', e);
+      socket.emit('printable-cards-error', {
+        message: e && e.message ? String(e.message) : 'Export failed.',
+      });
+    }
+  });
+
   // Set game pattern
   socket.on('set-pattern', (data = {}) => {
     try {
@@ -5146,6 +5200,130 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
     console.error('❌ Error generating bingo cards:', error);
     return false;
   }
+}
+
+/**
+ * Pick 24 or 25 songs for one extra printable card using the same geometry as generateBingoCards,
+ * from pools stored on the room at finalize time (1x75, 5x15 columns, or canonical fallback pool).
+ */
+function pickChosen25ForPrintableCard(room) {
+  const useFreeSpace = !!room.freeSpaceEnabled;
+  const songsNeededPerCard = useFreeSpace ? 24 : 25;
+  const map = buildCanonicalSongMapFromRoom(room);
+
+  const mode5x15 =
+    Array.isArray(room.fiveByFifteenColumnsIds) &&
+    room.fiveByFifteenColumnsIds.length === 5 &&
+    room.fiveByFifteenColumnsIds.every((col) => Array.isArray(col) && col.length >= 15);
+  const mode1x75 =
+    Array.isArray(room.oneBySeventyFivePool) && room.oneBySeventyFivePool.length >= songsNeededPerCard;
+
+  let chosen25 = [];
+
+  if (mode5x15) {
+    const meta =
+      room.fiveByFifteenMeta && typeof room.fiveByFifteenMeta === 'object' ? room.fiveByFifteenMeta : {};
+    const perListGloballyUnique = room.fiveByFifteenColumnsIds.map((colIds) =>
+      colIds
+        .map((id) => {
+          let s = map.get(id);
+          if (!s && meta[id]) {
+            s = {
+              id,
+              name: meta[id].name || '',
+              artist: meta[id].artist || '',
+            };
+          }
+          return s;
+        })
+        .filter(Boolean)
+    );
+    if (perListGloballyUnique.some((pl) => pl.length < 15)) return null;
+
+    const used = new Set();
+    const columns = [];
+    let ok = true;
+    for (let col = 0; col < 5; col++) {
+      const need = useFreeSpace && col === 2 ? 4 : 5;
+      const pool = properShuffle(perListGloballyUnique[col]);
+      const colPicks = [];
+      for (const s of pool) {
+        if (!used.has(s.id)) {
+          colPicks.push(s);
+          used.add(s.id);
+        }
+        if (colPicks.length === need) break;
+      }
+      if (colPicks.length < need) {
+        ok = false;
+        break;
+      }
+      columns.push(colPicks);
+    }
+    if (!ok) return null;
+
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 5; col++) {
+        if (useFreeSpace && row === 2 && col === 2) continue;
+        if (useFreeSpace && col === 2) {
+          const idxInCol = row < 2 ? row : row - 1;
+          chosen25.push(columns[2][idxInCol]);
+        } else {
+          chosen25.push(columns[col][row]);
+        }
+      }
+    }
+  } else if (mode1x75) {
+    const base = room.oneBySeventyFivePool
+      .map((e) => map.get(typeof e === 'string' ? e : e.id))
+      .filter(Boolean);
+    if (base.length < songsNeededPerCard) return null;
+    chosen25 = properShuffle(base).slice(0, songsNeededPerCard);
+  } else {
+    const pool = Array.from(map.values());
+    if (pool.length < songsNeededPerCard) return null;
+    chosen25 = properShuffle(pool).slice(0, songsNeededPerCard);
+  }
+
+  if (chosen25.length !== songsNeededPerCard) return null;
+  return chosen25;
+}
+
+function buildPrintableCardFromChosen(chosen25, useFreeSpace, index) {
+  const card = {
+    id: `print-${index}-${Date.now()}`,
+    printableIndex: index + 1,
+    squares: [],
+  };
+  let idx = 0;
+  for (let row = 0; row < 5; row++) {
+    for (let col = 0; col < 5; col++) {
+      if (useFreeSpace && row === 2 && col === 2) {
+        card.squares.push({
+          position: '2-2',
+          songId: FREE_SPACE_SONG_ID,
+          songName: 'FREE',
+          customSongName: 'FREE',
+          artistName: '',
+          marked: false,
+          isFreeSpace: true,
+        });
+        continue;
+      }
+      const s = chosen25[idx++];
+      if (!s || !s.id) return null;
+      card.squares.push({
+        position: `${row}-${col}`,
+        songId: s.id,
+        songName: s.name,
+        customSongName: customSongTitles.get(s.id) || cleanSongTitle(s.name),
+        artistName: s.artist || '',
+        marked: false,
+      });
+    }
+  }
+  if (card.squares.length !== 25) return null;
+  return card;
 }
 
 /** Merge playback/finalized caches into full song rows for late-join cards. */

@@ -39,6 +39,7 @@ import {
   Check,
   Sparkles,
   Radio,
+  Printer,
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL, ENABLE_YOUTUBE_MUSIC } from '../config';
@@ -53,6 +54,7 @@ import { HostYoutubeIframePlayer, primeYoutubeHostPlaybackAudioUnlock } from './
 import RoundPlanner from './RoundPlanner';
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
+import { buildPrintableBingoPdfBlob } from '../utils/printableBingoPdf';
 import {
   normalizePublicDisplayTitleRevealMode,
   type PublicDisplayTitleRevealMode,
@@ -358,6 +360,9 @@ const HostView: React.FC = () => {
   const [pendingVerification, setPendingVerification] = useState<any>(null);
   const [gamePaused, setGamePaused] = useState(false);
   const [mixFinalized, setMixFinalized] = useState(false);
+  /** Printable PDF export (physical daubers) — count capped server-side at 200. */
+  const [printableCardCount, setPrintableCardCount] = useState(30);
+  const [printablePdfLoading, setPrintablePdfLoading] = useState(false);
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
   /** Server served GET /v1/me/playlists from last successful DB copy (Spotify 429 or TEMPO quarantine). */
   const [spotifyListCacheInfo, setSpotifyListCacheInfo] = useState<string | null>(null);
@@ -2710,6 +2715,63 @@ const HostView: React.FC = () => {
       finalizeMixInFlightRef.current = false;
     }
   };
+
+  const handleDownloadPrintablePdf = useCallback(() => {
+    if (!socket || !roomId || !mixFinalized) return;
+    const count = Math.min(200, Math.max(1, Math.floor(Number(printableCardCount)) || 30));
+    setPrintablePdfLoading(true);
+
+    let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const cleanup = () => {
+      socket.off('printable-cards-result', onOk);
+      socket.off('printable-cards-error', onErr);
+      if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
+    };
+
+    const onOk = (payload: any) => {
+      cleanup();
+      try {
+        const cards = Array.isArray(payload?.cards) ? payload.cards : [];
+        if (cards.length === 0) {
+          window.alert('No cards returned from server.');
+          return;
+        }
+        const blob = buildPrintableBingoPdfBlob(cards, {
+          freeSpace: !!payload?.freeSpace,
+          subtitle: `Room ${roomId}`,
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tempo-bingo-cards-${roomId}-${Date.now()}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error(e);
+        window.alert('Could not build PDF. Try fewer cards or reload and finalize again.');
+      } finally {
+        setPrintablePdfLoading(false);
+      }
+    };
+
+    const onErr = (payload: any) => {
+      cleanup();
+      window.alert(typeof payload?.message === 'string' ? payload.message : 'Could not generate printable cards.');
+      setPrintablePdfLoading(false);
+    };
+
+    timeoutId = globalThis.setTimeout(() => {
+      cleanup();
+      setPrintablePdfLoading(false);
+      window.alert('Timed out waiting for printable cards. Try again.');
+    }, 90000);
+
+    socket.on('printable-cards-result', onOk);
+    socket.on('printable-cards-error', onErr);
+    socket.emit('request-printable-cards', { roomId, count });
+  }, [socket, roomId, mixFinalized, printableCardCount]);
 
   const startGame = async () => {
     if (mixPlaylistSelection.length === 0) {
@@ -6196,6 +6258,58 @@ const HostView: React.FC = () => {
                       Player cards refresh automatically when the game starts, players join, songs play, or bingo verification opens.
                     </span>
                   </div>
+                 </div>
+               )}
+               {mixFinalized && (
+                 <div
+                   style={{
+                     marginTop: 18,
+                     padding: '14px 16px',
+                     borderRadius: 12,
+                     border: '1px solid rgba(255, 255, 255, 0.12)',
+                     background: 'rgba(255, 255, 255, 0.04)',
+                     maxWidth: 560,
+                   }}
+                 >
+                   <div style={{ fontWeight: 800, fontSize: '0.95rem', marginBottom: 8, color: '#e8ecf1' }}>
+                     Printable cards (daubers)
+                   </div>
+                   <p style={{ margin: '0 0 12px', fontSize: '0.8rem', color: '#9aa5b1', lineHeight: 1.45 }}>
+                     Generate random cards from your <strong style={{ color: '#c5cdd6' }}>finalized</strong> bingo pool and
+                     download a PDF to print before the event. Cards match the same rules as digital boards (5×15 columns,
+                     1×75 pool, or merged pool).
+                   </p>
+                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                     <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: '#c8d0d8' }}>
+                       Count
+                       <input
+                         type="number"
+                         min={1}
+                         max={200}
+                         value={printableCardCount}
+                         onChange={(e) => setPrintableCardCount(Number(e.target.value))}
+                         disabled={printablePdfLoading}
+                         style={{
+                           width: 72,
+                           padding: '6px 8px',
+                           borderRadius: 8,
+                           border: '1px solid rgba(255,255,255,0.15)',
+                           background: 'rgba(0,0,0,0.25)',
+                           color: '#fff',
+                         }}
+                       />
+                     </label>
+                     <button
+                       type="button"
+                       className="btn-secondary"
+                       disabled={printablePdfLoading}
+                       onClick={handleDownloadPrintablePdf}
+                       style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                     >
+                       <Printer className="w-4 h-4" aria-hidden />
+                       {printablePdfLoading ? 'Building PDF…' : 'Download PDF'}
+                     </button>
+                   </div>
                  </div>
                )}
              </div>
