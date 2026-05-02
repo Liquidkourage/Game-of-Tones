@@ -45,12 +45,12 @@ const TITLE_LINE_FACTOR = 1.14;
 const ARTIST_LINE_FACTOR = 1.12;
 
 /** Watermark strength for venue logo on the bingo grid (baked in canvas for reliable PDF output). */
-const GRID_LOGO_OPACITY = 0.2;
+const GRID_LOGO_OPACITY = 0.1;
 
 export type PrintablePdfOpts = {
   freeSpace?: boolean;
   subtitle?: string;
-  /** Venue logo URL (absolute or path) — centered on the 5×5 grid at GRID_LOGO_OPACITY, fit inside grid bounds. */
+  /** Venue logo URL (absolute or path) — centered on the 5×5 grid at ~10% opacity, fit inside grid bounds. */
   logoUrl?: string | null;
 };
 
