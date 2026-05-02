@@ -302,6 +302,9 @@ helmetCspDirectives['img-src'] = [
   ...(helmetCspDirectives['img-src'] || ["'self'"]),
   'https://i.ytimg.com',
   'https://yt3.ggpht.com',
+  // Venue / corporate branding: hosts paste arbitrary logo URLs in Admin
+  'https:',
+  'data:',
 ];
 
 app.use(
