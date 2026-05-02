@@ -1596,7 +1596,7 @@ body {
   justify-content: center;
   min-width: 0;
   min-height: 0;
-  padding: clamp(8px, 1.2vmin, 16px);
+  padding: clamp(5px, 0.85vmin, 11px);
   border-radius: clamp(14px, 2vmin, 20px);
   background: rgba(0, 0, 0, 0.22);
   box-shadow:
@@ -1633,7 +1633,7 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: clamp(10px, 1.5vmin, 20px);
+  gap: clamp(8px, 1.2vmin, 16px);
   align-items: stretch;
   min-width: 0;
 }
@@ -1652,8 +1652,8 @@ body {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: clamp(4px, 0.65vmin, 10px);
-  padding: clamp(6px, 1vmin, 12px) clamp(8px, 1.2vmin, 12px);
+  gap: clamp(3px, 0.5vmin, 8px);
+  padding: clamp(4px, 0.75vmin, 9px) clamp(6px, 0.95vmin, 10px);
   border-radius: clamp(14px, 2vmin, 20px);
   background: rgba(0, 0, 0, 0.24);
   box-shadow:
@@ -1670,8 +1670,8 @@ body {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: clamp(5px, 0.95vmin, 11px);
-  padding: clamp(8px, 1.2vmin, 16px) clamp(10px, 1.4vmin, 16px);
+  gap: clamp(4px, 0.75vmin, 9px);
+  padding: clamp(6px, 0.95vmin, 12px) clamp(8px, 1.1vmin, 12px);
   border-radius: clamp(14px, 2vmin, 20px);
   background: rgba(0, 0, 0, 0.2);
   box-shadow:
@@ -1714,8 +1714,8 @@ body {
   max-width: 100%;
   margin-left: auto;
   margin-right: auto;
-  margin-top: clamp(4px, 0.6vmin, 10px);
-  padding: clamp(10px, 1.4vmin, 20px) clamp(14px, 2.2vmin, 28px);
+  margin-top: clamp(3px, 0.45vmin, 7px);
+  padding: clamp(8px, 1.1vmin, 14px) clamp(10px, 1.65vmin, 20px);
   border-radius: clamp(12px, 1.8vmin, 18px);
   background: rgba(0, 20, 24, 0.55);
   border: 1px solid rgba(0, 255, 200, 0.22);
@@ -1729,7 +1729,7 @@ body {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: stretch;
-    gap: clamp(12px, 2vmin, 22px);
+    gap: clamp(8px, 1.5vmin, 16px);
     min-height: 0;
   }
 
@@ -1756,7 +1756,7 @@ body {
     justify-content: space-evenly;
     flex: unset;
     min-height: 0;
-    padding: clamp(12px, 2vmin, 26px) clamp(14px, 2.2vmin, 28px);
+    padding: clamp(8px, 1.45vmin, 18px) clamp(10px, 1.65vmin, 20px);
   }
 
   .public-display-splash-join-card__split--triple
@@ -1787,7 +1787,7 @@ body {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: stretch;
-    gap: clamp(12px, 2vmin, 22px);
+    gap: clamp(8px, 1.5vmin, 16px);
     min-height: 0;
   }
 
@@ -1809,7 +1809,7 @@ body {
     ) {
     flex-direction: row;
     align-items: stretch;
-    gap: clamp(10px, 2vmin, 20px);
+    gap: clamp(8px, 1.5vmin, 16px);
     min-height: 0;
   }
 
@@ -1853,8 +1853,8 @@ body {
     align-items: center;
     text-align: center;
     border-left: 1px solid rgba(255, 255, 255, 0.12);
-    padding: clamp(12px, 2vmin, 26px) clamp(14px, 2.2vmin, 28px) clamp(12px, 2vmin, 26px)
-      clamp(14px, 2.2vmin, 28px);
+    padding: clamp(8px, 1.45vmin, 18px) clamp(10px, 1.65vmin, 20px) clamp(8px, 1.45vmin, 18px)
+      clamp(10px, 1.65vmin, 20px);
     justify-content: space-between;
     gap: clamp(6px, 1vmin, 14px);
   }
@@ -1871,7 +1871,7 @@ body {
 
   .public-display-splash-join-card__manual--solo {
     border-left: none;
-    padding: clamp(10px, 1.6vmin, 22px);
+    padding: clamp(8px, 1.2vmin, 16px);
     align-items: center;
     text-align: center;
     justify-content: center;

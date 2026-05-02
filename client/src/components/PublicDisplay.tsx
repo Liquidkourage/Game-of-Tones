@@ -3488,7 +3488,7 @@ const PublicDisplay: React.FC = () => {
                   display: 'flex',
                   flexDirection: 'column',
                   overflow: 'hidden',
-                  padding: 'clamp(8px, 1.2vmin, 18px) clamp(10px, 1.5vmin, 20px)',
+                  padding: 'clamp(6px, 0.95vmin, 14px) clamp(8px, 1.2vmin, 16px)',
                   borderRadius: 'clamp(18px, 2.5vmin, 26px)',
                   background:
                     'linear-gradient(165deg, rgba(0,255,180,0.11) 0%, rgba(20,38,55,0.52) 45%, rgba(130,100,255,0.14) 100%)',
@@ -3593,9 +3593,9 @@ const PublicDisplay: React.FC = () => {
                           overflowX: 'auto',
                           overflowY: 'hidden',
                           WebkitOverflowScrolling: 'touch',
-                          paddingLeft: 'clamp(4px, 1vmin, 12px)',
-                          paddingRight: 'clamp(4px, 1vmin, 12px)',
-                          paddingBottom: 6,
+                          paddingLeft: 'clamp(3px, 0.75vmin, 9px)',
+                          paddingRight: 'clamp(3px, 0.75vmin, 9px)',
+                          paddingBottom: 4,
                           scrollbarGutter: 'stable',
                           touchAction: 'pan-x',
                         }}
