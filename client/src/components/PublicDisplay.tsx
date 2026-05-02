@@ -108,6 +108,8 @@ function PublicDisplayVenueBrandingHero({
           src={branding.logoUrl}
           alt={branding.eventTitle || 'Venue'}
           className="public-display-venue-logo public-display-venue-logo--hero"
+          decoding="async"
+          fetchPriority="high"
         />
       </div>
     );
@@ -178,6 +180,8 @@ function PublicDisplayVenueBrandingHero({
           src={branding.logoUrl}
           alt={branding.eventTitle || 'Venue'}
           className="public-display-venue-logo public-display-venue-logo--hero"
+          decoding="async"
+          fetchPriority="high"
           style={
             compact
               ? {
@@ -294,6 +298,20 @@ const PublicDisplay: React.FC = () => {
       );
     };
   }, [venueBranding]);
+
+  /** Start fetching the venue logo as soon as we know the URL (socket delivers branding before hero mounts). */
+  useEffect(() => {
+    const url = venueBranding?.logoUrl?.trim();
+    if (!url) return;
+    const link = document.createElement('link');
+    link.rel = 'preload';
+    link.as = 'image';
+    link.href = url;
+    document.head.appendChild(link);
+    return () => {
+      link.remove();
+    };
+  }, [venueBranding?.logoUrl]);
 
   /** Same tab’s origin — correct for QR and “go to this site” when hosted on a licensee domain. */
   const playerJoinOrigin = useMemo(
@@ -3526,7 +3544,7 @@ const PublicDisplay: React.FC = () => {
                       <div className="public-display-splash-join-card__qr-wrap">
                         <img
                           alt="Join QR"
-                          src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent(playerJoinUrl)}`}
+                          src={`${API_BASE || ''}/api/qr?size=960&data=${encodeURIComponent(playerJoinUrl)}`}
                         />
                       </div>
                     </div>
@@ -4160,7 +4178,7 @@ const PublicDisplay: React.FC = () => {
                         borderRadius: 8, 
                         border: '1px solid rgba(255,255,255,0.15)' 
                       }}
-                      src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent(playerJoinUrl)}`}
+                      src={`${API_BASE || ''}/api/qr?size=960&data=${encodeURIComponent(playerJoinUrl)}`}
                     />
                     <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#ddd', lineHeight: 1 }}>Scan to join</div>
                 </div>
@@ -4179,7 +4197,12 @@ const PublicDisplay: React.FC = () => {
             >
               {venueBranding?.logoUrl && !showSplash && !showRules ? (
                 <div className="public-display-venue-watermark" aria-hidden>
-                  <img src={venueBranding.logoUrl} alt="" />
+                  <img
+                    src={venueBranding.logoUrl}
+                    alt=""
+                    decoding="async"
+                    fetchPriority="low"
+                  />
                 </div>
               ) : null}
               <div

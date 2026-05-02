@@ -1607,7 +1607,7 @@ body {
 .public-display-splash-join-card__logo-tile .public-display-venue-logo--hero {
   max-width: 100%;
   object-fit: contain;
-  max-height: clamp(180px, min(44vmin, 38svh), 560px);
+  max-height: clamp(204px, min(50vmin, 44svh), 640px);
 }
 
 /* Splash: combined join card — fills join column; side-by-side when wide. */
@@ -1684,7 +1684,7 @@ body {
 
 .public-display-splash-join-card__qr-wrap {
   width: 100%;
-  max-width: min(100%, min(40vmin, 36svh), 440px);
+  max-width: min(100%, min(46vmin, 42svh), 520px);
   margin-left: auto;
   margin-right: auto;
   padding: 0;
@@ -1701,7 +1701,7 @@ body {
   width: 100%;
   max-width: 100%;
   height: auto;
-  max-height: clamp(176px, min(40vmin, 36svh), 440px);
+  max-height: clamp(200px, min(46vmin, 42svh), 520px);
   aspect-ratio: 1 / 1;
   object-fit: contain;
   border-radius: clamp(10px, 1.6vmin, 16px);
@@ -1741,13 +1741,13 @@ body {
   }
 
   .public-display-splash-join-card__split--triple .public-display-splash-join-card__qr-wrap {
-    max-width: min(100%, min(42vmin, 70cqh), 500px);
+    max-width: min(100%, min(48vmin, 80cqh), 580px);
   }
 
   .public-display-splash-join-card__split--triple .public-display-splash-join-card__qr-wrap img {
     max-height: min(
-      clamp(190px, min(40vmin, 34svh), 520px),
-      70cqh
+      clamp(218px, min(46vmin, 40svh), 600px),
+      80cqh
     );
   }
 
@@ -1775,8 +1775,8 @@ body {
 
   .public-display-splash-join-card__split--triple .public-display-splash-join-card__logo-tile .public-display-venue-logo--hero {
     max-height: min(
-      clamp(190px, min(40vmin, 34svh), 520px),
-      70cqh
+      clamp(218px, min(46vmin, 40svh), 600px),
+      80cqh
     );
     max-width: 100%;
   }
@@ -1797,8 +1797,8 @@ body {
 
   .public-display-splash-join-card__split--hero-pair .public-display-splash-join-card__logo-tile .public-display-venue-logo--hero {
     max-height: min(
-      clamp(200px, min(42vmin, 36svh), 540px),
-      72cqh
+      clamp(226px, min(48vmin, 42svh), 620px),
+      82cqh
     );
   }
 }
@@ -1829,7 +1829,7 @@ body {
     )
     .public-display-splash-join-card__qr-wrap {
     width: 100%;
-    max-width: min(100%, min(48vmin, 68cqh), 560px);
+    max-width: min(100%, min(54vmin, 78cqh), 640px);
   }
 
   .public-display-splash-join-card__split:not(.public-display-splash-join-card__split--triple):not(
@@ -1838,8 +1838,8 @@ body {
     .public-display-splash-join-card__qr-wrap
     img {
     max-height: min(
-      clamp(200px, min(44vmin, 38svh), 560px),
-      72cqh
+      clamp(226px, min(50vmin, 44svh), 640px),
+      82cqh
     );
   }
 
