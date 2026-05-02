@@ -13,6 +13,7 @@ const path = require('path');
 const hostAuth = require('./hostAuth');
 const usersStore = require('./users');
 const organizationsStore = require('./organizations');
+const venueLogoCache = require('./venueLogoCache');
 const credentialCrypto = require('./credentialCrypto');
 const spotifyPipelineLog = require('./spotifyPipelineLog');
 const catalogSpotify = require('./catalogSpotify');
@@ -332,6 +333,7 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 app.use(express.static('public'));
+venueLogoCache.registerVenueLogoRoutes(app);
 
 // Note: production static serving is registered after API routes below
 
@@ -7682,7 +7684,17 @@ async function resolveRoomVenueBranding(room) {
     room.venueBranding = null;
     return;
   }
-  room.venueBranding = await organizationsStore.getVenueBrandingForHostUserId(db, uid);
+  const { branding, orgId } = await organizationsStore.getVenueBrandingContextForHostUserId(db, uid);
+  let b = branding;
+  if (b && b.logoUrl && orgId != null) {
+    try {
+      const local = await venueLogoCache.mirroredPublicPathOrNull(b.logoUrl, orgId);
+      if (local) b = { ...b, logoUrl: local };
+    } catch (e) {
+      console.warn('[venue-logo-cache] mirror:', e?.message || e);
+    }
+  }
+  room.venueBranding = b;
 }
 
 function venueBrandingForRoom(room) {

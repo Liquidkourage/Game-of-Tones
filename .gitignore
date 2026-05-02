@@ -38,3 +38,6 @@ client/.env.local
 server/spotify_tokens.json
 server/spotify_device.json
 
+# Mirrored venue logos (on-disk cache; path overridable via TEMPO_VENUE_LOGO_DIR)
+data/venue-logos/
+

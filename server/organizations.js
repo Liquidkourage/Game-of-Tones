@@ -304,11 +304,11 @@ async function patchOrganizationVenueSettings(db, orgId, patch) {
   return merged;
 }
 
-async function getVenueBrandingForHostUserId(db, userId) {
-  if (!db || userId == null) return null;
+async function getVenueBrandingContextForHostUserId(db, userId) {
+  if (!db || userId == null) return { branding: null, orgId: null };
   await ensureOrganizationsTable(db);
   const uid = Number(userId);
-  if (!Number.isFinite(uid)) return null;
+  if (!Number.isFinite(uid)) return { branding: null, orgId: null };
   const r = await db.query(
     `SELECT u.organization_id AS org_id, o.venue_settings
      FROM users u
@@ -318,20 +318,20 @@ async function getVenueBrandingForHostUserId(db, userId) {
   );
   if (r.rows.length === 0) {
     console.warn(`[venue-branding] no users row for host user id ${uid} (JWT sub must match users.id)`);
-    return null;
+    return { branding: null, orgId: null };
   }
   const { org_id: orgId, venue_settings: vs } = r.rows[0];
   if (orgId == null) {
     console.warn(
       `[venue-branding] host user id ${uid} has organization_id NULL — in Admin assign this user to organization id with your logo (e.g. 1)`
     );
-    return null;
+    return { branding: null, orgId: null };
   }
   if (vs == null) {
     console.warn(
       `[venue-branding] host user id ${uid} points to organization ${orgId} but venue_settings is missing (data issue)`
     );
-    return null;
+    return { branding: null, orgId: null };
   }
   const merged = sanitizeVenueSettings(vs);
   const payload = venueBrandingPayloadFromSettings(merged);
@@ -340,7 +340,12 @@ async function getVenueBrandingForHostUserId(db, userId) {
       `[venue-branding] organization ${orgId} (user ${uid}) has no displayable fields after sanitize — check logoUrl is https or /path`
     );
   }
-  return payload;
+  return { branding: payload || null, orgId };
+}
+
+async function getVenueBrandingForHostUserId(db, userId) {
+  const { branding } = await getVenueBrandingContextForHostUserId(db, userId);
+  return branding;
 }
 
 module.exports = {
@@ -353,5 +358,6 @@ module.exports = {
   setUserOrganizationId,
   getOrganizationById,
   patchOrganizationVenueSettings,
+  getVenueBrandingContextForHostUserId,
   getVenueBrandingForHostUserId,
 };
