@@ -1581,51 +1581,33 @@ body {
   filter: drop-shadow(0 14px 36px rgba(0, 0, 0, 0.55));
 }
 
-/* Splash: hero + join row — grid keeps one row on wall displays (flex-wrap was stacking hero alone). */
+/* Splash: single full-width row; join card may contain QR | web | logo (3-col). */
 .public-display-splash-bottom {
   display: grid;
   align-items: stretch;
   grid-template-columns: minmax(0, 1fr);
 }
 
-/* Wide join track uses leftover horizontal space (card grows right on large screens). */
-.public-display-splash-bottom--with-hero {
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 2.35fr);
-}
-
-@media (max-width: 780px) {
-  .public-display-splash-bottom--with-hero {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-/* Hero column fills grid’s left gutter; logo stack is centered in that full width + row height. */
-.public-display-splash-hero-slot {
-  min-width: 0;
-  width: 100%;
-  justify-self: stretch;
-  overflow: hidden;
+/* Third-column logo tile (matches scan/manual panels). */
+.public-display-splash-join-card__logo-tile {
   display: flex;
   flex-direction: column;
-  min-height: 0;
   align-items: stretch;
-  justify-content: flex-start;
-  isolation: isolate;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  padding: clamp(8px, 1.2vmin, 16px);
+  border-radius: clamp(14px, 2vmin, 20px);
+  background: rgba(0, 0, 0, 0.22);
+  box-shadow:
+    inset 0 0 0 1px rgba(100, 200, 255, 0.16),
+    0 10px 28px rgba(0, 0, 0, 0.16);
 }
 
-.public-display-splash-bottom--with-hero .public-display-splash-hero-slot {
-  max-width: none;
-}
-
-.public-display-splash-hero-slot > div {
-  max-width: 100% !important;
-  width: 100% !important;
-}
-
-.public-display-splash-hero-slot .public-display-venue-logo--hero {
+.public-display-splash-join-card__logo-tile .public-display-venue-logo--hero {
   max-width: 100%;
-  /* Large on wall displays; stay roughly in family with splash QR. */
-  max-height: clamp(240px, min(52vmin, 48svh), 720px);
+  object-fit: contain;
+  max-height: clamp(180px, min(44vmin, 38svh), 560px);
 }
 
 /* Splash: combined join card — fills join column; side-by-side when wide. */
@@ -1639,7 +1621,11 @@ body {
   flex-direction: column;
   max-height: min(calc(100svh - 10.5rem), 78vh);
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: hidden;
+}
+
+.public-display-splash-join-card--with-logo-tile {
+  overflow-y: hidden;
 }
 
 .public-display-splash-join-card__split {
@@ -1738,15 +1724,99 @@ body {
   flex: 0 0 auto;
 }
 
+@container splash-join (min-width: 900px) {
+  .public-display-splash-join-card__split--triple {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+    gap: clamp(12px, 2vmin, 22px);
+    min-height: 0;
+  }
+
+  .public-display-splash-join-card__split--triple .public-display-splash-join-card__scan {
+    flex: unset;
+    min-width: 0;
+    max-width: none;
+    justify-content: flex-start;
+  }
+
+  .public-display-splash-join-card__split--triple .public-display-splash-join-card__qr-wrap {
+    max-width: min(100%, min(42vmin, 70cqh), 500px);
+  }
+
+  .public-display-splash-join-card__split--triple .public-display-splash-join-card__qr-wrap img {
+    max-height: min(
+      clamp(190px, min(40vmin, 34svh), 520px),
+      70cqh
+    );
+  }
+
+  .public-display-splash-join-card__split--triple .public-display-splash-join-card__manual {
+    border-left: none;
+    justify-content: space-evenly;
+    flex: unset;
+    min-height: 0;
+    padding: clamp(12px, 2vmin, 26px) clamp(14px, 2.2vmin, 28px);
+  }
+
+  .public-display-splash-join-card__split--triple
+    .public-display-splash-join-card__manual:not(.public-display-splash-join-card__manual--solo)
+    .public-display-splash-join-card__eyebrow {
+    font-size: clamp(1.48rem, min(4.3vmin, 3.65vh), 1.98rem);
+    align-self: center;
+    width: 100%;
+  }
+
+  .public-display-splash-join-card__split--triple .public-display-splash-join-card__logo-tile {
+    min-height: 0;
+    min-width: 0;
+    align-self: stretch;
+  }
+
+  .public-display-splash-join-card__split--triple .public-display-splash-join-card__logo-tile .public-display-venue-logo--hero {
+    max-height: min(
+      clamp(190px, min(40vmin, 34svh), 520px),
+      70cqh
+    );
+    max-width: 100%;
+  }
+}
+
+@container splash-join (min-width: 720px) {
+  .public-display-splash-join-card__split--hero-pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: clamp(12px, 2vmin, 22px);
+    min-height: 0;
+  }
+
+  .public-display-splash-join-card__split--hero-pair .public-display-splash-join-card__manual--solo {
+    justify-content: space-evenly;
+  }
+
+  .public-display-splash-join-card__split--hero-pair .public-display-splash-join-card__logo-tile .public-display-venue-logo--hero {
+    max-height: min(
+      clamp(200px, min(42vmin, 36svh), 540px),
+      72cqh
+    );
+  }
+}
+
 @container splash-join (min-width: 520px) {
-  .public-display-splash-join-card__split {
+  .public-display-splash-join-card__split:not(.public-display-splash-join-card__split--triple):not(
+      .public-display-splash-join-card__split--hero-pair
+    ) {
     flex-direction: row;
     align-items: stretch;
     gap: clamp(10px, 2vmin, 20px);
     min-height: 0;
   }
 
-  .public-display-splash-join-card__scan {
+  .public-display-splash-join-card__split:not(.public-display-splash-join-card__split--triple):not(
+      .public-display-splash-join-card__split--hero-pair
+    )
+    .public-display-splash-join-card__scan {
     flex: 1 1 46%;
     min-width: clamp(200px, 40%, 380px);
     max-width: min(58%, 620px);
@@ -1754,19 +1824,29 @@ body {
     align-items: center;
   }
 
-  .public-display-splash-join-card__qr-wrap {
+  .public-display-splash-join-card__split:not(.public-display-splash-join-card__split--triple):not(
+      .public-display-splash-join-card__split--hero-pair
+    )
+    .public-display-splash-join-card__qr-wrap {
     width: 100%;
     max-width: min(100%, min(48vmin, 68cqh), 560px);
   }
 
-  .public-display-splash-join-card__qr-wrap img {
+  .public-display-splash-join-card__split:not(.public-display-splash-join-card__split--triple):not(
+      .public-display-splash-join-card__split--hero-pair
+    )
+    .public-display-splash-join-card__qr-wrap
+    img {
     max-height: min(
       clamp(200px, min(44vmin, 38svh), 560px),
       72cqh
     );
   }
 
-  .public-display-splash-join-card__manual {
+  .public-display-splash-join-card__split:not(.public-display-splash-join-card__split--triple):not(
+      .public-display-splash-join-card__split--hero-pair
+    )
+    .public-display-splash-join-card__manual {
     flex: 1 1 0;
     min-width: 0;
     min-height: 0;
@@ -1779,8 +1859,11 @@ body {
     gap: clamp(6px, 1vmin, 14px);
   }
 
-  .public-display-splash-join-card__manual:not(.public-display-splash-join-card__manual--solo)
-  .public-display-splash-join-card__eyebrow {
+  .public-display-splash-join-card__split:not(.public-display-splash-join-card__split--triple):not(
+      .public-display-splash-join-card__split--hero-pair
+    )
+    .public-display-splash-join-card__manual:not(.public-display-splash-join-card__manual--solo)
+    .public-display-splash-join-card__eyebrow {
     font-size: clamp(1.48rem, min(4.3vmin, 3.65vh), 1.98rem);
     align-self: center;
     width: 100%;

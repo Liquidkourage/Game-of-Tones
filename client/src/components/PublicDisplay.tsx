@@ -78,6 +78,7 @@ function PublicDisplayVenueBrandingHero({
   marginBottom,
   fillSlot = false,
   compact = false,
+  logoTileOnly = false,
 }: {
   branding: PublicDisplayVenueBrandingState;
   marginBottom: string;
@@ -85,8 +86,77 @@ function PublicDisplayVenueBrandingHero({
   fillSlot?: boolean;
   /** Smaller logo/type for space-constrained overlays (e.g. rules). */
   compact?: boolean;
+  /** Splash third column: logo only (symmetrical tile). */
+  logoTileOnly?: boolean;
 }) {
   if (!(branding.logoUrl || branding.eventTitle || branding.sponsorLine)) return null;
+
+  if (logoTileOnly && branding.logoUrl) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '100%',
+          marginBottom,
+          ...(fillSlot ? { flex: 1, minHeight: 0 } : {}),
+        }}
+      >
+        <img
+          src={branding.logoUrl}
+          alt={branding.eventTitle || 'Venue'}
+          className="public-display-venue-logo public-display-venue-logo--hero"
+        />
+      </div>
+    );
+  }
+
+  if (logoTileOnly) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '100%',
+          textAlign: 'center',
+          marginBottom,
+          padding: 'clamp(8px, 1.5vmin, 14px)',
+          ...(fillSlot ? { flex: 1, minHeight: 0 } : {}),
+        }}
+      >
+        {branding.eventTitle ? (
+          <div
+            style={{
+              fontSize: 'clamp(1rem, min(3vmin, 2.5vh), 1.65rem)',
+              fontWeight: 800,
+              color: 'rgba(245,250,255,0.98)',
+              lineHeight: 1.2,
+            }}
+          >
+            {branding.eventTitle}
+          </div>
+        ) : null}
+        {branding.sponsorLine ? (
+          <div
+            style={{
+              fontSize: 'clamp(0.85rem, min(2.4vmin, 2vh), 1.2rem)',
+              fontWeight: 600,
+              color: 'rgba(200,215,225,0.9)',
+              marginTop: 6,
+              lineHeight: 1.25,
+            }}
+          >
+            {branding.sponsorLine}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -3368,11 +3438,7 @@ const PublicDisplay: React.FC = () => {
               />
             </div>
             <div
-              className={
-                splashHasHeroBranding
-                  ? 'public-display-splash-bottom public-display-splash-bottom--with-hero'
-                  : 'public-display-splash-bottom'
-              }
+              className="public-display-splash-bottom"
               style={{
                 gap: 'clamp(20px, 3.5vmin, 48px)',
                 width: '100%',
@@ -3381,15 +3447,6 @@ const PublicDisplay: React.FC = () => {
                 minHeight: 0,
               }}
             >
-              {splashHasHeroBranding && venueBranding ? (
-                <div className="public-display-splash-hero-slot">
-                  <PublicDisplayVenueBrandingHero
-                    branding={venueBranding}
-                    marginBottom="0"
-                    fillSlot
-                  />
-                </div>
-              ) : null}
               <div
                 style={{
                   minWidth: 0,
@@ -3415,7 +3472,10 @@ const PublicDisplay: React.FC = () => {
               }}
             >
               <motion.div
-                className="public-display-splash-join-card"
+                className={
+                  'public-display-splash-join-card' +
+                  (splashHasHeroBranding ? ' public-display-splash-join-card--with-logo-tile' : '')
+                }
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.45, delay: 0.2 }}
@@ -3427,6 +3487,7 @@ const PublicDisplay: React.FC = () => {
                   maxHeight: 'min(calc(100svh - 10.5rem), 78vh)',
                   display: 'flex',
                   flexDirection: 'column',
+                  overflow: 'hidden',
                   padding: 'clamp(8px, 1.2vmin, 18px) clamp(10px, 1.5vmin, 20px)',
                   borderRadius: 'clamp(18px, 2.5vmin, 26px)',
                   background:
@@ -3437,7 +3498,17 @@ const PublicDisplay: React.FC = () => {
                   boxSizing: 'border-box',
                 }}
               >
-                <div className="public-display-splash-join-card__split">
+                <div
+                  className={
+                    'public-display-splash-join-card__split' +
+                    (splashHasHeroBranding && roomId
+                      ? ' public-display-splash-join-card__split--triple'
+                      : '') +
+                    (splashHasHeroBranding && !roomId
+                      ? ' public-display-splash-join-card__split--hero-pair'
+                      : '')
+                  }
+                >
                   {roomId ? (
                     <div className="public-display-splash-join-card__scan">
                       <div className="public-display-splash-join-card__eyebrow">Phone or tablet</div>
@@ -3582,6 +3653,16 @@ const PublicDisplay: React.FC = () => {
                       {roomInfo?.id || roomId || '—'}
                     </div>
                   </div>
+                  {splashHasHeroBranding && venueBranding ? (
+                    <div className="public-display-splash-join-card__logo-tile">
+                      <PublicDisplayVenueBrandingHero
+                        branding={venueBranding}
+                        marginBottom="0"
+                        fillSlot
+                        logoTileOnly
+                      />
+                    </div>
+                  ) : null}
                 </div>
               </motion.div>
             </div>
