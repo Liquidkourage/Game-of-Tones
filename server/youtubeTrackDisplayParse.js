@@ -69,6 +69,46 @@ function isParenVersionOrEditTag(inner) {
 }
 
 /**
+ * Common single-token performer names on YouTube as "Artist - Title". Paired with titleFirstOrder:
+ * skip title-first swap when the left chunk is likely already the artist (avoids Nelly/Boston/DMX reversals).
+ */
+const SINGLE_WORD_ARTIST_TITLE_LEFT_HINTS = new Set(
+  (`abba boston cher chicago drake eminem europe enya journey kansas kiss lorde ` +
+    `moby muse nas nelly pink prince rush sade seal sia ` +
+    `tlc tool usher blur yes adele beyonce shakira rihanna outkast creed ` +
+    `foreigner survivor heart filter train cake hole`).split(/\s+/),
+);
+
+/** "DMX", "TLC" — treat as artist when on the left of "-". */
+function looksLikeAllCapsStageName(token) {
+  const s = String(token || '').trim();
+  const letters = s.replace(/[^A-Za-z]/g, '');
+  if (letters.length < 2 || letters.length > 6) return false;
+  return s === s.toUpperCase();
+}
+
+function isLikelyOneWordArtistTitleLeft(token) {
+  const s = String(token || '').trim();
+  if (!s) return false;
+  if (looksLikeAllCapsStageName(s)) return true;
+  return SINGLE_WORD_ARTIST_TITLE_LEFT_HINTS.has(s.toLowerCase());
+}
+
+/**
+ * "Jimmy Eat World-Polaris" / "Twenty One Pilots-Stressed Out" — hyphen with no surrounding spaces.
+ * Turn the last "word-hyphen-rest" before EOL into "word - rest" so spaced-dash logic applies.
+ */
+function expandTightHyphenSeparators(line) {
+  let s = String(line || '');
+  for (let i = 0; i < 4; i++) {
+    const next = s.replace(/^(.+)\s([^-\s]+)-(.+)$/, '$1 $2 - $3');
+    if (next === s) break;
+    s = next;
+  }
+  return s;
+}
+
+/**
  * @param {string} rawTitle
  * @returns {{ title: string; artist: string }}
  */
@@ -77,7 +117,8 @@ function parseYoutubeVideoTitleForDisplay(rawTitle) {
   if (!raw) return { title: '', artist: '' };
 
   const cleaned = preprocessYoutubeVideoTitleLine(raw);
-  const normalized = cleaned.replace(/\u2013|\u2014|\u2212/g, '-');
+  let normalized = cleaned.replace(/\u2013|\u2014|\u2212/g, '-');
+  normalized = expandTightHyphenSeparators(normalized);
 
   const officialRe =
     /\b(official\s*(video|audio|mv|lyric|lyrics)?|lyric\s*video|audio\s*only|m\/v)\b|\(official[^)]*\)|\[official[^]]*\]|\(lyrics?\)/i;
@@ -131,12 +172,13 @@ function parseYoutubeVideoTitleForDisplay(rawTitle) {
     const tL = tokenCount(left);
     const tR = tokenCount(right);
     const titleFirstOrder =
-      (tL === 1 &&
+      ((tL === 1 &&
         tR >= 2 &&
         !/[\/&]/.test(left) &&
         !/^\d+$/.test(left) &&
-        left.length <= 48) ||
-      (tL === 2 && tR === 2 && /^the\s+/i.test(right) && !/^the\s+/i.test(left));
+        left.length <= 48 &&
+        !isLikelyOneWordArtistTitleLeft(left)) ||
+        (tL === 2 && tR === 2 && /^the\s+/i.test(right) && !/^the\s+/i.test(left)));
 
     if (titleFirstOrder) {
       return { artist: right, title: left };

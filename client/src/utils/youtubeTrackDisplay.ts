@@ -53,12 +53,45 @@ function isParenVersionOrEditTag(inner: string): boolean {
   return false;
 }
 
+/** Matches server/youtubeTrackDisplayParse.js — skip title-first swap for common "Artist - Title" one-word artists. */
+const SINGLE_WORD_ARTIST_TITLE_LEFT_HINTS = new Set(
+  (`abba boston cher chicago drake eminem europe enya journey kansas kiss lorde ` +
+    `moby muse nas nelly pink prince rush sade seal sia ` +
+    `tlc tool usher blur yes adele beyonce shakira rihanna outkast creed ` +
+    `foreigner survivor heart filter train cake hole`).split(/\s+/),
+);
+
+function looksLikeAllCapsStageName(token: string): boolean {
+  const s = String(token || '').trim();
+  const letters = s.replace(/[^A-Za-z]/g, '');
+  if (letters.length < 2 || letters.length > 6) return false;
+  return s === s.toUpperCase();
+}
+
+function isLikelyOneWordArtistTitleLeft(token: string): boolean {
+  const s = String(token || '').trim();
+  if (!s) return false;
+  if (looksLikeAllCapsStageName(s)) return true;
+  return SINGLE_WORD_ARTIST_TITLE_LEFT_HINTS.has(s.toLowerCase());
+}
+
+function expandTightHyphenSeparators(line: string): string {
+  let s = String(line || '');
+  for (let i = 0; i < 4; i++) {
+    const next = s.replace(/^(.+)\s([^-\s]+)-(.+)$/, '$1 $2 - $3');
+    if (next === s) break;
+    s = next;
+  }
+  return s;
+}
+
 export function parseYoutubeVideoTitleForDisplay(rawTitle: string): { title: string; artist: string } {
   const raw = String(rawTitle || '').trim();
   if (!raw) return { title: '', artist: '' };
 
   const cleaned = preprocessYoutubeVideoTitleLine(raw);
-  const normalized = cleaned.replace(/\u2013|\u2014|\u2212/g, '-');
+  let normalized = cleaned.replace(/\u2013|\u2014|\u2212/g, '-');
+  normalized = expandTightHyphenSeparators(normalized);
 
   const officialRe =
     /\b(official\s*(video|audio|mv|lyric|lyrics)?|lyric\s*video|audio\s*only|m\/v)\b|\(official[^)]*\)|\[official[^]]*\]|\(lyrics?\)/i;
@@ -110,12 +143,13 @@ export function parseYoutubeVideoTitleForDisplay(rawTitle: string): { title: str
     const tL = tokenCount(left);
     const tR = tokenCount(right);
     const titleFirstOrder =
-      (tL === 1 &&
+      ((tL === 1 &&
         tR >= 2 &&
         !/[\/&]/.test(left) &&
         !/^\d+$/.test(left) &&
-        left.length <= 48) ||
-      (tL === 2 && tR === 2 && /^the\s+/i.test(right) && !/^the\s+/i.test(left));
+        left.length <= 48 &&
+        !isLikelyOneWordArtistTitleLeft(left)) ||
+      (tL === 2 && tR === 2 && /^the\s+/i.test(right) && !/^the\s+/i.test(left)));
 
     if (titleFirstOrder) {
       return { artist: right, title: left };
