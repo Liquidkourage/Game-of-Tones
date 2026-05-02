@@ -41,6 +41,33 @@ function preprocessYoutubeVideoTitleLine(rawTitle) {
   return s.trim();
 }
 
+function tokenCount(s) {
+  return String(s || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
+/** e.g. "VILLAGE PEOPLE" — ALL CAPS band line followed by track — "ARTIST - TITLE - EXTRA". */
+function isAllCapsArtistPrefix(seg) {
+  const s = String(seg || '').trim();
+  if (s.length < 4) return false;
+  const letters = s.replace(/[^a-zA-Z]/g, '');
+  if (letters.length < 4) return false;
+  return s === s.toUpperCase();
+}
+
+/** Parenthetical is a version/edit, not a performer name — "Bad Girls (12" Version)". */
+function isParenVersionOrEditTag(inner) {
+  const x = String(inner || '').trim();
+  if (!x) return true;
+  if (/\b(version|remix|rm\b|re-?master|mix|edit|mono|stereo|live|acoustic|hq|extended)\b/i.test(x)) return true;
+  if (/^\d{1,2}["'″]?\s*(version)?$/i.test(x)) return true;
+  if (/^\d{4}\s*(\([^)]*\))?$/i.test(x)) return true;
+  if (/\(RM\)|\bR\.?M\.?\b/i.test(x)) return true;
+  return false;
+}
+
 /**
  * @param {string} rawTitle
  * @returns {{ title: string; artist: string }}
@@ -87,9 +114,34 @@ function parseYoutubeVideoTitleForDisplay(rawTitle) {
   }
 
   const dashParts = normalized.split(/\s+-\s+/);
+
+  if (dashParts.length >= 3 && isAllCapsArtistPrefix(dashParts[0])) {
+    const artist = dashParts[0].trim();
+    const title = dashParts[1].trim();
+    const extra = dashParts.slice(2).join(' - ').trim();
+    const titleFull =
+      extra && extra.length <= 120 ? `${title} (${extra})` : title;
+    return { title: titleFull, artist };
+  }
+
   if (dashParts.length >= 2) {
-    const left = dashParts[0];
-    const right = dashParts.slice(1).join(' - ');
+    const left = dashParts[0].trim();
+    const right = dashParts.slice(1).join(' - ').trim();
+
+    const tL = tokenCount(left);
+    const tR = tokenCount(right);
+    const titleFirstOrder =
+      (tL === 1 &&
+        tR >= 2 &&
+        !/[\/&]/.test(left) &&
+        !/^\d+$/.test(left) &&
+        left.length <= 48) ||
+      (tL === 2 && tR === 2 && /^the\s+/i.test(right) && !/^the\s+/i.test(left));
+
+    if (titleFirstOrder) {
+      return { artist: right, title: left };
+    }
+
     const picked = pickOrientation(left, right);
     if (picked) return picked;
   }
@@ -122,6 +174,9 @@ function parseYoutubeVideoTitleForDisplay(rawTitle) {
   const paren = normalized.match(/^(.+?)\s*\(\s*([^)]+)\)\s*$/);
   if (paren) {
     const inner = paren[2].trim();
+    if (isParenVersionOrEditTag(inner)) {
+      return { title: paren[1].trim(), artist: '' };
+    }
     if (
       inner.length >= 2 &&
       inner.length <= 120 &&
