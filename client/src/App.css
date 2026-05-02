@@ -1653,7 +1653,7 @@ body {
 }
 
 .public-display-splash-join-card__eyebrow {
-  font-size: clamp(0.88rem, min(2.35vmin, 2vh), 1.08rem);
+  font-size: clamp(1rem, min(2.85vmin, 2.45vh), 1.32rem);
   font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -1781,7 +1781,7 @@ body {
 
   .public-display-splash-join-card__manual:not(.public-display-splash-join-card__manual--solo)
   .public-display-splash-join-card__eyebrow {
-    font-size: clamp(0.92rem, min(2.55vmin, 2.25vh), 1.2rem);
+    font-size: clamp(1.06rem, min(3.05vmin, 2.65vh), 1.42rem);
     align-self: center;
     width: 100%;
   }

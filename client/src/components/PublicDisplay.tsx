@@ -3428,7 +3428,7 @@ const PublicDisplay: React.FC = () => {
                       <div className="public-display-splash-join-card__eyebrow">Phone or tablet</div>
                       <div
                         style={{
-                          fontSize: 'clamp(1.2rem, min(3.4vmin, 2.85vh), 2.45rem)',
+                          fontSize: 'clamp(1.38rem, min(4vmin, 3.35vh), 2.85rem)',
                           fontWeight: 900,
                           color: '#eafff8',
                           letterSpacing: '0.06em',
@@ -3457,7 +3457,7 @@ const PublicDisplay: React.FC = () => {
                     </div>
                     <div
                       style={{
-                        fontSize: 'clamp(1.7rem, min(5.6vmin, 4.65vh), 3.85rem)',
+                        fontSize: 'clamp(1.95rem, min(6.5vmin, 5.35vh), 4.4rem)',
                         fontWeight: 800,
                         color: 'rgba(230,240,255,0.94)',
                         letterSpacing: '0.18em',
@@ -3481,7 +3481,7 @@ const PublicDisplay: React.FC = () => {
                     >
                       <span
                         style={{
-                          fontSize: 'clamp(1.55rem, min(4.65vmin, 4.1vh), 3.35rem)',
+                          fontSize: 'clamp(1.78rem, min(5.4vmin, 4.75vh), 3.85rem)',
                           fontWeight: 700,
                           color: 'rgba(240,248,255,0.98)',
                           lineHeight: 1.2,
@@ -3541,7 +3541,7 @@ const PublicDisplay: React.FC = () => {
                     </div>
                     <div
                       style={{
-                        fontSize: 'clamp(1.45rem, min(4.85vmin, 4.35vh), 3.35rem)',
+                        fontSize: 'clamp(1.68rem, min(5.6vmin, 5vh), 3.85rem)',
                         fontWeight: 700,
                         opacity: 0.96,
                         letterSpacing: '0.02em',
