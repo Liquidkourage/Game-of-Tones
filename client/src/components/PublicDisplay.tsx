@@ -3377,7 +3377,7 @@ const PublicDisplay: React.FC = () => {
             <div
               style={{
                 width: '100%',
-                maxWidth: 'min(1180px, calc(100vw - clamp(20px, 4vw, 72px)))',
+                maxWidth: 'min(1180px, calc(100vw - clamp(12px, 3vw, 40px)))',
                 minWidth: 0,
                 margin: '0 auto',
               }}
@@ -3390,7 +3390,7 @@ const PublicDisplay: React.FC = () => {
                 style={{
                   minWidth: 0,
                   width: '100%',
-                  padding: 'clamp(10px, 1.5vmin, 22px) clamp(12px, 2vmin, 28px)',
+                  padding: 'clamp(8px, 1.2vmin, 18px) clamp(10px, 1.5vmin, 20px)',
                   borderRadius: 'clamp(18px, 2.5vmin, 26px)',
                   background:
                     'linear-gradient(165deg, rgba(0,255,180,0.11) 0%, rgba(20,38,55,0.52) 45%, rgba(130,100,255,0.14) 100%)',

@@ -1581,7 +1581,7 @@ body {
   filter: drop-shadow(0 14px 36px rgba(0, 0, 0, 0.55));
 }
 
-/* Splash: combined join card — scan → manual; height follows content (no forced min). */
+/* Splash: combined join card — stacked on narrow; scan | manual side-by-side when wide. */
 .public-display-splash-join-card {
   container-type: inline-size;
   container-name: splash-join;
@@ -1610,7 +1610,7 @@ body {
   align-items: center;
   text-align: center;
   gap: clamp(4px, 0.65vmin, 10px);
-  padding: clamp(8px, 1.1vmin, 14px);
+  padding: clamp(6px, 1vmin, 12px) clamp(8px, 1.2vmin, 12px);
   border-radius: clamp(14px, 2vmin, 20px);
   background: rgba(0, 0, 0, 0.24);
   box-shadow:
@@ -1627,7 +1627,7 @@ body {
   align-items: center;
   text-align: center;
   gap: clamp(5px, 0.95vmin, 11px);
-  padding: clamp(10px, 1.5vmin, 22px);
+  padding: clamp(8px, 1.2vmin, 16px) clamp(10px, 1.4vmin, 16px);
   border-radius: clamp(14px, 2vmin, 20px);
   background: rgba(0, 0, 0, 0.2);
   box-shadow:
@@ -1671,6 +1671,63 @@ body {
   border: 1px solid rgba(0, 255, 200, 0.22);
   box-sizing: border-box;
   text-align: center;
+}
+
+@container splash-join (min-width: 520px) {
+  .public-display-splash-join-card__split {
+    flex-direction: row;
+    align-items: stretch;
+    gap: clamp(10px, 2vmin, 20px);
+  }
+
+  .public-display-splash-join-card__scan {
+    flex: 0 1 38%;
+    max-width: min(292px, 42%);
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .public-display-splash-join-card__qr-wrap {
+    width: 100%;
+    max-width: min(100%, min(30vmin, 34vh), 320px);
+  }
+
+  .public-display-splash-join-card__qr-wrap img {
+    max-height: clamp(150px, min(30vmin, 34vh), 320px);
+  }
+
+  .public-display-splash-join-card__manual {
+    flex: 1 1 0;
+    min-width: 0;
+    align-items: flex-start;
+    text-align: left;
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    padding-left: clamp(12px, 2vmin, 22px);
+    justify-content: center;
+  }
+
+  .public-display-splash-join-card__manual--solo {
+    border-left: none;
+    padding-left: clamp(8px, 1.2vmin, 16px);
+    align-items: center;
+    text-align: center;
+  }
+
+  .public-display-splash-join-card__manual .public-display-splash-join-url-scroller {
+    justify-content: flex-start;
+  }
+
+  .public-display-splash-join-card__manual .public-display-splash-join-url-scroller span {
+    text-align: left;
+  }
+
+  .public-display-splash-join-card__manual--solo .public-display-splash-join-url-scroller {
+    justify-content: center;
+  }
+
+  .public-display-splash-join-card__manual--solo .public-display-splash-join-url-scroller span {
+    text-align: center;
+  }
 }
 
 /**
