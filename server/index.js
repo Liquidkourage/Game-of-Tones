@@ -5929,14 +5929,16 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     // Temporary Spotify playlist only when every row is Spotify URIs (mixed YT lists break index ↔ URI alignment).
     if (needsSpotifyTransport && !playlistHasYoutube) {
       try {
-        try {
-          await spotifyFor(roomId).deleteAllGameOfTonesOutputPlaylists();
-        } catch (clearErr) {
-          console.warn(
-            '⚠️ Could not auto-clear prior GOT output playlists (non-fatal):',
-            clearErr?.message || clearErr
-          );
-        }
+        // Listing/deleting prior GOT output playlists walks paginated /me/playlists and can take
+        // several seconds. Do not block first playback on it — new playlists use a unique name.
+        void spotifyFor(roomId)
+          .deleteAllGameOfTonesOutputPlaylists()
+          .catch((clearErr) => {
+            console.warn(
+              '⚠️ Deferred GOT output playlist cleanup failed (non-fatal):',
+              clearErr?.message || clearErr
+            );
+          });
         const trackUris = allSongs.map((song) => `spotify:track:${song.id}`);
         const playlistName = `TEMPO Bingo Room ${roomId} - ${new Date().toISOString().slice(0, 16)}`;
         room.temporaryPlaylistId = await spotifyFor(roomId).createTemporaryPlaylist(playlistName, trackUris);
@@ -6012,9 +6014,9 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       // Skip-based queue clearing removed to avoid context hijacks
       // Enforce deterministic playback mode to avoid context/radio fallbacks with delays
       try { await spotifyFor(roomId).withRetries('setShuffle(false)', () => spotifyFor(roomId).setShuffleState(false, targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 100));
       // Note: Skip setting repeat to 'off' - startPlaybackFromPlaylist will set it to 'track' to prevent auto-advance
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 100));
       // Use explicit device_id and uris as fallback in case transfer isn't picked up
       // Randomized start position within track when enabled and safe
       startMs = 0;
@@ -6056,8 +6058,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         }
       } catch {}
       
-      // Stabilization delay to prevent context hijacks from volume changes
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Brief settle before volume API (shorter than historical 800ms — audio already started)
+      await new Promise(resolve => setTimeout(resolve, 400));
       
       // Set initial volume to 100% (or room's saved volume)
       try {
@@ -6093,8 +6095,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
             }
           } catch {}
           
-          // Stabilization delay to prevent context hijacks from volume changes
-          await new Promise(resolve => setTimeout(resolve, 800));
+          await new Promise(resolve => setTimeout(resolve, 400));
           
           // Set initial volume to 100% (or room's saved volume)
           try {
@@ -6134,8 +6135,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     try {
       let playing = false;
       let correctTrack = false;
-      for (let i = 0; i < 3; i++) { // Reduced from 5 to 3 attempts
-        await new Promise(r => setTimeout(r, 500)); // Increased delay from 300ms to 500ms
+      for (let i = 0; i < 3; i++) {
+        await new Promise(r => setTimeout(r, 280));
         const state = await spotifyFor(roomId).getCurrentPlaybackState();
         playing = !!state?.is_playing;
         const currentId = state?.item?.id;
