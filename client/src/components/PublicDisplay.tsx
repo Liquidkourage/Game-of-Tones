@@ -368,8 +368,8 @@ function PublicDisplayVenueBrandingHero({
           style={
             rulesWall
               ? {
-                  maxHeight: 'clamp(128px, min(28vmin, 24svh), 360px)',
-                  maxWidth: 'min(92vw, 560px)',
+                  maxHeight: 'clamp(168px, min(36vmin, 32svh), 520px)',
+                  maxWidth: 'min(96vw, 1200px)',
                   width: 'auto',
                 }
               : undefined
@@ -458,8 +458,8 @@ function PublicDisplayVenueBrandingHero({
                 }
               : rulesWall
                 ? {
-                    maxHeight: 'clamp(128px, min(28vmin, 24svh), 360px)',
-                    maxWidth: 'min(92vw, 560px)',
+                    maxHeight: 'clamp(168px, min(36vmin, 32svh), 520px)',
+                    maxWidth: 'min(96vw, 1200px)',
                     width: 'auto',
                   }
                 : undefined
