@@ -36,6 +36,9 @@ function preprocessYoutubeVideoTitleLine(rawTitle) {
     // " HD" / " | 4K" at end
     s = s.replace(/\s+(\||\u007c)\s*(HD|4K|HQ)(\s*video)?\s*$/i, '');
     s = s.replace(/\s+\(?\s*HD\s*\)?\s*$/i, '');
+    // Trailing fan uploader / channel suffixes on title line
+    s = s.replace(/\s*[•·]\s*top\s*pop\s*$/i, '');
+    s = s.replace(/\s*[\(\[]\s*with\s+lyrics\s*[\)\]]\s*$/i, '');
     if (s === before) break;
   }
   return s.trim();
@@ -73,18 +76,55 @@ function isParenVersionOrEditTag(inner) {
  * skip title-first swap when the left chunk is likely already the artist (avoids Nelly/Boston/DMX reversals).
  */
 const SINGLE_WORD_ARTIST_TITLE_LEFT_HINTS = new Set(
-  (`abba boston cher chicago drake eminem europe enya journey kansas kiss lorde ` +
-    `moby muse nas nelly pink prince rush sade seal sia ` +
-    `tlc tool usher blur yes adele beyonce shakira rihanna outkast creed ` +
-    `foreigner survivor heart filter train cake hole`).split(/\s+/),
+  (`abba aerosmith aqua boston cher chic chicago drake eminem europe enya journey kansas kiss ` +
+    `lorde ludacris moby muse nas nelly pink prince queen rush sade seal sia ` +
+    `tlc tool usher blur yes adele beyonce shakira rihanna outkast creed chamillionaire ` +
+    `foreigner survivor heart filter train cake hole metallica nirvana radiohead ` +
+    `madonna eagles`).split(/\s+/),
 );
 
-/** "DMX", "TLC" — treat as artist when on the left of "-". */
+/** "DMX", "TLC" — treat as artist when on the left of "-". Not Y.M.C.A.-style dotted acronyms or *decorated* titles. */
 function looksLikeAllCapsStageName(token) {
   const s = String(token || '').trim();
+  if (/^\*[^*]+\*$/.test(s)) return false;
+  if (/\b[A-Z]\.(?:[A-Z]\.)+[A-Z]?\.?/i.test(s)) return false;
   const letters = s.replace(/[^A-Za-z]/g, '');
   if (letters.length < 2 || letters.length > 6) return false;
   return s === s.toUpperCase();
+}
+
+/** e.g. "Stevie Wonder Superstition" with no " - " (channel is not the artist name). Conservative. */
+function tryLeadingTwoWordPersonArtist(normalized) {
+  const s = String(normalized || '').trim();
+  if (!s || /\s+-\s+/.test(s) || /\s+[|/]\s+/.test(s) || /\sby\s/i.test(s)) return null;
+  const m = s.match(/^([A-Z][a-z]+ [A-Z][a-z]+)\s+(.+)$/);
+  if (!m) return null;
+  const w1 = m[1].split(/\s+/)[0];
+  const w2 = m[1].split(/\s+/)[1];
+  const pair = `${w1} ${w2}`.toLowerCase();
+  if (/^(The|A|An|All|My|Your|Our|Its?|If|When|Where|Why|How|Let|One|Two|Three|For|But|Not|And|She|Her|His|Our)$/i.test(w1)) return null;
+  const badPair = new Set([
+    'one more',
+    'one last',
+    'all falls',
+    'let it',
+    'let me',
+    'hold on',
+    'come on',
+    'move on',
+    'run away',
+    'get down',
+    'get low',
+    'shake it',
+    'take me',
+    'give me',
+  ]);
+  if (badPair.has(pair)) return null;
+  const rest = m[2].trim();
+  const restTok = tokenCount(rest);
+  if (restTok >= 2) return { artist: m[1].trim(), title: rest };
+  if (rest.length >= 8) return { artist: m[1].trim(), title: rest };
+  return null;
 }
 
 function isLikelyOneWordArtistTitleLeft(token) {
@@ -229,6 +269,9 @@ function parseYoutubeVideoTitleForDisplay(rawTitle) {
       if (picked) return picked;
     }
   }
+
+  const twoWordArtist = tryLeadingTwoWordPersonArtist(normalized);
+  if (twoWordArtist) return twoWordArtist;
 
   return { title: normalized, artist: '' };
 }

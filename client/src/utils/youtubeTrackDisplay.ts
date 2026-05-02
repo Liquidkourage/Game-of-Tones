@@ -23,6 +23,8 @@ function preprocessYoutubeVideoTitleLine(rawTitle: string): string {
     s = s.replace(/\s*「[^」]{0,48}」\s*/u, '');
     s = s.replace(/\s+(\||\u007c)\s*(HD|4K|HQ)(\s*video)?\s*$/i, '');
     s = s.replace(/\s+\(?\s*HD\s*\)?\s*$/i, '');
+    s = s.replace(/\s*[•·]\s*top\s*pop\s*$/i, '');
+    s = s.replace(/\s*[\(\[]\s*with\s+lyrics\s*[\)\]]\s*$/i, '');
     if (s === before) break;
   }
   return s.trim();
@@ -55,17 +57,53 @@ function isParenVersionOrEditTag(inner: string): boolean {
 
 /** Matches server/youtubeTrackDisplayParse.js — skip title-first swap for common "Artist - Title" one-word artists. */
 const SINGLE_WORD_ARTIST_TITLE_LEFT_HINTS = new Set(
-  (`abba boston cher chicago drake eminem europe enya journey kansas kiss lorde ` +
-    `moby muse nas nelly pink prince rush sade seal sia ` +
-    `tlc tool usher blur yes adele beyonce shakira rihanna outkast creed ` +
-    `foreigner survivor heart filter train cake hole`).split(/\s+/),
+  (`abba aerosmith aqua boston cher chic chicago drake eminem europe enya journey kansas kiss ` +
+    `lorde ludacris moby muse nas nelly pink prince queen rush sade seal sia ` +
+    `tlc tool usher blur yes adele beyonce shakira rihanna outkast creed chamillionaire ` +
+    `foreigner survivor heart filter train cake hole metallica nirvana radiohead ` +
+    `madonna eagles`).split(/\s+/),
 );
 
 function looksLikeAllCapsStageName(token: string): boolean {
   const s = String(token || '').trim();
+  if (/^\*[^*]+\*$/.test(s)) return false;
+  if (/\b[A-Z]\.(?:[A-Z]\.)+[A-Z]?\.?/i.test(s)) return false;
   const letters = s.replace(/[^A-Za-z]/g, '');
   if (letters.length < 2 || letters.length > 6) return false;
   return s === s.toUpperCase();
+}
+
+function tryLeadingTwoWordPersonArtist(normalized: string): { title: string; artist: string } | null {
+  const s = String(normalized || '').trim();
+  if (!s || /\s+-\s+/.test(s) || /\s+[|/]\s+/.test(s) || /\sby\s/i.test(s)) return null;
+  const m = s.match(/^([A-Z][a-z]+ [A-Z][a-z]+)\s+(.+)$/);
+  if (!m) return null;
+  const w1 = m[1].split(/\s+/)[0];
+  const w2 = m[1].split(/\s+/)[1];
+  const pair = `${w1} ${w2}`.toLowerCase();
+  if (/^(The|A|An|All|My|Your|Our|Its?|If|When|Where|Why|How|Let|One|Two|Three|For|But|Not|And|She|Her|His|Our)$/i.test(w1)) return null;
+  const badPair = new Set([
+    'one more',
+    'one last',
+    'all falls',
+    'let it',
+    'let me',
+    'hold on',
+    'come on',
+    'move on',
+    'run away',
+    'get down',
+    'get low',
+    'shake it',
+    'take me',
+    'give me',
+  ]);
+  if (badPair.has(pair)) return null;
+  const rest = m[2].trim();
+  const restTok = tokenCount(rest);
+  if (restTok >= 2) return { artist: m[1].trim(), title: rest };
+  if (rest.length >= 8) return { artist: m[1].trim(), title: rest };
+  return null;
 }
 
 function isLikelyOneWordArtistTitleLeft(token: string): boolean {
@@ -198,6 +236,9 @@ export function parseYoutubeVideoTitleForDisplay(rawTitle: string): { title: str
       if (picked) return picked;
     }
   }
+
+  const twoWordArtist = tryLeadingTwoWordPersonArtist(normalized);
+  if (twoWordArtist) return twoWordArtist;
 
   return { title: normalized, artist: '' };
 }

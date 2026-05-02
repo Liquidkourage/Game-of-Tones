@@ -33,6 +33,7 @@ export function cleanSongTitle(title: string, options: CleanTitleOptions = DEFAU
   }
 
   let cleaned = title.trim();
+  cleaned = cleaned.replace(/^\*+/, '').replace(/\*+$/, '').trim();
 
   // Remove remastered versions
   if (options.removeRemastered) {
