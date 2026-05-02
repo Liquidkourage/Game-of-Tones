@@ -3992,65 +3992,159 @@ const PublicDisplay: React.FC = () => {
                   paddingTop: 'clamp(2px, 0.6vmin, 8px)',
                 }}
               >
-              <div style={{ flexShrink: 0, width: '100%' }}>
-                <PublicDisplayTempoBallRow seeds={ballAnimSeedsRef.current} variant="rules" />
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: 0.05, ease: 'easeOut' }}
-                  style={{
-                    marginTop: 'clamp(3px, 0.8vmin, 10px)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 'clamp(6px, 1.4vmin, 14px)',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <Sparkles
-                    style={{
-                      width: 'clamp(20px, 3.8vmin, 44px)',
-                      height: 'clamp(20px, 3.8vmin, 44px)',
-                      color: '#7bffd9',
-                      filter: 'drop-shadow(0 0 14px rgba(0,255,200,0.6))',
-                    }}
-                    strokeWidth={2.2}
-                    aria-hidden
-                  />
-                  <div
-                    style={{
-                      fontSize: 'clamp(1.45rem, min(5.5vmin, 4.5vh), 3.4rem)',
-                      fontWeight: 1000,
-                      letterSpacing: '0.02em',
-                      backgroundImage: 'linear-gradient(90deg,#7bffd9 0%, #ffffff 50%, #7bffd9 100%)',
-                      WebkitBackgroundClip: 'text',
-                      backgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                      filter: 'drop-shadow(0 6px 22px rgba(123,255,217,0.35))',
-                      lineHeight: 1.05,
-                    }}
-                  >
-                    Music Bingo
-                  </div>
-                  <Sparkles
-                    style={{
-                      width: 'clamp(20px, 3.8vmin, 44px)',
-                      height: 'clamp(20px, 3.8vmin, 44px)',
-                      color: '#7bffd9',
-                      filter: 'drop-shadow(0 0 14px rgba(0,255,200,0.6))',
-                    }}
-                    strokeWidth={2.2}
-                    aria-hidden
-                  />
-                </motion.div>
-              </div>
-              {venueBranding ? (
-                <PublicDisplayVenueBrandingHero
-                  branding={venueBranding}
-                  marginBottom="clamp(0.25rem, 0.7vmin, 0.55rem)"
-                  rulesWall
-                />
-              ) : null}
+              {(() => {
+                const vb = venueBranding;
+                const logoUrl = vb?.logoUrl;
+                const hasVenueText = !!(vb && (vb.eventTitle || vb.sponsorLine));
+                return (
+                  <>
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'row',
+                        alignItems: 'flex-start',
+                        justifyContent: 'space-between',
+                        gap: 'clamp(8px, 2vmin, 24px)',
+                        width: '100%',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <div
+                        style={{
+                          flex: '1 1 0',
+                          minWidth: 0,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          textAlign: 'center',
+                        }}
+                      >
+                        <PublicDisplayTempoBallRow seeds={ballAnimSeedsRef.current} variant="rules" />
+                        <motion.div
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.4, delay: 0.05, ease: 'easeOut' }}
+                          style={{
+                            marginTop: 'clamp(3px, 0.8vmin, 10px)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 'clamp(6px, 1.4vmin, 14px)',
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          <Sparkles
+                            style={{
+                              width: 'clamp(20px, 3.8vmin, 44px)',
+                              height: 'clamp(20px, 3.8vmin, 44px)',
+                              color: '#7bffd9',
+                              filter: 'drop-shadow(0 0 14px rgba(0,255,200,0.6))',
+                            }}
+                            strokeWidth={2.2}
+                            aria-hidden
+                          />
+                          <div
+                            style={{
+                              fontSize: 'clamp(1.45rem, min(5.5vmin, 4.5vh), 3.4rem)',
+                              fontWeight: 1000,
+                              letterSpacing: '0.02em',
+                              backgroundImage: 'linear-gradient(90deg,#7bffd9 0%, #ffffff 50%, #7bffd9 100%)',
+                              WebkitBackgroundClip: 'text',
+                              backgroundClip: 'text',
+                              WebkitTextFillColor: 'transparent',
+                              filter: 'drop-shadow(0 6px 22px rgba(123,255,217,0.35))',
+                              lineHeight: 1.05,
+                            }}
+                          >
+                            Music Bingo
+                          </div>
+                          <Sparkles
+                            style={{
+                              width: 'clamp(20px, 3.8vmin, 44px)',
+                              height: 'clamp(20px, 3.8vmin, 44px)',
+                              color: '#7bffd9',
+                              filter: 'drop-shadow(0 0 14px rgba(0,255,200,0.6))',
+                            }}
+                            strokeWidth={2.2}
+                            aria-hidden
+                          />
+                        </motion.div>
+                      </div>
+                      {logoUrl ? (
+                        <div
+                          style={{
+                            flex: '0 0 auto',
+                            width: 'min(42vw, 300px)',
+                            maxWidth: 'min(42vw, 300px)',
+                            alignSelf: 'flex-start',
+                          }}
+                        >
+                          <img
+                            src={logoUrl}
+                            alt={vb?.eventTitle || 'Venue'}
+                            className="public-display-venue-logo public-display-venue-logo--hero"
+                            decoding="async"
+                            fetchPriority="high"
+                            style={{
+                              width: '100%',
+                              height: 'auto',
+                              maxHeight: 'clamp(92px, min(21vmin, 19svh), 240px)',
+                              objectFit: 'contain',
+                              display: 'block',
+                              marginLeft: 'auto',
+                            }}
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                    {!logoUrl && vb && hasVenueText ? (
+                      <PublicDisplayVenueBrandingHero
+                        branding={vb}
+                        marginBottom="clamp(0.25rem, 0.7vmin, 0.55rem)"
+                        rulesWall
+                      />
+                    ) : null}
+                    {logoUrl && hasVenueText ? (
+                      <div
+                        style={{
+                          width: '100%',
+                          textAlign: 'center',
+                          marginBottom: 'clamp(0.25rem, 0.7vmin, 0.55rem)',
+                          flexShrink: 0,
+                          marginTop: 'clamp(4px, 1vmin, 12px)',
+                        }}
+                      >
+                        {vb!.eventTitle ? (
+                          <div
+                            style={{
+                              fontSize: 'clamp(1.05rem, min(3.2vmin, 2.75vh), 1.85rem)',
+                              fontWeight: 800,
+                              color: 'rgba(245,250,255,0.98)',
+                              lineHeight: 1.15,
+                              letterSpacing: '0.04em',
+                            }}
+                          >
+                            {vb!.eventTitle}
+                          </div>
+                        ) : null}
+                        {vb!.sponsorLine ? (
+                          <div
+                            style={{
+                              fontSize: 'clamp(0.92rem, min(2.5vmin, 2.1vh), 1.3rem)',
+                              fontWeight: 600,
+                              color: 'rgba(200,215,225,0.9)',
+                              marginTop: 6,
+                              lineHeight: 1.25,
+                            }}
+                          >
+                            {vb!.sponsorLine}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </>
+                );
+              })()}
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -4159,7 +4253,7 @@ const PublicDisplay: React.FC = () => {
                     style={{
                       display: 'grid',
                       gridTemplateColumns: 'auto 1fr',
-                      alignItems: 'stretch',
+                      alignItems: 'start',
                       gap: 'clamp(8px, 1.65vmin, 18px)',
                       padding: 'clamp(10px, 1.85vmin, 20px) clamp(12px, 2.2vmin, 24px)',
                       borderRadius: 'clamp(14px, 2.2vmin, 26px)',
@@ -4189,7 +4283,7 @@ const PublicDisplay: React.FC = () => {
                     >
                       {step.n}
                     </div>
-                    <div>
+                    <div style={{ minWidth: 0 }}>
                       <div
                         style={{
                           fontSize: 'clamp(1.2rem, 3.4vmin, 2.25rem)',
