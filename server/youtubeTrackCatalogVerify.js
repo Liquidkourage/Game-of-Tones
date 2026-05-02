@@ -1,17 +1,24 @@
 'use strict';
 
 /**
- * At finalize-mix, upgrade YouTube Music rows to canonical track title + artist using the
- * **iTunes Search API** (public JSON, no Spotify Web API — avoids Spotify quota on this path).
+ * Finalize-mix: reconcile YouTube videos to stable track title + artist for bingo.
+ *
+ * Strategy (learnings: Spotify quota lockouts, iTunes rate limits, 75+ row pools):
+ * 1) **Heuristic** — Data API `snippet.title` parsed (never channel) in `youtubeMusic.js`; each row carries `youtubeRawTitle`.
+ * 2) **Disk cache** — `youtubeMetadataCache.js` keys `videoId + country + titleFingerprint` → last good iTunes hit; avoids repeat traffic across finalizes.
+ * 3) **iTunes Search only** — no Spotify Web API; one GET per *uncached* unique video, paced; one backoff retry on 429.
  *
  * Env:
- * - TEMPO_YT_CATALOG_VERIFY — default true; set 0/false/off to skip
- * - TEMPO_YT_VERIFY_MIN_INTERVAL_MS — ms between requests (default 450, max 5000)
- * - TEMPO_YT_VERIFY_SCORE_MIN — 0–1 match threshold (default 0.5)
- * - TEMPO_YT_VERIFY_SEARCH_LIMIT — iTunes `limit` param (default 8, max 25)
- * - TEMPO_YT_VERIFY_ITUNES_COUNTRY — store country code (default us)
- * - TEMPO_YT_VERIFY_HTTP_UA — optional User-Agent for requests
+ * - TEMPO_YT_CATALOG_VERIFY — default on; 0/false/off to skip remote (cache still read if useful — skipped when verify off entirely)
+ * - TEMPO_YT_VERIFY_MIN_INTERVAL_MS — default 400
+ * - TEMPO_YT_VERIFY_SCORE_MIN — default 0.5
+ * - TEMPO_YT_VERIFY_SEARCH_LIMIT — default 8, max 25
+ * - TEMPO_YT_VERIFY_ITUNES_COUNTRY — default us
+ * - TEMPO_YT_VERIFY_HTTP_UA — optional
  */
+
+const { parseYoutubeVideoTitleForDisplay } = require('./youtubeTrackDisplayParse');
+const metadataCache = require('./youtubeMetadataCache');
 
 function parseEnvBool(raw, defaultVal) {
   if (raw == null || String(raw).trim() === '') return defaultVal;
@@ -28,7 +35,7 @@ function clamp(n, lo, hi) {
 function getMinIntervalMs() {
   const n = Number(process.env.TEMPO_YT_VERIFY_MIN_INTERVAL_MS);
   if (Number.isFinite(n) && n >= 0) return Math.min(5000, Math.floor(n));
-  return 450;
+  return 400;
 }
 
 function getScoreMin() {
@@ -70,7 +77,7 @@ function tokenSetJaccard(a, b) {
  * @param {{ name: string; artist: string }} track
  * @param {string} expectedTitle
  * @param {string} expectedArtist
- * @param {number} rankIndex — iTunes result order (0 = most relevant)
+ * @param {number} rankIndex
  */
 function scoreCandidate(track, expectedTitle, expectedArtist, rankIndex = 0) {
   const t = tokenSetJaccard(track.name, expectedTitle);
@@ -98,9 +105,29 @@ function buildSearchQuery(artist, title) {
 }
 
 /**
+ * Prefer parsing **full** YouTube title line; fallback to stored heuristic fields.
+ * @param {any} seed
+ */
+function expectedFieldsFromSeed(seed) {
+  const raw = String(seed.youtubeRawTitle || '').trim();
+  if (raw) {
+    const p = parseYoutubeVideoTitleForDisplay(raw);
+    return {
+      expectedTitle: (p.title || raw).trim(),
+      expectedArtist: (p.artist || '').trim(),
+      cacheRawFingerprintSource: raw,
+    };
+  }
+  return {
+    expectedTitle: String(seed.name || '').trim(),
+    expectedArtist: String(seed.artist || '').trim(),
+    cacheRawFingerprintSource: `${String(seed.name || '')}\0${String(seed.artist || '')}`,
+  };
+}
+
+/**
  * @param {string} term
  * @param {number} limit
- * @returns {Promise<{ name: string; artist: string }[]>}
  */
 async function searchItunesTracks(term, limit) {
   const url = new URL('https://itunes.apple.com/search');
@@ -150,7 +177,7 @@ async function searchItunesTracks(term, limit) {
  * @returns {Promise<any[]>}
  */
 async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
-  const log = opts.log || ((...a) => console.log('[yt-itunes-verify]', ...a));
+  const log = opts.log || ((...a) => console.log('[yt-reconcile]', ...a));
 
   if (!Array.isArray(songList) || songList.length === 0) return songList;
 
@@ -159,6 +186,7 @@ async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
     return songList;
   }
 
+  const country = getItunesCountry();
   const minIv = getMinIntervalMs();
   const scoreMin = getScoreMin();
   const searchLimit = clamp(Number(process.env.TEMPO_YT_VERIFY_SEARCH_LIMIT) || 8, 1, 25);
@@ -181,6 +209,7 @@ async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
   /** @type {Map<string, { name: string; artist: string }>} */
   const idToMeta = new Map();
   let upgraded = 0;
+  let cacheHits = 0;
   let noMatch = 0;
   let haltedQuota = 0;
 
@@ -194,10 +223,17 @@ async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
 
   for (const { id, firstIndex } of uniqueYts) {
     const seed = songList[firstIndex];
-    const expectedTitle = String(seed.name || '').trim();
-    const expectedArtist = String(seed.artist || '').trim();
+    const { expectedTitle, expectedArtist, cacheRawFingerprintSource } = expectedFieldsFromSeed(seed);
+
     if (!expectedTitle) {
       noMatch++;
+      continue;
+    }
+
+    const cached = metadataCache.getCached(id, country, cacheRawFingerprintSource);
+    if (cached && cached.name) {
+      idToMeta.set(id, { name: cached.name, artist: cached.artist || '' });
+      cacheHits++;
       continue;
     }
 
@@ -211,22 +247,39 @@ async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
 
     /** @type {{ name: string; artist: string }[]} */
     let items;
-    try {
-      items = await searchItunesTracks(query, searchLimit);
-    } catch (e) {
-      const msg = e && e.message ? String(e.message) : String(e);
-      const code = e && /** @type {any} */ (e).statusCode;
-      if (code === 429 || msg.includes('429')) {
-        haltedQuota++;
-        log('halted — iTunes rate limit');
+    let attempt = 0;
+    for (;;) {
+      try {
+        items = await searchItunesTracks(query, searchLimit);
+        break;
+      } catch (e) {
+        const msg = e && e.message ? String(e.message) : String(e);
+        const code = e && /** @type {any} */ (e).statusCode;
+        if (code === 429 && attempt < 1) {
+          attempt++;
+          log('iTunes 429 — single backoff 12s then retry once');
+          await new Promise((r) => setTimeout(r, 12000));
+          lastCallAt = Date.now();
+          continue;
+        }
+        if (code === 429 || msg.includes('429')) {
+          haltedQuota++;
+          log('halted — iTunes rate limit after retry');
+        } else {
+          log('search error', id, msg.slice(0, 120));
+          noMatch++;
+        }
+        items = null;
         break;
       }
-      log('search error', id, msg.slice(0, 120));
-      noMatch++;
+    }
+
+    if (!items) {
+      if (haltedQuota) break;
       continue;
     }
 
-    if (!Array.isArray(items) || items.length === 0) {
+    if (items.length === 0) {
       noMatch++;
       continue;
     }
@@ -244,6 +297,7 @@ async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
 
     if (best && bestScore >= scoreMin) {
       idToMeta.set(id, { name: best.name, artist: best.artist });
+      metadataCache.setCached(id, country, cacheRawFingerprintSource, best.name, best.artist);
       upgraded++;
     } else {
       noMatch++;
@@ -251,7 +305,7 @@ async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
   }
 
   if (idToMeta.size === 0) {
-    log(`no upgrades (${noMatch} no/low match; ${haltedQuota} rate-limit halt)`);
+    log(`no upgrades — ${noMatch} no/low match; ${cacheHits} cache miss; ${haltedQuota} rate-limit halt`);
     return songList;
   }
 
@@ -269,7 +323,7 @@ async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
   });
 
   log(
-    `upgraded ${upgraded} unique video(s) via iTunes (${idToMeta.size}/${uniqueYts.length}); ${noMatch} heuristic; ${haltedQuota} halted`,
+    `reconciled ${idToMeta.size} unique video(s): ${upgraded} iTunes, ${cacheHits} cache, ${noMatch} heuristic, ${haltedQuota} halted`,
   );
   return out;
 }

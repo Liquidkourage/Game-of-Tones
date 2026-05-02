@@ -41,3 +41,6 @@ server/spotify_device.json
 # Mirrored venue logos (on-disk cache; path overridable via TEMPO_VENUE_LOGO_DIR)
 data/venue-logos/
 
+# YouTube → iTunes metadata cache (path overridable via TEMPO_YT_METADATA_CACHE_PATH)
+data/youtube-metadata-cache.json
+

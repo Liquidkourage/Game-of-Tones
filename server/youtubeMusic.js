@@ -195,6 +195,8 @@ async function listPlaylistItems(hostUserId, playlistId, options = {}) {
         id: vid,
         name: displayName,
         artist: displayArtist,
+        /** Full Data API `snippet.title` — used for finalize reconciliation + cache keys (not for channel name). */
+        youtubeRawTitle: rawTitle,
         youtubeMusic: true,
         sourcePlaylistId: pid,
         ...(playlistName ? { sourcePlaylistName: playlistName } : {}),

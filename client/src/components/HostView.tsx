@@ -122,6 +122,8 @@ interface Song {
   youtubeMusic?: boolean;
   sourcePlaylistId?: string;
   sourcePlaylistName?: string;
+  /** Full YouTube `snippet.title` when loaded from Data API; finalize reconciliation uses this. */
+  youtubeRawTitle?: string;
   /** True when server matched this row via iTunes Search at finalize (YouTube mix). */
   catalogDisplayVerified?: boolean;
 }
