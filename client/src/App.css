@@ -1581,20 +1581,41 @@ body {
   filter: drop-shadow(0 14px 36px rgba(0, 0, 0, 0.55));
 }
 
-/* Splash: hero column — same vertical band as join card; logo centered in left gutter. */
+/* Splash: hero + join row — grid keeps one row on wall displays (flex-wrap was stacking hero alone). */
+.public-display-splash-bottom {
+  display: grid;
+  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.public-display-splash-bottom--with-hero {
+  grid-template-columns: minmax(0, min(40vw, 460px)) minmax(0, 1fr);
+}
+
+@media (max-width: 780px) {
+  .public-display-splash-bottom--with-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Splash: hero column — matches join row height; inner fillSlot block centers logo. */
 .public-display-splash-hero-slot {
-  flex: 0 0 auto;
-  align-self: stretch;
-  width: 100%;
-  max-width: min(40vw, 460px);
   min-width: 0;
-  margin-right: clamp(16px, 2.75vmin, 40px);
+  max-width: min(40vw, 460px);
+  width: 100%;
+  justify-self: center;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  min-height: 0;
+  align-items: stretch;
+  justify-content: flex-start;
   isolation: isolate;
+}
+
+.public-display-splash-bottom--with-hero .public-display-splash-hero-slot {
+  justify-self: stretch;
+  max-width: none;
 }
 
 .public-display-splash-hero-slot > div {
@@ -1632,7 +1653,7 @@ body {
 }
 
 .public-display-splash-join-card__eyebrow {
-  font-size: clamp(0.78rem, min(2.05vmin, 1.75vh), 0.95rem);
+  font-size: clamp(0.88rem, min(2.35vmin, 2vh), 1.08rem);
   font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -1748,7 +1769,7 @@ body {
 
   .public-display-splash-join-card__manual:not(.public-display-splash-join-card__manual--solo)
   .public-display-splash-join-card__eyebrow {
-    font-size: clamp(0.82rem, min(2.25vmin, 2vh), 1.1rem);
+    font-size: clamp(0.92rem, min(2.55vmin, 2.25vh), 1.2rem);
   }
 
   .public-display-splash-join-card__manual--solo {

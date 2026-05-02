@@ -76,9 +76,12 @@ type PublicDisplayVenueBrandingState = {
 function PublicDisplayVenueBrandingHero({
   branding,
   marginBottom,
+  fillSlot = false,
 }: {
   branding: PublicDisplayVenueBrandingState;
   marginBottom: string;
+  /** When true, expand to parent height and vertically center content (splash left column). */
+  fillSlot?: boolean;
 }) {
   if (!(branding.logoUrl || branding.eventTitle || branding.sponsorLine)) return null;
   return (
@@ -87,12 +90,14 @@ function PublicDisplayVenueBrandingHero({
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
+        justifyContent: fillSlot ? 'center' : undefined,
         gap: 'clamp(8px, 1.8vmin, 18px)',
         marginBottom,
         width: '100%',
         maxWidth: 'min(98vw, 1200px)',
         marginLeft: 'auto',
         marginRight: 'auto',
+        ...(fillSlot ? { flex: 1, minHeight: 0 } : {}),
       }}
     >
       {branding.logoUrl ? (
@@ -217,6 +222,15 @@ const PublicDisplay: React.FC = () => {
   const playerJoinUrl = useMemo(
     () => (roomId && playerJoinOrigin ? `${playerJoinOrigin}/player/${roomId}` : ''),
     [roomId, playerJoinOrigin],
+  );
+
+  const splashHasHeroBranding = useMemo(
+    () =>
+      !!(
+        venueBranding &&
+        (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine)
+      ),
+    [venueBranding],
   );
 
   // Splash/intro overlay (can disable with ?splash=0)
@@ -3339,38 +3353,35 @@ const PublicDisplay: React.FC = () => {
               />
             </div>
             <div
+              className={
+                splashHasHeroBranding
+                  ? 'public-display-splash-bottom public-display-splash-bottom--with-hero'
+                  : 'public-display-splash-bottom'
+              }
               style={{
-                display: 'flex',
-                flexDirection: 'row',
-                flexWrap: 'wrap',
                 gap: 'clamp(20px, 3.5vmin, 48px)',
-                alignItems: 'stretch',
-                justifyContent: 'flex-start',
                 width: '100%',
                 minWidth: 0,
                 flex: 1,
                 minHeight: 0,
               }}
             >
-              {venueBranding &&
-              (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine) ? (
+              {splashHasHeroBranding && venueBranding ? (
                 <div className="public-display-splash-hero-slot">
-                  <PublicDisplayVenueBrandingHero branding={venueBranding} marginBottom="0" />
+                  <PublicDisplayVenueBrandingHero
+                    branding={venueBranding}
+                    marginBottom="0"
+                    fillSlot
+                  />
                 </div>
               ) : null}
               <div
                 style={{
-                  flex:
-                    venueBranding &&
-                    (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine)
-                      ? '1 1 320px'
-                      : '1 1 100%',
                   minWidth: 0,
                   maxWidth: '100%',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'stretch',
-                  alignSelf: 'stretch',
                   minHeight: 0,
                   position: 'relative',
                   zIndex: 2,
@@ -3417,7 +3428,7 @@ const PublicDisplay: React.FC = () => {
                       <div className="public-display-splash-join-card__eyebrow">Phone or tablet</div>
                       <div
                         style={{
-                          fontSize: 'clamp(1.05rem, min(2.85vmin, 2.35vh), 2.05rem)',
+                          fontSize: 'clamp(1.2rem, min(3.4vmin, 2.85vh), 2.45rem)',
                           fontWeight: 900,
                           color: '#eafff8',
                           letterSpacing: '0.06em',
@@ -3446,7 +3457,7 @@ const PublicDisplay: React.FC = () => {
                     </div>
                     <div
                       style={{
-                        fontSize: 'clamp(1.5rem, min(4.8vmin, 4vh), 3.35rem)',
+                        fontSize: 'clamp(1.7rem, min(5.6vmin, 4.65vh), 3.85rem)',
                         fontWeight: 800,
                         color: 'rgba(230,240,255,0.94)',
                         letterSpacing: '0.18em',
@@ -3468,7 +3479,7 @@ const PublicDisplay: React.FC = () => {
                     >
                       <span
                         style={{
-                          fontSize: 'clamp(1.35rem, min(4vmin, 3.5vh), 2.95rem)',
+                          fontSize: 'clamp(1.55rem, min(4.65vmin, 4.1vh), 3.35rem)',
                           fontWeight: 700,
                           color: 'rgba(240,248,255,0.98)',
                           lineHeight: 1.2,
@@ -3508,7 +3519,7 @@ const PublicDisplay: React.FC = () => {
                           lang="en"
                           style={{
                             display: 'inline-block',
-                            fontSize: 'clamp(1.15rem, calc(100cqw / 11), 3.6rem)',
+                            fontSize: 'clamp(1.35rem, calc(100cqw / 9.25), 4.15rem)',
                             fontWeight: 900,
                             lineHeight: 1.15,
                             textShadow: '0 8px 32px rgba(0,0,0,0.45), 0 0 40px rgba(180,210,255,0.12)',
@@ -3527,7 +3538,7 @@ const PublicDisplay: React.FC = () => {
                     </div>
                     <div
                       style={{
-                        fontSize: 'clamp(1.3rem, min(4.2vmin, 3.8vh), 2.95rem)',
+                        fontSize: 'clamp(1.45rem, min(4.85vmin, 4.35vh), 3.35rem)',
                         fontWeight: 700,
                         opacity: 0.96,
                         letterSpacing: '0.02em',
@@ -3542,7 +3553,7 @@ const PublicDisplay: React.FC = () => {
                     <div
                       className="public-display-splash-join-card__room-code"
                       style={{
-                        fontSize: 'clamp(2.25rem, min(9.5vmin, 8.2vh), 6rem)',
+                        fontSize: 'clamp(2.6rem, min(11vmin, 9.25vh), 6.85rem)',
                         fontWeight: 1000,
                         color: '#00ffb0',
                         textShadow: '0 8px 28px rgba(0,255,170,0.55)',
