@@ -1,17 +1,17 @@
 'use strict';
 
 /**
- * At finalize-mix, upgrade YouTube Music rows to Spotify-catalog title + artist using the Tempo
- * catalog Spotify token (same app as pack reads). Respects pacing between search calls and stops
- * when the catalog client is quarantined after a 429.
+ * At finalize-mix, upgrade YouTube Music rows to canonical track title + artist using the
+ * **iTunes Search API** (public JSON, no Spotify Web API — avoids Spotify quota on this path).
  *
  * Env:
  * - TEMPO_YT_CATALOG_VERIFY — default true; set 0/false/off to skip
- * - TEMPO_YT_VERIFY_MIN_INTERVAL_MS — ms between search calls (default 320, max clamped 5000)
+ * - TEMPO_YT_VERIFY_MIN_INTERVAL_MS — ms between requests (default 450, max 5000)
  * - TEMPO_YT_VERIFY_SCORE_MIN — 0–1 match threshold (default 0.5)
+ * - TEMPO_YT_VERIFY_SEARCH_LIMIT — iTunes `limit` param (default 8, max 25)
+ * - TEMPO_YT_VERIFY_ITUNES_COUNTRY — store country code (default us)
+ * - TEMPO_YT_VERIFY_HTTP_UA — optional User-Agent for requests
  */
-
-const catalogSpotify = require('./catalogSpotify');
 
 function parseEnvBool(raw, defaultVal) {
   if (raw == null || String(raw).trim() === '') return defaultVal;
@@ -28,13 +28,21 @@ function clamp(n, lo, hi) {
 function getMinIntervalMs() {
   const n = Number(process.env.TEMPO_YT_VERIFY_MIN_INTERVAL_MS);
   if (Number.isFinite(n) && n >= 0) return Math.min(5000, Math.floor(n));
-  return 320;
+  return 450;
 }
 
 function getScoreMin() {
   const n = Number(process.env.TEMPO_YT_VERIFY_SCORE_MIN);
   if (Number.isFinite(n) && n > 0 && n <= 1) return n;
   return 0.5;
+}
+
+function getItunesCountry() {
+  const c = String(process.env.TEMPO_YT_VERIFY_ITUNES_COUNTRY || 'us')
+    .trim()
+    .toLowerCase()
+    .slice(0, 2);
+  return c || 'us';
 }
 
 function normalizeForMatch(s) {
@@ -59,17 +67,18 @@ function tokenSetJaccard(a, b) {
 }
 
 /**
- * @param {{ name: string; artist: string; popularity?: number }} track
+ * @param {{ name: string; artist: string }} track
  * @param {string} expectedTitle
  * @param {string} expectedArtist
+ * @param {number} rankIndex — iTunes result order (0 = most relevant)
  */
-function scoreCandidate(track, expectedTitle, expectedArtist) {
+function scoreCandidate(track, expectedTitle, expectedArtist, rankIndex = 0) {
   const t = tokenSetJaccard(track.name, expectedTitle);
   const artist = String(expectedArtist || '').trim();
   const a = artist ? tokenSetJaccard(track.artist, artist) : 0;
   const base = artist ? t * 0.55 + a * 0.45 : t * 0.92;
-  const pop = (Number(track.popularity) || 0) / 100;
-  return clamp(base + pop * 0.07, 0, 1);
+  const rankBoost = Math.max(0, 0.035 - Math.min(rankIndex, 4) * 0.008);
+  return clamp(base + rankBoost, 0, 1);
 }
 
 function sanitizeQueryPart(s) {
@@ -89,37 +98,70 @@ function buildSearchQuery(artist, title) {
 }
 
 /**
+ * @param {string} term
+ * @param {number} limit
+ * @returns {Promise<{ name: string; artist: string }[]>}
+ */
+async function searchItunesTracks(term, limit) {
+  const url = new URL('https://itunes.apple.com/search');
+  url.searchParams.set('term', term);
+  url.searchParams.set('entity', 'song');
+  url.searchParams.set('limit', String(limit));
+  url.searchParams.set('country', getItunesCountry());
+
+  const ua =
+    String(process.env.TEMPO_YT_VERIFY_HTTP_UA || '').trim() ||
+    'TempoMusicBingo/1.0 (finalize-metadata; +https://github.com/Liquidkourage/Game-of-Tones)';
+
+  const r = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': ua,
+    },
+  });
+
+  if (r.status === 429) {
+    const err = new Error('iTunes rate limited (429)');
+    /** @type {any} */ (err).statusCode = 429;
+    throw err;
+  }
+  if (!r.ok) {
+    const err = new Error(`iTunes HTTP ${r.status}`);
+    /** @type {any} */ (err).statusCode = r.status;
+    throw err;
+  }
+
+  const body = await r.json();
+  const results = Array.isArray(body.results) ? body.results : [];
+  const out = [];
+  for (let i = 0; i < results.length && out.length < limit; i++) {
+    const row = results[i];
+    const name = String(row.trackName || '').trim();
+    const artist = String(row.artistName || '').trim();
+    if (name) out.push({ name, artist });
+  }
+  return out;
+}
+
+/**
  * @param {any[]} songList
  * @param {{ log?: (...a: any[]) => void }} [opts]
  * @returns {Promise<any[]>}
  */
 async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
-  const log = opts.log || ((...a) => console.log('[yt-catalog-verify]', ...a));
+  const log = opts.log || ((...a) => console.log('[yt-itunes-verify]', ...a));
 
   if (!Array.isArray(songList) || songList.length === 0) return songList;
-
-  if (!catalogSpotify.isCatalogFeatureConfigured()) {
-    log('skipped — Tempo catalog Spotify not configured (set TEMPO_CATALOG_SPOTIFY_REFRESH_TOKEN and allowlist)');
-    return songList;
-  }
 
   if (!parseEnvBool(process.env.TEMPO_YT_CATALOG_VERIFY, true)) {
     log('skipped — TEMPO_YT_CATALOG_VERIFY disabled');
     return songList;
   }
 
-  let svc;
-  try {
-    svc = await catalogSpotify.ensureCatalogAccessToken();
-  } catch (e) {
-    const msg = e && e.message ? String(e.message) : String(e);
-    log('skipped — catalog token:', msg.slice(0, 160));
-    return songList;
-  }
-
   const minIv = getMinIntervalMs();
   const scoreMin = getScoreMin();
-  const searchLimit = clamp(Number(process.env.TEMPO_YT_VERIFY_SEARCH_LIMIT) || 5, 1, 10);
+  const searchLimit = clamp(Number(process.env.TEMPO_YT_VERIFY_SEARCH_LIMIT) || 8, 1, 25);
 
   /** @type {{ id: string; firstIndex: number }[]} */
   const uniqueYts = [];
@@ -151,11 +193,6 @@ async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
   };
 
   for (const { id, firstIndex } of uniqueYts) {
-    if (typeof svc.isQuarantined === 'function' && svc.isQuarantined()) {
-      haltedQuota++;
-      break;
-    }
-
     const seed = songList[firstIndex];
     const expectedTitle = String(seed.name || '').trim();
     const expectedArtist = String(seed.artist || '').trim();
@@ -172,15 +209,16 @@ async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
 
     await pace();
 
-    /** @type {any[]} */
+    /** @type {{ name: string; artist: string }[]} */
     let items;
     try {
-      items = await svc.searchTracks(query, searchLimit, 0);
+      items = await searchItunesTracks(query, searchLimit);
     } catch (e) {
       const msg = e && e.message ? String(e.message) : String(e);
-      if (msg.includes('quarantined') || msg.includes('429')) {
+      const code = e && /** @type {any} */ (e).statusCode;
+      if (code === 429 || msg.includes('429')) {
         haltedQuota++;
-        log('halted — Spotify rate limit / quarantine');
+        log('halted — iTunes rate limit');
         break;
       }
       log('search error', id, msg.slice(0, 120));
@@ -195,8 +233,9 @@ async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
 
     let best = null;
     let bestScore = 0;
-    for (const tr of items) {
-      const sc = scoreCandidate(tr, expectedTitle, expectedArtist);
+    for (let ri = 0; ri < items.length; ri++) {
+      const tr = items[ri];
+      const sc = scoreCandidate(tr, expectedTitle, expectedArtist, ri);
       if (sc > bestScore) {
         bestScore = sc;
         best = tr;
@@ -212,14 +251,14 @@ async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
   }
 
   if (idToMeta.size === 0) {
-    log(`no upgrades (${noMatch} no/low match; ${haltedQuota} quota/halt)`);
+    log(`no upgrades (${noMatch} no/low match; ${haltedQuota} rate-limit halt)`);
     return songList;
   }
 
   const out = songList.map((s) => {
     if (!s || s.youtubeMusic !== true) return s;
-    const id = String(s.id || '').trim();
-    const meta = idToMeta.get(id);
+    const sid = String(s.id || '').trim();
+    const meta = idToMeta.get(sid);
     if (!meta) return s;
     return {
       ...s,
@@ -230,7 +269,7 @@ async function applyYoutubeCatalogTrackVerification(songList, opts = {}) {
   });
 
   log(
-    `upgraded ${upgraded} unique video(s) (${idToMeta.size}/${uniqueYts.length}); ${noMatch} heuristic kept; ${haltedQuota} halted/quarantine`,
+    `upgraded ${upgraded} unique video(s) via iTunes (${idToMeta.size}/${uniqueYts.length}); ${noMatch} heuristic; ${haltedQuota} halted`,
   );
   return out;
 }

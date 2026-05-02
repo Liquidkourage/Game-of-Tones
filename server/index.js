@@ -2415,7 +2415,7 @@ io.on('connection', (socket) => {
           log: (...a) => routineServerLog('🎼', ...a),
         });
       } catch (e) {
-        routineServerLog('⚠️ YouTube catalog verification failed (using heuristic titles):', e?.message || e);
+        routineServerLog('⚠️ YouTube metadata verification failed (using heuristic titles):', e?.message || e);
         songListVerified = songList;
       }
 

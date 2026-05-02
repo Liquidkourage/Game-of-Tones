@@ -122,7 +122,7 @@ interface Song {
   youtubeMusic?: boolean;
   sourcePlaylistId?: string;
   sourcePlaylistName?: string;
-  /** True when server matched this row to Spotify catalog at finalize (YouTube mix). */
+  /** True when server matched this row via iTunes Search at finalize (YouTube mix). */
   catalogDisplayVerified?: boolean;
 }
 
