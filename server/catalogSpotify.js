@@ -376,4 +376,5 @@ module.exports = {
   loadCatalogPackSummariesForApi,
   fetchCatalogPlaylistTracks,
   assertCatalogPlaylistAllowlisted,
+  ensureCatalogAccessToken,
 };

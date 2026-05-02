@@ -18,6 +18,7 @@ const credentialCrypto = require('./credentialCrypto');
 const spotifyPipelineLog = require('./spotifyPipelineLog');
 const catalogSpotify = require('./catalogSpotify');
 const youtubeMusic = require('./youtubeMusic');
+const { applyYoutubeCatalogTrackVerification } = require('./youtubeTrackCatalogVerify');
 
 // Song title cleaning utility
 function cleanSongTitle(title) {
@@ -2393,9 +2394,8 @@ io.on('connection', (socket) => {
         return;
       }
 
-      // Persist finalized data, including host-ordered song list if provided
+      // Persist finalized data; song order is set after optional YouTube → catalog title pass
       room.finalizedPlaylists = playlists;
-      room.finalizedSongOrder = songList;
       room.freeSpaceEnabled = !!freeSpace;
       
       routineServerLog('📋 Received songList for finalization:', {
@@ -2409,8 +2409,19 @@ io.on('connection', (socket) => {
         },
       });
 
-      room.finalizedSongs = songList;
-      routineServerLog(`📝 Stored ${songList.length} finalized songs for room ${roomId}`);
+      let songListVerified = songList;
+      try {
+        songListVerified = await applyYoutubeCatalogTrackVerification(songList, {
+          log: (...a) => routineServerLog('🎼', ...a),
+        });
+      } catch (e) {
+        routineServerLog('⚠️ YouTube catalog verification failed (using heuristic titles):', e?.message || e);
+        songListVerified = songList;
+      }
+
+      room.finalizedSongOrder = songListVerified;
+      room.finalizedSongs = songListVerified;
+      routineServerLog(`📝 Stored ${songListVerified.length} finalized songs for room ${roomId}`);
 
       const bingoOk = await generateBingoCards(roomId, playlists, room.finalizedSongOrder || null);
       if (!bingoOk) {
@@ -2428,7 +2439,7 @@ io.on('connection', (socket) => {
 
       room.mixFinalized = true;
       
-      io.to(roomId).emit('mix-finalized', { playlists });
+      io.to(roomId).emit('mix-finalized', { playlists, songList: songListVerified });
       
       routineServerLog('✅ Mix finalized for room:', roomId);
     } catch (error) {

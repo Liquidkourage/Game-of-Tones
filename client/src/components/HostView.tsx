@@ -122,6 +122,8 @@ interface Song {
   youtubeMusic?: boolean;
   sourcePlaylistId?: string;
   sourcePlaylistName?: string;
+  /** True when server matched this row to Spotify catalog at finalize (YouTube mix). */
+  catalogDisplayVerified?: boolean;
 }
 
 interface EventRound {
@@ -2671,7 +2673,7 @@ const HostView: React.FC = () => {
       });
 
       return await new Promise<boolean>((resolve) => {
-        const timeoutMs = 25000;
+        const timeoutMs = 120000;
         const cleanup = () => {
           window.clearTimeout(t);
           socket.off('mix-finalized', onFinalized);
@@ -2701,6 +2703,10 @@ const HostView: React.FC = () => {
         const onFinalized = (data: any) => {
           cleanup();
           console.log('Mix finalized:', data);
+          if (Array.isArray(data?.songList) && data.songList.length > 0) {
+            setSongList(data.songList as Song[]);
+            lastFinalizeMixSongListRef.current = data.songList as Song[];
+          }
           setMixFinalized(true);
           setTimeout(() => {
             requestPlayerCards({ announce: true });
