@@ -3985,6 +3985,36 @@ const PublicDisplay: React.FC = () => {
               />
             </div>
 
+            {venueBranding?.logoUrl ? (
+              <div
+                style={{
+                  position: 'fixed',
+                  top: 'max(4px, env(safe-area-inset-top, 0px))',
+                  right: 'max(4px, env(safe-area-inset-right, 0px))',
+                  zIndex: 2001,
+                  width: 'min(72vw, 540px)',
+                  maxWidth: 540,
+                  pointerEvents: 'none',
+                }}
+              >
+                <img
+                  src={venueBranding.logoUrl}
+                  alt={venueBranding.eventTitle || 'Venue'}
+                  className="public-display-venue-logo public-display-venue-logo--hero"
+                  decoding="async"
+                  fetchPriority="high"
+                  style={{
+                    width: '100%',
+                    height: 'auto',
+                    maxHeight: 'clamp(144px, min(34vmin, 30svh), 400px)',
+                    objectFit: 'contain',
+                    display: 'block',
+                    marginLeft: 'auto',
+                  }}
+                />
+              </div>
+            ) : null}
+
               <div
                 className="public-display-rules-overlay__panel"
                 style={{
@@ -4013,35 +4043,6 @@ const PublicDisplay: React.FC = () => {
                 const hasVenueText = !!(vb && (vb.eventTitle || vb.sponsorLine));
                 return (
                   <>
-                    {logoUrl ? (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: 'clamp(2px, 1vmin, 14px)',
-                          right: 'clamp(6px, 2vmin, 24px)',
-                          zIndex: 2,
-                          width: 'min(36vw, 270px)',
-                          maxWidth: 270,
-                          pointerEvents: 'none',
-                        }}
-                      >
-                        <img
-                          src={logoUrl}
-                          alt={vb?.eventTitle || 'Venue'}
-                          className="public-display-venue-logo public-display-venue-logo--hero"
-                          decoding="async"
-                          fetchPriority="high"
-                          style={{
-                            width: '100%',
-                            height: 'auto',
-                            maxHeight: 'clamp(72px, min(17vmin, 15svh), 200px)',
-                            objectFit: 'contain',
-                            display: 'block',
-                            marginLeft: 'auto',
-                          }}
-                        />
-                      </div>
-                    ) : null}
                     <div
                       style={{
                         width: '100%',
