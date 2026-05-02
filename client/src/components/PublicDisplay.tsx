@@ -3376,107 +3376,89 @@ const PublicDisplay: React.FC = () => {
               >
             <div
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
-                gap: 'clamp(12px, 2.5vmin, 40px)',
-                alignItems: 'stretch',
-                justifyContent: 'center',
                 width: '100%',
-                maxWidth: 'min(1100px, 100%)',
+                maxWidth: 'min(720px, 94vw)',
                 minWidth: 0,
                 margin: '0 auto',
               }}
             >
-              {roomId && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.45, delay: 0.2 }}
-                  style={{
-                    background: 'linear-gradient(145deg, rgba(0,255,180,0.14) 0%, rgba(20,40,55,0.45) 100%)',
-                    border: 'max(2px, 0.25vmin) solid rgba(0,255,200,0.4)',
-                    borderRadius: 'clamp(18px, 2.5vmin, 26px)',
-                    padding:
-                      'clamp(16px, 2.6vmin, 32px) clamp(16px, 2.8vmin, 28px) clamp(14px, 2.2vmin, 28px)',
-                    width: '100%',
-                    minWidth: 0,
-                    minHeight: '100%',
-                    textAlign: 'center',
-                    boxSizing: 'border-box',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'flex-start',
-                    boxShadow:
-                      '0 0 0 1px rgba(255,255,255,0.08) inset, 0 24px 56px rgba(0,0,0,0.4), 0 0 50px rgba(0,255,200,0.1)',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 'min(100%, min(42vmin, 46vh), 440px)',
-                      maxWidth: '100%',
-                      boxSizing: 'border-box',
-                      marginLeft: 'auto',
-                      marginRight: 'auto',
-                      flexShrink: 0,
-                      paddingLeft: 'clamp(8px, 1.5vmin, 18px)',
-                      paddingRight: 'clamp(8px, 1.5vmin, 18px)',
-                    }}
-                  >
-                  <img
-                    alt="Join QR"
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      height: 'auto',
-                      aspectRatio: '1/1',
-                      objectFit: 'contain',
-                      borderRadius: 'clamp(12px, 2vmin, 18px)',
-                      border: '1px solid rgba(255,255,255,0.2)',
-                      boxShadow: '0 16px 44px rgba(0,0,0,0.5)',
-                    }}
-                    src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent(playerJoinUrl)}`}
-                  />
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 'clamp(1.35rem, min(3.4vmin, 2.8vh), 2.85rem)',
-                      fontWeight: 900,
-                      marginTop: 'auto',
-                      paddingTop: 'clamp(8px, 1.5vmin, 16px)',
-                      color: '#eafff8',
-                      letterSpacing: '0.06em',
-                    }}
-                  >
-                    Scan to join
-                  </div>
-                </motion.div>
-              )}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.45, delay: 0.28 }}
+                transition={{ duration: 0.45, delay: 0.2 }}
                 style={{
                   minWidth: 0,
                   width: '100%',
-                  minHeight: '100%',
                   textAlign: 'center',
                   padding: 'clamp(22px, 3vmin, 48px) clamp(22px, 3.5vmin, 44px)',
                   borderRadius: 'clamp(18px, 2.5vmin, 26px)',
-                  background: 'linear-gradient(145deg, rgba(130,100,255,0.18) 0%, rgba(15,25,45,0.55) 100%)',
-                  border: 'max(2px, 0.25vmin) solid rgba(160,140,255,0.45)',
+                  background:
+                    'linear-gradient(165deg, rgba(0,255,180,0.11) 0%, rgba(20,38,55,0.52) 45%, rgba(130,100,255,0.14) 100%)',
+                  border: 'max(2px, 0.25vmin) solid rgba(100, 210, 200, 0.42)',
                   boxShadow:
-                    '0 0 0 1px rgba(255,255,255,0.07) inset, 0 24px 56px rgba(0,0,0,0.38), 0 0 48px rgba(130,100,255,0.12)',
+                    '0 0 0 1px rgba(255,255,255,0.08) inset, 0 24px 56px rgba(0,0,0,0.42), 0 0 40px rgba(0,255,200,0.08), 0 0 36px rgba(130,100,255,0.1)',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'stretch',
-                  justifyContent: 'center',
-                  gap: 'clamp(16px, 2.6vmin, 34px)',
+                  gap: 'clamp(18px, 2.8vmin, 32px)',
                   boxSizing: 'border-box',
-                  /* Lets URL use cqw so one line scales to card width */
                   containerType: 'inline-size',
                 }}
               >
+                {roomId ? (
+                  <>
+                    <div
+                      style={{
+                        fontSize: 'clamp(1.35rem, min(3.4vmin, 2.8vh), 2.85rem)',
+                        fontWeight: 900,
+                        color: '#eafff8',
+                        letterSpacing: '0.06em',
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      Scan to join
+                    </div>
+                    <div
+                      style={{
+                        width: 'min(100%, min(42vmin, 46vh), 440px)',
+                        maxWidth: '100%',
+                        boxSizing: 'border-box',
+                        marginLeft: 'auto',
+                        marginRight: 'auto',
+                        flexShrink: 0,
+                        paddingLeft: 'clamp(8px, 1.5vmin, 18px)',
+                        paddingRight: 'clamp(8px, 1.5vmin, 18px)',
+                      }}
+                    >
+                      <img
+                        alt="Join QR"
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          height: 'auto',
+                          aspectRatio: '1/1',
+                          objectFit: 'contain',
+                          borderRadius: 'clamp(12px, 2vmin, 18px)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          boxShadow: '0 16px 44px rgba(0,0,0,0.5)',
+                        }}
+                        src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent(playerJoinUrl)}`}
+                      />
+                    </div>
+                    <div
+                      aria-hidden
+                      style={{
+                        height: 'max(2px, 0.22vmin)',
+                        width: 'min(88%, 520px)',
+                        margin: 'clamp(4px, 0.8vmin, 12px) auto 0',
+                        borderRadius: 999,
+                        background:
+                          'linear-gradient(90deg, transparent, rgba(255,255,255,0.22), rgba(160,140,255,0.35), rgba(255,255,255,0.22), transparent)',
+                        opacity: 0.9,
+                      }}
+                    />
+                  </>
+                ) : null}
                 <div
                   style={{
                     fontSize: 'clamp(2rem, min(5vmin, 4vh), 3.65rem)',
