@@ -3390,7 +3390,7 @@ const PublicDisplay: React.FC = () => {
                 style={{
                   minWidth: 0,
                   width: '100%',
-                  padding: 'clamp(16px, 2.3vmin, 34px) clamp(16px, 2.6vmin, 36px)',
+                  padding: 'clamp(10px, 1.5vmin, 22px) clamp(12px, 2vmin, 28px)',
                   borderRadius: 'clamp(18px, 2.5vmin, 26px)',
                   background:
                     'linear-gradient(165deg, rgba(0,255,180,0.11) 0%, rgba(20,38,55,0.52) 45%, rgba(130,100,255,0.14) 100%)',

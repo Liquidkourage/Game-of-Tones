@@ -1581,23 +1581,18 @@ body {
   filter: drop-shadow(0 14px 36px rgba(0, 0, 0, 0.55));
 }
 
-/* Splash: combined join card — tall stack (scan → manual); QR scales like hero logo. */
+/* Splash: combined join card — scan → manual; height follows content (no forced min). */
 .public-display-splash-join-card {
   container-type: inline-size;
   container-name: splash-join;
-  min-height: clamp(320px, 48vh, 720px);
-  display: flex;
-  flex-direction: column;
 }
 
 .public-display-splash-join-card__split {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: clamp(18px, 2.8vmin, 32px);
+  gap: clamp(10px, 1.5vmin, 20px);
   align-items: stretch;
   min-width: 0;
-  min-height: 0;
 }
 
 .public-display-splash-join-card__eyebrow {
@@ -1614,16 +1609,16 @@ body {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: clamp(10px, 1.5vmin, 16px);
-  padding: clamp(16px, 2.5vmin, 28px);
+  gap: clamp(4px, 0.65vmin, 10px);
+  padding: clamp(8px, 1.1vmin, 14px);
   border-radius: clamp(14px, 2vmin, 20px);
   background: rgba(0, 0, 0, 0.24);
   box-shadow:
     inset 0 0 0 1px rgba(0, 255, 200, 0.14),
     0 10px 28px rgba(0, 0, 0, 0.18);
   min-width: 0;
-  flex: 1 1 auto;
-  justify-content: center;
+  flex: 0 1 auto;
+  justify-content: flex-start;
 }
 
 .public-display-splash-join-card__manual {
@@ -1631,24 +1626,24 @@ body {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: clamp(8px, 1.35vmin, 14px);
-  padding: clamp(16px, 2.5vmin, 32px);
+  gap: clamp(5px, 0.95vmin, 11px);
+  padding: clamp(10px, 1.5vmin, 22px);
   border-radius: clamp(14px, 2vmin, 20px);
   background: rgba(0, 0, 0, 0.2);
   box-shadow:
     inset 0 0 0 1px rgba(160, 140, 255, 0.18),
     0 10px 28px rgba(0, 0, 0, 0.16);
   min-width: 0;
-  flex: 1 1 auto;
-  justify-content: center;
+  flex: 0 1 auto;
+  justify-content: flex-start;
 }
 
 .public-display-splash-join-card__qr-wrap {
-  width: min(100%, min(44vmin, 38vh), 520px);
+  width: min(100%, min(36vmin, 30vh), 400px);
   max-width: 100%;
   margin-left: auto;
   margin-right: auto;
-  padding: clamp(6px, 1vmin, 14px);
+  padding: 0;
   box-sizing: border-box;
 }
 
@@ -1656,12 +1651,12 @@ body {
   display: block;
   width: 100%;
   height: auto;
-  max-height: clamp(200px, min(44vmin, 38vh), 520px);
+  max-height: clamp(160px, min(36vmin, 30vh), 400px);
   aspect-ratio: 1 / 1;
   object-fit: contain;
-  border-radius: clamp(12px, 2vmin, 18px);
+  border-radius: clamp(10px, 1.6vmin, 16px);
   border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.48);
 }
 
 .public-display-splash-join-card__room-code {
@@ -1669,8 +1664,8 @@ body {
   max-width: min(100%, 28rem);
   margin-left: auto;
   margin-right: auto;
-  margin-top: clamp(6px, 0.85vmin, 12px);
-  padding: clamp(10px, 1.4vmin, 16px) clamp(14px, 2.2vmin, 24px);
+  margin-top: clamp(4px, 0.6vmin, 10px);
+  padding: clamp(8px, 1.1vmin, 14px) clamp(12px, 1.8vmin, 20px);
   border-radius: clamp(12px, 1.8vmin, 18px);
   background: rgba(0, 20, 24, 0.55);
   border: 1px solid rgba(0, 255, 200, 0.22);
