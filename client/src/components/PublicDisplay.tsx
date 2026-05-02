@@ -3348,8 +3348,8 @@ const PublicDisplay: React.FC = () => {
               (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine) ? (
                 <div
                   style={{
-                    flex: '1 1 340px',
-                    maxWidth: 960,
+                    flex: '0 1 300px',
+                    maxWidth: 520,
                     minWidth: 0,
                     display: 'flex',
                     flexDirection: 'column',
@@ -3365,7 +3365,7 @@ const PublicDisplay: React.FC = () => {
                   flex:
                     venueBranding &&
                     (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine)
-                      ? '2 1 320px'
+                      ? '2 1 400px'
                       : '1 1 100%',
                   minWidth: 0,
                   maxWidth: '100%',
@@ -3377,7 +3377,7 @@ const PublicDisplay: React.FC = () => {
             <div
               style={{
                 width: '100%',
-                maxWidth: 'min(720px, 94vw)',
+                maxWidth: 'min(1180px, calc(100vw - clamp(20px, 4vw, 72px)))',
                 minWidth: 0,
                 margin: '0 auto',
               }}
@@ -3390,7 +3390,7 @@ const PublicDisplay: React.FC = () => {
                   minWidth: 0,
                   width: '100%',
                   textAlign: 'center',
-                  padding: 'clamp(22px, 3vmin, 48px) clamp(22px, 3.5vmin, 44px)',
+                  padding: 'clamp(12px, 1.8vmin, 26px) clamp(14px, 2.2vmin, 32px)',
                   borderRadius: 'clamp(18px, 2.5vmin, 26px)',
                   background:
                     'linear-gradient(165deg, rgba(0,255,180,0.11) 0%, rgba(20,38,55,0.52) 45%, rgba(130,100,255,0.14) 100%)',
@@ -3400,7 +3400,7 @@ const PublicDisplay: React.FC = () => {
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'stretch',
-                  gap: 'clamp(18px, 2.8vmin, 32px)',
+                  gap: 'clamp(8px, 1.4vmin, 18px)',
                   boxSizing: 'border-box',
                   containerType: 'inline-size',
                 }}
@@ -3409,7 +3409,7 @@ const PublicDisplay: React.FC = () => {
                   <>
                     <div
                       style={{
-                        fontSize: 'clamp(1.35rem, min(3.4vmin, 2.8vh), 2.85rem)',
+                        fontSize: 'clamp(0.95rem, min(2.5vmin, 2vh), 1.85rem)',
                         fontWeight: 900,
                         color: '#eafff8',
                         letterSpacing: '0.06em',
@@ -3420,14 +3420,14 @@ const PublicDisplay: React.FC = () => {
                     </div>
                     <div
                       style={{
-                        width: 'min(100%, min(42vmin, 46vh), 440px)',
+                        width: 'min(100%, min(26vmin, 28vh), min(72cqw, 280px))',
                         maxWidth: '100%',
                         boxSizing: 'border-box',
                         marginLeft: 'auto',
                         marginRight: 'auto',
                         flexShrink: 0,
-                        paddingLeft: 'clamp(8px, 1.5vmin, 18px)',
-                        paddingRight: 'clamp(8px, 1.5vmin, 18px)',
+                        paddingLeft: 'clamp(6px, 1.2vmin, 14px)',
+                        paddingRight: 'clamp(6px, 1.2vmin, 14px)',
                       }}
                     >
                       <img
@@ -3436,11 +3436,12 @@ const PublicDisplay: React.FC = () => {
                           display: 'block',
                           width: '100%',
                           height: 'auto',
+                          maxHeight: 'min(28vh, 260px)',
                           aspectRatio: '1/1',
                           objectFit: 'contain',
-                          borderRadius: 'clamp(12px, 2vmin, 18px)',
+                          borderRadius: 'clamp(10px, 1.6vmin, 16px)',
                           border: '1px solid rgba(255,255,255,0.2)',
-                          boxShadow: '0 16px 44px rgba(0,0,0,0.5)',
+                          boxShadow: '0 12px 32px rgba(0,0,0,0.45)',
                         }}
                         src={`${API_BASE || ''}/api/qr?size=800&data=${encodeURIComponent(playerJoinUrl)}`}
                       />
@@ -3461,7 +3462,7 @@ const PublicDisplay: React.FC = () => {
                 ) : null}
                 <div
                   style={{
-                    fontSize: 'clamp(2rem, min(5vmin, 4vh), 3.65rem)',
+                    fontSize: 'clamp(1.2rem, min(3.4vmin, 2.8vh), 2.35rem)',
                     fontWeight: 800,
                     color: 'rgba(230,240,255,0.94)',
                     letterSpacing: '0.18em',
@@ -3479,12 +3480,12 @@ const PublicDisplay: React.FC = () => {
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'stretch',
-                    gap: 'clamp(12px, 2vmin, 22px)',
+                    gap: 'clamp(6px, 1.2vmin, 14px)',
                   }}
                 >
                   <span
                     style={{
-                      fontSize: 'clamp(2.1rem, min(5.2vmin, 4.2vh), 3.85rem)',
+                      fontSize: 'clamp(1.05rem, min(3vmin, 2.5vh), 2.1rem)',
                       fontWeight: 700,
                       color: 'rgba(240,248,255,0.98)',
                       lineHeight: 1.2,
@@ -3524,7 +3525,7 @@ const PublicDisplay: React.FC = () => {
                       style={{
                         display: 'inline-block',
                         /* Slightly smaller divisor = URL breathes inside padding */
-                        fontSize: 'clamp(1.15rem, calc(100cqw / 14.5), 4.5rem)',
+                        fontSize: 'clamp(0.9rem, calc(100cqw / 20), 2.65rem)',
                         fontWeight: 900,
                         lineHeight: 1.15,
                         textShadow: '0 8px 32px rgba(0,0,0,0.45), 0 0 40px rgba(180,210,255,0.12)',
@@ -3543,24 +3544,24 @@ const PublicDisplay: React.FC = () => {
                 </div>
                 <div
                   style={{
-                    fontSize: 'clamp(1.85rem, min(4.8vmin, 3.8vh), 3.45rem)',
+                    fontSize: 'clamp(1rem, min(3.2vmin, 2.6vh), 2.15rem)',
                     fontWeight: 700,
                     opacity: 0.96,
                     letterSpacing: '0.02em',
                     color: 'rgba(230,240,255,0.98)',
                     textAlign: 'center',
                     lineHeight: 1.25,
-                    marginTop: 'clamp(4px, 0.8vmin, 12px)',
+                    marginTop: 'clamp(2px, 0.5vmin, 8px)',
                   }}
                 >
                   And enter room code
                 </div>
                 <div
                   style={{
-                    fontSize: 'clamp(3rem, min(12vmin, 11vh), 10rem)',
+                    fontSize: 'clamp(1.65rem, min(7vmin, 6.5vh), 4.25rem)',
                     fontWeight: 1000,
                     color: '#00ffb0',
-                    textShadow: '0 10px 40px rgba(0,255,170,0.65)',
+                    textShadow: '0 8px 28px rgba(0,255,170,0.55)',
                     lineHeight: 1,
                   }}
                 >
