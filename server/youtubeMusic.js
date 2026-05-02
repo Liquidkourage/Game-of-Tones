@@ -14,6 +14,36 @@ const { parseYoutubeVideoTitleForDisplay } = require('./youtubeTrackDisplayParse
 
 const SCOPES = ['https://www.googleapis.com/auth/youtube.readonly'];
 
+/**
+ * Channel display name normalized for use as fallback artist when the title line has no performer.
+ * Strips " - Topic" / trailing VEVO so "Artist - Topic" → "Artist".
+ */
+function channelFallbackArtistName(channelTitle) {
+  let ch = String(channelTitle || '').trim();
+  if (!ch) return '';
+  ch = ch.replace(/\s*-\s*topic\s*$/i, '').trim();
+  ch = ch.replace(/vevo\s*$/i, '').trim();
+  if (ch.length < 2) return '';
+  if (/\bvevo\b/i.test(ch)) return '';
+  if (/\btopic\b/i.test(ch)) return '';
+  if (/\bkaraoke\b/i.test(ch)) return '';
+  if (/^various artists$/i.test(ch)) return '';
+  if (/^lyrics?(\s+channel)?$/i.test(ch)) return '';
+  return ch;
+}
+
+/** If the visible title begins with the channel artist name, return the remainder (e.g. "Stevie Wonder Superstition" → "Superstition"). */
+function titleIfStartsWithChannel(displayTitle, channelArtist) {
+  const t = String(displayTitle || '').trim();
+  const ch = String(channelArtist || '').trim();
+  if (!t || !ch) return null;
+  const tl = t.toLowerCase();
+  const cl = ch.toLowerCase();
+  if (!tl.startsWith(cl + ' ')) return null;
+  const rest = t.slice(ch.length).trim();
+  return rest.length >= 2 ? rest : null;
+}
+
 /** @type {Map<number, import('google-auth-library').Credentials>} */
 const tokenStore = new Map();
 
@@ -189,8 +219,14 @@ async function listPlaylistItems(hostUserId, playlistId, options = {}) {
       const rawTitle = it.snippet?.title || '';
       if (rawTitle === 'Deleted video' || rawTitle === 'Private video') continue;
       const { title: parsedTitle, artist: parsedArtist } = parseYoutubeVideoTitleForDisplay(rawTitle);
-      const displayName = (parsedTitle || rawTitle).trim() || rawTitle;
-      const displayArtist = (parsedArtist || '').trim();
+      let displayName = (parsedTitle || rawTitle).trim() || rawTitle;
+      let displayArtist = (parsedArtist || '').trim();
+      const channelArtist = channelFallbackArtistName(it.snippet?.videoOwnerChannelTitle || '');
+      if (!displayArtist && channelArtist) {
+        const stripped = titleIfStartsWithChannel(displayName, channelArtist);
+        if (stripped) displayName = stripped;
+        displayArtist = channelArtist;
+      }
       tracks.push({
         id: vid,
         name: displayName,

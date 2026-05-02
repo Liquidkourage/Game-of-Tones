@@ -93,6 +93,25 @@ export function parseYoutubeVideoTitleForDisplay(rawTitle: string): { title: str
     if (picked) return picked;
   }
 
+  const byMatch = normalized.match(/^(.{2,200}?)\s+\bby\s+(.{2,120})$/i);
+  if (byMatch && !/^\d{1,2}:\d{2}/.test(byMatch[1])) {
+    return { title: byMatch[1].trim(), artist: byMatch[2].trim() };
+  }
+
+  const paren = normalized.match(/^(.+?)\s*\(\s*([^)]+)\)\s*$/);
+  if (paren) {
+    const inner = paren[2].trim();
+    if (
+      inner.length >= 2 &&
+      inner.length <= 120 &&
+      !officialRe.test(inner) &&
+      !/\b(official|lyrics?|audio|video|mv)\b/i.test(inner)
+    ) {
+      const picked = pickOrientation(paren[1].trim(), inner);
+      if (picked) return picked;
+    }
+  }
+
   return { title: normalized, artist: '' };
 }
 
