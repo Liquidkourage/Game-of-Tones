@@ -3547,7 +3547,7 @@ const PublicDisplay: React.FC = () => {
                         letterSpacing: '0.02em',
                         color: 'rgba(230,240,255,0.98)',
                         lineHeight: 1.25,
-                        marginTop: 'clamp(4px, 0.65vmin, 10px)',
+                        marginTop: 0,
                         width: '100%',
                         textAlign: 'center',
                       }}
