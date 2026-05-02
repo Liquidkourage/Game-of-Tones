@@ -3417,7 +3417,7 @@ const PublicDisplay: React.FC = () => {
                       <div className="public-display-splash-join-card__eyebrow">Phone or tablet</div>
                       <div
                         style={{
-                          fontSize: 'clamp(0.95rem, min(2.5vmin, 2vh), 1.85rem)',
+                          fontSize: 'clamp(1.05rem, min(2.85vmin, 2.35vh), 2.05rem)',
                           fontWeight: 900,
                           color: '#eafff8',
                           letterSpacing: '0.06em',
@@ -3446,7 +3446,7 @@ const PublicDisplay: React.FC = () => {
                     </div>
                     <div
                       style={{
-                        fontSize: 'clamp(1.35rem, min(4.2vmin, 3.6vh), 3rem)',
+                        fontSize: 'clamp(1.5rem, min(4.8vmin, 4vh), 3.35rem)',
                         fontWeight: 800,
                         color: 'rgba(230,240,255,0.94)',
                         letterSpacing: '0.18em',
@@ -3468,7 +3468,7 @@ const PublicDisplay: React.FC = () => {
                     >
                       <span
                         style={{
-                          fontSize: 'clamp(1.2rem, min(3.6vmin, 3.2vh), 2.65rem)',
+                          fontSize: 'clamp(1.35rem, min(4vmin, 3.5vh), 2.95rem)',
                           fontWeight: 700,
                           color: 'rgba(240,248,255,0.98)',
                           lineHeight: 1.2,
@@ -3508,7 +3508,7 @@ const PublicDisplay: React.FC = () => {
                           lang="en"
                           style={{
                             display: 'inline-block',
-                            fontSize: 'clamp(1.05rem, calc(100cqw / 12), 3.25rem)',
+                            fontSize: 'clamp(1.15rem, calc(100cqw / 11), 3.6rem)',
                             fontWeight: 900,
                             lineHeight: 1.15,
                             textShadow: '0 8px 32px rgba(0,0,0,0.45), 0 0 40px rgba(180,210,255,0.12)',
@@ -3527,7 +3527,7 @@ const PublicDisplay: React.FC = () => {
                     </div>
                     <div
                       style={{
-                        fontSize: 'clamp(1.15rem, min(3.8vmin, 3.4vh), 2.65rem)',
+                        fontSize: 'clamp(1.3rem, min(4.2vmin, 3.8vh), 2.95rem)',
                         fontWeight: 700,
                         opacity: 0.96,
                         letterSpacing: '0.02em',
@@ -3542,7 +3542,7 @@ const PublicDisplay: React.FC = () => {
                     <div
                       className="public-display-splash-join-card__room-code"
                       style={{
-                        fontSize: 'clamp(2rem, min(8.5vmin, 7.5vh), 5.5rem)',
+                        fontSize: 'clamp(2.25rem, min(9.5vmin, 8.2vh), 6rem)',
                         fontWeight: 1000,
                         color: '#00ffb0',
                         textShadow: '0 8px 28px rgba(0,255,170,0.55)',
