@@ -190,6 +190,29 @@ function sanitizeHttpUrl(s, maxLen) {
   }
 }
 
+/** Logo: absolute http(s) URL, protocol-relative //..., or same-origin path /uploads/.... */
+function sanitizeLogoUrl(s, maxLen) {
+  const http = sanitizeHttpUrl(s, maxLen);
+  if (http) return http;
+  const t = trimStr(String(s == null ? '' : s), maxLen);
+  if (!t) return '';
+  if (t.startsWith('/') && !t.startsWith('//') && !t.includes('..')) {
+    return t.split('?')[0].slice(0, maxLen);
+  }
+  if (t.startsWith('//') && t.length > 2) {
+    try {
+      const u = new URL(`https:${t}`);
+      if (u.protocol === 'https:' || u.protocol === 'http:') {
+        if (u.protocol === 'http:' && u.hostname !== 'localhost' && u.hostname !== '127.0.0.1') return '';
+        return u.href.split('?')[0].slice(0, maxLen);
+      }
+    } catch {
+      return '';
+    }
+  }
+  return '';
+}
+
 function sanitizeHexColor(s) {
   const t = String(s == null ? '' : s).trim();
   if (!t) return '';
@@ -202,6 +225,7 @@ function sanitizeVenueSettings(raw) {
   const o = raw && typeof raw === 'object' ? raw : {};
   const defSnippet = o.defaultSnippetLength;
   const volCap = o.volumeCap;
+  const rawLogo = o.logoUrl ?? o.logo_url ?? o.logoURI ?? o.logo;
   let dsl = defSnippet == null || defSnippet === '' ? null : parseInt(String(defSnippet), 10);
   if (!Number.isFinite(dsl)) dsl = null;
   else dsl = Math.min(120, Math.max(5, dsl));
@@ -213,7 +237,7 @@ function sanitizeVenueSettings(raw) {
     sponsorLine: trimStr(o.sponsorLine, MAX_VENUE.sponsorLine),
     footerText: trimStr(o.footerText, MAX_VENUE.footerText),
     runbookUrl: sanitizeHttpUrl(o.runbookUrl, 2000),
-    logoUrl: sanitizeHttpUrl(o.logoUrl, 2000),
+    logoUrl: sanitizeLogoUrl(rawLogo, 2000),
     primaryColor: sanitizeHexColor(o.primaryColor),
     accentColor: sanitizeHexColor(o.accentColor),
     defaultSnippetLength: dsl,

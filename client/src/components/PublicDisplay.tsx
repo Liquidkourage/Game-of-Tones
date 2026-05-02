@@ -480,10 +480,10 @@ const PublicDisplay: React.FC = () => {
     newSocket.on('room-state', (payload: any) => {
       console.log('🖥️ PublicDisplay: Received room state sync:', payload);
       try {
-        if (payload) {
-          if (payload.venueBranding !== undefined) {
-            setVenueBranding(payload.venueBranding || null);
-          }
+          if (payload) {
+            if (payload.venueBranding !== undefined) {
+              setVenueBranding(payload.venueBranding ?? null);
+            }
           const serverSaysNoPlays =
             (typeof payload.totalPlayedCount === 'number' && payload.totalPlayedCount === 0) ||
             (Array.isArray(payload.playedSongIds) && payload.playedSongIds.length === 0);

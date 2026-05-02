@@ -2169,6 +2169,8 @@ io.on('connection', (socket) => {
     };
     
     room.players.set(socket.id, player);
+
+    ensureRoomOwnerFromHostSocket(room);
     
     if (room.ownerUserId != null && db) {
       try {
@@ -3612,6 +3614,8 @@ io.on('connection', (socket) => {
         routineServerLog(`🔄 SYNC-STATE: Room ${roomId} not found`);
         return;
       }
+
+      ensureRoomOwnerFromHostSocket(room);
 
       if (room.ownerUserId != null && db) {
         try {
@@ -7598,6 +7602,23 @@ app.post('/api/host/rooms', async (req, res) => {
     res.status(500).json({ error: 'Failed to create room', message: e?.message || 'Failed to create room' });
   }
 });
+
+/**
+ * If the room was created before ownerUserId was persisted (e.g. display joined first),
+ * copy hostUserId from the current host socket so venue branding and Spotify org key resolve.
+ */
+function ensureRoomOwnerFromHostSocket(room) {
+  if (!room || room.ownerUserId != null || !room.host) return;
+  try {
+    const hostSocket = io.sockets.sockets.get(room.host);
+    if (hostSocket && hostSocket.hostUserId != null) {
+      room.ownerUserId = hostSocket.hostUserId;
+      routineServerLog(`📌 Room ${room.id}: ownerUserId backfilled from host socket → ${room.ownerUserId}`);
+    }
+  } catch (e) {
+    console.warn('ensureRoomOwnerFromHostSocket:', e?.message || e);
+  }
+}
 
 /** Load venue / corporate branding for a host-owned room (organization venue_settings). */
 async function resolveRoomVenueBranding(room) {
