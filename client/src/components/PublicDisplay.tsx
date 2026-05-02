@@ -72,6 +72,258 @@ type PublicDisplayVenueBrandingState = {
   accentColor?: string;
 };
 
+type PublicDisplayBallAnimSeed = {
+  dx: number;
+  dy: number;
+  rz: number;
+  rx: number;
+  ry: number;
+  dur: number;
+  delay: number;
+  shadeDur: number;
+  hiliteDur: number;
+  hiliteDelay: number;
+  sparkleDX: number;
+  sparkleDY: number;
+  shadowAmp: number;
+};
+
+/** Floating T/E/M/P/O balls — shared by splash and rules overlay. */
+function PublicDisplayTempoBallRow({
+  seeds,
+  variant,
+}: {
+  seeds: PublicDisplayBallAnimSeed[];
+  variant: 'splash' | 'rules';
+}) {
+  const ballWH =
+    variant === 'splash'
+      ? 'clamp(72px, min(18vmin, 14vh), 220px)'
+      : 'clamp(56px, min(15vmin, 12vh), 180px)';
+  const letterSize =
+    variant === 'splash'
+      ? 'clamp(2rem, min(8vmin, 6vh), 5.25rem)'
+      : 'clamp(1.55rem, min(6.5vmin, 5.2vh), 3.85rem)';
+  const rowGap = variant === 'splash' ? 'clamp(8px, 2vmin, 28px)' : 'clamp(5px, 1.5vmin, 18px)';
+  const rowMarginTop = variant === 'splash' ? 'clamp(4px, 1vmin, 12px)' : 'clamp(0px, 0.35vmin, 6px)';
+  const shadowBottom = variant === 'splash' ? -28 : -22;
+  const shadowSide = variant === 'splash' ? 28 : 22;
+  const shadowH = variant === 'splash' ? 28 : 22;
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: rowGap,
+        justifyContent: 'center',
+        marginTop: rowMarginTop,
+        perspective: '1200px',
+        position: 'relative',
+        flexWrap: 'wrap',
+      }}
+    >
+      {['T', 'E', 'M', 'P', 'O'].map((ch, i) => {
+        const glow = [
+          'rgba(0,255,163,0.45)',
+          'rgba(0,215,255,0.45)',
+          'rgba(158,123,255,0.45)',
+          'rgba(255,110,199,0.45)',
+          'rgba(255,209,102,0.45)',
+        ][i];
+        const rimInner = [
+          'rgba(0,255,170,0.28)',
+          'rgba(0,215,255,0.28)',
+          'rgba(158,123,255,0.28)',
+          'rgba(255,110,199,0.28)',
+          'rgba(255,209,102,0.28)',
+        ][i];
+        const rimOuter = [
+          'rgba(0,255,170,0.18)',
+          'rgba(0,215,255,0.18)',
+          'rgba(158,123,255,0.18)',
+          'rgba(255,110,199,0.18)',
+          'rgba(255,209,102,0.18)',
+        ][i];
+        const tintGradients = [
+          'radial-gradient(circle at 35% 30%, #f6fffb 10%, #b7f4df 55%, #6ee7c1 100%)',
+          'radial-gradient(circle at 35% 30%, #f3faff 10%, #a6dcff 55%, #5ec7ff 100%)',
+          'radial-gradient(circle at 35% 30%, #f8f5ff 10%, #c5b6ff 55%, #957dff 100%)',
+          'radial-gradient(circle at 35% 30%, #fff4fa 10%, #ffb1cf 55%, #ff82b8 100%)',
+          'radial-gradient(circle at 35% 30%, #fff3d2 10%, #ffcf6e 55%, #ffb020 100%)',
+        ];
+        const seed = seeds[i] || {
+          dx: 0,
+          dy: 0,
+          rz: 0,
+          rx: 0,
+          ry: 0,
+          dur: 4,
+          delay: 0,
+          shadeDur: 6,
+          hiliteDur: 6.5,
+          hiliteDelay: 0.1,
+          sparkleDX: 1,
+          sparkleDY: -1,
+          shadowAmp: 4,
+        };
+        const ampX = 6 + i * 2 + seed.dx;
+        const ampY = 10 + (i % 3) * 2 + seed.dy;
+        const rotX = 3 + i + seed.rx;
+        const rotY = 4 + (i % 2) * 2 + seed.ry;
+        const rotZ = 1 + (i % 2) + seed.rz;
+        const dur = 3.6 + i * 0.45 + (seed.dur - 4);
+        const delay = i * 0.18 + seed.delay;
+        const shadeDur = 5.5 + i * 0.5 + (seed.shadeDur - 6);
+        const highlightDur = 6.4 + i * 0.4 + (seed.hiliteDur - 6.5);
+        const highlightDelay = 0.1 + i * 0.22 + seed.hiliteDelay;
+        const sparkleDelay = 0.15 + i * 0.17 + seed.delay;
+        const shadowAmp = Math.round(ampX * 0.6 + seed.shadowAmp);
+        return (
+          <motion.div
+            key={i}
+            initial={{ y: 0, rotateZ: 0, rotateX: 0, rotateY: 0, scale: 1 }}
+            animate={{
+              x: [-ampX, ampX, -ampX],
+              y: [0, -ampY, 0],
+              rotateZ: [-rotZ, rotZ, -rotZ],
+              rotateX: [-rotX, rotX, -rotX],
+              rotateY: [-rotY, rotY, -rotY],
+            }}
+            transition={{ duration: dur, delay, repeat: Infinity, ease: 'easeInOut' }}
+            style={{
+              width: ballWH,
+              height: ballWH,
+              borderRadius: '50%',
+              position: 'relative',
+              transformStyle: 'preserve-3d',
+              background: (() => {
+                const base =
+                  tintGradients[i] ||
+                  'radial-gradient(circle at 35% 30%, #ffffff, #eef4fb 38%, #d2deea 62%, #b0c4d8 100%)';
+                const highlight =
+                  'radial-gradient(120% 120% at 30% 28%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.55) 18%, rgba(255,255,255,0.08) 40%, rgba(0,0,0,0) 42%)';
+                const shadow =
+                  'radial-gradient(140% 140% at 72% 78%, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.6) 35%, rgba(0,0,0,0.0) 60%)';
+                const vignette =
+                  'radial-gradient(100% 100% at 50% 50%, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.06) 55%, rgba(0,0,0,0) 62%)';
+                return `${highlight}, ${shadow}, ${vignette}, ${base}`;
+              })(),
+              boxShadow: `0 28px 44px rgba(0,0,0,0.35), inset 0 -18px 24px rgba(0,0,0,0.22), inset 0 20px 26px rgba(255,255,255,0.55), 0 0 44px ${glow}`,
+              border: '1px solid rgba(0,0,0,0.06)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#102436',
+              fontWeight: 1000,
+              fontSize: letterSize,
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                borderRadius: '50%',
+                background: `radial-gradient(circle, transparent 66%, ${rimInner} 85%, ${rimOuter} 100%)`,
+                pointerEvents: 'none',
+              }}
+            />
+            <motion.div
+              initial={{ rotate: -8, opacity: 0.32 }}
+              animate={{ rotate: [-8, 8, -8], opacity: [0.32, 0.26, 0.32] }}
+              transition={{ duration: shadeDur, delay, repeat: Infinity, ease: 'easeInOut' }}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                borderRadius: '50%',
+                mixBlendMode: 'multiply',
+                background:
+                  'conic-gradient(from 0deg, rgba(0,0,0,0.10) 0deg, rgba(255,255,255,0.06) 90deg, rgba(0,0,0,0.18) 200deg, rgba(0,0,0,0.10) 360deg)',
+              }}
+            />
+            <motion.div
+              initial={{ x: '-20%', y: '0%', opacity: 0.8 }}
+              animate={{ x: ['-10%', '55%', '-10%'], y: ['2%', '-6%', '2%'], opacity: [0.85, 0.5, 0.85] }}
+              transition={{ duration: highlightDur, delay: highlightDelay, repeat: Infinity, ease: 'easeInOut' }}
+              style={{
+                position: 'absolute',
+                width: '30%',
+                height: '30%',
+                borderRadius: '50%',
+                top: '12%',
+                left: 0,
+                background:
+                  'radial-gradient(circle, rgba(255,255,255,0.95), rgba(255,255,255,0.1) 60%, transparent 70%)',
+                filter: 'blur(1px)',
+                mixBlendMode: 'screen',
+                pointerEvents: 'none',
+              }}
+            />
+            <motion.div
+              initial={{ x: '60%', y: '62%', opacity: 0.3 }}
+              animate={{ x: ['60%', '40%', '60%'], y: ['62%', '58%', '62%'], opacity: [0.3, 0.22, 0.3] }}
+              transition={{ duration: 5.2 + i * 0.35, delay: delay * 0.8, repeat: Infinity, ease: 'easeInOut' }}
+              style={{
+                position: 'absolute',
+                width: '18%',
+                height: '18%',
+                borderRadius: '50%',
+                bottom: '12%',
+                right: '12%',
+                background:
+                  'radial-gradient(circle, rgba(255,255,255,0.6), rgba(255,255,255,0.05) 60%, transparent 70%)',
+                filter: 'blur(0.6px)',
+                mixBlendMode: 'screen',
+                pointerEvents: 'none',
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                borderRadius: '50%',
+                boxShadow: 'inset 0 0 16px rgba(255,255,255,0.45)',
+              }}
+            />
+            <motion.div
+              initial={{ opacity: 0.0 }}
+              animate={{ opacity: [0.0, 0.9, 0.0], x: [0, 4, 0], y: [0, -3, 0] }}
+              transition={{ duration: 2.8 + i * 0.3, delay: sparkleDelay, repeat: Infinity, ease: 'easeInOut' }}
+              style={{
+                position: 'absolute',
+                top: '18%',
+                right: '16%',
+                width: 20,
+                height: 20,
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, #ffffff, rgba(255,255,255,0.1) 60%, transparent 70%)',
+                filter: 'blur(0.5px)',
+                pointerEvents: 'none',
+              }}
+            />
+            <motion.div
+              initial={{ opacity: 0.5, x: 0 }}
+              animate={{ opacity: [0.5, 0.35, 0.5], x: [-shadowAmp, shadowAmp, -shadowAmp] }}
+              transition={{ duration: dur, delay, repeat: Infinity, ease: 'easeInOut' }}
+              style={{
+                position: 'absolute',
+                bottom: shadowBottom,
+                left: shadowSide,
+                right: shadowSide,
+                height: shadowH,
+                borderRadius: shadowH,
+                background: 'rgba(0,0,0,0.55)',
+                filter: 'blur(12px)',
+                zIndex: -1,
+              }}
+            />
+            {ch}
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** Large licensee block for splash + rules (wall-readable vs. TEMPO balls). */
 function PublicDisplayVenueBrandingHero({
   branding,
@@ -79,6 +331,7 @@ function PublicDisplayVenueBrandingHero({
   fillSlot = false,
   compact = false,
   logoTileOnly = false,
+  rulesWall = false,
 }: {
   branding: PublicDisplayVenueBrandingState;
   marginBottom: string;
@@ -88,6 +341,8 @@ function PublicDisplayVenueBrandingHero({
   compact?: boolean;
   /** Splash third column: logo only (symmetrical tile). */
   logoTileOnly?: boolean;
+  /** Rules overlay: larger than compact, tuned for wall/projector (not full splash hero). */
+  rulesWall?: boolean;
 }) {
   if (!(branding.logoUrl || branding.eventTitle || branding.sponsorLine)) return null;
 
@@ -110,6 +365,15 @@ function PublicDisplayVenueBrandingHero({
           className="public-display-venue-logo public-display-venue-logo--hero"
           decoding="async"
           fetchPriority="high"
+          style={
+            rulesWall
+              ? {
+                  maxHeight: 'clamp(128px, min(28vmin, 24svh), 360px)',
+                  maxWidth: 'min(92vw, 560px)',
+                  width: 'auto',
+                }
+              : undefined
+          }
         />
       </div>
     );
@@ -166,7 +430,11 @@ function PublicDisplayVenueBrandingHero({
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: fillSlot ? 'center' : undefined,
-        gap: compact ? 'clamp(6px, 1.2vmin, 14px)' : 'clamp(8px, 1.8vmin, 18px)',
+        gap: rulesWall
+          ? 'clamp(5px, 1vmin, 12px)'
+          : compact
+            ? 'clamp(6px, 1.2vmin, 14px)'
+            : 'clamp(8px, 1.8vmin, 18px)',
         marginBottom,
         width: '100%',
         maxWidth: compact ? 'min(98vw, 1000px)' : 'min(98vw, 1200px)',
@@ -188,16 +456,24 @@ function PublicDisplayVenueBrandingHero({
                   maxHeight: 'clamp(80px, min(16vmin, 14vh), 180px)',
                   maxWidth: 'min(88vw, 420px)',
                 }
-              : undefined
+              : rulesWall
+                ? {
+                    maxHeight: 'clamp(128px, min(28vmin, 24svh), 360px)',
+                    maxWidth: 'min(92vw, 560px)',
+                    width: 'auto',
+                  }
+                : undefined
           }
         />
       ) : null}
       {branding.eventTitle ? (
         <div
           style={{
-            fontSize: compact
-              ? 'clamp(1.08rem, min(3.2vmin, 2.65vh), 1.85rem)'
-              : 'clamp(1.35rem, min(4vmin, 3.2vh), 2.5rem)',
+            fontSize: rulesWall
+              ? 'clamp(1.15rem, min(3.5vmin, 2.95vh), 2rem)'
+              : compact
+                ? 'clamp(1.08rem, min(3.2vmin, 2.65vh), 1.85rem)'
+                : 'clamp(1.35rem, min(4vmin, 3.2vh), 2.5rem)',
             fontWeight: 800,
             color: 'rgba(245,250,255,0.98)',
             textAlign: 'center',
@@ -211,9 +487,11 @@ function PublicDisplayVenueBrandingHero({
       {branding.sponsorLine ? (
         <div
           style={{
-            fontSize: compact
-              ? 'clamp(0.95rem, min(2.65vmin, 2.15vh), 1.35rem)'
-              : 'clamp(1.05rem, min(2.8vmin, 2.3vh), 1.6rem)',
+            fontSize: rulesWall
+              ? 'clamp(1rem, min(2.75vmin, 2.35vh), 1.45rem)'
+              : compact
+                ? 'clamp(0.95rem, min(2.65vmin, 2.15vh), 1.35rem)'
+                : 'clamp(1.05rem, min(2.8vmin, 2.3vh), 1.6rem)',
             fontWeight: 600,
             color: 'rgba(200,215,225,0.9)',
             textAlign: 'center',
@@ -555,11 +833,7 @@ const PublicDisplay: React.FC = () => {
   }, [callListMode]);
 
   // Per-ball animation seeds (stable for component lifetime)
-  const ballAnimSeedsRef = useRef<Array<{
-    dx: number; dy: number; rz: number; rx: number; ry: number;
-    dur: number; delay: number; shadeDur: number; hiliteDur: number; hiliteDelay: number;
-    sparkleDX: number; sparkleDY: number; shadowAmp: number;
-  }>>([]);
+  const ballAnimSeedsRef = useRef<PublicDisplayBallAnimSeed[]>([]);
   if (ballAnimSeedsRef.current.length === 0) {
     // Generate small random jitters so each ball feels unique but cohesive
     for (let i = 0; i < 5; i++) {
@@ -3310,112 +3584,7 @@ const PublicDisplay: React.FC = () => {
                 Tempo - Music Bingo
               </div>
               <div style={{ fontSize: 'clamp(1.8rem, 3.8vw, 2.6rem)', opacity: 0.98, marginTop: 18, display: 'none' }}>The game is on, the volume is up, the win is yours.</div>
-              {/* TEMPO balls — size scales with vmin for wall displays */}
-              <div style={{ display: 'flex', gap: 'clamp(8px, 2vmin, 28px)', justifyContent: 'center', marginTop: 'clamp(4px, 1vmin, 12px)', perspective: '1200px', position: 'relative', flexWrap: 'wrap' }}>
-                {['T','E','M','P','O'].map((ch, i) => {
-                  const glow = ['rgba(0,255,163,0.45)','rgba(0,215,255,0.45)','rgba(158,123,255,0.45)','rgba(255,110,199,0.45)','rgba(255,209,102,0.45)'][i];
-                  const rimInner = ['rgba(0,255,170,0.28)','rgba(0,215,255,0.28)','rgba(158,123,255,0.28)','rgba(255,110,199,0.28)','rgba(255,209,102,0.28)'][i];
-                  const rimOuter = ['rgba(0,255,170,0.18)','rgba(0,215,255,0.18)','rgba(158,123,255,0.18)','rgba(255,110,199,0.18)','rgba(255,209,102,0.18)'][i];
-                  const tintGradients = [
-                    'radial-gradient(circle at 35% 30%, #f6fffb 10%, #b7f4df 55%, #6ee7c1 100%)', // mint (darker)
-                    'radial-gradient(circle at 35% 30%, #f3faff 10%, #a6dcff 55%, #5ec7ff 100%)', // aqua (darker)
-                    'radial-gradient(circle at 35% 30%, #f8f5ff 10%, #c5b6ff 55%, #957dff 100%)', // lavender (darker)
-                    'radial-gradient(circle at 35% 30%, #fff4fa 10%, #ffb1cf 55%, #ff82b8 100%)', // pink (darker)
-                    'radial-gradient(circle at 35% 30%, #fff3d2 10%, #ffcf6e 55%, #ffb020 100%)'  // gold (darker)
-                  ];
-                  // Per-ball motion parameters to desynchronize and add light randomness
-                  const seed = ballAnimSeedsRef.current[i] || { dx:0,dy:0,rz:0,rx:0,ry:0,dur:4,delay:0,shadeDur:6,hiliteDur:6.5,hiliteDelay:0.1,sparkleDX:1,sparkleDY:-1,shadowAmp:4 };
-                  const ampX = 6 + (i * 2) + seed.dx;
-                  const ampY = 10 + ((i % 3) * 2) + seed.dy;
-                  const rotX = 3 + i + seed.rx; // degrees
-                  const rotY = 4 + ((i % 2) * 2) + seed.ry;
-                  const rotZ = 1 + (i % 2) + seed.rz;
-                  const dur = (3.6 + i * 0.45) + (seed.dur - 4);
-                  const delay = (i * 0.18) + seed.delay;
-                  const shadeDur = (5.5 + i * 0.5) + (seed.shadeDur - 6);
-                  const highlightDur = (6.4 + i * 0.4) + (seed.hiliteDur - 6.5);
-                  const highlightDelay = (0.1 + i * 0.22) + seed.hiliteDelay;
-                  const sparkleDelay = (0.15 + i * 0.17) + seed.delay;
-                  const shadowAmp = Math.round((ampX * 0.6) + seed.shadowAmp);
-                  return (
-                    <motion.div
-                      key={i}
-                      initial={{ y: 0, rotateZ: 0, rotateX: 0, rotateY: 0, scale: 1 }}
-                      animate={{
-                        x: [-ampX, ampX, -ampX],
-                        y: [0, -ampY, 0],
-                        rotateZ: [-rotZ, rotZ, -rotZ],
-                        rotateX: [-rotX, rotX, -rotX],
-                        rotateY: [-rotY, rotY, -rotY]
-                      }}
-                      transition={{ duration: dur, delay, repeat: Infinity, ease: 'easeInOut' }}
-                      style={{
-                        width: 'clamp(72px, min(18vmin, 14vh), 220px)',
-                        height: 'clamp(72px, min(18vmin, 14vh), 220px)',
-                        borderRadius: '50%',
-                        position: 'relative',
-                        transformStyle: 'preserve-3d',
-                        background: (() => {
-                          const base = tintGradients[i] || 'radial-gradient(circle at 35% 30%, #ffffff, #eef4fb 38%, #d2deea 62%, #b0c4d8 100%)';
-                          const highlight = 'radial-gradient(120% 120% at 30% 28%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.55) 18%, rgba(255,255,255,0.08) 40%, rgba(0,0,0,0) 42%)';
-                          const shadow = 'radial-gradient(140% 140% at 72% 78%, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.6) 35%, rgba(0,0,0,0.0) 60%)';
-                          const vignette = 'radial-gradient(100% 100% at 50% 50%, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.06) 55%, rgba(0,0,0,0) 62%)';
-                          return `${highlight}, ${shadow}, ${vignette}, ${base}`;
-                        })(),
-                        boxShadow: `0 28px 44px rgba(0,0,0,0.35), inset 0 -18px 24px rgba(0,0,0,0.22), inset 0 20px 26px rgba(255,255,255,0.55), 0 0 44px ${glow}`,
-                        border: '1px solid rgba(0,0,0,0.06)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#102436',
-                        fontWeight: 1000,
-                        fontSize: 'clamp(2rem, min(8vmin, 6vh), 5.25rem)',
-                      }}
-                    >
-                      {/* colored glow rim */}
-                      <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `radial-gradient(circle, transparent 66%, ${rimInner} 85%, ${rimOuter} 100%)`, pointerEvents: 'none' }} />
-                      {/* subtle rotating conic shade to simulate spherical turn */}
-                      <motion.div
-                        initial={{ rotate: -8, opacity: 0.32 }}
-                        animate={{ rotate: [-8, 8, -8], opacity: [0.32, 0.26, 0.32] }}
-                        transition={{ duration: shadeDur, delay, repeat: Infinity, ease: 'easeInOut' }}
-                        style={{ position: 'absolute', inset: 0, borderRadius: '50%', mixBlendMode: 'multiply', background: 'conic-gradient(from 0deg, rgba(0,0,0,0.10) 0deg, rgba(255,255,255,0.06) 90deg, rgba(0,0,0,0.18) 200deg, rgba(0,0,0,0.10) 360deg)' }}
-                      />
-                      {/* specular highlight */}
-                      <motion.div
-                        initial={{ x: '-20%', y: '0%', opacity: 0.8 }}
-                        animate={{ x: ['-10%', '55%', '-10%'], y: ['2%', '-6%', '2%'], opacity: [0.85, 0.5, 0.85] }}
-                        transition={{ duration: highlightDur, delay: highlightDelay, repeat: Infinity, ease: 'easeInOut' }}
-                        style={{ position: 'absolute', width: '30%', height: '30%', borderRadius: '50%', top: '12%', left: 0, background: 'radial-gradient(circle, rgba(255,255,255,0.95), rgba(255,255,255,0.1) 60%, transparent 70%)', filter: 'blur(1px)', mixBlendMode: 'screen', pointerEvents: 'none' }}
-                      />
-                      {/* secondary moving highlight for parallax */}
-                      <motion.div
-                        initial={{ x: '60%', y: '62%', opacity: 0.3 }}
-                        animate={{ x: ['60%','40%','60%'], y: ['62%','58%','62%'], opacity: [0.3,0.22,0.3] }}
-                        transition={{ duration: 5.2 + i * 0.35, delay: delay * 0.8, repeat: Infinity, ease: 'easeInOut' }}
-                        style={{ position: 'absolute', width: '18%', height: '18%', borderRadius: '50%', bottom: '12%', right: '12%', background: 'radial-gradient(circle, rgba(255,255,255,0.6), rgba(255,255,255,0.05) 60%, transparent 70%)', filter: 'blur(0.6px)', mixBlendMode: 'screen', pointerEvents: 'none' }}
-                      />
-                      {/* rim light */}
-                      <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', boxShadow: 'inset 0 0 16px rgba(255,255,255,0.45)' }} />
-                      {/* sparkle */}
-                      <motion.div
-                        initial={{ opacity: 0.0 }}
-                        animate={{ opacity: [0.0, 0.9, 0.0], x: [0, 4, 0], y: [0, -3, 0] }}
-                        transition={{ duration: 2.8 + i * 0.3, delay: sparkleDelay, repeat: Infinity, ease: 'easeInOut' }}
-                        style={{ position: 'absolute', top: '18%', right: '16%', width: 20, height: 20, borderRadius: '50%', background: 'radial-gradient(circle, #ffffff, rgba(255,255,255,0.1) 60%, transparent 70%)', filter: 'blur(0.5px)', pointerEvents: 'none' }}
-                      />
-                      {/* floating shadow */}
-                      <motion.div
-                        initial={{ opacity: 0.5, x: 0 }}
-                        animate={{ opacity: [0.5, 0.35, 0.5], x: [-shadowAmp, shadowAmp, -shadowAmp] }}
-                        transition={{ duration: dur, delay, repeat: Infinity, ease: 'easeInOut' }}
-                        style={{ position: 'absolute', bottom: -28, left: 28, right: 28, height: 28, borderRadius: 28, background: 'rgba(0,0,0,0.55)', filter: 'blur(12px)', zIndex: -1 }}
-                      />
-                      {ch}
-                    </motion.div>
-                  );
-                })}
-              </div>
+              <PublicDisplayTempoBallRow seeds={ballAnimSeedsRef.current} variant="splash" />
               <motion.div
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -3749,9 +3918,9 @@ const PublicDisplay: React.FC = () => {
                 'linear-gradient(155deg, #0f0c24 0%, #152a3d 38%, #0a1628 72%, #06121c 100%)',
               display: 'flex',
               flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 'clamp(10px, 2vmin, 24px)',
+              alignItems: 'stretch',
+              justifyContent: 'flex-start',
+              padding: 'clamp(5px, 1vmin, 12px) clamp(8px, 1.4vmin, 18px) clamp(8px, 1.6vmin, 16px)',
               overflow: 'auto',
               boxSizing: 'border-box',
               maxHeight: '100dvh',
@@ -3810,22 +3979,76 @@ const PublicDisplay: React.FC = () => {
                   textAlign: 'center',
                   maxWidth: 'min(98vw, 1600px)',
                   width: '100%',
+                  margin: '0 auto',
                   flex: '1 1 auto',
                   minHeight: 0,
                   maxHeight: '100%',
                   display: 'flex',
                   flexDirection: 'column',
-                  justifyContent: 'safe center',
+                  justifyContent: 'flex-start',
                   overflowX: 'hidden',
                   overflowY: 'auto',
                   WebkitOverflowScrolling: 'touch',
+                  paddingTop: 'clamp(2px, 0.6vmin, 8px)',
                 }}
               >
+              <div style={{ flexShrink: 0, width: '100%' }}>
+                <PublicDisplayTempoBallRow seeds={ballAnimSeedsRef.current} variant="rules" />
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: 0.05, ease: 'easeOut' }}
+                  style={{
+                    marginTop: 'clamp(3px, 0.8vmin, 10px)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 'clamp(6px, 1.4vmin, 14px)',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <Sparkles
+                    style={{
+                      width: 'clamp(20px, 3.8vmin, 44px)',
+                      height: 'clamp(20px, 3.8vmin, 44px)',
+                      color: '#7bffd9',
+                      filter: 'drop-shadow(0 0 14px rgba(0,255,200,0.6))',
+                    }}
+                    strokeWidth={2.2}
+                    aria-hidden
+                  />
+                  <div
+                    style={{
+                      fontSize: 'clamp(1.45rem, min(5.5vmin, 4.5vh), 3.4rem)',
+                      fontWeight: 1000,
+                      letterSpacing: '0.02em',
+                      backgroundImage: 'linear-gradient(90deg,#7bffd9 0%, #ffffff 50%, #7bffd9 100%)',
+                      WebkitBackgroundClip: 'text',
+                      backgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      filter: 'drop-shadow(0 6px 22px rgba(123,255,217,0.35))',
+                      lineHeight: 1.05,
+                    }}
+                  >
+                    Music Bingo
+                  </div>
+                  <Sparkles
+                    style={{
+                      width: 'clamp(20px, 3.8vmin, 44px)',
+                      height: 'clamp(20px, 3.8vmin, 44px)',
+                      color: '#7bffd9',
+                      filter: 'drop-shadow(0 0 14px rgba(0,255,200,0.6))',
+                    }}
+                    strokeWidth={2.2}
+                    aria-hidden
+                  />
+                </motion.div>
+              </div>
               {venueBranding ? (
                 <PublicDisplayVenueBrandingHero
                   branding={venueBranding}
-                  marginBottom="clamp(0.55rem, 1.4vmin, 1rem)"
-                  compact
+                  marginBottom="clamp(0.25rem, 0.7vmin, 0.55rem)"
+                  rulesWall
                 />
               ) : null}
               <motion.div
@@ -3836,25 +4059,25 @@ const PublicDisplay: React.FC = () => {
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 'clamp(8px, 1.8vmin, 22px)',
-                  marginBottom: 'clamp(0.55rem, 1.5vmin, 1.1rem)',
+                  gap: 'clamp(6px, 1.5vmin, 18px)',
+                  marginBottom: 'clamp(0.35rem, 1vmin, 0.75rem)',
                   flexWrap: 'wrap',
                   flexShrink: 0,
                 }}
               >
                 <Sparkles
                   style={{
-                    width: 'clamp(28px, 5.5vmin, 60px)',
-                    height: 'clamp(28px, 5.5vmin, 60px)',
+                    width: 'clamp(22px, 4.2vmin, 52px)',
+                    height: 'clamp(22px, 4.2vmin, 52px)',
                     color: '#7bffd9',
-                    filter: 'drop-shadow(0 0 20px rgba(0,255,200,0.7))',
+                    filter: 'drop-shadow(0 0 18px rgba(0,255,200,0.65))',
                   }}
                   strokeWidth={2.2}
                   aria-hidden
                 />
                 <div
                   style={{
-                    fontSize: 'clamp(2.2rem, 7.2vmin, 5.5rem)',
+                    fontSize: 'clamp(1.85rem, 6vmin, 4.8rem)',
                     fontWeight: 1000,
                     letterSpacing: '0.03em',
                     backgroundImage:
@@ -3870,10 +4093,10 @@ const PublicDisplay: React.FC = () => {
                 </div>
                 <Sparkles
                   style={{
-                    width: 'clamp(28px, 5.5vmin, 60px)',
-                    height: 'clamp(28px, 5.5vmin, 60px)',
+                    width: 'clamp(22px, 4.2vmin, 52px)',
+                    height: 'clamp(22px, 4.2vmin, 52px)',
                     color: '#7bffd9',
-                    filter: 'drop-shadow(0 0 20px rgba(0,255,200,0.7))',
+                    filter: 'drop-shadow(0 0 18px rgba(0,255,200,0.65))',
                   }}
                   strokeWidth={2.2}
                   aria-hidden
@@ -3884,8 +4107,8 @@ const PublicDisplay: React.FC = () => {
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 'clamp(10px, 2vmin, 22px)',
-                  marginBottom: 'clamp(0.55rem, 1.5vmin, 1.1rem)',
+                  gap: 'clamp(7px, 1.45vmin, 16px)',
+                  marginBottom: 'clamp(0.35rem, 1vmin, 0.75rem)',
                   flex: '0 1 auto',
                   minHeight: 0,
                 }}
@@ -3937,8 +4160,8 @@ const PublicDisplay: React.FC = () => {
                       display: 'grid',
                       gridTemplateColumns: 'auto 1fr',
                       alignItems: 'stretch',
-                      gap: 'clamp(10px, 2vmin, 22px)',
-                      padding: 'clamp(12px, 2.2vmin, 24px) clamp(14px, 2.6vmin, 28px)',
+                      gap: 'clamp(8px, 1.65vmin, 18px)',
+                      padding: 'clamp(10px, 1.85vmin, 20px) clamp(12px, 2.2vmin, 24px)',
                       borderRadius: 'clamp(14px, 2.2vmin, 26px)',
                       background: step.accent,
                       border: `max(2px, 0.25vmin) solid ${step.borderGlow}`,
@@ -3999,19 +4222,19 @@ const PublicDisplay: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: 0.35 }}
                 style={{
-                  padding: 'clamp(12px, 2.2vmin, 22px) clamp(14px, 2.6vmin, 28px)',
+                  padding: 'clamp(9px, 1.75vmin, 18px) clamp(12px, 2.2vmin, 24px)',
                   borderRadius: 'clamp(14px, 2vmin, 22px)',
                   background:
                     'linear-gradient(135deg, rgba(255,160,60,0.22) 0%, rgba(80,40,10,0.35) 100%)',
                   border: 'max(2px, 0.2vmin) solid rgba(255,200,120,0.45)',
                   boxShadow: '0 12px 40px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
-                  fontSize: 'clamp(1.02rem, 2.55vmin, 1.6rem)',
+                  fontSize: 'clamp(0.98rem, 2.35vmin, 1.5rem)',
                   lineHeight: 1.45,
                   color: 'rgba(255,245,220,0.98)',
                   fontWeight: 800,
                   textAlign: 'center',
                   maxWidth: 'min(92vw, 1100px)',
-                  margin: '0 auto clamp(0.5rem, 1.35vmin, 1rem)',
+                  margin: '0 auto clamp(0.35rem, 0.9vmin, 0.65rem)',
                   flexShrink: 0,
                 }}
               >
