@@ -2177,7 +2177,12 @@ io.on('connection', (socket) => {
         console.error('join-room resolveRoomVenueBranding:', e?.message || e);
       }
     }
-    
+    try {
+      io.to(roomId).emit('venue-branding', { venueBranding: venueBrandingForRoom(room) });
+    } catch (e) {
+      console.error('join-room venue-branding emit:', e?.message || e);
+    }
+
     if (effectiveIsHost) {
       for (const [pid, p] of room.players) {
         if (pid !== socket.id && p.isHost) {
@@ -2353,6 +2358,14 @@ io.on('connection', (socket) => {
 
     if (socket.hostUserId != null && room.ownerUserId == null) {
       room.ownerUserId = socket.hostUserId;
+    }
+    if (room.ownerUserId != null && db) {
+      try {
+        await resolveRoomVenueBranding(room);
+        io.to(roomId).emit('venue-branding', { venueBranding: venueBrandingForRoom(room) });
+      } catch (e) {
+        console.error('finalize-mix resolveRoomVenueBranding:', e?.message || e);
+      }
     }
 
     // Prevent duplicate finalization
@@ -3591,7 +3604,7 @@ io.on('connection', (socket) => {
   });
 
   // Client requests a state sync (useful if they joined before start or missed events)
-  socket.on('sync-state', (data = {}) => {
+  socket.on('sync-state', async (data = {}) => {
     try {
       const { roomId } = data;
       const room = rooms.get(roomId);
@@ -3599,7 +3612,15 @@ io.on('connection', (socket) => {
         routineServerLog(`🔄 SYNC-STATE: Room ${roomId} not found`);
         return;
       }
-      
+
+      if (room.ownerUserId != null && db) {
+        try {
+          await resolveRoomVenueBranding(room);
+        } catch (e) {
+          console.error('sync-state resolveRoomVenueBranding:', e?.message || e);
+        }
+      }
+
       routineServerLog(`🔄 SYNC-STATE: Sending state to ${socket.id} for room ${roomId}`);
       
       // Build played songs list that includes current song if it exists

@@ -464,6 +464,18 @@ const PublicDisplay: React.FC = () => {
       setConnectionStatus('reconnecting');
     });
 
+    newSocket.on('room-joined', (data: any) => {
+      if (data?.venueBranding !== undefined) {
+        setVenueBranding(data.venueBranding ?? null);
+      }
+    });
+
+    newSocket.on('venue-branding', (data: any) => {
+      if (data && 'venueBranding' in data) {
+        setVenueBranding(data.venueBranding ?? null);
+      }
+    });
+
     // State sync handler
     newSocket.on('room-state', (payload: any) => {
       console.log('🖥️ PublicDisplay: Received room state sync:', payload);

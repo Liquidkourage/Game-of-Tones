@@ -344,6 +344,12 @@ const PlayerView: React.FC = () => {
       }
     });
 
+    newSocket.on('venue-branding', (data: any) => {
+      if (data && 'venueBranding' in data) {
+        setVenueBranding(data.venueBranding ?? null);
+      }
+    });
+
     newSocket.on('player-joined', (data: any) => {
       console.log('Player joined:', data);
       setGameState(prev => ({
