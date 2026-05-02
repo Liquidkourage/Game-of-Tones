@@ -191,6 +191,23 @@ const PublicDisplay: React.FC = () => {
   const [roomInfo, setRoomInfo] = useState<{ id: string; playerCount: number } | null>(null);
   const [venueBranding, setVenueBranding] = useState<PublicDisplayVenueBrandingState | null>(null);
 
+  /** Dispatched to `AppHeader` for TEMPO + licensee lockup (idea 1). */
+  const DISPLAY_HEADER_BRANDING_EVENT = 'tempo-display-venue-branding';
+
+  /** Full-screen “Presented by” on splash (idea 9). */
+  const [splashSponsorBeat, setSplashSponsorBeat] = useState(false);
+
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent(DISPLAY_HEADER_BRANDING_EVENT, { detail: { branding: venueBranding } }),
+    );
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent(DISPLAY_HEADER_BRANDING_EVENT, { detail: { branding: null } }),
+      );
+    };
+  }, [venueBranding]);
+
   /** Same tab’s origin — correct for QR and “go to this site” when hosted on a licensee domain. */
   const playerJoinOrigin = useMemo(
     () => (typeof window !== 'undefined' ? window.location.origin : ''),
@@ -211,6 +228,20 @@ const PublicDisplay: React.FC = () => {
   
   // Rules/instruction screen state
   const [showRules, setShowRules] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!showSplash) {
+      setSplashSponsorBeat(false);
+      return;
+    }
+    if (!venueBranding?.logoUrl) {
+      setSplashSponsorBeat(false);
+      return;
+    }
+    setSplashSponsorBeat(true);
+    const t = window.setTimeout(() => setSplashSponsorBeat(false), 4200);
+    return () => clearTimeout(t);
+  }, [showSplash, venueBranding?.logoUrl]);
   
   
   const [currentWinningLine, setCurrentWinningLine] = useState(0);
@@ -2647,25 +2678,6 @@ const PublicDisplay: React.FC = () => {
         } as React.CSSProperties
       }
     >
-      {venueBranding &&
-        (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine) &&
-        !showSplash &&
-        !showRules && (
-          <div className="public-display-venue-bar">
-            {venueBranding.logoUrl ? (
-              <img src={venueBranding.logoUrl} alt="" className="public-display-venue-logo" />
-            ) : null}
-            <div className="public-display-venue-text">
-              {venueBranding.eventTitle ? (
-                <span className="public-display-venue-title">{venueBranding.eventTitle}</span>
-              ) : null}
-              {venueBranding.sponsorLine ? (
-                <span className="public-display-venue-sponsor">{venueBranding.sponsorLine}</span>
-              ) : null}
-            </div>
-          </div>
-        )}
-
       <AnimatePresence>
         {winnerCardModal && (
           <motion.div
@@ -3116,22 +3128,108 @@ const PublicDisplay: React.FC = () => {
               />
             </div>
 
+            {venueBranding?.logoUrl ? (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  zIndex: 6,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 'clamp(16px, 3vmin, 40px)',
+                  opacity: splashSponsorBeat ? 1 : 0,
+                  transition: 'opacity 0.55s ease',
+                  pointerEvents: 'none',
+                  background:
+                    'linear-gradient(155deg, rgba(15,12,36,0.96) 0%, rgba(21,42,61,0.94) 50%, rgba(6,18,28,0.96) 100%)',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 'clamp(0.9rem, 2.2vmin, 1.35rem)',
+                    fontWeight: 700,
+                    letterSpacing: '0.32em',
+                    textTransform: 'uppercase',
+                    color: 'rgba(195,215,230,0.88)',
+                    marginBottom: 'clamp(14px, 2.5vmin, 26px)',
+                  }}
+                >
+                  Presented by
+                </div>
+                <img
+                  src={venueBranding.logoUrl}
+                  alt={venueBranding.eventTitle || 'Venue'}
+                  className="public-display-venue-logo public-display-venue-logo--sponsor-beat"
+                />
+                {venueBranding.eventTitle ? (
+                  <div
+                    style={{
+                      marginTop: 'clamp(16px, 2.5vmin, 28px)',
+                      fontSize: 'clamp(1.15rem, 3vmin, 2rem)',
+                      fontWeight: 800,
+                      color: 'rgba(245,250,255,0.96)',
+                      textAlign: 'center',
+                      maxWidth: 'min(90vw, 640px)',
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {venueBranding.eventTitle}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             <div
               style={{
                 position: 'relative',
                 zIndex: 1,
                 width: '100%',
-                maxWidth: 'min(98vw, 1800px)',
+                maxWidth: 'min(98vw, 1900px)',
                 minWidth: 0,
                 margin: '0 auto',
+                opacity: venueBranding?.logoUrl && splashSponsorBeat ? 0 : 1,
+                transition: 'opacity 0.65s ease 0.08s',
+                pointerEvents: venueBranding?.logoUrl && splashSponsorBeat ? 'none' : 'auto',
               }}
             >
-            {venueBranding ? (
-              <PublicDisplayVenueBrandingHero
-                branding={venueBranding}
-                marginBottom="clamp(18px, 3vmin, 42px)"
-              />
-            ) : null}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'row',
+                flexWrap: 'wrap',
+                gap: 'clamp(20px, 3.5vmin, 48px)',
+                alignItems: 'stretch',
+                justifyContent: 'center',
+                width: '100%',
+              }}
+            >
+              {venueBranding &&
+              (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine) ? (
+                <div
+                  style={{
+                    flex: '1 1 260px',
+                    maxWidth: 560,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
+                >
+                  <PublicDisplayVenueBrandingHero branding={venueBranding} marginBottom="0" />
+                </div>
+              ) : null}
+              <div
+                style={{
+                  flex: '2 1 320px',
+                  minWidth: 260,
+                  maxWidth: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                }}
+              >
             <div style={{ textAlign: 'center', marginBottom: 'clamp(10px, 2vmin, 28px)' }}>
               <div
                 style={{
@@ -3362,6 +3460,21 @@ const PublicDisplay: React.FC = () => {
                       '0 0 0 1px rgba(255,255,255,0.08) inset, 0 24px 56px rgba(0,0,0,0.4), 0 0 50px rgba(0,255,200,0.1)',
                   }}
                 >
+                  {venueBranding?.logoUrl ? (
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'center',
+                        marginBottom: 'clamp(8px, 1.5vmin, 14px)',
+                      }}
+                    >
+                      <img
+                        src={venueBranding.logoUrl}
+                        alt=""
+                        className="public-display-venue-logo--qr-card"
+                      />
+                    </div>
+                  ) : null}
                   <img
                     alt="Join QR"
                     style={{
@@ -3521,6 +3634,8 @@ const PublicDisplay: React.FC = () => {
                   {roomInfo?.id || roomId || '—'}
                 </div>
               </motion.div>
+            </div>
+              </div>
             </div>
             </div>
           </motion.div>
@@ -4013,7 +4128,22 @@ const PublicDisplay: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
             >
-              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1, minHeight: 0 }}>
+              {venueBranding?.logoUrl && !showSplash && !showRules ? (
+                <div className="public-display-venue-watermark" aria-hidden>
+                  <img src={venueBranding.logoUrl} alt="" />
+                </div>
+              ) : null}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  minWidth: 0,
+                  flex: 1,
+                  minHeight: 0,
+                  position: 'relative',
+                  zIndex: 1,
+                }}
+              >
               {/* Removed call count header and redundant BINGO row; playlist titles shown above columns */}
               {(() => {
                 // CRITICAL FIX: Use ref as fallback if state isn't set yet (fixes first song not displaying)

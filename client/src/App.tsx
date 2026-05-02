@@ -6,6 +6,17 @@ import { API_BASE } from './config';
 import { hostFetch } from './utils/hostFetch';
 import './App.css';
 
+/** Mirrors PublicDisplay venue state (dispatched via window event). */
+type DisplayVenueBranding = {
+  eventTitle?: string;
+  sponsorLine?: string;
+  logoUrl?: string;
+  primaryColor?: string;
+  accentColor?: string;
+} | null;
+
+const DISPLAY_VENUE_EVENT = 'tempo-display-venue-branding';
+
 // Components
 import Home from './components/Home';
 import HostView from './components/HostView';
@@ -21,7 +32,21 @@ import HostYoutubePlaybackWindow from './components/HostYoutubePlaybackWindow';
 function AppHeader() {
   const location = useLocation();
   const [showAdminLink, setShowAdminLink] = useState(false);
+  const [displayVenueBranding, setDisplayVenueBranding] = useState<DisplayVenueBranding>(null);
   const isDisplay = /^\/display(\/.+|$)/.test(location.pathname);
+
+  useEffect(() => {
+    const onBranding = (e: Event) => {
+      const d = (e as CustomEvent<{ branding: DisplayVenueBranding }>).detail;
+      setDisplayVenueBranding(d?.branding ?? null);
+    };
+    window.addEventListener(DISPLAY_VENUE_EVENT, onBranding as EventListener);
+    return () => window.removeEventListener(DISPLAY_VENUE_EVENT, onBranding as EventListener);
+  }, []);
+
+  useEffect(() => {
+    if (!isDisplay) setDisplayVenueBranding(null);
+  }, [isDisplay]);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,8 +93,8 @@ function AppHeader() {
       transition={{ duration: 0.8, ease: 'easeOut' }}
       style={headerStyle}
     >
-      <div className="header-content" style={isDisplay ? { width: 'auto' } : {}}>
-        <div className="logo">
+      <div className="header-content" style={isDisplay ? { width: 'auto', maxWidth: 'min(96vw, 1200px)' } : {}}>
+        <div className={`logo${isDisplay ? ' logo--display-lockup' : ''}`}>
           <Sparkles className="logo-icon" />
           <h1>TEMPO - Music Bingo</h1>
           <span style={{ 
@@ -84,6 +109,30 @@ function AppHeader() {
             maxWidth: '180px', /* Adjust max width for smaller text */
             alignSelf: 'flex-end' /* Align to bottom of the logo */
           }}>by Liquid Kourage</span>
+          {isDisplay &&
+            displayVenueBranding &&
+            (displayVenueBranding.logoUrl ||
+              displayVenueBranding.eventTitle ||
+              displayVenueBranding.sponsorLine) && (
+              <span className="app-header__display-co-brand" aria-label="Venue branding">
+                <span className="app-header__display-co-divider" aria-hidden>
+                  |
+                </span>
+                {displayVenueBranding.logoUrl ? (
+                  <img
+                    src={displayVenueBranding.logoUrl}
+                    alt={displayVenueBranding.eventTitle || 'Venue'}
+                    className="app-header__display-co-logo"
+                  />
+                ) : null}
+                {displayVenueBranding.eventTitle ? (
+                  <span className="app-header__display-co-text">{displayVenueBranding.eventTitle}</span>
+                ) : null}
+                {displayVenueBranding.sponsorLine ? (
+                  <span className="app-header__display-co-sub">{displayVenueBranding.sponsorLine}</span>
+                ) : null}
+              </span>
+            )}
         </div>
       </div>
       {!isDisplay && (
