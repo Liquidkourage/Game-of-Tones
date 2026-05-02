@@ -3411,23 +3411,6 @@ const PublicDisplay: React.FC = () => {
                       '0 0 0 1px rgba(255,255,255,0.08) inset, 0 24px 56px rgba(0,0,0,0.4), 0 0 50px rgba(0,255,200,0.1)',
                   }}
                 >
-                  {venueBranding?.logoUrl ? (
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'center',
-                        marginTop: 'clamp(2px, 0.6vmin, 8px)',
-                        marginBottom: 'clamp(8px, 1.4vmin, 14px)',
-                        flexShrink: 0,
-                      }}
-                    >
-                      <img
-                        src={venueBranding.logoUrl}
-                        alt=""
-                        className="public-display-venue-logo--qr-card"
-                      />
-                    </div>
-                  ) : null}
                   <div
                     style={{
                       width: 'min(100%, min(42vmin, 46vh), 440px)',

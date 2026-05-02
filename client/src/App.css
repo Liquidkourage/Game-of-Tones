@@ -1581,15 +1581,6 @@ body {
   filter: drop-shadow(0 14px 36px rgba(0, 0, 0, 0.55));
 }
 
-/** Logo inside green QR card on splash. */
-.public-display-venue-logo--qr-card {
-  max-height: clamp(100px, 18vmin, 200px);
-  max-width: min(88%, 440px);
-  width: auto;
-  object-fit: contain;
-  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.45));
-}
-
 /**
  * Idea 2: faint watermark behind call list (readable grid stays on top).
  */
