@@ -90,7 +90,7 @@ function PublicDisplayVenueBrandingHero({
         gap: 'clamp(8px, 1.8vmin, 18px)',
         marginBottom,
         width: '100%',
-        maxWidth: 'min(96vw, 920px)',
+        maxWidth: 'min(98vw, 1200px)',
         marginLeft: 'auto',
         marginRight: 'auto',
       }}
@@ -194,9 +194,6 @@ const PublicDisplay: React.FC = () => {
   /** Dispatched to `AppHeader` for TEMPO + licensee lockup (idea 1). */
   const DISPLAY_HEADER_BRANDING_EVENT = 'tempo-display-venue-branding';
 
-  /** Full-screen “Presented by” on splash (idea 9). */
-  const [splashSponsorBeat, setSplashSponsorBeat] = useState(false);
-
   useEffect(() => {
     window.dispatchEvent(
       new CustomEvent(DISPLAY_HEADER_BRANDING_EVENT, { detail: { branding: venueBranding } }),
@@ -228,20 +225,6 @@ const PublicDisplay: React.FC = () => {
   
   // Rules/instruction screen state
   const [showRules, setShowRules] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (!showSplash) {
-      setSplashSponsorBeat(false);
-      return;
-    }
-    if (!venueBranding?.logoUrl) {
-      setSplashSponsorBeat(false);
-      return;
-    }
-    setSplashSponsorBeat(true);
-    const t = window.setTimeout(() => setSplashSponsorBeat(false), 4200);
-    return () => clearTimeout(t);
-  }, [showSplash, venueBranding?.logoUrl]);
   
   
   const [currentWinningLine, setCurrentWinningLine] = useState(0);
@@ -3128,59 +3111,6 @@ const PublicDisplay: React.FC = () => {
               />
             </div>
 
-            {venueBranding?.logoUrl ? (
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  zIndex: 6,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: 'clamp(16px, 3vmin, 40px)',
-                  opacity: splashSponsorBeat ? 1 : 0,
-                  transition: 'opacity 0.55s ease',
-                  pointerEvents: 'none',
-                  background:
-                    'linear-gradient(155deg, rgba(15,12,36,0.96) 0%, rgba(21,42,61,0.94) 50%, rgba(6,18,28,0.96) 100%)',
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 'clamp(0.9rem, 2.2vmin, 1.35rem)',
-                    fontWeight: 700,
-                    letterSpacing: '0.32em',
-                    textTransform: 'uppercase',
-                    color: 'rgba(195,215,230,0.88)',
-                    marginBottom: 'clamp(14px, 2.5vmin, 26px)',
-                  }}
-                >
-                  Presented by
-                </div>
-                <img
-                  src={venueBranding.logoUrl}
-                  alt={venueBranding.eventTitle || 'Venue'}
-                  className="public-display-venue-logo public-display-venue-logo--sponsor-beat"
-                />
-                {venueBranding.eventTitle ? (
-                  <div
-                    style={{
-                      marginTop: 'clamp(16px, 2.5vmin, 28px)',
-                      fontSize: 'clamp(1.15rem, 3vmin, 2rem)',
-                      fontWeight: 800,
-                      color: 'rgba(245,250,255,0.96)',
-                      textAlign: 'center',
-                      maxWidth: 'min(90vw, 640px)',
-                      lineHeight: 1.2,
-                    }}
-                  >
-                    {venueBranding.eventTitle}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
             <div
               style={{
                 position: 'relative',
@@ -3189,9 +3119,6 @@ const PublicDisplay: React.FC = () => {
                 maxWidth: 'min(98vw, 1900px)',
                 minWidth: 0,
                 margin: '0 auto',
-                opacity: venueBranding?.logoUrl && splashSponsorBeat ? 0 : 1,
-                transition: 'opacity 0.65s ease 0.08s',
-                pointerEvents: venueBranding?.logoUrl && splashSponsorBeat ? 'none' : 'auto',
               }}
             >
             <div
@@ -3209,8 +3136,8 @@ const PublicDisplay: React.FC = () => {
               (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine) ? (
                 <div
                   style={{
-                    flex: '1 1 260px',
-                    maxWidth: 560,
+                    flex: '1 1 340px',
+                    maxWidth: 960,
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'center',
