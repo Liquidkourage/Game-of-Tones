@@ -3608,7 +3608,7 @@ const PublicDisplay: React.FC = () => {
                           lang="en"
                           style={{
                             display: 'inline-block',
-                            fontSize: 'clamp(1.35rem, calc(100cqw / 9.25), 4.15rem)',
+                            fontSize: 'clamp(1.05rem, calc(100cqw / 11.25), 3.25rem)',
                             fontWeight: 900,
                             lineHeight: 1.15,
                             textShadow: '0 8px 32px rgba(0,0,0,0.45), 0 0 40px rgba(180,210,255,0.12)',
