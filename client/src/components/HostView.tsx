@@ -5563,7 +5563,7 @@ const HostView: React.FC = () => {
                               Spotify is still used for playback. Appended after your own playlist selections.
                             </p>
                             {catalogPackOptions.length > 0 ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <div className="host-catalog-pack-list">
                                 {catalogPackOptions.map((pack) => {
                                   const isSel = selectedCatalogPlaylists.some((p) => p.id === pack.id);
                                   return (
