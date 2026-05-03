@@ -10,6 +10,8 @@ function preprocessYoutubeVideoTitleLine(rawTitle: string): string {
   if (!s) return s;
   for (let iter = 0; iter < 8; iter++) {
     const before = s;
+    s = s.replace(/^\s*[\(\[]\s*official[^)\]]*[\)\]]\s*(?:ft\.?|feat\.?|featuring)\s+/i, '');
+    s = s.replace(/^\s*[\(\[]\s*official[^)\]]*[\)\]]\s+/i, '');
     s = s.replace(
       /\s+(\||\u007c|\uff5c)\s*(official[^|]*|lyrics?[^|]*|lyric\s*video[^|]*|audio[^|]*|music\s*video[^|]*|mv\b[^|]*|video\b[^|]*)\s*$/i,
       '',
@@ -55,6 +57,15 @@ function isParenVersionOrEditTag(inner: string): boolean {
   return false;
 }
 
+function isParenSubtitleOrRecordingMeta(inner: string): boolean {
+  const x = String(inner || '').trim();
+  if (/^with\s+(my|your|his|her|our|their)\b/i.test(x)) return true;
+  if (/^from\s+(the|a)\b/i.test(x)) return true;
+  if (/\brecords?\b/i.test(x) && /\d{4}/.test(x)) return true;
+  if (/^live\s+at\b/i.test(x)) return true;
+  return false;
+}
+
 /** Matches server/youtubeTrackDisplayParse.js — skip title-first swap for common "Artist - Title" one-word artists. */
 const SINGLE_WORD_ARTIST_TITLE_LEFT_HINTS = new Set(
   (`abba aerosmith aqua boston cher chic chicago drake eminem europe enya journey kansas kiss ` +
@@ -79,8 +90,7 @@ function tryLeadingTwoWordPersonArtist(normalized: string): { title: string; art
   const m = s.match(/^([A-Z][a-z]+ [A-Z][a-z]+)\s+(.+)$/);
   if (!m) return null;
   const w1 = m[1].split(/\s+/)[0];
-  const w2 = m[1].split(/\s+/)[1];
-  const pair = `${w1} ${w2}`.toLowerCase();
+  const pair = `${m[1].split(/\s+/)[0]} ${m[1].split(/\s+/)[1]}`.toLowerCase();
   if (/^(The|A|An|All|My|Your|Our|Its?|If|When|Where|Why|How|Let|One|Two|Three|For|But|Not|And|She|Her|His|Our)$/i.test(w1)) return null;
   const badPair = new Set([
     'one more',
@@ -97,13 +107,17 @@ function tryLeadingTwoWordPersonArtist(normalized: string): { title: string; art
     'shake it',
     'take me',
     'give me',
+    'we will',
+    'we are',
+    'we can',
+    'you are',
+    'blame it',
   ]);
   if (badPair.has(pair)) return null;
   const rest = m[2].trim();
   const restTok = tokenCount(rest);
-  if (restTok >= 2) return { artist: m[1].trim(), title: rest };
-  if (rest.length >= 8) return { artist: m[1].trim(), title: rest };
-  return null;
+  if (restTok !== 1 || rest.length < 7) return null;
+  return { artist: m[1].trim(), title: rest };
 }
 
 function isLikelyOneWordArtistTitleLeft(token: string): boolean {
@@ -138,6 +152,36 @@ export function parseYoutubeVideoTitleForDisplay(rawTitle: string): { title: str
     return /\b(feat\.?|ft\.|featuring)\b/i.test(side);
   }
 
+  function isLikelyPerformerCreditInParens(inner: string, outer: string): boolean {
+    const x = String(inner || '').trim();
+    const ou = String(outer || '').trim();
+    if (isParenSubtitleOrRecordingMeta(x)) return false;
+    if (isParenVersionOrEditTag(x)) return false;
+    if (officialRe.test(x)) return false;
+    if (/\b(official|lyrics?|audio|video|mv)\b/i.test(x)) return false;
+    const tk = tokenCount(x);
+    if (tk < 1 || tk > 4 || x.length > 48) return false;
+    if (/^\d{4}\s*$/.test(x)) return false;
+    if (hasFeat(ou)) return false;
+    return true;
+  }
+
+  function tryDashLeftParenPerformerMatch(
+    left: string,
+    right: string,
+  ): { title: string; artist: string } | null {
+    const m = String(left).match(/^(.+?)\s*\(\s*([^)]+)\)\s*$/);
+    if (!m) return null;
+    const outer = m[1].trim();
+    const inner = m[2].trim();
+    if (!isLikelyPerformerCreditInParens(inner, outer)) return null;
+    const rNorm = right.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const iNorm = inner.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (iNorm.length < 4) return null;
+    if (rNorm.includes(iNorm)) return { title: outer, artist: right.trim() };
+    return null;
+  }
+
   function pickOrientation(
     left: string,
     right: string,
@@ -165,6 +209,36 @@ export function parseYoutubeVideoTitleForDisplay(rawTitle: string): { title: str
 
   const dashParts = normalized.split(/\s+-\s+/);
 
+  if (dashParts.length >= 3) {
+    const mid = dashParts[1].trim().toLowerCase();
+    const lastSeg = dashParts[dashParts.length - 1].trim();
+    if (mid === 'titanic' && /\blyrics?\b/i.test(lastSeg)) {
+      return { title: dashParts[0].trim(), artist: '' };
+    }
+    if (!isAllCapsArtistPrefix(dashParts[0])) {
+      const a = dashParts[0].trim();
+      const b = dashParts[1].trim();
+      const c = dashParts[2].trim();
+      const tA = tokenCount(a);
+      const tB = tokenCount(b);
+      const tC = tokenCount(c);
+      if (
+        tA <= 2 &&
+        tB >= 2 &&
+        tC >= 1 &&
+        tC <= 3 &&
+        a.length + b.length >= 12 &&
+        !/^\d{4}$/.test(c) &&
+        !isAllCapsArtistPrefix(c) &&
+        !hasFeat(c) &&
+        !officialRe.test(c) &&
+        !/\b(remaster(ed)?|version|explicit)\b/i.test(c)
+      ) {
+        return { title: `${a} ${b}`.replace(/\s+/g, ' ').trim(), artist: c };
+      }
+    }
+  }
+
   if (dashParts.length >= 3 && isAllCapsArtistPrefix(dashParts[0])) {
     const artist = dashParts[0].trim();
     const title = dashParts[1].trim();
@@ -177,6 +251,9 @@ export function parseYoutubeVideoTitleForDisplay(rawTitle: string): { title: str
   if (dashParts.length >= 2) {
     const left = dashParts[0].trim();
     const right = dashParts.slice(1).join(' - ').trim();
+
+    const parenPerform = tryDashLeftParenPerformerMatch(left, right);
+    if (parenPerform) return parenPerform;
 
     const tL = tokenCount(left);
     const tR = tokenCount(right);
@@ -222,9 +299,16 @@ export function parseYoutubeVideoTitleForDisplay(rawTitle: string): { title: str
 
   const paren = normalized.match(/^(.+?)\s*\(\s*([^)]+)\)\s*$/);
   if (paren) {
+    const outer = paren[1].trim();
     const inner = paren[2].trim();
     if (isParenVersionOrEditTag(inner)) {
-      return { title: paren[1].trim(), artist: '' };
+      return { title: outer, artist: '' };
+    }
+    if (isParenSubtitleOrRecordingMeta(inner)) {
+      return { title: `${outer} (${inner})`, artist: '' };
+    }
+    if (isLikelyPerformerCreditInParens(inner, outer)) {
+      return { title: outer, artist: inner };
     }
     if (
       inner.length >= 2 &&
@@ -232,7 +316,7 @@ export function parseYoutubeVideoTitleForDisplay(rawTitle: string): { title: str
       !officialRe.test(inner) &&
       !/\b(official|lyrics?|audio|video|mv)\b/i.test(inner)
     ) {
-      const picked = pickOrientation(paren[1].trim(), inner);
+      const picked = pickOrientation(outer, inner);
       if (picked) return picked;
     }
   }
