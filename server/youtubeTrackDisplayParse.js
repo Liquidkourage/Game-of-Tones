@@ -17,8 +17,15 @@
 function preprocessYoutubeVideoTitleLine(rawTitle) {
   let s = String(rawTitle || '').trim();
   if (!s) return s;
-  for (let iter = 0; iter < 8; iter++) {
+  // Newlines / odd spacing so "(Official Music\nVideo)" still matches
+  s = s.replace(/\s+/g, ' ').trim();
+  for (let iter = 0; iter < 12; iter++) {
     const before = s;
+    // Never keep this promo phrase in the title line (anywhere)
+    s = s.replace(/\(\s*official\s+music\s+video[^)]{0,120}\)/gi, '');
+    s = s.replace(/\[\s*official\s+music\s+video[^\]]{0,120}\]/gi, '');
+    s = s.replace(/\s*[-–—]\s*official\s+music\s+video\b/gi, ' ');
+    s = s.replace(/\s*\bofficial\s+music\s+video\b\s*/gi, ' ');
     // Leading "(Official Music Video) ft. …" / "[…]" clutter before the song title
     s = s.replace(/^\s*[\(\[]\s*official[^)\]]*[\)\]]\s*(?:ft\.?|feat\.?|featuring)\s+/i, '');
     s = s.replace(/^\s*[\(\[]\s*official[^)\]]*[\)\]]\s+/i, '');
@@ -44,7 +51,7 @@ function preprocessYoutubeVideoTitleLine(rawTitle) {
     s = s.replace(/\s*[\(\[]\s*with\s+lyrics\s*[\)\]]\s*$/i, '');
     if (s === before) break;
   }
-  return s.trim();
+  return s.replace(/\s+/g, ' ').trim();
 }
 
 function tokenCount(s) {

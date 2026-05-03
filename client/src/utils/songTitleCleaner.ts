@@ -32,7 +32,10 @@ export function cleanSongTitle(title: string, options: CleanTitleOptions = DEFAU
     return title;
   }
 
-  let cleaned = title.trim();
+  let cleaned = title.trim().replace(/\s+/g, ' ');
+  cleaned = cleaned.replace(/\(\s*official\s+music\s+video[^)]{0,120}\)/gi, '');
+  cleaned = cleaned.replace(/\[\s*official\s+music\s+video[^\]]{0,120}\]/gi, '');
+  cleaned = cleaned.replace(/\s*\bofficial\s+music\s+video\b\s*/gi, ' ');
   cleaned = cleaned.replace(/^\*+/, '').replace(/\*+$/, '').trim();
 
   // Remove remastered versions

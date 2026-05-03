@@ -8,8 +8,13 @@ import { cleanSongTitle } from './songTitleCleaner';
 function preprocessYoutubeVideoTitleLine(rawTitle: string): string {
   let s = String(rawTitle || '').trim();
   if (!s) return s;
-  for (let iter = 0; iter < 8; iter++) {
+  s = s.replace(/\s+/g, ' ').trim();
+  for (let iter = 0; iter < 12; iter++) {
     const before = s;
+    s = s.replace(/\(\s*official\s+music\s+video[^)]{0,120}\)/gi, '');
+    s = s.replace(/\[\s*official\s+music\s+video[^\]]{0,120}\]/gi, '');
+    s = s.replace(/\s*[-–—]\s*official\s+music\s+video\b/gi, ' ');
+    s = s.replace(/\s*\bofficial\s+music\s+video\b\s*/gi, ' ');
     s = s.replace(/^\s*[\(\[]\s*official[^)\]]*[\)\]]\s*(?:ft\.?|feat\.?|featuring)\s+/i, '');
     s = s.replace(/^\s*[\(\[]\s*official[^)\]]*[\)\]]\s+/i, '');
     s = s.replace(
@@ -29,7 +34,7 @@ function preprocessYoutubeVideoTitleLine(rawTitle: string): string {
     s = s.replace(/\s*[\(\[]\s*with\s+lyrics\s*[\)\]]\s*$/i, '');
     if (s === before) break;
   }
-  return s.trim();
+  return s.replace(/\s+/g, ' ').trim();
 }
 
 function tokenCount(s: string): number {
