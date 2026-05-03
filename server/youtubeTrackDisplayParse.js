@@ -237,6 +237,19 @@ function parseYoutubeVideoTitleForDisplay(rawTitle) {
     const R = right.trim();
     if (!L || !R) return null;
 
+    if (
+      looksLikeDottedLetterAcronymTitle(R) &&
+      isAllCapsArtistPrefix(allCapsArtistHead(L))
+    ) {
+      return { artist: L, title: R };
+    }
+    if (
+      looksLikeDottedLetterAcronymTitle(L) &&
+      isAllCapsArtistPrefix(allCapsArtistHead(R))
+    ) {
+      return { artist: R, title: L };
+    }
+
     const oL = officialRe.test(L) ? 1 : 0;
     const oR = officialRe.test(R) ? 1 : 0;
     if (oR > oL) return { artist: L, title: R };
