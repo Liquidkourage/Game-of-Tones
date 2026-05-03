@@ -84,6 +84,22 @@ function isParenSubtitleOrRecordingMeta(inner) {
   return false;
 }
 
+/** "*Y.M.C.A.*" / "Y.M.C.A." — letter+dots acronym titles (not band names). */
+function looksLikeDottedLetterAcronymTitle(chunk) {
+  const s = String(chunk || '').trim();
+  if (!s) return false;
+  const deco = s.replace(/^\*+/, '').replace(/\*+$/, '').trim();
+  const compact = deco.replace(/\s+/g, '');
+  return /^[a-z](?:\.[a-z])+\.?$/i.test(compact);
+}
+
+/** First segment before '(' for ALL CAPS band test — "VILLAGE PEOPLE (1978 (RM))". */
+function allCapsArtistHead(seg) {
+  return String(seg || '')
+    .split('(')[0]
+    .trim();
+}
+
 /**
  * Common single-token performer names on YouTube as "Artist - Title". Paired with titleFirstOrder:
  * skip title-first swap when the left chunk is likely already the artist (avoids Nelly/Boston/DMX reversals).
@@ -138,12 +154,15 @@ function tryLeadingTwoWordPersonArtist(normalized) {
     'we can',
     'you are',
     'blame it',
+    'quit playing',
+    'drop it',
   ]);
   if (badPair.has(pair)) return null;
   const rest = m[2].trim();
   const restTok = tokenCount(rest);
-  if (restTok !== 1 || rest.length < 7) return null;
-  return { artist: m[1].trim(), title: rest };
+  if (restTok === 1 && rest.length >= 7) return { artist: m[1].trim(), title: rest };
+  if (restTok >= 3) return { artist: m[1].trim(), title: rest };
+  return null;
 }
 
 function isLikelyOneWordArtistTitleLeft(token) {
@@ -238,19 +257,24 @@ function parseYoutubeVideoTitleForDisplay(rawTitle) {
   const dashParts = normalized.split(/\s+-\s+/);
 
   if (dashParts.length >= 3) {
-    const mid = dashParts[1].trim().toLowerCase();
-    const lastSeg = dashParts[dashParts.length - 1].trim();
-    if (mid === 'titanic' && /\blyrics?\b/i.test(lastSeg)) {
-      return { title: dashParts[0].trim(), artist: '' };
+    const a = dashParts[0].trim();
+    const b = dashParts[1].trim();
+    const c = dashParts[2].trim();
+    const cL = c.toLowerCase();
+    const midLower = b.toLowerCase();
+
+    if (cL === 'titanic' && /^[A-Z][a-z]+ [A-Z][a-z]+$/.test(a) && tokenCount(b) >= 2) {
+      return { title: b, artist: a };
+    }
+    if (midLower === 'titanic' && /\blyrics?\b/i.test(cL)) {
+      return { title: a.trim(), artist: '' };
     }
     if (!isAllCapsArtistPrefix(dashParts[0])) {
-      const a = dashParts[0].trim();
-      const b = dashParts[1].trim();
-      const c = dashParts[2].trim();
       const tA = tokenCount(a);
       const tB = tokenCount(b);
       const tC = tokenCount(c);
       if (
+        cL !== 'titanic' &&
         tA <= 2 &&
         tB >= 2 &&
         tC >= 1 &&
@@ -304,12 +328,22 @@ function parseYoutubeVideoTitleForDisplay(rawTitle) {
 
   const pipeParts = normalized.split(/\s+\|\s+/);
   if (pipeParts.length === 2) {
+    const pL = pipeParts[0].trim();
+    const pR = pipeParts[1].trim();
+    if (looksLikeDottedLetterAcronymTitle(pL) && isAllCapsArtistPrefix(allCapsArtistHead(pR))) {
+      return { title: pL, artist: pR };
+    }
     const picked = pickOrientation(pipeParts[0], pipeParts[1]);
     if (picked) return picked;
   }
 
   const slashParts = normalized.split(/\s+\/\s+/);
   if (slashParts.length === 2) {
+    const sL = slashParts[0].trim();
+    const sR = slashParts[1].trim();
+    if (looksLikeDottedLetterAcronymTitle(sL) && isAllCapsArtistPrefix(allCapsArtistHead(sR))) {
+      return { title: sL, artist: sR };
+    }
     const picked = pickOrientation(slashParts[0], slashParts[1]);
     if (picked) return picked;
   }
