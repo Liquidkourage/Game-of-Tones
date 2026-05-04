@@ -577,28 +577,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       // Enforce deterministic playback mode for direct index plays
       try { await spotifyFor(roomId).setShuffleState(false, targetDeviceId); } catch (_) {}
       try { await spotifyFor(roomId).setRepeatState('off', targetDeviceId); } catch (_) {}
-      // Determine randomized start when enabled and safe
-      let startMs = 0;
-      if (room.randomStarts && room.randomStarts !== 'none' && Number.isFinite(song.duration)) {
-        const durationMs = Math.max(0, Number(song.duration));
-        const snippetMs = room.snippetLength * 1000;
-        const bufferMs = 1500;
-        
-        if (room.randomStarts === 'early') {
-          // Early random: first 90 seconds
-          const maxStartMs = 90000; // 90 seconds
-          const safeWindow = Math.min(maxStartMs, Math.max(0, durationMs - snippetMs - bufferMs));
-          if (safeWindow > 3000) {
-            startMs = Math.floor(Math.random() * safeWindow);
-          }
-        } else if (room.randomStarts === 'random') {
-          // Random: anywhere but last 30+ seconds
-          const safeWindow = Math.max(0, durationMs - snippetMs - bufferMs - 30000); // 30 second buffer
-          if (safeWindow > 3000) {
-            startMs = Math.floor(Math.random() * safeWindow);
-          }
-        }
-      }
+      const startMs = computeSpotifySnippetRandomStartMs(room, song, 'playSongAtIndex');
       await spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${song.id}`], startMs);
       const endTime = Date.now();
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId} (took ${endTime - startTime}ms)`);
@@ -1263,6 +1242,38 @@ function computeSnippetRandomStartMs(room, song) {
   return startMs;
 }
 
+/**
+ * Spotify rows in room.playlistSongs often omit `duration` after ID-only finalized reorder merges.
+ * Use duration_ms when present, then duration, then the same fallback as YouTube snippet math.
+ */
+function resolveSpotifyTrackDurationMsForRandomStart(song, contextLabel) {
+  const raw = song && (song.duration_ms != null ? song.duration_ms : song.duration);
+  const n = Number(raw);
+  if (Number.isFinite(n) && n > 0) return n;
+  routineServerLog(
+    `⚠️ Random start (${contextLabel || 'spotify'}): missing/zero duration on "${song?.name || song?.id || '?'}" (raw=${raw}) — using ${YOUTUBE_FALLBACK_DURATION_MS}ms fallback for offset math`
+  );
+  return YOUTUBE_FALLBACK_DURATION_MS;
+}
+
+/** Randomized start offset (ms) for Spotify transport — mirrors early/full-track logic with resilient duration. */
+function computeSpotifySnippetRandomStartMs(room, song, contextLabel) {
+  if (!room.randomStarts || room.randomStarts === 'none') return 0;
+  const snippetMs = (room.snippetLength || 30) * 1000;
+  const bufferMs = 1500;
+  const durationMs = resolveSpotifyTrackDurationMsForRandomStart(song, contextLabel);
+  let startMs = 0;
+  if (room.randomStarts === 'early') {
+    const maxStartMs = 90000;
+    const safeWindow = Math.min(maxStartMs, Math.max(0, durationMs - snippetMs - bufferMs));
+    if (safeWindow > 3000) startMs = Math.floor(Math.random() * safeWindow);
+  } else if (room.randomStarts === 'random') {
+    const safeWindow = Math.max(0, durationMs - snippetMs - bufferMs - 30000);
+    if (safeWindow > 3000) startMs = Math.floor(Math.random() * safeWindow);
+  }
+  return startMs;
+}
+
 function buildSongPlayingPayload(room, song, currentIndex) {
   const yt = songUsesYoutubePlayback(song);
   const startMs = room.currentSongStartMs || 0;
@@ -1555,28 +1566,7 @@ async function playNextSongSimple(roomId, deviceId) {
     return;
   }
 
-  // Calculate start position if random starts enabled
-  let startMs = 0;
-  if (room.randomStarts && room.randomStarts !== 'none' && Number.isFinite(nextSong.duration)) {
-    const dur = Math.max(0, Number(nextSong.duration));
-    const snippetMs = room.snippetLength * 1000;
-    const bufferMs = 1500;
-    
-    if (room.randomStarts === 'early') {
-      // Early random: first 90 seconds
-      const maxStartMs = 90000; // 90 seconds
-      const safeWindow = Math.min(maxStartMs, Math.max(0, dur - snippetMs - bufferMs));
-      if (safeWindow > 3000) {
-        startMs = Math.floor(Math.random() * safeWindow);
-      }
-    } else if (room.randomStarts === 'random') {
-      // Random: anywhere but last 30+ seconds
-      const safeWindow = Math.max(0, dur - snippetMs - bufferMs - 30000); // 30 second buffer
-      if (safeWindow > 3000) {
-        startMs = Math.floor(Math.random() * safeWindow);
-      }
-    }
-  }
+  const startMs = computeSpotifySnippetRandomStartMs(room, nextSong, 'playNextSongSimple');
 
     // Track called song
     room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
@@ -6086,30 +6076,8 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       await new Promise(resolve => setTimeout(resolve, 100));
       // First track always starts via URIs (temp playlist, if any, is still building asynchronously)
       await new Promise(resolve => setTimeout(resolve, 100));
-      // Use explicit device_id and uris as fallback in case transfer isn't picked up
-      // Randomized start position within track when enabled and safe
-      startMs = 0;
-      if (room.randomStarts && room.randomStarts !== 'none' && Number.isFinite(firstSong.duration)) {
-        const dur = Math.max(0, Number(firstSong.duration));
-        const snippetMs = room.snippetLength * 1000;
-        const bufferMs = 1500;
-        
-        if (room.randomStarts === 'early') {
-          // Early random: first 90 seconds
-          const maxStartMs = 90000; // 90 seconds
-          const safeWindow = Math.min(maxStartMs, Math.max(0, dur - snippetMs - bufferMs));
-          if (safeWindow > 3000) {
-            startMs = Math.floor(Math.random() * safeWindow);
-          }
-        } else if (room.randomStarts === 'random') {
-          // Random: anywhere but last 30+ seconds
-          const safeWindow = Math.max(0, dur - snippetMs - bufferMs - 30000); // 30 second buffer
-          if (safeWindow > 3000) {
-            startMs = Math.floor(Math.random() * safeWindow);
-          }
-        }
-      }
-      routineServerLog(`🎯 Starting first song with randomized offset: ${startMs}ms (${Math.floor(startMs/1000)}s)`);
+      startMs = computeSpotifySnippetRandomStartMs(room, firstSong, 'auto first');
+      routineServerLog(`🎯 Starting first song with randomized offset: ${startMs}ms (${Math.floor(startMs / 1000)}s) mode=${room.randomStarts}`);
       
       await spotifyFor(roomId).withRetries('startPlayback(initial)', () => spotifyFor(roomId).startPlayback(targetDeviceId, [`spotify:track:${firstSong.id}`], startMs), { attempts: 3, backoffMs: 400 });
       try {
@@ -6384,28 +6352,7 @@ async function playNextSong(roomId, deviceId) {
       // Reset repeat to 'off' before advancing (clears any previous 'track' repeat)
       try { await spotifyFor(roomId).withRetries('setRepeat(off,next)', () => spotifyFor(roomId).setRepeatState('off', targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
       await new Promise(resolve => setTimeout(resolve, 200));
-      // Randomized start position within track when enabled and safe
-      let startMs = 0;
-      if (room.randomStarts && room.randomStarts !== 'none' && Number.isFinite(nextSong.duration)) {
-        const dur = Math.max(0, Number(nextSong.duration));
-        const snippetMs = room.snippetLength * 1000;
-        const bufferMs = 1500;
-        
-        if (room.randomStarts === 'early') {
-          // Early random: first 90 seconds
-          const maxStartMs = 90000; // 90 seconds
-          const safeWindow = Math.min(maxStartMs, Math.max(0, dur - snippetMs - bufferMs));
-          if (safeWindow > 3000) {
-            startMs = Math.floor(Math.random() * safeWindow);
-          }
-        } else if (room.randomStarts === 'random') {
-          // Random: anywhere but last 30+ seconds
-          const safeWindow = Math.max(0, dur - snippetMs - bufferMs - 30000); // 30 second buffer
-          if (safeWindow > 3000) {
-            startMs = Math.floor(Math.random() * safeWindow);
-          }
-        }
-      }
+      const startMs = computeSpotifySnippetRandomStartMs(room, nextSong, 'playNextSong');
       // Use playlist context if available, otherwise fall back to individual track
       if (room.temporaryPlaylistId) {
         routineServerLog(`🎼 Playing next song from playlist context at index ${room.currentSongIndex}`);
