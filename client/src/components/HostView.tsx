@@ -40,6 +40,7 @@ import {
   Sparkles,
   Radio,
   Printer,
+  Save,
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL, ENABLE_YOUTUBE_MUSIC } from '../config';
@@ -137,6 +138,61 @@ interface EventRound {
   status: 'completed' | 'active' | 'planned' | 'unplanned';
   startedAt?: number;
   completedAt?: number;
+  /** Winning pattern for this round (live game + printable PDF free-space toggle when set). */
+  bingoPattern?: BingoPattern;
+  /** Required when `bingoPattern === 'custom'` (saved-pattern squares). */
+  customPatternMask?: string[];
+  /** When set, overrides host-wide free-space for this round; omit to inherit the Bingo Pattern checkbox. */
+  freeSpaceEnabled?: boolean;
+  /** Frozen finalized subset for this round (tracks + gameplay knobs at save time). Enables offline PDF from snapshot. */
+  savedMixSnapshot?: SavedRoundMixSnapshot;
+}
+
+/** Geometry implied by mix playlist layout when the snapshot was saved (informational + reload UX). */
+type SavedMixGeometry = '5x15' | '1x75' | 'merged';
+
+interface SavedRoundMixSnapshot {
+  savedAt: number;
+  songs: Song[];
+  mixGeometry: SavedMixGeometry;
+  snippetLength: number;
+  randomStarts: 'none' | 'early' | 'random';
+}
+
+function cloneSongForSnapshot(s: Song): Song {
+  return {
+    id: s.id,
+    name: s.name,
+    artist: s.artist,
+    duration: s.duration,
+    explicit: s.explicit,
+    youtubeMusic: s.youtubeMusic,
+    sourcePlaylistId: s.sourcePlaylistId,
+    sourcePlaylistName: s.sourcePlaylistName,
+    youtubeRawTitle: s.youtubeRawTitle,
+    catalogDisplayVerified: s.catalogDisplayVerified,
+  };
+}
+
+/** Tracks assigned to this round's playlists, order preserved from the finalized playback pool. */
+function songsForRoundFromFinalizedPool(round: EventRound, pool: Song[]): Song[] {
+  const want = new Set((round.playlistIds || []).map(String));
+  const seen = new Set<string>();
+  const out: Song[] = [];
+  for (const s of pool) {
+    const pid = s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : '';
+    if (!want.has(pid)) continue;
+    if (!s.id || seen.has(s.id)) continue;
+    seen.add(s.id);
+    out.push(s);
+  }
+  return out;
+}
+
+function deriveMixGeometryForSnapshot(playlists: Array<{ id: string }>, poolLen: number): SavedMixGeometry {
+  if (playlists.length === 5) return '5x15';
+  if (playlists.length === 1 && poolLen >= 75) return '1x75';
+  return 'merged';
 }
 
 interface Player {
@@ -332,6 +388,11 @@ const HostView: React.FC = () => {
     return out;
   }, [selectedPlaylists, selectedCatalogPlaylists]);
 
+  const mixPlaylistSelectionRef = useRef(mixPlaylistSelection);
+  useEffect(() => {
+    mixPlaylistSelectionRef.current = mixPlaylistSelection;
+  }, [mixPlaylistSelection]);
+
   /** Mix includes at least one playlist that uses the host Spotify token (not catalog-only or YouTube Music). */
   const mixNeedsHostSpotify = useMemo(
     () =>
@@ -367,6 +428,7 @@ const HostView: React.FC = () => {
   const [mixFinalized, setMixFinalized] = useState(false);
   /** Printable PDF export (physical daubers) — count capped server-side at 200. */
   const [printableCardCount, setPrintableCardCount] = useState(30);
+  const [saveRoundBusy, setSaveRoundBusy] = useState(false);
   const [printablePdfLoading, setPrintablePdfLoading] = useState(false);
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
   /** Server served GET /v1/me/playlists from last successful DB copy (Spotify 429 or TEMPO quarantine). */
@@ -497,17 +559,7 @@ const HostView: React.FC = () => {
   const [pausePosition, setPausePosition] = useState<number>(0);
   const [isPausedByInterface, setIsPausedByInterface] = useState(false);
 
-  // Round management state
-  interface EventRound {
-    id: string;
-    name: string;
-    playlistIds: string[];
-    playlistNames: string[];
-    songCount: number;
-    status: 'completed' | 'active' | 'planned' | 'unplanned';
-    startedAt?: number;
-    completedAt?: number;
-  }
+  // Round management state (see file-level `EventRound`)
 
   const [eventRounds, setEventRounds] = useState<EventRound[]>([
     {
@@ -516,7 +568,8 @@ const HostView: React.FC = () => {
       playlistIds: [],
       playlistNames: [],
       songCount: 0,
-      status: 'unplanned'
+      status: 'unplanned',
+      bingoPattern: 'line',
     }
   ]);
   const eventRoundsRef = useRef(eventRounds);
@@ -543,7 +596,11 @@ const HostView: React.FC = () => {
   }, [hostAuthBootstrapDone]);
 
   const [currentRoundIndex, setCurrentRoundIndex] = useState<number>(-1);
-  
+  const currentRoundIndexRef = useRef(currentRoundIndex);
+  useEffect(() => {
+    currentRoundIndexRef.current = currentRoundIndex;
+  }, [currentRoundIndex]);
+
   // License key management
   const [licenseKey, setLicenseKey] = useState<string>(() => {
     const saved = localStorage.getItem('tempo-license-key');
@@ -671,6 +728,10 @@ const HostView: React.FC = () => {
   const [previousVolume, setPreviousVolume] = useState(100);
   const [songList, setSongList] = useState<Song[]>([]);
   const [finalizedOrder, setFinalizedOrder] = useState<Song[] | null>(null);
+  const finalizedOrderRef = useRef<Song[] | null>(null);
+  useEffect(() => {
+    finalizedOrderRef.current = finalizedOrder;
+  }, [finalizedOrder]);
   // Playlists state
   const [visiblePlaylists, setVisiblePlaylists] = useState<Playlist[]>([]);
   const [playlistQuery, setPlaylistQuery] = useState('');
@@ -1748,6 +1809,8 @@ const HostView: React.FC = () => {
               artist: o.artist,
               explicit: o.explicit === true,
               youtubeMusic: o.youtubeMusic === true,
+              sourcePlaylistId: o.sourcePlaylistId != null ? String(o.sourcePlaylistId) : undefined,
+              sourcePlaylistName: typeof o.sourcePlaylistName === 'string' ? o.sourcePlaylistName : undefined,
             }))
           : [];
         if (arr.length > 0) {
@@ -2735,8 +2798,20 @@ const HostView: React.FC = () => {
   };
 
   const requestPrintablePdfDownload = useCallback(
-    (opts: { playlistIds?: string[]; pdfSubtitle: string; fileSlug: string }) => {
-      if (!socket || !roomId || !mixFinalized) return;
+    (opts: {
+      playlistIds?: string[];
+      songSnapshot?: Song[];
+      pdfSubtitle: string;
+      fileSlug: string;
+      freeSpace?: boolean;
+    }) => {
+      if (!socket || !roomId) return;
+      const fs =
+        opts.freeSpace === true ? true : opts.freeSpace === false ? false : freeSpaceEnabled;
+      const need = fs ? 24 : 25;
+      const snapLen = opts.songSnapshot?.length ?? 0;
+      const canSnapshotPrint = snapLen >= need;
+      if (!mixFinalized && !canSnapshotPrint) return;
       const count = Math.min(200, Math.max(1, Math.floor(Number(printableCardCount)) || 30));
       setPrintablePdfLoading(true);
 
@@ -2801,9 +2876,11 @@ const HostView: React.FC = () => {
         roomId,
         count,
         ...(opts.playlistIds && opts.playlistIds.length > 0 ? { playlistIds: opts.playlistIds } : {}),
+        ...(opts.songSnapshot && opts.songSnapshot.length > 0 ? { songSnapshot: opts.songSnapshot } : {}),
+        ...(opts.freeSpace !== undefined ? { freeSpace: opts.freeSpace } : {}),
       });
     },
-    [socket, roomId, mixFinalized, printableCardCount],
+    [socket, roomId, mixFinalized, printableCardCount, freeSpaceEnabled],
   );
 
   const handleDownloadPrintablePdf = useCallback(() => {
@@ -2818,17 +2895,53 @@ const HostView: React.FC = () => {
       const ids = round.playlistIds || [];
       if (ids.length === 0) return;
       const safeSlug = (round.name || 'round').replace(/[^\w\-]+/g, '_').slice(0, 48);
+      const fs =
+        round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : freeSpaceEnabled;
+      const need = fs ? 24 : 25;
+      const snap = round.savedMixSnapshot?.songs;
+      if (snap && snap.length >= need) {
+        requestPrintablePdfDownload({
+          songSnapshot: snap.map(cloneSongForSnapshot),
+          pdfSubtitle: `Room ${roomId} · ${round.name} (saved)`,
+          fileSlug: safeSlug,
+          freeSpace: fs,
+        });
+        return;
+      }
       requestPrintablePdfDownload({
         playlistIds: [...ids],
         pdfSubtitle: `Room ${roomId} · ${round.name}`,
         fileSlug: safeSlug,
+        freeSpace: fs,
       });
     },
-    [requestPrintablePdfDownload, roomId],
+    [requestPrintablePdfDownload, roomId, freeSpaceEnabled],
   );
 
   const startGame = async () => {
-    if (mixPlaylistSelection.length === 0) {
+    if (!socket) {
+      console.error('Socket not connected');
+      return;
+    }
+
+    if (mixNeedsHostSpotify && !isSpotifyConnected) {
+      alert('Spotify is not connected. Open Connection in the header and connect Spotify first.');
+      return;
+    }
+
+    const idxStart = currentRoundIndex;
+    const roundForStart =
+      idxStart >= 0 && idxStart < eventRounds.length ? eventRounds[idxStart] : null;
+    const freeSpaceForStart =
+      roundForStart?.freeSpaceEnabled !== undefined
+        ? roundForStart.freeSpaceEnabled
+        : freeSpaceEnabled;
+    const needSnapTracks = freeSpaceForStart ? 24 : 25;
+    const snapPool = roundForStart?.savedMixSnapshot?.songs;
+    const useSavedRoundPlayback =
+      !!roundForStart && !!snapPool && snapPool.length >= needSnapTracks;
+
+    if (!useSavedRoundPlayback && mixPlaylistSelection.length === 0) {
       alert('Please select at least one playlist or official catalog pack');
       return;
     }
@@ -2840,16 +2953,6 @@ const HostView: React.FC = () => {
       return;
     }
 
-    if (!socket) {
-      console.error('Socket not connected');
-      return;
-    }
-
-    if (mixNeedsHostSpotify && !isSpotifyConnected) {
-      alert('Spotify is not connected. Open Connection in the header and connect Spotify first.');
-      return;
-    }
-
     const resolveSongListForStart = () =>
       finalizedOrder && finalizedOrder.length > 0
         ? finalizedOrder
@@ -2857,7 +2960,7 @@ const HostView: React.FC = () => {
           ? songList
           : lastFinalizeMixSongListRef.current ?? [];
 
-    if (resolveSongListForStart().length === 0) {
+    if (!useSavedRoundPlayback && resolveSongListForStart().length === 0) {
       alert(
         mixNeedsHostSpotify
           ? 'No songs loaded from playlists. Ensure Spotify is connected and playlists have tracks, then try again.'
@@ -2867,7 +2970,7 @@ const HostView: React.FC = () => {
     }
 
     try {
-      if (!mixFinalized) {
+      if (!useSavedRoundPlayback && !mixFinalized) {
         addLog('Finalizing mix before start...', 'info');
         const ok = await finalizeMix();
         if (!ok) {
@@ -2878,7 +2981,10 @@ const HostView: React.FC = () => {
         }
       }
 
-      const songListForStart = resolveSongListForStart();
+      const songListForStart = useSavedRoundPlayback && snapPool
+        ? snapPool.map(cloneSongForSnapshot)
+        : resolveSongListForStart();
+
       if (songListForStart.length === 0) {
         alert('No song pool is available. Refresh the page or load playlists again.');
         return;
@@ -2886,16 +2992,45 @@ const HostView: React.FC = () => {
 
       console.log('Starting game with playlists:', mixPlaylistSelection);
       setIsStartingGame(true);
+
+      let patternForStart: BingoPattern = roundForStart?.bingoPattern ?? pattern;
+      let maskForStart: string[] =
+        patternForStart === 'custom'
+          ? roundForStart?.customPatternMask?.length
+            ? roundForStart.customPatternMask
+            : customMask.length > 0
+              ? customMask
+              : customPattern
+          : [];
+      if (patternForStart === 'custom' && maskForStart.length === 0) {
+        window.alert(
+          'This round uses a custom pattern but no squares are saved. Choose a saved custom pattern on the Game tab or in Round Manager.',
+        );
+        setIsStartingGame(false);
+        return;
+      }
+
+      if (patternForStart === 'custom' && maskForStart.length > 0) {
+        socket.emit('set-pattern', { roomId, pattern: 'custom', customMask: maskForStart });
+      } else {
+        socket.emit('set-pattern', { roomId, pattern: patternForStart });
+      }
+
+      if (useSavedRoundPlayback) {
+        addLog('Starting game from saved round snapshot (playback order = snapshot)', 'info');
+      }
+
       socket.emit('start-game', {
         roomId,
         playlists: mixPlaylistSelection,
         snippetLength,
         deviceId: mixNeedsHostSpotify && selectedDevice ? selectedDevice.id : undefined,
-        songList: songListForStart, // Send the shuffled song list to ensure server uses same order
+        songList: songListForStart,
         randomStarts,
-        pattern,
-        customMask,
-        freeSpace: freeSpaceEnabled
+        pattern: patternForStart,
+        customMask: maskForStart,
+        freeSpace: freeSpaceForStart,
+        savedRoundPlayback: useSavedRoundPlayback,
       });
       
       // Safety timeout in case no response comes back
@@ -3381,6 +3516,105 @@ const HostView: React.FC = () => {
     addLog('Display letters reset', 'info');
   };
 
+  const patchActiveRoundBingo = useCallback(
+    (patch: Partial<Pick<EventRound, 'bingoPattern' | 'customPatternMask' | 'freeSpaceEnabled'>>) => {
+      const idx = currentRoundIndexRef.current;
+      if (idx < 0) return;
+      setEventRounds((prev) => {
+        if (idx >= prev.length) return prev;
+        const r = prev[idx];
+        let updated: EventRound = { ...r, ...patch };
+        if (patch.bingoPattern != null && patch.bingoPattern !== 'custom') {
+          updated = { ...updated, customPatternMask: undefined };
+        }
+        const next = [...prev];
+        next[idx] = updated;
+        try {
+          localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(next));
+        } catch {
+          /* ignore */
+        }
+        return next;
+      });
+    },
+    [roomId],
+  );
+
+  const applyRoundBingoToHost = useCallback(
+    (round: EventRound) => {
+      let p = round.bingoPattern ?? 'line';
+      let mask =
+        p === 'custom' && round.customPatternMask && round.customPatternMask.length > 0
+          ? round.customPatternMask
+          : [];
+
+      if (p === 'custom' && mask.length === 0) {
+        p = 'line';
+        mask = [];
+      }
+
+      setPattern(p);
+      setCustomPattern(mask);
+      setCustomMask(mask);
+
+      if (p === 'custom' && mask.length > 0) {
+        const norm = (arr: string[]) => [...arr].sort().join(',');
+        const key = norm(mask);
+        const matched = savedCustomPatterns.find((sp) => norm(sp.positions) === key);
+        setSelectedCustomPattern(matched ?? null);
+      } else {
+        setSelectedCustomPattern(null);
+      }
+
+      if (round.freeSpaceEnabled !== undefined) {
+        setFreeSpaceEnabled(round.freeSpaceEnabled);
+        try {
+          localStorage.setItem('bingo-free-space', round.freeSpaceEnabled ? '1' : '0');
+        } catch {
+          /* ignore */
+        }
+      }
+
+      if (round.savedMixSnapshot) {
+        const snap = round.savedMixSnapshot;
+        const sl = snap.snippetLength;
+        if (typeof sl === 'number' && Number.isFinite(sl) && sl > 0 && sl <= 120) {
+          setSnippetLength(sl);
+          try {
+            localStorage.setItem('game-snippet-length', String(sl));
+          } catch {
+            /* ignore */
+          }
+        }
+        const rs = snap.randomStarts;
+        if (rs === 'none' || rs === 'early' || rs === 'random') {
+          setRandomStarts(rs);
+          try {
+            localStorage.setItem('game-random-starts', rs);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+
+      if (socket && roomId) {
+        if (p === 'custom' && mask.length > 0) {
+          socket.emit('set-pattern', { roomId, pattern: 'custom', customMask: mask });
+        } else {
+          socket.emit('set-pattern', { roomId, pattern: p });
+        }
+      }
+    },
+    [socket, roomId, savedCustomPatterns],
+  );
+
+  useEffect(() => {
+    if (currentRoundIndex < 0) return;
+    const r = eventRoundsRef.current[currentRoundIndex];
+    if (!r) return;
+    applyRoundBingoToHost(r);
+  }, [currentRoundIndex, applyRoundBingoToHost]);
+
   // Round management functions
 
 
@@ -3424,19 +3658,37 @@ const HostView: React.FC = () => {
 
   const updatePattern = (next: BingoPattern) => {
     setPattern(next);
+    if (next !== 'custom') {
+      setSelectedCustomPattern(null);
+      setCustomPattern([]);
+      setCustomMask([]);
+    }
+    patchActiveRoundBingo({
+      bingoPattern: next,
+      ...(next !== 'custom' ? { customPatternMask: undefined } : {}),
+    });
     if (socket && roomId) {
-      socket.emit('set-pattern', { roomId, pattern: next, customMask });
+      socket.emit('set-pattern', {
+        roomId,
+        pattern: next,
+        customMask: next === 'custom' ? customMask : undefined,
+      });
       addLog(`Pattern set to ${next}`, 'info');
     }
   };
 
-  const handleCustomPatternSelect = (customPattern: SavedCustomPattern) => {
-    setSelectedCustomPattern(customPattern);
+  const handleCustomPatternSelect = (customPatternObj: SavedCustomPattern) => {
+    setSelectedCustomPattern(customPatternObj);
     setPattern('custom');
-    setCustomPattern(customPattern.positions);
+    setCustomPattern(customPatternObj.positions);
+    setCustomMask(customPatternObj.positions);
+    patchActiveRoundBingo({
+      bingoPattern: 'custom',
+      customPatternMask: customPatternObj.positions,
+    });
     if (socket && roomId) {
-      socket.emit('set-pattern', { roomId, pattern: 'custom', customMask: customPattern.positions });
-      addLog(`Custom pattern set to ${customPattern.name}`, 'info');
+      socket.emit('set-pattern', { roomId, pattern: 'custom', customMask: customPatternObj.positions });
+      addLog(`Custom pattern set to ${customPatternObj.name}`, 'info');
     }
   };
 
@@ -4431,6 +4683,116 @@ const HostView: React.FC = () => {
   }, [roomId]);
 
 
+  const handleUpdateRoundBingoFields = useCallback(
+    (
+      roundIndex: number,
+      patch: Partial<Pick<EventRound, 'bingoPattern' | 'customPatternMask' | 'freeSpaceEnabled'>>,
+    ) => {
+      setEventRounds((prev) => {
+        const r = prev[roundIndex];
+        if (!r) return prev;
+        let updated: EventRound = { ...r, ...patch };
+        if (patch.bingoPattern != null && patch.bingoPattern !== 'custom') {
+          updated = { ...updated, customPatternMask: undefined };
+        }
+        const next = [...prev];
+        next[roundIndex] = updated;
+        try {
+          localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(next));
+        } catch {
+          /* ignore */
+        }
+        if (roundIndex === currentRoundIndexRef.current) {
+          applyRoundBingoToHost(updated);
+        }
+        return next;
+      });
+    },
+    [roomId, applyRoundBingoToHost],
+  );
+
+
+  const handleSaveRoundAtIndex = async (roundIndex: number) => {
+    if (!socket || !roomId) {
+      window.alert('Connect to the room first.');
+      return;
+    }
+    const round0 = eventRoundsRef.current[roundIndex];
+    if (!round0 || !(round0.playlistIds || []).length) {
+      window.alert('Assign at least one playlist to this round before saving.');
+      return;
+    }
+
+    setSaveRoundBusy(true);
+    try {
+      const ok = await finalizeMix();
+      if (!ok) return;
+
+      let pool: Song[] = [];
+      const deadline = Date.now() + 4500;
+      while (Date.now() < deadline) {
+        const fo = finalizedOrderRef.current;
+        if (fo && fo.length > 0) {
+          pool = fo.map(cloneSongForSnapshot);
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 75));
+      }
+      if (pool.length === 0) {
+        const fb = lastFinalizeMixSongListRef.current;
+        if (fb && fb.length > 0) pool = fb.map(cloneSongForSnapshot);
+      }
+      if (pool.length === 0) {
+        window.alert(
+          'No finalized song list arrived yet. Wait a second after finalize and click Save round again.',
+        );
+        return;
+      }
+
+      const r = eventRoundsRef.current[roundIndex];
+      if (!r) return;
+
+      const filtered = songsForRoundFromFinalizedPool(r, pool).map(cloneSongForSnapshot);
+      const fs = r.freeSpaceEnabled !== undefined ? r.freeSpaceEnabled : freeSpaceEnabled;
+      const need = fs ? 24 : 25;
+      if (filtered.length < need) {
+        window.alert(
+          `This round only has ${filtered.length} unique tracks from its playlists in the finalized mix (need ${need}). Include those playlists in the mix on the Game tab, finalize, then save again.`,
+        );
+        return;
+      }
+
+      const snap: SavedRoundMixSnapshot = {
+        savedAt: Date.now(),
+        songs: filtered,
+        mixGeometry: deriveMixGeometryForSnapshot(mixPlaylistSelectionRef.current, pool.length),
+        snippetLength,
+        randomStarts,
+      };
+
+      setEventRounds((prev) => {
+        if (roundIndex < 0 || roundIndex >= prev.length) return prev;
+        const next = [...prev];
+        next[roundIndex] = {
+          ...next[roundIndex],
+          savedMixSnapshot: snap,
+          songCount: filtered.length,
+        };
+        try {
+          localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(next));
+        } catch {
+          /* ignore */
+        }
+        return next;
+      });
+      showToast(`Saved ${r.name} — ${filtered.length} tracks (${snap.mixGeometry})`, 'success');
+      addLog(`Round snapshot saved: ${r.name}, ${filtered.length} tracks`, 'info');
+    } finally {
+      setSaveRoundBusy(false);
+    }
+  };
+
+
   const handleStartRound = useCallback((roundIndex: number) => {
     const round = eventRounds[roundIndex];
     if (!round || round.playlistIds.length === 0) {
@@ -4563,14 +4925,16 @@ const HostView: React.FC = () => {
                 playlistNames: round.playlistName ? [round.playlistName] : [],
                 // Remove old properties
                 playlistId: undefined,
-                playlistName: undefined
+                playlistName: undefined,
+                bingoPattern: round.bingoPattern ?? 'line',
               };
             }
             // Ensure new format has required arrays
             return {
               ...round,
               playlistIds: round.playlistIds || [],
-              playlistNames: round.playlistNames || []
+              playlistNames: round.playlistNames || [],
+              bingoPattern: round.bingoPattern ?? 'line',
             };
           });
           
@@ -4998,6 +5362,11 @@ const HostView: React.FC = () => {
                 <Grid3x3 className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
                 Bingo Pattern
               </h2>
+              <p style={{ margin: '0 0 14px', fontSize: '0.82rem', color: '#9aa5b1', lineHeight: 1.45 }}>
+                Each round stores its own pattern and free-space setting. Use <strong style={{ color: '#c5cdd6' }}>Start</strong>{' '}
+                in Round Manager to make a round current — the Bingo Pattern section updates to that round&apos;s saved settings, and
+                changes here are saved on that round. If no round is current yet, picks here are not tied to a bucket until you start one.
+              </p>
               <div className="pattern-selection">
                 {/* Main Pattern Options */}
                 <div className="main-pattern-options" style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '16px' }}>
@@ -5062,6 +5431,7 @@ const HostView: React.FC = () => {
                     onChange={(e) => {
                       const v = e.target.checked;
                       setFreeSpaceEnabled(v);
+                      patchActiveRoundBingo({ freeSpaceEnabled: v });
                       try {
                         localStorage.setItem('bingo-free-space', v ? '1' : '0');
                       } catch {
@@ -6673,6 +7043,12 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
 
                   <div>
                     <h4 style={{ margin: '0 0 12px', fontSize: '1rem', fontWeight: 600, color: '#fff' }}>All rounds</h4>
+                    <p style={{ margin: '0 0 12px', fontSize: '0.8rem', color: '#9aa5b1', lineHeight: 1.45 }}>
+                      <strong style={{ color: '#c5cdd6' }}>Save round</strong> finalizes the mix when needed, then stores this round&apos;s
+                      playlist-linked tracks (frozen pool order), snippet length, random-start mode, and 5×15 / 1×75 / merged layout hint in this browser —{' '}
+                      plus pattern/free-center already on each row. <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> can use that snapshot even if the room mix changes later.
+                      With that round as <strong style={{ color: '#c5cdd6' }}>current</strong>, <strong style={{ color: '#c5cdd6' }}>Start Game</strong> plays the snapshot tracks in order (live audio follows the save).
+                    </p>
                     <div className="host-round-manager-rounds">
                       {eventRounds.map((round, index) => {
                         const isCurrentRound = index === currentRoundIndex;
@@ -6706,16 +7082,149 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                                       · Completed {new Date(round.completedAt).toLocaleTimeString()}
                                     </span>
                                   )}
+                                  {round.savedMixSnapshot && (
+                                    <>
+                                      <br />
+                                      <span style={{ color: '#7dd3fc', fontSize: '0.72rem' }}>
+                                        Snapshot · {round.savedMixSnapshot.songs.length} tracks · {round.savedMixSnapshot.mixGeometry} ·{' '}
+                                        {new Date(round.savedMixSnapshot.savedAt).toLocaleString()}
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                                <div
+                                  style={{
+                                    marginTop: 10,
+                                    display: 'flex',
+                                    flexWrap: 'wrap',
+                                    gap: '10px 14px',
+                                    alignItems: 'center',
+                                    fontSize: '0.78rem',
+                                    color: '#b9c3cd',
+                                  }}
+                                >
+                                  <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    Pattern
+                                    <select
+                                      value={round.bingoPattern ?? 'line'}
+                                      onChange={(e) => {
+                                        const v = e.target.value as BingoPattern;
+                                        handleUpdateRoundBingoFields(index, {
+                                          bingoPattern: v,
+                                          ...(v !== 'custom' ? { customPatternMask: undefined } : {}),
+                                        });
+                                      }}
+                                      style={{
+                                        padding: '4px 8px',
+                                        borderRadius: 6,
+                                        border: '1px solid rgba(255,255,255,0.25)',
+                                        background: 'rgba(0,0,0,0.35)',
+                                        color: '#fff',
+                                        fontSize: '0.78rem',
+                                      }}
+                                    >
+                                      {PATTERN_OPTIONS.map((opt) => (
+                                        <option key={opt.value} value={opt.value}>
+                                          {opt.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  {(round.bingoPattern ?? 'line') === 'custom' && (
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      Saved shape
+                                      <select
+                                        value={(() => {
+                                          const mask = round.customPatternMask;
+                                          if (!mask?.length) return '';
+                                          const norm = (arr: string[]) => [...arr].sort().join(',');
+                                          const key = norm(mask);
+                                          const sp = savedCustomPatterns.find((p) => norm(p.positions) === key);
+                                          return sp?.id ?? '';
+                                        })()}
+                                        onChange={(e) => {
+                                          const id = e.target.value;
+                                          const sp = savedCustomPatterns.find((p) => p.id === id);
+                                          if (sp) {
+                                            handleUpdateRoundBingoFields(index, {
+                                              bingoPattern: 'custom',
+                                              customPatternMask: [...sp.positions],
+                                            });
+                                          }
+                                        }}
+                                        style={{
+                                          padding: '4px 8px',
+                                          borderRadius: 6,
+                                          border: '1px solid rgba(255,255,255,0.25)',
+                                          background: 'rgba(0,0,0,0.35)',
+                                          color: '#fff',
+                                          fontSize: '0.78rem',
+                                          maxWidth: 200,
+                                        }}
+                                      >
+                                        <option value="">Select saved pattern…</option>
+                                        {savedCustomPatterns.map((sp) => (
+                                          <option key={sp.id} value={sp.id}>
+                                            {sp.name}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                  )}
+                                  <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={
+                                        round.freeSpaceEnabled !== undefined
+                                          ? round.freeSpaceEnabled
+                                          : freeSpaceEnabled
+                                      }
+                                      onChange={(e) =>
+                                        handleUpdateRoundBingoFields(index, {
+                                          freeSpaceEnabled: e.target.checked,
+                                        })
+                                      }
+                                    />
+                                    Free center
+                                  </label>
                                 </div>
                               </div>
                               <div className="host-round-manager-round__actions">
-                                {mixFinalized && (round.playlistIds || []).length > 0 && (
+                                {(round.playlistIds || []).length > 0 && (
+                                  <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    disabled={saveRoundBusy || printablePdfLoading || mixGameActionsBlocked}
+                                    onClick={() => void handleSaveRoundAtIndex(index)}
+                                    title="Finalizes the mix if needed, then saves this round’s frozen tracks and snippet/random-start settings for reproducible PDFs."
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 6,
+                                      fontSize: '0.82rem',
+                                      marginRight: 8,
+                                    }}
+                                  >
+                                    <Save className="w-4 h-4" aria-hidden />
+                                    Save round
+                                  </button>
+                                )}
+                                {(() => {
+                                  const fs = round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : freeSpaceEnabled;
+                                  const need = fs ? 24 : 25;
+                                  const snapOk = (round.savedMixSnapshot?.songs?.length ?? 0) >= need;
+                                  return (mixFinalized || snapOk) && (round.playlistIds || []).length > 0;
+                                })() && (
                                   <button
                                     type="button"
                                     className="btn-secondary"
                                     disabled={printablePdfLoading}
                                     onClick={() => handleDownloadRoundPrintablePdf(round)}
-                                    title="Random printable cards using only tracks from this round’s playlists that are in the finalized mix. Uses the card count above."
+                                    title={
+                                      round.savedMixSnapshot?.songs?.length
+                                        ? 'Uses the saved snapshot tracks when available; otherwise the live finalized mix and this round’s playlists.'
+                                        : 'Uses this round’s playlists in the finalized mix, its Free center setting, and the card count above.'
+                                    }
                                     style={{
                                       display: 'inline-flex',
                                       alignItems: 'center',

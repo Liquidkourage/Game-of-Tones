@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import type { BingoPattern } from '../patternDefinitions';
 import {
   ChevronDown,
   ChevronUp,
@@ -29,6 +30,9 @@ interface EventRound {
   status: 'completed' | 'active' | 'planned' | 'unplanned';
   startedAt?: number;
   completedAt?: number;
+  bingoPattern?: BingoPattern;
+  customPatternMask?: string[];
+  freeSpaceEnabled?: boolean;
 }
 
 interface RoundPlannerProps {
@@ -113,7 +117,8 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
       playlistIds: [],
       playlistNames: [],
       songCount: 0,
-      status: 'unplanned'
+      status: 'unplanned',
+      bingoPattern: 'line',
     };
     const updatedRounds = [...rounds, newRound];
     const renumberedRounds = ensureSequentialNumbering(updatedRounds);

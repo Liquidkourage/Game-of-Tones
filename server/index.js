@@ -2462,37 +2462,61 @@ io.on('connection', (socket) => {
           socket.emit('printable-cards-error', { message: 'Only the host can export printable cards.' });
           return;
         }
-        if (!room.mixFinalized) {
-          socket.emit('printable-cards-error', {
-            message: 'Finalize the mix first so the bingo pool is locked.',
-          });
-          return;
-        }
         ensureRoomOwnerFromHostSocket(room);
         try {
           await resolveRoomVenueBranding(room);
         } catch (e) {
           console.warn('request-printable-cards resolveRoomVenueBranding:', e?.message || e);
         }
-        const useFreeSpace = !!room.freeSpaceEnabled;
+        const useFreeSpace =
+          typeof data.freeSpace === 'boolean' ? data.freeSpace : !!room.freeSpaceEnabled;
+        const songsNeededFirst = useFreeSpace ? 24 : 25;
+
+        const snapshotPool = normalizeSongSnapshotForPrint(data.songSnapshot);
+
         const rawRoundPlaylists = data.playlistIds;
         const roundPlaylistIds =
           Array.isArray(rawRoundPlaylists) &&
           rawRoundPlaylists.every((x) => typeof x === 'string' || typeof x === 'number')
             ? rawRoundPlaylists.map((x) => String(x).trim()).filter(Boolean).slice(0, 40)
             : null;
-        const roundPool =
-          roundPlaylistIds && roundPlaylistIds.length > 0
-            ? poolSongsForRoundPrint(room, roundPlaylistIds)
-            : null;
-        if (roundPlaylistIds && roundPlaylistIds.length > 0 && (!roundPool || roundPool.length === 0)) {
+
+        let roundPool = null;
+        if (snapshotPool && snapshotPool.length >= songsNeededFirst) {
+          roundPool = snapshotPool;
+        } else if (roundPlaylistIds && roundPlaylistIds.length > 0) {
+          roundPool = poolSongsForRoundPrint(room, roundPlaylistIds);
+        }
+
+        const bypassFinalizeForSnapshot =
+          !!snapshotPool && snapshotPool.length >= songsNeededFirst && roundPool === snapshotPool;
+
+        if (!room.mixFinalized && !bypassFinalizeForSnapshot) {
+          socket.emit('printable-cards-error', {
+            message: 'Finalize the mix first so the bingo pool is locked.',
+          });
+          return;
+        }
+
+        if (snapshotPool && snapshotPool.length > 0 && snapshotPool.length < songsNeededFirst) {
+          socket.emit('printable-cards-error', {
+            message: `Saved round snapshot has only ${snapshotPool.length} tracks; need at least ${songsNeededFirst} for one printable card.`,
+          });
+          return;
+        }
+
+        if (
+          roundPlaylistIds &&
+          roundPlaylistIds.length > 0 &&
+          !(snapshotPool && snapshotPool.length >= songsNeededFirst) &&
+          (!roundPool || roundPool.length === 0)
+        ) {
           socket.emit('printable-cards-error', {
             message:
               'No tracks for those playlists were found in the finalized mix. Use playlists that are included in the mix and assigned to this round, then finalize again.',
           });
           return;
         }
-        const songsNeededFirst = useFreeSpace ? 24 : 25;
         if (roundPool && roundPool.length < songsNeededFirst) {
           socket.emit('printable-cards-error', {
             message: `This round only has ${roundPool.length} unique songs in the finalized mix; need at least ${songsNeededFirst} for one printable card.`,
@@ -2526,9 +2550,11 @@ io.on('connection', (socket) => {
         });
         routineServerLog(
           `📄 Exported ${count} printable bingo cards for room ${roomId}${
-            roundPlaylistIds && roundPlaylistIds.length
-              ? ` (round subset: ${roundPlaylistIds.length} playlist(s), ${roundPool?.length ?? 0} tracks)`
-              : ' (full finalized pool)'
+            bypassFinalizeForSnapshot
+              ? ` (saved round snapshot, ${roundPool?.length ?? 0} tracks)`
+              : roundPlaylistIds && roundPlaylistIds.length
+                ? ` (round subset: ${roundPlaylistIds.length} playlist(s), ${roundPool?.length ?? 0} tracks)`
+                : ' (full finalized pool)'
           }`,
         );
       } catch (e) {
@@ -3849,7 +3875,7 @@ io.on('connection', (socket) => {
 
   socket.on('start-game', async (data) => {
     routineServerLog('🎮 Start game event received:', data);
-    const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = 'none', pattern: incomingPattern, freeSpace } = data;
+    const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, freeSpace, savedRoundPlayback } = data;
     const room = rooms.get(roomId);
     
     routineServerLog('🔍 Room found:', !!room);
@@ -3876,16 +3902,37 @@ io.on('connection', (socket) => {
         room.round = (room.round || 0) + 1;
         // Apply pattern from host if provided; default to 'line' if still unset
         try {
-          const allowed = new Set(['line', 'four_corners', 'x', 'full_card', 't', 'l', 'u', 'plus']);
+          const allowed = new Set(['line', 'four_corners', 'x', 'full_card', 't', 'l', 'u', 'plus', 'custom']);
           if (incomingPattern && allowed.has(incomingPattern)) {
             room.pattern = incomingPattern;
+          }
+          if (room.pattern === 'custom' && Array.isArray(incomingCustomMask)) {
+            const mask = incomingCustomMask.filter((p) => /^(0|1|2|3|4)-(0|1|2|3|4)$/.test(p));
+            room.customPattern = mask.length > 0 ? new Set(mask) : undefined;
+          } else if (room.pattern !== 'custom') {
+            room.customPattern = undefined;
           }
         } catch {}
         room.pattern = room.pattern || 'line';
 
+        const savedRoundSongs =
+          savedRoundPlayback === true ? normalizeSongSnapshotForPrint(songList) || [] : [];
+        const fsForMin = freeSpace !== undefined ? !!freeSpace : !!room.freeSpaceEnabled;
+        const minSnapTracks = fsForMin ? 24 : 25;
+        if (savedRoundPlayback === true && savedRoundSongs.length < minSnapTracks) {
+          socket.emit('error', {
+            message: `Saved round playback needs at least ${minSnapTracks} tracks in the snapshot (have ${savedRoundSongs.length}). Save the round again after loading playlists.`,
+          });
+          return;
+        }
+        const useSavedRoundPlayback =
+          savedRoundPlayback === true && savedRoundSongs.length >= minSnapTracks;
+
         routineServerLog('🎵 Generating bingo cards...');
+        const forceRegenerateCards =
+          useSavedRoundPlayback || !room.mixFinalized || !room.bingoCards || room.bingoCards.size === 0;
         // If mix is already finalized and cards exist, do NOT regenerate to avoid reshuffle
-        if (!room.mixFinalized || !room.bingoCards || room.bingoCards.size === 0) {
+        if (forceRegenerateCards) {
           if (freeSpace !== undefined) {
             room.freeSpaceEnabled = !!freeSpace;
           }
@@ -3896,17 +3943,59 @@ io.on('connection', (socket) => {
           if (room.clientCards) {
             room.clientCards.clear();
           }
-          // CRITICAL: Use finalizedPlaylists if available to preserve order, otherwise use playlists
-          const playlistsToUse = room.finalizedPlaylists && room.finalizedPlaylists.length > 0 
-            ? room.finalizedPlaylists 
-            : playlists;
-          routineServerLog(`📋 Using ${room.finalizedPlaylists ? 'finalized' : 'regular'} playlists for card generation`);
-          routineServerLog(`📋 Playlist order: ${playlistsToUse.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
-          const songOrderForCards =
-            room.finalizedSongOrder ||
-            (Array.isArray(songList) && songList.length > 0 ? songList : null);
+
+          const SNAP = '__saved_round_snap__';
+          let playlistsToUse;
+          let songOrderForCards;
+          if (useSavedRoundPlayback) {
+            routineServerLog(`📋 Saved-round playback: generating cards from ${savedRoundSongs.length} snapshot tracks`);
+            room.fiveByFifteenColumnsIds = null;
+            room.fiveByFifteenColumns = null;
+            room.fiveByFifteenPlaylistNames = null;
+            room.fiveByFifteenMeta = null;
+            room.oneBySeventyFivePool = null;
+            const tagged = savedRoundSongs.map((s) => ({
+              ...s,
+              sourcePlaylistId: SNAP,
+              sourcePlaylistName: 'Saved round',
+            }));
+            playlistsToUse = [{ id: SNAP, name: 'Saved round snapshot', songs: tagged }];
+            songOrderForCards = tagged;
+          } else {
+            playlistsToUse =
+              room.finalizedPlaylists && room.finalizedPlaylists.length > 0
+                ? room.finalizedPlaylists
+                : playlists;
+            routineServerLog(`📋 Using ${room.finalizedPlaylists ? 'finalized' : 'regular'} playlists for card generation`);
+            routineServerLog(`📋 Playlist order: ${playlistsToUse.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
+            songOrderForCards =
+              room.finalizedSongOrder ||
+              (Array.isArray(songList) && songList.length > 0 ? songList : null);
+          }
           await generateBingoCards(roomId, playlistsToUse, songOrderForCards);
-          
+
+          if (useSavedRoundPlayback) {
+            room.finalizedSongOrder = savedRoundSongs.map((s) => ({ ...s }));
+            room.oneBySeventyFivePool = null;
+            room.fiveByFifteenColumnsIds = null;
+            room.fiveByFifteenColumns = null;
+            room.fiveByFifteenPlaylistNames = null;
+            room.fiveByFifteenMeta = null;
+            try {
+              io.to(roomId).emit('finalized-order', {
+                order: savedRoundSongs.map((s) => ({
+                  id: s.id,
+                  name: s.name || '',
+                  artist: s.artist || '',
+                  explicit: s.explicit === true,
+                  youtubeMusic: s.youtubeMusic === true,
+                  sourcePlaylistId: s.sourcePlaylistId,
+                  sourcePlaylistName: s.sourcePlaylistName,
+                })),
+              });
+            } catch (_) {}
+          }
+
           // CRITICAL: Auto-set pattern to 'full_card' for 1x75 mode if pattern wasn't explicitly set
           if (room.oneBySeventyFivePool && room.oneBySeventyFivePool.length === 75 && !incomingPattern) {
             routineServerLog('🎯 1x75 mode detected: Auto-setting pattern to full_card');
@@ -3970,8 +4059,9 @@ io.on('connection', (socket) => {
         }
       
         routineServerLog('🎵 Starting automatic playback...');
-        // Start automatic playback with the client's shuffled song list
-        await startAutomaticPlayback(roomId, playlists, deviceId, songList);
+        const playbackSongList =
+          useSavedRoundPlayback && savedRoundSongs.length > 0 ? savedRoundSongs : songList;
+        await startAutomaticPlayback(roomId, playlists, deviceId, playbackSongList);
         
         routineServerLog('✅ Game state set and playback attempt triggered');
       } catch (error) {
@@ -5037,11 +5127,20 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           routineServerLog(`   ✅ Column ${col} assigned to playlist: ${perListGloballyUnique[col].name}`);
           src.forEach(s => {
             if (s && s.id) {
+              const plRow = perListGloballyUnique[col];
               metaMap[s.id] = {
                 name: s.name,
                 artist: s.artist,
                 explicit: s.explicit === true,
                 youtubeMusic: s.youtubeMusic === true,
+                sourcePlaylistId:
+                  s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : String(plRow?.id ?? ''),
+                sourcePlaylistName:
+                  typeof s.sourcePlaylistName === 'string'
+                    ? s.sourcePlaylistName
+                    : typeof plRow?.name === 'string'
+                      ? plRow.name
+                      : '',
               };
             }
           });
@@ -5079,6 +5178,8 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
                 artist: m?.artist || '',
                 explicit: m?.explicit === true,
                 youtubeMusic: m?.youtubeMusic === true,
+                sourcePlaylistId: m?.sourcePlaylistId,
+                sourcePlaylistName: m?.sourcePlaylistName,
               };
             });
             io.to(roomId).emit('finalized-order', { order: orderWithMeta });
@@ -5139,6 +5240,8 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
               artist: s.artist || '',
               explicit: s.explicit === true,
               youtubeMusic: s.youtubeMusic === true,
+              sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
+              sourcePlaylistName: typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
             }));
             io.to(roomId).emit('finalized-order', { order: orderWithMeta });
           }
@@ -5156,6 +5259,8 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
             artist: s.artist || '',
             explicit: s.explicit === true,
             youtubeMusic: s.youtubeMusic === true,
+            sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
+            sourcePlaylistName: typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
           }));
           io.to(roomId).emit('finalized-order', { order: orderWithMeta });
         }
@@ -5511,6 +5616,32 @@ function poolSongsForRoundPrint(room, playlistIdsRaw) {
     pool.push(s);
   }
   return pool.length ? pool : null;
+}
+
+/** Host-provided frozen pool for printable export (saved round) — deduped, capped. */
+function normalizeSongSnapshotForPrint(raw) {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const out = [];
+  const seen = new Set();
+  for (const item of raw.slice(0, 650)) {
+    if (!item || typeof item !== 'object') continue;
+    const id = String(item.id ?? '').trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      id,
+      name: typeof item.name === 'string' ? item.name : '',
+      artist: typeof item.artist === 'string' ? item.artist : '',
+      explicit: item.explicit === true,
+      youtubeMusic: item.youtubeMusic === true,
+      sourcePlaylistId: item.sourcePlaylistId != null ? String(item.sourcePlaylistId) : undefined,
+      sourcePlaylistName: typeof item.sourcePlaylistName === 'string' ? item.sourcePlaylistName : undefined,
+      duration: typeof item.duration === 'number' ? item.duration : undefined,
+      youtubeRawTitle: typeof item.youtubeRawTitle === 'string' ? item.youtubeRawTitle : undefined,
+      catalogDisplayVerified: item.catalogDisplayVerified === true,
+    });
+  }
+  return out.length ? out : null;
 }
 
 /** Printable card: random 24/25 from an explicit pool (round playlists), not 5×15 / 1×75 geometry. */

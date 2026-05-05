@@ -1,0 +1,574 @@
+%PDF-1.3
+%ºß¬à
+3 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 4 0 R
+>>
+endobj
+4 0 obj
+<<
+/Length 4297
+>>
+stream
+0.200025 w
+0 G
+BT
+/F2 16 Tf
+18.3999999999999986 TL
+0 g
+54. 738. Td
+(Tempo — Host quick start) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 710. Td
+(Step-by-step for first-time hosts. Generated from project tooling.) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+54. 682. Td
+(Hosting your first Tempo show) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 662. Td
+(Tempo is music bingo: players mark squares when they hear songs on their cards; you control playback) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 648. Td
+(from one computer \(the host\). These steps assume your product name is Tempo / Game of Tones.) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+54. 620. Td
+(1. Open Tempo and your room) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 600. Td
+(Open Tempo in a browser on the laptop that will run the show. Use your host link or room code. Enter a) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 586. Td
+(host display name if asked — players see it.) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+54. 558. Td
+(2. Connect your music \(Connection\)) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 538. Td
+(Use Connection in the header to link Spotify and/or YouTube Music, depending on your event. Stay) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 524. Td
+(connected before loading playlists. If you use Spotify for playback, you will pick a playback device) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 510. Td
+(\(phone app open, speaker, etc.\) when starting the game. Tip: connect at home on Wi-Fi first.) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+54. 482. Td
+(3. Load playlists into your mix) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 462. Td
+(In your library, select the playlists or catalog packs that belong to tonight’s game. Tempo builds a pool) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 448. Td
+(from those selections; you will lock it when you finalize the mix.) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+54. 420. Td
+(4. Plan rounds \(recommended\)) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 400. Td
+(Open Round Planner or Round Manager. Create Round 1, Round 2, etc. Assign playlists to each round.) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 386. Td
+(Per round, set bingo pattern \(line, full card, custom, …\) and free center if you use it. You can skip) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 372. Td
+(rounds and use one big pool instead.) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+54. 344. Td
+(5. Finalize the mix) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 324. Td
+(On the Game tab, click Finalize mix. Wait for confirmation — tracks finish loading and player boards are) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 310. Td
+(generated from the locked pool. Until finalize succeeds, treat the setup as draft.) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+54. 282. Td
+(6. Save each round at home \(optional, strong prep\)) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 262. Td
+(After finalize, in Round Manager use Save round on each round. That stores a snapshot \(frozen songs) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 248. Td
+(for that round, snippet length, random-start mode, layout hint\) in this browser. Use Print PDF per round) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 234. Td
+(if you want paper cards. Snapshots live in this browser’s storage — use the same computer at the) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 220. Td
+(venue when possible.) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+54. 192. Td
+(7. Pattern and playback \(Game tab\)) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 172. Td
+(Choose the bingo pattern. Set snippet length \(seconds per clip\). Set random starts if clips should not) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 158. Td
+(always begin at 0:00. Per-round settings apply when that round is current.) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+54. 130. Td
+(8. Players join) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 110. Td
+(Share the player join link or room code. Guests open it on their phones, enter a name, and receive a) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 96. Td
+(bingo card. Put the Public Display on a projector or TV if you use it for the room.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 612. 792.]
+/Contents 6 0 R
+>>
+endobj
+6 0 obj
+<<
+/Length 1700
+>>
+stream
+0.200025 w
+0 G
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+54. 738. Td
+(9. Start the game) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 718. Td
+(If you use rounds, in Round Manager Start the round you are about to play so it is current. Click Start) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 704. Td
+(Game. Tempo plays clips in order; the display shows what has played. If you saved rounds earlier and) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 690. Td
+(this round is current, playback can follow the saved snapshot order.) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+54. 662. Td
+(10. During and after the show) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 642. Td
+(Use host controls to skip or pause as labeled. When someone calls Bingo, use verification if your flow) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 628. Td
+(shows it. End game when finished so playback and timers stop cleanly.) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+54. 600. Td
+(Night-before checklist) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 580. Td
+(Connection works • Playlists selected • Mix finalized • Rounds saved \(if used\) and PDFs printed if) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 566. Td
+(wanted • Playback device tested • Player link and display link tested.) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+54. 538. Td
+(If something goes wrong) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 518. Td
+(No tracks / finalize fails: reconnect music, refresh library, retry on stable Wi-Fi. No sound: check Spotify) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 504. Td
+(device and volume. Wrong cards: only refinalize when you accept new random boards.) Tj
+ET
+endstream
+endobj
+1 0 obj
+<</Type /Pages
+/Kids [3 0 R 5 0 R ]
+/Count 2
+>>
+endobj
+7 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+8 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+9 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+10 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+11 0 obj
+<<
+/Type /Font
+/BaseFont /Courier
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+12 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+13 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+14 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+15 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Roman
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+16 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+17 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Italic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+18 0 obj
+<<
+/Type /Font
+/BaseFont /Times-BoldItalic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+19 0 obj
+<<
+/Type /Font
+/BaseFont /ZapfDingbats
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+20 0 obj
+<<
+/Type /Font
+/BaseFont /Symbol
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+2 0 obj
+<<
+/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]
+/Font <<
+/F1 7 0 R
+/F2 8 0 R
+/F3 9 0 R
+/F4 10 0 R
+/F5 11 0 R
+/F6 12 0 R
+/F7 13 0 R
+/F8 14 0 R
+/F9 15 0 R
+/F10 16 0 R
+/F11 17 0 R
+/F12 18 0 R
+/F13 19 0 R
+/F14 20 0 R
+>>
+/XObject <<
+>>
+>>
+endobj
+21 0 obj
+<<
+/Producer (jsPDF 4.2.1)
+/CreationDate (D:20260505105653-05'00')
+>>
+endobj
+22 0 obj
+<<
+/Type /Catalog
+/Pages 1 0 R
+/OpenAction [3 0 R /FitH null]
+/PageLayout /OneColumn
+>>
+endobj
+xref
+0 23
+0000000000 65535 f 
+0000006326 00000 n 
+0000008151 00000 n 
+0000000015 00000 n 
+0000000120 00000 n 
+0000004469 00000 n 
+0000004574 00000 n 
+0000006389 00000 n 
+0000006514 00000 n 
+0000006644 00000 n 
+0000006777 00000 n 
+0000006915 00000 n 
+0000007039 00000 n 
+0000007168 00000 n 
+0000007300 00000 n 
+0000007436 00000 n 
+0000007564 00000 n 
+0000007691 00000 n 
+0000007820 00000 n 
+0000007953 00000 n 
+0000008055 00000 n 
+0000008401 00000 n 
+0000008487 00000 n 
+trailer
+<<
+/Size 23
+/Root 22 0 R
+/Info 21 0 R
+/ID [ <1568A15CBDF0B064AE73CF41996421FE> <1568A15CBDF0B064AE73CF41996421FE> ]
+>>
+startxref
+8591
+%%EOF
