@@ -41,6 +41,7 @@ import {
   Radio,
   Printer,
   Save,
+  Eraser,
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL, ENABLE_YOUTUBE_MUSIC } from '../config';
@@ -3655,6 +3656,60 @@ const HostView: React.FC = () => {
     }
   };
 
+  /** Browser-only: wipe `event-rounds-<roomId>` and UI prep state for a clean save/load test (snapshots + buckets). */
+  const clearRoomRoundPrepStorage = () => {
+    if (!roomId) return;
+    if (
+      !window.confirm(
+        'Clear ALL saved round prep for THIS ROOM on THIS browser?\n\n' +
+          '• Deletes localStorage event-rounds (round buckets + Save-round snapshots)\n' +
+          '• Leaves one empty Round 1\n' +
+          '• Clears mix selection & finalized pool in this tab\n' +
+          '• Ends the live game if playing\n\n' +
+          'Does not remove playlists from Spotify/YouTube. Cannot be undone.',
+      )
+    ) {
+      return;
+    }
+
+    if (gameState === 'playing') {
+      endGame();
+    }
+
+    try {
+      localStorage.removeItem(`event-rounds-${roomId}`);
+    } catch {
+      /* ignore */
+    }
+
+    const fresh: EventRound[] = [
+      {
+        id: `round-${Date.now()}`,
+        name: 'Round 1',
+        playlistIds: [],
+        playlistNames: [],
+        songCount: 0,
+        status: 'unplanned',
+        bingoPattern: 'line',
+      },
+    ];
+    setEventRounds(fresh);
+    setCurrentRoundIndex(-1);
+    setSelectedPlaylists([]);
+    setSelectedCatalogPlaylists([]);
+    setMixFinalized(false);
+    setSongList([]);
+    invalidateSetlistBuildCache();
+    setGameState('waiting');
+    setCurrentSong(null);
+    setPlayedSoFar([]);
+    setWinners([]);
+    setRoundComplete(null);
+    setRoundWinners([]);
+    setShowRoundManager(false);
+    showToast('Prep cache cleared — fresh Round 1 (this browser)', 'success');
+    addLog('Cleared room round prep storage (localStorage + UI)', 'info');
+  };
 
   const updatePattern = (next: BingoPattern) => {
     setPattern(next);
@@ -6460,6 +6515,24 @@ const HostView: React.FC = () => {
                         </button>
                         <span className="host-manager-round__reset-hint">
                           Clears scores and round state for this room. Cannot be undone.
+                        </span>
+                      </div>
+                      <div className="host-manager-round__reset-wrap">
+                        <button
+                          type="button"
+                          onClick={clearRoomRoundPrepStorage}
+                          className="btn-secondary"
+                          title="Remove browser-only round buckets and Save-round snapshots for this room; resets mix UI."
+                          style={{
+                            borderColor: 'rgba(248, 113, 113, 0.45)',
+                            color: '#fecaca',
+                          }}
+                        >
+                          <Eraser className="w-4 h-4" aria-hidden />
+                          Clear prep cache (browser)
+                        </button>
+                        <span className="host-manager-round__reset-hint">
+                          Fresh instantiation for testing Save round / PDF: wipes snapshots & bucket assignments stored here — not your Spotify lists.
                         </span>
                       </div>
                   </div>
