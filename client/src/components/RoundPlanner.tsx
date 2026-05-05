@@ -41,6 +41,8 @@ interface RoundPlannerProps {
   playlists: Playlist[];
   currentRound: number;
   onStartRound: (roundIndex: number) => void;
+  /** Sync this round's playlists into the host mix + pattern/snippet UI without starting the live game */
+  onSelectRoundForPrep?: (roundIndex: number) => void;
   gameState: 'waiting' | 'playing' | 'ended';
 }
 
@@ -83,6 +85,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
   playlists,
   currentRound,
   onStartRound,
+  onSelectRoundForPrep,
   gameState
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -323,14 +326,14 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
               <Music className="w-4 h-4 text-[#00ff88]" />
               <span className="font-semibold text-white">Round organization</span>
             </div>
-            <span>Drag playlists from above into round buckets. Use <strong className="text-white">Start round</strong> on a
-              column or <strong className="text-white">Start next round</strong> in the header between rounds.</span>
+            <span>Use <strong className="text-white">Load for prep</strong> on a bucket to sync the mix for Save / PDF without starting the round. Use <strong className="text-white">Start round</strong> when you want the live handoff (marks active and opens Game).</span>
           </div>
 
           {/* Round Buckets — grid wraps to multiple rows (see round-planner-buckets-wrap in HostView.css) */}
           <div className="round-planner-buckets-wrap">
             {rounds.slice(0, MAX_ROUND_BUCKETS).map((round, index) => {
               const isActive = index === currentRound && gameState === 'playing';
+              const isMixTarget = index === currentRound && gameState !== 'playing';
               const minRequired = round.songCount >= 60 ? 75 : 15;
               const isInsufficient = round.songCount > 0 && round.songCount < minRequired;
               const isDragOver = dragOverBucket === index;
@@ -431,6 +434,11 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                     {isActive && (
                       <span className="px-2 py-1 bg-[#00ff88] text-black text-xs font-bold rounded-full">
                         ACTIVE
+                      </span>
+                    )}
+                    {isMixTarget && (
+                      <span className="px-2 py-1 bg-[#38bdf8]/25 text-[#7dd3fc] border border-[#38bdf8]/40 text-xs font-bold rounded-full">
+                        Mix target
                       </span>
                     )}
                   </div>
@@ -579,12 +587,25 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                       </div>
                     )}
                     
-                    <div className="flex gap-2 items-stretch">
+                    <div className="flex flex-wrap gap-2 items-stretch">
+                      {onSelectRoundForPrep &&
+                        gameState !== 'playing' &&
+                        (round.playlistIds || []).length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => onSelectRoundForPrep(index)}
+                            title="Put this round’s playlists in the mix and sync pattern/snippet controls — does not mark the round started"
+                            className="flex-1 min-w-[140px] min-h-[44px] px-3 py-2.5 bg-sky-500/20 text-sky-100 border border-sky-400/40 text-sm font-bold rounded-lg hover:bg-sky-500/30 transition-colors flex items-center justify-center gap-2"
+                          >
+                            Load for prep
+                          </button>
+                        )}
                       {!isActive && round.status !== 'completed' && canStartRound(round) && (
                         <button
                           type="button"
                           onClick={() => onStartRound(index)}
-                          className="flex-1 min-h-[44px] px-3 py-2.5 bg-[#00ff88] text-black text-sm font-bold rounded-lg hover:bg-[#00cc6a] transition-colors flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(0,255,136,0.25)]"
+                          title="Mark this round active and open the Game tab (live event flow)"
+                          className="flex-1 min-w-[140px] min-h-[44px] px-3 py-2.5 bg-[#00ff88] text-black text-sm font-bold rounded-lg hover:bg-[#00cc6a] transition-colors flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(0,255,136,0.25)]"
                         >
                           <Play className="w-4 h-4 shrink-0" aria-hidden />
                           Start round

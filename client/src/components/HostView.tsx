@@ -4712,6 +4712,52 @@ const HostView: React.FC = () => {
   );
 
 
+  /** Load a round's playlists into the host mix selection (finalize / Save round use this list). Does not change round status. */
+  const applyRoundPlaylistsToMixSelection = useCallback(
+    (round: EventRound) => {
+      const idSet = new Set((round.playlistIds || []).map((id) => String(id)));
+      const fromLibrary = playlistsForRoundPlanner.filter((p) => idSet.has(String(p.id)));
+      const libraryIdSet = new Set(fromLibrary.map((p) => String(p.id)));
+      const fromCatalog = catalogPackOptions.filter(
+        (p) => idSet.has(String(p.id)) && !libraryIdSet.has(String(p.id)),
+      );
+      if (fromLibrary.length > 0 || fromCatalog.length > 0) {
+        setSelectedPlaylists(fromLibrary);
+        setSelectedCatalogPlaylists(fromCatalog.map((p) => ({ ...p, catalog: true })));
+        return true;
+      }
+      return false;
+    },
+    [playlistsForRoundPlanner, catalogPackOptions],
+  );
+
+  /** Pick a round for advance prep: sync mix + pattern/snippet UI without marking rounds active/completed or leaving Manager. */
+  const handleSelectRoundForPrep = useCallback(
+    (roundIndex: number) => {
+      if (gameState === 'playing') {
+        window.alert('End or pause the live game before switching which round you are prepping.');
+        return;
+      }
+      const round = eventRoundsRef.current[roundIndex];
+      if (!round || !(round.playlistIds || []).length) {
+        window.alert('Add playlists to this round first.');
+        return;
+      }
+      const ok = applyRoundPlaylistsToMixSelection(round);
+      if (!ok) {
+        window.alert(
+          'No playlists from this round matched your library. Use Connection to refresh, or re-drag playlists from the library into this bucket.',
+        );
+        return;
+      }
+      setCurrentRoundIndex(roundIndex);
+      const playlistNames = round.playlistNames.join(', ');
+      showToast(`${round.name} — mix loaded for prep (${playlistNames})`, 'success');
+      addLog(`Prep select ${round.name}: ${playlistNames}`, 'info');
+    },
+    [gameState, applyRoundPlaylistsToMixSelection, showToast, addLog],
+  );
+
   const handleSaveRoundAtIndex = async (roundIndex: number) => {
     if (!socket || !roomId) {
       window.alert('Connect to the room first.');
@@ -4821,17 +4867,8 @@ const HostView: React.FC = () => {
     setEventRounds(updatedRounds);
     setCurrentRoundIndex(roundIndex);
 
-    // Update selected playlists to match the round (Spotify + YouTube Music + catalog packs).
-    const idSet = new Set((round.playlistIds || []).map((id) => String(id)));
-    const fromLibrary = playlistsForRoundPlanner.filter((p) => idSet.has(String(p.id)));
-    const libraryIdSet = new Set(fromLibrary.map((p) => String(p.id)));
-    const fromCatalog = catalogPackOptions.filter(
-      (p) => idSet.has(String(p.id)) && !libraryIdSet.has(String(p.id))
-    );
-
-    if (fromLibrary.length > 0 || fromCatalog.length > 0) {
-      setSelectedPlaylists(fromLibrary);
-      setSelectedCatalogPlaylists(fromCatalog.map((p) => ({ ...p, catalog: true })));
+    const loaded = applyRoundPlaylistsToMixSelection(round);
+    if (loaded) {
       const playlistNames = round.playlistNames.join(', ');
       addLog(`Started ${round.name}: ${playlistNames}`, 'info');
     }
@@ -4845,7 +4882,7 @@ const HostView: React.FC = () => {
 
     // Next step is Finalize mix / Start game on the Game tab
     setActiveTab('play');
-  }, [eventRounds, currentRoundIndex, playlistsForRoundPlanner, catalogPackOptions, roomId, addLog]);
+  }, [eventRounds, currentRoundIndex, applyRoundPlaylistsToMixSelection, roomId, addLog]);
 
   // Advanced round management functions
   const jumpToRound = useCallback((roundIndex: number) => {
@@ -5363,9 +5400,9 @@ const HostView: React.FC = () => {
                 Bingo Pattern
               </h2>
               <p style={{ margin: '0 0 14px', fontSize: '0.82rem', color: '#9aa5b1', lineHeight: 1.45 }}>
-                Each round stores its own pattern and free-space setting. Use <strong style={{ color: '#c5cdd6' }}>Start</strong>{' '}
-                in Round Manager to make a round current — the Bingo Pattern section updates to that round&apos;s saved settings, and
-                changes here are saved on that round. If no round is current yet, picks here are not tied to a bucket until you start one.
+                Each round stores its own pattern and free-space setting. Use <strong style={{ color: '#c5cdd6' }}>Load for prep</strong>{' '}
+                on a round bucket (or in Round prep & PDF) to sync that round&apos;s playlists into the mix without starting it — the Bingo Pattern section then applies to that round, and changes are saved on it.{' '}
+                Use <strong style={{ color: '#c5cdd6' }}>Start round</strong> when you want the live handoff (marks active and opens Game). If no round is targeted yet, picks here are not tied to a bucket until you load one for prep or start one.
               </p>
               <div className="pattern-selection">
                 {/* Main Pattern Options */}
@@ -5788,6 +5825,7 @@ const HostView: React.FC = () => {
               playlists={playlistsForRoundPlanner}
               currentRound={currentRoundIndex}
               onStartRound={handleStartRound}
+              onSelectRoundForPrep={handleSelectRoundForPrep}
               gameState={gameState}
             />
 
@@ -6366,6 +6404,17 @@ const HostView: React.FC = () => {
                   </h2>
                   <p className="host-manager-round__actions-head">Quick actions</p>
                   <div className="host-manager-round__row">
+                      <button
+                        type="button"
+                        className="btn-accent"
+                        onClick={() => setShowRoundManager(!showRoundManager)}
+                        aria-pressed={showRoundManager}
+                        title="Save rounds, print PDFs, and edit per-round pattern without starting the live game"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                      >
+                        <ListChecks className="w-4 h-4" aria-hidden />
+                        {showRoundManager ? 'Hide round prep & PDF' : 'Round prep & PDF'}
+                      </button>
                       {gameState === 'playing' && (
                         <>
                           <button 
@@ -7044,10 +7093,9 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   <div>
                     <h4 style={{ margin: '0 0 12px', fontSize: '1rem', fontWeight: 600, color: '#fff' }}>All rounds</h4>
                     <p style={{ margin: '0 0 12px', fontSize: '0.8rem', color: '#9aa5b1', lineHeight: 1.45 }}>
-                      <strong style={{ color: '#c5cdd6' }}>Save round</strong> finalizes the mix when needed, then stores this round&apos;s
-                      playlist-linked tracks (frozen pool order), snippet length, random-start mode, and 5×15 / 1×75 / merged layout hint in this browser —{' '}
-                      plus pattern/free-center already on each row. <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> can use that snapshot even if the room mix changes later.
-                      With that round as <strong style={{ color: '#c5cdd6' }}>current</strong>, <strong style={{ color: '#c5cdd6' }}>Start Game</strong> plays the snapshot tracks in order (live audio follows the save).
+                      Use <strong style={{ color: '#c5cdd6' }}>Load for prep</strong> (or the same control on Round buckets) to put that round&apos;s playlists into the mix and sync pattern/snippet controls — no need to{' '}
+                      <strong style={{ color: '#c5cdd6' }}>Start</strong> a round just to save or print. <strong style={{ color: '#c5cdd6' }}>Save round</strong> finalizes when needed, then stores frozen tracks, snippet length, random-start mode, and layout hint in this browser.
+                      <strong style={{ color: '#c5cdd6' }}> Print PDF</strong> can use that snapshot later. At showtime, with that round loaded and a snapshot saved, <strong style={{ color: '#c5cdd6' }}>Start Game</strong> can follow the saved track order.
                     </p>
                     <div className="host-round-manager-rounds">
                       {eventRounds.map((round, index) => {
@@ -7235,6 +7283,23 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                                   >
                                     <Printer className="w-4 h-4" aria-hidden />
                                     Print PDF
+                                  </button>
+                                )}
+                                {gameState !== 'playing' && (round.playlistIds || []).length > 0 && !isCurrentRound && (
+                                  <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    onClick={() => handleSelectRoundForPrep(index)}
+                                    title="Put this round’s playlists in the mix and sync Bingo Pattern / snippet controls — does not change round status"
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 6,
+                                      fontSize: '0.82rem',
+                                      marginRight: 8,
+                                    }}
+                                  >
+                                    Load for prep
                                   </button>
                                 )}
                                 {canStart && !isCurrentRound && (
