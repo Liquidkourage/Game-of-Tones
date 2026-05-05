@@ -2734,69 +2734,98 @@ const HostView: React.FC = () => {
     }
   };
 
-  const handleDownloadPrintablePdf = useCallback(() => {
-    if (!socket || !roomId || !mixFinalized) return;
-    const count = Math.min(200, Math.max(1, Math.floor(Number(printableCardCount)) || 30));
-    setPrintablePdfLoading(true);
+  const requestPrintablePdfDownload = useCallback(
+    (opts: { playlistIds?: string[]; pdfSubtitle: string; fileSlug: string }) => {
+      if (!socket || !roomId || !mixFinalized) return;
+      const count = Math.min(200, Math.max(1, Math.floor(Number(printableCardCount)) || 30));
+      setPrintablePdfLoading(true);
 
-    let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
-    const cleanup = () => {
-      socket.off('printable-cards-result', onOk);
-      socket.off('printable-cards-error', onErr);
-      if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
-    };
+      let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+      const cleanup = () => {
+        socket.off('printable-cards-result', onOk);
+        socket.off('printable-cards-error', onErr);
+        if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
+      };
 
-    const onOk = (payload: any) => {
-      void (async () => {
-        cleanup();
-        try {
-          const cards = Array.isArray(payload?.cards) ? payload.cards : [];
-          if (cards.length === 0) {
-            window.alert('No cards returned from server.');
-            return;
+      const onOk = (payload: any) => {
+        void (async () => {
+          cleanup();
+          try {
+            const cards = Array.isArray(payload?.cards) ? payload.cards : [];
+            if (cards.length === 0) {
+              window.alert('No cards returned from server.');
+              return;
+            }
+            const logoUrl =
+              payload?.venueBranding && typeof payload.venueBranding.logoUrl === 'string'
+                ? payload.venueBranding.logoUrl
+                : undefined;
+            const blob = await buildPrintableBingoPdfBlob(cards, {
+              freeSpace: !!payload?.freeSpace,
+              subtitle: opts.pdfSubtitle,
+              logoUrl,
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const slug = opts.fileSlug.replace(/[^\w\-]+/g, '_').slice(0, 72);
+            a.download = `tempo-bingo-${slug}-${roomId}-${Date.now()}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+          } catch (e) {
+            console.error(e);
+            window.alert('Could not build PDF. Try fewer cards or reload and finalize again.');
+          } finally {
+            setPrintablePdfLoading(false);
           }
-          const logoUrl =
-            payload?.venueBranding && typeof payload.venueBranding.logoUrl === 'string'
-              ? payload.venueBranding.logoUrl
-              : undefined;
-          const blob = await buildPrintableBingoPdfBlob(cards, {
-            freeSpace: !!payload?.freeSpace,
-            subtitle: `Room ${roomId}`,
-            logoUrl,
-          });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `tempo-bingo-cards-${roomId}-${Date.now()}.pdf`;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          URL.revokeObjectURL(url);
-        } catch (e) {
-          console.error(e);
-          window.alert('Could not build PDF. Try fewer cards or reload and finalize again.');
-        } finally {
-          setPrintablePdfLoading(false);
-        }
-      })();
-    };
+        })();
+      };
 
-    const onErr = (payload: any) => {
-      cleanup();
-      window.alert(typeof payload?.message === 'string' ? payload.message : 'Could not generate printable cards.');
-      setPrintablePdfLoading(false);
-    };
+      const onErr = (payload: any) => {
+        cleanup();
+        window.alert(typeof payload?.message === 'string' ? payload.message : 'Could not generate printable cards.');
+        setPrintablePdfLoading(false);
+      };
 
-    timeoutId = globalThis.setTimeout(() => {
-      cleanup();
-      setPrintablePdfLoading(false);
-      window.alert('Timed out waiting for printable cards. Try again.');
-    }, 90000);
+      timeoutId = globalThis.setTimeout(() => {
+        cleanup();
+        setPrintablePdfLoading(false);
+        window.alert('Timed out waiting for printable cards. Try again.');
+      }, 90000);
 
-    socket.on('printable-cards-result', onOk);
-    socket.on('printable-cards-error', onErr);
-    socket.emit('request-printable-cards', { roomId, count });
-  }, [socket, roomId, mixFinalized, printableCardCount]);
+      socket.on('printable-cards-result', onOk);
+      socket.on('printable-cards-error', onErr);
+      socket.emit('request-printable-cards', {
+        roomId,
+        count,
+        ...(opts.playlistIds && opts.playlistIds.length > 0 ? { playlistIds: opts.playlistIds } : {}),
+      });
+    },
+    [socket, roomId, mixFinalized, printableCardCount],
+  );
+
+  const handleDownloadPrintablePdf = useCallback(() => {
+    requestPrintablePdfDownload({
+      pdfSubtitle: `Room ${roomId}`,
+      fileSlug: 'cards',
+    });
+  }, [requestPrintablePdfDownload, roomId]);
+
+  const handleDownloadRoundPrintablePdf = useCallback(
+    (round: EventRound) => {
+      const ids = round.playlistIds || [];
+      if (ids.length === 0) return;
+      const safeSlug = (round.name || 'round').replace(/[^\w\-]+/g, '_').slice(0, 48);
+      requestPrintablePdfDownload({
+        playlistIds: [...ids],
+        pdfSubtitle: `Room ${roomId} · ${round.name}`,
+        fileSlug: safeSlug,
+      });
+    },
+    [requestPrintablePdfDownload, roomId],
+  );
 
   const startGame = async () => {
     if (mixPlaylistSelection.length === 0) {
@@ -6312,8 +6341,9 @@ const HostView: React.FC = () => {
                    </div>
                    <p style={{ margin: '0 0 12px', fontSize: '0.8rem', color: '#9aa5b1', lineHeight: 1.45 }}>
                      Generate random cards from your <strong style={{ color: '#c5cdd6' }}>finalized</strong> bingo pool and
-                     download a PDF to print before the event. Cards match the same rules as digital boards (5×15 columns,
-                     1×75 pool, or merged pool).
+                     download a PDF to print before the event. Full mix uses 5×15 / 1×75 geometry when applicable. In{' '}
+                     <strong style={{ color: '#c5cdd6' }}>Round Manager</strong>, use <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> per
+                     round to sample only that round&apos;s playlists (still requires finalize first).
                    </p>
                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: '#c8d0d8' }}>
@@ -6679,6 +6709,25 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                                 </div>
                               </div>
                               <div className="host-round-manager-round__actions">
+                                {mixFinalized && (round.playlistIds || []).length > 0 && (
+                                  <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    disabled={printablePdfLoading}
+                                    onClick={() => handleDownloadRoundPrintablePdf(round)}
+                                    title="Random printable cards using only tracks from this round’s playlists that are in the finalized mix. Uses the card count above."
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 6,
+                                      fontSize: '0.82rem',
+                                      marginRight: 8,
+                                    }}
+                                  >
+                                    <Printer className="w-4 h-4" aria-hidden />
+                                    Print PDF
+                                  </button>
+                                )}
                                 {canStart && !isCurrentRound && (
                                   <button
                                     type="button"

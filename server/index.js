@@ -2475,9 +2475,35 @@ io.on('connection', (socket) => {
           console.warn('request-printable-cards resolveRoomVenueBranding:', e?.message || e);
         }
         const useFreeSpace = !!room.freeSpaceEnabled;
+        const rawRoundPlaylists = data.playlistIds;
+        const roundPlaylistIds =
+          Array.isArray(rawRoundPlaylists) &&
+          rawRoundPlaylists.every((x) => typeof x === 'string' || typeof x === 'number')
+            ? rawRoundPlaylists.map((x) => String(x).trim()).filter(Boolean).slice(0, 40)
+            : null;
+        const roundPool =
+          roundPlaylistIds && roundPlaylistIds.length > 0
+            ? poolSongsForRoundPrint(room, roundPlaylistIds)
+            : null;
+        if (roundPlaylistIds && roundPlaylistIds.length > 0 && (!roundPool || roundPool.length === 0)) {
+          socket.emit('printable-cards-error', {
+            message:
+              'No tracks for those playlists were found in the finalized mix. Use playlists that are included in the mix and assigned to this round, then finalize again.',
+          });
+          return;
+        }
+        const songsNeededFirst = useFreeSpace ? 24 : 25;
+        if (roundPool && roundPool.length < songsNeededFirst) {
+          socket.emit('printable-cards-error', {
+            message: `This round only has ${roundPool.length} unique songs in the finalized mix; need at least ${songsNeededFirst} for one printable card.`,
+          });
+          return;
+        }
         const cards = [];
         for (let i = 0; i < count; i++) {
-          const chosen25 = pickChosen25ForPrintableCard(room);
+          const chosen25 = roundPool
+            ? pickChosen25ForPrintableFromPool(roundPool, useFreeSpace)
+            : pickChosen25ForPrintableCard(room);
           if (!chosen25) {
             socket.emit('printable-cards-error', {
               message:
@@ -2498,7 +2524,13 @@ io.on('connection', (socket) => {
           freeSpace: useFreeSpace,
           venueBranding: venueBrandingForRoom(room),
         });
-        routineServerLog(`📄 Exported ${count} printable bingo cards for room ${roomId}`);
+        routineServerLog(
+          `📄 Exported ${count} printable bingo cards for room ${roomId}${
+            roundPlaylistIds && roundPlaylistIds.length
+              ? ` (round subset: ${roundPlaylistIds.length} playlist(s), ${roundPool?.length ?? 0} tracks)`
+              : ' (full finalized pool)'
+          }`,
+        );
       } catch (e) {
         console.error('request-printable-cards:', e);
         socket.emit('printable-cards-error', {
@@ -5457,6 +5489,36 @@ function songsForPlaylistFromRoomCache(room, playlistId) {
     if (s.sourcePlaylistId != null && String(s.sourcePlaylistId) === pid) out.push(s);
   }
   return out;
+}
+
+/**
+ * Unique songs from the finalized-room cache whose sourcePlaylistId is in playlistIds (Round Planner → printable PDF).
+ */
+function poolSongsForRoundPrint(room, playlistIdsRaw) {
+  if (!Array.isArray(playlistIdsRaw) || playlistIdsRaw.length === 0) return null;
+  const want = new Set(
+    playlistIdsRaw.map((id) => String(id).trim()).filter(Boolean),
+  );
+  if (want.size === 0) return null;
+  const map = buildCanonicalSongMapFromRoom(room);
+  const pool = [];
+  const seen = new Set();
+  for (const s of map.values()) {
+    const pid = s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : '';
+    if (!want.has(pid)) continue;
+    if (!s.id || seen.has(s.id)) continue;
+    seen.add(s.id);
+    pool.push(s);
+  }
+  return pool.length ? pool : null;
+}
+
+/** Printable card: random 24/25 from an explicit pool (round playlists), not 5×15 / 1×75 geometry. */
+function pickChosen25ForPrintableFromPool(pool, useFreeSpace) {
+  const songsNeededPerCard = useFreeSpace ? 24 : 25;
+  if (!pool || pool.length < songsNeededPerCard) return null;
+  const chosen25 = properShuffle([...pool]).slice(0, songsNeededPerCard);
+  return chosen25.length === songsNeededPerCard ? chosen25 : null;
 }
 
 async function fetchTracksForLateJoinPlaylist(roomId, room, playlist) {
