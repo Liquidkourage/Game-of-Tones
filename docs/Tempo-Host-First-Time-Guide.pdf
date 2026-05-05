@@ -10,7 +10,7 @@
 endobj
 4 0 obj
 <<
-/Length 4297
+/Length 4560
 >>
 stream
 0.200025 w
@@ -132,119 +132,126 @@ BT
 12.6499999999999986 TL
 0 g
 54. 400. Td
-(Open Round Planner or Round Manager. Create Round 1, Round 2, etc. Assign playlists to each round.) Tj
+(On the Manager tab under Music & rounds, use Round buckets: create rounds and drag playlists into) Tj
 ET
 BT
 /F1 11 Tf
 12.6499999999999986 TL
 0 g
 54. 386. Td
-(Per round, set bingo pattern \(line, full card, custom, …\) and free center if you use it. You can skip) Tj
+(each bucket. Load for prep puts that round into the mix target so Bingo Pattern and snippet controls) Tj
 ET
 BT
 /F1 11 Tf
 12.6499999999999986 TL
 0 g
 54. 372. Td
-(rounds and use one big pool instead.) Tj
+(apply to it without starting the live round. Start round is for showtime handoff \(marks active and opens) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 358. Td
+(Game\). Open Round prep & PDF under Round & event when you need Save round / Print PDF from) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 344. Td
+(one place. You can skip buckets and use one big pool instead.) Tj
 ET
 BT
 /F2 12 Tf
 13.7999999999999989 TL
 0 g
-54. 344. Td
+54. 316. Td
 (5. Finalize the mix) Tj
 ET
 BT
 /F1 11 Tf
 12.6499999999999986 TL
 0 g
-54. 324. Td
+54. 296. Td
 (On the Game tab, click Finalize mix. Wait for confirmation — tracks finish loading and player boards are) Tj
 ET
 BT
 /F1 11 Tf
 12.6499999999999986 TL
 0 g
-54. 310. Td
+54. 282. Td
 (generated from the locked pool. Until finalize succeeds, treat the setup as draft.) Tj
 ET
 BT
 /F2 12 Tf
 13.7999999999999989 TL
 0 g
-54. 282. Td
+54. 254. Td
 (6. Save each round at home \(optional, strong prep\)) Tj
 ET
 BT
 /F1 11 Tf
 12.6499999999999986 TL
 0 g
-54. 262. Td
-(After finalize, in Round Manager use Save round on each round. That stores a snapshot \(frozen songs) Tj
-ET
-BT
-/F1 11 Tf
-12.6499999999999986 TL
-0 g
-54. 248. Td
-(for that round, snippet length, random-start mode, layout hint\) in this browser. Use Print PDF per round) Tj
-ET
-BT
-/F1 11 Tf
-12.6499999999999986 TL
-0 g
 54. 234. Td
-(if you want paper cards. Snapshots live in this browser’s storage — use the same computer at the) Tj
+(For each round: tap Load for prep \(bucket or Round prep panel\), set pattern / snippet / random-start as) Tj
 ET
 BT
 /F1 11 Tf
 12.6499999999999986 TL
 0 g
 54. 220. Td
-(venue when possible.) Tj
+(you want, then Save round \(finalizes if needed\). That stores a snapshot \(frozen songs for that round,) Tj
 ET
 BT
-/F2 12 Tf
-13.7999999999999989 TL
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 206. Td
+(snippet length, random-start mode, layout hint\) in this browser. Use Print PDF per round for paper) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
 0 g
 54. 192. Td
-(7. Pattern and playback \(Game tab\)) Tj
+(cards. You do not need Start round just to save or print in advance. Snapshots live in this browser —) Tj
 ET
 BT
 /F1 11 Tf
 12.6499999999999986 TL
 0 g
-54. 172. Td
-(Choose the bingo pattern. Set snippet length \(seconds per clip\). Set random starts if clips should not) Tj
-ET
-BT
-/F1 11 Tf
-12.6499999999999986 TL
-0 g
-54. 158. Td
-(always begin at 0:00. Per-round settings apply when that round is current.) Tj
+54. 178. Td
+(use the same computer at the venue when possible.) Tj
 ET
 BT
 /F2 12 Tf
 13.7999999999999989 TL
 0 g
+54. 150. Td
+(7. Pattern and playback) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
 54. 130. Td
-(8. Players join) Tj
+(On Manager, after Load for prep on a round, edit Bingo Pattern \(line, full card, custom, …\), free center,) Tj
 ET
 BT
 /F1 11 Tf
 12.6499999999999986 TL
 0 g
-54. 110. Td
-(Share the player join link or room code. Guests open it on their phones, enter a name, and receive a) Tj
+54. 116. Td
+(snippet length, and random starts; changes attach to that round. On Game you can adjust playback) Tj
 ET
 BT
 /F1 11 Tf
 12.6499999999999986 TL
 0 g
-54. 96. Td
-(bingo card. Put the Public Display on a projector or TV if you use it for the room.) Tj
+54. 102. Td
+(settings again before Start Game.) Tj
 ET
 endstream
 endobj
@@ -258,7 +265,7 @@ endobj
 endobj
 6 0 obj
 <<
-/Length 1700
+/Length 2085
 >>
 stream
 0.200025 w
@@ -268,90 +275,111 @@ BT
 13.7999999999999989 TL
 0 g
 54. 738. Td
-(9. Start the game) Tj
+(8. Players join) Tj
 ET
 BT
 /F1 11 Tf
 12.6499999999999986 TL
 0 g
 54. 718. Td
-(If you use rounds, in Round Manager Start the round you are about to play so it is current. Click Start) Tj
+(Share the player join link or room code. Guests open it on their phones, enter a name, and receive a) Tj
 ET
 BT
 /F1 11 Tf
 12.6499999999999986 TL
 0 g
 54. 704. Td
-(Game. Tempo plays clips in order; the display shows what has played. If you saved rounds earlier and) Tj
-ET
-BT
-/F1 11 Tf
-12.6499999999999986 TL
-0 g
-54. 690. Td
-(this round is current, playback can follow the saved snapshot order.) Tj
+(bingo card. Put the Public Display on a projector or TV if you use it for the room.) Tj
 ET
 BT
 /F2 12 Tf
 13.7999999999999989 TL
 0 g
-54. 662. Td
-(10. During and after the show) Tj
+54. 676. Td
+(9. Start the game) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 656. Td
+(When it is showtime, Load for prep or Start round so the correct round is current and playlists match the) Tj
 ET
 BT
 /F1 11 Tf
 12.6499999999999986 TL
 0 g
 54. 642. Td
-(Use host controls to skip or pause as labeled. When someone calls Bingo, use verification if your flow) Tj
+(mix. Click Start Game. Tempo plays clips in order; the display shows what has played. If you saved a) Tj
 ET
 BT
 /F1 11 Tf
 12.6499999999999986 TL
 0 g
 54. 628. Td
-(shows it. End game when finished so playback and timers stop cleanly.) Tj
+(snapshot for the current round, playback can follow that frozen order.) Tj
 ET
 BT
 /F2 12 Tf
 13.7999999999999989 TL
 0 g
 54. 600. Td
-(Night-before checklist) Tj
+(10. During and after the show) Tj
 ET
 BT
 /F1 11 Tf
 12.6499999999999986 TL
 0 g
 54. 580. Td
-(Connection works • Playlists selected • Mix finalized • Rounds saved \(if used\) and PDFs printed if) Tj
+(Use host controls to skip or pause as labeled. When someone calls Bingo, use verification if your flow) Tj
 ET
 BT
 /F1 11 Tf
 12.6499999999999986 TL
 0 g
 54. 566. Td
-(wanted • Playback device tested • Player link and display link tested.) Tj
+(shows it. End game when finished so playback and timers stop cleanly.) Tj
 ET
 BT
 /F2 12 Tf
 13.7999999999999989 TL
 0 g
 54. 538. Td
-(If something goes wrong) Tj
+(Night-before checklist) Tj
 ET
 BT
 /F1 11 Tf
 12.6499999999999986 TL
 0 g
 54. 518. Td
-(No tracks / finalize fails: reconnect music, refresh library, retry on stable Wi-Fi. No sound: check Spotify) Tj
+(Connection works • Playlists selected • Mix finalized • Rounds saved \(if used\) and PDFs printed if) Tj
 ET
 BT
 /F1 11 Tf
 12.6499999999999986 TL
 0 g
 54. 504. Td
+(wanted • Playback device tested • Player link and display link tested.) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+54. 476. Td
+(If something goes wrong) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 456. Td
+(No tracks / finalize fails: reconnect music, refresh library, retry on stable Wi-Fi. No sound: check Spotify) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+54. 442. Td
 (device and volume. Wrong cards: only refinalize when you accept new random boards.) Tj
 ET
 endstream
@@ -526,7 +554,7 @@ endobj
 21 0 obj
 <<
 /Producer (jsPDF 4.2.1)
-/CreationDate (D:20260505105653-05'00')
+/CreationDate (D:20260505114226-05'00')
 >>
 endobj
 22 0 obj
@@ -540,35 +568,35 @@ endobj
 xref
 0 23
 0000000000 65535 f 
-0000006326 00000 n 
-0000008151 00000 n 
+0000006974 00000 n 
+0000008799 00000 n 
 0000000015 00000 n 
 0000000120 00000 n 
-0000004469 00000 n 
-0000004574 00000 n 
-0000006389 00000 n 
-0000006514 00000 n 
-0000006644 00000 n 
-0000006777 00000 n 
-0000006915 00000 n 
-0000007039 00000 n 
-0000007168 00000 n 
-0000007300 00000 n 
-0000007436 00000 n 
-0000007564 00000 n 
-0000007691 00000 n 
-0000007820 00000 n 
-0000007953 00000 n 
-0000008055 00000 n 
-0000008401 00000 n 
-0000008487 00000 n 
+0000004732 00000 n 
+0000004837 00000 n 
+0000007037 00000 n 
+0000007162 00000 n 
+0000007292 00000 n 
+0000007425 00000 n 
+0000007563 00000 n 
+0000007687 00000 n 
+0000007816 00000 n 
+0000007948 00000 n 
+0000008084 00000 n 
+0000008212 00000 n 
+0000008339 00000 n 
+0000008468 00000 n 
+0000008601 00000 n 
+0000008703 00000 n 
+0000009049 00000 n 
+0000009135 00000 n 
 trailer
 <<
 /Size 23
 /Root 22 0 R
 /Info 21 0 R
-/ID [ <1568A15CBDF0B064AE73CF41996421FE> <1568A15CBDF0B064AE73CF41996421FE> ]
+/ID [ <9FDF2818AB4F0C2A7E69AB14181E4194> <9FDF2818AB4F0C2A7E69AB14181E4194> ]
 >>
 startxref
-8591
+9239
 %%EOF
