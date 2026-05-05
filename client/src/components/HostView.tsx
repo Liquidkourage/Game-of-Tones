@@ -196,6 +196,14 @@ function deriveMixGeometryForSnapshot(playlists: Array<{ id: string }>, poolLen:
   return 'merged';
 }
 
+/** Same minimum track count as Save round / printable PDF eligibility for this round's free-center setting. */
+function eventRoundSnapshotMeetsSaveThreshold(round: EventRound, hostDefaultFreeSpace: boolean): boolean {
+  const fs = round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : hostDefaultFreeSpace;
+  const need = fs ? 24 : 25;
+  const n = round.savedMixSnapshot?.songs?.length ?? 0;
+  return n >= need;
+}
+
 interface Player {
   id: string;
   name: string;
@@ -3621,29 +3629,55 @@ const HostView: React.FC = () => {
 
 
   const resetEvent = () => {
-    if (window.confirm('Reset entire event?\n\nThis will:\n• Reset all rounds to unplanned status\n• Clear all round progress\n• End the current game if running\n• Allow you to replay from Round 1\n\nThis cannot be undone. Continue?')) {
+    if (
+      window.confirm(
+        'Reset entire event?\n\n' +
+          '• Ends the game if playing\n' +
+          '• Clears mix selection & finalized pool in this tab\n' +
+          '• Rounds with a valid Save round snapshot keep playlists + snapshot\n' +
+          '• All other rounds: buckets emptied (draft prep discarded)\n' +
+          '• Every round returns to unplanned\n\n' +
+          'This cannot be undone. Continue?',
+      )
+    ) {
       // End current game if running
       if (gameState === 'playing') {
         endGame();
       }
-      
-      // Reset all rounds to unplanned status
-      const resetRounds = eventRounds.map((round, index) => ({
-        ...round,
-        status: 'unplanned' as const,
-        startedAt: undefined,
-        completedAt: undefined
-      }));
-      
+
+      const resetRounds: EventRound[] = eventRounds.map((round) => {
+        if (eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled)) {
+          const snapLen = round.savedMixSnapshot!.songs.length;
+          return {
+            ...round,
+            status: 'unplanned' as const,
+            startedAt: undefined,
+            completedAt: undefined,
+            songCount: snapLen,
+          };
+        }
+        return {
+          id: round.id,
+          name: round.name,
+          playlistIds: [],
+          playlistNames: [],
+          songCount: 0,
+          status: 'unplanned' as const,
+          bingoPattern: round.bingoPattern ?? 'line',
+          startedAt: undefined,
+          completedAt: undefined,
+        };
+      });
+
       // Update rounds and reset current round index
       setEventRounds(resetRounds);
       setCurrentRoundIndex(-1);
-      
+
       // Save to localStorage
       if (roomId) {
         localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(resetRounds));
       }
-      
+
       // Clear selected playlists and reset game state
       setSelectedPlaylists([]);
       setSelectedCatalogPlaylists([]);
@@ -3651,8 +3685,8 @@ const HostView: React.FC = () => {
       setSongList([]);
       invalidateSetlistBuildCache();
       setGameState('waiting');
-      
-      addLog('?? Event reset - All rounds returned to unplanned status', 'info');
+
+      addLog('Event reset — saved-round snapshots kept; unsaved buckets cleared', 'info');
     }
   };
 
@@ -6514,7 +6548,7 @@ const HostView: React.FC = () => {
                           Reset event
                         </button>
                         <span className="host-manager-round__reset-hint">
-                          Clears scores and round state for this room. Cannot be undone.
+                          Clears draft round buckets; rounds with a valid Save round snapshot keep playlists & PDF data. Mix UI cleared.
                         </span>
                       </div>
                       <div className="host-manager-round__reset-wrap">
