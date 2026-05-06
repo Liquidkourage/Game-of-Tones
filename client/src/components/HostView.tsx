@@ -208,13 +208,20 @@ function cloneSongForSnapshot(s: Song): Song {
   };
 }
 
+function selectionPlaylistKey(playlists: Array<{ id: string }>): string {
+  return [...playlists]
+    .map((p) => String(p.id))
+    .sort((a, b) => a.localeCompare(String(b)))
+    .join('|');
+}
+
 /** Tracks assigned to this round's playlists, order preserved from the finalized playback pool. */
 function songsForRoundFromFinalizedPool(round: EventRound, pool: Song[]): Song[] {
-  const want = new Set((round.playlistIds || []).map(String));
+  const want = new Set((round.playlistIds || []).map((id) => String(id).trim()));
   const seen = new Set<string>();
   const out: Song[] = [];
   for (const s of pool) {
-    const pid = s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : '';
+    const pid = s.sourcePlaylistId != null ? String(s.sourcePlaylistId).trim() : '';
     if (!want.has(pid)) continue;
     if (!s.id || seen.has(s.id)) continue;
     seen.add(s.id);
@@ -2088,6 +2095,7 @@ const HostView: React.FC = () => {
       setIsPlaying(false);
       setCurrentSong(null);
       setMixFinalized(false);
+      lastFinalizePlaylistKeyRef.current = null;
       setPlaylists([]);
       setSelectedPlaylists([]);
       setSelectedCatalogPlaylists([]);
@@ -2369,6 +2377,7 @@ const HostView: React.FC = () => {
       setCurrentSong(null);
       setWinners([]);
       setMixFinalized(false);
+      lastFinalizePlaylistKeyRef.current = null;
       setSongList([]);
       invalidateSetlistBuildCache();
       console.log('?? Game reset');
@@ -2805,11 +2814,23 @@ const HostView: React.FC = () => {
   const finalizeMixInFlightRef = useRef(false);
   /** Shared promise so Save round + printable PDF await the same finalize instead of failing the second caller. */
   const finalizeMixPromiseRef = useRef<Promise<boolean> | null>(null);
+  /** Playlist-id key last confirmed by server `mix-finalized` for this tab — avoids skipping refinalize after prep changes selection while `mixFinalized` stayed true. */
+  const lastFinalizePlaylistKeyRef = useRef<string | null>(null);
 
   /** Returns true when server confirms mix-finalized (or already finalized on client). */
-  const finalizeMix = async (): Promise<boolean> => {
-    if (!socket || mixPlaylistSelection.length === 0) return false;
-    if (mixFinalized) return true;
+  const finalizeMix = async (opts?: { playlists?: Playlist[] }): Promise<boolean> => {
+    const playlists = opts?.playlists ?? mixPlaylistSelection;
+    if (!socket || playlists.length === 0) return false;
+
+    const targetKey = selectionPlaylistKey(playlists);
+    const uiKey = selectionPlaylistKey(mixPlaylistSelection);
+    if (
+      mixFinalized &&
+      targetKey === uiKey &&
+      lastFinalizePlaylistKeyRef.current === targetKey
+    ) {
+      return true;
+    }
 
     const inFlight = finalizeMixPromiseRef.current;
     if (inFlight) {
@@ -2822,7 +2843,11 @@ const HostView: React.FC = () => {
     const run = async (): Promise<boolean> => {
       try {
         addLog('Loading tracks from playlists before finalizing…', 'info');
-        const listToSend = await generateSongList({ force: true, reason: 'finalize' });
+        const listToSend = await generateSongList({
+          force: true,
+          reason: 'finalize',
+          playlists,
+        });
 
         if (listToSend.length === 0) {
           window.alert(
@@ -2846,7 +2871,7 @@ const HostView: React.FC = () => {
 
         // Include current host-side songList ordering to enforce 1x75 pool deterministically
         console.log('?? Finalizing mix - Playlist order being sent to server:');
-        mixPlaylistSelection.forEach((p, i) => {
+        playlists.forEach((p, i) => {
           console.log(
             `   ${i + 1}. ${p.name}${p.catalog ? ' (catalog)' : ''}${p.youtubeMusic ? ' (YouTube)' : ''} (will be column ${i})`
           );
@@ -2883,6 +2908,7 @@ const HostView: React.FC = () => {
           const onFinalized = (data: any) => {
             cleanup();
             console.log('Mix finalized:', data);
+            lastFinalizePlaylistKeyRef.current = selectionPlaylistKey(playlists);
             if (Array.isArray(data?.songList) && data.songList.length > 0) {
               setSongList(data.songList as Song[]);
               lastFinalizeMixSongListRef.current = data.songList as Song[];
@@ -2899,7 +2925,7 @@ const HostView: React.FC = () => {
           socket.on('finalize-mix-failed', onFailed);
           socket.emit('finalize-mix', {
             roomId: roomId,
-            playlists: mixPlaylistSelection,
+            playlists,
             songList: listToSend,
             freeSpace: freeSpaceEnabled
           });
@@ -3923,6 +3949,7 @@ const HostView: React.FC = () => {
       setSelectedPlaylists([]);
       setSelectedCatalogPlaylists([]);
       setMixFinalized(false);
+      lastFinalizePlaylistKeyRef.current = null;
       setSongList([]);
       invalidateSetlistBuildCache();
       setGameState('waiting');
@@ -3973,6 +4000,7 @@ const HostView: React.FC = () => {
     setSelectedPlaylists([]);
     setSelectedCatalogPlaylists([]);
     setMixFinalized(false);
+    lastFinalizePlaylistKeyRef.current = null;
     setSongList([]);
     invalidateSetlistBuildCache();
     setGameState('waiting');
@@ -4349,14 +4377,23 @@ const HostView: React.FC = () => {
 
   // Generate and shuffle song list from selected playlists. Only fetches tracks for newly selected playlists (avoids re-downloading the whole library on each click). Use { force: true } to refetch all.
   const generateSongList = useCallback(
-    async (opts?: { force?: boolean; reason?: 'selection' | 'finalize' }): Promise<Song[]> => {
-      if (mixPlaylistSelection.length === 0) {
+    async (opts?: {
+      force?: boolean;
+      reason?: 'selection' | 'finalize';
+      playlists?: Playlist[];
+    }): Promise<Song[]> => {
+      const rows = opts?.playlists ?? mixPlaylistSelection;
+      const rowsNeedHostSpotify = rows.some(
+        (p) => p.youtubeMusic !== true && p.catalog !== true
+      );
+
+      if (rows.length === 0) {
         fullyLoadedPlaylistIdsRef.current.clear();
         setSongList([]);
         return [];
       }
 
-      if (mixNeedsHostSpotify && !isSpotifyConnected) {
+      if (rowsNeedHostSpotify && !isSpotifyConnected) {
         console.warn('Cannot generate song list: Spotify not connected for selected playlists');
         setSongList([]);
         fullyLoadedPlaylistIdsRef.current.clear();
@@ -4371,7 +4408,7 @@ const HostView: React.FC = () => {
       genRef.current += 1;
       const myBuild = genRef.current;
 
-      const selectedIds = new Set(mixPlaylistSelection.map((p) => p.id));
+      const selectedIds = new Set(rows.map((p) => p.id));
       Array.from(fullyLoadedPlaylistIdsRef.current).forEach((id) => {
         if (!selectedIds.has(id)) {
           fullyLoadedPlaylistIdsRef.current.delete(id);
@@ -4384,13 +4421,13 @@ const HostView: React.FC = () => {
             (s) => s.sourcePlaylistId && selectedIds.has(s.sourcePlaylistId)
           );
 
-      let toFetch = mixPlaylistSelection.filter((p) => !fullyLoadedPlaylistIdsRef.current.has(p.id));
+      let toFetch = rows.filter((p) => !fullyLoadedPlaylistIdsRef.current.has(p.id));
 
       // Ref says every selected playlist was fetched, but we have no tracks in memory (reconnect, room
       // lifecycle, etc.). Refetch instead of returning [] with no network calls — avoids Finalize Mix alert.
-      if (toFetch.length === 0 && kept.length === 0 && mixPlaylistSelection.length > 0) {
+      if (toFetch.length === 0 && kept.length === 0 && rows.length > 0) {
         fullyLoadedPlaylistIdsRef.current.clear();
-        toFetch = mixPlaylistSelection.filter((p) => !fullyLoadedPlaylistIdsRef.current.has(p.id));
+        toFetch = rows.filter((p) => !fullyLoadedPlaylistIdsRef.current.has(p.id));
       }
 
       const dedupeAndShuffle = (songs: Song[]) => {
@@ -4485,7 +4522,7 @@ const HostView: React.FC = () => {
         return [];
       }
     },
-    [mixPlaylistSelection, mixNeedsHostSpotify, isSpotifyConnected, setPlaylists, setSelectedPlaylists]
+    [mixPlaylistSelection, isSpotifyConnected, setPlaylists, setSelectedPlaylists]
   );
 
   /** Always latest generateSongList — debounced effect must not depend on this callback (identity churn retriggers → duplicate playlist-tracks waves). */
@@ -5139,23 +5176,41 @@ const HostView: React.FC = () => {
   );
 
 
-  /** Load a round's playlists into the host mix selection (finalize / Save round use this list). Does not change round status. */
-  const applyRoundPlaylistsToMixSelection = useCallback(
-    (round: EventRound) => {
+  /** Resolved rows match `mixPlaylistSelection` merge order (library first, then catalog-only). */
+  const resolveMixPlaylistRowsForRound = useCallback(
+    (round: EventRound): Playlist[] | null => {
       const idSet = new Set((round.playlistIds || []).map((id) => String(id)));
       const fromLibrary = playlistsForRoundPlanner.filter((p) => idSet.has(String(p.id)));
       const libraryIdSet = new Set(fromLibrary.map((p) => String(p.id)));
       const fromCatalog = catalogPackOptions.filter(
         (p) => idSet.has(String(p.id)) && !libraryIdSet.has(String(p.id)),
       );
-      if (fromLibrary.length > 0 || fromCatalog.length > 0) {
-        setSelectedPlaylists(fromLibrary);
-        setSelectedCatalogPlaylists(fromCatalog.map((p) => ({ ...p, catalog: true })));
-        return true;
+      if (fromLibrary.length === 0 && fromCatalog.length === 0) return null;
+      const merged: Playlist[] = [...fromLibrary];
+      const ids = new Set(fromLibrary.map((p) => p.id));
+      for (const c of fromCatalog) {
+        if (!ids.has(c.id)) {
+          merged.push({ ...c, catalog: true });
+          ids.add(c.id);
+        }
       }
-      return false;
+      return merged;
     },
     [playlistsForRoundPlanner, catalogPackOptions],
+  );
+
+  /** Load a round's playlists into the host mix selection (finalize / Save round use this list). Does not change round status. */
+  const applyRoundPlaylistsToMixSelection = useCallback(
+    (round: EventRound) => {
+      const merged = resolveMixPlaylistRowsForRound(round);
+      if (!merged) return false;
+      const libraryRows = merged.filter((p) => p.catalog !== true);
+      const catalogRows = merged.filter((p) => p.catalog === true);
+      setSelectedPlaylists(libraryRows);
+      setSelectedCatalogPlaylists(catalogRows);
+      return true;
+    },
+    [resolveMixPlaylistRowsForRound],
   );
 
   /** Pick a round for advance prep: sync mix + pattern/snippet UI without marking rounds active/completed or leaving Manager. */
@@ -5212,9 +5267,18 @@ const HostView: React.FC = () => {
       return;
     }
 
+    const mixRows = resolveMixPlaylistRowsForRound(round0);
+    if (!mixRows) {
+      window.alert(
+        'No playlists from this round matched your library. Use Connection to refresh, or re-drag playlists from the library into this bucket.',
+      );
+      return;
+    }
+    applyRoundPlaylistsToMixSelection(round0);
+
     setSaveRoundBusy(true);
     try {
-      const ok = await finalizeMix();
+      const ok = await finalizeMix({ playlists: mixRows });
       if (!ok) return;
 
       let pool: Song[] = [];
@@ -5254,7 +5318,7 @@ const HostView: React.FC = () => {
       const snap: SavedRoundMixSnapshot = {
         savedAt: Date.now(),
         songs: filtered,
-        mixGeometry: deriveMixGeometryForSnapshot(mixPlaylistSelectionRef.current, pool.length),
+        mixGeometry: deriveMixGeometryForSnapshot(mixRows, pool.length),
         snippetLength,
         randomStarts,
       };
@@ -7519,7 +7583,7 @@ const HostView: React.FC = () => {
                    {!mixFinalized && !savedRoundSnapshotMakesFinalizeRedundant && (
                      <button 
                        className="control-button finalize-mix"
-                       onClick={finalizeMix}
+                       onClick={() => void finalizeMix()}
                        disabled={mixGameActionsBlocked}
                      >
                        <ListChecks className="w-4 h-4" aria-hidden />
