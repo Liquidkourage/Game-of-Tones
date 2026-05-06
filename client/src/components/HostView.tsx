@@ -205,6 +205,20 @@ function eventRoundSnapshotMeetsSaveThreshold(round: EventRound, hostDefaultFree
   return n >= need;
 }
 
+/** Same playlist ids in the same order as the round bucket and current mix (column order matters for 5×15). */
+function prepRoundPlaylistOrderMatchesMix(
+  roundIds: string[] | undefined,
+  mix: Array<{ id: string }>,
+): boolean {
+  const r = (roundIds || []).map((id) => String(id).trim()).filter(Boolean);
+  const m = mix.map((p) => String(p.id).trim()).filter(Boolean);
+  if (r.length !== m.length) return false;
+  for (let i = 0; i < r.length; i++) {
+    if (r[i] !== m[i]) return false;
+  }
+  return true;
+}
+
 interface Player {
   id: string;
   name: string;
@@ -4867,6 +4881,22 @@ const HostView: React.FC = () => {
     [gameState, applyRoundPlaylistsToMixSelection, showToast, addLog],
   );
 
+  /** After reload / restore, pull the active round's playlists into the mix when the mix is still empty. */
+  useEffect(() => {
+    if (!roomId) return;
+    if (currentRoundIndex < 0 || currentRoundIndex >= eventRounds.length) return;
+    if (mixPlaylistSelection.length > 0) return;
+    const round = eventRounds[currentRoundIndex];
+    if (!round || !(round.playlistIds || []).length) return;
+    applyRoundPlaylistsToMixSelection(round);
+  }, [
+    roomId,
+    currentRoundIndex,
+    eventRounds,
+    mixPlaylistSelection.length,
+    applyRoundPlaylistsToMixSelection,
+  ]);
+
   const handleSaveRoundAtIndex = async (roundIndex: number) => {
     if (!socket || !roomId) {
       window.alert('Connect to the room first.');
@@ -4932,6 +4962,7 @@ const HostView: React.FC = () => {
           ...next[roundIndex],
           savedMixSnapshot: snap,
           songCount: filtered.length,
+          status: next[roundIndex].status === 'active' ? 'active' : 'planned',
         };
         try {
           localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(next));
@@ -4940,6 +4971,7 @@ const HostView: React.FC = () => {
         }
         return next;
       });
+      setCurrentRoundIndex(roundIndex);
       showToast(`Saved ${r.name} — ${filtered.length} tracks (${snap.mixGeometry})`, 'success');
       addLog(`Round snapshot saved: ${r.name}, ${filtered.length} tracks`, 'info');
     } finally {
@@ -5083,16 +5115,41 @@ const HostView: React.FC = () => {
               bingoPattern: round.bingoPattern ?? 'line',
             };
           });
-          
-          setEventRounds(migratedRounds);
-          
-          // Save migrated data back to localStorage
-          localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(migratedRounds));
-          
-          // Find the active round
-          const activeIndex = migratedRounds.findIndex((r: EventRound) => r.status === 'active');
-          if (activeIndex >= 0) {
-            setCurrentRoundIndex(activeIndex);
+
+          let hostFsDefault = false;
+          try {
+            hostFsDefault = localStorage.getItem('bingo-free-space') === '1';
+          } catch {
+            /* ignore */
+          }
+
+          const withPromotedStatus: EventRound[] = migratedRounds.map((r: EventRound) => {
+            if (
+              r.status !== 'active' &&
+              r.status !== 'completed' &&
+              (r.playlistIds || []).length > 0 &&
+              eventRoundSnapshotMeetsSaveThreshold(r, hostFsDefault)
+            ) {
+              return r.status === 'unplanned' ? { ...r, status: 'planned' as const } : r;
+            }
+            return r;
+          });
+
+          setEventRounds(withPromotedStatus);
+
+          // Save migrated / promoted data back to localStorage
+          localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(withPromotedStatus));
+
+          let pickIdx = withPromotedStatus.findIndex((r: EventRound) => r.status === 'active');
+          if (pickIdx < 0) {
+            pickIdx = withPromotedStatus.findIndex(
+              (r: EventRound) =>
+                (r.playlistIds || []).length > 0 &&
+                eventRoundSnapshotMeetsSaveThreshold(r, hostFsDefault),
+            );
+          }
+          if (pickIdx >= 0) {
+            setCurrentRoundIndex(pickIdx);
           }
         }
       }
@@ -5112,10 +5169,30 @@ const HostView: React.FC = () => {
       return (finalizedOrder && finalizedOrder.length > 0 ? finalizedOrder : null) || songList;
     }
     if (!songList.length || mixPlaylistSelection.length === 0) {
+      const ridx = currentRoundIndex;
+      const r = ridx >= 0 && ridx < eventRounds.length ? eventRounds[ridx] : null;
+      if (
+        r &&
+        mixPlaylistSelection.length > 0 &&
+        prepRoundPlaylistOrderMatchesMix(r.playlistIds, mixPlaylistSelection) &&
+        eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled) &&
+        r.savedMixSnapshot?.songs?.length
+      ) {
+        return r.savedMixSnapshot.songs;
+      }
       return songList;
     }
     return bingoPoolPreview.pool as Song[];
-  }, [mixFinalized, finalizedOrder, songList, mixPlaylistSelection, bingoPoolPreview])
+  }, [
+    mixFinalized,
+    finalizedOrder,
+    songList,
+    mixPlaylistSelection,
+    bingoPoolPreview,
+    currentRoundIndex,
+    eventRounds,
+    freeSpaceEnabled,
+  ])
 
   const bingoPoolUiShowsPreFinalizeSubset =
     !mixFinalized && songList.length > 0 && finalizedPoolSongs.length < songList.length;
@@ -5123,6 +5200,19 @@ const HostView: React.FC = () => {
   const hasFinalizedSongPool = finalizedPoolSongs.length > 0;
   /** Server said mix is finalized but this UI has no tracks (e.g. client fetches got 429; rare timing). */
   const showFinalizedButEmptyPool = mixFinalized && finalizedPoolSongs.length === 0;
+
+  const currentPrepRoundForFinalizeUi =
+    currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length
+      ? eventRounds[currentRoundIndex]
+      : undefined;
+  const prepRoundPlaylistsMatchMix =
+    currentPrepRoundForFinalizeUi == null ||
+    prepRoundPlaylistOrderMatchesMix(currentPrepRoundForFinalizeUi.playlistIds, mixPlaylistSelection);
+  /** Active round has a usable snapshot and the mix still matches that round's playlist bucket — hide manual Finalize. */
+  const savedRoundSnapshotMakesFinalizeRedundant =
+    currentPrepRoundForFinalizeUi != null &&
+    eventRoundSnapshotMeetsSaveThreshold(currentPrepRoundForFinalizeUi, freeSpaceEnabled) &&
+    prepRoundPlaylistsMatchMix;
 
   const webApiQuarantineBannerText = useMemo(() => {
     if (webApiQuarantine.active !== true) return null;
@@ -6624,6 +6714,76 @@ const HostView: React.FC = () => {
               Game Controls
             </h2>
 
+            {gameState === 'waiting' && !currentSong && eventRounds.length > 0 && (
+                <div
+                  style={{
+                    marginBottom: 18,
+                    padding: '12px 14px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    background: 'rgba(255,255,255,0.04)',
+                    maxWidth: 560,
+                  }}
+                >
+                  <label
+                    htmlFor="host-game-tab-active-round"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      fontSize: '0.88rem',
+                      fontWeight: 700,
+                      color: '#c8e6ff',
+                      marginBottom: 8,
+                    }}
+                  >
+                    <CalendarRange className="w-4 h-4" style={{ color: '#00ff88' }} aria-hidden />
+                    Round for Game tab prep
+                  </label>
+                  <select
+                    id="host-game-tab-active-round"
+                    aria-label="Select round for game prep"
+                    value={currentRoundIndex >= 0 ? String(currentRoundIndex) : ''}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === '') {
+                        setCurrentRoundIndex(-1);
+                        return;
+                      }
+                      const idx = Number.parseInt(v, 10);
+                      if (!Number.isFinite(idx) || idx < 0 || idx >= eventRounds.length) return;
+                      handleSelectRoundForPrep(idx);
+                    }}
+                    style={{
+                      width: '100%',
+                      maxWidth: 440,
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      border: '1px solid rgba(255,255,255,0.18)',
+                      background: 'rgba(0,0,0,0.35)',
+                      color: '#fff',
+                      fontSize: '0.9rem',
+                    }}
+                  >
+                    <option value="">— Choose round —</option>
+                    {eventRounds.map((round, index) => {
+                      const empty = (round.playlistIds || []).length === 0;
+                      const savedOk = eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled);
+                      return (
+                        <option key={round.id} value={String(index)} disabled={empty}>
+                          {round.name}
+                          {savedOk ? ' · snapshot saved' : ''}
+                          {empty ? ' (no playlists)' : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <p style={{ margin: '10px 0 0', fontSize: '0.78rem', color: '#9aa5b1', lineHeight: 1.45 }}>
+                    Matches <strong style={{ color: '#dfe7ee' }}>Load for prep</strong> in Round Manager: loads this round&apos;s playlists into the mix so track lists and snapshots align here.
+                  </p>
+                </div>
+              )}
+
                   {/* Game Settings */}
                   <div className="host-game-settings-panel">
                     {/* Track Length Control */}
@@ -6743,7 +6903,7 @@ const HostView: React.FC = () => {
              <div className="control-buttons">
                {gameState === 'waiting' && !currentSong ? (
                  <>
-                   {!mixFinalized && (
+                   {!mixFinalized && !savedRoundSnapshotMakesFinalizeRedundant && (
                      <button 
                        className="control-button finalize-mix"
                        onClick={finalizeMix}
@@ -6752,6 +6912,29 @@ const HostView: React.FC = () => {
                        <ListChecks className="w-4 h-4" aria-hidden />
                        Finalize Mix
                      </button>
+                   )}
+                   {!mixFinalized && savedRoundSnapshotMakesFinalizeRedundant && (
+                     <p
+                       className="status-text"
+                       style={{
+                         display: 'flex',
+                         alignItems: 'center',
+                         gap: 8,
+                         justifyContent: 'center',
+                         flexWrap: 'wrap',
+                         maxWidth: 520,
+                         margin: '0 auto',
+                         fontSize: '0.85rem',
+                         color: 'rgba(255,255,255,0.72)',
+                         lineHeight: 1.4,
+                       }}
+                     >
+                       <ListChecks className="w-4 h-4" style={{ opacity: 0.85 }} aria-hidden />
+                       This round has a saved snapshot (or you loaded it for prep), and your mix still matches this
+                       round&apos;s playlists. Start Game, Save round, or Print PDF will finalize automatically. If you
+                       change playlists or their order, <strong style={{ color: 'rgba(255,255,255,0.88)' }}>Finalize Mix</strong>{' '}
+                       appears again; Save / Print still finalize for you when you use them.
+                     </p>
                    )}
                    {mixFinalized && (
                      <div className="mix-finalized-status">
@@ -6967,7 +7150,9 @@ const HostView: React.FC = () => {
                     }}>
                       {mixPlaylistSelection.length === 0
                         ? 'Use Connection for Spotify and/or YouTube Music as needed, then the Manager tab to select playlists (and optional catalog packs). YouTube-only mixes do not require Spotify. Return here to finalize or start the game.'
-                        : 'Tap Finalize Mix or Start Game to build the bingo song pool from your selected playlists.'}
+                        : savedRoundSnapshotMakesFinalizeRedundant
+                          ? 'Start Game, Save round, or Print PDF will finalize and build the bingo pool from your selected playlists.'
+                          : 'Tap Finalize Mix or Start Game to build the bingo song pool from your selected playlists.'}
                     </p>
                   </div>
                 )}
