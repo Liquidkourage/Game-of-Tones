@@ -689,6 +689,24 @@
   gap: 20px;
 }
 
+.host-manager-setup-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.host-manager-setup-flow__music {
+  order: 1;
+}
+
+.host-manager-setup-flow__grid {
+  order: 2;
+}
+
+.host-manager-setup-flow__round {
+  order: 3;
+}
+
 .host-manager-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -696,7 +714,7 @@
   align-items: start;
 }
 
-/* Hybrid mode strip spans full width; avoids an empty half-column when pattern UI is hidden */
+/* Full-width row within the manager grid (spans all columns). */
 .host-manager-grid__full {
   grid-column: 1 / -1;
 }

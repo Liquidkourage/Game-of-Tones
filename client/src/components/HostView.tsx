@@ -84,6 +84,7 @@ import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
 import { youtubeTrackDisplayFields, youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
 import { buildPrintableBingoPdfBlob } from '../utils/printableBingoPdf';
+import { buildRoundCallSheetPdfBlob } from '../utils/printRoundCallSheetPdf';
 import {
   normalizePublicDisplayTitleRevealMode,
   type PublicDisplayTitleRevealMode,
@@ -3100,6 +3101,40 @@ const HostView: React.FC = () => {
     [requestPrintablePdfDownload, roomId],
   );
 
+  const handleDownloadRoundCallSheetPdf = useCallback(
+    (round: EventRound) => {
+      const songs = round.savedMixSnapshot?.songs;
+      if (!eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled)) {
+        window.alert(
+          'Save this round first so there is a snapshot with enough tracks. The call sheet uses the frozen playback order from Save round.',
+        );
+        return;
+      }
+      if (!songs || songs.length === 0) {
+        window.alert('No snapshot songs found for this round. Save the round again and retry.');
+        return;
+      }
+      try {
+        const blob = buildRoundCallSheetPdfBlob({
+          roundName: round.name,
+          roomLabel: `Room ${roomId}`,
+          tracks: songs.map((s) => ({ name: s.name, artist: s.artist })),
+        });
+        const safeSlug = (round.name || 'round').replace(/[^\w\-]+/g, '_').slice(0, 48);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tempo-call-sheet-${safeSlug}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error(e);
+        window.alert('Could not build call sheet PDF. Try again or use a shorter round name.');
+      }
+    },
+    [roomId, freeSpaceEnabled],
+  );
+
   const startGame = async () => {
     if (!socket) {
       console.error('Socket not connected');
@@ -5979,72 +6014,9 @@ const HostView: React.FC = () => {
                   <div style={{ display: 'none' }}>License validation disabled for tonight</div>
                 )}
 
+                <div className="host-manager-setup-flow">
+                <div className="host-manager-setup-flow__grid">
                 <div className="host-manager-grid host-manager-grid--split">
-                    <section
-                      className={`host-manager-section host-manager-grid__full host-manager-section--collapsible${
-                        hostManagerCollapse['mgr-hybrid'] ? ' host-manager-section--collapsed' : ''
-                      }`}
-                    >
-                      <div className="host-manager-section__topbar">
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          {!hostManagerCollapse['mgr-hybrid'] ? (
-                            <label
-                              style={{
-                                display: 'flex',
-                                alignItems: 'flex-start',
-                                gap: 12,
-                                marginBottom: 0,
-                                padding: '12px 14px',
-                                borderRadius: 10,
-                                border: '1px solid rgba(0, 255, 136, 0.25)',
-                                background: 'rgba(0, 255, 136, 0.06)',
-                                cursor: 'pointer',
-                                maxWidth: '100%',
-                              }}
-                            >
-                              <input
-                                type="checkbox"
-                                className="host-control-checkbox"
-                                checked={hybridInPersonPlusOnline}
-                                onChange={(e) => {
-                                  const v = e.target.checked;
-                                  setHybridInPersonPlusOnline(v);
-                                  try {
-                                    socket?.emit('set-hybrid-mode', { roomId, hybridInPersonPlusOnline: v });
-                                  } catch {
-                                    /* ignore */
-                                  }
-                                }}
-                                style={{ marginTop: 4 }}
-                              />
-                              <span style={{ fontSize: '0.88rem', lineHeight: 1.45, color: 'rgba(255,255,255,0.9)' }}>
-                                <strong style={{ color: '#00ff88' }}>Hybrid in-person + online</strong>
-                                <br />
-                                Remote players who join with &quot;online&quot; can play, but a valid bingo from them does{' '}
-                                <strong>not</strong> pause the game or award the round — only an <strong>in-person</strong> player&apos;s
-                                bingo does. They still see when they complete the pattern.
-                              </span>
-                            </label>
-                          ) : (
-                            <p
-                              style={{
-                                margin: 0,
-                                padding: '10px 12px',
-                                fontSize: '0.88rem',
-                                lineHeight: 1.45,
-                                color: 'rgba(255,255,255,0.72)',
-                              }}
-                            >
-                              <strong style={{ color: '#00ff88' }}>Hybrid in-person + online</strong> — expand to view or change.
-                            </p>
-                          )}
-                        </div>
-                        <HostManagerCollapseToggle
-                          collapsed={!!hostManagerCollapse['mgr-hybrid']}
-                          onToggle={() => toggleHostManagerCollapse('mgr-hybrid')}
-                        />
-                      </div>
-                    </section>
 
           {/* Pattern Selection — applies to every mix (Spotify, YouTube Music, catalog-only, hybrid). */}
           <div className="host-manager-grid__primary">
@@ -6769,9 +6741,11 @@ const HostView: React.FC = () => {
           </motion.div>
                   </div>
                 </div>
+                </div>
 
           {/* Music & rounds: planner + playlists — show when Spotify is linked OR YouTube Music OAuth is available on server */}
-          {(isSpotifyConnected || showYoutubeMusicInConnectionModal) && (
+          {(isSpotifyConnected || showYoutubeMusicInConnectionModal) ? (
+          <div className="host-manager-setup-flow__music">
             <div
               className={`host-manager-music host-manager-section host-manager-section--collapsible${
                 hostManagerCollapse['mgr-music-rounds'] ? ' host-manager-section--collapsed' : ''
@@ -7367,9 +7341,11 @@ const HostView: React.FC = () => {
               </>
               ) : null}
             </div>
-          )}
+          </div>
+          ) : null}
 
                 {/* Round & event actions (during or between rounds) */}
+                <div className="host-manager-setup-flow__round">
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -7390,9 +7366,51 @@ const HostView: React.FC = () => {
                   </div>
                   {!hostManagerCollapse['mgr-round-event'] ? (
                   <>
-                  <p style={{ margin: '8px 0 12px', fontSize: '0.82rem', color: '#9aa5b1', lineHeight: 1.45, maxWidth: 560 }}>
-                    <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> (Round & event management) and{' '}
-                    <strong style={{ color: '#c5cdd6' }}>Download PDF</strong> (Game tab) share the same server shuffle rules and bingo geometry — same card count here (1–200).
+                  <div
+                    style={{
+                      marginBottom: 16,
+                      padding: '12px 14px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(0, 255, 136, 0.25)',
+                      background: 'rgba(0, 255, 136, 0.06)',
+                    }}
+                  >
+                    <label
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 12,
+                        cursor: 'pointer',
+                        margin: 0,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        className="host-control-checkbox"
+                        checked={hybridInPersonPlusOnline}
+                        onChange={(e) => {
+                          const v = e.target.checked;
+                          setHybridInPersonPlusOnline(v);
+                          try {
+                            socket?.emit('set-hybrid-mode', { roomId, hybridInPersonPlusOnline: v });
+                          } catch {
+                            /* ignore */
+                          }
+                        }}
+                        style={{ marginTop: 4 }}
+                      />
+                      <span style={{ fontSize: '0.88rem', lineHeight: 1.45, color: 'rgba(255,255,255,0.9)' }}>
+                        <strong style={{ color: '#00ff88' }}>Hybrid in-person + online</strong>
+                        <br />
+                        Remote players who join with &quot;online&quot; can play, but a valid bingo from them does{' '}
+                        <strong>not</strong> pause the game or award the round — only an <strong>in-person</strong> player&apos;s
+                        bingo does. They still see when they complete the pattern.
+                      </span>
+                    </label>
+                  </div>
+                  <p style={{ margin: '8px 0 12px', fontSize: '0.82rem', color: '#9aa5b1', lineHeight: 1.45, maxWidth: 620 }}>
+                    <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> (player cards) and <strong style={{ color: '#c5cdd6' }}>Call sheet</strong> (your playback order after Save round) live in <strong style={{ color: '#c5cdd6' }}>Round prep & PDF</strong>.{' '}
+                    <strong style={{ color: '#c5cdd6' }}>Download PDF</strong> on the Game tab uses the same card generator — set card count below (1–200).
                   </p>
                   <div
                     style={{
@@ -7505,11 +7523,13 @@ const HostView: React.FC = () => {
                   </>
                   ) : (
                     <p style={{ margin: '8px 0 0', fontSize: '0.82rem', color: 'rgba(255,255,255,0.68)', lineHeight: 1.45 }}>
-                      Expand for PDF card count, Round Manager link, and event resets.
+                      Expand for hybrid mode, PDF settings, Round Manager (cards + call sheet), and event resets.
                     </p>
                   )}
                 </motion.div>
               </div>
+            </div>
+            </div>
             )}
 
             {activeTab === 'play' && (
@@ -8474,6 +8494,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   Use <strong style={{ color: '#c5cdd6' }}>Load for prep</strong> (or the same control on Round buckets) to put that round&apos;s playlists into the mix and sync pattern/snippet controls — no need to{' '}
                   <strong style={{ color: '#c5cdd6' }}>Start</strong> a round just to save or print.{' '}
                   <strong style={{ color: '#c5cdd6' }}>Save round</strong> and per-round <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> both finalize automatically when needed (server truncates the pool), then save or export.
+                  Use <strong style={{ color: '#c5cdd6' }}>Call sheet</strong> after Save round for a numbered PDF playback list from the snapshot.
                   <strong style={{ color: '#c5cdd6' }}> Print PDF</strong> uses the same printable generator as the Game tab (subtitle names this round). At showtime, with that round loaded and a snapshot saved, <strong style={{ color: '#c5cdd6' }}>Start Game</strong> can follow the saved track order.
                 </p>
                 <div className="host-round-manager-rounds">
@@ -8681,6 +8702,28 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                               >
                                 <Printer className="w-4 h-4" aria-hidden />
                                 Print PDF
+                              </button>
+                            )}
+                            {(round.playlistIds || []).length > 0 && (
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                disabled={
+                                  printablePdfLoading ||
+                                  !eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled)
+                                }
+                                onClick={() => handleDownloadRoundCallSheetPdf(round)}
+                                title="PDF host call list in playback order from this round Save round snapshot."
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  fontSize: '0.82rem',
+                                  marginRight: 8,
+                                }}
+                              >
+                                <ListMusic className="w-4 h-4" aria-hidden />
+                                Call sheet
                               </button>
                             )}
                             {gameState !== 'playing' && (round.playlistIds || []).length > 0 && !isCurrentRound && (
