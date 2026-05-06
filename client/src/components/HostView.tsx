@@ -42,6 +42,9 @@ import {
   Printer,
   Save,
   Eraser,
+  RotateCw,
+  FlipHorizontal,
+  FlipVertical,
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL, ENABLE_YOUTUBE_MUSIC } from '../config';
@@ -55,6 +58,13 @@ import {
   PRESET_SHAPE_PATTERNS,
   saveCustomPattern,
   SavedCustomPattern,
+  CompositeClausePreset,
+  PatternCompositeSpec,
+  COMPOSITE_CLAUSE_PRESETS,
+  DEFAULT_COMPOSITE_SPEC,
+  normalizePatternComposite,
+  compositeLegitProgressPct,
+  transformPositions,
 } from '../patternDefinitions';
 import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
@@ -153,6 +163,8 @@ interface EventRound {
   bingoPattern?: BingoPattern;
   /** Required when `bingoPattern === 'custom'` (saved-pattern squares). */
   customPatternMask?: string[];
+  /** Required when `bingoPattern === 'composite'` (AND/OR clauses). */
+  patternComposite?: PatternCompositeSpec;
   /** When set, overrides host-wide free-space for this round; omit to inherit the Bingo Pattern checkbox. */
   freeSpaceEnabled?: boolean;
   /** Frozen finalized subset for this round (tracks + gameplay knobs at save time). Enables offline PDF from snapshot. */
@@ -554,6 +566,10 @@ const HostView: React.FC = () => {
   const [stripGoTPrefix, setStripGoTPrefix] = useState<boolean>(true);
   const [customMask, setCustomMask] = useState<string[]>([]);
   const [customPattern, setCustomPattern] = useState<string[]>([]);
+  const [patternComposite, setPatternComposite] = useState<PatternCompositeSpec>(
+    () => normalizePatternComposite(DEFAULT_COMPOSITE_SPEC) ?? DEFAULT_COMPOSITE_SPEC,
+  );
+  const [compositePaintDraft, setCompositePaintDraft] = useState<string[]>([]);
   const [showSongList, setShowSongList] = useState(false);
   const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]);
   const [superStrict, setSuperStrict] = useState<boolean>(false);
@@ -2095,6 +2111,10 @@ const HostView: React.FC = () => {
     newSocket.on('pattern-updated', (data: any) => {
       if (data?.pattern) {
         setPattern(data.pattern);
+        if (data.pattern === 'composite' && data.patternComposite != null) {
+          const n = normalizePatternComposite(data.patternComposite);
+          if (n) setPatternComposite(n);
+        }
         addLog(`Pattern updated to ${data.pattern}`, 'info');
       }
     });
@@ -3054,6 +3074,21 @@ const HostView: React.FC = () => {
               ? customMask
               : customPattern
           : [];
+      let compositeForStart: PatternCompositeSpec | undefined;
+      if (patternForStart === 'composite') {
+        const spec =
+          normalizePatternComposite(roundForStart?.patternComposite) ??
+          normalizePatternComposite(patternComposite);
+        if (!spec) {
+          window.alert(
+            'This round uses a combined pattern but it could not be loaded. Configure Combined (AND/OR) on the Game tab or in Round Manager.',
+          );
+          setIsStartingGame(false);
+          return;
+        }
+        compositeForStart = spec;
+      }
+
       if (patternForStart === 'custom' && maskForStart.length === 0) {
         window.alert(
           'This round uses a custom pattern but no squares are saved. Choose a saved custom pattern on the Game tab or in Round Manager.',
@@ -3064,6 +3099,8 @@ const HostView: React.FC = () => {
 
       if (patternForStart === 'custom' && maskForStart.length > 0) {
         socket.emit('set-pattern', { roomId, pattern: 'custom', customMask: maskForStart });
+      } else if (patternForStart === 'composite' && compositeForStart) {
+        socket.emit('set-pattern', { roomId, pattern: 'composite', patternComposite: compositeForStart });
       } else {
         socket.emit('set-pattern', { roomId, pattern: patternForStart });
       }
@@ -3081,6 +3118,7 @@ const HostView: React.FC = () => {
         randomStarts,
         pattern: patternForStart,
         customMask: maskForStart,
+        patternComposite: compositeForStart,
         freeSpace: freeSpaceForStart,
         savedRoundPlayback: useSavedRoundPlayback,
       });
@@ -3114,7 +3152,12 @@ const HostView: React.FC = () => {
   };
 
   // Calculate win progress for a player's card based on actual patterns
-  const calculateWinProgress = (card: any, currentPattern: string, playedSongs: string[] = []) => {
+  const calculateWinProgress = (
+    card: any,
+    currentPattern: string,
+    playedSongs: string[] = [],
+    compositeSpec?: PatternCompositeSpec | null,
+  ) => {
     if (!card || !card.squares) return { marked: 0, legitimate: 0, needed: 5, progress: 0, patternProgress: 0 };
     
     const squares = card.squares;
@@ -3241,6 +3284,11 @@ const HostView: React.FC = () => {
       }).length;
       totalNeeded = pts.length;
       bestProgress = patternProgress;
+    } else if (currentPattern === 'composite' && compositeSpec && compositeSpec.clauses.length > 0) {
+      const pct = compositeLegitProgressPct(card, compositeSpec, playedSongs);
+      patternProgress = pct;
+      totalNeeded = 100;
+      bestProgress = pct;
     } else if (currentPattern === 'custom') {
       // For custom patterns, we'd need the custom mask from the server
       // For now, fall back to line logic
@@ -3248,7 +3296,10 @@ const HostView: React.FC = () => {
       bestProgress = legitimateMarkedCount;
     }
     
-    const needed = Math.max(0, totalNeeded - bestProgress);
+    const needed =
+      currentPattern === 'composite'
+        ? Math.max(0, 100 - bestProgress)
+        : Math.max(0, totalNeeded - bestProgress);
     const progress = totalNeeded > 0 ? Math.round((bestProgress / totalNeeded) * 100) : 0;
     
     return { 
@@ -3309,7 +3360,12 @@ const HostView: React.FC = () => {
             </div>
 
             {(() => {
-              const progress = calculateWinProgress(playerData.card, pattern, playerData.playedSongs || []);
+              const progress = calculateWinProgress(
+                playerData.card,
+                pattern,
+                playerData.playedSongs || [],
+                pattern === 'composite' ? patternComposite : undefined,
+              );
               const progressColor =
                 progress.needed === 0
                   ? '#00ff88'
@@ -3597,15 +3653,29 @@ const HostView: React.FC = () => {
   };
 
   const patchActiveRoundBingo = useCallback(
-    (patch: Partial<Pick<EventRound, 'bingoPattern' | 'customPatternMask' | 'freeSpaceEnabled'>>) => {
+    (
+      patch: Partial<
+        Pick<EventRound, 'bingoPattern' | 'customPatternMask' | 'patternComposite' | 'freeSpaceEnabled'>
+      >,
+    ) => {
       const idx = currentRoundIndexRef.current;
       if (idx < 0) return;
       setEventRounds((prev) => {
         if (idx >= prev.length) return prev;
         const r = prev[idx];
         let updated: EventRound = { ...r, ...patch };
-        if (patch.bingoPattern != null && patch.bingoPattern !== 'custom') {
+        if (patch.bingoPattern != null && patch.bingoPattern !== 'custom' && patch.bingoPattern !== 'composite') {
+          updated = { ...updated, customPatternMask: undefined, patternComposite: undefined };
+        }
+        if (patch.bingoPattern === 'custom') {
+          updated = { ...updated, patternComposite: undefined };
+        }
+        if (patch.bingoPattern === 'composite') {
           updated = { ...updated, customPatternMask: undefined };
+          if (!updated.patternComposite) {
+            const d = normalizePatternComposite(DEFAULT_COMPOSITE_SPEC);
+            if (d) updated = { ...updated, patternComposite: d };
+          }
         }
         const next = [...prev];
         next[idx] = updated;
@@ -3633,11 +3703,22 @@ const HostView: React.FC = () => {
         mask = [];
       }
 
+      let compositeSpec: PatternCompositeSpec | null = null;
+      if (p === 'composite') {
+        compositeSpec =
+          normalizePatternComposite(round.patternComposite) ??
+          normalizePatternComposite(DEFAULT_COMPOSITE_SPEC);
+        if (!compositeSpec) p = 'line';
+      }
+
       setPattern(p);
       setCustomPattern(mask);
       setCustomMask(mask);
 
-      if (p === 'custom' && mask.length > 0) {
+      if (p === 'composite' && compositeSpec) {
+        setPatternComposite(compositeSpec);
+        setSelectedCustomPattern(null);
+      } else if (p === 'custom' && mask.length > 0) {
         const norm = (arr: string[]) => [...arr].sort().join(',');
         const key = norm(mask);
         const matched = savedCustomPatterns.find((sp) => norm(sp.positions) === key);
@@ -3678,7 +3759,9 @@ const HostView: React.FC = () => {
       }
 
       if (socket && roomId) {
-        if (p === 'custom' && mask.length > 0) {
+        if (p === 'composite' && compositeSpec) {
+          socket.emit('set-pattern', { roomId, pattern: 'composite', patternComposite: compositeSpec });
+        } else if (p === 'custom' && mask.length > 0) {
           socket.emit('set-pattern', { roomId, pattern: 'custom', customMask: mask });
         } else {
           socket.emit('set-pattern', { roomId, pattern: p });
@@ -3817,6 +3900,26 @@ const HostView: React.FC = () => {
   };
 
   const updatePattern = (next: BingoPattern) => {
+    if (next === 'composite') {
+      const spec = normalizePatternComposite(patternComposite) ?? normalizePatternComposite(DEFAULT_COMPOSITE_SPEC);
+      if (!spec) return;
+      setPatternComposite(spec);
+      setPattern('composite');
+      setSelectedCustomPattern(null);
+      setCustomPattern([]);
+      setCustomMask([]);
+      patchActiveRoundBingo({
+        bingoPattern: 'composite',
+        patternComposite: spec,
+        customPatternMask: undefined,
+      });
+      if (socket && roomId) {
+        socket.emit('set-pattern', { roomId, pattern: 'composite', patternComposite: spec });
+        addLog(`Pattern set to Combined (${spec.op.toUpperCase()})`, 'info');
+      }
+      return;
+    }
+
     setPattern(next);
     if (next !== 'custom') {
       setSelectedCustomPattern(null);
@@ -3826,6 +3929,7 @@ const HostView: React.FC = () => {
     patchActiveRoundBingo({
       bingoPattern: next,
       ...(next !== 'custom' ? { customPatternMask: undefined } : {}),
+      patternComposite: undefined,
     });
     if (socket && roomId) {
       socket.emit('set-pattern', {
@@ -3837,6 +3941,24 @@ const HostView: React.FC = () => {
     }
   };
 
+  const commitPatternComposite = useCallback(
+    (next: PatternCompositeSpec) => {
+      const n = normalizePatternComposite(next);
+      if (!n) return;
+      setPatternComposite(n);
+      setPattern('composite');
+      patchActiveRoundBingo({
+        bingoPattern: 'composite',
+        patternComposite: n,
+        customPatternMask: undefined,
+      });
+      if (socket && roomId) {
+        socket.emit('set-pattern', { roomId, pattern: 'composite', patternComposite: n });
+      }
+    },
+    [socket, roomId, patchActiveRoundBingo],
+  );
+
   const handleCustomPatternSelect = (customPatternObj: SavedCustomPattern) => {
     setSelectedCustomPattern(customPatternObj);
     setPattern('custom');
@@ -3845,6 +3967,7 @@ const HostView: React.FC = () => {
     patchActiveRoundBingo({
       bingoPattern: 'custom',
       customPatternMask: customPatternObj.positions,
+      patternComposite: undefined,
     });
     if (socket && roomId) {
       socket.emit('set-pattern', { roomId, pattern: 'custom', customMask: customPatternObj.positions });
@@ -4846,14 +4969,26 @@ const HostView: React.FC = () => {
   const handleUpdateRoundBingoFields = useCallback(
     (
       roundIndex: number,
-      patch: Partial<Pick<EventRound, 'bingoPattern' | 'customPatternMask' | 'freeSpaceEnabled'>>,
+      patch: Partial<
+        Pick<EventRound, 'bingoPattern' | 'customPatternMask' | 'patternComposite' | 'freeSpaceEnabled'>
+      >,
     ) => {
       setEventRounds((prev) => {
         const r = prev[roundIndex];
         if (!r) return prev;
         let updated: EventRound = { ...r, ...patch };
-        if (patch.bingoPattern != null && patch.bingoPattern !== 'custom') {
+        if (patch.bingoPattern != null && patch.bingoPattern !== 'custom' && patch.bingoPattern !== 'composite') {
+          updated = { ...updated, customPatternMask: undefined, patternComposite: undefined };
+        }
+        if (patch.bingoPattern === 'custom') {
+          updated = { ...updated, patternComposite: undefined };
+        }
+        if (patch.bingoPattern === 'composite') {
           updated = { ...updated, customPatternMask: undefined };
+          if (!updated.patternComposite) {
+            const d = normalizePatternComposite(DEFAULT_COMPOSITE_SPEC);
+            if (d) updated = { ...updated, patternComposite: d };
+          }
         }
         const next = [...prev];
         next[roundIndex] = updated;
@@ -5728,7 +5863,310 @@ const HostView: React.FC = () => {
                     <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{BINGO_PATTERNS.blackout.label}</div>
                     <div style={{ fontSize: '0.78rem', opacity: 0.82, textAlign: 'center' }}>Same win rule as full card</div>
                   </button>
+
+                  <button
+                    type="button"
+                    className={`pattern-option ${pattern === 'composite' ? 'active' : ''}`}
+                    onClick={() => updatePattern('composite')}
+                    title={BINGO_PATTERNS.composite.description}
+                    style={{
+                      padding: '12px 16px',
+                      border: pattern === 'composite' ? '2px solid #00ff88' : '1px solid rgba(255,255,255,0.3)',
+                      borderRadius: '8px',
+                      background: pattern === 'composite' ? 'rgba(0,255,136,0.1)' : 'rgba(255,255,255,0.05)',
+                      color: pattern === 'composite' ? '#00ff88' : '#ffffff',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      minWidth: '112px',
+                    }}
+                  >
+                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{BINGO_PATTERNS.composite.label}</div>
+                    <div style={{ fontSize: '0.78rem', opacity: 0.82, textAlign: 'center' }}>
+                      AND / OR presets + painted grid
+                    </div>
+                  </button>
                 </div>
+
+                {pattern === 'composite' && (
+                  <div
+                    style={{
+                      marginBottom: 18,
+                      padding: 14,
+                      borderRadius: 12,
+                      border: '1px solid rgba(0, 255, 136, 0.35)',
+                      background: 'rgba(0, 255, 136, 0.06)',
+                      maxWidth: 540,
+                      marginLeft: 'auto',
+                      marginRight: 'auto',
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontWeight: 700,
+                        marginBottom: 10,
+                        color: '#e8ecf1',
+                        fontSize: '0.9rem',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {patternComposite.op === 'or'
+                        ? 'Win if any clause completes'
+                        : 'Win only when every clause completes'}
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: 8,
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        marginBottom: 12,
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <span style={{ color: '#9aa5b1', fontSize: '0.78rem' }}>Combine with</span>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => commitPatternComposite({ ...patternComposite, op: 'or' })}
+                        style={{
+                          fontSize: '0.78rem',
+                          borderColor:
+                            patternComposite.op === 'or' ? 'rgba(0,255,136,0.75)' : 'rgba(255,255,255,0.25)',
+                          color: patternComposite.op === 'or' ? '#00ff88' : '#e0e0e0',
+                        }}
+                      >
+                        Any (OR)
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => commitPatternComposite({ ...patternComposite, op: 'and' })}
+                        style={{
+                          fontSize: '0.78rem',
+                          borderColor:
+                            patternComposite.op === 'and' ? 'rgba(0,255,136,0.75)' : 'rgba(255,255,255,0.25)',
+                          color: patternComposite.op === 'and' ? '#00ff88' : '#e0e0e0',
+                        }}
+                      >
+                        All (AND)
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {patternComposite.clauses.map((clause, idx) => {
+                        const sel =
+                          clause.kind === 'preset' ? `preset:${clause.preset}` : 'mask';
+                        return (
+                          <div
+                            key={`clause-${idx}`}
+                            style={{
+                              display: 'flex',
+                              flexWrap: 'wrap',
+                              gap: 8,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            <select
+                              value={sel}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                const clauses = [...patternComposite.clauses];
+                                if (v === 'mask') {
+                                  const pos =
+                                    compositePaintDraft.length > 0
+                                      ? [...compositePaintDraft].sort()
+                                      : ['2-2'];
+                                  clauses[idx] = { kind: 'mask', positions: pos };
+                                } else if (v.startsWith('preset:')) {
+                                  const preset = v.slice(7) as CompositeClausePreset;
+                                  clauses[idx] = { kind: 'preset', preset };
+                                }
+                                commitPatternComposite({ ...patternComposite, clauses });
+                              }}
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: 6,
+                                border: '1px solid rgba(255,255,255,0.25)',
+                                background: 'rgba(0,0,0,0.35)',
+                                color: '#fff',
+                                fontSize: '0.78rem',
+                              }}
+                            >
+                              {COMPOSITE_CLAUSE_PRESETS.map((pk) => (
+                                <option key={pk} value={`preset:${pk}`}>
+                                  {BINGO_PATTERNS[pk as BingoPattern]?.label ?? pk}
+                                </option>
+                              ))}
+                              <option value="mask">Painted shape (uses grid below)</option>
+                            </select>
+                            {clause.kind === 'mask' && (
+                              <span style={{ fontSize: '0.72rem', color: '#9aa5b1' }}>
+                                {clause.positions.length} squares
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              disabled={patternComposite.clauses.length <= 1}
+                              title={patternComposite.clauses.length <= 1 ? 'Need at least one clause' : 'Remove this clause'}
+                              onClick={() => {
+                                const clauses = patternComposite.clauses.filter((_, j) => j !== idx);
+                                commitPatternComposite({ ...patternComposite, clauses });
+                              }}
+                              style={{ fontSize: '0.72rem', padding: '4px 8px', opacity: patternComposite.clauses.length <= 1 ? 0.45 : 1 }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div style={{ textAlign: 'center', marginTop: 10 }}>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() =>
+                          commitPatternComposite({
+                            ...patternComposite,
+                            clauses: [...patternComposite.clauses, { kind: 'preset', preset: 'line' }],
+                          })
+                        }
+                        style={{ fontSize: '0.78rem' }}
+                      >
+                        + Add clause
+                      </button>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 16,
+                        borderTop: '1px solid rgba(255,255,255,0.12)',
+                        paddingTop: 12,
+                      }}
+                    >
+                      <div style={{ fontSize: '0.76rem', color: '#9aa5b1', marginBottom: 8, textAlign: 'center' }}>
+                        Paint helper — tap squares, use transforms, then add as a &quot;painted shape&quot; clause.
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'center',
+                          flexWrap: 'wrap',
+                          gap: 6,
+                          marginBottom: 10,
+                        }}
+                      >
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => setCompositePaintDraft((prev) => transformPositions(prev, 'rotateCw'))}
+                          style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                        >
+                          <RotateCw className="w-3.5 h-3.5" aria-hidden /> CW
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => setCompositePaintDraft((prev) => transformPositions(prev, 'rotateCcw'))}
+                          style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" aria-hidden /> CCW
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => setCompositePaintDraft((prev) => transformPositions(prev, 'flipH'))}
+                          style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                        >
+                          <FlipHorizontal className="w-3.5 h-3.5" aria-hidden /> ↔
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => setCompositePaintDraft((prev) => transformPositions(prev, 'flipV'))}
+                          style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                        >
+                          <FlipVertical className="w-3.5 h-3.5" aria-hidden /> ↕
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => setCompositePaintDraft([])}
+                          style={{ fontSize: '0.72rem' }}
+                        >
+                          Clear draft
+                        </button>
+                      </div>
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(5, 1fr)',
+                          gap: 4,
+                          maxWidth: 260,
+                          margin: '0 auto 10px',
+                        }}
+                      >
+                        {Array.from({ length: 25 }, (_, index) => {
+                          const row = Math.floor(index / 5);
+                          const col = index % 5;
+                          const position = `${row}-${col}`;
+                          const on = compositePaintDraft.includes(position);
+                          return (
+                            <button
+                              key={position}
+                              type="button"
+                              onClick={() => {
+                                setCompositePaintDraft((prev) =>
+                                  prev.includes(position)
+                                    ? prev.filter((p) => p !== position)
+                                    : [...prev, position].sort(),
+                                );
+                              }}
+                              style={{
+                                width: 46,
+                                height: 46,
+                                border: '2px solid rgba(255,255,255,0.28)',
+                                borderRadius: 8,
+                                background: on ? '#00ff88' : 'rgba(255,255,255,0.07)',
+                                color: on ? '#001a0d' : '#fff',
+                                cursor: 'pointer',
+                                fontSize: 11,
+                                fontWeight: 700,
+                              }}
+                            >
+                              {on ? '✓' : ''}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          disabled={compositePaintDraft.length === 0}
+                          onClick={() => {
+                            if (!compositePaintDraft.length) return;
+                            commitPatternComposite({
+                              ...patternComposite,
+                              clauses: [
+                                ...patternComposite.clauses,
+                                { kind: 'mask', positions: [...compositePaintDraft].sort() },
+                              ],
+                            });
+                          }}
+                          style={{ fontSize: '0.78rem' }}
+                        >
+                          Add painted squares as clause
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <p style={{ margin: '0 0 10px', fontSize: '0.78rem', color: '#8a96a3', textAlign: 'center', lineHeight: 1.45 }}>
                   Pattern bingo presets — highlight squares players watch for (verification still requires played songs / free space).
@@ -5855,17 +6293,25 @@ const HostView: React.FC = () => {
                 </div>
               </div>
                 <div style={{ marginTop: '8px', fontSize: '0.9rem', color: '#b3b3b3' }}>
-                  Current pattern: <strong style={{ color: '#00ff88' }}>
-                    {pattern === 'custom' && selectedCustomPattern 
-                      ? selectedCustomPattern.name 
-                      : getPatternDisplayName(pattern)}
+                  Current pattern:{' '}
+                  <strong style={{ color: '#00ff88' }}>
+                    {pattern === 'custom' && selectedCustomPattern
+                      ? selectedCustomPattern.name
+                      : pattern === 'composite'
+                        ? `${BINGO_PATTERNS.composite.label} (${patternComposite.op.toUpperCase()}, ${patternComposite.clauses.length} part${patternComposite.clauses.length !== 1 ? 's' : ''})`
+                        : getPatternDisplayName(pattern)}
                   </strong>
                   {pattern === 'custom' && selectedCustomPattern && (
                     <div style={{ marginTop: '8px', fontSize: '0.8rem', color: '#b3b3b3' }}>
                       Pattern: {selectedCustomPattern.positions.length} squares selected
                     </div>
                   )}
-              </div>
+                  {pattern === 'composite' && (
+                    <div style={{ marginTop: '8px', fontSize: '0.78rem', color: '#9aa5b1', lineHeight: 1.45 }}>
+                      Players see highlights for every clause. Wins match server rules for OR vs AND.
+                    </div>
+                  )}
+                </div>
             </motion.div>
             </div>
                   <div className="host-manager-grid__secondary">
@@ -7616,6 +8062,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                                         handleUpdateRoundBingoFields(index, {
                                           bingoPattern: v,
                                           ...(v !== 'custom' ? { customPatternMask: undefined } : {}),
+                                          ...(v !== 'composite' ? { patternComposite: undefined } : {}),
                                         });
                                       }}
                                       style={{

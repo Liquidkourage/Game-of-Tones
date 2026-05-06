@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save, Trash2 } from 'lucide-react';
-import { saveCustomPattern, validatePatternPositions } from '../patternDefinitions';
+import { saveCustomPattern, validatePatternPositions, transformPositions, type GridTransform } from '../patternDefinitions';
+import { RotateCw, RotateCcw, FlipHorizontal, FlipVertical } from 'lucide-react';
 
 interface CustomPatternModalProps {
   isOpen: boolean;
@@ -53,6 +54,10 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
       });
       onClose();
     }
+  };
+
+  const applyTransform = (t: GridTransform) => {
+    setSelectedPositions((prev) => transformPositions(prev, t));
   };
 
   const handleClear = () => {
@@ -148,28 +153,106 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
 
           {/* 5x5 Grid */}
           <div style={{ marginBottom: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: 8 }}>
               <label style={{ color: '#ffffff', fontWeight: '500' }}>
                 Select Pattern Squares
               </label>
-              <button
-                onClick={handleClear}
-                style={{
-                  background: 'rgba(255, 0, 0, 0.2)',
-                  border: '1px solid rgba(255, 0, 0, 0.3)',
-                  color: '#ff6b6b',
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-              >
-                <Trash2 size={14} />
-                Clear
-              </button>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => applyTransform('rotateCw')}
+                  title="Rotate 90° clockwise"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    color: '#e8ecf1',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <RotateCw size={14} /> CW
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyTransform('rotateCcw')}
+                  title="Rotate 90° counter-clockwise"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    color: '#e8ecf1',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <RotateCcw size={14} /> CCW
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyTransform('flipH')}
+                  title="Mirror left / right"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    color: '#e8ecf1',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <FlipHorizontal size={14} /> Mirror ↔
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyTransform('flipV')}
+                  title="Mirror top / bottom"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    color: '#e8ecf1',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <FlipVertical size={14} /> Mirror ↕
+                </button>
+                <button
+                  onClick={handleClear}
+                  style={{
+                    background: 'rgba(255, 0, 0, 0.2)',
+                    border: '1px solid rgba(255, 0, 0, 0.3)',
+                    color: '#ff6b6b',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <Trash2 size={14} />
+                  Clear
+                </button>
+              </div>
             </div>
             
             <div style={{

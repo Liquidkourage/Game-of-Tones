@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { BingoPattern } from '../patternDefinitions';
+import type { BingoPattern, PatternCompositeSpec } from '../patternDefinitions';
 import {
   ChevronDown,
   ChevronUp,
@@ -32,6 +32,7 @@ interface EventRound {
   completedAt?: number;
   bingoPattern?: BingoPattern;
   customPatternMask?: string[];
+  patternComposite?: PatternCompositeSpec;
   freeSpaceEnabled?: boolean;
 }
 

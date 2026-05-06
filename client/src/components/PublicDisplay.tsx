@@ -25,6 +25,8 @@ import {
   normalizePublicDisplayTitleRevealMode,
   type PublicDisplayTitleRevealMode,
 } from '../utils/publicDisplayTitleReveal';
+import type { PatternCompositeSpec } from '../patternDefinitions';
+import { normalizePatternComposite, unionCompositeHighlightPositions } from '../patternDefinitions';
 
 interface GameState {
   isPlaying: boolean;
@@ -692,6 +694,7 @@ const PublicDisplay: React.FC = () => {
     }
   });
   const [pattern, setPattern] = useState<string>('full_card');
+  const [patternComposite, setPatternComposite] = useState<PatternCompositeSpec | null>(null);
   const [countdownMs, setCountdownMs] = useState<number>(0);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   /** Snippet countdown label only (current clip timer). */
@@ -1059,10 +1062,17 @@ const PublicDisplay: React.FC = () => {
           
           if (payload.pattern) {
             setPattern(payload.pattern);
+            if (payload.pattern === 'composite') {
+              setPatternComposite(normalizePatternComposite(payload.patternComposite));
+            } else {
+              setPatternComposite(null);
+            }
           }
-          
+
           if (Array.isArray(payload.customMask)) {
             setCustomMask(new Set(payload.customMask));
+          } else if (payload.pattern && payload.pattern !== 'custom') {
+            setCustomMask(new Set());
           }
           
           // Update total played count for display sync
@@ -1394,7 +1404,19 @@ const PublicDisplay: React.FC = () => {
     newSocket.on('pattern-updated', (data: any) => {
       try {
         const p = data?.pattern;
-        if (p) setPattern(p);
+        if (p) {
+          setPattern(p);
+          if (p === 'composite') {
+            setPatternComposite(normalizePatternComposite(data.patternComposite));
+          } else {
+            setPatternComposite(null);
+          }
+        }
+        if (Array.isArray(data?.customMask)) {
+          setCustomMask(new Set(data.customMask));
+        } else if (p && p !== 'custom') {
+          setCustomMask(new Set());
+        }
       } catch {}
     });
 
@@ -1554,8 +1576,15 @@ const PublicDisplay: React.FC = () => {
       setShowSplash(false);
       if (data?.pattern) {
         setPattern(data.pattern);
+        if (data.pattern === 'composite') {
+          setPatternComposite(normalizePatternComposite(data.patternComposite));
+        } else {
+          setPatternComposite(null);
+        }
         if (Array.isArray(data?.customMask)) {
-          try { setCustomMask(new Set<string>(data.customMask as string[])); } catch {}
+          try {
+            setCustomMask(new Set<string>(data.customMask as string[]));
+          } catch {}
         } else {
           setCustomMask(new Set());
         }
@@ -1648,17 +1677,6 @@ const PublicDisplay: React.FC = () => {
           console.log('🔤 Reset complete - auto-reveal re-enabled');
         }, 500);
       }, 3000);
-    });
-
-    newSocket.on('pattern-updated', (data: any) => {
-      try {
-        if (data?.pattern) setPattern(data.pattern);
-        if (Array.isArray(data?.customMask)) {
-          setCustomMask(new Set<string>(data.customMask as string[]));
-        } else {
-          setCustomMask(new Set());
-        }
-      } catch {}
     });
 
     newSocket.on('bingo-remote-unofficial', (data: any) => {
@@ -2375,6 +2393,10 @@ const PublicDisplay: React.FC = () => {
         return 'Pattern: X';
       case 'custom':
         return 'Pattern: Custom';
+      case 'composite':
+        return patternComposite
+          ? `Pattern: Combined (${patternComposite.op.toUpperCase()})`
+          : 'Pattern: Combined';
       case 'line':
       default:
     return 'Pattern: Single Line (any direction)';
@@ -2401,6 +2423,8 @@ const PublicDisplay: React.FC = () => {
         return 'Plus';
       case 'custom':
         return 'Custom';
+      case 'composite':
+        return patternComposite ? `Combined (${patternComposite.op})` : 'Combined';
       case 'line':
       default:
         return 'Single line';
@@ -2412,6 +2436,9 @@ const PublicDisplay: React.FC = () => {
     if (pattern === 'full_card' || pattern === 'blackout') {
       // For full card / blackout, all squares are winning squares
       return true;
+    }
+    if (pattern === 'composite' && patternComposite) {
+      return unionCompositeHighlightPositions(patternComposite).includes(`${row}-${col}`);
     }
     if (pattern === 'custom' && customMask && customMask.size > 0) {
       return customMask.has(`${row}-${col}`);

@@ -5,7 +5,15 @@ import io from 'socket.io-client';
 import { SOCKET_URL } from '../config';
 import { Music, Users } from 'lucide-react';
 import { youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
-import { STANDARD_BINGO_POSITIONS, validateBingoCardGrid } from '../patternDefinitions';
+import {
+  STANDARD_BINGO_POSITIONS,
+  validateBingoCardGrid,
+  type PatternCompositeSpec,
+  normalizePatternComposite,
+  evaluateCompositeVisual,
+  evaluateCompositeStrict,
+  unionCompositeHighlightPositions,
+} from '../patternDefinitions';
 
 interface BingoSquare {
   position: string;
@@ -32,6 +40,8 @@ interface GameState {
   hasBingo: boolean;
   pattern: string;
   customPattern?: string[]; // Array of positions like ['0-0', '2-2', '4-4']
+  /** Combined AND/OR pattern from server when pattern === 'composite' */
+  patternComposite?: PatternCompositeSpec | null;
 }
 
 interface Song {
@@ -369,10 +379,18 @@ const PlayerView: React.FC = () => {
     newSocket.on('game-started', (data: any) => {
       console.log('Game started:', data);
       setBingoColumnPlaylistNames([]);
-      setGameState(prev => ({
+      setGameState((prev) => ({
         ...prev,
         isPlaying: true,
-        pattern: data?.pattern || 'full_card'
+        pattern: data?.pattern || 'full_card',
+        customPattern:
+          data?.pattern === 'custom' && Array.isArray(data?.customMask) && data.customMask.length > 0
+            ? data.customMask
+            : undefined,
+        patternComposite:
+          data?.pattern === 'composite'
+            ? normalizePatternComposite(data.patternComposite) ?? undefined
+            : undefined,
       }));
       // Reset songs played counter when game starts
       setSongsPlayed(0);
@@ -426,12 +444,27 @@ const PlayerView: React.FC = () => {
         }
         
         if (payload?.isPlaying) {
-          setGameState(prev => ({
+          const pat = typeof payload?.pattern === 'string' && payload.pattern.length > 0 ? payload.pattern : undefined;
+          setGameState((prev) => ({
             ...prev,
             isPlaying: true,
-            pattern: payload?.pattern || prev.pattern,
+            pattern: pat || prev.pattern,
             playerCount: typeof payload?.playerCount === 'number' ? payload.playerCount : prev.playerCount,
-            currentSong: payload?.currentSong || prev.currentSong
+            currentSong: payload?.currentSong || prev.currentSong,
+            customPattern:
+              (pat || prev.pattern) === 'custom' &&
+              Array.isArray(payload?.customMask) &&
+              payload.customMask.length > 0
+                ? payload.customMask
+                : (pat || prev.pattern) === 'custom'
+                  ? prev.customPattern
+                  : undefined,
+            patternComposite:
+              (pat || prev.pattern) === 'composite'
+                ? normalizePatternComposite(payload.patternComposite) ?? prev.patternComposite
+                : pat && pat !== 'composite'
+                  ? undefined
+                  : prev.patternComposite,
           }));
         } else if (typeof payload?.playerCount === 'number') {
           setGameState(prev => ({ ...prev, playerCount: payload.playerCount }));
@@ -524,7 +557,15 @@ const PlayerView: React.FC = () => {
           ? data.customMask.length > 0
             ? data.customMask
             : undefined
-          : prev.customPattern,
+          : typeof data?.pattern === 'string' && data.pattern === 'custom'
+            ? prev.customPattern
+            : undefined,
+        patternComposite:
+          typeof data?.pattern === 'string' && data.pattern === 'composite'
+            ? normalizePatternComposite(data.patternComposite) ?? prev.patternComposite
+            : typeof data?.pattern === 'string' && data.pattern !== 'composite'
+              ? undefined
+              : prev.patternComposite,
       }));
     });
 
@@ -973,7 +1014,7 @@ const PlayerView: React.FC = () => {
         setGameState(prev => ({ ...prev, hasBingo: hasVisualPattern }));
       }
     }
-  }, [bingoCard, gameState.pattern, gameState.customPattern]);
+  }, [bingoCard, gameState.pattern, gameState.customPattern, gameState.patternComposite]);
 
   // Check if a visual pattern is complete (only checks if squares are marked, not if songs played)
   const checkVisualPattern = (card: BingoCard): boolean => {
@@ -996,6 +1037,10 @@ const PlayerView: React.FC = () => {
         const square = card.squares.find((s) => s.position === pos);
         return square ? isSquareMarked(square) : false;
       });
+    }
+
+    if (pattern === 'composite' && gameState.patternComposite) {
+      return evaluateCompositeVisual(card, gameState.patternComposite);
     }
     
     // Four corners pattern - all 4 corners must be marked
@@ -1141,6 +1186,10 @@ const PlayerView: React.FC = () => {
       });
     }
     
+    if (pattern === 'composite' && gameState.patternComposite) {
+      return evaluateCompositeStrict(card, gameState.patternComposite, playedSongIds);
+    }
+
     // Four corners pattern - all 4 corners must be marked AND correspond to played songs
     if (pattern === 'four_corners') {
       const corners = ['0-0', '0-4', '4-0', '4-4'];
@@ -1256,6 +1305,10 @@ const PlayerView: React.FC = () => {
   // Helper function to determine if a square should be highlighted based on pattern
   const isPatternSquare = (position: string): boolean => {
     const pattern = gameState.pattern;
+
+    if (pattern === 'composite' && gameState.patternComposite) {
+      return unionCompositeHighlightPositions(gameState.patternComposite).includes(position);
+    }
 
     // Any row, column, or diagonal can win - every cell can belong to some winning line.
     // Full card (blackout): every cell is required.

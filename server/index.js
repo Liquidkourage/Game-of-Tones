@@ -32,6 +32,7 @@ const ALLOWED_BINGO_PATTERNS = new Set([
   'u',
   'plus',
   'custom',
+  'composite',
 ]);
 
 // Song title cleaning utility
@@ -1319,6 +1320,7 @@ function syncRoomStateAfterSongStart(roomId, room) {
     isPlaying: room.gameState === 'playing',
     pattern: room.pattern || 'line',
     customMask: Array.from(room.customPattern || []),
+    patternComposite: patternCompositeForClient(room),
     currentSong: room.currentSong || null,
     snippetLength: room.snippetLength || 30,
     playerCount: getNonHostPlayerCount(room),
@@ -1638,6 +1640,7 @@ async function playNextSongSimple(roomId, deviceId) {
       isPlaying: room.gameState === 'playing',
       pattern: room.pattern || 'line',
       customMask: Array.from(room.customPattern || []),
+      patternComposite: patternCompositeForClient(room),
       currentSong: room.currentSong || null,
       snippetLength: room.snippetLength || 30,
       playerCount: getNonHostPlayerCount(room),
@@ -2072,6 +2075,7 @@ io.on('connection', (socket) => {
         superStrictLock: false,
         pattern: 'line', // Default pattern
         customPattern: undefined, // Will be set when custom pattern is chosen
+        patternComposite: undefined,
         letterRevealIntervalSec: DEFAULT_LETTER_REVEAL_INTERVAL_SEC,
         publicDisplayTitleRevealMode: DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE,
         createdAt: new Date().toISOString()
@@ -2247,6 +2251,7 @@ io.on('connection', (socket) => {
             isPlaying: room.gameState === 'playing',
             pattern: room.pattern || 'line',
             customMask: Array.from(room.customPattern || []),
+            patternComposite: patternCompositeForClient(room),
             currentSong: room.currentSong || null,
             snippetLength: room.snippetLength || 30,
             playerCount: getNonHostPlayerCount(room),
@@ -2583,7 +2588,7 @@ io.on('connection', (socket) => {
   // Set game pattern
   socket.on('set-pattern', (data = {}) => {
     try {
-      const { roomId, pattern, customMask } = data;
+      const { roomId, pattern, customMask, patternComposite: incomingComposite } = data;
       const room = rooms.get(roomId);
       if (!room) return;
       const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
@@ -2593,10 +2598,20 @@ io.on('connection', (socket) => {
       if (room.pattern === 'custom') {
         const mask = Array.isArray(customMask) ? customMask.filter(p => /^(0|1|2|3|4)-(0|1|2|3|4)$/.test(p)) : [];
         room.customPattern = new Set(mask);
+        room.patternComposite = undefined;
+      } else if (room.pattern === 'composite') {
+        room.customPattern = undefined;
+        room.patternComposite = normalizePatternComposite(incomingComposite);
+        if (!room.patternComposite) room.pattern = 'line';
       } else {
         room.customPattern = undefined;
+        room.patternComposite = undefined;
       }
-      io.to(roomId).emit('pattern-updated', { pattern: room.pattern, customMask: Array.from(room.customPattern || []) });
+      io.to(roomId).emit('pattern-updated', {
+        pattern: room.pattern,
+        customMask: Array.from(room.customPattern || []),
+        patternComposite: patternCompositeForClient(room),
+      });
       routineServerLog(`🎯 Pattern set to ${room.pattern} for room ${roomId}`);
     } catch (e) {
       console.error('❌ Error setting pattern:', e?.message || e);
@@ -3578,6 +3593,7 @@ io.on('connection', (socket) => {
     // Reset pattern to default
     room.pattern = 'line';
     room.customPattern = new Set();
+    room.patternComposite = undefined;
     
     // Reset settings to defaults  
     room.snippetLength = 30;
@@ -3740,6 +3756,7 @@ io.on('connection', (socket) => {
         isPlaying: room.gameState === 'playing',
         pattern: room.pattern || 'line',
         customMask: Array.from(room.customPattern || []),
+        patternComposite: patternCompositeForClient(room),
         currentSong: room.currentSong || null,
         snippetLength: room.snippetLength || 30,
         playerCount: getNonHostPlayerCount(room),
@@ -3889,7 +3906,7 @@ io.on('connection', (socket) => {
 
   socket.on('start-game', async (data) => {
     routineServerLog('🎮 Start game event received:', data);
-    const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, freeSpace, savedRoundPlayback } = data;
+    const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, patternComposite: incomingPatternComposite, freeSpace, savedRoundPlayback } = data;
     const room = rooms.get(roomId);
     
     routineServerLog('🔍 Room found:', !!room);
@@ -3923,8 +3940,14 @@ io.on('connection', (socket) => {
           if (room.pattern === 'custom' && Array.isArray(incomingCustomMask)) {
             const mask = incomingCustomMask.filter((p) => /^(0|1|2|3|4)-(0|1|2|3|4)$/.test(p));
             room.customPattern = mask.length > 0 ? new Set(mask) : undefined;
+            room.patternComposite = undefined;
+          } else if (room.pattern === 'composite') {
+            room.customPattern = undefined;
+            room.patternComposite = normalizePatternComposite(incomingPatternComposite);
+            if (!room.patternComposite) room.pattern = 'line';
           } else if (room.pattern !== 'custom') {
             room.customPattern = undefined;
+            room.patternComposite = undefined;
           }
         } catch {}
         room.pattern = room.pattern || 'line';
@@ -4014,6 +4037,7 @@ io.on('connection', (socket) => {
           if (room.oneBySeventyFivePool && room.oneBySeventyFivePool.length === 75 && !incomingPattern) {
             routineServerLog('🎯 1x75 mode detected: Auto-setting pattern to full_card');
             room.pattern = 'full_card';
+            room.patternComposite = undefined;
           }
         } else {
           routineServerLog('🛑 Skipping card regeneration (mix finalized and cards already exist)');
@@ -4047,7 +4071,8 @@ io.on('connection', (socket) => {
           snippetLength,
           deviceId,
           pattern: room.pattern,
-          customMask: Array.from(room.customPattern || [])
+          customMask: Array.from(room.customPattern || []),
+          patternComposite: patternCompositeForClient(room),
         });
         
         // Emit fiveby15 columns if computed during card generation (AFTER game-started so display can sync)
@@ -4097,6 +4122,7 @@ io.on('connection', (socket) => {
           currentSongIndex: 0,
           pattern: 'line', // Default pattern
           customPattern: undefined, // Will be set when custom pattern is chosen
+          patternComposite: undefined,
           letterRevealIntervalSec: DEFAULT_LETTER_REVEAL_INTERVAL_SEC,
           publicDisplayTitleRevealMode: DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE,
         };
@@ -6860,6 +6886,263 @@ function checkBingoWithPlayedSongs(card, playedSongIds) {
   return { valid: false, type: null };
 }
 
+const COMPOSITE_PRESET_KEYS = new Set([
+  'line',
+  'four_corners',
+  'x',
+  't',
+  'l',
+  'u',
+  'plus',
+  'full_card',
+  'blackout',
+]);
+
+function patternCompositeForClient(room) {
+  return room && room.pattern === 'composite' && room.patternComposite ? room.patternComposite : null;
+}
+
+function normalizePatternComposite(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const op = raw.op === 'and' || raw.op === 'or' ? raw.op : null;
+  if (!op || !Array.isArray(raw.clauses)) return null;
+  const clauses = [];
+  for (const c of raw.clauses) {
+    if (!c || typeof c !== 'object') continue;
+    if (c.kind === 'preset' && typeof c.preset === 'string' && COMPOSITE_PRESET_KEYS.has(c.preset)) {
+      clauses.push({ kind: 'preset', preset: c.preset });
+    } else if (c.kind === 'mask' && Array.isArray(c.positions)) {
+      const mask = [
+        ...new Set(c.positions.filter((p) => typeof p === 'string' && /^[0-4]-[0-4]$/.test(p))),
+      ];
+      if (mask.length > 0) clauses.push({ kind: 'mask', positions: mask.sort() });
+    }
+  }
+  if (clauses.length === 0 || clauses.length > 12) return null;
+  return { op, clauses };
+}
+
+function positionsFromLineBingoType(type) {
+  if (!type || typeof type !== 'string') return [];
+  if (type.startsWith('Row')) {
+    const rowNum = parseInt(type.replace('Row ', ''), 10) - 1;
+    const positions = [];
+    for (let col = 0; col < 5; col++) positions.push(`${rowNum}-${col}`);
+    return positions;
+  }
+  if (type.startsWith('Column')) {
+    const colNum = parseInt(type.replace('Column ', ''), 10) - 1;
+    const positions = [];
+    for (let row = 0; row < 5; row++) positions.push(`${row}-${colNum}`);
+    return positions;
+  }
+  if (type.includes('top-left to bottom-right')) {
+    return [0, 1, 2, 3, 4].map((i) => `${i}-${i}`);
+  }
+  if (type.includes('top-right to bottom-left')) {
+    return [0, 1, 2, 3, 4].map((i) => `${i}-${4 - i}`);
+  }
+  return [];
+}
+
+function validateCompositeClauseResult(card, playedSongIds, clause, isMarkedSquareValid) {
+  if (!clause || typeof clause !== 'object') {
+    return { valid: false, reason: 'Invalid clause', positions: [] };
+  }
+  if (clause.kind === 'mask' && Array.isArray(clause.positions)) {
+    const invalid = [];
+    for (const pos of clause.positions) {
+      const sq = card.squares.find((s) => s.position === pos);
+      if (!isMarkedSquareValid(sq)) invalid.push(pos);
+    }
+    if (invalid.length > 0) {
+      return {
+        valid: false,
+        reason: `Painted shape needs ${invalid.length} more squares marked with played songs`,
+        positions: [],
+      };
+    }
+    return { valid: true, reason: 'Painted shape complete', positions: [...clause.positions] };
+  }
+  if (clause.kind !== 'preset' || typeof clause.preset !== 'string') {
+    return { valid: false, reason: 'Invalid clause', positions: [] };
+  }
+  const p = clause.preset;
+  if (p === 'line') {
+    const lineResult = checkBingoWithPlayedSongs(card, playedSongIds);
+    if (!lineResult.valid) {
+      return { valid: false, reason: 'No complete line with played songs', positions: [] };
+    }
+    return {
+      valid: true,
+      reason: `Line (${lineResult.type})`,
+      positions: positionsFromLineBingoType(lineResult.type),
+    };
+  }
+  if (p === 'four_corners') {
+    const required = ['0-0', '0-4', '4-0', '4-4'];
+    const invalid = required.filter((pos) => {
+      const sq = card.squares.find((s) => s.position === pos);
+      return !isMarkedSquareValid(sq);
+    });
+    if (invalid.length > 0) {
+      return {
+        valid: false,
+        reason: `Four corners incomplete — need ${invalid.length} more corners`,
+        positions: [],
+      };
+    }
+    return { valid: true, reason: 'Four corners', positions: required };
+  }
+  if (p === 'x') {
+    const invalid = [];
+    for (let i = 0; i < 5; i++) {
+      const a = card.squares.find((s) => s.position === `${i}-${i}`);
+      const b = card.squares.find((s) => s.position === `${i}-${4 - i}`);
+      if (!isMarkedSquareValid(a)) invalid.push(`${i}-${i}`);
+      if (!isMarkedSquareValid(b)) invalid.push(`${i}-${4 - i}`);
+    }
+    if (invalid.length > 0) {
+      return {
+        valid: false,
+        reason: `X pattern incomplete — ${invalid.length} diagonal squares left`,
+        positions: [],
+      };
+    }
+    const positions = [];
+    for (let i = 0; i < 5; i++) {
+      positions.push(`${i}-${i}`);
+      positions.push(`${i}-${4 - i}`);
+    }
+    return { valid: true, reason: 'X pattern', positions };
+  }
+  if (p === 't') {
+    const tPositions = ['0-0', '0-1', '0-2', '0-3', '0-4', '1-2', '2-2', '3-2', '4-2'];
+    const invalid = tPositions.filter((pos) => {
+      const sq = card.squares.find((s) => s.position === pos);
+      return !isMarkedSquareValid(sq);
+    });
+    if (invalid.length > 0) {
+      return {
+        valid: false,
+        reason: `T pattern incomplete — need ${invalid.length} more squares`,
+        positions: [],
+      };
+    }
+    return { valid: true, reason: 'T pattern', positions: tPositions };
+  }
+  if (p === 'l') {
+    const lPositions = ['0-0', '1-0', '2-0', '3-0', '4-0', '4-1', '4-2', '4-3', '4-4'];
+    const invalid = lPositions.filter((pos) => {
+      const sq = card.squares.find((s) => s.position === pos);
+      return !isMarkedSquareValid(sq);
+    });
+    if (invalid.length > 0) {
+      return {
+        valid: false,
+        reason: `L pattern incomplete — need ${invalid.length} more squares`,
+        positions: [],
+      };
+    }
+    return { valid: true, reason: 'L pattern', positions: lPositions };
+  }
+  if (p === 'u') {
+    const uPositions = ['0-0', '1-0', '2-0', '3-0', '4-0', '0-4', '1-4', '2-4', '3-4', '4-4', '4-1', '4-2', '4-3'];
+    const invalid = uPositions.filter((pos) => {
+      const sq = card.squares.find((s) => s.position === pos);
+      return !isMarkedSquareValid(sq);
+    });
+    if (invalid.length > 0) {
+      return {
+        valid: false,
+        reason: `U pattern incomplete — need ${invalid.length} more squares`,
+        positions: [],
+      };
+    }
+    return { valid: true, reason: 'U pattern', positions: uPositions };
+  }
+  if (p === 'plus') {
+    const plusPositions = ['2-0', '2-1', '2-2', '2-3', '2-4', '0-2', '1-2', '3-2', '4-2'];
+    const invalid = plusPositions.filter((pos) => {
+      const sq = card.squares.find((s) => s.position === pos);
+      return !isMarkedSquareValid(sq);
+    });
+    if (invalid.length > 0) {
+      return {
+        valid: false,
+        reason: `Plus pattern incomplete — need ${invalid.length} more squares`,
+        positions: [],
+      };
+    }
+    return { valid: true, reason: 'Plus pattern', positions: plusPositions };
+  }
+  if (p === 'full_card' || p === 'blackout') {
+    if (!validateBingoCardGrid(card)) {
+      return { valid: false, reason: 'Invalid bingo card grid', positions: [] };
+    }
+    const positions = [];
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 5; col++) positions.push(`${row}-${col}`);
+    }
+    let invalidCount = 0;
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 5; col++) {
+        const square = card.squares.find((s) => s.position === `${row}-${col}`);
+        if (!isMarkedSquareValid(square)) invalidCount++;
+      }
+    }
+    if (invalidCount > 0) {
+      const label = p === 'blackout' ? 'Blackout' : 'Full card';
+      return { valid: false, reason: `${label} incomplete`, positions: [] };
+    }
+    const ok = p === 'blackout' ? 'Blackout' : 'Full card';
+    return { valid: true, reason: `${ok} complete`, positions };
+  }
+  return { valid: false, reason: 'Unknown sub-pattern', positions: [] };
+}
+
+function validateBingoCompositePattern(card, playedSongIds, composite, isMarkedSquareValid) {
+  const op = composite && composite.op;
+  const clauses = composite && composite.clauses;
+  if (!op || !Array.isArray(clauses) || clauses.length === 0) {
+    return { valid: false, reason: 'Combined pattern is not configured' };
+  }
+  if (op === 'or') {
+    const fails = [];
+    for (const cl of clauses) {
+      const r = validateCompositeClauseResult(card, playedSongIds, cl, isMarkedSquareValid);
+      if (r.valid) {
+        return {
+          valid: true,
+          reason: `Win: ${r.reason}`,
+          type: 'Composite',
+          winningPositions: r.positions,
+        };
+      }
+      fails.push(r.reason);
+    }
+    return {
+      valid: false,
+      reason: `No winning combination (${fails.slice(0, 2).join(' · ')})`,
+    };
+  }
+  const union = [];
+  for (const cl of clauses) {
+    const r = validateCompositeClauseResult(card, playedSongIds, cl, isMarkedSquareValid);
+    if (!r.valid) {
+      return { valid: false, reason: `Combined (all): ${r.reason}`, type: 'Composite' };
+    }
+    union.push(...r.positions);
+  }
+  const winningPositions = [...new Set(union)];
+  return {
+    valid: true,
+    reason: 'Combined pattern (all parts) complete!',
+    type: 'Composite',
+    winningPositions,
+  };
+}
+
 function validateBingoCardGrid(card) {
   if (!card?.squares || !Array.isArray(card.squares) || card.squares.length !== 25) return false;
   const seen = new Set();
@@ -6905,7 +7188,11 @@ function validateBingoForPattern(card, room) {
     }
     return isValid;
   };
-  
+
+  if (pattern === 'composite' && room?.patternComposite) {
+    return validateBingoCompositePattern(card, playedSongIds, room.patternComposite, isMarkedSquareValid);
+  }
+
   if (pattern === 'custom' && room?.customPattern && room.customPattern.size > 0) {
     // All positions in customPattern must be marked AND correspond to played songs
     const invalidPositions = [];
@@ -7086,6 +7373,10 @@ function getWinningPatternPositions(card, room, validationResult) {
     return square && square.marked && (square.isFreeSpace || playedSongIds.includes(square.songId));
   };
   
+  if (pattern === 'composite' && Array.isArray(validationResult?.winningPositions) && validationResult.winningPositions.length > 0) {
+    return validationResult.winningPositions;
+  }
+
   if (pattern === 'custom' && room?.customPattern && room.customPattern.size > 0) {
     return Array.from(room.customPattern);
   }
@@ -7851,6 +8142,7 @@ app.post('/api/host/rooms', async (req, res) => {
         superStrictLock: false,
         pattern: 'line',
         customPattern: undefined,
+        patternComposite: undefined,
         createdAt: new Date().toISOString(),
       };
       rooms.set(code, newRoom);
