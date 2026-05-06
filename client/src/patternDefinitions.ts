@@ -73,6 +73,10 @@ export interface SavedCustomPattern {
   id: string;
   name: string;
   positions: string[];
+  /** When set, any 90° rotation of the painted shape counts as a win (same as combined-pattern masks). */
+  matchAllowRotation?: boolean;
+  /** When set, horizontal and/or vertical mirror of the painted shape counts as a win. */
+  matchAllowMirror?: boolean;
   createdAt: number;
 }
 
@@ -80,7 +84,7 @@ export const BINGO_PATTERNS: Record<BingoPattern, PatternDefinition> = {
   line: {
     value: 'line',
     label: 'Line',
-    description: 'Any row, column, or diagonal',
+    description: 'Rows, columns, or diagonals — host sets how many lines to complete',
     positions: [] // Dynamic - any complete line
   },
   four_corners: {
@@ -251,14 +255,149 @@ function deriveOrientationFlags(raw: Record<string, unknown>): { rot: boolean; m
  * Grid transforms implied by host orientation choices (rotation = 90° / 180° / 270°, mirror = ↔ and ↕).
  * Handles legacy per-transform `matchVariants` until recipes are re-saved.
  */
-export function clauseOrientationTransforms(
-  clause: PatternCompositeClause & { matchVariants?: GridTransform[] },
-): GridTransform[] {
-  const { rot, mir } = deriveOrientationFlags(clause as unknown as Record<string, unknown>);
+export function hostOrientationTransforms(opts: {
+  matchAllowRotation?: boolean;
+  matchAllowMirror?: boolean;
+  matchVariants?: GridTransform[];
+}): GridTransform[] {
+  const { rot, mir } = deriveOrientationFlags(opts as unknown as Record<string, unknown>);
   const out: GridTransform[] = [];
   if (rot) out.push('rotateCw', 'rotate180', 'rotateCcw');
   if (mir) out.push('flipH', 'flipV');
   return normalizeMatchVariants(out);
+}
+
+export function clauseOrientationTransforms(
+  clause: PatternCompositeClause & { matchVariants?: GridTransform[] },
+): GridTransform[] {
+  return hostOrientationTransforms(clause as unknown as Parameters<typeof hostOrientationTransforms>[0]);
+}
+
+/** Union of base cells plus rotated/reflected copies (for highlights). */
+export function unionMaskVariantsPositions(
+  base: readonly string[],
+  transforms: GridTransform[] | null | undefined,
+): string[] {
+  const variants = expandMaskOrientations(base, transforms?.length ? transforms : []);
+  const u = new Set<string>();
+  for (const m of variants) {
+    for (const p of m) u.add(p);
+  }
+  return Array.from(u).sort();
+}
+
+/** Highlight cells for a custom saved pattern including optional orientation allowances. */
+export function customMaskHighlightPositions(
+  positions: readonly string[] | undefined,
+  opts?: { matchAllowRotation?: boolean; matchAllowMirror?: boolean },
+): string[] {
+  if (!positions?.length) return [];
+  const t = hostOrientationTransforms(opts || {});
+  return unionMaskVariantsPositions(positions, t);
+}
+
+type CardSqLite = { position: string; marked?: boolean; songId?: string; isFreeSpace?: boolean };
+
+function everyMarked(card: { squares: CardSqLite[] }, mask: readonly string[]): boolean {
+  return mask.every((pos) => {
+    const sq = card.squares.find((s) => s.position === pos);
+    return !!(sq && sq.marked);
+  });
+}
+
+function everyStrict(
+  card: { squares: CardSqLite[] },
+  mask: readonly string[],
+  isValid: (sq: CardSqLite) => boolean,
+): boolean {
+  return mask.every((pos) => {
+    const sq = card.squares.find((s) => s.position === pos);
+    return !!(sq && isValid(sq));
+  });
+}
+
+/** Visual win check for standalone custom pattern (marks only), honoring orientation flags. */
+export function evaluateCustomPatternVisual(
+  card: { squares: CardSqLite[] } | null | undefined,
+  basePositions: readonly string[] | null | undefined,
+  opts?: { matchAllowRotation?: boolean; matchAllowMirror?: boolean },
+): boolean {
+  if (!card?.squares?.length || !basePositions?.length) return false;
+  const transforms = hostOrientationTransforms(opts || {});
+  const variants = expandMaskOrientations(basePositions, transforms);
+  return variants.some((m) => everyMarked(card, m));
+}
+
+/** Strict win check for standalone custom pattern (played songs / free space), honoring orientation flags. */
+export function evaluateCustomPatternStrict(
+  card: { squares: CardSqLite[] } | null | undefined,
+  basePositions: readonly string[] | null | undefined,
+  playedSongIds: readonly string[],
+  opts?: { matchAllowRotation?: boolean; matchAllowMirror?: boolean },
+): boolean {
+  if (!card?.squares?.length || !basePositions?.length) return false;
+  const cur = playedSongIds;
+  const isValid = (sq: CardSqLite) => {
+    const free = !!(sq.isFreeSpace || sq.songId === '__FREE_SPACE__');
+    return !!(sq.marked && (free || cur.includes(sq.songId || '')));
+  };
+  const transforms = hostOrientationTransforms(opts || {});
+  const variants = expandMaskOrientations(basePositions, transforms);
+  return variants.some((m) => everyStrict(card, m, isValid));
+}
+
+/** Max distinct row/column/diagonal lines on a 5×5 card. */
+export const LINE_PATTERN_MAX_LINES = 12;
+
+export function normalizeLinesRequired(raw: unknown): number {
+  const x = typeof raw === 'number' ? raw : parseInt(String(raw ?? ''), 10);
+  if (!Number.isFinite(x)) return 1;
+  return Math.min(LINE_PATTERN_MAX_LINES, Math.max(1, Math.round(x)));
+}
+
+/** Count complete lines (rows, columns, both diagonals) using mark-only predicate. */
+export function countCompletedLinesVisual(card: { squares: CardSqLite[] }): number {
+  const isOn = (pos: string) => {
+    const sq = card.squares.find((s) => s.position === pos);
+    return !!(sq && sq.marked);
+  };
+  let n = 0;
+  for (let row = 0; row < 5; row++) {
+    if ([0, 1, 2, 3, 4].every((c) => isOn(`${row}-${c}`))) n++;
+  }
+  for (let col = 0; col < 5; col++) {
+    if ([0, 1, 2, 3, 4].every((r) => isOn(`${r}-${col}`))) n++;
+  }
+  let d1 = true;
+  let d2 = true;
+  for (let i = 0; i < 5; i++) {
+    if (!isOn(`${i}-${i}`)) d1 = false;
+    if (!isOn(`${i}-${4 - i}`)) d2 = false;
+  }
+  if (d1) n++;
+  if (d2) n++;
+  return n;
+}
+
+/** Count complete lines where every cell passes strict validation (played songs / free). */
+export function countCompletedLinesStrict(
+  card: { squares: CardSqLite[] },
+  playedSongIds: readonly string[],
+): number {
+  const isValid = (sq: CardSqLite | undefined) =>
+    !!(sq && sq.marked && (sq.isFreeSpace || sq.songId === '__FREE_SPACE__' || playedSongIds.includes(sq.songId || '')));
+  let n = 0;
+  for (let row = 0; row < 5; row++) {
+    if ([0, 1, 2, 3, 4].every((c) => isValid(card.squares.find((s) => s.position === `${row}-${c}`)))) n++;
+  }
+  for (let col = 0; col < 5; col++) {
+    if ([0, 1, 2, 3, 4].every((r) => isValid(card.squares.find((s) => s.position === `${r}-${col}`)))) n++;
+  }
+  const d1 = [0, 1, 2, 3, 4].every((i) => isValid(card.squares.find((s) => s.position === `${i}-${i}`)));
+  const d2 = [0, 1, 2, 3, 4].every((i) => isValid(card.squares.find((s) => s.position === `${i}-${4 - i}`)));
+  if (d1) n++;
+  if (d2) n++;
+  return n;
 }
 
 /** Identity mask plus each transformed copy (deduped). */

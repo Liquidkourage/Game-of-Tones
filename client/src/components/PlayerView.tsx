@@ -13,6 +13,12 @@ import {
   evaluateCompositeVisual,
   evaluateCompositeStrict,
   unionCompositeHighlightPositions,
+  normalizeLinesRequired,
+  countCompletedLinesVisual,
+  countCompletedLinesStrict,
+  evaluateCustomPatternVisual,
+  evaluateCustomPatternStrict,
+  customMaskHighlightPositions,
 } from '../patternDefinitions';
 
 interface BingoSquare {
@@ -42,6 +48,11 @@ interface GameState {
   customPattern?: string[]; // Array of positions like ['0-0', '2-2', '4-4']
   /** Combined AND/OR pattern from server when pattern === 'composite' */
   patternComposite?: PatternCompositeSpec | null;
+  /** When pattern === 'line': distinct complete lines required (1–12). */
+  linesRequired?: number;
+  /** Custom pattern orientation (server / host). */
+  customMatchAllowRotation?: boolean;
+  customMatchAllowMirror?: boolean;
 }
 
 interface Song {
@@ -379,6 +390,12 @@ const PlayerView: React.FC = () => {
     newSocket.on('game-started', (data: any) => {
       console.log('Game started:', data);
       setBingoColumnPlaylistNames([]);
+      const lr =
+        data?.pattern === 'line' && data?.linesRequired != null ? normalizeLinesRequired(data.linesRequired) : undefined;
+      const cre =
+        data?.pattern === 'custom'
+          ? { rot: !!data.customMatchAllowRotation, mir: !!data.customMatchAllowMirror }
+          : { rot: false, mir: false };
       setGameState((prev) => ({
         ...prev,
         isPlaying: true,
@@ -391,6 +408,16 @@ const PlayerView: React.FC = () => {
           data?.pattern === 'composite'
             ? normalizePatternComposite(data.patternComposite) ?? undefined
             : undefined,
+        ...(lr !== undefined ? { linesRequired: lr } : {}),
+        ...(data?.pattern === 'custom'
+          ? {
+              customMatchAllowRotation: cre.rot,
+              customMatchAllowMirror: cre.mir,
+            }
+          : {
+              customMatchAllowRotation: false,
+              customMatchAllowMirror: false,
+            }),
       }));
       // Reset songs played counter when game starts
       setSongsPlayed(0);
@@ -445,27 +472,44 @@ const PlayerView: React.FC = () => {
         
         if (payload?.isPlaying) {
           const pat = typeof payload?.pattern === 'string' && payload.pattern.length > 0 ? payload.pattern : undefined;
-          setGameState((prev) => ({
-            ...prev,
-            isPlaying: true,
-            pattern: pat || prev.pattern,
-            playerCount: typeof payload?.playerCount === 'number' ? payload.playerCount : prev.playerCount,
-            currentSong: payload?.currentSong || prev.currentSong,
-            customPattern:
-              (pat || prev.pattern) === 'custom' &&
-              Array.isArray(payload?.customMask) &&
-              payload.customMask.length > 0
-                ? payload.customMask
-                : (pat || prev.pattern) === 'custom'
-                  ? prev.customPattern
-                  : undefined,
-            patternComposite:
-              (pat || prev.pattern) === 'composite'
-                ? normalizePatternComposite(payload.patternComposite) ?? prev.patternComposite
-                : pat && pat !== 'composite'
-                  ? undefined
-                  : prev.patternComposite,
-          }));
+          setGameState((prev) => {
+            const effectivePat = pat || prev.pattern;
+            const lr =
+              effectivePat === 'line' && payload?.linesRequired != null
+                ? normalizeLinesRequired(payload.linesRequired)
+                : undefined;
+            return {
+              ...prev,
+              isPlaying: true,
+              pattern: effectivePat,
+              playerCount: typeof payload?.playerCount === 'number' ? payload.playerCount : prev.playerCount,
+              currentSong: payload?.currentSong || prev.currentSong,
+              customPattern:
+                effectivePat === 'custom' &&
+                Array.isArray(payload?.customMask) &&
+                payload.customMask.length > 0
+                  ? payload.customMask
+                  : effectivePat === 'custom'
+                    ? prev.customPattern
+                    : undefined,
+              patternComposite:
+                effectivePat === 'composite'
+                  ? normalizePatternComposite(payload.patternComposite) ?? prev.patternComposite
+                  : pat && pat !== 'composite'
+                    ? undefined
+                    : prev.patternComposite,
+              ...(lr !== undefined ? { linesRequired: lr } : {}),
+              ...(effectivePat === 'custom'
+                ? {
+                    customMatchAllowRotation: !!payload.customMatchAllowRotation,
+                    customMatchAllowMirror: !!payload.customMatchAllowMirror,
+                  }
+                : {
+                    customMatchAllowRotation: false,
+                    customMatchAllowMirror: false,
+                  }),
+            };
+          });
         } else if (typeof payload?.playerCount === 'number') {
           setGameState(prev => ({ ...prev, playerCount: payload.playerCount }));
         }
@@ -549,24 +593,41 @@ const PlayerView: React.FC = () => {
 
     newSocket.on('pattern-updated', (data: any) => {
       console.log('Pattern updated:', data);
-      setGameState((prev) => ({
-        ...prev,
-        pattern:
-          typeof data?.pattern === 'string' && data.pattern.length > 0 ? data.pattern : prev.pattern,
-        customPattern: Array.isArray(data?.customMask)
-          ? data.customMask.length > 0
-            ? data.customMask
-            : undefined
-          : typeof data?.pattern === 'string' && data.pattern === 'custom'
-            ? prev.customPattern
-            : undefined,
-        patternComposite:
-          typeof data?.pattern === 'string' && data.pattern === 'composite'
-            ? normalizePatternComposite(data.patternComposite) ?? prev.patternComposite
-            : typeof data?.pattern === 'string' && data.pattern !== 'composite'
-              ? undefined
-              : prev.patternComposite,
-      }));
+      const p = typeof data?.pattern === 'string' && data.pattern.length > 0 ? data.pattern : undefined;
+      setGameState((prev) => {
+        const nextPat = p ?? prev.pattern;
+        const lr =
+          nextPat === 'line' && data?.linesRequired != null
+            ? normalizeLinesRequired(data.linesRequired)
+            : undefined;
+        return {
+          ...prev,
+          pattern: nextPat,
+          customPattern: Array.isArray(data?.customMask)
+            ? data.customMask.length > 0
+              ? data.customMask
+              : undefined
+            : p === 'custom'
+              ? prev.customPattern
+              : undefined,
+          patternComposite:
+            p === 'composite'
+              ? normalizePatternComposite(data.patternComposite) ?? prev.patternComposite
+              : p && p !== 'composite'
+                ? undefined
+                : prev.patternComposite,
+          ...(lr !== undefined ? { linesRequired: lr } : {}),
+          ...(nextPat === 'custom'
+            ? {
+                customMatchAllowRotation: !!data.customMatchAllowRotation,
+                customMatchAllowMirror: !!data.customMatchAllowMirror,
+              }
+            : {
+                customMatchAllowRotation: false,
+                customMatchAllowMirror: false,
+              }),
+        };
+      });
     });
 
     // Handle bingo validation result (for the caller)
@@ -1014,7 +1075,15 @@ const PlayerView: React.FC = () => {
         setGameState(prev => ({ ...prev, hasBingo: hasVisualPattern }));
       }
     }
-  }, [bingoCard, gameState.pattern, gameState.customPattern, gameState.patternComposite]);
+  }, [
+    bingoCard,
+    gameState.pattern,
+    gameState.customPattern,
+    gameState.patternComposite,
+    gameState.linesRequired,
+    gameState.customMatchAllowRotation,
+    gameState.customMatchAllowMirror,
+  ]);
 
   // Check if a visual pattern is complete (only checks if squares are marked, not if songs played)
   const checkVisualPattern = (card: BingoCard): boolean => {
@@ -1102,58 +1171,20 @@ const PlayerView: React.FC = () => {
       });
     }
     
-    // Line pattern - any row, column, or diagonal (all squares must be marked)
+    // Line pattern — host sets how many complete lines are required
     if (pattern === 'line') {
-      // Check rows
-      for (let row = 0; row < 5; row++) {
-        let rowComplete = true;
-        for (let col = 0; col < 5; col++) {
-          const square = card.squares.find(s => s.position === `${row}-${col}`);
-          if (!square || !isSquareMarked(square)) {
-            rowComplete = false;
-            break;
-          }
-        }
-        if (rowComplete) return true;
-      }
-
-      // Check columns
-      for (let col = 0; col < 5; col++) {
-        let colComplete = true;
-        for (let row = 0; row < 5; row++) {
-          const square = card.squares.find(s => s.position === `${row}-${col}`);
-          if (!square || !isSquareMarked(square)) {
-            colComplete = false;
-            break;
-          }
-        }
-        if (colComplete) return true;
-      }
-
-      // Check diagonals
-      let diag1Complete = true;
-      let diag2Complete = true;
-      for (let i = 0; i < 5; i++) {
-        const square1 = card.squares.find(s => s.position === `${i}-${i}`);
-        const square2 = card.squares.find(s => s.position === `${i}-${4-i}`);
-        
-        if (!square1 || !isSquareMarked(square1)) diag1Complete = false;
-        if (!square2 || !isSquareMarked(square2)) diag2Complete = false;
-      }
-      if (diag1Complete || diag2Complete) return true;
+      const need = normalizeLinesRequired(gameState.linesRequired ?? 1);
+      return countCompletedLinesVisual(card) >= need;
     }
-    
-    // Custom pattern - check if all custom positions are marked
-    if (pattern === 'custom' && gameState.customPattern) {
-      const customPositions = Array.isArray(gameState.customPattern) 
-        ? gameState.customPattern 
-        : Array.from(gameState.customPattern);
-      return customPositions.every(pos => {
-        const square = card.squares.find(s => s.position === pos);
-        return square ? isSquareMarked(square) : false;
+
+    // Custom pattern — optional rotations / mirrors when matching
+    if (pattern === 'custom' && gameState.customPattern?.length) {
+      return evaluateCustomPatternVisual(card, gameState.customPattern, {
+        matchAllowRotation: gameState.customMatchAllowRotation,
+        matchAllowMirror: gameState.customMatchAllowMirror,
       });
     }
-    
+
     return false;
   };
 
@@ -1249,55 +1280,20 @@ const PlayerView: React.FC = () => {
       });
     }
     
-    // Line pattern - any row, column, or diagonal (all marked squares must correspond to played songs)
+    // Line pattern — host sets how many complete lines are required (each with legit marks)
     if (pattern === 'line') {
-      // Check rows
-      for (let row = 0; row < 5; row++) {
-        let rowComplete = true;
-        for (let col = 0; col < 5; col++) {
-          const square = card.squares.find(s => s.position === `${row}-${col}`);
-          if (!square || !isMarkedSquareValid(square)) {
-            rowComplete = false;
-            break;
-          }
-        }
-        if (rowComplete) return true;
-      }
-
-      // Check columns
-      for (let col = 0; col < 5; col++) {
-        let colComplete = true;
-        for (let row = 0; row < 5; row++) {
-          const square = card.squares.find(s => s.position === `${row}-${col}`);
-          if (!square || !isMarkedSquareValid(square)) {
-            colComplete = false;
-            break;
-          }
-        }
-        if (colComplete) return true;
-      }
-
-      // Check diagonals
-      let diag1Complete = true;
-      let diag2Complete = true;
-      for (let i = 0; i < 5; i++) {
-        const square1 = card.squares.find(s => s.position === `${i}-${i}`);
-        const square2 = card.squares.find(s => s.position === `${i}-${4-i}`);
-        
-        if (!square1 || !isMarkedSquareValid(square1)) diag1Complete = false;
-        if (!square2 || !isMarkedSquareValid(square2)) diag2Complete = false;
-      }
-      return diag1Complete || diag2Complete;
+      const need = normalizeLinesRequired(gameState.linesRequired ?? 1);
+      return countCompletedLinesStrict(card, playedSongIds) >= need;
     }
-    
-    // Custom pattern - check if all required positions are marked AND correspond to played songs
-    if (pattern === 'custom' && gameState.customPattern) {
-      return gameState.customPattern.every(pos => {
-        const square = card.squares.find(s => s.position === pos);
-        return square && isMarkedSquareValid(square);
+
+    // Custom pattern with optional rotations / mirrors
+    if (pattern === 'custom' && gameState.customPattern?.length) {
+      return evaluateCustomPatternStrict(card, gameState.customPattern, playedSongIds, {
+        matchAllowRotation: gameState.customMatchAllowRotation,
+        matchAllowMirror: gameState.customMatchAllowMirror,
       });
     }
-    
+
     // Default fallback
     return false;
   };
@@ -1317,7 +1313,10 @@ const PlayerView: React.FC = () => {
     }
 
     if (pattern === 'custom' && gameState.customPattern?.length) {
-      return gameState.customPattern.includes(position);
+      return customMaskHighlightPositions(gameState.customPattern, {
+        matchAllowRotation: gameState.customMatchAllowRotation,
+        matchAllowMirror: gameState.customMatchAllowMirror,
+      }).includes(position);
     }
     
     if (pattern === 'four_corners') {

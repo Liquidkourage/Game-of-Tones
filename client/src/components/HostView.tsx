@@ -60,6 +60,8 @@ import {
   COMPOSITE_CLAUSE_PRESETS,
   DEFAULT_COMPOSITE_SPEC,
   normalizePatternComposite,
+  normalizeLinesRequired,
+  LINE_PATTERN_MAX_LINES,
   compositeLegitProgressPct,
   clauseSupportsMatchVariants,
   type SavedCompositePattern,
@@ -67,7 +69,7 @@ import {
   saveCompositePattern,
   deleteSavedCompositePattern,
 } from '../patternDefinitions';
-import CustomPatternModal from './CustomPatternModal';
+import CustomPatternModal, { type CustomPatternSavePayload } from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
 import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModal';
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
@@ -166,6 +168,12 @@ interface EventRound {
   customPatternMask?: string[];
   /** Required when `bingoPattern === 'composite'` (AND/OR clauses). */
   patternComposite?: PatternCompositeSpec;
+  /** When `bingoPattern === 'line'`: how many distinct rows/columns/diagonals must be complete (1–12). */
+  linesRequired?: number;
+  /** Custom pattern: allow rotated placements when matching (stored per round). */
+  customMatchAllowRotation?: boolean;
+  /** Custom pattern: allow mirrored placements when matching (stored per round). */
+  customMatchAllowMirror?: boolean;
   /** When set, overrides host-wide free-space for this round; omit to inherit the Bingo Pattern checkbox. */
   freeSpaceEnabled?: boolean;
   /** Frozen finalized subset for this round (tracks + gameplay knobs at save time). Enables offline PDF from snapshot. */
@@ -505,6 +513,9 @@ const HostView: React.FC = () => {
   const [playedSoFar, setPlayedSoFar] = useState<Array<{ id: string; name: string; artist: string }>>([]);
   const [revealMode, setRevealMode] = useState<'off' | 'artist' | 'title' | 'full'>('off');
   const [pattern, setPattern] = useState<BingoPattern>('line');
+  const [linesRequired, setLinesRequired] = useState(1);
+  const [customMatchAllowRotation, setCustomMatchAllowRotation] = useState(false);
+  const [customMatchAllowMirror, setCustomMatchAllowMirror] = useState(false);
   const [freeSpaceEnabled, setFreeSpaceEnabled] = useState<boolean>(() => {
     try {
       return localStorage.getItem('bingo-free-space') === '1';
@@ -2130,6 +2141,17 @@ const HostView: React.FC = () => {
           const n = normalizePatternComposite(data.patternComposite);
           if (n) setPatternComposite(n);
         }
+        if (incomingPat === 'line' && data.linesRequired != null) {
+          setLinesRequired(normalizeLinesRequired(data.linesRequired));
+        }
+        if (incomingPat === 'custom') {
+          setCustomMatchAllowRotation(!!data.customMatchAllowRotation);
+          setCustomMatchAllowMirror(!!data.customMatchAllowMirror);
+        }
+        if (incomingPat !== 'custom') {
+          setCustomMatchAllowRotation(false);
+          setCustomMatchAllowMirror(false);
+        }
         addLog(`Pattern updated to ${incomingPat}`, 'info');
       }
     });
@@ -3113,9 +3135,21 @@ const HostView: React.FC = () => {
       }
 
       if (patternForStart === 'custom' && maskForStart.length > 0) {
-        socket.emit('set-pattern', { roomId, pattern: 'custom', customMask: maskForStart });
+        socket.emit('set-pattern', {
+          roomId,
+          pattern: 'custom',
+          customMask: maskForStart,
+          customMatchAllowRotation: !!(roundForStart?.customMatchAllowRotation ?? customMatchAllowRotation),
+          customMatchAllowMirror: !!(roundForStart?.customMatchAllowMirror ?? customMatchAllowMirror),
+        });
       } else if (patternForStart === 'composite' && compositeForStart) {
         socket.emit('set-pattern', { roomId, pattern: 'composite', patternComposite: compositeForStart });
+      } else if (patternForStart === 'line') {
+        socket.emit('set-pattern', {
+          roomId,
+          pattern: 'line',
+          linesRequired: normalizeLinesRequired(roundForStart?.linesRequired ?? linesRequired),
+        });
       } else {
         socket.emit('set-pattern', { roomId, pattern: patternForStart });
       }
@@ -3134,6 +3168,9 @@ const HostView: React.FC = () => {
         pattern: patternForStart,
         customMask: maskForStart,
         patternComposite: compositeForStart,
+        linesRequired: normalizeLinesRequired(roundForStart?.linesRequired ?? linesRequired),
+        customMatchAllowRotation: !!(roundForStart?.customMatchAllowRotation ?? customMatchAllowRotation),
+        customMatchAllowMirror: !!(roundForStart?.customMatchAllowMirror ?? customMatchAllowMirror),
         freeSpace: freeSpaceForStart,
         savedRoundPlayback: useSavedRoundPlayback,
       });
@@ -3670,7 +3707,16 @@ const HostView: React.FC = () => {
   const patchActiveRoundBingo = useCallback(
     (
       patch: Partial<
-        Pick<EventRound, 'bingoPattern' | 'customPatternMask' | 'patternComposite' | 'freeSpaceEnabled'>
+        Pick<
+          EventRound,
+          | 'bingoPattern'
+          | 'customPatternMask'
+          | 'patternComposite'
+          | 'freeSpaceEnabled'
+          | 'linesRequired'
+          | 'customMatchAllowRotation'
+          | 'customMatchAllowMirror'
+        >
       >,
     ) => {
       const idx = currentRoundIndexRef.current;
@@ -3681,6 +3727,12 @@ const HostView: React.FC = () => {
         let updated: EventRound = { ...r, ...patch };
         if (patch.bingoPattern != null && patch.bingoPattern !== 'custom' && patch.bingoPattern !== 'composite') {
           updated = { ...updated, customPatternMask: undefined, patternComposite: undefined };
+        }
+        if (patch.bingoPattern != null && patch.bingoPattern !== 'line') {
+          updated = { ...updated, linesRequired: undefined };
+        }
+        if (patch.bingoPattern != null && patch.bingoPattern !== 'custom') {
+          updated = { ...updated, customMatchAllowRotation: undefined, customMatchAllowMirror: undefined };
         }
         if (patch.bingoPattern === 'custom') {
           updated = { ...updated, patternComposite: undefined };
@@ -3729,17 +3781,28 @@ const HostView: React.FC = () => {
       setPattern(p);
       setCustomPattern(mask);
       setCustomMask(mask);
+      setLinesRequired(normalizeLinesRequired(round.linesRequired ?? 1));
+
+      let matchedSaved: SavedCustomPattern | undefined;
 
       if (p === 'composite' && compositeSpec) {
         setPatternComposite(compositeSpec);
         setSelectedCustomPattern(null);
+        setCustomMatchAllowRotation(false);
+        setCustomMatchAllowMirror(false);
       } else if (p === 'custom' && mask.length > 0) {
         const norm = (arr: string[]) => [...arr].sort().join(',');
         const key = norm(mask);
-        const matched = savedCustomPatterns.find((sp) => norm(sp.positions) === key);
-        setSelectedCustomPattern(matched ?? null);
+        matchedSaved = savedCustomPatterns.find((sp) => norm(sp.positions) === key);
+        setSelectedCustomPattern(matchedSaved ?? null);
+        const rot = !!(round.customMatchAllowRotation ?? matchedSaved?.matchAllowRotation);
+        const mir = !!(round.customMatchAllowMirror ?? matchedSaved?.matchAllowMirror);
+        setCustomMatchAllowRotation(rot);
+        setCustomMatchAllowMirror(mir);
       } else {
         setSelectedCustomPattern(null);
+        setCustomMatchAllowRotation(false);
+        setCustomMatchAllowMirror(false);
       }
 
       if (round.freeSpaceEnabled !== undefined) {
@@ -3777,7 +3840,19 @@ const HostView: React.FC = () => {
         if (p === 'composite' && compositeSpec) {
           socket.emit('set-pattern', { roomId, pattern: 'composite', patternComposite: compositeSpec });
         } else if (p === 'custom' && mask.length > 0) {
-          socket.emit('set-pattern', { roomId, pattern: 'custom', customMask: mask });
+          socket.emit('set-pattern', {
+            roomId,
+            pattern: 'custom',
+            customMask: mask,
+            customMatchAllowRotation: !!(round.customMatchAllowRotation ?? matchedSaved?.matchAllowRotation),
+            customMatchAllowMirror: !!(round.customMatchAllowMirror ?? matchedSaved?.matchAllowMirror),
+          });
+        } else if (p === 'line') {
+          socket.emit('set-pattern', {
+            roomId,
+            pattern: 'line',
+            linesRequired: normalizeLinesRequired(round.linesRequired ?? 1),
+          });
         } else {
           socket.emit('set-pattern', { roomId, pattern: p });
         }
@@ -3923,6 +3998,8 @@ const HostView: React.FC = () => {
       setSelectedCustomPattern(null);
       setCustomPattern([]);
       setCustomMask([]);
+      setCustomMatchAllowRotation(false);
+      setCustomMatchAllowMirror(false);
       patchActiveRoundBingo({
         bingoPattern: 'composite',
         patternComposite: spec,
@@ -3940,17 +4017,33 @@ const HostView: React.FC = () => {
       setSelectedCustomPattern(null);
       setCustomPattern([]);
       setCustomMask([]);
+      setCustomMatchAllowRotation(false);
+      setCustomMatchAllowMirror(false);
     }
     patchActiveRoundBingo({
       bingoPattern: next,
       ...(next !== 'custom' ? { customPatternMask: undefined } : {}),
       patternComposite: undefined,
+      ...(next === 'line' ? { linesRequired: normalizeLinesRequired(linesRequired) } : {}),
+      ...(next === 'custom'
+        ? {
+            customMatchAllowRotation,
+            customMatchAllowMirror,
+          }
+        : {}),
     });
     if (socket && roomId) {
       socket.emit('set-pattern', {
         roomId,
         pattern: next,
         customMask: next === 'custom' ? customMask : undefined,
+        ...(next === 'line' ? { linesRequired: normalizeLinesRequired(linesRequired) } : {}),
+        ...(next === 'custom'
+          ? {
+              customMatchAllowRotation,
+              customMatchAllowMirror,
+            }
+          : {}),
       });
       addLog(`Pattern set to ${next}`, 'info');
     }
@@ -3979,13 +4072,25 @@ const HostView: React.FC = () => {
     setPattern('custom');
     setCustomPattern(customPatternObj.positions);
     setCustomMask(customPatternObj.positions);
+    const rot = customPatternObj.matchAllowRotation === true;
+    const mir = customPatternObj.matchAllowMirror === true;
+    setCustomMatchAllowRotation(rot);
+    setCustomMatchAllowMirror(mir);
     patchActiveRoundBingo({
       bingoPattern: 'custom',
       customPatternMask: customPatternObj.positions,
       patternComposite: undefined,
+      customMatchAllowRotation: rot,
+      customMatchAllowMirror: mir,
     });
     if (socket && roomId) {
-      socket.emit('set-pattern', { roomId, pattern: 'custom', customMask: customPatternObj.positions });
+      socket.emit('set-pattern', {
+        roomId,
+        pattern: 'custom',
+        customMask: customPatternObj.positions,
+        customMatchAllowRotation: rot,
+        customMatchAllowMirror: mir,
+      });
       addLog(`Custom pattern set to ${customPatternObj.name}`, 'info');
     }
   };
@@ -3994,7 +4099,7 @@ const HostView: React.FC = () => {
     setShowCustomPatternModal(true);
   };
 
-  const handleSaveCustomPattern = (patternData: { name: string; positions: string[] }) => {
+  const handleSaveCustomPattern = (patternData: CustomPatternSavePayload) => {
     const savedPattern = saveCustomPattern(patternData);
     setSavedCustomPatterns(getSavedCustomPatterns());
     handleCustomPatternSelect(savedPattern);
@@ -4985,7 +5090,16 @@ const HostView: React.FC = () => {
     (
       roundIndex: number,
       patch: Partial<
-        Pick<EventRound, 'bingoPattern' | 'customPatternMask' | 'patternComposite' | 'freeSpaceEnabled'>
+        Pick<
+          EventRound,
+          | 'bingoPattern'
+          | 'customPatternMask'
+          | 'patternComposite'
+          | 'freeSpaceEnabled'
+          | 'linesRequired'
+          | 'customMatchAllowRotation'
+          | 'customMatchAllowMirror'
+        >
       >,
     ) => {
       setEventRounds((prev) => {
@@ -4994,6 +5108,12 @@ const HostView: React.FC = () => {
         let updated: EventRound = { ...r, ...patch };
         if (patch.bingoPattern != null && patch.bingoPattern !== 'custom' && patch.bingoPattern !== 'composite') {
           updated = { ...updated, customPatternMask: undefined, patternComposite: undefined };
+        }
+        if (patch.bingoPattern != null && patch.bingoPattern !== 'line') {
+          updated = { ...updated, linesRequired: undefined };
+        }
+        if (patch.bingoPattern != null && patch.bingoPattern !== 'custom') {
+          updated = { ...updated, customMatchAllowRotation: undefined, customMatchAllowMirror: undefined };
         }
         if (patch.bingoPattern === 'custom') {
           updated = { ...updated, patternComposite: undefined };
@@ -5892,6 +6012,69 @@ const HostView: React.FC = () => {
                   </button>
                 </div>
 
+                {pattern === 'line' && (
+                  <div
+                    style={{
+                      marginBottom: 14,
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      gap: 12,
+                      flexWrap: 'wrap',
+                      flexDirection: 'column',
+                    }}
+                  >
+                    <label
+                      style={{
+                        fontSize: '0.84rem',
+                        color: '#c5cdd6',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        flexWrap: 'wrap',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      Lines required (1–{LINE_PATTERN_MAX_LINES})
+                      <input
+                        type="number"
+                        min={1}
+                        max={LINE_PATTERN_MAX_LINES}
+                        value={linesRequired}
+                        onChange={(e) => {
+                          const v = normalizeLinesRequired(parseInt(e.target.value, 10));
+                          setLinesRequired(v);
+                          patchActiveRoundBingo({ bingoPattern: 'line', linesRequired: v });
+                          if (socket && roomId) {
+                            socket.emit('set-pattern', { roomId, pattern: 'line', linesRequired: v });
+                          }
+                        }}
+                        style={{
+                          width: 56,
+                          padding: '6px 8px',
+                          borderRadius: 8,
+                          border: '1px solid rgba(255,255,255,0.28)',
+                          background: 'rgba(0,0,0,0.35)',
+                          color: '#fff',
+                          fontSize: '0.85rem',
+                        }}
+                      />
+                    </label>
+                    <span
+                      style={{
+                        fontSize: '0.74rem',
+                        color: '#8a96a3',
+                        maxWidth: 420,
+                        textAlign: 'center',
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      Players must finish this many complete rows, columns, or diagonals — each cell still needs a played song (or
+                      free space).
+                    </span>
+                  </div>
+                )}
+
                 {pattern === 'composite' && (
                   <div
                     style={{
@@ -6608,6 +6791,96 @@ const HostView: React.FC = () => {
                       New Custom Pattern
                     </button>
                   </div>
+                  {pattern === 'custom' && customMask.length > 0 && (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        padding: '12px 14px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        background: 'rgba(0,0,0,0.22)',
+                        maxWidth: 440,
+                        marginLeft: 'auto',
+                        marginRight: 'auto',
+                        textAlign: 'left',
+                      }}
+                    >
+                      <div style={{ fontSize: '0.78rem', color: '#9aa5b1', marginBottom: 10, lineHeight: 1.45 }}>
+                        Optional match rules for this custom shape (pick or paint squares first).
+                      </div>
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          cursor: 'pointer',
+                          color: '#e8ecf1',
+                          fontSize: '0.88rem',
+                          marginBottom: 8,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={customMatchAllowRotation}
+                          onChange={(e) => {
+                            const v = e.target.checked;
+                            setCustomMatchAllowRotation(v);
+                            patchActiveRoundBingo({
+                              bingoPattern: 'custom',
+                              customPatternMask: customMask,
+                              customMatchAllowRotation: v,
+                              customMatchAllowMirror,
+                            });
+                            if (socket && roomId) {
+                              socket.emit('set-pattern', {
+                                roomId,
+                                pattern: 'custom',
+                                customMask,
+                                customMatchAllowRotation: v,
+                                customMatchAllowMirror,
+                              });
+                            }
+                          }}
+                        />
+                        Allow rotations (90° / 180° / 270°)
+                      </label>
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          cursor: 'pointer',
+                          color: '#e8ecf1',
+                          fontSize: '0.88rem',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={customMatchAllowMirror}
+                          onChange={(e) => {
+                            const v = e.target.checked;
+                            setCustomMatchAllowMirror(v);
+                            patchActiveRoundBingo({
+                              bingoPattern: 'custom',
+                              customPatternMask: customMask,
+                              customMatchAllowRotation,
+                              customMatchAllowMirror: v,
+                            });
+                            if (socket && roomId) {
+                              socket.emit('set-pattern', {
+                                roomId,
+                                pattern: 'custom',
+                                customMask,
+                                customMatchAllowRotation,
+                                customMatchAllowMirror: v,
+                              });
+                            }
+                          }}
+                        />
+                        Allow mirrors (horizontal / vertical)
+                      </label>
+                    </div>
+                  )}
                 </div>
               </div>
                 <div style={{ marginTop: '8px', fontSize: '0.9rem', color: '#b3b3b3' }}>
@@ -8418,6 +8691,8 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                                             handleUpdateRoundBingoFields(index, {
                                               bingoPattern: 'custom',
                                               customPatternMask: [...sp.positions],
+                                              customMatchAllowRotation: sp.matchAllowRotation === true,
+                                              customMatchAllowMirror: sp.matchAllowMirror === true,
                                             });
                                           }
                                         }}
@@ -8438,6 +8713,31 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                                           </option>
                                         ))}
                                       </select>
+                                    </label>
+                                  )}
+                                  {(round.bingoPattern ?? 'line') === 'line' && (
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      Lines
+                                      <input
+                                        type="number"
+                                        min={1}
+                                        max={LINE_PATTERN_MAX_LINES}
+                                        value={normalizeLinesRequired(round.linesRequired ?? 1)}
+                                        onChange={(e) =>
+                                          handleUpdateRoundBingoFields(index, {
+                                            linesRequired: normalizeLinesRequired(parseInt(e.target.value, 10)),
+                                          })
+                                        }
+                                        style={{
+                                          width: 52,
+                                          padding: '4px 6px',
+                                          borderRadius: 6,
+                                          border: '1px solid rgba(255,255,255,0.25)',
+                                          background: 'rgba(0,0,0,0.35)',
+                                          color: '#fff',
+                                          fontSize: '0.78rem',
+                                        }}
+                                      />
                                     </label>
                                   )}
                                   <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

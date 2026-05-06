@@ -1,24 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save, Trash2 } from 'lucide-react';
-import { saveCustomPattern, validatePatternPositions, transformPositions, type GridTransform } from '../patternDefinitions';
-import { RotateCw, RotateCcw, FlipHorizontal, FlipVertical } from 'lucide-react';
+import { saveCustomPattern, validatePatternPositions } from '../patternDefinitions';
+
+export interface CustomPatternSavePayload {
+  name: string;
+  positions: string[];
+  matchAllowRotation?: boolean;
+  matchAllowMirror?: boolean;
+}
 
 interface CustomPatternModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (pattern: { name: string; positions: string[] }) => void;
-  initialPattern?: { name: string; positions: string[] };
+  onSave: (pattern: CustomPatternSavePayload) => void;
+  initialPattern?: CustomPatternSavePayload;
 }
 
 const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
   isOpen,
   onClose,
   onSave,
-  initialPattern
+  initialPattern,
 }) => {
   const [patternName, setPatternName] = useState('');
   const [selectedPositions, setSelectedPositions] = useState<string[]>([]);
+  const [matchAllowRotation, setMatchAllowRotation] = useState(false);
+  const [matchAllowMirror, setMatchAllowMirror] = useState(false);
   const [isValid, setIsValid] = useState(false);
 
   useEffect(() => {
@@ -26,9 +34,13 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
       if (initialPattern) {
         setPatternName(initialPattern.name);
         setSelectedPositions(initialPattern.positions);
+        setMatchAllowRotation(initialPattern.matchAllowRotation === true);
+        setMatchAllowMirror(initialPattern.matchAllowMirror === true);
       } else {
         setPatternName('');
         setSelectedPositions([]);
+        setMatchAllowRotation(false);
+        setMatchAllowMirror(false);
       }
     }
   }, [isOpen, initialPattern]);
@@ -39,10 +51,8 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
 
   const togglePosition = (row: number, col: number) => {
     const position = `${row}-${col}`;
-    setSelectedPositions(prev => 
-      prev.includes(position) 
-        ? prev.filter(p => p !== position)
-        : [...prev, position]
+    setSelectedPositions((prev) =>
+      prev.includes(position) ? prev.filter((p) => p !== position) : [...prev, position],
     );
   };
 
@@ -50,14 +60,12 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
     if (isValid) {
       onSave({
         name: patternName.trim(),
-        positions: selectedPositions
+        positions: selectedPositions,
+        ...(matchAllowRotation ? { matchAllowRotation: true as const } : {}),
+        ...(matchAllowMirror ? { matchAllowMirror: true as const } : {}),
       });
       onClose();
     }
-  };
-
-  const applyTransform = (t: GridTransform) => {
-    setSelectedPositions((prev) => transformPositions(prev, t));
   };
 
   const handleClear = () => {
@@ -84,7 +92,7 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 10000,
-          padding: '20px'
+          padding: '20px',
         }}
         onClick={onClose}
       >
@@ -102,11 +110,10 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
             width: '100%',
             maxHeight: '90vh',
             overflow: 'auto',
-            backdropFilter: 'blur(10px)'
+            backdropFilter: 'blur(10px)',
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <h2 style={{ margin: 0, fontSize: '1.5rem', color: '#ffffff' }}>
               {initialPattern ? 'Edit Custom Pattern' : 'Create Custom Pattern'}
@@ -122,14 +129,13 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
                 borderRadius: '8px',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
               }}
             >
               <X size={20} />
             </button>
           </div>
 
-          {/* Pattern Name Input */}
           <div style={{ marginBottom: '20px' }}>
             <label style={{ display: 'block', marginBottom: '8px', color: '#ffffff', fontWeight: '500' }}>
               Pattern Name
@@ -146,148 +152,87 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
                 border: '1px solid rgba(255, 255, 255, 0.3)',
                 backgroundColor: 'rgba(0, 0, 0, 0.3)',
                 color: '#ffffff',
-                fontSize: '1rem'
+                fontSize: '1rem',
               }}
             />
           </div>
 
-          {/* 5x5 Grid */}
           <div style={{ marginBottom: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: 8 }}>
-              <label style={{ color: '#ffffff', fontWeight: '500' }}>
-                Select Pattern Squares
-              </label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                <button
-                  type="button"
-                  onClick={() => applyTransform('rotateCw')}
-                  title="Rotate 90° clockwise"
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.25)',
-                    color: '#e8ecf1',
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.75rem',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 4,
-                  }}
-                >
-                  <RotateCw size={14} /> CW
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyTransform('rotateCcw')}
-                  title="Rotate 90° counter-clockwise"
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.25)',
-                    color: '#e8ecf1',
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.75rem',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 4,
-                  }}
-                >
-                  <RotateCcw size={14} /> CCW
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyTransform('rotate180')}
-                  title="Rotate 180°"
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.25)',
-                    color: '#e8ecf1',
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                  }}
-                >
-                  180°
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyTransform('flipH')}
-                  title="Mirror left / right"
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.25)',
-                    color: '#e8ecf1',
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.75rem',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 4,
-                  }}
-                >
-                  <FlipHorizontal size={14} /> Mirror ↔
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyTransform('flipV')}
-                  title="Mirror top / bottom"
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.25)',
-                    color: '#e8ecf1',
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.75rem',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 4,
-                  }}
-                >
-                  <FlipVertical size={14} /> Mirror ↕
-                </button>
-                <button
-                  onClick={handleClear}
-                  style={{
-                    background: 'rgba(255, 0, 0, 0.2)',
-                    border: '1px solid rgba(255, 0, 0, 0.3)',
-                    color: '#ff6b6b',
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.8rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                  }}
-                >
-                  <Trash2 size={14} />
-                  Clear
-                </button>
-              </div>
+              <label style={{ color: '#ffffff', fontWeight: '500' }}>Select Pattern Squares</label>
+              <button
+                onClick={handleClear}
+                type="button"
+                style={{
+                  background: 'rgba(255, 0, 0, 0.2)',
+                  border: '1px solid rgba(255, 0, 0, 0.3)',
+                  color: '#ff6b6b',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <Trash2 size={14} />
+                Clear
+              </button>
             </div>
-            
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(5, 1fr)',
-              gap: '4px',
-              maxWidth: '300px',
-              margin: '0 auto'
-            }}>
+
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+                marginBottom: 14,
+                padding: '12px 14px',
+                borderRadius: 10,
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                background: 'rgba(0,0,0,0.25)',
+              }}
+            >
+              <div style={{ fontSize: '0.78rem', color: '#b9c3cd', lineHeight: 1.45 }}>
+                After you paint the shape, optional match rules (same idea as combined-pattern painted clauses):
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', color: '#e8ecf1', fontSize: '0.88rem' }}>
+                <input
+                  type="checkbox"
+                  checked={matchAllowRotation}
+                  onChange={(e) => setMatchAllowRotation(e.target.checked)}
+                />
+                Allow rotations (90° / 180° / 270°)
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', color: '#e8ecf1', fontSize: '0.88rem' }}>
+                <input
+                  type="checkbox"
+                  checked={matchAllowMirror}
+                  onChange={(e) => setMatchAllowMirror(e.target.checked)}
+                />
+                Allow mirrors (horizontal / vertical)
+              </label>
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(5, 1fr)',
+                gap: '4px',
+                maxWidth: '300px',
+                margin: '0 auto',
+              }}
+            >
               {Array.from({ length: 25 }, (_, index) => {
                 const row = Math.floor(index / 5);
                 const col = index % 5;
                 const position = `${row}-${col}`;
                 const isSelected = selectedPositions.includes(position);
-                
+
                 return (
                   <button
                     key={index}
+                    type="button"
                     onClick={() => togglePosition(row, col)}
                     style={{
                       width: '50px',
@@ -302,7 +247,7 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
                       transition: 'all 0.2s ease',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center'
+                      justifyContent: 'center',
                     }}
                     onMouseEnter={(e) => {
                       if (!isSelected) {
@@ -320,15 +265,15 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
                 );
               })}
             </div>
-            
+
             <div style={{ textAlign: 'center', marginTop: '12px', color: '#b3b3b3', fontSize: '0.9rem' }}>
               {selectedPositions.length} squares selected
             </div>
           </div>
 
-          {/* Action Buttons */}
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
             <button
+              type="button"
               onClick={onClose}
               style={{
                 padding: '12px 24px',
@@ -337,12 +282,13 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
                 background: 'rgba(255, 255, 255, 0.1)',
                 color: '#ffffff',
                 cursor: 'pointer',
-                fontSize: '1rem'
+                fontSize: '1rem',
               }}
             >
               Cancel
             </button>
             <button
+              type="button"
               onClick={handleSave}
               disabled={!isValid}
               style={{
@@ -356,7 +302,7 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                fontWeight: '500'
+                fontWeight: '500',
               }}
             >
               <Save size={16} />

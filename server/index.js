@@ -1390,6 +1390,7 @@ function syncRoomStateAfterSongStart(roomId, room) {
     pattern: room.pattern || 'line',
     customMask: Array.from(room.customPattern || []),
     patternComposite: patternCompositeForClient(room),
+    ...patternExtrasForClient(room),
     currentSong: room.currentSong || null,
     snippetLength: room.snippetLength || 30,
     playerCount: getNonHostPlayerCount(room),
@@ -1710,6 +1711,7 @@ async function playNextSongSimple(roomId, deviceId) {
       pattern: room.pattern || 'line',
       customMask: Array.from(room.customPattern || []),
       patternComposite: patternCompositeForClient(room),
+      ...patternExtrasForClient(room),
       currentSong: room.currentSong || null,
       snippetLength: room.snippetLength || 30,
       playerCount: getNonHostPlayerCount(room),
@@ -2143,7 +2145,10 @@ io.on('connection', (socket) => {
         // Pre-queue system removed for deterministic playback
         superStrictLock: false,
         pattern: 'line', // Default pattern
+        linesRequired: 1,
         customPattern: undefined, // Will be set when custom pattern is chosen
+        customPatternAllowRotation: false,
+        customPatternAllowMirror: false,
         patternComposite: undefined,
         letterRevealIntervalSec: DEFAULT_LETTER_REVEAL_INTERVAL_SEC,
         publicDisplayTitleRevealMode: DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE,
@@ -2321,6 +2326,7 @@ io.on('connection', (socket) => {
             pattern: room.pattern || 'line',
             customMask: Array.from(room.customPattern || []),
             patternComposite: patternCompositeForClient(room),
+            ...patternExtrasForClient(room),
             currentSong: room.currentSong || null,
             snippetLength: room.snippetLength || 30,
             playerCount: getNonHostPlayerCount(room),
@@ -2657,7 +2663,15 @@ io.on('connection', (socket) => {
   // Set game pattern
   socket.on('set-pattern', (data = {}) => {
     try {
-      const { roomId, pattern, customMask, patternComposite: incomingComposite } = data;
+      const {
+        roomId,
+        pattern,
+        customMask,
+        patternComposite: incomingComposite,
+        linesRequired: lrIn,
+        customMatchAllowRotation,
+        customMatchAllowMirror,
+      } = data;
       const room = rooms.get(roomId);
       if (!room) return;
       const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
@@ -2665,10 +2679,14 @@ io.on('connection', (socket) => {
       const allowed = ALLOWED_BINGO_PATTERNS;
       const canonPattern = canonicalHostBingoPattern(pattern);
       room.pattern = allowed.has(canonPattern) ? canonPattern : 'line';
+      room.customPatternAllowRotation = false;
+      room.customPatternAllowMirror = false;
       if (room.pattern === 'custom') {
         const mask = Array.isArray(customMask) ? customMask.filter(p => /^(0|1|2|3|4)-(0|1|2|3|4)$/.test(p)) : [];
         room.customPattern = new Set(mask);
         room.patternComposite = undefined;
+        room.customPatternAllowRotation = readOrientationBoolSrv(customMatchAllowRotation);
+        room.customPatternAllowMirror = readOrientationBoolSrv(customMatchAllowMirror);
       } else if (room.pattern === 'composite') {
         room.customPattern = undefined;
         room.patternComposite = normalizePatternComposite(incomingComposite);
@@ -2677,10 +2695,16 @@ io.on('connection', (socket) => {
         room.customPattern = undefined;
         room.patternComposite = undefined;
       }
+      if (room.pattern === 'line') {
+        room.linesRequired = normalizeLinesRequiredSrv(lrIn != null ? lrIn : room.linesRequired != null ? room.linesRequired : 1);
+      } else {
+        room.linesRequired = 1;
+      }
       io.to(roomId).emit('pattern-updated', {
         pattern: room.pattern,
         customMask: Array.from(room.customPattern || []),
         patternComposite: patternCompositeForClient(room),
+        ...patternExtrasForClient(room),
       });
       routineServerLog(`🎯 Pattern set to ${room.pattern} for room ${roomId}`);
     } catch (e) {
@@ -3827,6 +3851,7 @@ io.on('connection', (socket) => {
         pattern: room.pattern || 'line',
         customMask: Array.from(room.customPattern || []),
         patternComposite: patternCompositeForClient(room),
+        ...patternExtrasForClient(room),
         currentSong: room.currentSong || null,
         snippetLength: room.snippetLength || 30,
         playerCount: getNonHostPlayerCount(room),
@@ -3976,7 +4001,7 @@ io.on('connection', (socket) => {
 
   socket.on('start-game', async (data) => {
     routineServerLog('🎮 Start game event received:', data);
-    const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, patternComposite: incomingPatternComposite, freeSpace, savedRoundPlayback } = data;
+    const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, patternComposite: incomingPatternComposite, linesRequired: incomingLinesRequired, customMatchAllowRotation: incomingCustomRot, customMatchAllowMirror: incomingCustomMir, freeSpace, savedRoundPlayback } = data;
     const room = rooms.get(roomId);
     
     routineServerLog('🔍 Room found:', !!room);
@@ -4021,6 +4046,17 @@ io.on('connection', (socket) => {
           }
         } catch {}
         room.pattern = room.pattern || 'line';
+        room.linesRequired =
+          room.pattern === 'line'
+            ? normalizeLinesRequiredSrv(incomingLinesRequired != null ? incomingLinesRequired : room.linesRequired)
+            : 1;
+        if (room.pattern === 'custom') {
+          room.customPatternAllowRotation = readOrientationBoolSrv(incomingCustomRot);
+          room.customPatternAllowMirror = readOrientationBoolSrv(incomingCustomMir);
+        } else {
+          room.customPatternAllowRotation = false;
+          room.customPatternAllowMirror = false;
+        }
 
         const savedRoundSongs =
           savedRoundPlayback === true ? normalizeSongSnapshotForPrint(songList) || [] : [];
@@ -4143,6 +4179,7 @@ io.on('connection', (socket) => {
           pattern: room.pattern,
           customMask: Array.from(room.customPattern || []),
           patternComposite: patternCompositeForClient(room),
+          ...patternExtrasForClient(room),
         });
         
         // Emit fiveby15 columns if computed during card generation (AFTER game-started so display can sync)
@@ -4191,7 +4228,10 @@ io.on('connection', (socket) => {
           playlistSongs: [],
           currentSongIndex: 0,
           pattern: 'line', // Default pattern
+          linesRequired: 1,
           customPattern: undefined, // Will be set when custom pattern is chosen
+          customPatternAllowRotation: false,
+          customPatternAllowMirror: false,
           patternComposite: undefined,
           letterRevealIntervalSec: DEFAULT_LETTER_REVEAL_INTERVAL_SEC,
           publicDisplayTitleRevealMode: DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE,
@@ -6907,53 +6947,91 @@ function checkBingo(card) {
   return diag1Complete || diag2Complete;
 }
 
-function checkBingoWithPlayedSongs(card, playedSongIds) {
-  // Helper function to check if a marked square corresponds to a played song (or free space)
-  const isMarkedSquareValid = (square) => {
-    return square && square.marked && (square.isFreeSpace || playedSongIds.includes(square.songId));
-  };
-  
-  // Check rows
+function normalizeLinesRequiredSrv(raw) {
+  const x = parseInt(raw, 10);
+  if (!Number.isFinite(x)) return 1;
+  return Math.min(12, Math.max(1, Math.round(x)));
+}
+
+function patternExtrasForClient(room) {
+  const pat = room?.pattern || 'line';
+  if (pat === 'line') {
+    return { linesRequired: normalizeLinesRequiredSrv(room.linesRequired) };
+  }
+  if (pat === 'custom') {
+    return {
+      customMatchAllowRotation: !!room.customPatternAllowRotation,
+      customMatchAllowMirror: !!room.customPatternAllowMirror,
+    };
+  }
+  return {};
+}
+
+function listCompletedLinesPlayedStrict(card, isMarkedSquareValid) {
+  const out = [];
   for (let row = 0; row < 5; row++) {
-    let rowComplete = true;
+    const positions = [];
+    let ok = true;
     for (let col = 0; col < 5; col++) {
-      const square = card.squares.find(s => s.position === `${row}-${col}`);
-      if (!isMarkedSquareValid(square)) {
-        rowComplete = false;
-        break;
-      }
+      const pos = `${row}-${col}`;
+      positions.push(pos);
+      const sq = card.squares.find((s) => s.position === pos);
+      if (!isMarkedSquareValid(sq)) ok = false;
     }
-    if (rowComplete) return { valid: true, type: `Row ${row + 1}` };
+    if (ok) out.push({ type: `Row ${row + 1}`, positions });
   }
-  
-  // Check columns
   for (let col = 0; col < 5; col++) {
-    let colComplete = true;
+    const positions = [];
+    let ok = true;
     for (let row = 0; row < 5; row++) {
-      const square = card.squares.find(s => s.position === `${row}-${col}`);
-      if (!isMarkedSquareValid(square)) {
-        colComplete = false;
-        break;
-      }
+      const pos = `${row}-${col}`;
+      positions.push(pos);
+      const sq = card.squares.find((s) => s.position === pos);
+      if (!isMarkedSquareValid(sq)) ok = false;
     }
-    if (colComplete) return { valid: true, type: `Column ${col + 1}` };
+    if (ok) out.push({ type: `Column ${col + 1}`, positions });
   }
-  
-  // Check diagonals
-  let diag1Complete = true;
-  let diag2Complete = true;
-  for (let i = 0; i < 5; i++) {
-    const square1 = card.squares.find(s => s.position === `${i}-${i}`);
-    const square2 = card.squares.find(s => s.position === `${i}-${4-i}`);
-    
-    if (!isMarkedSquareValid(square1)) diag1Complete = false;
-    if (!isMarkedSquareValid(square2)) diag2Complete = false;
+  const d1 = [0, 1, 2, 3, 4].map((i) => `${i}-${i}`);
+  if (d1.every((pos) => isMarkedSquareValid(card.squares.find((s) => s.position === pos)))) {
+    out.push({ type: 'Diagonal (top-left to bottom-right)', positions: d1 });
   }
-  
-  if (diag1Complete) return { valid: true, type: 'Diagonal (top-left to bottom-right)' };
-  if (diag2Complete) return { valid: true, type: 'Diagonal (top-right to bottom-left)' };
-  
-  return { valid: false, type: null };
+  const d2 = [0, 1, 2, 3, 4].map((i) => `${i}-${4 - i}`);
+  if (d2.every((pos) => isMarkedSquareValid(card.squares.find((s) => s.position === pos)))) {
+    out.push({ type: 'Diagonal (top-right to bottom-left)', positions: d2 });
+  }
+  return out;
+}
+
+function unionLineWinningPositions(lineObjs) {
+  const s = new Set();
+  for (const o of lineObjs) {
+    for (const p of o.positions) s.add(p);
+  }
+  return Array.from(s);
+}
+
+function checkBingoWithPlayedSongs(card, playedSongIds, linesRequiredRaw) {
+  const isMarkedSquareValid = (square) =>
+    square && square.marked && (square.isFreeSpace || playedSongIds.includes(square.songId));
+  const need = normalizeLinesRequiredSrv(linesRequiredRaw != null ? linesRequiredRaw : 1);
+  const completed = listCompletedLinesPlayedStrict(card, isMarkedSquareValid);
+  if (completed.length >= need) {
+    const used = completed.slice(0, need);
+    const winningPositions = unionLineWinningPositions(used);
+    const type = need === 1 ? used[0].type : `${need} lines`;
+    return {
+      valid: true,
+      type,
+      winningPositions,
+      completedLineCount: completed.length,
+    };
+  }
+  return {
+    valid: false,
+    type: null,
+    winningPositions: [],
+    completedLineCount: completed.length,
+  };
 }
 
 const COMPOSITE_PRESET_KEYS = new Set([
@@ -7055,6 +7133,15 @@ function expandCompositeShapeVariants(baseSorted, transforms) {
     add(transformGridPositions(baseSorted, t));
   }
   return [...masks.values()];
+}
+
+function customPatternOrientationTransformsSrv(room) {
+  const rot = readOrientationBoolSrv(room && room.customPatternAllowRotation);
+  const mir = readOrientationBoolSrv(room && room.customPatternAllowMirror);
+  const acc = [];
+  if (rot) acc.push('rotateCw', 'rotate180', 'rotateCcw');
+  if (mir) acc.push('flipH', 'flipV');
+  return normalizeCompositeMatchVariants(acc);
 }
 
 function patternCompositeForClient(room) {
@@ -7190,14 +7277,18 @@ function validateCompositeClauseResult(card, playedSongIds, clause, isMarkedSqua
   }
   const p = clause.preset;
   if (p === 'line') {
-    const lineResult = checkBingoWithPlayedSongs(card, playedSongIds);
+    const lineResult = checkBingoWithPlayedSongs(card, playedSongIds, 1);
     if (!lineResult.valid) {
       return { valid: false, reason: 'No complete line with played songs', positions: [] };
     }
+    const positions =
+      Array.isArray(lineResult.winningPositions) && lineResult.winningPositions.length > 0
+        ? lineResult.winningPositions
+        : positionsFromLineBingoType(lineResult.type);
     return {
       valid: true,
       reason: `Line (${lineResult.type})`,
-      positions: positionsFromLineBingoType(lineResult.type),
+      positions,
     };
   }
   if (p === 'full_card' || p === 'blackout') {
@@ -7345,21 +7436,33 @@ function validateBingoForPattern(card, room) {
   }
 
   if (pattern === 'custom' && room?.customPattern && room.customPattern.size > 0) {
-    // All positions in customPattern must be marked AND correspond to played songs
-    const invalidPositions = [];
-    for (const pos of room.customPattern) {
-      const sq = card.squares.find(s => s.position === pos);
-      if (!isMarkedSquareValid(sq)) {
-        invalidPositions.push(pos);
+    const baseSorted = Array.from(room.customPattern).sort();
+    const transforms = customPatternOrientationTransformsSrv(room);
+    const variants = expandCompositeShapeVariants(baseSorted, transforms);
+    for (const mask of variants) {
+      const bad = [];
+      for (const pos of mask) {
+        const sq = card.squares.find((s) => s.position === pos);
+        if (!isMarkedSquareValid(sq)) bad.push(pos);
+      }
+      if (bad.length === 0) {
+        return {
+          valid: true,
+          reason: 'Custom pattern complete!',
+          type: 'custom',
+          customWinningMask: mask,
+        };
       }
     }
-    if (invalidPositions.length > 0) {
-      return { 
-        valid: false, 
-        reason: `Custom pattern incomplete. Need ${invalidPositions.length} more squares marked with played songs.`
-      };
-    }
-    return { valid: true, reason: 'Custom pattern complete!' };
+    return {
+      valid: false,
+      reason:
+        transforms.length > 0
+          ? 'Custom pattern incomplete — no allowed orientation fully marked with played songs.'
+          : 'Custom pattern incomplete. Need more squares marked with played songs.',
+      type: null,
+      customWinningMask: null,
+    };
   }
   
   if (pattern === 'full_card' || pattern === 'blackout') {
@@ -7498,16 +7601,29 @@ function validateBingoForPattern(card, room) {
     return { valid: true, reason: 'Plus pattern complete!' };
   }
   
-  // default: any single line with played song validation
-  const lineResult = checkBingoWithPlayedSongs(card, playedSongIds);
-  if (lineResult.valid) {
-    return { valid: true, reason: `Line bingo complete! (${lineResult.type})` };
-  } else {
-    return { 
-      valid: false, 
-      reason: 'No complete lines found. Need a full row, column, or diagonal with played songs.'
+  if (pattern === 'line') {
+    const need = normalizeLinesRequiredSrv(room.linesRequired);
+    const lineResult = checkBingoWithPlayedSongs(card, playedSongIds, need);
+    if (lineResult.valid) {
+      return {
+        valid: true,
+        reason:
+          need === 1
+            ? `Line bingo complete! (${lineResult.type})`
+            : `${need}-line bingo complete!`,
+        type: lineResult.type,
+        lineWinningPositions: lineResult.winningPositions || [],
+      };
+    }
+    return {
+      valid: false,
+      reason: `Need ${need} complete line(s) with played songs (have ${lineResult.completedLineCount}).`,
+      type: null,
+      lineWinningPositions: [],
     };
   }
+
+  return { valid: false, reason: `Unsupported bingo pattern: ${pattern}` };
 }
 
 // Helper function to get winning pattern positions for verification display
@@ -7528,10 +7644,16 @@ function getWinningPatternPositions(card, room, validationResult) {
     return validationResult.winningPositions;
   }
 
+  if (pattern === 'custom' && Array.isArray(validationResult?.customWinningMask) && validationResult.customWinningMask.length > 0) {
+    return validationResult.customWinningMask;
+  }
   if (pattern === 'custom' && room?.customPattern && room.customPattern.size > 0) {
     return Array.from(room.customPattern);
   }
-  
+
+  if (pattern === 'line' && Array.isArray(validationResult?.lineWinningPositions) && validationResult.lineWinningPositions.length > 0) {
+    return validationResult.lineWinningPositions;
+  }  
   if (pattern === 'full_card' || pattern === 'blackout') {
     // All 25 squares
     const positions = [];

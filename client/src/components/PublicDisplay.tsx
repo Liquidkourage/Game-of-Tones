@@ -26,7 +26,12 @@ import {
   type PublicDisplayTitleRevealMode,
 } from '../utils/publicDisplayTitleReveal';
 import type { PatternCompositeSpec } from '../patternDefinitions';
-import { normalizePatternComposite, unionCompositeHighlightPositions } from '../patternDefinitions';
+import {
+  normalizePatternComposite,
+  unionCompositeHighlightPositions,
+  normalizeLinesRequired,
+  customMaskHighlightPositions,
+} from '../patternDefinitions';
 
 interface GameState {
   isPlaying: boolean;
@@ -807,6 +812,9 @@ const PublicDisplay: React.FC = () => {
   // Toast for revealed letter
   const [revealToast, setRevealToast] = useState<string | null>(null);
   const [customMask, setCustomMask] = useState<Set<string>>(new Set());
+  const [linesRequired, setLinesRequired] = useState(1);
+  const [customMatchAllowRotation, setCustomMatchAllowRotation] = useState(false);
+  const [customMatchAllowMirror, setCustomMatchAllowMirror] = useState(false);
   const revealToastTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [showWinnerBanner, setShowWinnerBanner] = useState<boolean>(false);
   const [winnerName, setWinnerName] = useState<string>('');
@@ -1066,6 +1074,17 @@ const PublicDisplay: React.FC = () => {
               setPatternComposite(normalizePatternComposite(payload.patternComposite));
             } else {
               setPatternComposite(null);
+            }
+            if (payload.pattern === 'line' && payload.linesRequired != null) {
+              setLinesRequired(normalizeLinesRequired(payload.linesRequired));
+            }
+            if (payload.pattern === 'custom') {
+              setCustomMatchAllowRotation(!!payload.customMatchAllowRotation);
+              setCustomMatchAllowMirror(!!payload.customMatchAllowMirror);
+            }
+            if (payload.pattern !== 'custom') {
+              setCustomMatchAllowRotation(false);
+              setCustomMatchAllowMirror(false);
             }
           }
 
@@ -1411,6 +1430,17 @@ const PublicDisplay: React.FC = () => {
           } else {
             setPatternComposite(null);
           }
+          if (p === 'line' && data.linesRequired != null) {
+            setLinesRequired(normalizeLinesRequired(data.linesRequired));
+          }
+          if (p === 'custom') {
+            setCustomMatchAllowRotation(!!data.customMatchAllowRotation);
+            setCustomMatchAllowMirror(!!data.customMatchAllowMirror);
+          }
+          if (p && p !== 'custom') {
+            setCustomMatchAllowRotation(false);
+            setCustomMatchAllowMirror(false);
+          }
         }
         if (Array.isArray(data?.customMask)) {
           setCustomMask(new Set(data.customMask));
@@ -1574,23 +1604,33 @@ const PublicDisplay: React.FC = () => {
       }));
       // Hide splash when a game starts
       setShowSplash(false);
-      if (data?.pattern) {
-        setPattern(data.pattern);
-        if (data.pattern === 'composite') {
-          setPatternComposite(normalizePatternComposite(data.patternComposite));
-        } else {
-          setPatternComposite(null);
+        if (data?.pattern) {
+          setPattern(data.pattern);
+          if (data.pattern === 'line' && data.linesRequired != null) {
+            setLinesRequired(normalizeLinesRequired(data.linesRequired));
+          }
+          if (data.pattern === 'composite') {
+            setPatternComposite(normalizePatternComposite(data.patternComposite));
+          } else {
+            setPatternComposite(null);
+          }
+          if (data.pattern === 'custom') {
+            setCustomMatchAllowRotation(!!data.customMatchAllowRotation);
+            setCustomMatchAllowMirror(!!data.customMatchAllowMirror);
+          } else {
+            setCustomMatchAllowRotation(false);
+            setCustomMatchAllowMirror(false);
+          }
+          if (Array.isArray(data?.customMask)) {
+            try {
+              setCustomMask(new Set<string>(data.customMask as string[]));
+            } catch {}
+          } else {
+            setCustomMask(new Set());
+          }
+          // Emit pattern to header
+          window.dispatchEvent(new CustomEvent('display-pattern', { detail: { pattern: data.pattern } }));
         }
-        if (Array.isArray(data?.customMask)) {
-          try {
-            setCustomMask(new Set<string>(data.customMask as string[]));
-          } catch {}
-        } else {
-          setCustomMask(new Set());
-        }
-        // Emit pattern to header
-        window.dispatchEvent(new CustomEvent('display-pattern', { detail: { pattern: data.pattern } }));
-      }
       // New round/game start: reset played/reveal sequencing so old entries don't leak
       playedOrderRef.current = [];
       revealSequenceRef.current = [];
@@ -2399,7 +2439,9 @@ const PublicDisplay: React.FC = () => {
           : 'Pattern: Combined';
       case 'line':
       default:
-    return 'Pattern: Single Line (any direction)';
+        return linesRequired > 1
+          ? `Pattern: ${linesRequired} lines (rows, columns, or diagonals)`
+          : 'Pattern: Single line (any direction)';
     }
   };
 
@@ -2427,7 +2469,7 @@ const PublicDisplay: React.FC = () => {
         return patternComposite ? `Combined (${patternComposite.op})` : 'Combined';
       case 'line':
       default:
-        return 'Single line';
+        return linesRequired > 1 ? `${linesRequired} lines` : 'Single line';
     }
   };
 
@@ -2441,7 +2483,11 @@ const PublicDisplay: React.FC = () => {
       return unionCompositeHighlightPositions(patternComposite).includes(`${row}-${col}`);
     }
     if (pattern === 'custom' && customMask && customMask.size > 0) {
-      return customMask.has(`${row}-${col}`);
+      const hi = customMaskHighlightPositions(Array.from(customMask), {
+        matchAllowRotation: customMatchAllowRotation,
+        matchAllowMirror: customMatchAllowMirror,
+      });
+      return hi.includes(`${row}-${col}`);
     }
     if (pattern === 'four_corners') {
       return (row === 0 && col === 0) || (row === 0 && col === 4) || (row === 4 && col === 0) || (row === 4 && col === 4);
