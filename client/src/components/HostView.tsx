@@ -6302,7 +6302,22 @@ const HostView: React.FC = () => {
                                     clauses[idx] = { kind: 'mask', positions: pos };
                                   } else if (v.startsWith('preset:')) {
                                     const preset = v.slice(7) as CompositeClausePreset;
-                                    clauses[idx] = { kind: 'preset', preset };
+                                    const prevClause = clauses[idx];
+                                    if (preset === 'line') {
+                                      clauses[idx] = {
+                                        kind: 'preset',
+                                        preset: 'line',
+                                        ...(prevClause.kind === 'preset' &&
+                                        prevClause.preset === 'line' &&
+                                        prevClause.linesRequired != null
+                                          ? {
+                                              linesRequired: normalizeLinesRequired(prevClause.linesRequired),
+                                            }
+                                          : {}),
+                                      };
+                                    } else {
+                                      clauses[idx] = { kind: 'preset', preset };
+                                    }
                                   }
                                   commitPatternComposite({ ...patternComposite, clauses });
                                 }}
@@ -6378,6 +6393,49 @@ const HostView: React.FC = () => {
                                 Remove
                               </button>
                             </div>
+                            {clause.kind === 'preset' && clause.preset === 'line' && (
+                              <label
+                                style={{
+                                  fontSize: '0.78rem',
+                                  color: '#c5cdd6',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 10,
+                                  flexWrap: 'wrap',
+                                  justifyContent: 'center',
+                                  marginTop: 2,
+                                }}
+                              >
+                                Lines for this clause (1–{LINE_PATTERN_MAX_LINES})
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={LINE_PATTERN_MAX_LINES}
+                                  value={normalizeLinesRequired(clause.linesRequired)}
+                                  onChange={(e) => {
+                                    const v = normalizeLinesRequired(parseInt(e.target.value, 10));
+                                    const clauses = [...patternComposite.clauses];
+                                    const prev = clauses[idx];
+                                    if (!(prev.kind === 'preset' && prev.preset === 'line')) return;
+                                    clauses[idx] = {
+                                      kind: 'preset',
+                                      preset: 'line',
+                                      ...(v !== 1 ? { linesRequired: v } : {}),
+                                    };
+                                    commitPatternComposite({ ...patternComposite, clauses });
+                                  }}
+                                  style={{
+                                    width: 56,
+                                    padding: '6px 8px',
+                                    borderRadius: 8,
+                                    border: '1px solid rgba(255,255,255,0.28)',
+                                    background: 'rgba(0,0,0,0.35)',
+                                    color: '#fff',
+                                    fontSize: '0.85rem',
+                                  }}
+                                />
+                              </label>
+                            )}
                             {clauseSupportsMatchVariants(clause) && (
                               <div
                                 style={{
@@ -6432,9 +6490,20 @@ const HostView: React.FC = () => {
                                           ...(prev.matchAllowMirror ? { matchAllowMirror: true } : {}),
                                         };
                                       } else {
+                                        const lrPreset =
+                                          prev.kind === 'preset' && prev.preset === 'line'
+                                            ? {
+                                                ...(normalizeLinesRequired(prev.linesRequired) !== 1
+                                                  ? {
+                                                      linesRequired: normalizeLinesRequired(prev.linesRequired),
+                                                    }
+                                                  : {}),
+                                              }
+                                            : {};
                                         clauses[idx] = {
                                           kind: 'preset',
                                           preset: prev.preset,
+                                          ...lrPreset,
                                           ...(checked ? { matchAllowRotation: true } : {}),
                                           ...(prev.matchAllowMirror ? { matchAllowMirror: true } : {}),
                                         };
@@ -6475,9 +6544,20 @@ const HostView: React.FC = () => {
                                           ...(checked ? { matchAllowMirror: true } : {}),
                                         };
                                       } else {
+                                        const lrPreset =
+                                          prev.kind === 'preset' && prev.preset === 'line'
+                                            ? {
+                                                ...(normalizeLinesRequired(prev.linesRequired) !== 1
+                                                  ? {
+                                                      linesRequired: normalizeLinesRequired(prev.linesRequired),
+                                                    }
+                                                  : {}),
+                                              }
+                                            : {};
                                         clauses[idx] = {
                                           kind: 'preset',
                                           preset: prev.preset,
+                                          ...lrPreset,
                                           ...(prev.matchAllowRotation ? { matchAllowRotation: true } : {}),
                                           ...(checked ? { matchAllowMirror: true } : {}),
                                         };

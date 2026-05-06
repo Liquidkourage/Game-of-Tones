@@ -7158,7 +7158,16 @@ function normalizePatternComposite(raw) {
     if (c.kind === 'preset' && typeof c.preset === 'string') {
       let preset = c.preset === 'blackout' ? 'full_card' : c.preset;
       if (!COMPOSITE_PRESET_KEYS.has(preset)) continue;
-      if (preset === 'line' || preset === 'full_card') {
+      if (preset === 'line') {
+        const lr = normalizeLinesRequiredSrv(c.linesRequired);
+        clauses.push({
+          kind: 'preset',
+          preset,
+          ...(lr !== 1 ? { linesRequired: lr } : {}),
+        });
+        continue;
+      }
+      if (preset === 'full_card') {
         clauses.push({ kind: 'preset', preset });
         continue;
       }
@@ -7277,9 +7286,14 @@ function validateCompositeClauseResult(card, playedSongIds, clause, isMarkedSqua
   }
   const p = clause.preset;
   if (p === 'line') {
-    const lineResult = checkBingoWithPlayedSongs(card, playedSongIds, 1);
+    const need = normalizeLinesRequiredSrv(clause.linesRequired);
+    const lineResult = checkBingoWithPlayedSongs(card, playedSongIds, need);
     if (!lineResult.valid) {
-      return { valid: false, reason: 'No complete line with played songs', positions: [] };
+      const msg =
+        need > 1
+          ? `Need ${need} complete lines with played songs (have ${lineResult.completedLineCount})`
+          : 'No complete line with played songs';
+      return { valid: false, reason: msg, positions: [] };
     }
     const positions =
       Array.isArray(lineResult.winningPositions) && lineResult.winningPositions.length > 0

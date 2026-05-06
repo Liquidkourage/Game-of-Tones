@@ -31,6 +31,8 @@ export type PatternCompositeClause =
   | {
       kind: 'preset';
       preset: CompositeClausePreset;
+      /** Only used when `preset === 'line'` (default 1). */
+      linesRequired?: number;
       matchAllowRotation?: boolean;
       matchAllowMirror?: boolean;
     }
@@ -379,6 +381,25 @@ export function countCompletedLinesVisual(card: { squares: CardSqLite[] }): numb
   return n;
 }
 
+/** Count complete lines where every cell passes the given validator (e.g. marked + played song). */
+export function countCompletedLinesWithValidator(
+  card: { squares: CardSqLite[] },
+  isLineCellValid: (sq: CardSqLite | undefined) => boolean,
+): number {
+  let n = 0;
+  for (let row = 0; row < 5; row++) {
+    if ([0, 1, 2, 3, 4].every((c) => isLineCellValid(card.squares.find((s) => s.position === `${row}-${c}`)))) n++;
+  }
+  for (let col = 0; col < 5; col++) {
+    if ([0, 1, 2, 3, 4].every((r) => isLineCellValid(card.squares.find((s) => s.position === `${r}-${col}`)))) n++;
+  }
+  const d1 = [0, 1, 2, 3, 4].every((i) => isLineCellValid(card.squares.find((s) => s.position === `${i}-${i}`)));
+  const d2 = [0, 1, 2, 3, 4].every((i) => isLineCellValid(card.squares.find((s) => s.position === `${i}-${4 - i}`)));
+  if (d1) n++;
+  if (d2) n++;
+  return n;
+}
+
 /** Count complete lines where every cell passes strict validation (played songs / free). */
 export function countCompletedLinesStrict(
   card: { squares: CardSqLite[] },
@@ -386,18 +407,7 @@ export function countCompletedLinesStrict(
 ): number {
   const isValid = (sq: CardSqLite | undefined) =>
     !!(sq && sq.marked && (sq.isFreeSpace || sq.songId === '__FREE_SPACE__' || playedSongIds.includes(sq.songId || '')));
-  let n = 0;
-  for (let row = 0; row < 5; row++) {
-    if ([0, 1, 2, 3, 4].every((c) => isValid(card.squares.find((s) => s.position === `${row}-${c}`)))) n++;
-  }
-  for (let col = 0; col < 5; col++) {
-    if ([0, 1, 2, 3, 4].every((r) => isValid(card.squares.find((s) => s.position === `${r}-${col}`)))) n++;
-  }
-  const d1 = [0, 1, 2, 3, 4].every((i) => isValid(card.squares.find((s) => s.position === `${i}-${i}`)));
-  const d2 = [0, 1, 2, 3, 4].every((i) => isValid(card.squares.find((s) => s.position === `${i}-${4 - i}`)));
-  if (d1) n++;
-  if (d2) n++;
-  return n;
+  return countCompletedLinesWithValidator(card, isValid);
 }
 
 /** Identity mask plus each transformed copy (deduped). */
@@ -447,7 +457,16 @@ export function normalizePatternComposite(raw: unknown): PatternCompositeSpec | 
       let p = (cl as { preset: string }).preset;
       if (p === 'blackout') p = 'full_card';
       if (!isCompositePreset(p)) continue;
-      if (p === 'line' || p === 'full_card') {
+      if (p === 'line') {
+        const lr = normalizeLinesRequired((cl as { linesRequired?: unknown }).linesRequired);
+        clauses.push({
+          kind: 'preset',
+          preset: 'line',
+          ...(lr !== 1 ? { linesRequired: lr } : {}),
+        });
+        continue;
+      }
+      if (p === 'full_card') {
         clauses.push({ kind: 'preset', preset: p });
         continue;
       }
@@ -524,61 +543,12 @@ function maskStrictComplete(
   });
 }
 
-function lineVisualComplete(card: { squares: SquareLite[] }): boolean {
-  const isOn = (pos: string) => {
-    const sq = card.squares.find((s) => s.position === pos);
-    return !!(sq && sq.marked);
-  };
-  for (let row = 0; row < 5; row++) {
-    let ok = true;
-    for (let col = 0; col < 5; col++) {
-      if (!isOn(`${row}-${col}`)) {
-        ok = false;
-        break;
-      }
-    }
-    if (ok) return true;
-  }
-  for (let col = 0; col < 5; col++) {
-    let ok = true;
-    for (let row = 0; row < 5; row++) {
-      if (!isOn(`${row}-${col}`)) {
-        ok = false;
-        break;
-      }
-    }
-    if (ok) return true;
-  }
-  let d1 = true;
-  let d2 = true;
-  for (let i = 0; i < 5; i++) {
-    if (!isOn(`${i}-${i}`)) d1 = false;
-    if (!isOn(`${i}-${4 - i}`)) d2 = false;
-  }
-  return d1 || d2;
-}
-
-function lineStrictComplete(card: { squares: SquareLite[] }, isValid: (sq: SquareLite) => boolean): boolean {
-  const rowColOk = (positions: string[]) => positions.every((pos) => {
-    const sq = card.squares.find((s) => s.position === pos);
-    return !!(sq && isValid(sq));
-  });
-  for (let row = 0; row < 5; row++) {
-    const pts = [0, 1, 2, 3, 4].map((c) => `${row}-${c}`);
-    if (rowColOk(pts)) return true;
-  }
-  for (let col = 0; col < 5; col++) {
-    const pts = [0, 1, 2, 3, 4].map((r) => `${r}-${col}`);
-    if (rowColOk(pts)) return true;
-  }
-  const diag1 = [0, 1, 2, 3, 4].map((i) => `${i}-${i}`);
-  const diag2 = [0, 1, 2, 3, 4].map((i) => `${i}-${4 - i}`);
-  return rowColOk(diag1) || rowColOk(diag2);
-}
-
 function clauseVisualComplete(card: { squares: SquareLite[] }, clause: PatternCompositeClause): boolean {
   if (clause.kind === 'preset') {
-    if (clause.preset === 'line') return lineVisualComplete(card);
+    if (clause.preset === 'line') {
+      const need = normalizeLinesRequired(clause.linesRequired);
+      return countCompletedLinesVisual(card) >= need;
+    }
     if (clause.preset === 'full_card') {
       if (!validateBingoCardGrid(card)) return false;
       return STANDARD_BINGO_POSITIONS.every((pos) => {
@@ -602,7 +572,10 @@ function clauseStrictComplete(
   isValid: (sq: SquareLite) => boolean,
 ): boolean {
   if (clause.kind === 'preset') {
-    if (clause.preset === 'line') return lineStrictComplete(card, isValid);
+    if (clause.preset === 'line') {
+      const need = normalizeLinesRequired(clause.linesRequired);
+      return countCompletedLinesWithValidator(card, (sq) => !!(sq && isValid(sq))) >= need;
+    }
     if (clause.preset === 'full_card') {
       if (!validateBingoCardGrid(card)) return false;
       return STANDARD_BINGO_POSITIONS.every((pos) => {
@@ -665,35 +638,6 @@ export function compositeLegitProgressPct(
     }
     return hit / positions.length;
   };
-  const ratioLine = (): number => {
-    let best = 0;
-    for (let row = 0; row < 5; row++) {
-      let h = 0;
-      for (let col = 0; col < 5; col++) {
-        const sq = card.squares.find((s) => s.position === `${row}-${col}`);
-        if (legit(sq)) h++;
-      }
-      best = Math.max(best, h / 5);
-    }
-    for (let col = 0; col < 5; col++) {
-      let h = 0;
-      for (let row = 0; row < 5; row++) {
-        const sq = card.squares.find((s) => s.position === `${row}-${col}`);
-        if (legit(sq)) h++;
-      }
-      best = Math.max(best, h / 5);
-    }
-    let d1 = 0;
-    let d2 = 0;
-    for (let i = 0; i < 5; i++) {
-      const sq1 = card.squares.find((s) => s.position === `${i}-${i}`);
-      const sq2 = card.squares.find((s) => s.position === `${i}-${4 - i}`);
-      if (legit(sq1)) d1++;
-      if (legit(sq2)) d2++;
-    }
-    best = Math.max(best, d1 / 5, d2 / 5);
-    return best;
-  };
   const ratioFullCard = (): number => {
     if (!validateBingoCardGrid(card)) return 0;
     let h = 0;
@@ -706,7 +650,11 @@ export function compositeLegitProgressPct(
 
   const clauseLegitRatio = (clause: PatternCompositeClause): number => {
     if (clause.kind === 'preset') {
-      if (clause.preset === 'line') return ratioLine();
+      if (clause.preset === 'line') {
+        const need = normalizeLinesRequired(clause.linesRequired);
+        const done = countCompletedLinesStrict(card, playedSongIds);
+        return Math.min(1, need > 0 ? done / need : 0);
+      }
       if (clause.preset === 'full_card') return ratioFullCard();
       const def = BINGO_PATTERNS[clause.preset];
       const pts = def?.positions;
