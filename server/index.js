@@ -3897,8 +3897,17 @@ io.on('connection', (socket) => {
         socket.emit('fiveby15-map', { idToColumn: idToCol });
       }
       
-      // Include oneby75 pool if available (for public display fallback)
-      if (room.oneBySeventyFivePool && Array.isArray(room.oneBySeventyFivePool) && room.oneBySeventyFivePool.length > 0) {
+      // Include oneby75 pool only when not in 5×15 (avoid wiping display columns via stale pool)
+      const hasFiveBy15Active =
+        room.fiveByFifteenColumnsIds &&
+        Array.isArray(room.fiveByFifteenColumnsIds) &&
+        room.fiveByFifteenColumnsIds.length === 5;
+      if (
+        !hasFiveBy15Active &&
+        room.oneBySeventyFivePool &&
+        Array.isArray(room.oneBySeventyFivePool) &&
+        room.oneBySeventyFivePool.length > 0
+      ) {
         const oneBy75Ids = room.oneBySeventyFivePool.map(s => s.id).filter(Boolean);
         socket.emit('oneby75-pool', { ids: oneBy75Ids });
       }
@@ -5014,7 +5023,7 @@ function playlistsWithSongsFromHostSongOrder(playlists, songOrder) {
   const byPid = new Map();
   for (const s of songOrder) {
     if (!s || typeof s !== 'object' || !s.id) return null;
-    const pid = s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : '';
+    const pid = s.sourcePlaylistId != null ? String(s.sourcePlaylistId).trim() : '';
     if (!pid) return null;
     if (!byPid.has(pid)) byPid.set(pid, []);
     byPid.get(pid).push(s);
@@ -5022,7 +5031,7 @@ function playlistsWithSongsFromHostSongOrder(playlists, songOrder) {
   const rows = [];
   for (let i = 0; i < playlists.length; i++) {
     const pl = playlists[i];
-    const pid = String(pl.id);
+    const pid = String(pl.id).trim();
     const songs = dedupeSongsByIdPreserveOrder(byPid.get(pid) || []);
     rows.push({ ...pl, songs, originalIndex: i });
   }
@@ -5251,6 +5260,22 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
     }
 
     routineServerLog(`🎯 Card generation mode: ${mode}`);
+
+    // Keep 1×75 and 5×15 room caches mutually exclusive. Stale oneBySeventyFivePool caused
+    // sync-state to emit oneby75-pool after fiveby15-pool; PublicDisplay clears column layout
+    // when handling oneby75-pool — playlists looked "merged" into sequential buckets (YT + Spotify).
+    const roomForMode = rooms.get(roomId);
+    if (roomForMode) {
+      if (mode !== '5x15') {
+        roomForMode.fiveByFifteenColumnsIds = null;
+        roomForMode.fiveByFifteenColumns = null;
+        roomForMode.fiveByFifteenPlaylistNames = null;
+        roomForMode.fiveByFifteenMeta = null;
+      }
+      if (mode !== '1x75') {
+        roomForMode.oneBySeventyFivePool = null;
+      }
+    }
 
     // If 5x15, compute and broadcast fixed 5 columns × 15 songs for the display
     if (mode === '5x15') {
