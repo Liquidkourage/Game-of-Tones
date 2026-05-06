@@ -2920,8 +2920,6 @@ const HostView: React.FC = () => {
 
   const requestPrintablePdfDownload = useCallback(
     (opts: {
-      playlistIds?: string[];
-      songSnapshot?: Song[];
       pdfSubtitle: string;
       fileSlug: string;
       freeSpace?: boolean;
@@ -2929,16 +2927,11 @@ const HostView: React.FC = () => {
       if (!socket || !roomId) return;
 
       void (async () => {
-        const fs =
-          opts.freeSpace === true ? true : opts.freeSpace === false ? false : freeSpaceEnabled;
-        const need = fs ? 24 : 25;
-        const snapLen = opts.songSnapshot?.length ?? 0;
-        const canSnapshotPrint = snapLen >= need;
         let finalizedOk = mixFinalized;
         if (!finalizedOk) {
           finalizedOk = await finalizeMix();
         }
-        if (!finalizedOk && !canSnapshotPrint) return;
+        if (!finalizedOk) return;
 
         const count = Math.min(200, Math.max(1, Math.floor(Number(printableCardCount)) || 30));
         setPrintablePdfLoading(true);
@@ -3003,8 +2996,6 @@ const HostView: React.FC = () => {
         socket.emit('request-printable-cards', {
           roomId,
           count,
-          ...(opts.playlistIds && opts.playlistIds.length > 0 ? { playlistIds: opts.playlistIds } : {}),
-          ...(opts.songSnapshot && opts.songSnapshot.length > 0 ? { songSnapshot: opts.songSnapshot } : {}),
           ...(opts.freeSpace !== undefined ? { freeSpace: opts.freeSpace } : {}),
         });
       })();
@@ -3019,32 +3010,18 @@ const HostView: React.FC = () => {
     });
   }, [requestPrintablePdfDownload, roomId]);
 
+  /** Same server path + RNG rules as Game tab “Download PDF” — subtitle/filename only differ for organizers. */
   const handleDownloadRoundPrintablePdf = useCallback(
     (round: EventRound) => {
       const ids = round.playlistIds || [];
       if (ids.length === 0) return;
       const safeSlug = (round.name || 'round').replace(/[^\w\-]+/g, '_').slice(0, 48);
-      const fs =
-        round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : freeSpaceEnabled;
-      const need = fs ? 24 : 25;
-      const snap = round.savedMixSnapshot?.songs;
-      if (snap && snap.length >= need) {
-        requestPrintablePdfDownload({
-          songSnapshot: snap.map(cloneSongForSnapshot),
-          pdfSubtitle: `Room ${roomId} · ${round.name} (saved)`,
-          fileSlug: safeSlug,
-          freeSpace: fs,
-        });
-        return;
-      }
       requestPrintablePdfDownload({
-        playlistIds: [...ids],
         pdfSubtitle: `Room ${roomId} · ${round.name}`,
         fileSlug: safeSlug,
-        freeSpace: fs,
       });
     },
-    [requestPrintablePdfDownload, roomId, freeSpaceEnabled],
+    [requestPrintablePdfDownload, roomId],
   );
 
   const startGame = async () => {
@@ -7222,7 +7199,7 @@ const HostView: React.FC = () => {
                   </h2>
                   <p style={{ margin: '8px 0 12px', fontSize: '0.82rem', color: '#9aa5b1', lineHeight: 1.45, maxWidth: 560 }}>
                     <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> (Round & event management) and{' '}
-                    <strong style={{ color: '#c5cdd6' }}>Download PDF</strong> (Game tab) both use this many randomized dauber cards per export (1–200).
+                    <strong style={{ color: '#c5cdd6' }}>Download PDF</strong> (Game tab) share the same server shuffle rules and bingo geometry — same card count here (1–200).
                   </p>
                   <div
                     style={{
@@ -7712,9 +7689,8 @@ const HostView: React.FC = () => {
                    </div>
                    <p style={{ margin: '0 0 12px', fontSize: '0.8rem', color: '#9aa5b1', lineHeight: 1.45 }}>
                      Generate random cards from your bingo pool and download a PDF.{' '}
-                     <strong style={{ color: '#c5cdd6' }}>Download PDF</strong> runs finalize automatically when needed so the pool is truncated (5×15 / 1×75) before cards are built. In{' '}
-                     <strong style={{ color: '#c5cdd6' }}>Round Manager</strong>, <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> does the same
-                     for that round&apos;s playlists (or uses a saved snapshot when you have one). Set card count on the{' '}
+                     <strong style={{ color: '#c5cdd6' }}>Download PDF</strong> runs finalize automatically when needed so the pool is truncated (5×15 / 1×75) before cards are built.{' '}
+                     <strong style={{ color: '#c5cdd6' }}>Round & event management → Print PDF</strong> uses the same generator (PDF subtitle names the round). Set card count on the{' '}
                      <strong style={{ color: '#c5cdd6' }}>Manager</strong> tab or inside <strong style={{ color: '#c5cdd6' }}>Round & event management</strong> when prepping offline packs — no need to visit Game tab first.
                    </p>
                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
@@ -8268,8 +8244,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   Printable dauber cards (PDF)
                 </h4>
                 <p style={{ margin: '0 0 10px', fontSize: '0.8rem', color: '#9aa5b1', lineHeight: 1.45 }}>
-                  Set how many randomized cards each round&apos;s <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> includes (same value as{' '}
-                  <strong style={{ color: '#c5cdd6' }}>Download PDF</strong> on the Game tab and <strong style={{ color: '#c5cdd6' }}>Cards per PDF</strong> on the Manager tab).
+                  Set how many cards each PDF export includes — applies equally to <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> here and <strong style={{ color: '#c5cdd6' }}>Download PDF</strong> on the Game tab (same backend path).
                 </p>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: '#c8d0d8', flexWrap: 'wrap' }}>
                   Cards per PDF
@@ -8298,8 +8273,9 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                 <h4 style={{ margin: '0 0 12px', fontSize: '1rem', fontWeight: 600, color: '#fff' }}>All rounds</h4>
                 <p style={{ margin: '0 0 12px', fontSize: '0.8rem', color: '#9aa5b1', lineHeight: 1.45 }}>
                   Use <strong style={{ color: '#c5cdd6' }}>Load for prep</strong> (or the same control on Round buckets) to put that round&apos;s playlists into the mix and sync pattern/snippet controls — no need to{' '}
-                  <strong style={{ color: '#c5cdd6' }}>Start</strong> a round just to save or print. <strong style={{ color: '#c5cdd6' }}>Save round</strong> and per-round <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> both finalize automatically when needed (server truncates the pool), then save or export.
-                  <strong style={{ color: '#c5cdd6' }}> Print PDF</strong> can use a saved snapshot instead when you have one. At showtime, with that round loaded and a snapshot saved, <strong style={{ color: '#c5cdd6' }}>Start Game</strong> can follow the saved track order.
+                  <strong style={{ color: '#c5cdd6' }}>Start</strong> a round just to save or print.{' '}
+                  <strong style={{ color: '#c5cdd6' }}>Save round</strong> and per-round <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> both finalize automatically when needed (server truncates the pool), then save or export.
+                  <strong style={{ color: '#c5cdd6' }}> Print PDF</strong> uses the same printable generator as the Game tab (subtitle names this round). At showtime, with that round loaded and a snapshot saved, <strong style={{ color: '#c5cdd6' }}>Start Game</strong> can follow the saved track order.
                 </p>
                 <div className="host-round-manager-rounds">
                   {eventRounds.map((round, index) => {
@@ -8495,11 +8471,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                                 className="btn-secondary"
                                 disabled={printablePdfLoading}
                                 onClick={() => handleDownloadRoundPrintablePdf(round)}
-                                title={
-                                  round.savedMixSnapshot?.songs?.length
-                                    ? 'Finalizes automatically if needed; uses saved snapshot tracks when available for this export.'
-                                    : 'Finalizes automatically if needed, then builds PDF from this round’s playlists in the locked mix.'
-                                }
+                                title="Same printable logic as Game tab Download PDF (finalize first). PDF subtitle names this round."
                                 style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
