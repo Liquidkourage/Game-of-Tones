@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tempo — Host Instruction Book</title>
+  <style>
+    :root {
+      --ink: #1a1f26;
+      --muted: #4a5568;
+      --accent: #0d8f5c;
+      --line: #e2e8f0;
+      --bg: #fafbfc;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 2rem 1.5rem 3rem;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--ink);
+      background: var(--bg);
+      max-width: 42rem;
+      margin-inline: auto;
+    }
+    h1 {
+      font-size: 1.75rem;
+      margin: 0 0 0.35rem;
+      letter-spacing: -0.02em;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 1rem;
+      margin: 0 0 1.75rem;
+    }
+    h2 {
+      font-size: 1.2rem;
+      margin: 2rem 0 0.65rem;
+      color: var(--accent);
+      border-bottom: 2px solid var(--line);
+      padding-bottom: 0.25rem;
+    }
+    h3 {
+      font-size: 1rem;
+      margin: 1.25rem 0 0.4rem;
+      color: var(--ink);
+    }
+    p { margin: 0.6rem 0; }
+    ul, ol { margin: 0.5rem 0 0.75rem; padding-left: 1.35rem; }
+    li { margin: 0.35rem 0; }
+    strong { font-weight: 700; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.75rem 0 1rem;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 0.45rem 0.55rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #edf2f7; }
+    hr {
+      border: none;
+      border-top: 1px dashed var(--line);
+      margin: 2rem 0;
+    }
+    .cover {
+      text-align: center;
+      padding: 2rem 0 1.5rem;
+      margin-bottom: 1.5rem;
+      border: 2px solid var(--accent);
+      border-radius: 12px;
+      background: #fff;
+    }
+    .cover .badge {
+      display: inline-block;
+      background: var(--accent);
+      color: #fff;
+      padding: 0.25rem 0.65rem;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.75rem;
+    }
+    .tip {
+      background: #ecfdf5;
+      border-left: 4px solid var(--accent);
+      padding: 0.65rem 0.85rem;
+      margin: 1rem 0;
+      border-radius: 0 8px 8px 0;
+    }
+    code {
+      font-family: ui-monospace, monospace;
+      font-size: 0.92em;
+      background: #edf2f7;
+      padding: 0.12em 0.35em;
+      border-radius: 4px;
+    }
+    @media print {
+      body {
+        padding: 0.75in;
+        max-width: none;
+        font-size: 11pt;
+        background: #fff;
+      }
+      h2 { page-break-after: avoid; }
+      li { page-break-inside: avoid; }
+      .cover { break-inside: avoid; }
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="cover">
+    <div class="badge">HOST GUIDE</div>
+    <h1 style="margin-bottom: 0.25rem;">Tempo Host Instruction Book</h1>
+    <p class="subtitle" style="margin-bottom: 0;">From first login to a full multi-round show — prep, save, print, play.</p>
+    <p style="margin-top: 1rem; font-size: 13px; color: var(--muted);">Written for teen readers: short steps, plain words.</p>
+  </header>
+
+  <h2>1. What you’re doing</h2>
+  <p>You’re hosting <strong>music bingo</strong>: songs play, players mark squares, someone wins.</p>
+  <p><strong>Tempo</strong> pulls tracks from <strong>Spotify</strong> and/or <strong>YouTube Music</strong>, helps you plan <strong>rounds</strong> (like chapters), and lets you <strong>prep</strong>, <strong>save</strong>, and <strong>print cards</strong> before the crowd shows up.</p>
+  <table>
+    <thead><tr><th>Tab</th><th>Use it for…</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Manager</strong></td><td>Playlists, rounds, music login, round prep</td></tr>
+      <tr><td><strong>Game</strong></td><td>Live show: play snippets, host controls</td></tr>
+    </tbody>
+  </table>
+
+  <h2>2. Before you open Tempo</h2>
+  <ul>
+    <li>Use <strong>Chrome or Edge</strong> on a laptop if you can.</li>
+    <li>Have <strong>Spotify</strong> and/or <strong>YouTube Music</strong> ready — match whatever you’ll play from.</li>
+    <li>Know how you sign in as <strong>host</strong> (only hosts drive the game).</li>
+  </ul>
+
+  <h2>3. First-time in the room</h2>
+  <h3>A. Open your room</h3>
+  <p>Join your Tempo room as <strong>host</strong>. Players join separately — they don’t pick playlists.</p>
+  <h3>B. Connection</h3>
+  <ol>
+    <li>Open <strong>Connection</strong> (Spotify / device / YouTube — labels vary).</li>
+    <li>Connect <strong>Spotify</strong> if you use Spotify playlists.</li>
+    <li>Connect <strong>YouTube Music</strong> if you use YouTube-only playlists.</li>
+  </ol>
+  <div class="tip">No connection = Tempo can’t see your playlists. Fix this before anything else.</div>
+  <h3>C. Pick the speaker</h3>
+  <p>Choose where audio goes (speaker, mixer, Bluetooth). Test volume once.</p>
+
+  <h2>4. Playlists &amp; pool modes</h2>
+  <h3>Five playlists (5×15 style)</h3>
+  <ul>
+    <li>You pick <strong>five playlists</strong>.</li>
+    <li>Each one lines up with a <strong>column</strong> on the big call board when the room is in that layout.</li>
+    <li>Great when each list has a theme (90s, rock, one artist, etc.).</li>
+  </ul>
+  <h3>One huge playlist (1×75 style)</h3>
+  <ul>
+    <li>One list with <strong>lots of songs</strong> turns into one shared pool.</li>
+    <li>Simpler vibe, fewer columns to think about.</li>
+  </ul>
+  <p>If Tempo warns you about “not enough songs,” add tracks or pick different lists — don’t ignore it.</p>
+
+  <h2>5. Rounds = chapters of your night</h2>
+  <p><strong>Rounds</strong> split the event (opening, themed game, finale). Each round usually has:</p>
+  <ul>
+    <li>A <strong>name</strong></li>
+    <li><strong>Playlists</strong> tied to that round</li>
+    <li>A <strong>status</strong> (planned → playing → done)</li>
+  </ul>
+  <p>You move rounds forward when <em>your schedule</em> says so — Tempo doesn’t rush you.</p>
+
+  <h2>6. Load for prep (practice without an audience)</h2>
+  <p>You do <strong>not</strong> need to “start the live game” just to get organized.</p>
+  <p><strong>Load for prep</strong>:</p>
+  <ul>
+    <li>Puts that round’s playlists into the <strong>mix</strong></li>
+    <li>Syncs your <strong>bingo pattern</strong> controls with that round</li>
+    <li>Lets you rehearse while it’s still quiet</li>
+  </ul>
+  <div class="tip">Use this before doors open: load Round 2, tweak pattern, hit Save round, print PDFs — no crowd required.</div>
+
+  <h2>7. Save round (freeze your rehearsal)</h2>
+  <p><strong>Save round</strong> stores a <strong>snapshot</strong> of that round after the mix rules run (trimming, layout, etc.).</p>
+  <ul>
+    <li>Show night can match what you rehearsed.</li>
+    <li>If you change playlists a lot, <strong>save again</strong> so the snapshot stays true.</li>
+  </ul>
+
+  <h2>8. Finalize mix (lock the bingo pool)</h2>
+  <p><strong>Finalize</strong> builds the <strong>official song pool</strong> for cards and display.</p>
+  <ul>
+    <li>Required before <strong>printing PDFs</strong> and solid digital cards.</li>
+    <li>If it fails: playlists didn’t load, rate limits, or connection glitch — refresh library, wait a minute, retry.</li>
+  </ul>
+
+  <h2>9. Printable PDF cards</h2>
+  <ul>
+    <li><strong>Cards per PDF</strong> = how many unique printed sheets (often 30).</li>
+    <li><strong>Round &amp; event management → Print PDF</strong> and <strong>Game tab → Download PDF</strong> use the <strong>same rules</strong> on the server — same random logic, same bingo shape. Only the PDF subtitle may show the round name.</li>
+    <li>You still must <strong>finalize</strong> first — same rule everywhere.</li>
+    <li>Set card count on the <strong>Manager</strong> tab or inside the round popup — they stay matched.</li>
+  </ul>
+
+  <h2>10. Round &amp; event management (the popup)</h2>
+  <p>Open <strong>Round prep &amp; PDF</strong> from Manager.</p>
+  <p>Inside you’ll see overview stats, card count, and per-round actions:</p>
+  <ul>
+    <li><strong>Load for prep</strong></li>
+    <li><strong>Save round</strong></li>
+    <li><strong>Print PDF</strong></li>
+    <li><strong>Start</strong> when it applies</li>
+  </ul>
+  <p>Use this when you’re thinking about the <strong>whole event</strong>, not only “right now on stage.”</p>
+
+  <h2>11. Running a multi-round live game</h2>
+  <ol>
+    <li><strong>Manager:</strong> playlists on rounds look correct.</li>
+    <li><strong>Prep:</strong> load round → finalize if needed → save round → print if you need paper.</li>
+    <li><strong>Game tab:</strong> <strong>Start Game</strong> when the room is ready.</li>
+    <li>Music plays as <strong>snippets</strong>; titles show on the <strong>public display</strong>.</li>
+    <li>Players mark cards → bingos get checked.</li>
+    <li><strong>Next round:</strong> finish or advance the round, <strong>load for prep</strong> for the next playlists, finalize/save if your workflow needs it, then continue.</li>
+  </ol>
+  <p>If the projector columns look wrong after big edits, you probably need to <strong>finalize again</strong> so the locked pool matches what everyone sees.</p>
+
+  <h2>12. Quick fixes</h2>
+  <table>
+    <thead><tr><th>Problem</th><th>Try</th></tr></thead>
+    <tbody>
+      <tr><td>Empty playlists</td><td>Reconnect Spotify/YouTube; refresh library</td></tr>
+      <tr><td>Finalize failed</td><td>Wait out rate limits; fewer giant playlist pulls at once</td></tr>
+      <tr><td>Weird printed cards</td><td>Finalize <em>after</em> your last playlist change</td></tr>
+      <tr><td>YouTube vs Spotify confusion</td><td>Use the service you actually connected</td></tr>
+    </tbody>
+  </table>
+
+  <h2>13. Night-before checklist</h2>
+  <ul>
+    <li>☐ Host login works</li>
+    <li>☐ Spotify or YouTube connected</li>
+    <li>☐ Speaker device picked</li>
+    <li>☐ Every round has playlists</li>
+    <li>☐ Load-for-prep tested on rounds you care about</li>
+    <li>☐ Save round after a happy rehearsal</li>
+    <li>☐ PDF printed if you need paper</li>
+    <li>☐ Pattern + free-space double-checked</li>
+    <li>☐ Public display bookmark / casting ready</li>
+  </ul>
+
+  <hr />
+  <p style="text-align: center; color: var(--muted); font-size: 13px;">Prep slow, party loud. You’ve got this.</p>
+</body>
+</html>
