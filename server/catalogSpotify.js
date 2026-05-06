@@ -11,17 +11,26 @@
  * - TEMPO_CATALOG_PLAYLIST_NAME_PREFIX_IGNORE_CASE — true: prefix match is case-insensitive (GoT vs got).
  * - TEMPO_CATALOG_PREFIX_OWNER_ONLY — default true: prefix matches must be owned by the catalog user
  *   (avoids followed playlists that 403 on /items).
- * - TEMPO_CATALOG_PREFIX_CACHE_MS — ms to cache prefix discovery (default 300000).
+ * - TEMPO_CATALOG_PREFIX_CACHE_MS — ms to cache prefix discovery in-memory per process (default 300000).
+ * - TEMPO_CATALOG_PACKS_SERVER_CACHE_MS — Postgres TTL for `/api/spotify/catalog/packs` snapshots (default 86400000).
+ *   Set to 0 to always try live Spotify for packs (still uses stale DB row on hard failure).
+ * - TEMPO_CATALOG_PUBLIC_FETCH_DISABLED — true: skip all catalog Spotify reads for pack list; API returns
+ *   configured=false (Official packs hidden) until unset.
  * - TEMPO_CATALOG_SPOTIFY_CLIENT_ID / TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET — optional; default SPOTIFY_*
  *
  * Catalog OAuth must use the same Spotify Developer app as the refresh token was issued for.
  *
- * Rate limits: catalog prefix mode calls GET /v1/me/playlists on the catalog token. If that token uses
- * the same Spotify app (client_id) as hosts, traffic stacks on one quota — prefer a second Developer app +
- * TEMPO_CATALOG_SPOTIFY_CLIENT_ID / SECRET for catalog only. When discovery fails (429), Tempo falls back
- * to static allowlist ids only until the next request (no stale cache of an empty prefix list).
+ * Rate limits / best practice:
+ * - Host library + catalog prefix discovery both paginate GET /v1/me/playlists (~1 page per 50 playlists).
+ *   Server-side pack cache avoids re-running catalog discovery on every host refresh.
+ * - Prefer TEMPO_CATALOG_SPOTIFY_CLIENT_* as a separate Spotify Developer app from host traffic so quotas
+ *   don’t stack on one client_id.
+ * - Prefer static TEMPO_CATALOG_PLAYLIST_IDS / JSON without prefix mode if you only ship a fixed pack list
+ *   — zero playlist enumeration on the catalog token for discovery.
+ * - Host pagination spacing: SPOTIFY_PLAYLIST_LIST_PAGE_GAP_MS (see spotify.js) between /me/playlists pages.
  */
 
+const crypto = require('crypto');
 const SpotifyService = require('./spotify');
 
 /** @returns {{ id: string, label?: string }[]} */
@@ -105,6 +114,33 @@ function isCatalogFeatureConfigured() {
   if (!hasCatalogRefreshToken()) return false;
   if (isCatalogPrefixMode()) return true;
   return parseCatalogAllowlistEntries().length > 0;
+}
+
+/** When true, `/api/spotify/catalog/packs` returns configured=false without calling Spotify. */
+function isCatalogPublicFetchDisabled() {
+  return parseEnvBool(process.env.TEMPO_CATALOG_PUBLIC_FETCH_DISABLED, false);
+}
+
+/**
+ * Stable key for Postgres snapshot of pack summaries (invalidates when catalog env meaningfully changes).
+ * @returns {string}
+ */
+function getCatalogPackSummariesCacheKey() {
+  const cid =
+    process.env.TEMPO_CATALOG_SPOTIFY_CLIENT_ID != null &&
+    String(process.env.TEMPO_CATALOG_SPOTIFY_CLIENT_ID).trim() !== ''
+      ? String(process.env.TEMPO_CATALOG_SPOTIFY_CLIENT_ID).trim()
+      : String(process.env.SPOTIFY_CLIENT_ID || '').trim();
+  const parts = {
+    hasRt: hasCatalogRefreshToken() ? '1' : '0',
+    prefix: getCatalogPlaylistNamePrefix(),
+    ignoreCase: getCatalogPrefixIgnoreCase(),
+    ownerOnly: getCatalogPrefixOwnerOnlyDefaultTrue(),
+    playlistsJson: process.env.TEMPO_CATALOG_PLAYLISTS_JSON || '',
+    playlistIds: process.env.TEMPO_CATALOG_PLAYLIST_IDS || '',
+    clientId: cid,
+  };
+  return crypto.createHash('sha256').update(JSON.stringify(parts)).digest('hex');
 }
 
 /**
@@ -371,6 +407,8 @@ async function fetchCatalogPlaylistTracks(playlistId, playlistInfo = null) {
 
 module.exports = {
   isCatalogFeatureConfigured,
+  isCatalogPublicFetchDisabled,
+  getCatalogPackSummariesCacheKey,
   parseCatalogAllowlistEntries,
   resolveCatalogAllowlistEntries,
   loadCatalogPackSummariesForApi,

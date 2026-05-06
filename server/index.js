@@ -962,6 +962,13 @@ async function initializeDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS catalog_pack_summaries_cache (
+        cache_key VARCHAR(128) PRIMARY KEY,
+        data JSONB NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
     routineServerLog('✅ Database tables initialized');
     return true;
   } catch (error) {
@@ -1090,6 +1097,64 @@ async function loadHostPlaylistListCache(organizationId) {
   } catch (e) {
     console.error('loadHostPlaylistListCache:', e?.message || e);
     return null;
+  }
+}
+
+/** TTL for Postgres snapshot of official catalog packs (`TEMPO_CATALOG_PACKS_SERVER_CACHE_MS`). Default 24h; 0 = always fetch live (still use stale row on hard errors). */
+function readCatalogPacksServerCacheTtlMs() {
+  const raw = process.env.TEMPO_CATALOG_PACKS_SERVER_CACHE_MS;
+  if (raw === '0') return 0;
+  const n = Number(raw);
+  if (Number.isFinite(n) && n >= 0) return n;
+  return 86400000;
+}
+
+/**
+ * @returns {Promise<null | { data: { packs: unknown[], catalogPrefixDiscoverySkipped: boolean }, updatedAtMs: number, updatedAtIso: string }>}
+ */
+async function loadCatalogPackSummariesCacheRow(cacheKey) {
+  if (!db) return null;
+  try {
+    const r = await db.query(
+      'SELECT data, updated_at FROM catalog_pack_summaries_cache WHERE cache_key = $1',
+      [cacheKey]
+    );
+    if (r.rows.length === 0) return null;
+    const row = r.rows[0];
+    const d = row.data;
+    if (!d || typeof d !== 'object') return null;
+    const packs = Array.isArray(d.packs) ? d.packs : [];
+    const catalogPrefixDiscoverySkipped = d.catalogPrefixDiscoverySkipped === true;
+    const updatedAt = row.updated_at;
+    const updatedAtMs = updatedAt instanceof Date ? updatedAt.getTime() : new Date(updatedAt).getTime();
+    const updatedAtIso =
+      updatedAt instanceof Date ? updatedAt.toISOString() : new Date(updatedAt).toISOString();
+    return {
+      data: { packs, catalogPrefixDiscoverySkipped },
+      updatedAtMs,
+      updatedAtIso,
+    };
+  } catch (e) {
+    console.error('loadCatalogPackSummariesCacheRow:', e?.message || e);
+    return null;
+  }
+}
+
+async function saveCatalogPackSummariesCacheRow(cacheKey, payload) {
+  if (!db) return false;
+  try {
+    await db.query(
+      `
+      INSERT INTO catalog_pack_summaries_cache (cache_key, data, updated_at)
+      VALUES ($1, $2::jsonb, CURRENT_TIMESTAMP)
+      ON CONFLICT (cache_key) DO UPDATE SET data = $2::jsonb, updated_at = CURRENT_TIMESTAMP
+    `,
+      [cacheKey, JSON.stringify(payload)]
+    );
+    return true;
+  } catch (e) {
+    console.error('saveCatalogPackSummariesCacheRow:', e?.message || e);
+    return false;
   }
 }
 
@@ -9787,10 +9852,80 @@ app.get('/api/spotify/catalog/packs', async (req, res) => {
     if (uid == null) {
       return res.status(401).json({ error: 'login_required', message: 'Sign in with Google first.' });
     }
+    if (catalogSpotify.isCatalogPublicFetchDisabled()) {
+      routineServerLog(
+        '[catalog] GET /api/spotify/catalog/packs: TEMPO_CATALOG_PUBLIC_FETCH_DISABLED — not calling Spotify'
+      );
+      return res.json({
+        success: true,
+        configured: false,
+        packs: [],
+        catalogPublicFetchDisabled: true,
+      });
+    }
     if (!catalogSpotify.isCatalogFeatureConfigured()) {
       return res.json({ success: true, configured: false, packs: [] });
     }
-    const catalogResult = await catalogSpotify.loadCatalogPackSummariesForApi();
+
+    const cacheKey = catalogSpotify.getCatalogPackSummariesCacheKey();
+    const ttlMs = readCatalogPacksServerCacheTtlMs();
+
+    if (db && ttlMs > 0) {
+      const cached = await loadCatalogPackSummariesCacheRow(cacheKey);
+      if (cached && Array.isArray(cached.data.packs)) {
+        const ageMs = Date.now() - cached.updatedAtMs;
+        if (Number.isFinite(ageMs) && ageMs >= 0 && ageMs < ttlMs) {
+          routineServerLog(
+            `[catalog] GET /api/spotify/catalog/packs: ${cached.data.packs.length} pack(s) from Postgres cache (${Math.round(ageMs / 1000)}s old, ttl ${Math.round(ttlMs / 1000)}s)`
+          );
+          return res.json({
+            success: true,
+            configured: true,
+            packs: cached.data.packs,
+            catalogPrefixDiscoverySkipped: cached.data.catalogPrefixDiscoverySkipped,
+            fromCatalogServerCache: true,
+            catalogCacheUpdatedAt: cached.updatedAtIso,
+          });
+        }
+      }
+    }
+
+    let catalogResult;
+    try {
+      catalogResult = await catalogSpotify.loadCatalogPackSummariesForApi();
+    } catch (fetchErr) {
+      if (db) {
+        const stale = await loadCatalogPackSummariesCacheRow(cacheKey);
+        if (stale && Array.isArray(stale.data.packs) && stale.data.packs.length > 0) {
+          routineServerLog(
+            '[catalog] GET /api/spotify/catalog/packs: live fetch failed — returning stale Postgres cache'
+          );
+          return res.json({
+            success: true,
+            configured: true,
+            packs: stale.data.packs,
+            catalogPrefixDiscoverySkipped: stale.data.catalogPrefixDiscoverySkipped,
+            fromCatalogServerCache: true,
+            catalogCacheStale: true,
+            catalogCacheUpdatedAt: stale.updatedAtIso,
+          });
+        }
+      }
+      throw fetchErr;
+    }
+
+    if (db && catalogResult && Array.isArray(catalogResult.packs)) {
+      const prefixSkipped = catalogResult.catalogPrefixDiscoverySkipped === true;
+      const wipeWouldErasePrior =
+        catalogResult.packs.length === 0 && prefixSkipped && ttlMs > 0;
+      if (!wipeWouldErasePrior) {
+        await saveCatalogPackSummariesCacheRow(cacheKey, {
+          packs: catalogResult.packs,
+          catalogPrefixDiscoverySkipped: prefixSkipped,
+        });
+      }
+    }
+
     const packs = catalogResult.packs;
     const catalogPrefixDiscoverySkipped = catalogResult.catalogPrefixDiscoverySkipped === true;
     if (packs.length === 0) {
@@ -9800,9 +9935,15 @@ app.get('/api/spotify/catalog/packs', async (req, res) => {
           : '[catalog] GET /api/spotify/catalog/packs: configured but 0 packs — check TEMPO_CATALOG_PLAYLIST_NAME_PREFIX / allowlist / playlist names on the catalog Spotify account'
       );
     } else {
-      routineServerLog(`[catalog] GET /api/spotify/catalog/packs: returning ${packs.length} pack(s)`);
+      routineServerLog(`[catalog] GET /api/spotify/catalog/packs: returning ${packs.length} pack(s) from Spotify`);
     }
-    res.json({ success: true, configured: true, packs, catalogPrefixDiscoverySkipped });
+    res.json({
+      success: true,
+      configured: true,
+      packs,
+      catalogPrefixDiscoverySkipped,
+      fromCatalogServerCache: false,
+    });
   } catch (error) {
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('GET /api/spotify/catalog/packs:', error);

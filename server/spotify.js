@@ -171,6 +171,17 @@ function readWebApiPacingMinMs() {
 }
 
 /**
+ * Extra gap between GET /v1/me/playlists pages when global pacing is disabled (SPOTIFY_WEB_API_MIN_INTERVAL_MS=0).
+ * Default 400ms; tune via SPOTIFY_PLAYLIST_LIST_PAGE_GAP_MS to reduce burst 429s on large libraries.
+ */
+function readPlaylistListPageGapMs() {
+  const raw = process.env.SPOTIFY_PLAYLIST_LIST_PAGE_GAP_MS;
+  const n = raw != null && raw !== '' ? parseInt(String(raw), 10) : 400;
+  if (!Number.isFinite(n) || n < 0) return 400;
+  return Math.min(5000, n);
+}
+
+/**
  * One row from GET /v1/playlists/{id}/items (`PlaylistTrackObject`).
  * Spotify deprecated the nested field name `track` — responses now expose track-or-episode on **`item`**.
  * Older payloads still use `track`; some rows have neither (removed catalog entry).
@@ -996,9 +1007,10 @@ class SpotifyService {
       let isFirst = true;
 
       // Use direct Web API so we keep `items.total` / `tracks.total` (Spotify is moving to `items`).
+      const pageGapMs = readPlaylistListPageGapMs();
       while (true) {
         if (offset > 0 && !this._pacingMinIntervalMs) {
-          await new Promise((r) => setTimeout(r, 200));
+          await new Promise((r) => setTimeout(r, pageGapMs));
         }
         const path = `/v1/me/playlists?limit=${limit}&offset=${offset}`;
         const { body } = await this._webApiGet(path, 'getUserPlaylists');
@@ -1646,9 +1658,10 @@ class SpotifyService {
       let offset = 0;
       const limit = 50;
       
+      const pageGapMs = readPlaylistListPageGapMs();
       while (true) {
         if (offset > 0 && !this._pacingMinIntervalMs) {
-          await new Promise((r) => setTimeout(r, 200));
+          await new Promise((r) => setTimeout(r, pageGapMs));
         }
         const path = `/v1/me/playlists?limit=${limit}&offset=${offset}`;
         const { body } = await this._webApiGet(path, 'getGameOfTonesPlaylists');
