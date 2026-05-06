@@ -71,6 +71,7 @@ import {
 } from '../patternDefinitions';
 import CustomPatternModal, { type CustomPatternSavePayload } from './CustomPatternModal';
 import CombinedPatternModal from './CombinedPatternModal';
+import HostRoundManagerModal from './HostRoundManagerModal';
 import SongTitleEditModal from './SongTitleEditModal';
 import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModal';
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
@@ -610,10 +611,14 @@ const HostView: React.FC = () => {
   /** 5�15 mode: playlist title per column (from `fiveby15-pool`, else five selected playlists). */
   const [bingoColumnPlaylistNames, setBingoColumnPlaylistNames] = useState<string[]>([]);
   const [showRoundManager, setShowRoundManager] = useState<boolean>(false);
+  const showRoundManagerScrollRef = useRef(showRoundManager);
+  showRoundManagerScrollRef.current = showRoundManager;
   const [activeTab, setActiveTab] = useState<'setup' | 'play'>('setup');
   /** In-person + online: only in-person verified bingos end the round / prize */
   const [hybridInPersonPlusOnline, setHybridInPersonPlusOnline] = useState(false);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
+  const showConnectionModalScrollRef = useRef(showConnectionModal);
+  showConnectionModalScrollRef.current = showConnectionModal;
   /** Server has YTM OAuth env; shows Connection UI even when REACT_APP_ENABLE_YOUTUBE_MUSIC was not set at client build time. */
   const [ytMusicServerConfigured, setYtMusicServerConfigured] = useState(false);
   /** Bump so HostYoutubeMusicPlaylistLibrary refetches after Google OAuth return (?youtube_music=connected). */
@@ -1508,13 +1513,25 @@ const HostView: React.FC = () => {
   }, [showConnectionModal]);
 
   useEffect(() => {
-    if (!showConnectionModal) return;
-    const prev = document.body.style.overflow;
+    const needLock = showConnectionModal || showRoundManager;
+    if (!needLock) return;
+    const restoreTo = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
-      document.body.style.overflow = prev;
+      if (!showConnectionModalScrollRef.current && !showRoundManagerScrollRef.current) {
+        document.body.style.overflow = restoreTo;
+      }
     };
-  }, [showConnectionModal]);
+  }, [showConnectionModal, showRoundManager]);
+
+  useEffect(() => {
+    if (!showRoundManager) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowRoundManager(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showRoundManager]);
 
   const refreshRooms = useCallback(async () => {
     try {
@@ -7201,20 +7218,19 @@ const HostView: React.FC = () => {
                 >
                   <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <CalendarRange className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
-                    Round &amp; event
+                    Round & event
                   </h2>
                   <p className="host-manager-round__actions-head">Quick actions</p>
                   <div className="host-manager-round__row">
                       <button
                         type="button"
                         className="btn-accent"
-                        onClick={() => setShowRoundManager(!showRoundManager)}
-                        aria-pressed={showRoundManager}
+                        onClick={() => setShowRoundManager(true)}
                         title="Save rounds, print PDFs, and edit per-round pattern without starting the live game"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
                       >
                         <ListChecks className="w-4 h-4" aria-hidden />
-                        {showRoundManager ? 'Hide round prep & PDF' : 'Round prep & PDF'}
+                        Round prep & PDF
                       </button>
                       {gameState === 'playing' && (
                         <>
@@ -7607,21 +7623,11 @@ const HostView: React.FC = () => {
                           <button
                             type="button"
                             className="btn-accent"
-                            onClick={() => setShowRoundManager(!showRoundManager)}
-                            aria-pressed={showRoundManager}
+                            onClick={() => setShowRoundManager(true)}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
                           >
-                            {showRoundManager ? (
-                              <>
-                                <ListChecks className="w-4 h-4" aria-hidden />
-                                Round Manager (on)
-                              </>
-                            ) : (
-                              <>
-                                <CalendarRange className="w-4 h-4" aria-hidden />
-                                Round Manager
-                              </>
-                            )}
+                            <CalendarRange className="w-4 h-4" aria-hidden />
+                            Round Manager
                           </button>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -7986,302 +7992,6 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                 </div>
           )}
 
-            {showRoundManager && (
-              <div className="manage-tab">
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.2 }}
-                  className="host-round-manager-panel"
-                >
-                  <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <CalendarRange className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
-                    Round &amp; event management
-                  </h2>
-
-                  <div className="host-round-manager-overview">
-                    <h4>Event overview</h4>
-                    <div className="host-round-manager-stats">
-                      {(() => {
-                        const summary = getRoundStatusSummary();
-                        return (
-                          <>
-                            <div className="host-round-manager-stat">
-                              <div className="host-round-manager-stat__val host-round-manager-stat__val--green">{summary.completed}</div>
-                              <div className="host-round-manager-stat__label">Completed</div>
-                            </div>
-                            <div className="host-round-manager-stat">
-                              <div className="host-round-manager-stat__val host-round-manager-stat__val--blue">{summary.active}</div>
-                              <div className="host-round-manager-stat__label">Active</div>
-                            </div>
-                            <div className="host-round-manager-stat">
-                              <div className="host-round-manager-stat__val host-round-manager-stat__val--yellow">{summary.planned}</div>
-                              <div className="host-round-manager-stat__label">Planned</div>
-                            </div>
-                            <div className="host-round-manager-stat">
-                              <div className="host-round-manager-stat__val host-round-manager-stat__val--gray">{summary.unplanned}</div>
-                              <div className="host-round-manager-stat__label">Unplanned</div>
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 style={{ margin: '0 0 12px', fontSize: '1rem', fontWeight: 600, color: '#fff' }}>All rounds</h4>
-                    <p style={{ margin: '0 0 12px', fontSize: '0.8rem', color: '#9aa5b1', lineHeight: 1.45 }}>
-                      Use <strong style={{ color: '#c5cdd6' }}>Load for prep</strong> (or the same control on Round buckets) to put that round&apos;s playlists into the mix and sync pattern/snippet controls — no need to{' '}
-                      <strong style={{ color: '#c5cdd6' }}>Start</strong> a round just to save or print. <strong style={{ color: '#c5cdd6' }}>Save round</strong> and per-round <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> both finalize automatically when needed (server truncates the pool), then save or export.
-                      <strong style={{ color: '#c5cdd6' }}> Print PDF</strong> can use a saved snapshot instead when you have one. At showtime, with that round loaded and a snapshot saved, <strong style={{ color: '#c5cdd6' }}>Start Game</strong> can follow the saved track order.
-                    </p>
-                    <div className="host-round-manager-rounds">
-                      {eventRounds.map((round, index) => {
-                        const isCurrentRound = index === currentRoundIndex;
-                        const canStart = round.status !== 'completed' && (round.playlistIds || []).length > 0;
-                        const roundClass =
-                          isCurrentRound
-                            ? 'host-round-manager-round host-round-manager-round--current'
-                            : round.status === 'completed'
-                              ? 'host-round-manager-round host-round-manager-round--done'
-                              : canStart
-                                ? 'host-round-manager-round host-round-manager-round--ready'
-                                : 'host-round-manager-round host-round-manager-round--blocked';
-
-                        return (
-                          <div key={round.id} className={roundClass}>
-                            <div className="host-round-manager-round__top">
-                              <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                  <span className="host-round-manager-round__name">{round.name}</span>
-                                  {isCurrentRound && (
-                                    <span className="host-round-manager-badge host-round-manager-badge--current">CURRENT</span>
-                                  )}
-                                  {round.status === 'completed' && (
-                                    <span className="host-round-manager-badge host-round-manager-badge--done">DONE</span>
-                                  )}
-                                </div>
-                                <div className="host-round-manager-round__meta">
-                                  {(round.playlistIds || []).length} playlist{(round.playlistIds || []).length !== 1 ? 's' : ''} · {round.songCount} songs
-                                  {round.status === 'completed' && round.completedAt && (
-                                    <span style={{ marginLeft: 8 }}>
-                                      · Completed {new Date(round.completedAt).toLocaleTimeString()}
-                                    </span>
-                                  )}
-                                  {round.savedMixSnapshot && (
-                                    <>
-                                      <br />
-                                      <span style={{ color: '#7dd3fc', fontSize: '0.72rem' }}>
-                                        Snapshot · {round.savedMixSnapshot.songs.length} tracks · {round.savedMixSnapshot.mixGeometry} ·{' '}
-                                        {new Date(round.savedMixSnapshot.savedAt).toLocaleString()}
-                                      </span>
-                                    </>
-                                  )}
-                                </div>
-                                <div
-                                  style={{
-                                    marginTop: 10,
-                                    display: 'flex',
-                                    flexWrap: 'wrap',
-                                    gap: '10px 14px',
-                                    alignItems: 'center',
-                                    fontSize: '0.78rem',
-                                    color: '#b9c3cd',
-                                  }}
-                                >
-                                  <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    Pattern
-                                    <select
-                                      value={round.bingoPattern ?? 'line'}
-                                      onChange={(e) => {
-                                        const v = e.target.value as BingoPattern;
-                                        handleUpdateRoundBingoFields(index, {
-                                          bingoPattern: v,
-                                          ...(v !== 'custom' ? { customPatternMask: undefined } : {}),
-                                          ...(v !== 'composite' ? { patternComposite: undefined } : {}),
-                                        });
-                                      }}
-                                      style={{
-                                        padding: '4px 8px',
-                                        borderRadius: 6,
-                                        border: '1px solid rgba(255,255,255,0.25)',
-                                        background: 'rgba(0,0,0,0.35)',
-                                        color: '#fff',
-                                        fontSize: '0.78rem',
-                                      }}
-                                    >
-                                      {PATTERN_OPTIONS.map((opt) => (
-                                        <option key={opt.value} value={opt.value}>
-                                          {opt.label}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </label>
-                                  {(round.bingoPattern ?? 'line') === 'custom' && (
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                      Saved shape
-                                      <select
-                                        value={(() => {
-                                          const mask = round.customPatternMask;
-                                          if (!mask?.length) return '';
-                                          const norm = (arr: string[]) => [...arr].sort().join(',');
-                                          const key = norm(mask);
-                                          const sp = savedCustomPatterns.find((p) => norm(p.positions) === key);
-                                          return sp?.id ?? '';
-                                        })()}
-                                        onChange={(e) => {
-                                          const id = e.target.value;
-                                          const sp = savedCustomPatterns.find((p) => p.id === id);
-                                          if (sp) {
-                                            handleUpdateRoundBingoFields(index, {
-                                              bingoPattern: 'custom',
-                                              customPatternMask: [...sp.positions],
-                                              customMatchAllowRotation: sp.matchAllowRotation === true,
-                                              customMatchAllowMirror: sp.matchAllowMirror === true,
-                                            });
-                                          }
-                                        }}
-                                        style={{
-                                          padding: '4px 8px',
-                                          borderRadius: 6,
-                                          border: '1px solid rgba(255,255,255,0.25)',
-                                          background: 'rgba(0,0,0,0.35)',
-                                          color: '#fff',
-                                          fontSize: '0.78rem',
-                                          maxWidth: 200,
-                                        }}
-                                      >
-                                        <option value="">Select saved pattern…</option>
-                                        {savedCustomPatterns.map((sp) => (
-                                          <option key={sp.id} value={sp.id}>
-                                            {sp.name}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </label>
-                                  )}
-                                  {(round.bingoPattern ?? 'line') === 'line' && (
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                      Lines
-                                      <input
-                                        type="number"
-                                        min={1}
-                                        max={LINE_PATTERN_MAX_LINES}
-                                        value={normalizeLinesRequired(round.linesRequired ?? 1)}
-                                        onChange={(e) =>
-                                          handleUpdateRoundBingoFields(index, {
-                                            linesRequired: normalizeLinesRequired(parseInt(e.target.value, 10)),
-                                          })
-                                        }
-                                        style={{
-                                          width: 52,
-                                          padding: '4px 6px',
-                                          borderRadius: 6,
-                                          border: '1px solid rgba(255,255,255,0.25)',
-                                          background: 'rgba(0,0,0,0.35)',
-                                          color: '#fff',
-                                          fontSize: '0.78rem',
-                                        }}
-                                      />
-                                    </label>
-                                  )}
-                                  <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    <input
-                                      type="checkbox"
-                                      checked={
-                                        round.freeSpaceEnabled !== undefined
-                                          ? round.freeSpaceEnabled
-                                          : freeSpaceEnabled
-                                      }
-                                      onChange={(e) =>
-                                        handleUpdateRoundBingoFields(index, {
-                                          freeSpaceEnabled: e.target.checked,
-                                        })
-                                      }
-                                    />
-                                    Free center
-                                  </label>
-                                </div>
-                              </div>
-                              <div className="host-round-manager-round__actions">
-                                {(round.playlistIds || []).length > 0 && (
-                                  <button
-                                    type="button"
-                                    className="btn-secondary"
-                                    disabled={saveRoundBusy || printablePdfLoading || mixGameActionsBlocked}
-                                    onClick={() => void handleSaveRoundAtIndex(index)}
-                                    title="Runs finalize automatically when needed (same server lock as Print PDF), then saves frozen tracks for this round."
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: 6,
-                                      fontSize: '0.82rem',
-                                      marginRight: 8,
-                                    }}
-                                  >
-                                    <Save className="w-4 h-4" aria-hidden />
-                                    Save round
-                                  </button>
-                                )}
-                                {(round.playlistIds || []).length > 0 && (
-                                  <button
-                                    type="button"
-                                    className="btn-secondary"
-                                    disabled={printablePdfLoading}
-                                    onClick={() => handleDownloadRoundPrintablePdf(round)}
-                                    title={
-                                      round.savedMixSnapshot?.songs?.length
-                                        ? 'Finalizes automatically if needed; uses saved snapshot tracks when available for this export.'
-                                        : 'Finalizes automatically if needed, then builds PDF from this round’s playlists in the locked mix.'
-                                    }
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: 6,
-                                      fontSize: '0.82rem',
-                                      marginRight: 8,
-                                    }}
-                                  >
-                                    <Printer className="w-4 h-4" aria-hidden />
-                                    Print PDF
-                                  </button>
-                                )}
-                                {gameState !== 'playing' && (round.playlistIds || []).length > 0 && !isCurrentRound && (
-                                  <button
-                                    type="button"
-                                    className="btn-secondary"
-                                    onClick={() => handleSelectRoundForPrep(index)}
-                                    title="Put this round’s playlists in the mix and sync Bingo Pattern / snippet controls — does not change round status"
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: 6,
-                                      fontSize: '0.82rem',
-                                      marginRight: 8,
-                                    }}
-                                  >
-                                    Load for prep
-                                  </button>
-                                )}
-                                {canStart && !isCurrentRound && (
-                                  <button
-                                    type="button"
-                                    onClick={() => jumpToRound(index)}
-                                    className="host-round-manager-start-btn"
-                                  >
-                                    Start
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </motion.div>
-              </div>
-            )}
 
                 {/* Player cards: compact strip � open modal or full screen to inspect grids */}
                 {playerCards.size > 0 && !playerCardsFullscreen && (
@@ -8480,7 +8190,297 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
           </div>
         </div>
       )}
+      {showRoundManager && (
+        <HostRoundManagerModal onClose={() => setShowRoundManager(false)}>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.08 }}
+            className="host-round-manager-panel"
+          >
+              <div className="host-round-manager-overview">
+                <h4>Event overview</h4>
+                <div className="host-round-manager-stats">
+                  {(() => {
+                    const summary = getRoundStatusSummary();
+                    return (
+                      <>
+                        <div className="host-round-manager-stat">
+                          <div className="host-round-manager-stat__val host-round-manager-stat__val--green">{summary.completed}</div>
+                          <div className="host-round-manager-stat__label">Completed</div>
+                        </div>
+                        <div className="host-round-manager-stat">
+                          <div className="host-round-manager-stat__val host-round-manager-stat__val--blue">{summary.active}</div>
+                          <div className="host-round-manager-stat__label">Active</div>
+                        </div>
+                        <div className="host-round-manager-stat">
+                          <div className="host-round-manager-stat__val host-round-manager-stat__val--yellow">{summary.planned}</div>
+                          <div className="host-round-manager-stat__label">Planned</div>
+                        </div>
+                        <div className="host-round-manager-stat">
+                          <div className="host-round-manager-stat__val host-round-manager-stat__val--gray">{summary.unplanned}</div>
+                          <div className="host-round-manager-stat__label">Unplanned</div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
 
+              <div>
+                <h4 style={{ margin: '0 0 12px', fontSize: '1rem', fontWeight: 600, color: '#fff' }}>All rounds</h4>
+                <p style={{ margin: '0 0 12px', fontSize: '0.8rem', color: '#9aa5b1', lineHeight: 1.45 }}>
+                  Use <strong style={{ color: '#c5cdd6' }}>Load for prep</strong> (or the same control on Round buckets) to put that round&apos;s playlists into the mix and sync pattern/snippet controls — no need to{' '}
+                  <strong style={{ color: '#c5cdd6' }}>Start</strong> a round just to save or print. <strong style={{ color: '#c5cdd6' }}>Save round</strong> and per-round <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> both finalize automatically when needed (server truncates the pool), then save or export.
+                  <strong style={{ color: '#c5cdd6' }}> Print PDF</strong> can use a saved snapshot instead when you have one. At showtime, with that round loaded and a snapshot saved, <strong style={{ color: '#c5cdd6' }}>Start Game</strong> can follow the saved track order.
+                </p>
+                <div className="host-round-manager-rounds">
+                  {eventRounds.map((round, index) => {
+                    const isCurrentRound = index === currentRoundIndex;
+                    const canStart = round.status !== 'completed' && (round.playlistIds || []).length > 0;
+                    const roundClass =
+                      isCurrentRound
+                        ? 'host-round-manager-round host-round-manager-round--current'
+                        : round.status === 'completed'
+                          ? 'host-round-manager-round host-round-manager-round--done'
+                          : canStart
+                            ? 'host-round-manager-round host-round-manager-round--ready'
+                            : 'host-round-manager-round host-round-manager-round--blocked';
+
+                    return (
+                      <div key={round.id} className={roundClass}>
+                        <div className="host-round-manager-round__top">
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span className="host-round-manager-round__name">{round.name}</span>
+                              {isCurrentRound && (
+                                <span className="host-round-manager-badge host-round-manager-badge--current">CURRENT</span>
+                              )}
+                              {round.status === 'completed' && (
+                                <span className="host-round-manager-badge host-round-manager-badge--done">DONE</span>
+                              )}
+                            </div>
+                            <div className="host-round-manager-round__meta">
+                              {(round.playlistIds || []).length} playlist{(round.playlistIds || []).length !== 1 ? 's' : ''} · {round.songCount} songs
+                              {round.status === 'completed' && round.completedAt && (
+                                <span style={{ marginLeft: 8 }}>
+                                  · Completed {new Date(round.completedAt).toLocaleTimeString()}
+                                </span>
+                              )}
+                              {round.savedMixSnapshot && (
+                                <>
+                                  <br />
+                                  <span style={{ color: '#7dd3fc', fontSize: '0.72rem' }}>
+                                    Snapshot · {round.savedMixSnapshot.songs.length} tracks · {round.savedMixSnapshot.mixGeometry} ·{' '}
+                                    {new Date(round.savedMixSnapshot.savedAt).toLocaleString()}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                            <div
+                              style={{
+                                marginTop: 10,
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                gap: '10px 14px',
+                                alignItems: 'center',
+                                fontSize: '0.78rem',
+                                color: '#b9c3cd',
+                              }}
+                            >
+                              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                Pattern
+                                <select
+                                  value={round.bingoPattern ?? 'line'}
+                                  onChange={(e) => {
+                                    const v = e.target.value as BingoPattern;
+                                    handleUpdateRoundBingoFields(index, {
+                                      bingoPattern: v,
+                                      ...(v !== 'custom' ? { customPatternMask: undefined } : {}),
+                                      ...(v !== 'composite' ? { patternComposite: undefined } : {}),
+                                    });
+                                  }}
+                                  style={{
+                                    padding: '4px 8px',
+                                    borderRadius: 6,
+                                    border: '1px solid rgba(255,255,255,0.25)',
+                                    background: 'rgba(0,0,0,0.35)',
+                                    color: '#fff',
+                                    fontSize: '0.78rem',
+                                  }}
+                                >
+                                  {PATTERN_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              {(round.bingoPattern ?? 'line') === 'custom' && (
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  Saved shape
+                                  <select
+                                    value={(() => {
+                                      const mask = round.customPatternMask;
+                                      if (!mask?.length) return '';
+                                      const norm = (arr: string[]) => [...arr].sort().join(',');
+                                      const key = norm(mask);
+                                      const sp = savedCustomPatterns.find((p) => norm(p.positions) === key);
+                                      return sp?.id ?? '';
+                                    })()}
+                                    onChange={(e) => {
+                                      const id = e.target.value;
+                                      const sp = savedCustomPatterns.find((p) => p.id === id);
+                                      if (sp) {
+                                        handleUpdateRoundBingoFields(index, {
+                                          bingoPattern: 'custom',
+                                          customPatternMask: [...sp.positions],
+                                          customMatchAllowRotation: sp.matchAllowRotation === true,
+                                          customMatchAllowMirror: sp.matchAllowMirror === true,
+                                        });
+                                      }
+                                    }}
+                                    style={{
+                                      padding: '4px 8px',
+                                      borderRadius: 6,
+                                      border: '1px solid rgba(255,255,255,0.25)',
+                                      background: 'rgba(0,0,0,0.35)',
+                                      color: '#fff',
+                                      fontSize: '0.78rem',
+                                      maxWidth: 200,
+                                    }}
+                                  >
+                                    <option value="">Select saved pattern…</option>
+                                    {savedCustomPatterns.map((sp) => (
+                                      <option key={sp.id} value={sp.id}>
+                                        {sp.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              )}
+                              {(round.bingoPattern ?? 'line') === 'line' && (
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  Lines
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={LINE_PATTERN_MAX_LINES}
+                                    value={normalizeLinesRequired(round.linesRequired ?? 1)}
+                                    onChange={(e) =>
+                                      handleUpdateRoundBingoFields(index, {
+                                        linesRequired: normalizeLinesRequired(parseInt(e.target.value, 10)),
+                                      })
+                                    }
+                                    style={{
+                                      width: 52,
+                                      padding: '4px 6px',
+                                      borderRadius: 6,
+                                      border: '1px solid rgba(255,255,255,0.25)',
+                                      background: 'rgba(0,0,0,0.35)',
+                                      color: '#fff',
+                                      fontSize: '0.78rem',
+                                    }}
+                                  />
+                                </label>
+                              )}
+                              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <input
+                                  type="checkbox"
+                                  checked={
+                                    round.freeSpaceEnabled !== undefined
+                                      ? round.freeSpaceEnabled
+                                      : freeSpaceEnabled
+                                  }
+                                  onChange={(e) =>
+                                    handleUpdateRoundBingoFields(index, {
+                                      freeSpaceEnabled: e.target.checked,
+                                    })
+                                  }
+                                />
+                                Free center
+                              </label>
+                            </div>
+                          </div>
+                          <div className="host-round-manager-round__actions">
+                            {(round.playlistIds || []).length > 0 && (
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                disabled={saveRoundBusy || printablePdfLoading || mixGameActionsBlocked}
+                                onClick={() => void handleSaveRoundAtIndex(index)}
+                                title="Runs finalize automatically when needed (same server lock as Print PDF), then saves frozen tracks for this round."
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  fontSize: '0.82rem',
+                                  marginRight: 8,
+                                }}
+                              >
+                                <Save className="w-4 h-4" aria-hidden />
+                                Save round
+                              </button>
+                            )}
+                            {(round.playlistIds || []).length > 0 && (
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                disabled={printablePdfLoading}
+                                onClick={() => handleDownloadRoundPrintablePdf(round)}
+                                title={
+                                  round.savedMixSnapshot?.songs?.length
+                                    ? 'Finalizes automatically if needed; uses saved snapshot tracks when available for this export.'
+                                    : 'Finalizes automatically if needed, then builds PDF from this round’s playlists in the locked mix.'
+                                }
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  fontSize: '0.82rem',
+                                  marginRight: 8,
+                                }}
+                              >
+                                <Printer className="w-4 h-4" aria-hidden />
+                                Print PDF
+                              </button>
+                            )}
+                            {gameState !== 'playing' && (round.playlistIds || []).length > 0 && !isCurrentRound && (
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={() => handleSelectRoundForPrep(index)}
+                                title="Put this round’s playlists in the mix and sync Bingo Pattern / snippet controls — does not change round status"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  fontSize: '0.82rem',
+                                  marginRight: 8,
+                                }}
+                              >
+                                Load for prep
+                              </button>
+                            )}
+                            {canStart && !isCurrentRound && (
+                              <button
+                                type="button"
+                                onClick={() => jumpToRound(index)}
+                                className="host-round-manager-start-btn"
+                              >
+                                Start
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+          </motion.div>
+        </HostRoundManagerModal>
+      )}
       {/* Player cards: centered modal (default) or expanded full-screen panel (z-index below bingo verification) */}
       {playerCards.size > 0 && playerCardsFullscreen && (
         playerCardsMaximized ? (

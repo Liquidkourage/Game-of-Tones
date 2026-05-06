@@ -624,6 +624,19 @@
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
+.host-connection-modal.host-connection-modal--round-manager {
+  width: min(100%, 920px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.host-connection-modal.host-connection-modal--round-manager .host-connection-modal__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .host-connection-modal__header {
   display: flex;
   align-items: center;
