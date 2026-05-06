@@ -535,3 +535,81 @@ export function deleteCustomPattern(id: string): void {
     console.error('Failed to delete custom pattern:', error);
   }
 }
+
+/** Browser-local named combined (AND/OR) recipes for the host. */
+export interface SavedCompositePattern {
+  id: string;
+  name: string;
+  spec: PatternCompositeSpec;
+  createdAt: number;
+}
+
+const COMPOSITE_RECIPES_KEY = 'bingo_composite_recipes';
+
+export function getSavedCompositePatterns(): SavedCompositePattern[] {
+  try {
+    const stored = localStorage.getItem(COMPOSITE_RECIPES_KEY);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const out: SavedCompositePattern[] = [];
+    for (const row of parsed) {
+      if (!row || typeof row !== 'object') continue;
+      const id = (row as { id?: unknown }).id;
+      const name = (row as { name?: unknown }).name;
+      const specRaw = (row as { spec?: unknown }).spec;
+      const createdAt = (row as { createdAt?: unknown }).createdAt;
+      if (typeof id !== 'string' || typeof name !== 'string') continue;
+      const spec = normalizePatternComposite(specRaw);
+      if (!spec) continue;
+      out.push({
+        id,
+        name,
+        spec,
+        createdAt: typeof createdAt === 'number' ? createdAt : 0,
+      });
+    }
+    return out.sort((a, b) => b.createdAt - a.createdAt);
+  } catch {
+    return [];
+  }
+}
+
+/** Persist a normalized copy of the combined recipe. Returns null if spec is invalid. */
+export function saveCompositePattern(entry: {
+  name: string;
+  spec: PatternCompositeSpec;
+}): SavedCompositePattern | null {
+  const norm = normalizePatternComposite(JSON.parse(JSON.stringify(entry.spec)) as PatternCompositeSpec);
+  if (!norm || !entry.name.trim()) return null;
+
+  const saved: SavedCompositePattern = {
+    id: `composite_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    name: entry.name.trim(),
+    spec: norm,
+    createdAt: Date.now(),
+  };
+
+  const existing = getSavedCompositePatterns();
+  existing.push(saved);
+
+  try {
+    localStorage.setItem(COMPOSITE_RECIPES_KEY, JSON.stringify(existing));
+  } catch (error) {
+    console.error('Failed to save composite pattern:', error);
+  }
+
+  return saved;
+}
+
+export function deleteSavedCompositePattern(id: string): void {
+  const existing = getSavedCompositePatterns();
+  const filtered = existing.filter((p) => p.id !== id);
+
+  try {
+    localStorage.setItem(COMPOSITE_RECIPES_KEY, JSON.stringify(filtered));
+  } catch (error) {
+    console.error('Failed to delete composite pattern:', error);
+  }
+}
+

@@ -65,6 +65,10 @@ import {
   normalizePatternComposite,
   compositeLegitProgressPct,
   transformPositions,
+  type SavedCompositePattern,
+  getSavedCompositePatterns,
+  saveCompositePattern,
+  deleteSavedCompositePattern,
 } from '../patternDefinitions';
 import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
@@ -570,7 +574,19 @@ const HostView: React.FC = () => {
     () => normalizePatternComposite(DEFAULT_COMPOSITE_SPEC) ?? DEFAULT_COMPOSITE_SPEC,
   );
   const [compositePaintDraft, setCompositePaintDraft] = useState<string[]>([]);
+  const [savedCompositePatterns, setSavedCompositePatterns] = useState<SavedCompositePattern[]>([]);
+  const [compositeRecipeSaveName, setCompositeRecipeSaveName] = useState('');
+  const [compositeRecipePickId, setCompositeRecipePickId] = useState('');
+  const [editingMaskClauseIndex, setEditingMaskClauseIndex] = useState<number | null>(null);
   const [showSongList, setShowSongList] = useState(false);
+
+  useEffect(() => {
+    if (pattern !== 'composite') {
+      setEditingMaskClauseIndex(null);
+      setCompositePaintDraft([]);
+    }
+  }, [pattern]);
+
   const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]);
   const [superStrict, setSuperStrict] = useState<boolean>(false);
   const [showRooms, setShowRooms] = useState<boolean>(false);
@@ -1735,6 +1751,7 @@ const HostView: React.FC = () => {
 
     // Load saved custom patterns
     setSavedCustomPatterns(getSavedCustomPatterns());
+    setSavedCompositePatterns(getSavedCompositePatterns());
     
     // Request all custom song titles
     if (socket) {
@@ -5955,6 +5972,125 @@ const HostView: React.FC = () => {
                       </button>
                     </div>
 
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: 8,
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        marginBottom: 14,
+                        paddingBottom: 12,
+                        borderBottom: '1px solid rgba(255,255,255,0.1)',
+                      }}
+                    >
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.76rem', color: '#b9c3cd' }}>
+                        Saved recipe
+                        <select
+                          value={compositeRecipePickId}
+                          onChange={(e) => {
+                            const id = e.target.value;
+                            setCompositeRecipePickId(id);
+                            if (!id) return;
+                            const r = savedCompositePatterns.find((p) => p.id === id);
+                            const n = r ? normalizePatternComposite(r.spec) : null;
+                            if (n) {
+                              commitPatternComposite(n);
+                              setEditingMaskClauseIndex(null);
+                              setCompositePaintDraft([]);
+                              addLog(`Loaded combined recipe: ${r!.name}`, 'info');
+                            }
+                          }}
+                          style={{
+                            padding: '5px 8px',
+                            borderRadius: 6,
+                            border: '1px solid rgba(255,255,255,0.25)',
+                            background: 'rgba(0,0,0,0.35)',
+                            color: '#fff',
+                            fontSize: '0.76rem',
+                            maxWidth: 200,
+                          }}
+                        >
+                          <option value="">Choose…</option>
+                          {savedCompositePatterns.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        disabled={!compositeRecipePickId}
+                        title="Remove this recipe from this browser only"
+                        onClick={() => {
+                          if (!compositeRecipePickId) return;
+                          const r = savedCompositePatterns.find((p) => p.id === compositeRecipePickId);
+                          if (
+                            !window.confirm(
+                              r ? `Delete saved recipe “${r.name}”?` : 'Delete this saved recipe?',
+                            )
+                          ) {
+                            return;
+                          }
+                          deleteSavedCompositePattern(compositeRecipePickId);
+                          setSavedCompositePatterns(getSavedCompositePatterns());
+                          setCompositeRecipePickId('');
+                          addLog('Saved combined recipe deleted', 'info');
+                        }}
+                        style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" aria-hidden />
+                        Delete
+                      </button>
+                      <input
+                        type="text"
+                        value={compositeRecipeSaveName}
+                        onChange={(e) => setCompositeRecipeSaveName(e.target.value)}
+                        placeholder="Name for current recipe"
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: 6,
+                          border: '1px solid rgba(255,255,255,0.25)',
+                          background: 'rgba(0,0,0,0.35)',
+                          color: '#fff',
+                          fontSize: '0.76rem',
+                          width: 160,
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => {
+                          const name = compositeRecipeSaveName.trim();
+                          if (!name) {
+                            showToast('Enter a recipe name first', 'warn');
+                            return;
+                          }
+                          const norm = normalizePatternComposite(patternComposite);
+                          if (!norm) {
+                            showToast('Cannot save invalid combined pattern', 'error');
+                            return;
+                          }
+                          const saved = saveCompositePattern({ name, spec: norm });
+                          if (!saved) {
+                            showToast('Could not save recipe', 'error');
+                            return;
+                          }
+                          setSavedCompositePatterns(getSavedCompositePatterns());
+                          setCompositeRecipeSaveName('');
+                          setCompositeRecipePickId(saved.id);
+                          addLog(`Saved combined recipe: ${saved.name}`, 'info');
+                          showToast(`Saved “${saved.name}”`, 'success');
+                        }}
+                        style={{ fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                      >
+                        <Save className="w-3.5 h-3.5" aria-hidden />
+                        Save
+                      </button>
+                    </div>
+
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {patternComposite.clauses.map((clause, idx) => {
                         const sel =
@@ -5974,6 +6110,10 @@ const HostView: React.FC = () => {
                               value={sel}
                               onChange={(e) => {
                                 const v = e.target.value;
+                                if (editingMaskClauseIndex === idx && v !== 'mask') {
+                                  setEditingMaskClauseIndex(null);
+                                  setCompositePaintDraft([]);
+                                }
                                 const clauses = [...patternComposite.clauses];
                                 if (v === 'mask') {
                                   const pos =
@@ -6008,13 +6148,41 @@ const HostView: React.FC = () => {
                                 {clause.positions.length} squares
                               </span>
                             )}
+                            {clause.kind === 'mask' && (
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={() => {
+                                  setEditingMaskClauseIndex(idx);
+                                  setCompositePaintDraft([...clause.positions]);
+                                }}
+                                style={{
+                                  fontSize: '0.72rem',
+                                  padding: '4px 8px',
+                                  borderColor:
+                                    editingMaskClauseIndex === idx
+                                      ? 'rgba(0,255,136,0.75)'
+                                      : 'rgba(255,255,255,0.25)',
+                                  color: editingMaskClauseIndex === idx ? '#00ff88' : '#e0e0e0',
+                                }}
+                              >
+                                Edit in grid
+                              </button>
+                            )}
                             <button
                               type="button"
                               className="btn-secondary"
                               disabled={patternComposite.clauses.length <= 1}
                               title={patternComposite.clauses.length <= 1 ? 'Need at least one clause' : 'Remove this clause'}
                               onClick={() => {
+                                let nextEdit = editingMaskClauseIndex;
+                                if (editingMaskClauseIndex !== null) {
+                                  if (editingMaskClauseIndex === idx) nextEdit = null;
+                                  else if (editingMaskClauseIndex > idx) nextEdit = editingMaskClauseIndex - 1;
+                                }
                                 const clauses = patternComposite.clauses.filter((_, j) => j !== idx);
+                                setEditingMaskClauseIndex(nextEdit);
+                                if (nextEdit === null) setCompositePaintDraft([]);
                                 commitPatternComposite({ ...patternComposite, clauses });
                               }}
                               style={{ fontSize: '0.72rem', padding: '4px 8px', opacity: patternComposite.clauses.length <= 1 ? 0.45 : 1 }}
@@ -6050,7 +6218,19 @@ const HostView: React.FC = () => {
                       }}
                     >
                       <div style={{ fontSize: '0.76rem', color: '#9aa5b1', marginBottom: 8, textAlign: 'center' }}>
-                        Paint helper — tap squares, use transforms, then add as a &quot;painted shape&quot; clause.
+                        {editingMaskClauseIndex !== null ? (
+                          <>
+                            <span style={{ color: '#7dd3fc' }}>
+                              Editing painted clause {editingMaskClauseIndex + 1}
+                            </span>
+                            {' — '}
+                            change squares below, then apply (or cancel).
+                          </>
+                        ) : (
+                          <>
+                            Paint helper — tap squares, use transforms, then add as a new &quot;painted shape&quot; clause.
+                          </>
+                        )}
                       </div>
                       <div
                         style={{
@@ -6144,25 +6324,61 @@ const HostView: React.FC = () => {
                           );
                         })}
                       </div>
-                      <div style={{ textAlign: 'center' }}>
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          disabled={compositePaintDraft.length === 0}
-                          onClick={() => {
-                            if (!compositePaintDraft.length) return;
-                            commitPatternComposite({
-                              ...patternComposite,
-                              clauses: [
-                                ...patternComposite.clauses,
-                                { kind: 'mask', positions: [...compositePaintDraft].sort() },
-                              ],
-                            });
-                          }}
-                          style={{ fontSize: '0.78rem' }}
-                        >
-                          Add painted squares as clause
-                        </button>
+                      <div style={{ textAlign: 'center', display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+                        {editingMaskClauseIndex !== null ? (
+                          <>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              disabled={compositePaintDraft.length === 0}
+                              onClick={() => {
+                                const i = editingMaskClauseIndex;
+                                if (i === null || compositePaintDraft.length === 0) return;
+                                const clauses = [...patternComposite.clauses];
+                                if (i < 0 || i >= clauses.length) return;
+                                clauses[i] = { kind: 'mask', positions: [...compositePaintDraft].sort() };
+                                commitPatternComposite({ ...patternComposite, clauses });
+                                setEditingMaskClauseIndex(null);
+                                setCompositePaintDraft([]);
+                                addLog(`Updated painted clause ${i + 1}`, 'info');
+                              }}
+                              style={{ fontSize: '0.78rem' }}
+                            >
+                              Apply to clause {editingMaskClauseIndex + 1}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() => {
+                                setEditingMaskClauseIndex(null);
+                                setCompositePaintDraft([]);
+                              }}
+                              style={{ fontSize: '0.78rem' }}
+                            >
+                              Cancel edit
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            disabled={compositePaintDraft.length === 0}
+                            onClick={() => {
+                              if (!compositePaintDraft.length) return;
+                              commitPatternComposite({
+                                ...patternComposite,
+                                clauses: [
+                                  ...patternComposite.clauses,
+                                  { kind: 'mask', positions: [...compositePaintDraft].sort() },
+                                ],
+                              });
+                              setCompositePaintDraft([]);
+                            }}
+                            style={{ fontSize: '0.78rem' }}
+                          >
+                            Add painted squares as clause
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
