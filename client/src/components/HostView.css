@@ -864,6 +864,21 @@
   font-size: 1.15rem;
 }
 
+.host-round-manager-printable {
+  margin-bottom: 20px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.host-round-manager-printable h4 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+}
+
 .host-round-manager-overview {
   margin-bottom: 20px;
   padding: 14px 16px;

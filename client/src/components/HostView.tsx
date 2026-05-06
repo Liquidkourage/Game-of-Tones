@@ -7220,6 +7220,40 @@ const HostView: React.FC = () => {
                     <CalendarRange className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
                     Round & event
                   </h2>
+                  <p style={{ margin: '8px 0 12px', fontSize: '0.82rem', color: '#9aa5b1', lineHeight: 1.45, maxWidth: 560 }}>
+                    <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> (Round & event management) and{' '}
+                    <strong style={{ color: '#c5cdd6' }}>Download PDF</strong> (Game tab) both use this many randomized dauber cards per export (1–200).
+                  </p>
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 10,
+                      alignItems: 'center',
+                      marginBottom: 18,
+                    }}
+                  >
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: '#c8d0d8' }}>
+                      Cards per PDF
+                      <input
+                        type="number"
+                        min={1}
+                        max={200}
+                        value={printableCardCount}
+                        onChange={(e) => setPrintableCardCount(Number(e.target.value))}
+                        disabled={printablePdfLoading}
+                        aria-label="Number of bingo cards per printable PDF export"
+                        style={{
+                          width: 72,
+                          padding: '6px 8px',
+                          borderRadius: 8,
+                          border: '1px solid rgba(255,255,255,0.15)',
+                          background: 'rgba(0,0,0,0.25)',
+                          color: '#fff',
+                        }}
+                      />
+                    </label>
+                  </div>
                   <p className="host-manager-round__actions-head">Quick actions</p>
                   <div className="host-manager-round__row">
                       <button
@@ -7680,11 +7714,12 @@ const HostView: React.FC = () => {
                      Generate random cards from your bingo pool and download a PDF.{' '}
                      <strong style={{ color: '#c5cdd6' }}>Download PDF</strong> runs finalize automatically when needed so the pool is truncated (5×15 / 1×75) before cards are built. In{' '}
                      <strong style={{ color: '#c5cdd6' }}>Round Manager</strong>, <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> does the same
-                     for that round&apos;s playlists (or uses a saved snapshot when you have one).
+                     for that round&apos;s playlists (or uses a saved snapshot when you have one). Set card count on the{' '}
+                     <strong style={{ color: '#c5cdd6' }}>Manager</strong> tab or inside <strong style={{ color: '#c5cdd6' }}>Round & event management</strong> when prepping offline packs — no need to visit Game tab first.
                    </p>
                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: '#c8d0d8' }}>
-                       Count
+                       Cards per PDF
                        <input
                          type="number"
                          min={1}
@@ -8225,6 +8260,38 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                     );
                   })()}
                 </div>
+              </div>
+
+              <div className="host-round-manager-printable">
+                <h4 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Printer className="w-4 h-4" style={{ color: '#00ff88' }} aria-hidden />
+                  Printable dauber cards (PDF)
+                </h4>
+                <p style={{ margin: '0 0 10px', fontSize: '0.8rem', color: '#9aa5b1', lineHeight: 1.45 }}>
+                  Set how many randomized cards each round&apos;s <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> includes (same value as{' '}
+                  <strong style={{ color: '#c5cdd6' }}>Download PDF</strong> on the Game tab and <strong style={{ color: '#c5cdd6' }}>Cards per PDF</strong> on the Manager tab).
+                </p>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: '#c8d0d8', flexWrap: 'wrap' }}>
+                  Cards per PDF
+                  <input
+                    type="number"
+                    min={1}
+                    max={200}
+                    value={printableCardCount}
+                    onChange={(e) => setPrintableCardCount(Number(e.target.value))}
+                    disabled={printablePdfLoading}
+                    aria-label="Number of bingo cards per printable PDF export"
+                    style={{
+                      width: 72,
+                      padding: '6px 8px',
+                      borderRadius: 8,
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      background: 'rgba(0,0,0,0.25)',
+                      color: '#fff',
+                    }}
+                  />
+                  <span style={{ fontSize: '0.75rem', color: '#7d8795' }}>1–200</span>
+                </label>
               </div>
 
               <div>
