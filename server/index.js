@@ -2618,10 +2618,28 @@ io.on('connection', (socket) => {
           return;
         }
         const cards = [];
+
+        let useFiveByFifteenRoundPrint = false;
+        let roundAllowedIds = null;
+        if (
+          roundPool &&
+          Array.isArray(roundPlaylistIds) &&
+          roundPlaylistIds.length === 5 &&
+          roundPlaylistSetMatchesFiveByFifteenColumns(room, roundPlaylistIds)
+        ) {
+          roundAllowedIds = new Set(roundPool.map((s) => s.id).filter(Boolean));
+          const probe = pickChosen25ForPrintableFiveByFifteen(room, useFreeSpace, roundAllowedIds);
+          if (probe && probe.length === songsNeededFirst) {
+            useFiveByFifteenRoundPrint = true;
+          }
+        }
+
         for (let i = 0; i < count; i++) {
-          const chosen25 = roundPool
-            ? pickChosen25ForPrintableFromPool(roundPool, useFreeSpace)
-            : pickChosen25ForPrintableCard(room);
+          const chosen25 = useFiveByFifteenRoundPrint
+            ? pickChosen25ForPrintableFiveByFifteen(room, useFreeSpace, roundAllowedIds)
+            : roundPool
+              ? pickChosen25ForPrintableFromPool(roundPool, useFreeSpace)
+              : pickChosen25ForPrintableCard(room);
           if (!chosen25) {
             socket.emit('printable-cards-error', {
               message:
@@ -2647,7 +2665,9 @@ io.on('connection', (socket) => {
             bypassFinalizeForSnapshot
               ? ` (saved round snapshot, ${roundPool?.length ?? 0} tracks)`
               : roundPlaylistIds && roundPlaylistIds.length
-                ? ` (round subset: ${roundPlaylistIds.length} playlist(s), ${roundPool?.length ?? 0} tracks)`
+                ? ` (round subset: ${roundPlaylistIds.length} playlist(s), ${roundPool?.length ?? 0} tracks${
+                    useFiveByFifteenRoundPrint ? ', 5×15 column geometry' : ''
+                  })`
                 : ' (full finalized pool)'
           }`,
         );
@@ -5576,6 +5596,112 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
 }
 
 /**
+ * Whether this round's five playlists are exactly the five 5×15 column sources (order-independent).
+ * Used so Round Manager → Print PDF matches Game tab column integrity.
+ */
+function roundPlaylistSetMatchesFiveByFifteenColumns(room, roundPlaylistIdsRaw) {
+  const cols = room.fiveByFifteenColumnsIds;
+  const meta = room.fiveByFifteenMeta;
+  if (
+    !Array.isArray(cols) ||
+    cols.length !== 5 ||
+    !cols.every((col) => Array.isArray(col) && col.length >= 15)
+  ) {
+    return false;
+  }
+  if (!meta || typeof meta !== 'object') return false;
+  if (!Array.isArray(roundPlaylistIdsRaw) || roundPlaylistIdsRaw.length !== 5) return false;
+  const want = new Set(
+    roundPlaylistIdsRaw.map((x) => String(x).trim()).filter(Boolean),
+  );
+  if (want.size !== 5) return false;
+  const columnPlaylistIds = [];
+  for (let col = 0; col < 5; col++) {
+    const id0 = cols[col][0];
+    const m = meta[id0];
+    const pid = m && m.sourcePlaylistId != null ? String(m.sourcePlaylistId).trim() : '';
+    if (!pid || !want.has(pid)) return false;
+    columnPlaylistIds.push(pid);
+  }
+  return new Set(columnPlaylistIds).size === 5;
+}
+
+/** Pick 24/25 for one printable card using frozen 5×15 columns; optional allowedIds restricts to a subset pool (saved round / modal export). */
+function pickChosen25ForPrintableFiveByFifteen(room, useFreeSpace, allowedIds /* Set|null */) {
+  const songsNeededPerCard = useFreeSpace ? 24 : 25;
+  const mode5x15 =
+    Array.isArray(room.fiveByFifteenColumnsIds) &&
+    room.fiveByFifteenColumnsIds.length === 5 &&
+    room.fiveByFifteenColumnsIds.every((col) => Array.isArray(col) && col.length >= 15);
+  if (!mode5x15) return null;
+
+  const map = buildCanonicalSongMapFromRoom(room);
+  const meta =
+    room.fiveByFifteenMeta && typeof room.fiveByFifteenMeta === 'object' ? room.fiveByFifteenMeta : {};
+  const perListGloballyUnique = room.fiveByFifteenColumnsIds.map((colIds) =>
+    colIds
+      .map((id) => {
+        let s = map.get(id);
+        if (!s && meta[id]) {
+          s = {
+            id,
+            name: meta[id].name || '',
+            artist: meta[id].artist || '',
+            explicit: meta[id].explicit === true,
+            youtubeMusic: meta[id].youtubeMusic === true,
+          };
+        }
+        return s;
+      })
+      .filter(Boolean)
+      .filter((s) => !allowedIds || allowedIds.has(s.id)),
+  );
+
+  for (let col = 0; col < 5; col++) {
+    const need = useFreeSpace && col === 2 ? 4 : 5;
+    if (perListGloballyUnique[col].length < need) return null;
+  }
+
+  const used = new Set();
+  const columns = [];
+  let ok = true;
+  for (let col = 0; col < 5; col++) {
+    const need = useFreeSpace && col === 2 ? 4 : 5;
+    const pool = properShuffle(perListGloballyUnique[col]);
+    const colPicks = [];
+    for (const s of pool) {
+      if (!used.has(s.id)) {
+        colPicks.push(s);
+        used.add(s.id);
+      }
+      if (colPicks.length === need) break;
+    }
+    if (colPicks.length < need) {
+      ok = false;
+      break;
+    }
+    columns.push(colPicks);
+  }
+  if (!ok) return null;
+
+  const chosen25 = [];
+  for (let row = 0; row < 5; row++) {
+    for (let col = 0; col < 5; col++) {
+      if (useFreeSpace && row === 2 && col === 2) continue;
+      if (useFreeSpace && col === 2) {
+        const idxInCol = row < 2 ? row : row - 1;
+        chosen25.push(columns[2][idxInCol]);
+      } else {
+        chosen25.push(columns[col][row]);
+      }
+    }
+  }
+
+  if (chosen25.length !== songsNeededPerCard) return null;
+  return chosen25;
+}
+
+/**
  * Pick 24 or 25 songs for one extra printable card using the same geometry as generateBingoCards,
  * from pools stored on the room at finalize time (1x75, 5x15 columns, or canonical fallback pool).
  */
@@ -5594,58 +5720,7 @@ function pickChosen25ForPrintableCard(room) {
   let chosen25 = [];
 
   if (mode5x15) {
-    const meta =
-      room.fiveByFifteenMeta && typeof room.fiveByFifteenMeta === 'object' ? room.fiveByFifteenMeta : {};
-    const perListGloballyUnique = room.fiveByFifteenColumnsIds.map((colIds) =>
-      colIds
-        .map((id) => {
-          let s = map.get(id);
-          if (!s && meta[id]) {
-            s = {
-              id,
-              name: meta[id].name || '',
-              artist: meta[id].artist || '',
-            };
-          }
-          return s;
-        })
-        .filter(Boolean)
-    );
-    if (perListGloballyUnique.some((pl) => pl.length < 15)) return null;
-
-    const used = new Set();
-    const columns = [];
-    let ok = true;
-    for (let col = 0; col < 5; col++) {
-      const need = useFreeSpace && col === 2 ? 4 : 5;
-      const pool = properShuffle(perListGloballyUnique[col]);
-      const colPicks = [];
-      for (const s of pool) {
-        if (!used.has(s.id)) {
-          colPicks.push(s);
-          used.add(s.id);
-        }
-        if (colPicks.length === need) break;
-      }
-      if (colPicks.length < need) {
-        ok = false;
-        break;
-      }
-      columns.push(colPicks);
-    }
-    if (!ok) return null;
-
-    for (let row = 0; row < 5; row++) {
-      for (let col = 0; col < 5; col++) {
-        if (useFreeSpace && row === 2 && col === 2) continue;
-        if (useFreeSpace && col === 2) {
-          const idxInCol = row < 2 ? row : row - 1;
-          chosen25.push(columns[2][idxInCol]);
-        } else {
-          chosen25.push(columns[col][row]);
-        }
-      }
-    }
+    return pickChosen25ForPrintableFiveByFifteen(room, useFreeSpace, null);
   } else if (mode1x75) {
     const base = room.oneBySeventyFivePool
       .map((e) => map.get(typeof e === 'string' ? e : e.id))
@@ -5813,7 +5888,7 @@ function normalizeSongSnapshotForPrint(raw) {
   return out.length ? out : null;
 }
 
-/** Printable card: random 24/25 from an explicit pool (round playlists), not 5×15 / 1×75 geometry. */
+/** Printable card: random 24/25 from a flat pool when round playlists are not the locked 5×15 column set (see request-printable-cards). */
 function pickChosen25ForPrintableFromPool(pool, useFreeSpace) {
   const songsNeededPerCard = useFreeSpace ? 24 : 25;
   if (!pool || pool.length < songsNeededPerCard) return null;
