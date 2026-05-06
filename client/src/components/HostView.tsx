@@ -42,6 +42,8 @@ import {
   Printer,
   Save,
   Eraser,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL, ENABLE_YOUTUBE_MUSIC } from '../config';
@@ -385,6 +387,41 @@ function filterBasePlaylistsForMix(playlists: Playlist[], showAllPlaylists: bool
   return [...spotifyPart, ...ytm];
 }
 
+const HOST_MANAGER_COLLAPSE_STORAGE_KEY = 'game-host-manager-collapse-v1';
+
+function loadHostManagerCollapsePrefs(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(HOST_MANAGER_COLLAPSE_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed as Record<string, boolean>;
+  } catch {
+    return {};
+  }
+}
+
+function HostManagerCollapseToggle({
+  collapsed,
+  onToggle,
+}: {
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="host-manager-section__collapse"
+      aria-expanded={!collapsed}
+      title={collapsed ? 'Expand section' : 'Collapse section'}
+      aria-label={collapsed ? 'Expand section' : 'Collapse section'}
+      onClick={onToggle}
+    >
+      {collapsed ? <ChevronDown className="w-4 h-4" aria-hidden /> : <ChevronUp className="w-4 h-4" aria-hidden />}
+    </button>
+  );
+}
+
 const HostView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -493,6 +530,19 @@ const HostView: React.FC = () => {
   const [printableCardCount, setPrintableCardCount] = useState(30);
   const [saveRoundBusy, setSaveRoundBusy] = useState(false);
   const [printablePdfLoading, setPrintablePdfLoading] = useState(false);
+  /** Manager tab: optional collapsed framed sections (persisted per browser). */
+  const [hostManagerCollapse, setHostManagerCollapse] = useState<Record<string, boolean>>(loadHostManagerCollapsePrefs);
+  const toggleHostManagerCollapse = useCallback((sectionId: string) => {
+    setHostManagerCollapse((prev) => {
+      const next = { ...prev, [sectionId]: !prev[sectionId] };
+      try {
+        localStorage.setItem(HOST_MANAGER_COLLAPSE_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
   /** Server served GET /v1/me/playlists from last successful DB copy (Spotify 429 or TEMPO quarantine). */
   const [spotifyListCacheInfo, setSpotifyListCacheInfo] = useState<string | null>(null);
@@ -5930,58 +5980,94 @@ const HostView: React.FC = () => {
                 )}
 
                 <div className="host-manager-grid host-manager-grid--split">
-                    <section className="host-manager-section host-manager-grid__full">
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 12,
-                    marginBottom: 0,
-                    padding: '12px 14px',
-                    borderRadius: 10,
-                    border: '1px solid rgba(0, 255, 136, 0.25)',
-                    background: 'rgba(0, 255, 136, 0.06)',
-                    cursor: 'pointer',
-                    maxWidth: '100%',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    className="host-control-checkbox"
-                    checked={hybridInPersonPlusOnline}
-                    onChange={(e) => {
-                      const v = e.target.checked;
-                      setHybridInPersonPlusOnline(v);
-                      try {
-                        socket?.emit('set-hybrid-mode', { roomId, hybridInPersonPlusOnline: v });
-                      } catch {
-                        /* ignore */
-                      }
-                    }}
-                    style={{ marginTop: 4 }}
-                  />
-                  <span style={{ fontSize: '0.88rem', lineHeight: 1.45, color: 'rgba(255,255,255,0.9)' }}>
-                    <strong style={{ color: '#00ff88' }}>Hybrid in-person + online</strong>
-                    <br />
-                    Remote players who join with &quot;online&quot; can play, but a valid bingo from them does{' '}
-                    <strong>not</strong> pause the game or award the round — only an <strong>in-person</strong> player&apos;s
-                    bingo does. They still see when they complete the pattern.
-                  </span>
-                </label>
+                    <section
+                      className={`host-manager-section host-manager-grid__full host-manager-section--collapsible${
+                        hostManagerCollapse['mgr-hybrid'] ? ' host-manager-section--collapsed' : ''
+                      }`}
+                    >
+                      <div className="host-manager-section__topbar">
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {!hostManagerCollapse['mgr-hybrid'] ? (
+                            <label
+                              style={{
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: 12,
+                                marginBottom: 0,
+                                padding: '12px 14px',
+                                borderRadius: 10,
+                                border: '1px solid rgba(0, 255, 136, 0.25)',
+                                background: 'rgba(0, 255, 136, 0.06)',
+                                cursor: 'pointer',
+                                maxWidth: '100%',
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                className="host-control-checkbox"
+                                checked={hybridInPersonPlusOnline}
+                                onChange={(e) => {
+                                  const v = e.target.checked;
+                                  setHybridInPersonPlusOnline(v);
+                                  try {
+                                    socket?.emit('set-hybrid-mode', { roomId, hybridInPersonPlusOnline: v });
+                                  } catch {
+                                    /* ignore */
+                                  }
+                                }}
+                                style={{ marginTop: 4 }}
+                              />
+                              <span style={{ fontSize: '0.88rem', lineHeight: 1.45, color: 'rgba(255,255,255,0.9)' }}>
+                                <strong style={{ color: '#00ff88' }}>Hybrid in-person + online</strong>
+                                <br />
+                                Remote players who join with &quot;online&quot; can play, but a valid bingo from them does{' '}
+                                <strong>not</strong> pause the game or award the round — only an <strong>in-person</strong> player&apos;s
+                                bingo does. They still see when they complete the pattern.
+                              </span>
+                            </label>
+                          ) : (
+                            <p
+                              style={{
+                                margin: 0,
+                                padding: '10px 12px',
+                                fontSize: '0.88rem',
+                                lineHeight: 1.45,
+                                color: 'rgba(255,255,255,0.72)',
+                              }}
+                            >
+                              <strong style={{ color: '#00ff88' }}>Hybrid in-person + online</strong> — expand to view or change.
+                            </p>
+                          )}
+                        </div>
+                        <HostManagerCollapseToggle
+                          collapsed={!!hostManagerCollapse['mgr-hybrid']}
+                          onToggle={() => toggleHostManagerCollapse('mgr-hybrid')}
+                        />
+                      </div>
                     </section>
 
           {/* Pattern Selection — applies to every mix (Spotify, YouTube Music, catalog-only, hybrid). */}
           <div className="host-manager-grid__primary">
             <motion.div 
-              className="pattern-section host-manager-section"
+              className={`pattern-section host-manager-section host-manager-section--collapsible${
+                hostManagerCollapse['mgr-bingo-pattern'] ? ' host-manager-section--collapsed' : ''
+              }`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.3 }}
             >
-              <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Grid3x3 className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
-                Bingo Pattern
-              </h2>
+              <div className="host-manager-section__topbar">
+                <h2 style={{ display: 'flex', alignItems: 'center', gap: 10, margin: 0, flex: 1, minWidth: 0 }}>
+                  <Grid3x3 className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
+                  Bingo Pattern
+                </h2>
+                <HostManagerCollapseToggle
+                  collapsed={!!hostManagerCollapse['mgr-bingo-pattern']}
+                  onToggle={() => toggleHostManagerCollapse('mgr-bingo-pattern')}
+                />
+              </div>
+              {!hostManagerCollapse['mgr-bingo-pattern'] ? (
+              <>
               <p style={{ margin: '0 0 14px', fontSize: '0.82rem', color: '#9aa5b1', lineHeight: 1.45 }}>
                 Each round stores its own pattern and free-space setting. Use <strong style={{ color: '#c5cdd6' }}>Load for prep</strong>{' '}
                 on a round bucket (or in Round prep & PDF) to sync that round&apos;s playlists into the mix without starting it — the Bingo Pattern section then applies to that round, and changes are saved on it.{' '}
@@ -6406,19 +6492,34 @@ const HostView: React.FC = () => {
                     </div>
                   )}
                 </div>
+              </>
+              ) : null}
             </motion.div>
             </div>
                   <div className="host-manager-grid__secondary">
           <motion.div
-            className="host-manager-section host-manager-section--display font-size-section"
+            className={`host-manager-section host-manager-section--display font-size-section host-manager-section--collapsible${
+              hostManagerCollapse['mgr-public-display'] ? ' host-manager-section--collapsed' : ''
+            }`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4 }}
           >
-            <h2 className="host-manager-section__title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Monitor className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
-              Public display
-            </h2>
+            <div className="host-manager-section__topbar">
+              <h2
+                className="host-manager-section__title host-manager-section__topbar-main"
+                style={{ display: 'flex', alignItems: 'center', gap: 10, margin: 0 }}
+              >
+                <Monitor className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
+                Public display
+              </h2>
+              <HostManagerCollapseToggle
+                collapsed={!!hostManagerCollapse['mgr-public-display']}
+                onToggle={() => toggleHostManagerCollapse('mgr-public-display')}
+              />
+            </div>
+            {!hostManagerCollapse['mgr-public-display'] ? (
+            <>
             <p className="host-manager-section__lead">
               Text size and what appears on the projector or TV for players.
             </p>
@@ -6663,14 +6764,30 @@ const HostView: React.FC = () => {
                 ) : null}
               </>
             ) : null}
+            </>
+            ) : null}
           </motion.div>
                   </div>
                 </div>
 
           {/* Music & rounds: planner + playlists — show when Spotify is linked OR YouTube Music OAuth is available on server */}
           {(isSpotifyConnected || showYoutubeMusicInConnectionModal) && (
-            <div className="host-manager-music host-manager-section">
-              <h2 className="host-manager-music__title">Music &amp; rounds</h2>
+            <div
+              className={`host-manager-music host-manager-section host-manager-section--collapsible${
+                hostManagerCollapse['mgr-music-rounds'] ? ' host-manager-section--collapsed' : ''
+              }`}
+            >
+              <div className="host-manager-section__topbar">
+                <h2 className="host-manager-music__title" style={{ margin: 0, flex: 1, minWidth: 0 }}>
+                  Music &amp; rounds
+                </h2>
+                <HostManagerCollapseToggle
+                  collapsed={!!hostManagerCollapse['mgr-music-rounds']}
+                  onToggle={() => toggleHostManagerCollapse('mgr-music-rounds')}
+                />
+              </div>
+              {!hostManagerCollapse['mgr-music-rounds'] ? (
+              <>
               {!isSpotifyConnected && showYoutubeMusicInConnectionModal ? (
                 <p style={{ fontSize: '0.84rem', color: '#b8c4cc', margin: '0 0 14px', lineHeight: 1.5, maxWidth: 720 }}>
                   Spotify isn&apos;t connected or your library didn&apos;t load (for example rate limits). Your{' '}
@@ -7247,6 +7364,8 @@ const HostView: React.FC = () => {
                         Create output playlist
                       </button>
                     </div>
+              </>
+              ) : null}
             </div>
           )}
 
@@ -7255,12 +7374,22 @@ const HostView: React.FC = () => {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.4 }}
-                  className="host-manager-round"
+                  className={`host-manager-round host-manager-section--collapsible${
+                    hostManagerCollapse['mgr-round-event'] ? ' host-manager-section--collapsed' : ''
+                  }`}
                 >
-                  <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <CalendarRange className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
-                    Round & event
-                  </h2>
+                  <div className="host-manager-section__topbar">
+                    <h2 style={{ display: 'flex', alignItems: 'center', gap: 10, margin: 0, flex: 1, minWidth: 0 }}>
+                      <CalendarRange className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
+                      Round & event
+                    </h2>
+                    <HostManagerCollapseToggle
+                      collapsed={!!hostManagerCollapse['mgr-round-event']}
+                      onToggle={() => toggleHostManagerCollapse('mgr-round-event')}
+                    />
+                  </div>
+                  {!hostManagerCollapse['mgr-round-event'] ? (
+                  <>
                   <p style={{ margin: '8px 0 12px', fontSize: '0.82rem', color: '#9aa5b1', lineHeight: 1.45, maxWidth: 560 }}>
                     <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> (Round & event management) and{' '}
                     <strong style={{ color: '#c5cdd6' }}>Download PDF</strong> (Game tab) share the same server shuffle rules and bingo geometry — same card count here (1–200).
@@ -7373,6 +7502,12 @@ const HostView: React.FC = () => {
                         </span>
                       </div>
                   </div>
+                  </>
+                  ) : (
+                    <p style={{ margin: '8px 0 0', fontSize: '0.82rem', color: 'rgba(255,255,255,0.68)', lineHeight: 1.45 }}>
+                      Expand for PDF card count, Round Manager link, and event resets.
+                    </p>
+                  )}
                 </motion.div>
               </div>
             )}
