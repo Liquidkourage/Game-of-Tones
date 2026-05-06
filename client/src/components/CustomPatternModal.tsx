@@ -198,6 +198,23 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
                 </button>
                 <button
                   type="button"
+                  onClick={() => applyTransform('rotate180')}
+                  title="Rotate 180°"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    color: '#e8ecf1',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  180°
+                </button>
+                <button
+                  type="button"
                   onClick={() => applyTransform('flipH')}
                   title="Mirror left / right"
                   style={{

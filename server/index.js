@@ -20,7 +20,7 @@ const catalogSpotify = require('./catalogSpotify');
 const youtubeMusic = require('./youtubeMusic');
 const { applyYoutubeCatalogTrackVerification } = require('./youtubeTrackCatalogVerify');
 
-/** Host-facing bingo win shapes (`blackout` === cover all 25; same validation as `full_card`). */
+/** Host-facing bingo patterns; `blackout` incoming values normalize to `full_card`. */
 const ALLOWED_BINGO_PATTERNS = new Set([
   'line',
   'four_corners',
@@ -34,6 +34,10 @@ const ALLOWED_BINGO_PATTERNS = new Set([
   'custom',
   'composite',
 ]);
+
+function canonicalHostBingoPattern(pattern) {
+  return pattern === 'blackout' ? 'full_card' : pattern;
+}
 
 // Song title cleaning utility
 function cleanSongTitle(title) {
@@ -2659,7 +2663,8 @@ io.on('connection', (socket) => {
       const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
       if (!isCurrentHost) return;
       const allowed = ALLOWED_BINGO_PATTERNS;
-      room.pattern = allowed.has(pattern) ? pattern : 'line';
+      const canonPattern = canonicalHostBingoPattern(pattern);
+      room.pattern = allowed.has(canonPattern) ? canonPattern : 'line';
       if (room.pattern === 'custom') {
         const mask = Array.isArray(customMask) ? customMask.filter(p => /^(0|1|2|3|4)-(0|1|2|3|4)$/.test(p)) : [];
         room.customPattern = new Set(mask);
@@ -3999,8 +4004,8 @@ io.on('connection', (socket) => {
         // Apply pattern from host if provided; default to 'line' if still unset
         try {
           const allowed = ALLOWED_BINGO_PATTERNS;
-          if (incomingPattern && allowed.has(incomingPattern)) {
-            room.pattern = incomingPattern;
+          if (incomingPattern && allowed.has(canonicalHostBingoPattern(incomingPattern))) {
+            room.pattern = canonicalHostBingoPattern(incomingPattern);
           }
           if (room.pattern === 'custom' && Array.isArray(incomingCustomMask)) {
             const mask = incomingCustomMask.filter((p) => /^(0|1|2|3|4)-(0|1|2|3|4)$/.test(p));
@@ -6960,8 +6965,68 @@ const COMPOSITE_PRESET_KEYS = new Set([
   'u',
   'plus',
   'full_card',
-  'blackout',
 ]);
+
+function normalizeCompositeMatchVariants(raw) {
+  const ALLOWED = new Set(['rotateCw', 'rotateCcw', 'rotate180', 'flipH', 'flipV']);
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const x of raw) {
+    if (typeof x === 'string' && ALLOWED.has(x) && !out.includes(x)) out.push(x);
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+function parseRcComposite(pos) {
+  const [a, b] = String(pos).split('-').map(Number);
+  return [a, b];
+}
+
+/** Rotate/mirror positions on 5×5 grid — mirrors patternDefinitions.transformPositions */
+function transformGridPositions(positions, t) {
+  const out = new Set();
+  for (const pos of positions) {
+    if (!/^[0-4]-[0-4]$/.test(pos)) continue;
+    let [r, c] = parseRcComposite(pos);
+    switch (t) {
+      case 'rotateCw':
+        [r, c] = [c, 4 - r];
+        break;
+      case 'rotateCcw':
+        [r, c] = [4 - c, r];
+        break;
+      case 'rotate180':
+        [r, c] = [4 - r, 4 - c];
+        break;
+      case 'flipH':
+        c = 4 - c;
+        break;
+      case 'flipV':
+        r = 4 - r;
+        break;
+      default:
+        break;
+    }
+    out.add(`${r}-${c}`);
+  }
+  return Array.from(out).sort();
+}
+
+function expandCompositeShapeVariants(baseSorted, transforms) {
+  const tArr = Array.isArray(transforms) ? transforms : [];
+  const masks = new Map();
+  const keyFn = (m) => m.slice().join('|');
+  const add = (arr) => {
+    const sorted = [...arr].sort();
+    masks.set(keyFn(sorted), sorted);
+  };
+  add(baseSorted);
+  for (const t of tArr) {
+    add(transformGridPositions(baseSorted, t));
+  }
+  return [...masks.values()];
+}
 
 function patternCompositeForClient(room) {
   return room && room.pattern === 'composite' && room.patternComposite ? room.patternComposite : null;
@@ -6974,13 +7039,23 @@ function normalizePatternComposite(raw) {
   const clauses = [];
   for (const c of raw.clauses) {
     if (!c || typeof c !== 'object') continue;
-    if (c.kind === 'preset' && typeof c.preset === 'string' && COMPOSITE_PRESET_KEYS.has(c.preset)) {
-      clauses.push({ kind: 'preset', preset: c.preset });
+    if (c.kind === 'preset' && typeof c.preset === 'string') {
+      let preset = c.preset === 'blackout' ? 'full_card' : c.preset;
+      if (!COMPOSITE_PRESET_KEYS.has(preset)) continue;
+      let mv = normalizeCompositeMatchVariants(c.matchVariants);
+      if (preset === 'line' || preset === 'full_card') mv = [];
+      clauses.push({ kind: 'preset', preset, ...(mv.length ? { matchVariants: mv } : {}) });
     } else if (c.kind === 'mask' && Array.isArray(c.positions)) {
       const mask = [
         ...new Set(c.positions.filter((p) => typeof p === 'string' && /^[0-4]-[0-4]$/.test(p))),
       ];
-      if (mask.length > 0) clauses.push({ kind: 'mask', positions: mask.sort() });
+      if (mask.length === 0) continue;
+      const mv = normalizeCompositeMatchVariants(c.matchVariants);
+      clauses.push({
+        kind: 'mask',
+        positions: mask.sort(),
+        ...(mv.length ? { matchVariants: mv } : {}),
+      });
     }
   }
   if (clauses.length === 0 || clauses.length > 12) return null;
@@ -7010,25 +7085,68 @@ function positionsFromLineBingoType(type) {
   return [];
 }
 
+const COMPOSITE_SHAPE_BASE = {
+  four_corners: ['0-0', '0-4', '4-0', '4-4'],
+  x: ['0-0', '1-1', '2-2', '3-3', '4-4', '0-4', '1-3', '3-1', '4-0'],
+  t: ['0-0', '0-1', '0-2', '0-3', '0-4', '1-2', '2-2', '3-2', '4-2'],
+  l: ['0-0', '1-0', '2-0', '3-0', '4-0', '4-1', '4-2', '4-3', '4-4'],
+  u: ['0-0', '1-0', '2-0', '3-0', '4-0', '0-4', '1-4', '2-4', '3-4', '4-4', '4-1', '4-2', '4-3'],
+  plus: ['2-0', '2-1', '2-2', '2-3', '2-4', '0-2', '1-2', '3-2', '4-2'],
+};
+
+const COMPOSITE_SHAPE_LABEL = {
+  four_corners: 'Four corners',
+  x: 'X pattern',
+  t: 'T pattern',
+  l: 'L pattern',
+  u: 'U pattern',
+  plus: 'Plus pattern',
+};
+
 function validateCompositeClauseResult(card, playedSongIds, clause, isMarkedSquareValid) {
   if (!clause || typeof clause !== 'object') {
     return { valid: false, reason: 'Invalid clause', positions: [] };
   }
-  if (clause.kind === 'mask' && Array.isArray(clause.positions)) {
-    const invalid = [];
-    for (const pos of clause.positions) {
-      const sq = card.squares.find((s) => s.position === pos);
-      if (!isMarkedSquareValid(sq)) invalid.push(pos);
+
+  function tryMaskVariants(baseSorted, transforms, okReason, failReason) {
+    const variants = expandCompositeShapeVariants(baseSorted, transforms);
+    for (const mask of variants) {
+      const invalid = [];
+      for (const pos of mask) {
+        const sq = card.squares.find((s) => s.position === pos);
+        if (!isMarkedSquareValid(sq)) invalid.push(pos);
+      }
+      if (invalid.length === 0) return { valid: true, reason: okReason, positions: mask };
     }
-    if (invalid.length > 0) {
-      return {
-        valid: false,
-        reason: `Painted shape needs ${invalid.length} more squares marked with played songs`,
-        positions: [],
-      };
-    }
-    return { valid: true, reason: 'Painted shape complete', positions: [...clause.positions] };
+    return { valid: false, reason: failReason, positions: [] };
   }
+
+  if (clause.kind === 'mask' && Array.isArray(clause.positions)) {
+    const base = [...clause.positions].sort();
+    const transforms = clause.matchVariants || [];
+    if (transforms.length === 0) {
+      const invalid = [];
+      for (const pos of base) {
+        const sq = card.squares.find((s) => s.position === pos);
+        if (!isMarkedSquareValid(sq)) invalid.push(pos);
+      }
+      if (invalid.length > 0) {
+        return {
+          valid: false,
+          reason: `Painted shape needs ${invalid.length} more squares marked with played songs`,
+          positions: [],
+        };
+      }
+      return { valid: true, reason: 'Painted shape complete', positions: base };
+    }
+    return tryMaskVariants(
+      base,
+      transforms,
+      'Painted shape complete',
+      'Painted shape incomplete — no chosen orientation fully marked with played songs yet',
+    );
+  }
+
   if (clause.kind !== 'preset' || typeof clause.preset !== 'string') {
     return { valid: false, reason: 'Invalid clause', positions: [] };
   }
@@ -7043,103 +7161,6 @@ function validateCompositeClauseResult(card, playedSongIds, clause, isMarkedSqua
       reason: `Line (${lineResult.type})`,
       positions: positionsFromLineBingoType(lineResult.type),
     };
-  }
-  if (p === 'four_corners') {
-    const required = ['0-0', '0-4', '4-0', '4-4'];
-    const invalid = required.filter((pos) => {
-      const sq = card.squares.find((s) => s.position === pos);
-      return !isMarkedSquareValid(sq);
-    });
-    if (invalid.length > 0) {
-      return {
-        valid: false,
-        reason: `Four corners incomplete — need ${invalid.length} more corners`,
-        positions: [],
-      };
-    }
-    return { valid: true, reason: 'Four corners', positions: required };
-  }
-  if (p === 'x') {
-    const invalid = [];
-    for (let i = 0; i < 5; i++) {
-      const a = card.squares.find((s) => s.position === `${i}-${i}`);
-      const b = card.squares.find((s) => s.position === `${i}-${4 - i}`);
-      if (!isMarkedSquareValid(a)) invalid.push(`${i}-${i}`);
-      if (!isMarkedSquareValid(b)) invalid.push(`${i}-${4 - i}`);
-    }
-    if (invalid.length > 0) {
-      return {
-        valid: false,
-        reason: `X pattern incomplete — ${invalid.length} diagonal squares left`,
-        positions: [],
-      };
-    }
-    const positions = [];
-    for (let i = 0; i < 5; i++) {
-      positions.push(`${i}-${i}`);
-      positions.push(`${i}-${4 - i}`);
-    }
-    return { valid: true, reason: 'X pattern', positions };
-  }
-  if (p === 't') {
-    const tPositions = ['0-0', '0-1', '0-2', '0-3', '0-4', '1-2', '2-2', '3-2', '4-2'];
-    const invalid = tPositions.filter((pos) => {
-      const sq = card.squares.find((s) => s.position === pos);
-      return !isMarkedSquareValid(sq);
-    });
-    if (invalid.length > 0) {
-      return {
-        valid: false,
-        reason: `T pattern incomplete — need ${invalid.length} more squares`,
-        positions: [],
-      };
-    }
-    return { valid: true, reason: 'T pattern', positions: tPositions };
-  }
-  if (p === 'l') {
-    const lPositions = ['0-0', '1-0', '2-0', '3-0', '4-0', '4-1', '4-2', '4-3', '4-4'];
-    const invalid = lPositions.filter((pos) => {
-      const sq = card.squares.find((s) => s.position === pos);
-      return !isMarkedSquareValid(sq);
-    });
-    if (invalid.length > 0) {
-      return {
-        valid: false,
-        reason: `L pattern incomplete — need ${invalid.length} more squares`,
-        positions: [],
-      };
-    }
-    return { valid: true, reason: 'L pattern', positions: lPositions };
-  }
-  if (p === 'u') {
-    const uPositions = ['0-0', '1-0', '2-0', '3-0', '4-0', '0-4', '1-4', '2-4', '3-4', '4-4', '4-1', '4-2', '4-3'];
-    const invalid = uPositions.filter((pos) => {
-      const sq = card.squares.find((s) => s.position === pos);
-      return !isMarkedSquareValid(sq);
-    });
-    if (invalid.length > 0) {
-      return {
-        valid: false,
-        reason: `U pattern incomplete — need ${invalid.length} more squares`,
-        positions: [],
-      };
-    }
-    return { valid: true, reason: 'U pattern', positions: uPositions };
-  }
-  if (p === 'plus') {
-    const plusPositions = ['2-0', '2-1', '2-2', '2-3', '2-4', '0-2', '1-2', '3-2', '4-2'];
-    const invalid = plusPositions.filter((pos) => {
-      const sq = card.squares.find((s) => s.position === pos);
-      return !isMarkedSquareValid(sq);
-    });
-    if (invalid.length > 0) {
-      return {
-        valid: false,
-        reason: `Plus pattern incomplete — need ${invalid.length} more squares`,
-        positions: [],
-      };
-    }
-    return { valid: true, reason: 'Plus pattern', positions: plusPositions };
   }
   if (p === 'full_card' || p === 'blackout') {
     if (!validateBingoCardGrid(card)) {
@@ -7157,13 +7178,40 @@ function validateCompositeClauseResult(card, playedSongIds, clause, isMarkedSqua
       }
     }
     if (invalidCount > 0) {
-      const label = p === 'blackout' ? 'Blackout' : 'Full card';
-      return { valid: false, reason: `${label} incomplete`, positions: [] };
+      return { valid: false, reason: 'Full card incomplete', positions: [] };
     }
-    const ok = p === 'blackout' ? 'Blackout' : 'Full card';
-    return { valid: true, reason: `${ok} complete`, positions };
+    return { valid: true, reason: 'Full card complete', positions };
   }
-  return { valid: false, reason: 'Unknown sub-pattern', positions: [] };
+
+  const baseShape = COMPOSITE_SHAPE_BASE[p];
+  const shapeLabel = COMPOSITE_SHAPE_LABEL[p];
+  if (!baseShape || !shapeLabel) {
+    return { valid: false, reason: 'Unknown sub-pattern', positions: [] };
+  }
+  const transforms = clause.matchVariants || [];
+  const sortedBase = [...baseShape].sort();
+  if (transforms.length === 0) {
+    const invalid = sortedBase.filter((pos) => {
+      const sq = card.squares.find((s) => s.position === pos);
+      return !isMarkedSquareValid(sq);
+    });
+    if (invalid.length > 0) {
+      let msg = `${shapeLabel} incomplete — need ${invalid.length} more squares`;
+      if (p === 'four_corners') {
+        msg = `Four corners incomplete — need ${invalid.length} more corners`;
+      } else if (p === 'x') {
+        msg = `X pattern incomplete — ${invalid.length} diagonal squares left`;
+      }
+      return { valid: false, reason: msg, positions: [] };
+    }
+    return { valid: true, reason: `${shapeLabel}`, positions: sortedBase };
+  }
+  return tryMaskVariants(
+    sortedBase,
+    transforms,
+    `${shapeLabel} complete`,
+    `${shapeLabel} incomplete — no matching orientation yet`,
+  );
 }
 
 function validateBingoCompositePattern(card, playedSongIds, composite, isMarkedSquareValid) {

@@ -22,12 +22,23 @@ export type CompositeClausePreset =
   | 'l'
   | 'u'
   | 'plus'
-  | 'full_card'
-  | 'blackout';
+  | 'full_card';
 
+export type GridTransform = 'rotateCw' | 'rotateCcw' | 'rotate180' | 'flipH' | 'flipV';
+
+/** Canonical transforms hosts may toggle per clause (180° is double CW on coordinates). */
+export const MATCH_VARIANT_TOGGLE_ORDER: readonly GridTransform[] = [
+  'rotateCw',
+  'rotate180',
+  'rotateCcw',
+  'flipH',
+  'flipV',
+] as const;
+
+/** Legacy payloads may use `blackout`; normalized to `full_card`. */
 export type PatternCompositeClause =
-  | { kind: 'preset'; preset: CompositeClausePreset }
-  | { kind: 'mask'; positions: string[] };
+  | { kind: 'preset'; preset: CompositeClausePreset; matchVariants?: GridTransform[] }
+  | { kind: 'mask'; positions: string[]; matchVariants?: GridTransform[] };
 
 export interface PatternCompositeSpec {
   op: 'and' | 'or';
@@ -43,15 +54,12 @@ export const COMPOSITE_CLAUSE_PRESETS: readonly CompositeClausePreset[] = [
   'u',
   'plus',
   'full_card',
-  'blackout',
 ] as const;
 
 export const DEFAULT_COMPOSITE_SPEC: PatternCompositeSpec = {
   op: 'or',
   clauses: [{ kind: 'preset', preset: 'line' }, { kind: 'preset', preset: 'four_corners' }],
 };
-
-export type GridTransform = 'rotateCw' | 'rotateCcw' | 'flipH' | 'flipV';
 
 export interface PatternDefinition {
   value: BingoPattern;
@@ -112,14 +120,14 @@ export const BINGO_PATTERNS: Record<BingoPattern, PatternDefinition> = {
   },
   full_card: {
     value: 'full_card',
-    label: 'Full Card',
-    description: 'All 25 squares',
+    label: 'Full card',
+    description: 'All 25 squares (same as blackout)',
     positions: Array.from({ length: 25 }, (_, i) => `${Math.floor(i / 5)}-${i % 5}`)
   },
   blackout: {
     value: 'blackout',
-    label: 'Blackout',
-    description: 'Cover the entire card (same win rule as full card)',
+    label: 'Full card',
+    description: 'Alias of full card (legacy)',
     positions: Array.from({ length: 25 }, (_, i) => `${Math.floor(i / 5)}-${i % 5}`),
   },
   custom: {
@@ -184,6 +192,9 @@ export function transformPositions(positions: string[], t: GridTransform): strin
       case 'rotateCcw':
         [r, c] = [4 - c, r];
         break;
+      case 'rotate180':
+        [r, c] = [4 - r, 4 - c];
+        break;
       case 'flipH':
         c = 4 - c;
         break;
@@ -196,6 +207,51 @@ export function transformPositions(positions: string[], t: GridTransform): strin
     out.add(`${r}-${c}`);
   }
   return Array.from(out).sort();
+}
+
+const VARIANT_TRANSFORM_ORDER: GridTransform[] = ['rotateCw', 'rotateCcw', 'rotate180', 'flipH', 'flipV'];
+
+/** Dedupe / clamp transforms coming from server or localStorage. */
+export function normalizeMatchVariants(raw: unknown): GridTransform[] {
+  if (!Array.isArray(raw)) return [];
+  const allowed = new Set<string>(VARIANT_TRANSFORM_ORDER);
+  const out: GridTransform[] = [];
+  for (const x of raw) {
+    if (typeof x === 'string' && allowed.has(x) && !(out as string[]).includes(x)) {
+      out.push(x as GridTransform);
+    }
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+/** Identity mask plus each transformed copy (deduped). */
+export function expandMaskOrientations(base: readonly string[], extras?: GridTransform[] | null): string[][] {
+  const transforms = extras?.length ? extras : [];
+  const maps = new Map<string, string[]>();
+  const add = (arr: string[]) => {
+    const sorted = [...arr].sort();
+    maps.set(sorted.join('|'), sorted);
+  };
+  add([...base]);
+  for (const t of transforms) {
+    add(transformPositions([...base], t));
+  }
+  return Array.from(maps.values());
+}
+
+/** Whether this clause type may use extra rotations/reflections at match time. */
+export function clauseSupportsMatchVariants(clause: PatternCompositeClause): boolean {
+  if (clause.kind === 'mask') return true;
+  return clause.preset !== 'line' && clause.preset !== 'full_card';
+}
+
+function unionVariantPositions(variants: string[][]): string[] {
+  const u = new Set<string>();
+  for (const m of variants) {
+    for (const p of m) u.add(p);
+  }
+  return Array.from(u).sort();
 }
 
 function isCompositePreset(x: string): x is CompositeClausePreset {
@@ -213,15 +269,25 @@ export function normalizePatternComposite(raw: unknown): PatternCompositeSpec | 
     if (!c || typeof c !== 'object') continue;
     const cl = c as PatternCompositeClause;
     if (cl.kind === 'preset' && typeof (cl as { preset?: string }).preset === 'string') {
-      const p = (cl as { preset: string }).preset;
-      if (isCompositePreset(p)) clauses.push({ kind: 'preset', preset: p });
+      let p = (cl as { preset: string }).preset;
+      if (p === 'blackout') p = 'full_card';
+      if (!isCompositePreset(p)) continue;
+      let mv = normalizeMatchVariants((cl as { matchVariants?: unknown }).matchVariants);
+      if (p === 'line' || p === 'full_card') mv = [];
+      clauses.push({ kind: 'preset', preset: p, ...(mv.length ? { matchVariants: mv } : {}) });
     } else if (cl.kind === 'mask' && Array.isArray((cl as { positions?: unknown }).positions)) {
       const mask = Array.from(
         new Set(
           (cl as { positions: string[] }).positions.filter((x) => typeof x === 'string' && POS_RE.test(x)),
         ),
       );
-      if (mask.length > 0) clauses.push({ kind: 'mask', positions: mask.sort() });
+      if (mask.length === 0) continue;
+      const mv = normalizeMatchVariants((cl as { matchVariants?: unknown }).matchVariants);
+      clauses.push({
+        kind: 'mask',
+        positions: mask.sort(),
+        ...(mv.length ? { matchVariants: mv } : {}),
+      });
     }
   }
   if (clauses.length === 0 || clauses.length > 12) return null;
@@ -230,14 +296,19 @@ export function normalizePatternComposite(raw: unknown): PatternCompositeSpec | 
 
 /** Cells to highlight on player/public UI as “part of some winning clause”. */
 export function clauseHighlightPositions(clause: PatternCompositeClause): string[] {
-  if (clause.kind === 'mask') return [...clause.positions];
-
-  const preset = clause.preset;
-  if (preset === 'line' || preset === 'full_card' || preset === 'blackout') {
-    return [...STANDARD_BINGO_POSITIONS];
+  if (clause.kind === 'preset') {
+    const preset = clause.preset;
+    if (preset === 'line' || preset === 'full_card') {
+      return [...STANDARD_BINGO_POSITIONS];
+    }
+    const def = BINGO_PATTERNS[preset];
+    const pts = def?.positions;
+    if (!pts?.length) return [];
+    const variants = expandMaskOrientations(pts, clause.matchVariants);
+    return unionVariantPositions(variants);
   }
-  const def = BINGO_PATTERNS[preset as BingoPattern];
-  return def?.positions?.length ? [...def.positions] : [];
+  const variants = expandMaskOrientations(clause.positions, clause.matchVariants);
+  return unionVariantPositions(variants);
 }
 
 export function unionCompositeHighlightPositions(spec: PatternCompositeSpec | null | undefined): string[] {
@@ -321,46 +392,24 @@ function lineStrictComplete(card: { squares: SquareLite[] }, isValid: (sq: Squar
   return rowColOk(diag1) || rowColOk(diag2);
 }
 
-function presetClauseVisualComplete(
-  card: { squares: SquareLite[] },
-  preset: CompositeClausePreset,
-): boolean {
-  if (preset === 'line') return lineVisualComplete(card);
-  if (preset === 'full_card' || preset === 'blackout') {
-    if (!validateBingoCardGrid(card)) return false;
-    return STANDARD_BINGO_POSITIONS.every((pos) => {
-      const sq = card.squares.find((s) => s.position === pos);
-      return !!(sq && sq.marked);
-    });
-  }
-  const def = BINGO_PATTERNS[preset as BingoPattern];
-  const pts = def?.positions;
-  if (!pts?.length) return false;
-  return maskVisualComplete(card, pts);
-}
-
-function presetClauseStrictComplete(
-  card: { squares: SquareLite[] },
-  preset: CompositeClausePreset,
-  isValid: (sq: SquareLite) => boolean,
-): boolean {
-  if (preset === 'line') return lineStrictComplete(card, isValid);
-  if (preset === 'full_card' || preset === 'blackout') {
-    if (!validateBingoCardGrid(card)) return false;
-    return STANDARD_BINGO_POSITIONS.every((pos) => {
-      const sq = card.squares.find((s) => s.position === pos);
-      return !!(sq && isValid(sq));
-    });
-  }
-  const def = BINGO_PATTERNS[preset as BingoPattern];
-  const pts = def?.positions;
-  if (!pts?.length) return false;
-  return maskStrictComplete(card, pts, isValid);
-}
-
 function clauseVisualComplete(card: { squares: SquareLite[] }, clause: PatternCompositeClause): boolean {
-  if (clause.kind === 'mask') return maskVisualComplete(card, clause.positions);
-  return presetClauseVisualComplete(card, clause.preset);
+  if (clause.kind === 'preset') {
+    if (clause.preset === 'line') return lineVisualComplete(card);
+    if (clause.preset === 'full_card') {
+      if (!validateBingoCardGrid(card)) return false;
+      return STANDARD_BINGO_POSITIONS.every((pos) => {
+        const sq = card.squares.find((s) => s.position === pos);
+        return !!(sq && sq.marked);
+      });
+    }
+    const def = BINGO_PATTERNS[clause.preset];
+    const pts = def?.positions;
+    if (!pts?.length) return false;
+    const variants = expandMaskOrientations(pts, clause.matchVariants);
+    return variants.some((m) => maskVisualComplete(card, m));
+  }
+  const variants = expandMaskOrientations(clause.positions, clause.matchVariants);
+  return variants.some((m) => maskVisualComplete(card, m));
 }
 
 function clauseStrictComplete(
@@ -368,8 +417,23 @@ function clauseStrictComplete(
   clause: PatternCompositeClause,
   isValid: (sq: SquareLite) => boolean,
 ): boolean {
-  if (clause.kind === 'mask') return maskStrictComplete(card, clause.positions, isValid);
-  return presetClauseStrictComplete(card, clause.preset, isValid);
+  if (clause.kind === 'preset') {
+    if (clause.preset === 'line') return lineStrictComplete(card, isValid);
+    if (clause.preset === 'full_card') {
+      if (!validateBingoCardGrid(card)) return false;
+      return STANDARD_BINGO_POSITIONS.every((pos) => {
+        const sq = card.squares.find((s) => s.position === pos);
+        return !!(sq && isValid(sq));
+      });
+    }
+    const def = BINGO_PATTERNS[clause.preset];
+    const pts = def?.positions;
+    if (!pts?.length) return false;
+    const variants = expandMaskOrientations(pts, clause.matchVariants);
+    return variants.some((m) => maskStrictComplete(card, m, isValid));
+  }
+  const variants = expandMaskOrientations(clause.positions, clause.matchVariants);
+  return variants.some((m) => maskStrictComplete(card, m, isValid));
 }
 
 export function evaluateCompositeVisual(
@@ -417,53 +481,60 @@ export function compositeLegitProgressPct(
     }
     return hit / positions.length;
   };
-  const ratioPreset = (preset: CompositeClausePreset): number => {
-    if (preset === 'line') {
-      let best = 0;
-      for (let row = 0; row < 5; row++) {
-        let h = 0;
-        for (let col = 0; col < 5; col++) {
-          const sq = card.squares.find((s) => s.position === `${row}-${col}`);
-          if (legit(sq)) h++;
-        }
-        best = Math.max(best, h / 5);
-      }
-      for (let col = 0; col < 5; col++) {
-        let h = 0;
-        for (let row = 0; row < 5; row++) {
-          const sq = card.squares.find((s) => s.position === `${row}-${col}`);
-          if (legit(sq)) h++;
-        }
-        best = Math.max(best, h / 5);
-      }
-      let d1 = 0;
-      let d2 = 0;
-      for (let i = 0; i < 5; i++) {
-        const sq1 = card.squares.find((s) => s.position === `${i}-${i}`);
-        const sq2 = card.squares.find((s) => s.position === `${i}-${4 - i}`);
-        if (legit(sq1)) d1++;
-        if (legit(sq2)) d2++;
-      }
-      best = Math.max(best, d1 / 5, d2 / 5);
-      return best;
-    }
-    if (preset === 'full_card' || preset === 'blackout') {
-      if (!validateBingoCardGrid(card)) return 0;
+  const ratioLine = (): number => {
+    let best = 0;
+    for (let row = 0; row < 5; row++) {
       let h = 0;
-      for (const pos of STANDARD_BINGO_POSITIONS) {
-        const sq = card.squares.find((s) => s.position === pos);
+      for (let col = 0; col < 5; col++) {
+        const sq = card.squares.find((s) => s.position === `${row}-${col}`);
         if (legit(sq)) h++;
       }
-      return h / 25;
+      best = Math.max(best, h / 5);
     }
-    const def = BINGO_PATTERNS[preset as BingoPattern];
-    const pts = def?.positions;
-    return pts?.length ? ratioMask(pts) : 0;
+    for (let col = 0; col < 5; col++) {
+      let h = 0;
+      for (let row = 0; row < 5; row++) {
+        const sq = card.squares.find((s) => s.position === `${row}-${col}`);
+        if (legit(sq)) h++;
+      }
+      best = Math.max(best, h / 5);
+    }
+    let d1 = 0;
+    let d2 = 0;
+    for (let i = 0; i < 5; i++) {
+      const sq1 = card.squares.find((s) => s.position === `${i}-${i}`);
+      const sq2 = card.squares.find((s) => s.position === `${i}-${4 - i}`);
+      if (legit(sq1)) d1++;
+      if (legit(sq2)) d2++;
+    }
+    best = Math.max(best, d1 / 5, d2 / 5);
+    return best;
+  };
+  const ratioFullCard = (): number => {
+    if (!validateBingoCardGrid(card)) return 0;
+    let h = 0;
+    for (const pos of STANDARD_BINGO_POSITIONS) {
+      const sq = card.squares.find((s) => s.position === pos);
+      if (legit(sq)) h++;
+    }
+    return h / 25;
   };
 
-  const ratios = spec.clauses.map((c) =>
-    c.kind === 'mask' ? ratioMask(c.positions) : ratioPreset(c.preset),
-  );
+  const clauseLegitRatio = (clause: PatternCompositeClause): number => {
+    if (clause.kind === 'preset') {
+      if (clause.preset === 'line') return ratioLine();
+      if (clause.preset === 'full_card') return ratioFullCard();
+      const def = BINGO_PATTERNS[clause.preset];
+      const pts = def?.positions;
+      if (!pts?.length) return 0;
+      const variants = expandMaskOrientations(pts, clause.matchVariants);
+      return Math.max(...variants.map((m) => ratioMask(m)));
+    }
+    const variants = expandMaskOrientations(clause.positions, clause.matchVariants);
+    return Math.max(...variants.map((m) => ratioMask(m)));
+  };
+
+  const ratios = spec.clauses.map((c) => clauseLegitRatio(c));
   const agg = spec.op === 'or' ? Math.max(...ratios) : Math.min(...ratios);
   return Math.round(Math.max(0, Math.min(1, agg)) * 100);
 }
@@ -485,6 +556,7 @@ export function isPositionInPattern(position: string, pattern: BingoPattern, cus
 
 // Helper function to get pattern display name
 export function getPatternDisplayName(pattern: BingoPattern | string): string {
+  if (pattern === 'blackout') return BINGO_PATTERNS.full_card.label;
   const key = pattern as BingoPattern;
   return BINGO_PATTERNS[key]?.label || pattern;
 }

@@ -42,9 +42,6 @@ import {
   Printer,
   Save,
   Eraser,
-  RotateCw,
-  FlipHorizontal,
-  FlipVertical,
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL, ENABLE_YOUTUBE_MUSIC } from '../config';
@@ -64,12 +61,22 @@ import {
   DEFAULT_COMPOSITE_SPEC,
   normalizePatternComposite,
   compositeLegitProgressPct,
-  transformPositions,
+  clauseSupportsMatchVariants,
+  MATCH_VARIANT_TOGGLE_ORDER,
   type SavedCompositePattern,
+  type GridTransform,
   getSavedCompositePatterns,
   saveCompositePattern,
   deleteSavedCompositePattern,
 } from '../patternDefinitions';
+
+const COMPOSITE_MATCH_VARIANT_LABEL: Record<GridTransform, string> = {
+  rotateCw: '+90° CW',
+  rotate180: '180°',
+  rotateCcw: '+90° CCW',
+  flipH: 'Mirror ↔',
+  flipV: 'Mirror ↕',
+};
 import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
 import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModal';
@@ -2127,12 +2134,13 @@ const HostView: React.FC = () => {
     // Listen for pattern updates
     newSocket.on('pattern-updated', (data: any) => {
       if (data?.pattern) {
-        setPattern(data.pattern);
-        if (data.pattern === 'composite' && data.patternComposite != null) {
+        const incomingPat = data.pattern === 'blackout' ? 'full_card' : data.pattern;
+        setPattern(incomingPat);
+        if (incomingPat === 'composite' && data.patternComposite != null) {
           const n = normalizePatternComposite(data.patternComposite);
           if (n) setPatternComposite(n);
         }
-        addLog(`Pattern updated to ${data.pattern}`, 'info');
+        addLog(`Pattern updated to ${incomingPat}`, 'info');
       }
     });
 
@@ -5838,14 +5846,20 @@ const HostView: React.FC = () => {
 
                   <button
                     type="button"
-                    className={`pattern-option ${pattern === 'full_card' ? 'active' : ''}`}
+                    className={`pattern-option ${pattern === 'full_card' || pattern === 'blackout' ? 'active' : ''}`}
                     onClick={() => updatePattern('full_card')}
                     style={{
                       padding: '12px 16px',
-                      border: pattern === 'full_card' ? '2px solid #00ff88' : '1px solid rgba(255,255,255,0.3)',
+                      border:
+                        pattern === 'full_card' || pattern === 'blackout'
+                          ? '2px solid #00ff88'
+                          : '1px solid rgba(255,255,255,0.3)',
                       borderRadius: '8px',
-                      background: pattern === 'full_card' ? 'rgba(0,255,136,0.1)' : 'rgba(255,255,255,0.05)',
-                      color: pattern === 'full_card' ? '#00ff88' : '#ffffff',
+                      background:
+                        pattern === 'full_card' || pattern === 'blackout'
+                          ? 'rgba(0,255,136,0.1)'
+                          : 'rgba(255,255,255,0.05)',
+                      color: pattern === 'full_card' || pattern === 'blackout' ? '#00ff88' : '#ffffff',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
                       display: 'flex',
@@ -5854,31 +5868,12 @@ const HostView: React.FC = () => {
                       minWidth: '112px',
                     }}
                   >
-                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{BINGO_PATTERNS.full_card.label}</div>
-                    <div style={{ fontSize: '0.78rem', opacity: 0.82, textAlign: 'center' }}>{BINGO_PATTERNS.full_card.description}</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    className={`pattern-option ${pattern === 'blackout' ? 'active' : ''}`}
-                    onClick={() => updatePattern('blackout')}
-                    title={BINGO_PATTERNS.blackout.description}
-                    style={{
-                      padding: '12px 16px',
-                      border: pattern === 'blackout' ? '2px solid #00ff88' : '1px solid rgba(255,255,255,0.3)',
-                      borderRadius: '8px',
-                      background: pattern === 'blackout' ? 'rgba(0,255,136,0.1)' : 'rgba(255,255,255,0.05)',
-                      color: pattern === 'blackout' ? '#00ff88' : '#ffffff',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      minWidth: '112px',
-                    }}
-                  >
-                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{BINGO_PATTERNS.blackout.label}</div>
-                    <div style={{ fontSize: '0.78rem', opacity: 0.82, textAlign: 'center' }}>Same win rule as full card</div>
+                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+                      Full card <span style={{ fontWeight: 600, opacity: 0.85 }}>(blackout)</span>
+                    </div>
+                    <div style={{ fontSize: '0.78rem', opacity: 0.82, textAlign: 'center' }}>
+                      {BINGO_PATTERNS.full_card.description}
+                    </div>
                   </button>
 
                   <button
@@ -6091,7 +6086,7 @@ const HostView: React.FC = () => {
                       </button>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {patternComposite.clauses.map((clause, idx) => {
                         const sel =
                           clause.kind === 'preset' ? `preset:${clause.preset}` : 'mask';
@@ -6100,95 +6095,171 @@ const HostView: React.FC = () => {
                             key={`clause-${idx}`}
                             style={{
                               display: 'flex',
-                              flexWrap: 'wrap',
+                              flexDirection: 'column',
                               gap: 8,
-                              alignItems: 'center',
-                              justifyContent: 'center',
+                              alignItems: 'stretch',
+                              maxWidth: 520,
+                              marginLeft: 'auto',
+                              marginRight: 'auto',
                             }}
                           >
-                            <select
-                              value={sel}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                if (editingMaskClauseIndex === idx && v !== 'mask') {
-                                  setEditingMaskClauseIndex(null);
-                                  setCompositePaintDraft([]);
-                                }
-                                const clauses = [...patternComposite.clauses];
-                                if (v === 'mask') {
-                                  const pos =
-                                    compositePaintDraft.length > 0
-                                      ? [...compositePaintDraft].sort()
-                                      : ['2-2'];
-                                  clauses[idx] = { kind: 'mask', positions: pos };
-                                } else if (v.startsWith('preset:')) {
-                                  const preset = v.slice(7) as CompositeClausePreset;
-                                  clauses[idx] = { kind: 'preset', preset };
-                                }
-                                commitPatternComposite({ ...patternComposite, clauses });
-                              }}
+                            <div
                               style={{
-                                padding: '6px 10px',
-                                borderRadius: 6,
-                                border: '1px solid rgba(255,255,255,0.25)',
-                                background: 'rgba(0,0,0,0.35)',
-                                color: '#fff',
-                                fontSize: '0.78rem',
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                gap: 8,
+                                alignItems: 'center',
+                                justifyContent: 'center',
                               }}
                             >
-                              {COMPOSITE_CLAUSE_PRESETS.map((pk) => (
-                                <option key={pk} value={`preset:${pk}`}>
-                                  {BINGO_PATTERNS[pk as BingoPattern]?.label ?? pk}
-                                </option>
-                              ))}
-                              <option value="mask">Painted shape (uses grid below)</option>
-                            </select>
-                            {clause.kind === 'mask' && (
-                              <span style={{ fontSize: '0.72rem', color: '#9aa5b1' }}>
-                                {clause.positions.length} squares
-                              </span>
-                            )}
-                            {clause.kind === 'mask' && (
+                              <select
+                                value={sel}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  if (editingMaskClauseIndex === idx && v !== 'mask') {
+                                    setEditingMaskClauseIndex(null);
+                                    setCompositePaintDraft([]);
+                                  }
+                                  const clauses = [...patternComposite.clauses];
+                                  if (v === 'mask') {
+                                    const pos =
+                                      compositePaintDraft.length > 0
+                                        ? [...compositePaintDraft].sort()
+                                        : ['2-2'];
+                                    clauses[idx] = { kind: 'mask', positions: pos };
+                                  } else if (v.startsWith('preset:')) {
+                                    const preset = v.slice(7) as CompositeClausePreset;
+                                    clauses[idx] = { kind: 'preset', preset };
+                                  }
+                                  commitPatternComposite({ ...patternComposite, clauses });
+                                }}
+                                style={{
+                                  padding: '6px 10px',
+                                  borderRadius: 6,
+                                  border: '1px solid rgba(255,255,255,0.25)',
+                                  background: 'rgba(0,0,0,0.35)',
+                                  color: '#fff',
+                                  fontSize: '0.78rem',
+                                }}
+                              >
+                                {COMPOSITE_CLAUSE_PRESETS.map((pk) => (
+                                  <option key={pk} value={`preset:${pk}`}>
+                                    {BINGO_PATTERNS[pk as BingoPattern]?.label ?? pk}
+                                  </option>
+                                ))}
+                                <option value="mask">Painted shape (uses grid below)</option>
+                              </select>
+                              {clause.kind === 'mask' && (
+                                <span style={{ fontSize: '0.72rem', color: '#9aa5b1' }}>
+                                  {clause.positions.length} squares
+                                </span>
+                              )}
+                              {clause.kind === 'mask' && (
+                                <button
+                                  type="button"
+                                  className="btn-secondary"
+                                  onClick={() => {
+                                    setEditingMaskClauseIndex(idx);
+                                    setCompositePaintDraft([...clause.positions]);
+                                  }}
+                                  style={{
+                                    fontSize: '0.72rem',
+                                    padding: '4px 8px',
+                                    borderColor:
+                                      editingMaskClauseIndex === idx
+                                        ? 'rgba(0,255,136,0.75)'
+                                        : 'rgba(255,255,255,0.25)',
+                                    color: editingMaskClauseIndex === idx ? '#00ff88' : '#e0e0e0',
+                                  }}
+                                >
+                                  Edit in grid
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 className="btn-secondary"
+                                disabled={patternComposite.clauses.length <= 1}
+                                title={
+                                  patternComposite.clauses.length <= 1
+                                    ? 'Need at least one clause'
+                                    : 'Remove this clause'
+                                }
                                 onClick={() => {
-                                  setEditingMaskClauseIndex(idx);
-                                  setCompositePaintDraft([...clause.positions]);
+                                  let nextEdit = editingMaskClauseIndex;
+                                  if (editingMaskClauseIndex !== null) {
+                                    if (editingMaskClauseIndex === idx) nextEdit = null;
+                                    else if (editingMaskClauseIndex > idx)
+                                      nextEdit = editingMaskClauseIndex - 1;
+                                  }
+                                  const clauses = patternComposite.clauses.filter((_, j) => j !== idx);
+                                  setEditingMaskClauseIndex(nextEdit);
+                                  if (nextEdit === null) setCompositePaintDraft([]);
+                                  commitPatternComposite({ ...patternComposite, clauses });
                                 }}
                                 style={{
                                   fontSize: '0.72rem',
                                   padding: '4px 8px',
-                                  borderColor:
-                                    editingMaskClauseIndex === idx
-                                      ? 'rgba(0,255,136,0.75)'
-                                      : 'rgba(255,255,255,0.25)',
-                                  color: editingMaskClauseIndex === idx ? '#00ff88' : '#e0e0e0',
+                                  opacity: patternComposite.clauses.length <= 1 ? 0.45 : 1,
                                 }}
                               >
-                                Edit in grid
+                                Remove
                               </button>
+                            </div>
+                            {clauseSupportsMatchVariants(clause) && (
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  flexWrap: 'wrap',
+                                  gap: 6,
+                                  justifyContent: 'center',
+                                  alignItems: 'center',
+                                  padding: '0 4px 4px',
+                                }}
+                              >
+                                <span style={{ fontSize: '0.7rem', color: '#8a96a3', width: '100%', textAlign: 'center' }}>
+                                  Also win if this shape matches after:
+                                </span>
+                                {MATCH_VARIANT_TOGGLE_ORDER.map((t) => {
+                                  const on = !!(clause.matchVariants && clause.matchVariants.includes(t));
+                                  return (
+                                    <button
+                                      key={`${idx}-${t}`}
+                                      type="button"
+                                      className="btn-secondary"
+                                      title="Toggle an extra orientation checked against the same painted cells / preset geometry"
+                                      onClick={() => {
+                                        const cur = new Set<GridTransform>(clause.matchVariants ?? []);
+                                        if (cur.has(t)) cur.delete(t);
+                                        else cur.add(t);
+                                        const mv = MATCH_VARIANT_TOGGLE_ORDER.filter((x) => cur.has(x));
+                                        const clauses = [...patternComposite.clauses];
+                                        const prev = clauses[idx];
+                                        if (!clauseSupportsMatchVariants(prev)) return;
+                                        clauses[idx] =
+                                          prev.kind === 'mask'
+                                            ? {
+                                                ...prev,
+                                                matchVariants: mv.length ? mv : undefined,
+                                              }
+                                            : {
+                                                ...prev,
+                                                matchVariants: mv.length ? mv : undefined,
+                                              };
+                                        commitPatternComposite({ ...patternComposite, clauses });
+                                      }}
+                                      style={{
+                                        fontSize: '0.66rem',
+                                        padding: '4px 8px',
+                                        borderColor: on ? 'rgba(0,255,136,0.75)' : 'rgba(255,255,255,0.22)',
+                                        color: on ? '#00ff88' : '#c5cdd6',
+                                      }}
+                                    >
+                                      {COMPOSITE_MATCH_VARIANT_LABEL[t]}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             )}
-                            <button
-                              type="button"
-                              className="btn-secondary"
-                              disabled={patternComposite.clauses.length <= 1}
-                              title={patternComposite.clauses.length <= 1 ? 'Need at least one clause' : 'Remove this clause'}
-                              onClick={() => {
-                                let nextEdit = editingMaskClauseIndex;
-                                if (editingMaskClauseIndex !== null) {
-                                  if (editingMaskClauseIndex === idx) nextEdit = null;
-                                  else if (editingMaskClauseIndex > idx) nextEdit = editingMaskClauseIndex - 1;
-                                }
-                                const clauses = patternComposite.clauses.filter((_, j) => j !== idx);
-                                setEditingMaskClauseIndex(nextEdit);
-                                if (nextEdit === null) setCompositePaintDraft([]);
-                                commitPatternComposite({ ...patternComposite, clauses });
-                              }}
-                              style={{ fontSize: '0.72rem', padding: '4px 8px', opacity: patternComposite.clauses.length <= 1 ? 0.45 : 1 }}
-                            >
-                              Remove
-                            </button>
                           </div>
                         );
                       })}
@@ -6228,7 +6299,8 @@ const HostView: React.FC = () => {
                           </>
                         ) : (
                           <>
-                            Paint helper — tap squares, use transforms, then add as a new &quot;painted shape&quot; clause.
+                            Paint one canonical shape below. Use each clause&apos;s toggles for extra rotations /
+                            mirrors — a win counts if <strong>any</strong> chosen orientation matches.
                           </>
                         )}
                       </div>
@@ -6241,38 +6313,6 @@ const HostView: React.FC = () => {
                           marginBottom: 10,
                         }}
                       >
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          onClick={() => setCompositePaintDraft((prev) => transformPositions(prev, 'rotateCw'))}
-                          style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                        >
-                          <RotateCw className="w-3.5 h-3.5" aria-hidden /> CW
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          onClick={() => setCompositePaintDraft((prev) => transformPositions(prev, 'rotateCcw'))}
-                          style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" aria-hidden /> CCW
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          onClick={() => setCompositePaintDraft((prev) => transformPositions(prev, 'flipH'))}
-                          style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                        >
-                          <FlipHorizontal className="w-3.5 h-3.5" aria-hidden /> ↔
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          onClick={() => setCompositePaintDraft((prev) => transformPositions(prev, 'flipV'))}
-                          style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                        >
-                          <FlipVertical className="w-3.5 h-3.5" aria-hidden /> ↕
-                        </button>
                         <button
                           type="button"
                           className="btn-secondary"
@@ -6336,7 +6376,16 @@ const HostView: React.FC = () => {
                                 if (i === null || compositePaintDraft.length === 0) return;
                                 const clauses = [...patternComposite.clauses];
                                 if (i < 0 || i >= clauses.length) return;
-                                clauses[i] = { kind: 'mask', positions: [...compositePaintDraft].sort() };
+                                const prevClause = clauses[i];
+                                const mv =
+                                  prevClause.kind === 'mask' && prevClause.matchVariants?.length
+                                    ? { matchVariants: prevClause.matchVariants }
+                                    : {};
+                                clauses[i] = {
+                                  kind: 'mask',
+                                  positions: [...compositePaintDraft].sort(),
+                                  ...mv,
+                                };
                                 commitPatternComposite({ ...patternComposite, clauses });
                                 setEditingMaskClauseIndex(null);
                                 setCompositePaintDraft([]);
