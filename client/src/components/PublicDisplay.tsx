@@ -3831,7 +3831,7 @@ const PublicDisplay: React.FC = () => {
                   width: '100%',
                   flex: 1,
                   minHeight: 0,
-                  maxHeight: 'min(calc(100svh - 10.5rem), 78vh)',
+                  maxHeight: 'min(calc(100svh - 8rem), 88vh)',
                   display: 'flex',
                   flexDirection: 'column',
                   overflow: 'hidden',

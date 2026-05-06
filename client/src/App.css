@@ -1611,7 +1611,7 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  max-height: min(calc(100svh - 10.5rem), 78vh);
+  max-height: min(calc(100svh - 8rem), 88vh);
   overflow-x: hidden;
   overflow-y: hidden;
 }
@@ -1653,8 +1653,9 @@ body {
     0 10px 28px rgba(0, 0, 0, 0.18);
   min-width: 0;
   flex: 0 1 auto;
-  justify-content: center;
+  justify-content: flex-start;
   min-height: 0;
+  align-self: stretch;
 }
 
 .public-display-splash-join-card__manual {
@@ -1676,7 +1677,7 @@ body {
 
 .public-display-splash-join-card__qr-wrap {
   width: 100%;
-  max-width: min(100%, min(46vmin, 42svh), 520px);
+  max-width: 100%;
   margin-left: auto;
   margin-right: auto;
   padding: 0;
@@ -1688,12 +1689,16 @@ body {
   justify-content: center;
 }
 
+/**
+ * Height-led QR: grows tall inside the join card instead of stretching wide with a short cap
+ * (the old width:100% + small max-height read as a “wide strip” on 1080p walls).
+ */
 .public-display-splash-join-card__qr-wrap img {
   display: block;
-  width: 100%;
+  width: auto;
   max-width: 100%;
   height: auto;
-  max-height: clamp(200px, min(46vmin, 42svh), 520px);
+  max-height: min(88cqh, 86vmin, 82vh, 820px);
   aspect-ratio: 1 / 1;
   object-fit: contain;
   border-radius: clamp(10px, 1.6vmin, 16px);
@@ -1719,7 +1724,8 @@ body {
 @container splash-join (min-width: 900px) {
   .public-display-splash-join-card__split--triple {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    /* Narrow fixed-purpose QR column on the left — reads tall on wall displays */
+    grid-template-columns: minmax(260px, 30cqw) minmax(280px, 1fr) minmax(240px, 28cqw);
     align-items: stretch;
     gap: clamp(8px, 1.5vmin, 16px);
     min-height: 0;
@@ -1730,17 +1736,16 @@ body {
     min-width: 0;
     max-width: none;
     justify-content: flex-start;
+    height: 100%;
   }
 
   .public-display-splash-join-card__split--triple .public-display-splash-join-card__qr-wrap {
-    max-width: min(100%, min(48vmin, 80cqh), 580px);
+    max-width: 100%;
+    width: 100%;
   }
 
   .public-display-splash-join-card__split--triple .public-display-splash-join-card__qr-wrap img {
-    max-height: min(
-      clamp(218px, min(46vmin, 40svh), 600px),
-      80cqh
-    );
+    max-height: min(92cqh, 90vmin, 86vh, 900px);
   }
 
   .public-display-splash-join-card__split--triple .public-display-splash-join-card__manual {
@@ -1809,11 +1814,13 @@ body {
       .public-display-splash-join-card__split--hero-pair
     )
     .public-display-splash-join-card__scan {
-    flex: 1 1 46%;
-    min-width: clamp(200px, 40%, 380px);
-    max-width: min(58%, 620px);
+    flex: 0 0 min(34cqw, 38vw, 480px);
+    max-width: min(40vw, 520px);
+    min-width: min(260px, 94%);
     justify-content: flex-start;
     align-items: center;
+    height: auto;
+    align-self: stretch;
   }
 
   .public-display-splash-join-card__split:not(.public-display-splash-join-card__split--triple):not(
@@ -1821,7 +1828,7 @@ body {
     )
     .public-display-splash-join-card__qr-wrap {
     width: 100%;
-    max-width: min(100%, min(54vmin, 78cqh), 640px);
+    max-width: 100%;
   }
 
   .public-display-splash-join-card__split:not(.public-display-splash-join-card__split--triple):not(
@@ -1829,10 +1836,7 @@ body {
     )
     .public-display-splash-join-card__qr-wrap
     img {
-    max-height: min(
-      clamp(226px, min(50vmin, 44svh), 640px),
-      82cqh
-    );
+    max-height: min(90cqh, 88vmin, 84vh, 860px);
   }
 
   .public-display-splash-join-card__split:not(.public-display-splash-join-card__split--triple):not(
@@ -1876,6 +1880,30 @@ body {
 
   .public-display-splash-join-card__manual .public-display-splash-join-url-scroller span {
     text-align: center;
+  }
+}
+
+/**
+ * Splash join — viewport fallback when container-query width stays “narrow” on full-screen HD walls.
+ * Keeps the QR column physically on the left and biased tall (height-led img rules above).
+ */
+@media (min-width: 900px) {
+  .public-display-splash-join-card__split--triple {
+    display: grid;
+    grid-template-columns: minmax(260px, 30vw) minmax(280px, 1fr) minmax(240px, 28vw);
+    align-items: stretch;
+    gap: clamp(8px, 1.5vmin, 16px);
+    min-height: 0;
+  }
+
+  .public-display-splash-join-card__split--triple .public-display-splash-join-card__scan {
+    justify-content: flex-start;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .public-display-splash-join-card__split--triple .public-display-splash-join-card__qr-wrap img {
+    max-height: min(90vh, 92vmin, 900px);
   }
 }
 
