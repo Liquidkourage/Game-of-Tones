@@ -46,7 +46,16 @@ import {
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL, ENABLE_YOUTUBE_MUSIC } from '../config';
 import { hostFetch, getHostJwt, setHostJwt, clearHostJwt, apiOrigin, browserGoogleLoginUrl } from '../utils/hostFetch';
-import { BingoPattern, PATTERN_OPTIONS, BINGO_PATTERNS, getPatternDisplayName, getSavedCustomPatterns, saveCustomPattern, SavedCustomPattern } from '../patternDefinitions';
+import {
+  BingoPattern,
+  BINGO_PATTERNS,
+  getPatternDisplayName,
+  getSavedCustomPatterns,
+  PATTERN_OPTIONS,
+  PRESET_SHAPE_PATTERNS,
+  saveCustomPattern,
+  SavedCustomPattern,
+} from '../patternDefinitions';
 import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
 import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModal';
@@ -3176,7 +3185,7 @@ const HostView: React.FC = () => {
       
       patternProgress = maxProgress;
       bestProgress = maxProgress;
-    } else if (currentPattern === 'full_card') {
+    } else if (currentPattern === 'full_card' || currentPattern === 'blackout') {
       patternProgress = legitimateMarkedCount;
       totalNeeded = 25;
       bestProgress = legitimateMarkedCount;
@@ -3193,17 +3202,45 @@ const HostView: React.FC = () => {
       totalNeeded = 4;
       bestProgress = cornerProgress;
     } else if (currentPattern === 'x') {
-      let xProgress = 0;
-      for (let i = 0; i < 5; i++) {
-        const square1 = squares.find((s: any) => s.position === `${i}-${i}`);
-        const square2 = squares.find((s: any) => s.position === `${i}-${4-i}`);
-        
-        if (square1 && isLegitimatelyMarked(square1)) xProgress++;
-        if (square2 && isLegitimatelyMarked(square2)) xProgress++;
-      }
-      patternProgress = xProgress;
-      totalNeeded = 9;
-      bestProgress = xProgress;
+      const xp = BINGO_PATTERNS.x.positions;
+      patternProgress = xp.filter((pos) => {
+        const square = squares.find((s: any) => s.position === pos);
+        return square && isLegitimatelyMarked(square);
+      }).length;
+      totalNeeded = xp.length;
+      bestProgress = patternProgress;
+    } else if (currentPattern === 't') {
+      const pts = BINGO_PATTERNS.t.positions;
+      patternProgress = pts.filter((pos) => {
+        const square = squares.find((s: any) => s.position === pos);
+        return square && isLegitimatelyMarked(square);
+      }).length;
+      totalNeeded = pts.length;
+      bestProgress = patternProgress;
+    } else if (currentPattern === 'l') {
+      const pts = BINGO_PATTERNS.l.positions;
+      patternProgress = pts.filter((pos) => {
+        const square = squares.find((s: any) => s.position === pos);
+        return square && isLegitimatelyMarked(square);
+      }).length;
+      totalNeeded = pts.length;
+      bestProgress = patternProgress;
+    } else if (currentPattern === 'u') {
+      const pts = BINGO_PATTERNS.u.positions;
+      patternProgress = pts.filter((pos) => {
+        const square = squares.find((s: any) => s.position === pos);
+        return square && isLegitimatelyMarked(square);
+      }).length;
+      totalNeeded = pts.length;
+      bestProgress = patternProgress;
+    } else if (currentPattern === 'plus') {
+      const pts = BINGO_PATTERNS.plus.positions;
+      patternProgress = pts.filter((pos) => {
+        const square = squares.find((s: any) => s.position === pos);
+        return square && isLegitimatelyMarked(square);
+      }).length;
+      totalNeeded = pts.length;
+      bestProgress = patternProgress;
     } else if (currentPattern === 'custom') {
       // For custom patterns, we'd need the custom mask from the server
       // For now, fall back to line logic
@@ -5620,13 +5657,17 @@ const HostView: React.FC = () => {
                 Use <strong style={{ color: '#c5cdd6' }}>Start round</strong> when you want the live handoff (marks active and opens Game). If no round is targeted yet, picks here are not tied to a bucket until you load one for prep or start one.
               </p>
               <div className="pattern-selection">
-                {/* Main Pattern Options */}
-                <div className="main-pattern-options" style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '16px' }}>
+                {/* Classic wins + preset shapes (server-validated; marks must match played songs). */}
+                <div
+                  className="main-pattern-options"
+                  style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '12px' }}
+                >
                   <button
+                    type="button"
                     className={`pattern-option ${pattern === 'line' ? 'active' : ''}`}
                     onClick={() => updatePattern('line')}
                     style={{
-                      padding: '12px 20px',
+                      padding: '12px 16px',
                       border: pattern === 'line' ? '2px solid #00ff88' : '1px solid rgba(255,255,255,0.3)',
                       borderRadius: '8px',
                       background: pattern === 'line' ? 'rgba(0,255,136,0.1)' : 'rgba(255,255,255,0.05)',
@@ -5636,18 +5677,19 @@ const HostView: React.FC = () => {
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      minWidth: '120px'
+                      minWidth: '112px',
                     }}
                   >
-                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Line</div>
-                    <div style={{ fontSize: '0.8rem', opacity: 0.8, textAlign: 'center' }}>Any row, column, or diagonal</div>
+                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{BINGO_PATTERNS.line.label}</div>
+                    <div style={{ fontSize: '0.78rem', opacity: 0.82, textAlign: 'center' }}>{BINGO_PATTERNS.line.description}</div>
                   </button>
-                  
+
                   <button
+                    type="button"
                     className={`pattern-option ${pattern === 'full_card' ? 'active' : ''}`}
                     onClick={() => updatePattern('full_card')}
                     style={{
-                      padding: '12px 20px',
+                      padding: '12px 16px',
                       border: pattern === 'full_card' ? '2px solid #00ff88' : '1px solid rgba(255,255,255,0.3)',
                       borderRadius: '8px',
                       background: pattern === 'full_card' ? 'rgba(0,255,136,0.1)' : 'rgba(255,255,255,0.05)',
@@ -5657,14 +5699,76 @@ const HostView: React.FC = () => {
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      minWidth: '120px'
+                      minWidth: '112px',
                     }}
                   >
-                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Full Card</div>
-                    <div style={{ fontSize: '0.8rem', opacity: 0.8, textAlign: 'center' }}>All 25 squares</div>
+                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{BINGO_PATTERNS.full_card.label}</div>
+                    <div style={{ fontSize: '0.78rem', opacity: 0.82, textAlign: 'center' }}>{BINGO_PATTERNS.full_card.description}</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`pattern-option ${pattern === 'blackout' ? 'active' : ''}`}
+                    onClick={() => updatePattern('blackout')}
+                    title={BINGO_PATTERNS.blackout.description}
+                    style={{
+                      padding: '12px 16px',
+                      border: pattern === 'blackout' ? '2px solid #00ff88' : '1px solid rgba(255,255,255,0.3)',
+                      borderRadius: '8px',
+                      background: pattern === 'blackout' ? 'rgba(0,255,136,0.1)' : 'rgba(255,255,255,0.05)',
+                      color: pattern === 'blackout' ? '#00ff88' : '#ffffff',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      minWidth: '112px',
+                    }}
+                  >
+                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{BINGO_PATTERNS.blackout.label}</div>
+                    <div style={{ fontSize: '0.78rem', opacity: 0.82, textAlign: 'center' }}>Same win rule as full card</div>
                   </button>
                 </div>
 
+                <p style={{ margin: '0 0 10px', fontSize: '0.78rem', color: '#8a96a3', textAlign: 'center', lineHeight: 1.45 }}>
+                  Pattern bingo presets — highlight squares players watch for (verification still requires played songs / free space).
+                </p>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '10px',
+                    justifyContent: 'center',
+                    flexWrap: 'wrap',
+                    marginBottom: '16px',
+                  }}
+                >
+                  {PRESET_SHAPE_PATTERNS.map((shapeKey) => {
+                    const def = BINGO_PATTERNS[shapeKey];
+                    const active = pattern === shapeKey;
+                    return (
+                      <button
+                        key={shapeKey}
+                        type="button"
+                        title={def.description}
+                        className={`pattern-option ${active ? 'active' : ''}`}
+                        onClick={() => updatePattern(shapeKey)}
+                        style={{
+                          padding: '10px 12px',
+                          border: active ? '2px solid #00ff88' : '1px solid rgba(255,255,255,0.28)',
+                          borderRadius: '8px',
+                          background: active ? 'rgba(0,255,136,0.09)' : 'rgba(255,255,255,0.04)',
+                          color: active ? '#00ff88' : '#e8ecf1',
+                          cursor: 'pointer',
+                          fontSize: '0.82rem',
+                          fontWeight: 700,
+                          minWidth: '100px',
+                        }}
+                      >
+                        {def.label}
+                      </button>
+                    );
+                  })}
+                </div>
                 <label
                   style={{
                     display: 'flex',

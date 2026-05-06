@@ -2367,6 +2367,8 @@ const PublicDisplay: React.FC = () => {
     switch (pattern) {
       case 'full_card':
         return 'Pattern: Full Card';
+      case 'blackout':
+        return 'Pattern: Blackout';
       case 'four_corners':
         return 'Pattern: Four Corners';
       case 'x':
@@ -2383,6 +2385,8 @@ const PublicDisplay: React.FC = () => {
     switch (p) {
       case 'full_card':
         return 'Full card';
+      case 'blackout':
+        return 'Blackout';
       case 'four_corners':
         return 'Four corners';
       case 'x':
@@ -2405,8 +2409,8 @@ const PublicDisplay: React.FC = () => {
 
   // Function to check if a square is part of the current winning line
   const isWinningSquare = (row: number, col: number) => {
-    if (pattern === 'full_card') {
-      // For full card, all squares are winning squares
+    if (pattern === 'full_card' || pattern === 'blackout') {
+      // For full card / blackout, all squares are winning squares
       return true;
     }
     if (pattern === 'custom' && customMask && customMask.size > 0) {
@@ -2498,7 +2502,7 @@ const PublicDisplay: React.FC = () => {
               animate={{ 
                 opacity: 1, 
                 scale: 1,
-                ...(isWinningLine && pattern === 'full_card' && {
+                ...(isWinningLine && (pattern === 'full_card' || pattern === 'blackout') && {
                   boxShadow: [
                     '0 0 0 rgba(0, 255, 136, 0.3)',
                     '0 0 20px rgba(0, 255, 136, 0.6)',
@@ -2509,7 +2513,7 @@ const PublicDisplay: React.FC = () => {
               transition={{ 
                 duration: 0.3, 
                 delay: (row + col) * 0.05,
-                ...(isWinningLine && pattern === 'full_card' && {
+                ...(isWinningLine && (pattern === 'full_card' || pattern === 'blackout') && {
                   boxShadow: {
                     duration: 2,
                     repeat: Infinity,
@@ -2608,7 +2612,7 @@ const PublicDisplay: React.FC = () => {
     }
 
     /** Full-card (blackout) mode: show full song titles without line-clamp truncation. */
-    const isFullCardPattern = pattern === 'full_card';
+    const isFullCardPattern = pattern === 'full_card' || pattern === 'blackout';
 
     // Helper: Wheel-of-Fortune style masking using per-song baseline
     const renderMaskedText = (text: string, set: Set<string>, highlightChar: string | null) => {
@@ -2892,7 +2896,7 @@ const PublicDisplay: React.FC = () => {
     // Use state if available, otherwise fallback to ref (for fallback mode)
     const idsToUse = oneBy75Ids || oneBy75IdsRef.current;
     if (!idsToUse) return null;
-    const isFullCardPattern = pattern === 'full_card';
+    const isFullCardPattern = pattern === 'full_card' || pattern === 'blackout';
     // CRITICAL: Use playedOrderRef as source of truth for played songs (not currentIndexRef)
     // This ensures all played songs are shown, not just up to currentIndex
     // CRITICAL FIX: Use playedOrderRef directly instead of slicing idsToUse

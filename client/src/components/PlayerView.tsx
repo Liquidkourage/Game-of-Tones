@@ -989,8 +989,8 @@ const PlayerView: React.FC = () => {
       return square && square.marked === true;
     };
     
-    // Full card — real 5×5 grid, then every cell marked (fail closed if card is truncated/duplicate)
-    if (pattern === 'full_card') {
+    // Full card / blackout — real 5×5 grid, then every cell marked (fail closed if card is truncated/duplicate)
+    if (pattern === 'full_card' || pattern === 'blackout') {
       if (!validateBingoCardGrid(card)) return false;
       return STANDARD_BINGO_POSITIONS.every((pos) => {
         const square = card.squares.find((s) => s.position === pos);
@@ -1132,8 +1132,8 @@ const PlayerView: React.FC = () => {
       return isValid;
     };
     
-    // Full card — grid integrity + every cell marked with a played song (matches server 0-0…4-4 loop)
-    if (pattern === 'full_card') {
+    // Full card / blackout — grid integrity + every cell marked with a played song (matches server 0-0…4-4 loop)
+    if (pattern === 'full_card' || pattern === 'blackout') {
       if (!validateBingoCardGrid(card)) return false;
       return STANDARD_BINGO_POSITIONS.every((pos) => {
         const square = card.squares.find((s) => s.position === pos);
@@ -1259,7 +1259,7 @@ const PlayerView: React.FC = () => {
 
     // Any row, column, or diagonal can win - every cell can belong to some winning line.
     // Full card (blackout): every cell is required.
-    if (pattern === 'line' || pattern === 'full_card') {
+    if (pattern === 'line' || pattern === 'full_card' || pattern === 'blackout') {
       return true;
     }
 

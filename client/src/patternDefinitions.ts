@@ -1,6 +1,16 @@
 // Shared bingo pattern definitions for consistency across all interfaces
 
-export type BingoPattern = 'line' | 'four_corners' | 'x' | 't' | 'l' | 'u' | 'plus' | 'full_card' | 'custom';
+export type BingoPattern =
+  | 'line'
+  | 'four_corners'
+  | 'x'
+  | 't'
+  | 'l'
+  | 'u'
+  | 'plus'
+  | 'full_card'
+  | 'blackout'
+  | 'custom';
 
 export interface PatternDefinition {
   value: BingoPattern;
@@ -33,7 +43,7 @@ export const BINGO_PATTERNS: Record<BingoPattern, PatternDefinition> = {
     value: 'x',
     label: 'X Pattern',
     description: 'Both diagonal lines',
-    positions: ['0-0', '1-1', '2-2', '3-3', '4-4', '0-4', '1-3', '2-2', '3-1', '4-0']
+    positions: ['0-0', '1-1', '2-2', '3-3', '4-4', '0-4', '1-3', '3-1', '4-0'],
   },
   t: {
     value: 't',
@@ -65,6 +75,12 @@ export const BINGO_PATTERNS: Record<BingoPattern, PatternDefinition> = {
     description: 'All 25 squares',
     positions: Array.from({ length: 25 }, (_, i) => `${Math.floor(i / 5)}-${i % 5}`)
   },
+  blackout: {
+    value: 'blackout',
+    label: 'Blackout',
+    description: 'Cover the entire card (same win rule as full card)',
+    positions: Array.from({ length: 25 }, (_, i) => `${Math.floor(i / 5)}-${i % 5}`),
+  },
   custom: {
     value: 'custom',
     label: 'Custom',
@@ -74,6 +90,14 @@ export const BINGO_PATTERNS: Record<BingoPattern, PatternDefinition> = {
 };
 
 export const PATTERN_OPTIONS = Object.values(BINGO_PATTERNS);
+
+/** Shape presets (not line / cover-all / custom). */
+export const PRESET_SHAPE_PATTERNS: readonly BingoPattern[] = ['four_corners', 'x', 't', 'l', 'u', 'plus'];
+
+/** Full grid win modes (identical validation on server). */
+export function isCoverAllWinPattern(pattern: BingoPattern): boolean {
+  return pattern === 'full_card' || pattern === 'blackout';
+}
 
 /** All 25 cell keys for a standard 5×5 card (same set as `full_card`). */
 export const STANDARD_BINGO_POSITIONS: readonly string[] = BINGO_PATTERNS.full_card.positions;
@@ -106,8 +130,9 @@ export function isPositionInPattern(position: string, pattern: BingoPattern, cus
 }
 
 // Helper function to get pattern display name
-export function getPatternDisplayName(pattern: BingoPattern): string {
-  return BINGO_PATTERNS[pattern]?.label || pattern;
+export function getPatternDisplayName(pattern: BingoPattern | string): string {
+  const key = pattern as BingoPattern;
+  return BINGO_PATTERNS[key]?.label || pattern;
 }
 
 // Helper function to validate pattern positions

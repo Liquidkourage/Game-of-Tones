@@ -20,6 +20,20 @@ const catalogSpotify = require('./catalogSpotify');
 const youtubeMusic = require('./youtubeMusic');
 const { applyYoutubeCatalogTrackVerification } = require('./youtubeTrackCatalogVerify');
 
+/** Host-facing bingo win shapes (`blackout` === cover all 25; same validation as `full_card`). */
+const ALLOWED_BINGO_PATTERNS = new Set([
+  'line',
+  'four_corners',
+  'x',
+  'full_card',
+  'blackout',
+  't',
+  'l',
+  'u',
+  'plus',
+  'custom',
+]);
+
 // Song title cleaning utility
 function cleanSongTitle(title) {
   if (!title || typeof title !== 'string') {
@@ -2574,7 +2588,7 @@ io.on('connection', (socket) => {
       if (!room) return;
       const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
       if (!isCurrentHost) return;
-      const allowed = new Set(['line', 'four_corners', 'x', 'full_card', 't', 'l', 'u', 'plus', 'custom']);
+      const allowed = ALLOWED_BINGO_PATTERNS;
       room.pattern = allowed.has(pattern) ? pattern : 'line';
       if (room.pattern === 'custom') {
         const mask = Array.isArray(customMask) ? customMask.filter(p => /^(0|1|2|3|4)-(0|1|2|3|4)$/.test(p)) : [];
@@ -3902,7 +3916,7 @@ io.on('connection', (socket) => {
         room.round = (room.round || 0) + 1;
         // Apply pattern from host if provided; default to 'line' if still unset
         try {
-          const allowed = new Set(['line', 'four_corners', 'x', 'full_card', 't', 'l', 'u', 'plus', 'custom']);
+          const allowed = ALLOWED_BINGO_PATTERNS;
           if (incomingPattern && allowed.has(incomingPattern)) {
             room.pattern = incomingPattern;
           }
@@ -4003,12 +4017,6 @@ io.on('connection', (socket) => {
           }
         } else {
           routineServerLog('🛑 Skipping card regeneration (mix finalized and cards already exist)');
-          
-          // Also check for 1x75 mode when cards already exist
-          if (room.oneBySeventyFivePool && room.oneBySeventyFivePool.length === 75 && !incomingPattern && room.pattern === 'line') {
-            routineServerLog('🎯 1x75 mode detected (existing cards): Auto-setting pattern to full_card');
-            room.pattern = 'full_card';
-          }
           
           // BUT check for any players who don't have cards (joined after finalization)
           const playersWithoutCards = [];
@@ -6916,7 +6924,7 @@ function validateBingoForPattern(card, room) {
     return { valid: true, reason: 'Custom pattern complete!' };
   }
   
-  if (pattern === 'full_card') {
+  if (pattern === 'full_card' || pattern === 'blackout') {
     if (!validateBingoCardGrid(card)) {
       return {
         valid: false,
@@ -6943,15 +6951,17 @@ function validateBingoForPattern(card, room) {
       }
     }
     if (invalidCount > 0) {
-      logger.debug(`🎯 Full card validation failed: ${invalidCount} invalid squares`);
+      logger.debug(`🎯 Cover-all validation failed (${pattern}): ${invalidCount} invalid squares`);
       logger.debug(`🎯 Invalid squares (first 5): ${JSON.stringify(invalidSquares.slice(0, 5))}`);
+      const label = pattern === 'blackout' ? 'Blackout' : 'Full card';
       return { 
         valid: false, 
-        reason: `Full card incomplete. Need ${invalidCount} more squares marked with played songs.`
+        reason: `${label} incomplete. Need ${invalidCount} more squares marked with played songs.`
       };
     }
-    logger.debug('🎯 Full card validation passed: all 25 squares marked with played songs');
-    return { valid: true, reason: 'Full card complete!' };
+    logger.debug(`🎯 Cover-all validation passed (${pattern}): all 25 squares marked with played songs`);
+    const okReason = pattern === 'blackout' ? 'Blackout complete!' : 'Full card complete!';
+    return { valid: true, reason: okReason };
   }
   
   if (pattern === 'four_corners') {
@@ -7080,7 +7090,7 @@ function getWinningPatternPositions(card, room, validationResult) {
     return Array.from(room.customPattern);
   }
   
-  if (pattern === 'full_card') {
+  if (pattern === 'full_card' || pattern === 'blackout') {
     // All 25 squares
     const positions = [];
     for (let row = 0; row < 5; row++) {

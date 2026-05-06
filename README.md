@@ -71,13 +71,21 @@ A modern, real-time music bingo game with Spotify integration. Where music meets
 1. **Join Room** - Enter the room code provided by the host
 2. **Get Your Card** - Receive a unique bingo card with songs from the selected playlists
 3. **Listen & Mark** - Click on squares when you hear matching songs
-4. **Call BINGO!** - Get 5 in a row to win!
+4. **Call BINGO!** - Hold the bingo button when you complete the **active pattern** (line, shape, full card / blackout, or custom — host chooses).
+
+### Game modes & winning patterns
+
+- **Single line** — Any full row, column, or diagonal.
+- **Full card** — All 25 squares; each must be a legitimately played song (or free center when enabled).
+- **Blackout** — Same win rule as full card (common venue wording).
+- **Preset shapes** — Four corners, X, T, L, U, Plus (+): fixed layouts validated server-side.
+- **Custom pattern** — Host-built mask (saved patterns supported).
 
 ### Game Modes
 
-- **Traditional Bingo** - 5 in a row (horizontal, vertical, or diagonal)
-- **Pattern Bingo** - Custom patterns (coming soon)
-- **Blackout** - Complete the entire card (coming soon)
+- **Traditional Bingo** — 5 in a row (horizontal, vertical, or diagonal)
+- **Pattern Bingo** — Preset shapes or fully custom layouts (above)
+- **Blackout / full card** — Entire card, with played-song verification
 
 ## 🛠️ Tech Stack
 
