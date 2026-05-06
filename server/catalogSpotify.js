@@ -8,11 +8,12 @@
  * - TEMPO_CATALOG_PLAYLISTS_JSON — e.g. [{"id":"abc","label":"Pack name"}] (label optional)
  * - TEMPO_CATALOG_PLAYLIST_NAME_PREFIX — non-empty: discover packs from GET /v1/me/playlists whose
  *   name starts with this string (merged with static allowlist above; dedupe by id, static wins labels).
+ *   Useful when the catalog refresh token is your personal library so only bingo-named playlists appear as packs.
  * - TEMPO_CATALOG_PLAYLIST_NAME_PREFIX_IGNORE_CASE — true: prefix match is case-insensitive (GoT vs got).
  * - TEMPO_CATALOG_PREFIX_OWNER_ONLY — default true: prefix matches must be owned by the catalog user
  *   (avoids followed playlists that 403 on /items).
  * - TEMPO_CATALOG_PREFIX_CACHE_MS — ms to cache prefix discovery in-memory per process (default 300000).
- * - TEMPO_CATALOG_PACKS_SERVER_CACHE_MS — Postgres TTL for `/api/spotify/catalog/packs` snapshots (default 86400000).
+ * - TEMPO_CATALOG_PACKS_SERVER_CACHE_MS — Postgres TTL for `/api/spotify/catalog/packs` snapshots (default 604800000 = 7d).
  *   Set to 0 to always try live Spotify for packs (still uses stale DB row on hard failure).
  * - TEMPO_CATALOG_PUBLIC_FETCH_DISABLED — true: skip all catalog Spotify reads for pack list; API returns
  *   configured=false (Official packs hidden) until unset.
@@ -23,8 +24,9 @@
  * Rate limits / best practice:
  * - Host library + catalog prefix discovery both paginate GET /v1/me/playlists (~1 page per 50 playlists).
  *   Server-side pack cache avoids re-running catalog discovery on every host refresh.
- * - Prefer TEMPO_CATALOG_SPOTIFY_CLIENT_* as a separate Spotify Developer app from host traffic so quotas
- *   don’t stack on one client_id.
+ * - When the Spotify Dashboard allows it, TEMPO_CATALOG_SPOTIFY_CLIENT_* on a second Developer app isolates
+ *   catalog quota from hosts; many creators only have one app (development mode) — then rely on this cache
+ *   TTL + prefix/static config instead of a second client_id.
  * - Prefer static TEMPO_CATALOG_PLAYLIST_IDS / JSON without prefix mode if you only ship a fixed pack list
  *   — zero playlist enumeration on the catalog token for discovery.
  * - Host pagination spacing: SPOTIFY_PLAYLIST_LIST_PAGE_GAP_MS (see spotify.js) between /me/playlists pages.
