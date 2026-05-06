@@ -6978,6 +6978,35 @@ function normalizeCompositeMatchVariants(raw) {
   return out;
 }
 
+function readOrientationBoolSrv(v) {
+  if (v === true || v === 1) return true;
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase();
+    return ['1', 'true', 'yes', 'on'].includes(s);
+  }
+  return false;
+}
+
+function deriveCompositeOrientationFlags(c) {
+  let rot = readOrientationBoolSrv(c.matchAllowRotation);
+  let mir = readOrientationBoolSrv(c.matchAllowMirror);
+  const legacy = normalizeCompositeMatchVariants(c.matchVariants);
+  for (const t of legacy) {
+    if (t === 'rotateCw' || t === 'rotateCcw' || t === 'rotate180') rot = true;
+    if (t === 'flipH' || t === 'flipV') mir = true;
+  }
+  return { rot, mir };
+}
+
+/** Same semantics as client `clauseOrientationTransforms`. */
+function compositeClauseTransformsFromClause(clause) {
+  const { rot, mir } = deriveCompositeOrientationFlags(clause);
+  const acc = [];
+  if (rot) acc.push('rotateCw', 'rotate180', 'rotateCcw');
+  if (mir) acc.push('flipH', 'flipV');
+  return normalizeCompositeMatchVariants(acc);
+}
+
 function parseRcComposite(pos) {
   const [a, b] = String(pos).split('-').map(Number);
   return [a, b];
@@ -7042,19 +7071,28 @@ function normalizePatternComposite(raw) {
     if (c.kind === 'preset' && typeof c.preset === 'string') {
       let preset = c.preset === 'blackout' ? 'full_card' : c.preset;
       if (!COMPOSITE_PRESET_KEYS.has(preset)) continue;
-      let mv = normalizeCompositeMatchVariants(c.matchVariants);
-      if (preset === 'line' || preset === 'full_card') mv = [];
-      clauses.push({ kind: 'preset', preset, ...(mv.length ? { matchVariants: mv } : {}) });
+      if (preset === 'line' || preset === 'full_card') {
+        clauses.push({ kind: 'preset', preset });
+        continue;
+      }
+      const { rot, mir } = deriveCompositeOrientationFlags(c);
+      clauses.push({
+        kind: 'preset',
+        preset,
+        ...(rot ? { matchAllowRotation: true } : {}),
+        ...(mir ? { matchAllowMirror: true } : {}),
+      });
     } else if (c.kind === 'mask' && Array.isArray(c.positions)) {
       const mask = [
         ...new Set(c.positions.filter((p) => typeof p === 'string' && /^[0-4]-[0-4]$/.test(p))),
       ];
       if (mask.length === 0) continue;
-      const mv = normalizeCompositeMatchVariants(c.matchVariants);
+      const { rot, mir } = deriveCompositeOrientationFlags(c);
       clauses.push({
         kind: 'mask',
         positions: mask.sort(),
-        ...(mv.length ? { matchVariants: mv } : {}),
+        ...(rot ? { matchAllowRotation: true } : {}),
+        ...(mir ? { matchAllowMirror: true } : {}),
       });
     }
   }
@@ -7123,7 +7161,7 @@ function validateCompositeClauseResult(card, playedSongIds, clause, isMarkedSqua
 
   if (clause.kind === 'mask' && Array.isArray(clause.positions)) {
     const base = [...clause.positions].sort();
-    const transforms = clause.matchVariants || [];
+    const transforms = compositeClauseTransformsFromClause(clause);
     if (transforms.length === 0) {
       const invalid = [];
       for (const pos of base) {
@@ -7188,7 +7226,7 @@ function validateCompositeClauseResult(card, playedSongIds, clause, isMarkedSqua
   if (!baseShape || !shapeLabel) {
     return { valid: false, reason: 'Unknown sub-pattern', positions: [] };
   }
-  const transforms = clause.matchVariants || [];
+  const transforms = compositeClauseTransformsFromClause(clause);
   const sortedBase = [...baseShape].sort();
   if (transforms.length === 0) {
     const invalid = sortedBase.filter((pos) => {

@@ -62,21 +62,11 @@ import {
   normalizePatternComposite,
   compositeLegitProgressPct,
   clauseSupportsMatchVariants,
-  MATCH_VARIANT_TOGGLE_ORDER,
   type SavedCompositePattern,
-  type GridTransform,
   getSavedCompositePatterns,
   saveCompositePattern,
   deleteSavedCompositePattern,
 } from '../patternDefinitions';
-
-const COMPOSITE_MATCH_VARIANT_LABEL: Record<GridTransform, string> = {
-  rotateCw: '+90° CW',
-  rotate180: '180°',
-  rotateCcw: '+90° CCW',
-  flipH: 'Mirror ↔',
-  flipV: 'Mirror ↕',
-};
 import CustomPatternModal from './CustomPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
 import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModal';
@@ -6209,55 +6199,115 @@ const HostView: React.FC = () => {
                               <div
                                 style={{
                                   display: 'flex',
-                                  flexWrap: 'wrap',
-                                  gap: 6,
-                                  justifyContent: 'center',
-                                  alignItems: 'center',
-                                  padding: '0 4px 4px',
+                                  flexDirection: 'column',
+                                  gap: 10,
+                                  alignItems: 'stretch',
+                                  padding: '8px 10px 10px',
+                                  borderRadius: 8,
+                                  background: 'rgba(0,0,0,0.18)',
+                                  maxWidth: 460,
+                                  marginLeft: 'auto',
+                                  marginRight: 'auto',
                                 }}
                               >
-                                <span style={{ fontSize: '0.7rem', color: '#8a96a3', width: '100%', textAlign: 'center' }}>
-                                  Also win if this shape matches after:
+                                <span
+                                  style={{
+                                    fontSize: '0.68rem',
+                                    color: '#8a96a3',
+                                    textAlign: 'center',
+                                    lineHeight: 1.45,
+                                  }}
+                                >
+                                  After you choose this clause&apos;s shape, optionally allow the{' '}
+                                  <strong style={{ color: '#c5cdd6' }}>same marked squares</strong> to count when the
+                                  pattern appears oriented differently:
                                 </span>
-                                {MATCH_VARIANT_TOGGLE_ORDER.map((t) => {
-                                  const on = !!(clause.matchVariants && clause.matchVariants.includes(t));
-                                  return (
-                                    <button
-                                      key={`${idx}-${t}`}
-                                      type="button"
-                                      className="btn-secondary"
-                                      title="Toggle an extra orientation checked against the same painted cells / preset geometry"
-                                      onClick={() => {
-                                        const cur = new Set<GridTransform>(clause.matchVariants ?? []);
-                                        if (cur.has(t)) cur.delete(t);
-                                        else cur.add(t);
-                                        const mv = MATCH_VARIANT_TOGGLE_ORDER.filter((x) => cur.has(x));
-                                        const clauses = [...patternComposite.clauses];
-                                        const prev = clauses[idx];
-                                        if (!clauseSupportsMatchVariants(prev)) return;
-                                        clauses[idx] =
-                                          prev.kind === 'mask'
-                                            ? {
-                                                ...prev,
-                                                matchVariants: mv.length ? mv : undefined,
-                                              }
-                                            : {
-                                                ...prev,
-                                                matchVariants: mv.length ? mv : undefined,
-                                              };
-                                        commitPatternComposite({ ...patternComposite, clauses });
-                                      }}
-                                      style={{
-                                        fontSize: '0.66rem',
-                                        padding: '4px 8px',
-                                        borderColor: on ? 'rgba(0,255,136,0.75)' : 'rgba(255,255,255,0.22)',
-                                        color: on ? '#00ff88' : '#c5cdd6',
-                                      }}
-                                    >
-                                      {COMPOSITE_MATCH_VARIANT_LABEL[t]}
-                                    </button>
-                                  );
-                                })}
+                                <label
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'flex-start',
+                                    gap: 10,
+                                    fontSize: '0.74rem',
+                                    color: '#dce4ec',
+                                    cursor: 'pointer',
+                                    textAlign: 'left',
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={clause.matchAllowRotation === true}
+                                    onChange={(e) => {
+                                      const clauses = [...patternComposite.clauses];
+                                      const prev = clauses[idx];
+                                      if (!clauseSupportsMatchVariants(prev)) return;
+                                      const checked = e.target.checked;
+                                      if (prev.kind === 'mask') {
+                                        clauses[idx] = {
+                                          kind: 'mask',
+                                          positions: prev.positions,
+                                          ...(checked ? { matchAllowRotation: true } : {}),
+                                          ...(prev.matchAllowMirror ? { matchAllowMirror: true } : {}),
+                                        };
+                                      } else {
+                                        clauses[idx] = {
+                                          kind: 'preset',
+                                          preset: prev.preset,
+                                          ...(checked ? { matchAllowRotation: true } : {}),
+                                          ...(prev.matchAllowMirror ? { matchAllowMirror: true } : {}),
+                                        };
+                                      }
+                                      commitPatternComposite({ ...patternComposite, clauses });
+                                    }}
+                                    style={{ marginTop: 3 }}
+                                  />
+                                  <span>
+                                    <strong>Allow rotations</strong> — also win if this shape matches after 90°, 180°, or
+                                    270° on the grid.
+                                  </span>
+                                </label>
+                                <label
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'flex-start',
+                                    gap: 10,
+                                    fontSize: '0.74rem',
+                                    color: '#dce4ec',
+                                    cursor: 'pointer',
+                                    textAlign: 'left',
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={clause.matchAllowMirror === true}
+                                    onChange={(e) => {
+                                      const clauses = [...patternComposite.clauses];
+                                      const prev = clauses[idx];
+                                      if (!clauseSupportsMatchVariants(prev)) return;
+                                      const checked = e.target.checked;
+                                      if (prev.kind === 'mask') {
+                                        clauses[idx] = {
+                                          kind: 'mask',
+                                          positions: prev.positions,
+                                          ...(prev.matchAllowRotation ? { matchAllowRotation: true } : {}),
+                                          ...(checked ? { matchAllowMirror: true } : {}),
+                                        };
+                                      } else {
+                                        clauses[idx] = {
+                                          kind: 'preset',
+                                          preset: prev.preset,
+                                          ...(prev.matchAllowRotation ? { matchAllowRotation: true } : {}),
+                                          ...(checked ? { matchAllowMirror: true } : {}),
+                                        };
+                                      }
+                                      commitPatternComposite({ ...patternComposite, clauses });
+                                    }}
+                                    style={{ marginTop: 3 }}
+                                  />
+                                  <span>
+                                    <strong>Allow mirrors</strong> — also win if this shape matches after a horizontal or
+                                    vertical flip.
+                                  </span>
+                                </label>
                               </div>
                             )}
                           </div>
@@ -6299,8 +6349,8 @@ const HostView: React.FC = () => {
                           </>
                         ) : (
                           <>
-                            Paint one canonical shape below. Use each clause&apos;s toggles for extra rotations /
-                            mirrors — a win counts if <strong>any</strong> chosen orientation matches.
+                            Paint one reference shape below. Rotations / mirrors are only the checkboxes on each clause —
+                            not separate buttons here.
                           </>
                         )}
                       </div>
@@ -6377,14 +6427,17 @@ const HostView: React.FC = () => {
                                 const clauses = [...patternComposite.clauses];
                                 if (i < 0 || i >= clauses.length) return;
                                 const prevClause = clauses[i];
-                                const mv =
-                                  prevClause.kind === 'mask' && prevClause.matchVariants?.length
-                                    ? { matchVariants: prevClause.matchVariants }
+                                const mvFlags =
+                                  prevClause.kind === 'mask'
+                                    ? {
+                                        ...(prevClause.matchAllowRotation ? { matchAllowRotation: true as const } : {}),
+                                        ...(prevClause.matchAllowMirror ? { matchAllowMirror: true as const } : {}),
+                                      }
                                     : {};
                                 clauses[i] = {
                                   kind: 'mask',
                                   positions: [...compositePaintDraft].sort(),
-                                  ...mv,
+                                  ...mvFlags,
                                 };
                                 commitPatternComposite({ ...patternComposite, clauses });
                                 setEditingMaskClauseIndex(null);

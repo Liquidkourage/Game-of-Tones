@@ -26,19 +26,20 @@ export type CompositeClausePreset =
 
 export type GridTransform = 'rotateCw' | 'rotateCcw' | 'rotate180' | 'flipH' | 'flipV';
 
-/** Canonical transforms hosts may toggle per clause (180° is double CW on coordinates). */
-export const MATCH_VARIANT_TOGGLE_ORDER: readonly GridTransform[] = [
-  'rotateCw',
-  'rotate180',
-  'rotateCcw',
-  'flipH',
-  'flipV',
-] as const;
-
-/** Legacy payloads may use `blackout`; normalized to `full_card`. */
+/** Optional host controls: pick the shape first, then allow extra winning orientations. */
 export type PatternCompositeClause =
-  | { kind: 'preset'; preset: CompositeClausePreset; matchVariants?: GridTransform[] }
-  | { kind: 'mask'; positions: string[]; matchVariants?: GridTransform[] };
+  | {
+      kind: 'preset';
+      preset: CompositeClausePreset;
+      matchAllowRotation?: boolean;
+      matchAllowMirror?: boolean;
+    }
+  | {
+      kind: 'mask';
+      positions: string[];
+      matchAllowRotation?: boolean;
+      matchAllowMirror?: boolean;
+    };
 
 export interface PatternCompositeSpec {
   op: 'and' | 'or';
@@ -211,7 +212,7 @@ export function transformPositions(positions: string[], t: GridTransform): strin
 
 const VARIANT_TRANSFORM_ORDER: GridTransform[] = ['rotateCw', 'rotateCcw', 'rotate180', 'flipH', 'flipV'];
 
-/** Dedupe / clamp transforms coming from server or localStorage. */
+/** Dedupe / clamp transforms from legacy `matchVariants` arrays. */
 export function normalizeMatchVariants(raw: unknown): GridTransform[] {
   if (!Array.isArray(raw)) return [];
   const allowed = new Set<string>(VARIANT_TRANSFORM_ORDER);
@@ -223,6 +224,41 @@ export function normalizeMatchVariants(raw: unknown): GridTransform[] {
     if (out.length >= 8) break;
   }
   return out;
+}
+
+function readOrientationBool(v: unknown): boolean {
+  if (v === true || v === 1) return true;
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase();
+    return ['1', 'true', 'yes', 'on'].includes(s);
+  }
+  return false;
+}
+
+/** Collect orientation flags from modern booleans and legacy `matchVariants` arrays. */
+function deriveOrientationFlags(raw: Record<string, unknown>): { rot: boolean; mir: boolean } {
+  let rot = readOrientationBool(raw.matchAllowRotation);
+  let mir = readOrientationBool(raw.matchAllowMirror);
+  const legacy = normalizeMatchVariants(raw.matchVariants);
+  for (const t of legacy) {
+    if (t === 'rotateCw' || t === 'rotateCcw' || t === 'rotate180') rot = true;
+    if (t === 'flipH' || t === 'flipV') mir = true;
+  }
+  return { rot, mir };
+}
+
+/**
+ * Grid transforms implied by host orientation choices (rotation = 90° / 180° / 270°, mirror = ↔ and ↕).
+ * Handles legacy per-transform `matchVariants` until recipes are re-saved.
+ */
+export function clauseOrientationTransforms(
+  clause: PatternCompositeClause & { matchVariants?: GridTransform[] },
+): GridTransform[] {
+  const { rot, mir } = deriveOrientationFlags(clause as unknown as Record<string, unknown>);
+  const out: GridTransform[] = [];
+  if (rot) out.push('rotateCw', 'rotate180', 'rotateCcw');
+  if (mir) out.push('flipH', 'flipV');
+  return normalizeMatchVariants(out);
 }
 
 /** Identity mask plus each transformed copy (deduped). */
@@ -272,9 +308,17 @@ export function normalizePatternComposite(raw: unknown): PatternCompositeSpec | 
       let p = (cl as { preset: string }).preset;
       if (p === 'blackout') p = 'full_card';
       if (!isCompositePreset(p)) continue;
-      let mv = normalizeMatchVariants((cl as { matchVariants?: unknown }).matchVariants);
-      if (p === 'line' || p === 'full_card') mv = [];
-      clauses.push({ kind: 'preset', preset: p, ...(mv.length ? { matchVariants: mv } : {}) });
+      if (p === 'line' || p === 'full_card') {
+        clauses.push({ kind: 'preset', preset: p });
+        continue;
+      }
+      const { rot, mir } = deriveOrientationFlags(cl as unknown as Record<string, unknown>);
+      clauses.push({
+        kind: 'preset',
+        preset: p,
+        ...(rot ? { matchAllowRotation: true } : {}),
+        ...(mir ? { matchAllowMirror: true } : {}),
+      });
     } else if (cl.kind === 'mask' && Array.isArray((cl as { positions?: unknown }).positions)) {
       const mask = Array.from(
         new Set(
@@ -282,11 +326,12 @@ export function normalizePatternComposite(raw: unknown): PatternCompositeSpec | 
         ),
       );
       if (mask.length === 0) continue;
-      const mv = normalizeMatchVariants((cl as { matchVariants?: unknown }).matchVariants);
+      const { rot, mir } = deriveOrientationFlags(cl as unknown as Record<string, unknown>);
       clauses.push({
         kind: 'mask',
         positions: mask.sort(),
-        ...(mv.length ? { matchVariants: mv } : {}),
+        ...(rot ? { matchAllowRotation: true } : {}),
+        ...(mir ? { matchAllowMirror: true } : {}),
       });
     }
   }
@@ -304,10 +349,10 @@ export function clauseHighlightPositions(clause: PatternCompositeClause): string
     const def = BINGO_PATTERNS[preset];
     const pts = def?.positions;
     if (!pts?.length) return [];
-    const variants = expandMaskOrientations(pts, clause.matchVariants);
+    const variants = expandMaskOrientations(pts, clauseOrientationTransforms(clause));
     return unionVariantPositions(variants);
   }
-  const variants = expandMaskOrientations(clause.positions, clause.matchVariants);
+  const variants = expandMaskOrientations(clause.positions, clauseOrientationTransforms(clause));
   return unionVariantPositions(variants);
 }
 
@@ -405,10 +450,10 @@ function clauseVisualComplete(card: { squares: SquareLite[] }, clause: PatternCo
     const def = BINGO_PATTERNS[clause.preset];
     const pts = def?.positions;
     if (!pts?.length) return false;
-    const variants = expandMaskOrientations(pts, clause.matchVariants);
+    const variants = expandMaskOrientations(pts, clauseOrientationTransforms(clause));
     return variants.some((m) => maskVisualComplete(card, m));
   }
-  const variants = expandMaskOrientations(clause.positions, clause.matchVariants);
+  const variants = expandMaskOrientations(clause.positions, clauseOrientationTransforms(clause));
   return variants.some((m) => maskVisualComplete(card, m));
 }
 
@@ -429,10 +474,10 @@ function clauseStrictComplete(
     const def = BINGO_PATTERNS[clause.preset];
     const pts = def?.positions;
     if (!pts?.length) return false;
-    const variants = expandMaskOrientations(pts, clause.matchVariants);
+    const variants = expandMaskOrientations(pts, clauseOrientationTransforms(clause));
     return variants.some((m) => maskStrictComplete(card, m, isValid));
   }
-  const variants = expandMaskOrientations(clause.positions, clause.matchVariants);
+  const variants = expandMaskOrientations(clause.positions, clauseOrientationTransforms(clause));
   return variants.some((m) => maskStrictComplete(card, m, isValid));
 }
 
@@ -527,10 +572,10 @@ export function compositeLegitProgressPct(
       const def = BINGO_PATTERNS[clause.preset];
       const pts = def?.positions;
       if (!pts?.length) return 0;
-      const variants = expandMaskOrientations(pts, clause.matchVariants);
+      const variants = expandMaskOrientations(pts, clauseOrientationTransforms(clause));
       return Math.max(...variants.map((m) => ratioMask(m)));
     }
-    const variants = expandMaskOrientations(clause.positions, clause.matchVariants);
+    const variants = expandMaskOrientations(clause.positions, clauseOrientationTransforms(clause));
     return Math.max(...variants.map((m) => ratioMask(m)));
   };
 
