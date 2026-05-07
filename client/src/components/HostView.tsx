@@ -90,6 +90,7 @@ import {
   type PublicDisplayTitleRevealMode,
 } from '../utils/publicDisplayTitleReveal';
 import {
+  canonicalPlaylistIdForMatch,
   compute5x15InsufficientWarnings,
   computeEffectiveBingoPoolPreview,
 } from '../utils/effectiveBingoPoolPreview';
@@ -223,15 +224,28 @@ function selectionPlaylistKey(playlists: Array<{ id: string }>): string {
 
 /** Tracks assigned to this round's playlists, order preserved from the finalized playback pool. */
 function songsForRoundFromFinalizedPool(round: EventRound, pool: Song[]): Song[] {
-  const want = new Set((round.playlistIds || []).map((id) => String(id).trim()));
+  const wantRaw = (round.playlistIds || []).map((id) => String(id).trim()).filter(Boolean);
+  const want = new Set(wantRaw.map(canonicalPlaylistIdForMatch));
   const seen = new Set<string>();
   const out: Song[] = [];
   for (const s of pool) {
-    const pid = s.sourcePlaylistId != null ? String(s.sourcePlaylistId).trim() : '';
+    const pidRaw = s.sourcePlaylistId != null ? String(s.sourcePlaylistId).trim() : '';
+    const pid = pidRaw ? canonicalPlaylistIdForMatch(pidRaw) : '';
     if (!want.has(pid)) continue;
     if (!s.id || seen.has(s.id)) continue;
     seen.add(s.id);
     out.push(s);
+  }
+  // Single-playlist (1×75): pool may lack sourcePlaylistId on every track (legacy server emit); pool is already from this finalize.
+  if (out.length === 0 && wantRaw.length === 1 && pool.length > 0) {
+    const seenFb = new Set<string>();
+    const fb: Song[] = [];
+    for (const s of pool) {
+      if (!s.id || seenFb.has(s.id)) continue;
+      seenFb.add(s.id);
+      fb.push(s);
+    }
+    return fb;
   }
   return out;
 }

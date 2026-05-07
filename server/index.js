@@ -5348,14 +5348,25 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
         io.to(roomId).emit('oneby75-pool', { ids: base.map(s => s.id) });
         try {
           if (base.length > 0) {
-            const orderWithMeta = base.map(s => ({
+            const solePl = Array.isArray(playlists) && playlists.length > 0 ? playlists[0] : null;
+            const solePlaylistId =
+              solePl != null && solePl.id != null ? String(solePl.id).trim() : '';
+            const solePlaylistName =
+              solePl != null && typeof solePl.name === 'string' ? solePl.name : '';
+            const orderWithMeta = base.map((s) => ({
               id: s.id,
               name: s.name || '',
               artist: s.artist || '',
               explicit: s.explicit === true,
               youtubeMusic: s.youtubeMusic === true,
-              sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
-              sourcePlaylistName: typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
+              sourcePlaylistId:
+                s.sourcePlaylistId != null && String(s.sourcePlaylistId).trim() !== ''
+                  ? String(s.sourcePlaylistId)
+                  : solePlaylistId || undefined,
+              sourcePlaylistName:
+                typeof s.sourcePlaylistName === 'string' && s.sourcePlaylistName.trim() !== ''
+                  ? s.sourcePlaylistName
+                  : solePlaylistName || undefined,
             }));
             io.to(roomId).emit('finalized-order', { order: orderWithMeta });
           }

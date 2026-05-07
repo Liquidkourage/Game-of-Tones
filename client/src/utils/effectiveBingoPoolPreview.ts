@@ -14,6 +14,14 @@ export type PoolSongLike = {
   sourcePlaylistName?: string;
 };
 
+/** Normalize Spotify URIs so `spotify:playlist:abc` matches bare `abc`. */
+export function canonicalPlaylistIdForMatch(id: string): string {
+  const s = String(id).trim();
+  const m = /^spotify:playlist:([a-zA-Z0-9]+)$/i.exec(s);
+  if (m) return m[1];
+  return s;
+}
+
 type PerListColumn = { id: string; name?: string; songs: PoolSongLike[] };
 
 function dedupePreserve(arr: PoolSongLike[]): PoolSongLike[] {
@@ -32,7 +40,10 @@ function buildPerListUnique(
   allSongs: PoolSongLike[],
 ): PerListColumn[] {
   return playlists.map((pl) => {
-    const raw = allSongs.filter((s) => String(s.sourcePlaylistId || '') === String(pl.id));
+    const plCanon = canonicalPlaylistIdForMatch(String(pl.id));
+    const raw = allSongs.filter(
+      (s) => canonicalPlaylistIdForMatch(String(s.sourcePlaylistId || '')) === plCanon,
+    );
     return { id: pl.id, name: pl.name, songs: dedupePreserve(raw) };
   });
 }
