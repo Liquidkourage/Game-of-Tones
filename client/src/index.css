@@ -1611,6 +1611,25 @@ code {
     0 0 16px rgba(34, 211, 238, 0.45);
 }
 
+/* Combined pattern demo: dim non-focused clauses while cycling readable sub-shapes */
+.public-display .bingo-square.winning.composite-demo-dim {
+  opacity: 0.52;
+  transform: scale(1.02);
+  filter: saturate(0.75);
+  box-shadow: 0 0 10px rgba(74, 222, 128, 0.35);
+}
+
+.public-display .bingo-square.winning.composite-demo-focus {
+  opacity: 1;
+  transform: scale(1.07);
+  filter: saturate(1.05);
+  box-shadow:
+    0 0 28px rgba(250, 250, 250, 0.85),
+    0 0 18px rgba(74, 222, 128, 0.95);
+  border-color: #ecfccb;
+  z-index: 2;
+}
+
 .square-content {
   height: 100%;
   display: flex;

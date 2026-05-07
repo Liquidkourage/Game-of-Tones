@@ -66,6 +66,7 @@ import {
   LINE_PATTERN_MAX_LINES,
   compositeLegitProgressPct,
   clauseSupportsMatchVariants,
+  describeCompositePatternFullSentence,
   type SavedCompositePattern,
   getSavedCompositePatterns,
   saveCompositePattern,
@@ -97,6 +98,28 @@ import {
 import { getYoutubeHostPlaybackChannelName } from '../utils/youtubeHostPlaybackChannel';
 import { validateSongTitle, validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
 import './HostView.css';
+
+const MAX_CUSTOM_PATTERN_NAME_EMIT = 80;
+
+function positionsKeyForMatch(arr: readonly string[]): string {
+  return [...arr].sort().join(',');
+}
+
+/** Saved-pattern display name for server sync (projector / clients). */
+function customPatternDisplayNameForEmit(
+  mask: readonly string[],
+  selected: SavedCustomPattern | null | undefined,
+  savedList: SavedCustomPattern[],
+): string | undefined {
+  if (!mask.length) return undefined;
+  const key = positionsKeyForMatch(mask);
+  const fromSelected =
+    selected && positionsKeyForMatch(selected.positions) === key ? selected.name?.trim() : '';
+  if (fromSelected) return fromSelected.slice(0, MAX_CUSTOM_PATTERN_NAME_EMIT);
+  const hit = savedList.find((sp) => positionsKeyForMatch(sp.positions) === key);
+  const n = hit?.name?.trim();
+  return n ? n.slice(0, MAX_CUSTOM_PATTERN_NAME_EMIT) : undefined;
+}
 
 interface Playlist {
   id: string;
@@ -3504,6 +3527,8 @@ const HostView: React.FC = () => {
           customMask: maskForStart,
           customMatchAllowRotation: !!(roundForStart?.customMatchAllowRotation ?? customMatchAllowRotation),
           customMatchAllowMirror: !!(roundForStart?.customMatchAllowMirror ?? customMatchAllowMirror),
+          customPatternName:
+            customPatternDisplayNameForEmit(maskForStart, selectedCustomPattern, savedCustomPatterns) ?? '',
         });
       } else if (patternForStart === 'composite' && compositeForStart) {
         socket.emit('set-pattern', { roomId, pattern: 'composite', patternComposite: compositeForStart });
@@ -3534,6 +3559,12 @@ const HostView: React.FC = () => {
         linesRequired: normalizeLinesRequired(roundForStart?.linesRequired ?? linesRequired),
         customMatchAllowRotation: !!(roundForStart?.customMatchAllowRotation ?? customMatchAllowRotation),
         customMatchAllowMirror: !!(roundForStart?.customMatchAllowMirror ?? customMatchAllowMirror),
+        ...(patternForStart === 'custom'
+          ? {
+              customPatternName:
+                customPatternDisplayNameForEmit(maskForStart, selectedCustomPattern, savedCustomPatterns) ?? '',
+            }
+          : {}),
         freeSpace: freeSpaceForStart,
         savedRoundPlayback: useSavedRoundPlayback,
       });
@@ -4209,6 +4240,8 @@ const HostView: React.FC = () => {
             customMask: mask,
             customMatchAllowRotation: !!(round.customMatchAllowRotation ?? matchedSaved?.matchAllowRotation),
             customMatchAllowMirror: !!(round.customMatchAllowMirror ?? matchedSaved?.matchAllowMirror),
+            customPatternName:
+              customPatternDisplayNameForEmit(mask, matchedSaved ?? null, savedCustomPatterns) ?? '',
           });
         } else if (p === 'line') {
           socket.emit('set-pattern', {
@@ -4409,6 +4442,8 @@ const HostView: React.FC = () => {
           ? {
               customMatchAllowRotation,
               customMatchAllowMirror,
+              customPatternName:
+                customPatternDisplayNameForEmit(customMask, selectedCustomPattern, savedCustomPatterns) ?? '',
             }
           : {}),
       });
@@ -4457,6 +4492,8 @@ const HostView: React.FC = () => {
         customMask: customPatternObj.positions,
         customMatchAllowRotation: rot,
         customMatchAllowMirror: mir,
+        customPatternName:
+          customPatternDisplayNameForEmit(customPatternObj.positions, customPatternObj, savedCustomPatterns) ?? '',
       });
       addLog(`Custom pattern set to ${customPatternObj.name}`, 'info');
     }
@@ -6843,6 +6880,9 @@ const HostView: React.FC = () => {
                                 customMask,
                                 customMatchAllowRotation: v,
                                 customMatchAllowMirror,
+                                customPatternName:
+                                  customPatternDisplayNameForEmit(customMask, selectedCustomPattern, savedCustomPatterns) ??
+                                  '',
                               });
                             }
                           }}
@@ -6878,6 +6918,9 @@ const HostView: React.FC = () => {
                                 customMask,
                                 customMatchAllowRotation,
                                 customMatchAllowMirror: v,
+                                customPatternName:
+                                  customPatternDisplayNameForEmit(customMask, selectedCustomPattern, savedCustomPatterns) ??
+                                  '',
                               });
                             }
                           }}
@@ -6903,8 +6946,8 @@ const HostView: React.FC = () => {
                     </div>
                   )}
                   {pattern === 'composite' && (
-                    <div style={{ marginTop: '8px', fontSize: '0.78rem', color: '#9aa5b1', lineHeight: 1.45 }}>
-                      Players see highlights for every clause. Wins match server rules for OR vs AND.
+                    <div style={{ marginTop: '8px', fontSize: '0.82rem', color: '#b8d4e8', lineHeight: 1.5 }}>
+                      {describeCompositePatternFullSentence(patternComposite)}
                     </div>
                   )}
                 </div>

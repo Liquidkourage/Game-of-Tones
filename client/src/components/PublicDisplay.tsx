@@ -35,6 +35,9 @@ import {
   expandMaskOrientations,
   hostOrientationTransforms,
   clauseHighlightPositions,
+  STANDARD_BINGO_POSITIONS,
+  describeCompositeClauseBrief,
+  describeCompositePatternFullSentence,
 } from '../patternDefinitions';
 
 /** Standard bingo lines: rows 0–4, cols 0–4, two diagonals (same order as server listCompletedLinesPlayedStrict). */
@@ -75,15 +78,17 @@ function spreadFallbackDemoTuples(n: number): number[][] {
  * not consecutive indices, so the wall reads as “examples” rather than chasing adjacent lines.
  */
 
-/** Dedupe clause highlight frames that resolve to the same cell set (projector composite demo). */
-function dedupePositionFrames(frames: string[][]): string[][] {
+/** Dedupe composite projector demos that resolve to the same cell set (keep first label). */
+function dedupeCompositeDemoSequences(
+  items: { label: string; positions: string[] }[],
+): { label: string; positions: string[] }[] {
   const seen = new Set<string>();
-  const out: string[][] = [];
-  for (const f of frames) {
-    const key = [...f].sort().join('|');
+  const out: { label: string; positions: string[] }[] = [];
+  for (const it of items) {
+    const key = [...it.positions].sort().join('|');
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push(f);
+    out.push(it);
   }
   return out;
 }
@@ -838,9 +843,12 @@ const PublicDisplay: React.FC = () => {
   /** Cycle orientation variants (custom) or clause highlights (composite) on the projector wall. */
   const [customPatternDemoIndex, setCustomPatternDemoIndex] = useState(0);
   const [compositePatternDemoIndex, setCompositePatternDemoIndex] = useState(0);
+  /** Full-card / blackout: traveling highlight across all 25 cells. */
+  const [fullCardWaveIndex, setFullCardWaveIndex] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const customDemoIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const compositeDemoIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const fullCardWaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [gameState, setGameState] = useState<GameState>({
     isPlaying: false,
     currentSong: null,
@@ -967,6 +975,7 @@ const PublicDisplay: React.FC = () => {
   // Toast for revealed letter
   const [revealToast, setRevealToast] = useState<string | null>(null);
   const [customMask, setCustomMask] = useState<Set<string>>(new Set());
+  const [customPatternName, setCustomPatternName] = useState('');
   const [customMatchAllowRotation, setCustomMatchAllowRotation] = useState(false);
   const [customMatchAllowMirror, setCustomMatchAllowMirror] = useState(false);
   const [linesRequired, setLinesRequired] = useState(1);
@@ -986,12 +995,14 @@ const PublicDisplay: React.FC = () => {
   }, [pattern, customMask, customMatchAllowRotation, customMatchAllowMirror]);
 
   /** Skip whole-board clauses (line/full_card); projector cycles readable clause-sized demos. */
-  const compositeDemoFrames = useMemo(() => {
+  const compositeDemoSequences = useMemo(() => {
     if (!patternComposite?.clauses?.length) return [];
-    const raw = patternComposite.clauses
-      .map((c) => clauseHighlightPositions(c))
-      .filter((p) => p.length > 0 && p.length < 25);
-    const deduped = dedupePositionFrames(raw);
+    const raw = patternComposite.clauses.map((c) => ({
+      label: describeCompositeClauseBrief(c),
+      positions: clauseHighlightPositions(c),
+    }));
+    const filtered = raw.filter((x) => x.positions.length > 0 && x.positions.length < 25);
+    const deduped = dedupeCompositeDemoSequences(filtered);
     return deduped.length >= 2 ? deduped : [];
   }, [patternComposite]);
   const revealToastTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -1260,10 +1271,14 @@ const PublicDisplay: React.FC = () => {
             if (payload.pattern === 'custom') {
               setCustomMatchAllowRotation(!!payload.customMatchAllowRotation);
               setCustomMatchAllowMirror(!!payload.customMatchAllowMirror);
+              if (typeof payload.customPatternName === 'string') {
+                setCustomPatternName(payload.customPatternName.trim().slice(0, 80));
+              }
             }
             if (payload.pattern !== 'custom') {
               setCustomMatchAllowRotation(false);
               setCustomMatchAllowMirror(false);
+              setCustomPatternName('');
             }
           }
 
@@ -1618,10 +1633,14 @@ const PublicDisplay: React.FC = () => {
           if (p === 'custom') {
             setCustomMatchAllowRotation(!!data.customMatchAllowRotation);
             setCustomMatchAllowMirror(!!data.customMatchAllowMirror);
+            if (typeof data.customPatternName === 'string') {
+              setCustomPatternName(data.customPatternName.trim().slice(0, 80));
+            }
           }
           if (p && p !== 'custom') {
             setCustomMatchAllowRotation(false);
             setCustomMatchAllowMirror(false);
+            setCustomPatternName('');
           }
         }
         if (Array.isArray(data?.customMask)) {
@@ -1799,9 +1818,13 @@ const PublicDisplay: React.FC = () => {
           if (data.pattern === 'custom') {
             setCustomMatchAllowRotation(!!data.customMatchAllowRotation);
             setCustomMatchAllowMirror(!!data.customMatchAllowMirror);
+            if (typeof data.customPatternName === 'string') {
+              setCustomPatternName(data.customPatternName.trim().slice(0, 80));
+            }
           } else {
             setCustomMatchAllowRotation(false);
             setCustomMatchAllowMirror(false);
+            setCustomPatternName('');
           }
           if (Array.isArray(data?.customMask)) {
             try {
@@ -2631,7 +2654,9 @@ const PublicDisplay: React.FC = () => {
       case 'x':
         return 'Pattern: X';
       case 'custom':
-        return 'Pattern: Custom';
+        return (customPatternName || '').trim()
+          ? `Pattern: ${(customPatternName || '').trim()}`
+          : 'Pattern: Custom';
       case 'composite':
         return patternComposite
           ? `Pattern: Combined (${patternComposite.op.toUpperCase()})`
@@ -2663,9 +2688,9 @@ const PublicDisplay: React.FC = () => {
       case 'plus':
         return 'Plus';
       case 'custom':
-        return 'Custom';
+        return (customPatternName || '').trim() ? (customPatternName || '').trim() : 'Custom';
       case 'composite':
-        return patternComposite ? `Combined (${patternComposite.op})` : 'Combined';
+        return patternComposite ? describeCompositePatternFullSentence(patternComposite) : 'Combined';
       case 'line':
       default:
         return linesRequired > 1 ? `Any ${linesRequired} lines` : 'Single line';
@@ -2679,10 +2704,6 @@ const PublicDisplay: React.FC = () => {
       return true;
     }
     if (pattern === 'composite' && patternComposite) {
-      if (compositeDemoFrames.length >= 2) {
-        const idx = compositePatternDemoIndex % compositeDemoFrames.length;
-        return compositeDemoFrames[idx].includes(`${row}-${col}`);
-      }
       return unionCompositeHighlightPositions(patternComposite).includes(`${row}-${col}`);
     }
     if (pattern === 'custom' && customMask && customMask.size > 0) {
@@ -2785,8 +2806,8 @@ const PublicDisplay: React.FC = () => {
       clearInterval(compositeDemoIntervalRef.current);
       compositeDemoIntervalRef.current = null;
     }
-    if (pattern !== 'composite' || compositeDemoFrames.length < 2) return;
-    const len = compositeDemoFrames.length;
+    if (pattern !== 'composite' || compositeDemoSequences.length < 2) return;
+    const len = compositeDemoSequences.length;
     compositeDemoIntervalRef.current = setInterval(() => {
       setCompositePatternDemoIndex((prev) => (prev + 1) % len);
     }, 1200);
@@ -2796,7 +2817,28 @@ const PublicDisplay: React.FC = () => {
         compositeDemoIntervalRef.current = null;
       }
     };
-  }, [pattern, compositeDemoFrames]);
+  }, [pattern, compositeDemoSequences]);
+
+  useEffect(() => {
+    setFullCardWaveIndex(0);
+  }, [pattern]);
+
+  useEffect(() => {
+    if (fullCardWaveIntervalRef.current) {
+      clearInterval(fullCardWaveIntervalRef.current);
+      fullCardWaveIntervalRef.current = null;
+    }
+    if (pattern !== 'full_card' && pattern !== 'blackout') return;
+    fullCardWaveIntervalRef.current = setInterval(() => {
+      setFullCardWaveIndex((i) => (i + 1) % STANDARD_BINGO_POSITIONS.length);
+    }, 380);
+    return () => {
+      if (fullCardWaveIntervalRef.current) {
+        clearInterval(fullCardWaveIntervalRef.current);
+        fullCardWaveIntervalRef.current = null;
+      }
+    };
+  }, [pattern]);
 
   const renderBingoCard = () => {
     const { bingoCard } = gameState;
@@ -2826,40 +2868,84 @@ const PublicDisplay: React.FC = () => {
             if (hitSlots.length > 1) linePatternDemoClass = ' winning-line-overlap';
             else if (hitSlots.length === 1) linePatternDemoClass = ` winning-line-slot-${hitSlots[0] % 4}`;
           }
+
+          const posKey = `${row}-${col}`;
+          let compositeDemoExtraClass = '';
+          if (
+            pattern === 'composite' &&
+            patternComposite &&
+            compositeDemoSequences.length >= 2 &&
+            isWinningLine
+          ) {
+            const frame =
+              compositeDemoSequences[
+                compositeDemoSequences.length === 0 ? 0 : compositePatternDemoIndex % compositeDemoSequences.length
+              ];
+            compositeDemoExtraClass = frame.positions.includes(posKey) ? ' composite-demo-focus' : ' composite-demo-dim';
+          }
+
+          const wavePos =
+            STANDARD_BINGO_POSITIONS[
+              STANDARD_BINGO_POSITIONS.length === 0 ? 0 : fullCardWaveIndex % STANDARD_BINGO_POSITIONS.length
+            ];
+          const isFullCardWaveCell =
+            isWinningLine && (pattern === 'full_card' || pattern === 'blackout') && wavePos === posKey;
+
+          const pulseFullCardFamily =
+            isWinningLine && (pattern === 'full_card' || pattern === 'blackout');
+
+          const pulseShapeGlow =
+            isWinningLine &&
+            (pattern === 'custom' ||
+              (pattern === 'composite' && compositeDemoSequences.length < 2));
+
           rowSquares.push(
             <motion.div
               key={`${row}-${col}`}
-              className={`bingo-square ${square.isPlayed ? 'played' : ''} ${isWinningLine ? 'winning' : ''}${linePatternDemoClass}`}
+              className={`bingo-square ${square.isPlayed ? 'played' : ''} ${isWinningLine ? 'winning' : ''}${linePatternDemoClass}${compositeDemoExtraClass}`}
               initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ 
-                opacity: 1, 
+              animate={{
+                opacity: 1,
                 scale: 1,
-                ...(isWinningLine &&
-                  (pattern === 'full_card' ||
-                    pattern === 'blackout' ||
-                    pattern === 'custom' ||
-                    pattern === 'composite') && {
-                    boxShadow: [
-                      '0 0 0 rgba(0, 255, 136, 0.3)',
-                      '0 0 20px rgba(0, 255, 136, 0.6)',
-                      '0 0 0 rgba(0, 255, 136, 0.3)',
-                    ],
-                  })
+                ...(pulseFullCardFamily && {
+                  boxShadow: isFullCardWaveCell
+                    ? [
+                        '0 0 4px rgba(0, 255, 136, 0.35)',
+                        '0 0 42px rgba(0, 255, 200, 0.95)',
+                        '0 0 4px rgba(0, 255, 136, 0.35)',
+                      ]
+                    : [
+                        '0 0 0 rgba(0, 255, 136, 0.12)',
+                        '0 0 14px rgba(0, 255, 136, 0.32)',
+                        '0 0 0 rgba(0, 255, 136, 0.12)',
+                      ],
+                }),
+                ...(pulseShapeGlow && {
+                  boxShadow: [
+                    '0 0 0 rgba(0, 255, 136, 0.3)',
+                    '0 0 20px rgba(0, 255, 136, 0.6)',
+                    '0 0 0 rgba(0, 255, 136, 0.3)',
+                  ],
+                }),
               }}
-              transition={{ 
-                duration: 0.3, 
+              transition={{
+                duration: 0.3,
                 delay: (row + col) * 0.05,
-                ...(isWinningLine &&
-                  (pattern === 'full_card' ||
-                    pattern === 'blackout' ||
-                    pattern === 'custom' ||
-                    pattern === 'composite') && {
+                ...(pulseFullCardFamily && {
+                  boxShadow: {
+                    duration: isFullCardWaveCell ? 1.05 : 2.5,
+                    repeat: Infinity,
+                    ease: 'easeInOut',
+                  },
+                }),
+                ...(pulseShapeGlow &&
+                  !pulseFullCardFamily && {
                     boxShadow: {
                       duration: 2,
                       repeat: Infinity,
                       ease: 'easeInOut',
                     },
-                  })
+                  }),
               }}
               whileHover={{ scale: 1.05 }}
             >
@@ -4846,6 +4932,45 @@ const PublicDisplay: React.FC = () => {
               <div className="bingo-card-header center" style={{ justifyContent: 'center' }}>
                 <Grid3X3 className="bingo-card-icon" />
                 <h2 style={{ fontSize: '3.2rem', fontWeight: 900, textShadow: '0 2px 6px rgba(0,0,0,0.8)' }}>{getPatternName()}</h2>
+                {pattern === 'composite' &&
+                  patternComposite &&
+                  describeCompositePatternFullSentence(patternComposite) && (
+                    <div
+                      style={{
+                        fontSize: 'clamp(1.05rem, 3vmin, 2rem)',
+                        fontWeight: 700,
+                        color: '#d7faf3',
+                        marginTop: 8,
+                        textAlign: 'center',
+                        maxWidth: '98%',
+                        lineHeight: 1.35,
+                        padding: '0 10px',
+                      }}
+                    >
+                      {describeCompositePatternFullSentence(patternComposite)}
+                    </div>
+                  )}
+                {pattern === 'composite' && compositeDemoSequences.length >= 2 && (
+                  <div
+                    style={{
+                      fontSize: 'clamp(0.92rem, 2.4vmin, 1.65rem)',
+                      fontWeight: 600,
+                      color: '#a8e6dc',
+                      marginTop: 8,
+                      textAlign: 'center',
+                      padding: '0 10px',
+                    }}
+                  >
+                    Showing now:{' '}
+                    <span style={{ color: '#ffffff', fontWeight: 800 }}>
+                      {
+                        compositeDemoSequences[
+                          compositePatternDemoIndex % compositeDemoSequences.length
+                        ]?.label
+                      }
+                    </span>
+                  </div>
+                )}
                 {showNowPlaying && gameState.currentSong && (
                   <div className="now-playing-banner" style={{ marginTop: 6, fontSize: '0.95rem' }}>
                     Now Playing: {(() => {

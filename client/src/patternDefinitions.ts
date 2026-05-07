@@ -514,6 +514,28 @@ export function clauseHighlightPositions(clause: PatternCompositeClause): string
   return unionVariantPositions(variants);
 }
 
+/** Short clause label for projector / winner UI (combined patterns). */
+export function describeCompositeClauseBrief(clause: PatternCompositeClause): string {
+  if (clause.kind === 'preset') {
+    if (clause.preset === 'line') {
+      const n = normalizeLinesRequired(clause.linesRequired);
+      return n <= 1 ? 'Any line' : `Any ${n} lines`;
+    }
+    if (clause.preset === 'full_card') return 'Full card';
+    const def = BINGO_PATTERNS[clause.preset];
+    return def?.label ?? clause.preset;
+  }
+  const n = clause.positions?.length ?? 0;
+  return `Painted shape (${n} sq)`;
+}
+
+/** Readable combined rule, e.g. "Four corners OR X pattern". */
+export function describeCompositePatternFullSentence(spec: PatternCompositeSpec | null | undefined): string {
+  if (!spec?.clauses?.length) return '';
+  const sep = spec.op === 'and' ? ' AND ' : ' OR ';
+  return spec.clauses.map(describeCompositeClauseBrief).join(sep);
+}
+
 export function unionCompositeHighlightPositions(spec: PatternCompositeSpec | null | undefined): string[] {
   if (!spec?.clauses?.length) return [];
   const u = new Set<string>();

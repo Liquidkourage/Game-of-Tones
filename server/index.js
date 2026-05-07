@@ -2178,6 +2178,7 @@ io.on('connection', (socket) => {
         pattern: 'line', // Default pattern
         linesRequired: 1,
         customPattern: undefined, // Will be set when custom pattern is chosen
+        customPatternName: '',
         customPatternAllowRotation: false,
         customPatternAllowMirror: false,
         patternComposite: undefined,
@@ -2681,6 +2682,7 @@ io.on('connection', (socket) => {
         linesRequired: lrIn,
         customMatchAllowRotation,
         customMatchAllowMirror,
+        customPatternName: incomingCustomPatternName,
       } = data;
       const room = rooms.get(roomId);
       if (!room) return;
@@ -2691,12 +2693,14 @@ io.on('connection', (socket) => {
       room.pattern = allowed.has(canonPattern) ? canonPattern : 'line';
       room.customPatternAllowRotation = false;
       room.customPatternAllowMirror = false;
+      room.customPatternName = '';
       if (room.pattern === 'custom') {
         const mask = Array.isArray(customMask) ? customMask.filter(p => /^(0|1|2|3|4)-(0|1|2|3|4)$/.test(p)) : [];
         room.customPattern = new Set(mask);
         room.patternComposite = undefined;
         room.customPatternAllowRotation = readOrientationBoolSrv(customMatchAllowRotation);
         room.customPatternAllowMirror = readOrientationBoolSrv(customMatchAllowMirror);
+        room.customPatternName = sanitizeCustomPatternNameSrv(incomingCustomPatternName);
       } else if (room.pattern === 'composite') {
         room.customPattern = undefined;
         room.patternComposite = normalizePatternComposite(incomingComposite);
@@ -3697,6 +3701,7 @@ io.on('connection', (socket) => {
     // Reset pattern to default
     room.pattern = 'line';
     room.customPattern = new Set();
+    room.customPatternName = '';
     room.patternComposite = undefined;
     
     // Reset settings to defaults  
@@ -4016,7 +4021,7 @@ io.on('connection', (socket) => {
 
   socket.on('start-game', async (data) => {
     routineServerLog('🎮 Start game event received:', data);
-    const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, patternComposite: incomingPatternComposite, linesRequired: incomingLinesRequired, customMatchAllowRotation: incomingCustomRot, customMatchAllowMirror: incomingCustomMir, freeSpace, savedRoundPlayback } = data;
+    const { roomId, playlists, snippetLength = 30, deviceId, songList, randomStarts = 'none', pattern: incomingPattern, customMask: incomingCustomMask, patternComposite: incomingPatternComposite, linesRequired: incomingLinesRequired, customMatchAllowRotation: incomingCustomRot, customMatchAllowMirror: incomingCustomMir, customPatternName: incomingCustomPatternName, freeSpace, savedRoundPlayback } = data;
     const room = rooms.get(roomId);
     
     routineServerLog('🔍 Room found:', !!room);
@@ -4051,12 +4056,15 @@ io.on('connection', (socket) => {
             const mask = incomingCustomMask.filter((p) => /^(0|1|2|3|4)-(0|1|2|3|4)$/.test(p));
             room.customPattern = mask.length > 0 ? new Set(mask) : undefined;
             room.patternComposite = undefined;
+            room.customPatternName = sanitizeCustomPatternNameSrv(incomingCustomPatternName);
           } else if (room.pattern === 'composite') {
             room.customPattern = undefined;
+            room.customPatternName = '';
             room.patternComposite = normalizePatternComposite(incomingPatternComposite);
             if (!room.patternComposite) room.pattern = 'line';
           } else if (room.pattern !== 'custom') {
             room.customPattern = undefined;
+            room.customPatternName = '';
             room.patternComposite = undefined;
           }
         } catch {}
@@ -4265,6 +4273,7 @@ io.on('connection', (socket) => {
           pattern: 'line', // Default pattern
           linesRequired: 1,
           customPattern: undefined, // Will be set when custom pattern is chosen
+          customPatternName: '',
           customPatternAllowRotation: false,
           customPatternAllowMirror: false,
           patternComposite: undefined,
@@ -7160,6 +7169,12 @@ function normalizeLinesRequiredSrv(raw) {
   return Math.min(12, Math.max(1, Math.round(x)));
 }
 
+function sanitizeCustomPatternNameSrv(raw) {
+  if (raw == null) return '';
+  const s = String(raw).trim().slice(0, 80);
+  return s.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
+}
+
 function patternExtrasForClient(room) {
   const pat = room?.pattern || 'line';
   if (pat === 'line') {
@@ -7169,6 +7184,7 @@ function patternExtrasForClient(room) {
     return {
       customMatchAllowRotation: !!room.customPatternAllowRotation,
       customMatchAllowMirror: !!room.customPatternAllowMirror,
+      customPatternName: room.customPatternName || '',
     };
   }
   return {};
