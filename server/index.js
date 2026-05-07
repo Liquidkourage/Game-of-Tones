@@ -2463,6 +2463,7 @@ io.on('connection', (socket) => {
     // Prevent duplicate finalization
     if (room.mixFinalized) {
       routineServerLog('⚠️ Mix already finalized for room:', roomId);
+      emitFinalizedOrderFromRoomState(roomId, room);
       socket.emit('mix-finalized', { playlists: room.finalizedPlaylists });
       return;
     }
@@ -2521,6 +2522,8 @@ io.on('connection', (socket) => {
         return;
       }
 
+      emitFinalizedOrderFromRoomState(roomId, room);
+
       room.mixFinalized = true;
       
       io.to(roomId).emit('mix-finalized', { playlists, songList: songListVerified });
@@ -2536,6 +2539,21 @@ io.on('connection', (socket) => {
         code: 'server_error',
         message: error && error.message ? String(error.message) : 'Finalize failed on server.',
       });
+    }
+  });
+
+  socket.on('request-finalized-order', (data = {}) => {
+    try {
+      const roomId = data.roomId;
+      if (!roomId) return;
+      const room = rooms.get(roomId);
+      if (!room || !room.mixFinalized) return;
+      const player = room.players.get(socket.id);
+      const isCurrentHost = room.host === socket.id || !!(player && player.isHost);
+      if (!isCurrentHost) return;
+      emitFinalizedOrderFromRoomState(roomId, room);
+    } catch (e) {
+      console.warn('request-finalized-order:', e?.message || e);
     }
   });
 
@@ -4982,6 +5000,148 @@ function playlistsWithSongsFromHostSongOrder(playlists, songOrder) {
   }
   if (!rows.every((r) => r.songs.length > 0)) return null;
   return rows;
+}
+
+/**
+ * Rebuild host/public `finalized-order` payload from room caches (5×15 meta + id order, 1×75 pool, or full objects).
+ * Used when replaying to hosts who missed the original emit (refresh, race, skip-refinalize client path).
+ */
+function buildFinalizedOrderPayloadFromRoom(room) {
+  if (!room || !room.mixFinalized) return [];
+
+  const fos = room.finalizedSongOrder;
+  const meta5 = room.fiveByFifteenMeta;
+
+  if (
+    meta5 &&
+    typeof meta5 === 'object' &&
+    Array.isArray(fos) &&
+    fos.length > 0 &&
+    typeof fos[0] === 'string'
+  ) {
+    const order = fos
+      .map((id) => {
+        const m = meta5[id];
+        if (!m) return null;
+        return {
+          id,
+          name: m.name || '',
+          artist: m.artist || '',
+          explicit: m.explicit === true,
+          youtubeMusic: m.youtubeMusic === true,
+          sourcePlaylistId: m.sourcePlaylistId,
+          sourcePlaylistName: m.sourcePlaylistName,
+        };
+      })
+      .filter(Boolean);
+    if (order.length > 0) return order;
+  }
+
+  const ob75 = room.oneBySeventyFivePool;
+  if (Array.isArray(ob75) && ob75.length > 0) {
+    const idToSong = new Map();
+    const addSong = (s) => {
+      if (s && typeof s === 'object' && s.id) idToSong.set(s.id, s);
+    };
+    if (Array.isArray(room.finalizedSongOrder)) {
+      for (const entry of room.finalizedSongOrder) {
+        if (typeof entry === 'string') continue;
+        addSong(entry);
+      }
+    }
+    if (Array.isArray(room.finalizedSongs)) {
+      for (const s of room.finalizedSongs) addSong(s);
+    }
+    const solePl =
+      Array.isArray(room.finalizedPlaylists) && room.finalizedPlaylists.length === 1
+        ? room.finalizedPlaylists[0]
+        : null;
+    const solePlaylistId = solePl != null && solePl.id != null ? String(solePl.id).trim() : '';
+    const solePlaylistName = solePl != null && typeof solePl.name === 'string' ? solePl.name : '';
+
+    return ob75
+      .map((row) => {
+        const id = row && row.id != null ? row.id : null;
+        if (!id) return null;
+        const s = idToSong.get(id);
+        return {
+          id,
+          name: s?.name || '',
+          artist: s?.artist || '',
+          explicit: s?.explicit === true,
+          youtubeMusic: s?.youtubeMusic === true,
+          sourcePlaylistId:
+            s?.sourcePlaylistId != null && String(s.sourcePlaylistId).trim() !== ''
+              ? String(s.sourcePlaylistId)
+              : solePlaylistId || undefined,
+          sourcePlaylistName:
+            typeof s?.sourcePlaylistName === 'string' && s.sourcePlaylistName.trim() !== ''
+              ? s.sourcePlaylistName
+              : solePlaylistName || undefined,
+        };
+      })
+      .filter(Boolean);
+  }
+
+  if (Array.isArray(fos) && fos.length > 0 && typeof fos[0] === 'object') {
+    return fos.map((s) => ({
+      id: s.id,
+      name: s.name || '',
+      artist: s.artist || '',
+      explicit: s.explicit === true,
+      youtubeMusic: s.youtubeMusic === true,
+      sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
+      sourcePlaylistName: typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
+    }));
+  }
+
+  if (
+    Array.isArray(fos) &&
+    fos.length > 0 &&
+    typeof fos[0] === 'string' &&
+    Array.isArray(room.finalizedSongs)
+  ) {
+    const idToSong = new Map(
+      room.finalizedSongs.filter((s) => s && s.id).map((s) => [s.id, s]),
+    );
+    return fos.map((id) => {
+      const s = idToSong.get(id);
+      if (!s) {
+        return {
+          id,
+          name: '',
+          artist: '',
+          explicit: false,
+          youtubeMusic: false,
+        };
+      }
+      return {
+        id,
+        name: s.name || '',
+        artist: s.artist || '',
+        explicit: s.explicit === true,
+        youtubeMusic: s.youtubeMusic === true,
+        sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
+        sourcePlaylistName: typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
+      };
+    });
+  }
+
+  return [];
+}
+
+function emitFinalizedOrderFromRoomState(roomId, room) {
+  try {
+    const order = buildFinalizedOrderPayloadFromRoom(room);
+    if (order.length > 0) {
+      io.to(roomId).emit('finalized-order', { order });
+      routineServerLog(`📻 finalized-order replay (${order.length} tracks) → room ${roomId}`);
+      return true;
+    }
+  } catch (e) {
+    console.warn('emitFinalizedOrderFromRoomState:', e?.message || e);
+  }
+  return false;
 }
 
 async function generateBingoCards(roomId, playlists, songOrder = null) {

@@ -2900,6 +2900,29 @@ const HostView: React.FC = () => {
   /** Playlist-id key last confirmed by server `mix-finalized` for this tab — avoids skipping refinalize after prep changes selection while `mixFinalized` stayed true. */
   const lastFinalizePlaylistKeyRef = useRef<string | null>(null);
 
+  /**
+   * Ensures `finalizedOrderRef` is populated from `finalized-order` (grace window for race after finalize,
+   * then host-only replay via `request-finalized-order`).
+   */
+  const ensureFinalizedOrderFromServer = useCallback(async (): Promise<boolean> => {
+    if (!socket || !roomId) return false;
+    if (finalizedOrderRef.current && finalizedOrderRef.current.length > 0) return true;
+    const graceUntil = Date.now() + 500;
+    while (Date.now() < graceUntil) {
+      if (finalizedOrderRef.current && finalizedOrderRef.current.length > 0) return true;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    if (finalizedOrderRef.current && finalizedOrderRef.current.length > 0) return true;
+    socket.emit('request-finalized-order', { roomId });
+    addLog('Requested finalized playback order from server…', 'info');
+    const deadline = Date.now() + 16000;
+    while (Date.now() < deadline) {
+      if (finalizedOrderRef.current && finalizedOrderRef.current.length > 0) return true;
+      await new Promise((r) => setTimeout(r, 75));
+    }
+    return !!(finalizedOrderRef.current && finalizedOrderRef.current.length > 0);
+  }, [socket, roomId, addLog]);
+
   /** Returns true when server confirms mix-finalized (or already finalized on client). */
   const finalizeMix = async (opts?: { playlists?: Playlist[] }): Promise<boolean> => {
     const playlists = opts?.playlists ?? mixPlaylistSelection;
@@ -2912,7 +2935,9 @@ const HostView: React.FC = () => {
       targetKey === uiKey &&
       lastFinalizePlaylistKeyRef.current === targetKey
     ) {
-      return true;
+      if (finalizedOrderRef.current && finalizedOrderRef.current.length > 0) return true;
+      addLog('Fetching finalized playback order from server…', 'info');
+      return ensureFinalizedOrderFromServer();
     }
 
     const inFlight = finalizeMixPromiseRef.current;
@@ -5409,24 +5434,21 @@ const HostView: React.FC = () => {
     setSaveRoundBusy(true);
     try {
       const ok = await finalizeMix({ playlists: mixRows });
-      if (!ok) return;
-
-      let pool: Song[] = [];
-      const deadline = Date.now() + 12000;
-      while (Date.now() < deadline) {
-        const fo = finalizedOrderRef.current;
-        if (fo && fo.length > 0) {
-          pool = fo.map(cloneSongForSnapshot);
-          break;
-        }
-        await new Promise((r) => setTimeout(r, 75));
+      if (!ok) {
+        addLog('Save round: finalize did not complete.', 'warn');
+        return;
       }
-      if (pool.length === 0) {
+
+      const orderReady = await ensureFinalizedOrderFromServer();
+      const fo = finalizedOrderRef.current;
+      if (!orderReady || !fo || fo.length === 0) {
         window.alert(
           'The server did not send the finalized playback order in time. Wait until you see “Finalized order received” in the activity log, or tap Finalize mix again, then Save round. Saved rounds must match projector/host playback order, not the longer prep list.',
         );
+        addLog('Save round: no finalized playback order after replay request.', 'warn');
         return;
       }
+      const pool = fo.map(cloneSongForSnapshot);
 
       const r = eventRoundsRef.current[roundIndex];
       if (!r) return;
