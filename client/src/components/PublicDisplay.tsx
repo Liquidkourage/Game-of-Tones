@@ -35,10 +35,18 @@ import {
   expandMaskOrientations,
   hostOrientationTransforms,
   clauseHighlightPositions,
-  STANDARD_BINGO_POSITIONS,
   describeCompositeClauseBrief,
   describeCompositePatternFullSentence,
 } from '../patternDefinitions';
+
+const FULL_CARD_PULSE_DURATION_SEC = 1.28;
+
+/** Non-row-major spread so full-card pulses don't read as a single sweep. */
+function fullCardPulseDelaySec(row: number, col: number): number {
+  const idx = row * 5 + col;
+  const perm = (idx * 17 + col * 7 + row * 11) % 25;
+  return perm * (FULL_CARD_PULSE_DURATION_SEC / 25);
+}
 
 /** Standard bingo lines: rows 0–4, cols 0–4, two diagonals (same order as server listCompletedLinesPlayedStrict). */
 const WINNING_LINE_PREDICATES: Array<(r: number, c: number) => boolean> = [
@@ -843,8 +851,6 @@ const PublicDisplay: React.FC = () => {
   /** Cycle orientation variants (custom) or clause highlights (composite) on the projector wall. */
   const [customPatternDemoIndex, setCustomPatternDemoIndex] = useState(0);
   const [compositePatternDemoIndex, setCompositePatternDemoIndex] = useState(0);
-  /** Full card / blackout: cumulative fill (-1 = start empty before sweep). */
-  const [fullCardFillPhase, setFullCardFillPhase] = useState(-1);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const customDemoIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const compositeDemoIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -2818,49 +2824,6 @@ const PublicDisplay: React.FC = () => {
     };
   }, [pattern, compositeDemoSequences]);
 
-  useEffect(() => {
-    setFullCardFillPhase(-1);
-  }, [pattern]);
-
-  useEffect(() => {
-    if (pattern !== 'full_card' && pattern !== 'blackout') {
-      return;
-    }
-    let cancelled = false;
-    const STEP_MS = 112;
-    const HOLD_FULL_MS = 520;
-    const AFTER_EMPTY_MS = 160;
-
-    const safeLater = (fn: () => void, ms: number) => {
-      setTimeout(() => {
-        if (!cancelled) fn();
-      }, ms);
-    };
-
-    const runCycle = () => {
-      setFullCardFillPhase(-1);
-      safeLater(() => {
-        let p = 0;
-        const advance = () => {
-          if (cancelled) return;
-          setFullCardFillPhase(p);
-          if (p < 24) {
-            p += 1;
-            safeLater(advance, STEP_MS);
-          } else {
-            safeLater(runCycle, HOLD_FULL_MS);
-          }
-        };
-        advance();
-      }, AFTER_EMPTY_MS);
-    };
-
-    runCycle();
-    return () => {
-      cancelled = true;
-    };
-  }, [pattern]);
-
   const renderBingoCard = () => {
     const { bingoCard } = gameState;
     console.log('Winners section rendering, winners:', gameState.winners);
@@ -2891,13 +2854,6 @@ const PublicDisplay: React.FC = () => {
           }
 
           const isFullCardPattern = pattern === 'full_card' || pattern === 'blackout';
-          let fullCardPendingClass = '';
-          if (isFullCardPattern) {
-            const seqIdx = STANDARD_BINGO_POSITIONS.indexOf(posKey);
-            const filled = fullCardFillPhase >= 0 && seqIdx <= fullCardFillPhase;
-            isWinningLine = filled;
-            if (!filled) fullCardPendingClass = ' full-card-slot-pending';
-          }
 
           let compositeDemoExtraClass = '';
           if (
@@ -2913,19 +2869,34 @@ const PublicDisplay: React.FC = () => {
             compositeDemoExtraClass = frame.positions.includes(posKey) ? ' composite-demo-focus' : ' composite-demo-dim';
           }
 
+          const pulseFullCardFamily = isWinningLine && isFullCardPattern;
+
           const pulseShapeGlow =
             isWinningLine &&
+            !pulseFullCardFamily &&
             (pattern === 'custom' ||
               (pattern === 'composite' && compositeDemoSequences.length < 2));
+
+          const fullCardPulseDelay = pulseFullCardFamily ? fullCardPulseDelaySec(row, col) : 0;
 
           rowSquares.push(
             <motion.div
               key={`${row}-${col}`}
-              className={`bingo-square ${square.isPlayed ? 'played' : ''} ${isWinningLine ? 'winning' : ''}${linePatternDemoClass}${compositeDemoExtraClass}${fullCardPendingClass}`}
+              className={`bingo-square ${square.isPlayed ? 'played' : ''} ${isWinningLine ? 'winning' : ''}${linePatternDemoClass}${compositeDemoExtraClass}`}
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{
                 opacity: 1,
                 scale: 1,
+                ...(pulseFullCardFamily && {
+                  boxShadow: [
+                    '0 0 1px rgba(0, 255, 150, 0.35)',
+                    '0 0 26px rgba(0, 255, 230, 1)',
+                    '0 0 48px rgba(220, 255, 250, 0.92)',
+                    '0 0 26px rgba(0, 255, 230, 1)',
+                    '0 0 1px rgba(0, 255, 150, 0.35)',
+                  ],
+                  scale: [1, 1.045, 1.065, 1.045, 1],
+                }),
                 ...(pulseShapeGlow && {
                   boxShadow: [
                     '0 0 0 rgba(0, 255, 136, 0.3)',
@@ -2935,15 +2906,29 @@ const PublicDisplay: React.FC = () => {
                 }),
               }}
               transition={{
-                duration: 0.3,
-                delay: (row + col) * 0.05,
-                ...(pulseShapeGlow && {
-                  boxShadow: {
-                    duration: 2,
-                    repeat: Infinity,
-                    ease: 'easeInOut',
-                  },
-                }),
+                opacity: { duration: 0.3, delay: (row + col) * 0.05 },
+                scale: pulseFullCardFamily
+                  ? {
+                      duration: FULL_CARD_PULSE_DURATION_SEC,
+                      repeat: Infinity,
+                      ease: 'easeInOut',
+                      delay: fullCardPulseDelay,
+                    }
+                  : { duration: 0.3, delay: (row + col) * 0.05 },
+                boxShadow: pulseFullCardFamily
+                  ? {
+                      duration: FULL_CARD_PULSE_DURATION_SEC,
+                      repeat: Infinity,
+                      ease: 'easeInOut',
+                      delay: fullCardPulseDelay,
+                    }
+                  : pulseShapeGlow
+                    ? {
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: 'easeInOut',
+                      }
+                    : { duration: 0.3, delay: (row + col) * 0.05 },
               }}
               whileHover={{ scale: 1.05 }}
             >
