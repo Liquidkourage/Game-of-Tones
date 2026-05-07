@@ -31,7 +31,40 @@ import {
   unionCompositeHighlightPositions,
   normalizeLinesRequired,
   customMaskHighlightPositions,
+  LINE_PATTERN_MAX_LINES,
 } from '../patternDefinitions';
+
+/** Standard bingo lines: rows 0–4, cols 0–4, two diagonals (same order as server listCompletedLinesPlayedStrict). */
+const WINNING_LINE_PREDICATES: Array<(r: number, c: number) => boolean> = [
+  (r, c) => r === 0,
+  (r, c) => r === 1,
+  (r, c) => r === 2,
+  (r, c) => r === 3,
+  (r, c) => r === 4,
+  (r, c) => c === 0,
+  (r, c) => c === 1,
+  (r, c) => c === 2,
+  (r, c) => c === 3,
+  (r, c) => c === 4,
+  (r, c) => r === c,
+  (r, c) => r + c === 4,
+];
+
+const LINE_PREDICATE_COUNT = WINNING_LINE_PREDICATES.length;
+
+/** Rotating demos: single-line cycles each line alone; multi-line shows N lines at once (distinct indices). */
+function buildLinePatternDemoTuples(linesRequiredNorm: number): number[][] {
+  const n = Math.min(LINE_PATTERN_MAX_LINES, Math.max(1, Math.round(linesRequiredNorm)));
+  if (n === 1) {
+    return Array.from({ length: LINE_PREDICATE_COUNT }, (_, i) => [i]);
+  }
+  if (n >= LINE_PREDICATE_COUNT) {
+    return [Array.from({ length: LINE_PREDICATE_COUNT }, (_, i) => i)];
+  }
+  return Array.from({ length: LINE_PREDICATE_COUNT }, (_, d) =>
+    Array.from({ length: n }, (_, i) => (d + i) % LINE_PREDICATE_COUNT),
+  );
+}
 
 /** Match song-playing / bingo card display titles when syncing from room-state. */
 function displayTitleFromSyncedSong(song: {
@@ -703,7 +736,8 @@ const PublicDisplay: React.FC = () => {
   const [showRules, setShowRules] = useState<boolean>(false);
   
   
-  const [currentWinningLine, setCurrentWinningLine] = useState(0);
+  /** Rotating projector demo for line pattern (one tuple of line indices per step). */
+  const [linePatternDemoIndex, setLinePatternDemoIndex] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const [gameState, setGameState] = useState<GameState>({
     isPlaying: false,
@@ -832,6 +866,10 @@ const PublicDisplay: React.FC = () => {
   const [revealToast, setRevealToast] = useState<string | null>(null);
   const [customMask, setCustomMask] = useState<Set<string>>(new Set());
   const [linesRequired, setLinesRequired] = useState(1);
+  const linePatternDemoTuples = useMemo(
+    () => buildLinePatternDemoTuples(normalizeLinesRequired(linesRequired)),
+    [linesRequired],
+  );
   const [customMatchAllowRotation, setCustomMatchAllowRotation] = useState(false);
   const [customMatchAllowMirror, setCustomMatchAllowMirror] = useState(false);
   const revealToastTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -2551,45 +2589,40 @@ const PublicDisplay: React.FC = () => {
       return plusPositions.includes(`${row}-${col}`);
     }
     
-    // 12 possible winning lines: 5 horizontal, 5 vertical, 2 diagonal
-    const winningLines = [
-      // Horizontal lines (rows 0-4)
-      (r: number, c: number) => r === 0, // Row 0
-      (r: number, c: number) => r === 1, // Row 1
-      (r: number, c: number) => r === 2, // Row 2
-      (r: number, c: number) => r === 3, // Row 3
-      (r: number, c: number) => r === 4, // Row 4
-      // Vertical lines (columns 0-4)
-      (r: number, c: number) => c === 0, // Column 0
-      (r: number, c: number) => c === 1, // Column 1
-      (r: number, c: number) => c === 2, // Column 2
-      (r: number, c: number) => c === 3, // Column 3
-      (r: number, c: number) => c === 4, // Column 4
-      // Diagonal lines
-      (r: number, c: number) => r === c, // Top-left to bottom-right
-      (r: number, c: number) => r + c === 4 // Top-right to bottom-left
-    ];
-    
-    return winningLines[currentWinningLine](row, col);
+    // Standard line pattern: highlight one line at a time (single-line) or N lines per demo step (multi-line)
+    const tuple =
+      linePatternDemoTuples[
+        linePatternDemoTuples.length === 0 ? 0 : linePatternDemoIndex % linePatternDemoTuples.length
+      ] ?? [0];
+    return tuple.some((idx) => {
+      const pred = WINNING_LINE_PREDICATES[idx];
+      return pred?.(row, col) === true;
+    });
   };
 
-  // Cycle winning line only for single-line pattern
+  useEffect(() => {
+    setLinePatternDemoIndex(0);
+  }, [pattern, linesRequired]);
+
+  // Cycle line-pattern demo (single line vs N simultaneous lines)
   useEffect(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
     if (pattern !== 'line') return;
+    const ms = linesRequired <= 1 ? 800 : 1300;
+    const len = Math.max(1, linePatternDemoTuples.length);
     intervalRef.current = setInterval(() => {
-      setCurrentWinningLine((prev) => ((prev + 1) % 12));
-    }, 800);
+      setLinePatternDemoIndex((prev) => (prev + 1) % len);
+    }, ms);
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
     };
-  }, [pattern]);
+  }, [pattern, linesRequired, linePatternDemoTuples.length]);
 
   const renderBingoCard = () => {
     const { bingoCard } = gameState;
@@ -2606,10 +2639,23 @@ const PublicDisplay: React.FC = () => {
         if (square) {
           // Check if this square is part of the current winning line
           const isWinningLine = isWinningSquare(row, col);
+          let linePatternDemoClass = '';
+          if (pattern === 'line' && linesRequired > 1 && isWinningLine) {
+            const tuple =
+              linePatternDemoTuples[
+                linePatternDemoTuples.length === 0 ? 0 : linePatternDemoIndex % linePatternDemoTuples.length
+              ] ?? [0];
+            const hitSlots: number[] = [];
+            tuple.forEach((lineIdx, slot) => {
+              if (WINNING_LINE_PREDICATES[lineIdx]?.(row, col)) hitSlots.push(slot);
+            });
+            if (hitSlots.length > 1) linePatternDemoClass = ' winning-line-overlap';
+            else if (hitSlots.length === 1) linePatternDemoClass = ` winning-line-slot-${hitSlots[0] % 4}`;
+          }
           rowSquares.push(
             <motion.div
               key={`${row}-${col}`}
-              className={`bingo-square ${square.isPlayed ? 'played' : ''} ${isWinningLine ? 'winning' : ''}`}
+              className={`bingo-square ${square.isPlayed ? 'played' : ''} ${isWinningLine ? 'winning' : ''}${linePatternDemoClass}`}
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ 
                 opacity: 1, 
