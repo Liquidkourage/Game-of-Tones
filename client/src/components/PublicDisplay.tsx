@@ -1075,19 +1075,6 @@ const PublicDisplay: React.FC = () => {
     return deduped.length >= 2 ? deduped : [];
   }, [patternComposite]);
 
-  /**
-   * Two or more clauses: show one demo shape per clause at once so OR/AND reads clearly on the wall.
-   * (Carousel stays available only when there is a single clause but multiple demo frames.)
-   */
-  const compositeClausePreviewSlots = useMemo(() => {
-    if (!patternComposite?.clauses?.length || patternComposite.clauses.length < 2) return null;
-    return patternComposite.clauses.map((c, clauseIndex) => {
-      const frames = expandCompositeClauseToDemoFrames(c);
-      const positions = frames[0]?.positions ?? [];
-      return { clauseIndex, positions: new Set(positions) };
-    });
-  }, [patternComposite]);
-
   const compositeDemoCycleMs = useMemo(() => {
     const n = compositeDemoSequences.length;
     if (n < 2) return 1200;
@@ -2792,13 +2779,7 @@ const PublicDisplay: React.FC = () => {
       return true;
     }
     if (pattern === 'composite' && patternComposite) {
-      // Line / full-card clauses intentionally union to the whole board in patternDefinitions
-      // (they represent flexible win shapes). For projector demos we cycle concrete frames;
-      // highlighting the union paints every square green and breaks the spotlight.
-      if (compositeClausePreviewSlots) {
-        const key = `${row}-${col}`;
-        return compositeClausePreviewSlots.some((s) => s.positions.has(key));
-      }
+      // Cycle one concrete demo frame at a time (never union whole-board line/full-card outlines).
       if (compositeDemoSequences.length >= 2) {
         const frame =
           compositeDemoSequences[
@@ -2908,7 +2889,7 @@ const PublicDisplay: React.FC = () => {
       clearInterval(compositeDemoIntervalRef.current);
       compositeDemoIntervalRef.current = null;
     }
-    if (pattern !== 'composite' || compositeDemoSequences.length < 2 || compositeClausePreviewSlots) return;
+    if (pattern !== 'composite' || compositeDemoSequences.length < 2) return;
     const len = compositeDemoSequences.length;
     compositeDemoIntervalRef.current = setInterval(() => {
       setCompositePatternDemoIndex((prev) => (prev + 1) % len);
@@ -2919,7 +2900,7 @@ const PublicDisplay: React.FC = () => {
         compositeDemoIntervalRef.current = null;
       }
     };
-  }, [pattern, compositeDemoSequences, compositeDemoCycleMs, compositeClausePreviewSlots]);
+  }, [pattern, compositeDemoSequences, compositeDemoCycleMs]);
 
   const renderBingoCard = () => {
     const { bingoCard } = gameState;
@@ -2954,13 +2935,7 @@ const PublicDisplay: React.FC = () => {
           let compositeClauseColorClass = '';
           if (pattern === 'composite' && patternComposite && isWinningLine) {
             const posKey = `${row}-${col}`;
-            if (compositeClausePreviewSlots) {
-              const hits = compositeClausePreviewSlots.filter((s) => s.positions.has(posKey));
-              if (hits.length > 1) compositeClauseColorClass = ' composite-clause-overlap';
-              else if (hits.length === 1) {
-                compositeClauseColorClass = ` composite-clause-color-${hits[0].clauseIndex % COMPOSITE_CLAUSE_COLOR_SLOTS}`;
-              }
-            } else if (compositeDemoSequences.length >= 2) {
+            if (compositeDemoSequences.length >= 2) {
               const frame =
                 compositeDemoSequences[
                   compositeDemoSequences.length === 0 ? 0 : compositePatternDemoIndex % compositeDemoSequences.length
@@ -2978,10 +2953,7 @@ const PublicDisplay: React.FC = () => {
           const pulseShapeGlow =
             isWinningLine &&
             !pulseFullCardFamily &&
-            (pattern === 'custom' ||
-              (pattern === 'composite' &&
-                !compositeClausePreviewSlots &&
-                compositeDemoSequences.length < 2));
+            (pattern === 'custom' || (pattern === 'composite' && compositeDemoSequences.length < 2));
 
           const fullCardPulseDelay = pulseFullCardFamily ? fullCardPulseDelaySec(row, col) : 0;
 
@@ -5055,16 +5027,9 @@ const PublicDisplay: React.FC = () => {
                         </React.Fragment>
                       ))}
                     </div>
-                    {compositeClausePreviewSlots ? (
-                      <div className="composite-pattern-color-key-hint">
-                        Grid colors match each clause above (shared squares blend).
-                      </div>
-                    ) : null}
                   </div>
                 )}
-                {pattern === 'composite' &&
-                  compositeDemoSequences.length >= 2 &&
-                  !compositeClausePreviewSlots && (
+                {pattern === 'composite' && compositeDemoSequences.length >= 2 && (
                   <div
                     className="composite-pattern-spotlight-row"
                     style={{

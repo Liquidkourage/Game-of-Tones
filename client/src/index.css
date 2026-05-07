@@ -1501,16 +1501,6 @@ code {
   padding: 4px 10px 8px;
 }
 
-.bingo-card-display .composite-pattern-color-key-hint {
-  margin-top: 10px;
-  font-size: clamp(0.88rem, 2.2vmin, 1.35rem);
-  font-weight: 600;
-  color: rgba(168, 230, 220, 0.92);
-  text-align: center;
-  padding: 0 12px;
-  letter-spacing: 0.02em;
-}
-
 .bingo-card-display .composite-pattern-chip {
   font-size: clamp(1.05rem, 3.6vmin, 2.15rem);
   font-weight: 800;
