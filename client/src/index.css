@@ -1495,34 +1495,70 @@ code {
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: clamp(6px, 1.2vmin, 14px);
-  margin-top: 8px;
+  gap: clamp(10px, 2vmin, 22px);
+  margin-top: 12px;
   max-width: 100%;
-  padding: 0 8px 4px;
+  padding: 4px 10px 8px;
+}
+
+.bingo-card-display .composite-pattern-color-key-hint {
+  margin-top: 10px;
+  font-size: clamp(0.88rem, 2.2vmin, 1.35rem);
+  font-weight: 600;
+  color: rgba(168, 230, 220, 0.92);
+  text-align: center;
+  padding: 0 12px;
+  letter-spacing: 0.02em;
 }
 
 .bingo-card-display .composite-pattern-chip {
-  font-size: clamp(0.85rem, 2.2vmin, 1.35rem);
-  font-weight: 700;
-  line-height: 1.25;
-  padding: 6px 14px;
+  font-size: clamp(1.05rem, 3.6vmin, 2.15rem);
+  font-weight: 800;
+  line-height: 1.2;
+  padding: 12px 22px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  color: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.98);
   text-align: center;
-  max-width: min(100%, 42rem);
+  max-width: min(100%, 46rem);
 }
 
 .bingo-card-display .composite-pattern-op-pill {
-  font-size: clamp(0.65rem, 1.6vmin, 0.95rem);
+  font-size: clamp(0.92rem, 2.8vmin, 1.55rem);
   font-weight: 900;
-  letter-spacing: 0.06em;
-  padding: 4px 10px;
-  border-radius: 6px;
+  letter-spacing: 0.07em;
+  padding: 8px 16px;
+  border-radius: 10px;
   background: rgba(245, 208, 97, 0.22);
-  border: 1px solid rgba(245, 208, 97, 0.45);
+  border: 2px solid rgba(245, 208, 97, 0.55);
   color: #f5d061;
+}
+
+/* Clause chips: accent matches projector grid hue for that clause index */
+.bingo-card-display .composite-pattern-chip--c0 {
+  border-color: rgba(74, 222, 128, 0.85);
+  box-shadow: 0 0 18px rgba(74, 222, 128, 0.28);
+}
+.bingo-card-display .composite-pattern-chip--c1 {
+  border-color: rgba(56, 189, 248, 0.9);
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.32);
+}
+.bingo-card-display .composite-pattern-chip--c2 {
+  border-color: rgba(250, 204, 21, 0.92);
+  box-shadow: 0 0 18px rgba(250, 204, 21, 0.3);
+}
+.bingo-card-display .composite-pattern-chip--c3 {
+  border-color: rgba(232, 121, 249, 0.88);
+  box-shadow: 0 0 18px rgba(232, 121, 249, 0.28);
+}
+.bingo-card-display .composite-pattern-chip--c4 {
+  border-color: rgba(165, 180, 252, 0.92);
+  box-shadow: 0 0 18px rgba(165, 180, 252, 0.32);
+}
+.bingo-card-display .composite-pattern-chip--c5 {
+  border-color: rgba(251, 146, 60, 0.92);
+  box-shadow: 0 0 18px rgba(251, 146, 60, 0.28);
 }
 
 .bingo-card-icon {
@@ -1673,6 +1709,45 @@ code {
     0 0 18px rgba(74, 222, 128, 0.95);
   border-color: #ecfccb;
   z-index: 2;
+}
+
+/* Combined pattern: distinct projector hue per clause (matches chip accents) */
+.public-display .bingo-square.winning.composite-clause-color-0 {
+  background: linear-gradient(135deg, rgba(74, 222, 128, 0.62), rgba(34, 197, 94, 0.55));
+  border-color: #22c55e;
+  box-shadow: 0 0 18px rgba(74, 222, 128, 0.72);
+}
+.public-display .bingo-square.winning.composite-clause-color-1 {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.58), rgba(14, 165, 233, 0.48));
+  border-color: #38bdf8;
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.72);
+}
+.public-display .bingo-square.winning.composite-clause-color-2 {
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.58), rgba(245, 158, 11, 0.48));
+  border-color: #facc15;
+  box-shadow: 0 0 20px rgba(250, 204, 21, 0.72);
+}
+.public-display .bingo-square.winning.composite-clause-color-3 {
+  background: linear-gradient(135deg, rgba(232, 121, 249, 0.56), rgba(217, 70, 239, 0.46));
+  border-color: #e879f9;
+  box-shadow: 0 0 20px rgba(232, 121, 249, 0.68);
+}
+.public-display .bingo-square.winning.composite-clause-color-4 {
+  background: linear-gradient(135deg, rgba(165, 180, 252, 0.58), rgba(129, 140, 248, 0.48));
+  border-color: #a5b4fc;
+  box-shadow: 0 0 20px rgba(165, 180, 252, 0.7);
+}
+.public-display .bingo-square.winning.composite-clause-color-5 {
+  background: linear-gradient(135deg, rgba(251, 146, 60, 0.58), rgba(249, 115, 22, 0.48));
+  border-color: #fb923c;
+  box-shadow: 0 0 20px rgba(251, 146, 60, 0.68);
+}
+.public-display .bingo-square.winning.composite-clause-overlap {
+  background: linear-gradient(135deg, rgba(253, 224, 71, 0.62), rgba(250, 204, 21, 0.52));
+  border-color: #fde047;
+  box-shadow:
+    0 0 22px rgba(253, 224, 71, 0.78),
+    inset 0 0 12px rgba(255, 255, 255, 0.18);
 }
 
 .square-content {

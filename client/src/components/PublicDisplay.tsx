@@ -67,6 +67,9 @@ const WINNING_LINE_PREDICATES: Array<(r: number, c: number) => boolean> = [
 
 const LINE_PREDICATE_COUNT = WINNING_LINE_PREDICATES.length;
 
+/** Distinct projector hues for combined-pattern clauses (grid + chip accents). */
+const COMPOSITE_CLAUSE_COLOR_SLOTS = 6;
+
 const LINE_PREDICATE_DISPLAY_LABELS: readonly string[] = [
   'Top row',
   'Row 2',
@@ -114,12 +117,12 @@ function spreadFallbackDemoTuples(n: number): number[][] {
  * not consecutive indices, so the wall reads as “examples” rather than chasing adjacent lines.
  */
 
-/** Dedupe composite projector demos that resolve to the same cell set (keep first label). */
+/** Dedupe composite projector demos that resolve to the same cell set (keep first label + clause). */
 function dedupeCompositeDemoSequences(
-  items: { label: string; positions: string[] }[],
-): { label: string; positions: string[] }[] {
+  items: { label: string; positions: string[]; clauseIndex: number }[],
+): { label: string; positions: string[]; clauseIndex: number }[] {
   const seen = new Set<string>();
-  const out: { label: string; positions: string[] }[] = [];
+  const out: { label: string; positions: string[]; clauseIndex: number }[] = [];
   for (const it of items) {
     const key = [...it.positions].sort().join('|');
     if (seen.has(key)) continue;
@@ -1062,12 +1065,27 @@ const PublicDisplay: React.FC = () => {
   /** Combined-pattern projector demos — line/full clauses expand into concrete examples; dedupe shared shapes. */
   const compositeDemoSequences = useMemo(() => {
     if (!patternComposite?.clauses?.length) return [];
-    const items: { label: string; positions: string[] }[] = [];
-    for (const c of patternComposite.clauses) {
-      items.push(...expandCompositeClauseToDemoFrames(c));
-    }
+    const items: { label: string; positions: string[]; clauseIndex: number }[] = [];
+    patternComposite.clauses.forEach((c, clauseIndex) => {
+      for (const f of expandCompositeClauseToDemoFrames(c)) {
+        items.push({ ...f, clauseIndex });
+      }
+    });
     const deduped = dedupeCompositeDemoSequences(items);
     return deduped.length >= 2 ? deduped : [];
+  }, [patternComposite]);
+
+  /**
+   * Two or more clauses: show one demo shape per clause at once so OR/AND reads clearly on the wall.
+   * (Carousel stays available only when there is a single clause but multiple demo frames.)
+   */
+  const compositeClausePreviewSlots = useMemo(() => {
+    if (!patternComposite?.clauses?.length || patternComposite.clauses.length < 2) return null;
+    return patternComposite.clauses.map((c, clauseIndex) => {
+      const frames = expandCompositeClauseToDemoFrames(c);
+      const positions = frames[0]?.positions ?? [];
+      return { clauseIndex, positions: new Set(positions) };
+    });
   }, [patternComposite]);
 
   const compositeDemoCycleMs = useMemo(() => {
@@ -2777,6 +2795,10 @@ const PublicDisplay: React.FC = () => {
       // Line / full-card clauses intentionally union to the whole board in patternDefinitions
       // (they represent flexible win shapes). For projector demos we cycle concrete frames;
       // highlighting the union paints every square green and breaks the spotlight.
+      if (compositeClausePreviewSlots) {
+        const key = `${row}-${col}`;
+        return compositeClausePreviewSlots.some((s) => s.positions.has(key));
+      }
       if (compositeDemoSequences.length >= 2) {
         const frame =
           compositeDemoSequences[
@@ -2886,7 +2908,7 @@ const PublicDisplay: React.FC = () => {
       clearInterval(compositeDemoIntervalRef.current);
       compositeDemoIntervalRef.current = null;
     }
-    if (pattern !== 'composite' || compositeDemoSequences.length < 2) return;
+    if (pattern !== 'composite' || compositeDemoSequences.length < 2 || compositeClausePreviewSlots) return;
     const len = compositeDemoSequences.length;
     compositeDemoIntervalRef.current = setInterval(() => {
       setCompositePatternDemoIndex((prev) => (prev + 1) % len);
@@ -2897,7 +2919,7 @@ const PublicDisplay: React.FC = () => {
         compositeDemoIntervalRef.current = null;
       }
     };
-  }, [pattern, compositeDemoSequences, compositeDemoCycleMs]);
+  }, [pattern, compositeDemoSequences, compositeDemoCycleMs, compositeClausePreviewSlots]);
 
   const renderBingoCard = () => {
     const { bingoCard } = gameState;
@@ -2929,8 +2951,27 @@ const PublicDisplay: React.FC = () => {
 
           const isFullCardPattern = pattern === 'full_card' || pattern === 'blackout';
 
-          // When cycling demos, every highlighted square is already in the current frame (see isWinningSquare).
-          const compositeDemoExtraClass = '';
+          let compositeClauseColorClass = '';
+          if (pattern === 'composite' && patternComposite && isWinningLine) {
+            const posKey = `${row}-${col}`;
+            if (compositeClausePreviewSlots) {
+              const hits = compositeClausePreviewSlots.filter((s) => s.positions.has(posKey));
+              if (hits.length > 1) compositeClauseColorClass = ' composite-clause-overlap';
+              else if (hits.length === 1) {
+                compositeClauseColorClass = ` composite-clause-color-${hits[0].clauseIndex % COMPOSITE_CLAUSE_COLOR_SLOTS}`;
+              }
+            } else if (compositeDemoSequences.length >= 2) {
+              const frame =
+                compositeDemoSequences[
+                  compositeDemoSequences.length === 0 ? 0 : compositePatternDemoIndex % compositeDemoSequences.length
+                ];
+              if (frame?.positions.includes(posKey)) {
+                compositeClauseColorClass = ` composite-clause-color-${frame.clauseIndex % COMPOSITE_CLAUSE_COLOR_SLOTS}`;
+              }
+            } else {
+              compositeClauseColorClass = ' composite-clause-color-0';
+            }
+          }
 
           const pulseFullCardFamily = isWinningLine && isFullCardPattern;
 
@@ -2938,14 +2979,16 @@ const PublicDisplay: React.FC = () => {
             isWinningLine &&
             !pulseFullCardFamily &&
             (pattern === 'custom' ||
-              (pattern === 'composite' && compositeDemoSequences.length < 2));
+              (pattern === 'composite' &&
+                !compositeClausePreviewSlots &&
+                compositeDemoSequences.length < 2));
 
           const fullCardPulseDelay = pulseFullCardFamily ? fullCardPulseDelaySec(row, col) : 0;
 
           rowSquares.push(
             <motion.div
               key={`${row}-${col}`}
-              className={`bingo-square ${square.isPlayed ? 'played' : ''} ${isWinningLine ? 'winning' : ''}${linePatternDemoClass}${compositeDemoExtraClass}`}
+              className={`bingo-square ${square.isPlayed ? 'played' : ''} ${isWinningLine ? 'winning' : ''}${linePatternDemoClass}${compositeClauseColorClass}`}
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{
                 opacity: 1,
@@ -4983,13 +5026,13 @@ const PublicDisplay: React.FC = () => {
                     <div
                       style={{
                         marginTop: 10,
-                        fontSize: 'clamp(0.92rem, 2.5vmin, 1.4rem)',
+                        fontSize: 'clamp(1.05rem, 3vmin, 1.95rem)',
                         fontWeight: 800,
                         letterSpacing: '0.04em',
                         color: '#f5d061',
                         textAlign: 'center',
                         maxWidth: '98%',
-                        padding: '0 10px',
+                        padding: '0 12px',
                       }}
                     >
                       {patternComposite.op === 'and'
@@ -5004,13 +5047,24 @@ const PublicDisplay: React.FC = () => {
                               {patternComposite.op.toUpperCase()}
                             </span>
                           ) : null}
-                          <span className="composite-pattern-chip">{describeCompositeClauseAudience(c)}</span>
+                          <span
+                            className={`composite-pattern-chip composite-pattern-chip--c${i % COMPOSITE_CLAUSE_COLOR_SLOTS}`}
+                          >
+                            {describeCompositeClauseAudience(c)}
+                          </span>
                         </React.Fragment>
                       ))}
                     </div>
+                    {compositeClausePreviewSlots ? (
+                      <div className="composite-pattern-color-key-hint">
+                        Grid colors match each clause above (shared squares blend).
+                      </div>
+                    ) : null}
                   </div>
                 )}
-                {pattern === 'composite' && compositeDemoSequences.length >= 2 && (
+                {pattern === 'composite' &&
+                  compositeDemoSequences.length >= 2 &&
+                  !compositeClausePreviewSlots && (
                   <div
                     className="composite-pattern-spotlight-row"
                     style={{
