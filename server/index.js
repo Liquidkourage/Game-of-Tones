@@ -2000,6 +2000,25 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
   roomPlaybackWatchers.set(roomId, intervalId);
 }
 
+/** Ordered playlist ids from finalize payload — column order matters for 5×15. */
+function finalizeMixPlaylistFingerprint(playlists) {
+  if (!Array.isArray(playlists) || playlists.length === 0) return '';
+  return playlists.map((p) => (p && p.id != null ? String(p.id).trim() : '')).join('|');
+}
+
+/**
+ * Host sent finalize-mix while room is already finalized — refinalize when playlists or free-space
+ * changed (e.g. Save round for another prep bucket). Otherwise replay cached order only.
+ */
+function hostFinalizeNeedsPlaylistRefinal(room, playlists, freeSpace) {
+  if (!room || !room.mixFinalized) return false;
+  const oldFp = finalizeMixPlaylistFingerprint(room.finalizedPlaylists);
+  const newFp = finalizeMixPlaylistFingerprint(playlists);
+  if (oldFp !== newFp) return true;
+  if (!!freeSpace !== !!room.freeSpaceEnabled) return true;
+  return false;
+}
+
 io.use((socket, next) => {
   try {
     const token = hostAuth.getHostSessionTokenFromHandshake(socket.handshake);
@@ -2462,12 +2481,28 @@ io.on('connection', (socket) => {
       }
     }
 
-    // Prevent duplicate finalization
+    // Already finalized: replay only if playlists + free-space unchanged; otherwise full refinalize
+    // (Save round / switching prep rounds sends new playlists — must not reuse prior 75 pool).
     if (room.mixFinalized) {
-      routineServerLog('⚠️ Mix already finalized for room:', roomId);
-      emitFinalizedOrderFromRoomState(roomId, room);
-      socket.emit('mix-finalized', { playlists: room.finalizedPlaylists });
-      return;
+      if (!hostFinalizeNeedsPlaylistRefinal(room, playlists, freeSpace)) {
+        routineServerLog('⚠️ Mix already finalized for room (unchanged):', roomId);
+        emitFinalizedOrderFromRoomState(roomId, room);
+        socket.emit('mix-finalized', { playlists: room.finalizedPlaylists });
+        return;
+      }
+      routineServerLog('🔄 Refinalizing mix — playlist selection or free-space changed:', roomId);
+      room.mixFinalized = false;
+      room.finalizedPlaylists = null;
+      room.finalizedSongOrder = null;
+      room.finalizedSongs = null;
+      room.freeSpaceEnabled = false;
+      if (room.bingoCards) room.bingoCards.clear();
+      if (room.clientCards) room.clientCards.clear();
+      room.fiveByFifteenColumnsIds = null;
+      room.fiveByFifteenColumns = null;
+      room.fiveByFifteenPlaylistNames = null;
+      room.fiveByFifteenMeta = null;
+      room.oneBySeventyFivePool = null;
     }
 
     try {

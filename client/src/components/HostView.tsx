@@ -5613,8 +5613,12 @@ const HostView: React.FC = () => {
       const fs = r.freeSpaceEnabled !== undefined ? r.freeSpaceEnabled : freeSpaceEnabled;
       const need = fs ? 24 : 25;
       if (filtered.length < need) {
+        const stalePoolHint =
+          pool.length > 0 && filtered.length === 0
+            ? ' The finalized playback pool still looked like a different mix — tap Finalize mix on the Game tab once, then Save round again.'
+            : '';
         window.alert(
-          `This round only has ${filtered.length} unique tracks from its playlists in the finalized mix (need ${need}). Include those playlists in the mix on the Game tab, finalize, then save again.`,
+          `This round only has ${filtered.length} unique tracks from its playlists in the finalized mix (need ${need}).${stalePoolHint} Include those playlists in the mix on the Game tab, finalize, then save again.`,
         );
         return;
       }
