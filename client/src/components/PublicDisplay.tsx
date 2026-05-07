@@ -32,6 +32,9 @@ import {
   normalizeLinesRequired,
   customMaskHighlightPositions,
   LINE_PATTERN_MAX_LINES,
+  expandMaskOrientations,
+  hostOrientationTransforms,
+  clauseHighlightPositions,
 } from '../patternDefinitions';
 
 /** Standard bingo lines: rows 0–4, cols 0–4, two diagonals (same order as server listCompletedLinesPlayedStrict). */
@@ -71,6 +74,20 @@ function spreadFallbackDemoTuples(n: number): number[][] {
  * Rotating demos: N===1 cycles all 12 lines alone; N>1 uses a short curated list (mixed geometry),
  * not consecutive indices, so the wall reads as “examples” rather than chasing adjacent lines.
  */
+
+/** Dedupe clause highlight frames that resolve to the same cell set (projector composite demo). */
+function dedupePositionFrames(frames: string[][]): string[][] {
+  const seen = new Set<string>();
+  const out: string[][] = [];
+  for (const f of frames) {
+    const key = [...f].sort().join('|');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(f);
+  }
+  return out;
+}
+
 function buildLinePatternDemoTuples(linesRequiredNorm: number): number[][] {
   const n = Math.min(LINE_PATTERN_MAX_LINES, Math.max(1, Math.round(linesRequiredNorm)));
   if (n === 1) {
@@ -818,7 +835,12 @@ const PublicDisplay: React.FC = () => {
   
   /** Rotating projector demo for line pattern (one tuple of line indices per step). */
   const [linePatternDemoIndex, setLinePatternDemoIndex] = useState(0);
+  /** Cycle orientation variants (custom) or clause highlights (composite) on the projector wall. */
+  const [customPatternDemoIndex, setCustomPatternDemoIndex] = useState(0);
+  const [compositePatternDemoIndex, setCompositePatternDemoIndex] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const customDemoIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const compositeDemoIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [gameState, setGameState] = useState<GameState>({
     isPlaying: false,
     currentSong: null,
@@ -945,13 +967,33 @@ const PublicDisplay: React.FC = () => {
   // Toast for revealed letter
   const [revealToast, setRevealToast] = useState<string | null>(null);
   const [customMask, setCustomMask] = useState<Set<string>>(new Set());
+  const [customMatchAllowRotation, setCustomMatchAllowRotation] = useState(false);
+  const [customMatchAllowMirror, setCustomMatchAllowMirror] = useState(false);
   const [linesRequired, setLinesRequired] = useState(1);
   const linePatternDemoTuples = useMemo(
     () => buildLinePatternDemoTuples(normalizeLinesRequired(linesRequired)),
     [linesRequired],
   );
-  const [customMatchAllowRotation, setCustomMatchAllowRotation] = useState(false);
-  const [customMatchAllowMirror, setCustomMatchAllowMirror] = useState(false);
+
+  const customPatternDemoFrames = useMemo(() => {
+    if (pattern !== 'custom' || !customMask || customMask.size === 0) return [];
+    const base = Array.from(customMask).sort();
+    const transforms = hostOrientationTransforms({
+      matchAllowRotation: customMatchAllowRotation,
+      matchAllowMirror: customMatchAllowMirror,
+    });
+    return expandMaskOrientations(base, transforms);
+  }, [pattern, customMask, customMatchAllowRotation, customMatchAllowMirror]);
+
+  /** Skip whole-board clauses (line/full_card); projector cycles readable clause-sized demos. */
+  const compositeDemoFrames = useMemo(() => {
+    if (!patternComposite?.clauses?.length) return [];
+    const raw = patternComposite.clauses
+      .map((c) => clauseHighlightPositions(c))
+      .filter((p) => p.length > 0 && p.length < 25);
+    const deduped = dedupePositionFrames(raw);
+    return deduped.length >= 2 ? deduped : [];
+  }, [patternComposite]);
   const revealToastTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [showWinnerBanner, setShowWinnerBanner] = useState<boolean>(false);
   const [winnerName, setWinnerName] = useState<string>('');
@@ -2637,9 +2679,17 @@ const PublicDisplay: React.FC = () => {
       return true;
     }
     if (pattern === 'composite' && patternComposite) {
+      if (compositeDemoFrames.length >= 2) {
+        const idx = compositePatternDemoIndex % compositeDemoFrames.length;
+        return compositeDemoFrames[idx].includes(`${row}-${col}`);
+      }
       return unionCompositeHighlightPositions(patternComposite).includes(`${row}-${col}`);
     }
     if (pattern === 'custom' && customMask && customMask.size > 0) {
+      if (customPatternDemoFrames.length > 1) {
+        const idx = customPatternDemoIndex % customPatternDemoFrames.length;
+        return customPatternDemoFrames[idx].includes(`${row}-${col}`);
+      }
       const hi = customMaskHighlightPositions(Array.from(customMask), {
         matchAllowRotation: customMatchAllowRotation,
         matchAllowMirror: customMatchAllowMirror,
@@ -2704,6 +2754,50 @@ const PublicDisplay: React.FC = () => {
     };
   }, [pattern, linesRequired, linePatternDemoTuples.length]);
 
+  useEffect(() => {
+    setCustomPatternDemoIndex(0);
+  }, [pattern, customMask, customMatchAllowRotation, customMatchAllowMirror]);
+
+  useEffect(() => {
+    if (customDemoIntervalRef.current) {
+      clearInterval(customDemoIntervalRef.current);
+      customDemoIntervalRef.current = null;
+    }
+    if (pattern !== 'custom' || customPatternDemoFrames.length <= 1) return;
+    const len = customPatternDemoFrames.length;
+    customDemoIntervalRef.current = setInterval(() => {
+      setCustomPatternDemoIndex((prev) => (prev + 1) % len);
+    }, 1000);
+    return () => {
+      if (customDemoIntervalRef.current) {
+        clearInterval(customDemoIntervalRef.current);
+        customDemoIntervalRef.current = null;
+      }
+    };
+  }, [pattern, customPatternDemoFrames]);
+
+  useEffect(() => {
+    setCompositePatternDemoIndex(0);
+  }, [patternComposite]);
+
+  useEffect(() => {
+    if (compositeDemoIntervalRef.current) {
+      clearInterval(compositeDemoIntervalRef.current);
+      compositeDemoIntervalRef.current = null;
+    }
+    if (pattern !== 'composite' || compositeDemoFrames.length < 2) return;
+    const len = compositeDemoFrames.length;
+    compositeDemoIntervalRef.current = setInterval(() => {
+      setCompositePatternDemoIndex((prev) => (prev + 1) % len);
+    }, 1200);
+    return () => {
+      if (compositeDemoIntervalRef.current) {
+        clearInterval(compositeDemoIntervalRef.current);
+        compositeDemoIntervalRef.current = null;
+      }
+    };
+  }, [pattern, compositeDemoFrames]);
+
   const renderBingoCard = () => {
     const { bingoCard } = gameState;
     console.log('Winners section rendering, winners:', gameState.winners);
@@ -2740,24 +2834,32 @@ const PublicDisplay: React.FC = () => {
               animate={{ 
                 opacity: 1, 
                 scale: 1,
-                ...(isWinningLine && (pattern === 'full_card' || pattern === 'blackout') && {
-                  boxShadow: [
-                    '0 0 0 rgba(0, 255, 136, 0.3)',
-                    '0 0 20px rgba(0, 255, 136, 0.6)',
-                    '0 0 0 rgba(0, 255, 136, 0.3)'
-                  ]
-                })
+                ...(isWinningLine &&
+                  (pattern === 'full_card' ||
+                    pattern === 'blackout' ||
+                    pattern === 'custom' ||
+                    pattern === 'composite') && {
+                    boxShadow: [
+                      '0 0 0 rgba(0, 255, 136, 0.3)',
+                      '0 0 20px rgba(0, 255, 136, 0.6)',
+                      '0 0 0 rgba(0, 255, 136, 0.3)',
+                    ],
+                  })
               }}
               transition={{ 
                 duration: 0.3, 
                 delay: (row + col) * 0.05,
-                ...(isWinningLine && (pattern === 'full_card' || pattern === 'blackout') && {
-                  boxShadow: {
-                    duration: 2,
-                    repeat: Infinity,
-                    ease: "easeInOut"
-                  }
-                })
+                ...(isWinningLine &&
+                  (pattern === 'full_card' ||
+                    pattern === 'blackout' ||
+                    pattern === 'custom' ||
+                    pattern === 'composite') && {
+                    boxShadow: {
+                      duration: 2,
+                      repeat: Infinity,
+                      ease: 'easeInOut',
+                    },
+                  })
               }}
               whileHover={{ scale: 1.05 }}
             >
