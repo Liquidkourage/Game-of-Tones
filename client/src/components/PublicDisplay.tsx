@@ -25,7 +25,7 @@ import {
   normalizePublicDisplayTitleRevealMode,
   type PublicDisplayTitleRevealMode,
 } from '../utils/publicDisplayTitleReveal';
-import type { PatternCompositeSpec } from '../patternDefinitions';
+import type { PatternCompositeSpec, PatternCompositeClause } from '../patternDefinitions';
 import {
   normalizePatternComposite,
   unionCompositeHighlightPositions,
@@ -36,7 +36,8 @@ import {
   hostOrientationTransforms,
   clauseHighlightPositions,
   describeCompositeClauseBrief,
-  describeCompositePatternFullSentence,
+  describeCompositeClauseAudience,
+  describeCompositePatternAudienceSentence,
 } from '../patternDefinitions';
 
 const FULL_CARD_PULSE_DURATION_SEC = 1.28;
@@ -65,6 +66,33 @@ const WINNING_LINE_PREDICATES: Array<(r: number, c: number) => boolean> = [
 ];
 
 const LINE_PREDICATE_COUNT = WINNING_LINE_PREDICATES.length;
+
+const LINE_PREDICATE_DISPLAY_LABELS: readonly string[] = [
+  'Top row',
+  'Row 2',
+  'Middle row',
+  'Row 4',
+  'Bottom row',
+  'B column',
+  'I column',
+  'N column',
+  'G column',
+  'O column',
+  'Diagonal (NW–SE)',
+  'Diagonal (NE–SW)',
+];
+
+function positionsForLinePredicateIndex(lineIdx: number): string[] {
+  const pred = WINNING_LINE_PREDICATES[lineIdx];
+  if (!pred) return [];
+  const out: string[] = [];
+  for (let r = 0; r < 5; r++) {
+    for (let c = 0; c < 5; c++) {
+      if (pred(r, c)) out.push(`${r}-${c}`);
+    }
+  }
+  return out;
+}
 
 /** Indices 0–4 = rows top→bottom; 5–9 = columns B–O left→right; 10 = \\ diag, 11 = / diag. */
 
@@ -174,6 +202,38 @@ function buildLinePatternDemoTuples(linesRequiredNorm: number): number[][] {
   if (fixed?.length) return fixed;
 
   return spreadFallbackDemoTuples(n);
+}
+
+/** Expand one composite clause into projector demo frames (includes line / full-card breakdown). */
+function expandCompositeClauseToDemoFrames(clause: PatternCompositeClause): { label: string; positions: string[] }[] {
+  if (clause.kind === 'preset' && clause.preset === 'line') {
+    const need = normalizeLinesRequired(clause.linesRequired);
+    const base = describeCompositeClauseBrief(clause);
+    if (need <= 1) {
+      return Array.from({ length: LINE_PREDICATE_COUNT }, (_, i) => ({
+        label: `${base}: ${LINE_PREDICATE_DISPLAY_LABELS[i] ?? `Line ${i + 1}`}`,
+        positions: positionsForLinePredicateIndex(i),
+      }));
+    }
+    const tuples = buildLinePatternDemoTuples(need);
+    return tuples.map((tuple, ti) => {
+      const cells = new Set<string>();
+      for (const lineIdx of tuple) {
+        for (const p of positionsForLinePredicateIndex(lineIdx)) cells.add(p);
+      }
+      return {
+        label: `${base} · example ${ti + 1}/${tuples.length}`,
+        positions: Array.from(cells).sort(),
+      };
+    });
+  }
+  if (clause.kind === 'preset' && clause.preset === 'full_card') {
+    const positions = clauseHighlightPositions(clause);
+    return positions.length ? [{ label: describeCompositeClauseBrief(clause), positions }] : [];
+  }
+  const positions = clauseHighlightPositions(clause);
+  if (!positions.length) return [];
+  return [{ label: describeCompositeClauseBrief(clause), positions }];
 }
 
 /** Match song-playing / bingo card display titles when syncing from room-state. */
@@ -999,17 +1059,22 @@ const PublicDisplay: React.FC = () => {
     return expandMaskOrientations(base, transforms);
   }, [pattern, customMask, customMatchAllowRotation, customMatchAllowMirror]);
 
-  /** Skip whole-board clauses (line/full_card); projector cycles readable clause-sized demos. */
+  /** Combined-pattern projector demos — line/full clauses expand into concrete examples; dedupe shared shapes. */
   const compositeDemoSequences = useMemo(() => {
     if (!patternComposite?.clauses?.length) return [];
-    const raw = patternComposite.clauses.map((c) => ({
-      label: describeCompositeClauseBrief(c),
-      positions: clauseHighlightPositions(c),
-    }));
-    const filtered = raw.filter((x) => x.positions.length > 0 && x.positions.length < 25);
-    const deduped = dedupeCompositeDemoSequences(filtered);
+    const items: { label: string; positions: string[] }[] = [];
+    for (const c of patternComposite.clauses) {
+      items.push(...expandCompositeClauseToDemoFrames(c));
+    }
+    const deduped = dedupeCompositeDemoSequences(items);
     return deduped.length >= 2 ? deduped : [];
   }, [patternComposite]);
+
+  const compositeDemoCycleMs = useMemo(() => {
+    const n = compositeDemoSequences.length;
+    if (n < 2) return 1200;
+    return Math.min(1700, Math.max(760, 640 + n * 38));
+  }, [compositeDemoSequences]);
   const revealToastTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [showWinnerBanner, setShowWinnerBanner] = useState<boolean>(false);
   const [winnerName, setWinnerName] = useState<string>('');
@@ -2695,7 +2760,7 @@ const PublicDisplay: React.FC = () => {
       case 'custom':
         return (customPatternName || '').trim() ? (customPatternName || '').trim() : 'Custom';
       case 'composite':
-        return patternComposite ? describeCompositePatternFullSentence(patternComposite) : 'Combined';
+        return patternComposite ? describeCompositePatternAudienceSentence(patternComposite) : 'Combined';
       case 'line':
       default:
         return linesRequired > 1 ? `Any ${linesRequired} lines` : 'Single line';
@@ -2815,14 +2880,14 @@ const PublicDisplay: React.FC = () => {
     const len = compositeDemoSequences.length;
     compositeDemoIntervalRef.current = setInterval(() => {
       setCompositePatternDemoIndex((prev) => (prev + 1) % len);
-    }, 1200);
+    }, compositeDemoCycleMs);
     return () => {
       if (compositeDemoIntervalRef.current) {
         clearInterval(compositeDemoIntervalRef.current);
         compositeDemoIntervalRef.current = null;
       }
     };
-  }, [pattern, compositeDemoSequences]);
+  }, [pattern, compositeDemoSequences, compositeDemoCycleMs]);
 
   const renderBingoCard = () => {
     const { bingoCard } = gameState;
@@ -4915,36 +4980,51 @@ const PublicDisplay: React.FC = () => {
               <div className="bingo-card-header center" style={{ justifyContent: 'center' }}>
                 <Grid3X3 className="bingo-card-icon" />
                 <h2 style={{ fontSize: '3.2rem', fontWeight: 900, textShadow: '0 2px 6px rgba(0,0,0,0.8)' }}>{getPatternName()}</h2>
-                {pattern === 'composite' &&
-                  patternComposite &&
-                  describeCompositePatternFullSentence(patternComposite) && (
+                {pattern === 'composite' && patternComposite && patternComposite.clauses.length > 0 && (
+                  <div className="composite-pattern-header-block">
                     <div
                       style={{
-                        fontSize: 'clamp(1.05rem, 3vmin, 2rem)',
-                        fontWeight: 700,
-                        color: '#d7faf3',
-                        marginTop: 8,
+                        marginTop: 10,
+                        fontSize: 'clamp(0.92rem, 2.5vmin, 1.4rem)',
+                        fontWeight: 800,
+                        letterSpacing: '0.04em',
+                        color: '#f5d061',
                         textAlign: 'center',
                         maxWidth: '98%',
-                        lineHeight: 1.35,
                         padding: '0 10px',
                       }}
                     >
-                      {describeCompositePatternFullSentence(patternComposite)}
+                      {patternComposite.op === 'and'
+                        ? '✓ Complete every part below'
+                        : '✓ Complete any one part below'}
                     </div>
-                  )}
+                    <div className="composite-pattern-chips">
+                      {patternComposite.clauses.map((c, i) => (
+                        <React.Fragment key={`${i}-${describeCompositeClauseBrief(c)}`}>
+                          {i > 0 ? (
+                            <span className="composite-pattern-op-pill" aria-hidden>
+                              {patternComposite.op.toUpperCase()}
+                            </span>
+                          ) : null}
+                          <span className="composite-pattern-chip">{describeCompositeClauseAudience(c)}</span>
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {pattern === 'composite' && compositeDemoSequences.length >= 2 && (
                   <div
+                    className="composite-pattern-spotlight-row"
                     style={{
                       fontSize: 'clamp(0.92rem, 2.4vmin, 1.65rem)',
                       fontWeight: 600,
                       color: '#a8e6dc',
-                      marginTop: 8,
+                      marginTop: 10,
                       textAlign: 'center',
                       padding: '0 10px',
                     }}
                   >
-                    Showing now:{' '}
+                    Spotlight:{' '}
                     <span style={{ color: '#ffffff', fontWeight: 800 }}>
                       {
                         compositeDemoSequences[

@@ -66,7 +66,7 @@ import {
   LINE_PATTERN_MAX_LINES,
   compositeLegitProgressPct,
   clauseSupportsMatchVariants,
-  describeCompositePatternFullSentence,
+  describeCompositePatternAudienceSentence,
   type SavedCompositePattern,
   getSavedCompositePatterns,
   saveCompositePattern,
@@ -6947,7 +6947,7 @@ const HostView: React.FC = () => {
                   )}
                   {pattern === 'composite' && (
                     <div style={{ marginTop: '8px', fontSize: '0.82rem', color: '#b8d4e8', lineHeight: 1.5 }}>
-                      {describeCompositePatternFullSentence(patternComposite)}
+                      {describeCompositePatternAudienceSentence(patternComposite)}
                     </div>
                   )}
                 </div>

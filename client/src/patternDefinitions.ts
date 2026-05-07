@@ -529,6 +529,28 @@ export function describeCompositeClauseBrief(clause: PatternCompositeClause): st
   return `Painted shape (${n} sq)`;
 }
 
+/** Readable combined rule with shape-orientation hints where relevant. */
+export function describeCompositeClauseAudience(clause: PatternCompositeClause): string {
+  const base = describeCompositeClauseBrief(clause);
+  if (!clauseSupportsMatchVariants(clause)) return base;
+  const tf = clauseOrientationTransforms(clause);
+  const rot = tf.some((t) => t === 'rotateCw' || t === 'rotateCcw' || t === 'rotate180');
+  const mir = tf.some((t) => t === 'flipH' || t === 'flipV');
+  const bits: string[] = [];
+  if (rot) bits.push('rotations OK');
+  if (mir) bits.push('mirrors OK');
+  if (!bits.length) return base;
+  return `${base} (${bits.join(', ')})`;
+}
+
+export function describeCompositePatternAudienceSentence(
+  spec: PatternCompositeSpec | null | undefined,
+): string {
+  if (!spec?.clauses?.length) return '';
+  const sep = spec.op === 'and' ? ' AND ' : ' OR ';
+  return spec.clauses.map(describeCompositeClauseAudience).join(sep);
+}
+
 /** Readable combined rule, e.g. "Four corners OR X pattern". */
 export function describeCompositePatternFullSentence(spec: PatternCompositeSpec | null | undefined): string {
   if (!spec?.clauses?.length) return '';

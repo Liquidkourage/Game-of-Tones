@@ -1478,7 +1478,52 @@ code {
   border-bottom: 1px solid rgba(255, 255, 255, 0.2);
   flex-shrink: 0;
 }
+.bingo-card-display .bingo-card-header {
+  flex-wrap: wrap;
+}
 .bingo-card-header.center { justify-content: center; }
+
+/* Public projector: composite pattern explainer + clause chips (full width under title) */
+.bingo-card-display .composite-pattern-header-block,
+.bingo-card-display .composite-pattern-spotlight-row {
+  width: 100%;
+  flex-basis: 100%;
+}
+
+.bingo-card-display .composite-pattern-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(6px, 1.2vmin, 14px);
+  margin-top: 8px;
+  max-width: 100%;
+  padding: 0 8px 4px;
+}
+
+.bingo-card-display .composite-pattern-chip {
+  font-size: clamp(0.85rem, 2.2vmin, 1.35rem);
+  font-weight: 700;
+  line-height: 1.25;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: rgba(255, 255, 255, 0.96);
+  text-align: center;
+  max-width: min(100%, 42rem);
+}
+
+.bingo-card-display .composite-pattern-op-pill {
+  font-size: clamp(0.65rem, 1.6vmin, 0.95rem);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(245, 208, 97, 0.22);
+  border: 1px solid rgba(245, 208, 97, 0.45);
+  color: #f5d061;
+}
 
 .bingo-card-icon {
   width: 28px;
