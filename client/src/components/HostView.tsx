@@ -89,7 +89,10 @@ import {
   normalizePublicDisplayTitleRevealMode,
   type PublicDisplayTitleRevealMode,
 } from '../utils/publicDisplayTitleReveal';
-import { computeEffectiveBingoPoolPreview } from '../utils/effectiveBingoPoolPreview';
+import {
+  compute5x15InsufficientWarnings,
+  computeEffectiveBingoPoolPreview,
+} from '../utils/effectiveBingoPoolPreview';
 import { getYoutubeHostPlaybackChannelName } from '../utils/youtubeHostPlaybackChannel';
 import { validateSongTitle, validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
 import './HostView.css';
@@ -626,6 +629,11 @@ const HostView: React.FC = () => {
   
   // Song title editing
   const [showSongTitleModal, setShowSongTitleModal] = useState(false);
+  /** Five playlists: cross-playlist dedup leaves a column short of 15 unique tracks (precheck blocks finalize; server uses fallback). */
+  const [fiveByFifteenInsufficientModal, setFiveByFifteenInsufficientModal] = useState<{
+    variant: 'blocked' | 'fallback';
+    warnings: string[];
+  } | null>(null);
   const [editingSong, setEditingSong] = useState<{id: string, title: string, artist: string} | null>(null);
   const [customSongTitles, setCustomSongTitles] = useState<Record<string, string>>({});
   const [showSetup, setShowSetup] = useState<boolean>(false);
@@ -2509,17 +2517,26 @@ const HostView: React.FC = () => {
       } catch {}
     });
 
-    // Handle 5x15 deduplication warnings
+    // 5×15 insufficient columns after cross-playlist dedup — must not be silent (server falls back to non-column pool).
     newSocket.on('mode-warning', (data: any) => {
+      const type = data?.type;
       const msg = data?.message || 'Mode warning occurred';
+      const details = Array.isArray(data?.details) ? (data.details as string[]) : [];
+
+      if (type === 'insufficient-unique-songs-5x15') {
+        console.warn('5×15 mode-warning:', msg, details);
+        addLog(`5×15 unavailable (fallback pool): ${msg}`, 'warn');
+        details.forEach((detail: string) => addLog(`  ${detail}`, 'warn'));
+        setFiveByFifteenInsufficientModal({
+          variant: 'fallback',
+          warnings: details.length > 0 ? details : [msg],
+        });
+        return;
+      }
+
       console.warn('Mode warning:', msg);
       addLog(`Mode warning: ${msg}`, 'warn');
-      if (data?.details && Array.isArray(data.details)) {
-        data.details.forEach((detail: string) => {
-          addLog(`  ${detail}`, 'warn');
-        });
-      }
-      // Show toast notification
+      details.forEach((detail: string) => addLog(`  ${detail}`, 'warn'));
       try {
         const toast = document.createElement('div');
         toast.textContent = msg;
@@ -2906,6 +2923,19 @@ const HostView: React.FC = () => {
             'No songs could be loaded from your playlists. Check Spotify and/or YouTube Music under Connection, refresh your library, fix any disconnects, and wait out API rate limits before retrying.'
           );
           return false;
+        }
+
+        if (playlists.length === 5) {
+          const insufficient = compute5x15InsufficientWarnings(playlists, listToSend);
+          if (insufficient.length > 0) {
+            addLog(
+              'Finalize blocked: 5×15 needs 15 unique tracks per playlist after removing duplicates across all five columns.',
+              'error',
+            );
+            insufficient.forEach((line) => addLog(`  ${line}`, 'warn'));
+            setFiveByFifteenInsufficientModal({ variant: 'blocked', warnings: insufficient });
+            return false;
+          }
         }
 
         console.log('?? Finalizing mix with songList:', {
@@ -5909,6 +5939,23 @@ const HostView: React.FC = () => {
         variant={hostAckNotification?.variant ?? 'warning'}
         acknowledgeLabel="OK"
         onAcknowledge={() => setHostAckNotification(null)}
+      />
+      <HostAcknowledgeModal
+        open={fiveByFifteenInsufficientModal != null}
+        title={
+          fiveByFifteenInsufficientModal?.variant === 'blocked'
+            ? 'Cannot finalize as 5×15'
+            : '5×15 mode unavailable'
+        }
+        message={
+          fiveByFifteenInsufficientModal?.variant === 'blocked'
+            ? 'Each of the five playlists must contribute 15 unique tracks after removing duplicate songs across all five columns (same rule as the live game). Adjust your playlists and try Finalize mix again.'
+            : 'The mix was finalized, but this room could not enter true 5×15 column mode. Cards and playback are using a fallback layout instead of five fixed B–O columns. Fix the issues below and finalize again before starting if you need strict 5×15.'
+        }
+        variant={fiveByFifteenInsufficientModal?.variant === 'blocked' ? 'error' : 'warning'}
+        detailBullets={fiveByFifteenInsufficientModal?.warnings}
+        acknowledgeLabel="OK"
+        onAcknowledge={() => setFiveByFifteenInsufficientModal(null)}
       />
       <motion.div 
         className="host-container"

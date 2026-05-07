@@ -7,6 +7,8 @@ type Props = {
   title: string;
   message: string;
   variant?: HostAckVariant;
+  /** Optional bullet list shown under the message (e.g. per-playlist 5×15 shortages). */
+  detailBullets?: string[];
   acknowledgeLabel?: string;
   onAcknowledge: () => void;
 };
@@ -20,6 +22,7 @@ export default function HostAcknowledgeModal({
   title,
   message,
   variant = 'warning',
+  detailBullets,
   acknowledgeLabel = 'I understand',
   onAcknowledge,
 }: Props) {
@@ -47,6 +50,13 @@ export default function HostAcknowledgeModal({
           {title}
         </h2>
         <p className="host-acknowledge-modal__message">{message}</p>
+        {detailBullets && detailBullets.length > 0 ? (
+          <ul className="host-acknowledge-modal__details">
+            {detailBullets.map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
+        ) : null}
         <div className="host-acknowledge-modal__actions">
           <button
             type="button"

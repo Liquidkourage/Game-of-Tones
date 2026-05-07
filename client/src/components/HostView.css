@@ -1459,6 +1459,21 @@
   white-space: pre-wrap;
 }
 
+.host-acknowledge-modal__details {
+  margin: 14px 0 0;
+  padding-left: 1.25rem;
+  max-height: min(280px, 42vh);
+  overflow-y: auto;
+  text-align: left;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: rgba(230, 234, 240, 0.88);
+}
+
+.host-acknowledge-modal__details li {
+  margin-bottom: 0.4rem;
+}
+
 .host-acknowledge-modal__actions {
   margin-top: 20px;
   display: flex;
