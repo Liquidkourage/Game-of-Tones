@@ -602,16 +602,20 @@ const HostView: React.FC = () => {
   const [winners, setWinners] = useState<Player[]>([]);
   const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
   const [isSpotifyConnecting, setIsSpotifyConnecting] = useState(false);
+  /** True while pushing a saved-round snapshot through finalize-mix (display + online cards). Blocks Start Game briefly. */
+  const [savedRoundRoomSyncBusy, setSavedRoundRoomSyncBusy] = useState(false);
   /** Finalize / Start Game require Spotify only when the mix includes non-catalog Spotify playlists. */
   const mixGameActionsBlocked = useMemo(
     () =>
       mixPlaylistSelection.length === 0 ||
-      (mixNeedsHostSpotify && (!isSpotifyConnected || isSpotifyConnecting)),
+      (mixNeedsHostSpotify && (!isSpotifyConnected || isSpotifyConnecting)) ||
+      savedRoundRoomSyncBusy,
     [
       mixPlaylistSelection.length,
       mixNeedsHostSpotify,
       isSpotifyConnected,
       isSpotifyConnecting,
+      savedRoundRoomSyncBusy,
     ]
   );
   /** Mirrors isSpotifyConnected for callbacks declared above sync effects (catalog schedule, socket reconnect). */
@@ -3068,9 +3072,16 @@ const HostView: React.FC = () => {
   );
 
   /** Returns true when server confirms mix-finalized (or already finalized on client). */
-  const finalizeMix = async (opts?: { playlists?: Playlist[] }): Promise<boolean> => {
+  const finalizeMix = async (opts?: {
+    playlists?: Playlist[];
+    /** Skip playlist fetch — use frozen Save-round order (must match `playlists` column assignment). */
+    songListOverride?: Song[];
+    /** Server free-center flag for this finalize (defaults to host Game tab toggle). */
+    freeSpace?: boolean;
+  }): Promise<boolean> => {
     const playlists = opts?.playlists ?? mixPlaylistSelection;
     if (!socket || playlists.length === 0) return false;
+    const freeSpaceForPayload = opts?.freeSpace ?? freeSpaceEnabled;
 
     const targetKey = selectionPlaylistKey(playlists);
     const uiKey = selectionPlaylistKey(mixPlaylistSelection);
@@ -3100,17 +3111,29 @@ const HostView: React.FC = () => {
 
     const run = async (): Promise<boolean> => {
       try {
-        addLog('Loading tracks from playlists before finalizing…', 'info');
-        const listToSend = await generateSongList({
-          force: true,
-          reason: 'finalize',
-          playlists,
-        });
+        let listToSend: Song[];
+
+        if (opts?.songListOverride && opts.songListOverride.length > 0) {
+          addLog('Applying saved round snapshot to the room (display + player cards)…', 'info');
+          listToSend = opts.songListOverride.map(cloneSongForSnapshot);
+        } else {
+          addLog('Loading tracks from playlists before finalizing…', 'info');
+          listToSend = await generateSongList({
+            force: true,
+            reason: 'finalize',
+            playlists,
+          });
+
+          if (listToSend.length === 0) {
+            window.alert(
+              'No songs could be loaded from your playlists. Check Spotify and/or YouTube Music under Connection, refresh your library, fix any disconnects, and wait out API rate limits before retrying.'
+            );
+            return false;
+          }
+        }
 
         if (listToSend.length === 0) {
-          window.alert(
-            'No songs could be loaded from your playlists. Check Spotify and/or YouTube Music under Connection, refresh your library, fix any disconnects, and wait out API rate limits before retrying.'
-          );
+          window.alert('No tracks to finalize. Try Save round again or pick playlists.');
           return false;
         }
 
@@ -3201,7 +3224,7 @@ const HostView: React.FC = () => {
             roomId: roomId,
             playlists,
             songList: listToSend,
-            freeSpace: freeSpaceEnabled
+            freeSpace: freeSpaceForPayload,
           });
         });
       } catch (error) {
@@ -5542,12 +5565,50 @@ const HostView: React.FC = () => {
         );
         return;
       }
+      const mixRows = resolveMixPlaylistRowsForRound(round);
+      applyRoundBingoToHost(round);
       setCurrentRoundIndex(roundIndex);
       const playlistNames = round.playlistNames.join(', ');
       showToast(`${round.name} — mix loaded for prep (${playlistNames})`, 'success');
       addLog(`Prep select ${round.name}: ${playlistNames}`, 'info');
+
+      if (
+        mixRows &&
+        socket &&
+        roomId &&
+        eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled) &&
+        round.savedMixSnapshot?.songs?.length
+      ) {
+        void (async () => {
+          setSavedRoundRoomSyncBusy(true);
+          try {
+            const pending = finalizeMixPromiseRef.current;
+            if (pending) await pending;
+            const fs =
+              round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : freeSpaceEnabled;
+            await finalizeMix({
+              playlists: mixRows,
+              songListOverride: round.savedMixSnapshot!.songs.map(cloneSongForSnapshot),
+              freeSpace: fs,
+            });
+          } finally {
+            setSavedRoundRoomSyncBusy(false);
+          }
+        })();
+      }
     },
-    [gameState, applyRoundPlaylistsToMixSelection, showToast, addLog],
+    [
+      gameState,
+      applyRoundPlaylistsToMixSelection,
+      resolveMixPlaylistRowsForRound,
+      applyRoundBingoToHost,
+      showToast,
+      addLog,
+      socket,
+      roomId,
+      freeSpaceEnabled,
+      finalizeMix,
+    ],
   );
 
   /** After reload / restore, pull the active round's playlists into the mix when the mix is still empty. */
@@ -5690,6 +5751,34 @@ const HostView: React.FC = () => {
       addLog(`Started ${round.name}: ${playlistNames}`, 'info');
     }
 
+    applyRoundBingoToHost(round);
+    const mixRows = resolveMixPlaylistRowsForRound(round);
+    if (
+      loaded &&
+      mixRows &&
+      socket &&
+      roomId &&
+      eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled) &&
+      round.savedMixSnapshot?.songs?.length
+    ) {
+      void (async () => {
+        setSavedRoundRoomSyncBusy(true);
+        try {
+          const pending = finalizeMixPromiseRef.current;
+          if (pending) await pending;
+          const fs =
+            round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : freeSpaceEnabled;
+          await finalizeMix({
+            playlists: mixRows,
+            songListOverride: round.savedMixSnapshot!.songs.map(cloneSongForSnapshot),
+            freeSpace: fs,
+          });
+        } finally {
+          setSavedRoundRoomSyncBusy(false);
+        }
+      })();
+    }
+
     // Store updated rounds
     try {
       localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(updatedRounds));
@@ -5699,7 +5788,18 @@ const HostView: React.FC = () => {
 
     // Next step is Finalize mix / Start game on the Game tab
     setActiveTab('play');
-  }, [eventRounds, currentRoundIndex, applyRoundPlaylistsToMixSelection, roomId, addLog]);
+  }, [
+    eventRounds,
+    currentRoundIndex,
+    applyRoundPlaylistsToMixSelection,
+    applyRoundBingoToHost,
+    resolveMixPlaylistRowsForRound,
+    roomId,
+    addLog,
+    socket,
+    freeSpaceEnabled,
+    finalizeMix,
+  ]);
 
   // Advanced round management functions
   const jumpToRound = useCallback((roundIndex: number) => {
@@ -8070,16 +8170,6 @@ const HostView: React.FC = () => {
              <div className="control-buttons">
                {gameState === 'waiting' && !currentSong ? (
                  <>
-                   {!mixFinalized && !savedRoundSnapshotMakesFinalizeRedundant && (
-                     <button 
-                       className="control-button finalize-mix"
-                       onClick={() => void finalizeMix()}
-                       disabled={mixGameActionsBlocked}
-                     >
-                       <ListChecks className="w-4 h-4" aria-hidden />
-                       Finalize Mix
-                     </button>
-                   )}
                    {!mixFinalized && savedRoundSnapshotMakesFinalizeRedundant && (
                      <p
                        className="status-text"
@@ -8089,19 +8179,28 @@ const HostView: React.FC = () => {
                          gap: 8,
                          justifyContent: 'center',
                          flexWrap: 'wrap',
-                         maxWidth: 520,
-                         margin: '0 auto',
+                         maxWidth: 560,
+                         margin: '0 auto 10px',
                          fontSize: '0.85rem',
                          color: 'rgba(255,255,255,0.72)',
                          lineHeight: 1.4,
                        }}
                      >
                        <ListChecks className="w-4 h-4" style={{ opacity: 0.85 }} aria-hidden />
-                       This round has a saved snapshot (or you loaded it for prep), and your mix still matches this
-                       round&apos;s playlists. Start Game, Save round, or Print PDF will finalize automatically. If you
-                       change playlists or their order, <strong style={{ color: 'rgba(255,255,255,0.88)' }}>Finalize Mix</strong>{' '}
-                       appears again; Save / Print still finalize for you when you use them.
+                       Saved snapshot for this round: choosing it syncs the projector and online cards automatically (same
+                       as Finalize mix). Use <strong style={{ color: 'rgba(255,255,255,0.88)' }}>Finalize Mix</strong> only if
+                       the display still shows an old mix or sync failed.
                      </p>
+                   )}
+                   {!mixFinalized && (
+                     <button
+                       className="control-button finalize-mix"
+                       onClick={() => void finalizeMix()}
+                       disabled={mixGameActionsBlocked}
+                     >
+                       <ListChecks className="w-4 h-4" aria-hidden />
+                       Finalize Mix
+                     </button>
                    )}
                    {mixFinalized && (
                      <div className="mix-finalized-status">
@@ -8136,7 +8235,11 @@ const HostView: React.FC = () => {
                     }}
                   >
                     <Play className="btn-icon" />
-                    {isSpotifyConnecting && mixNeedsHostSpotify ? 'Connecting Spotify...' : 'Start Game'}
+                    {savedRoundRoomSyncBusy
+                      ? 'Syncing room…'
+                      : isSpotifyConnecting && mixNeedsHostSpotify
+                        ? 'Connecting Spotify...'
+                        : 'Start Game'}
                   </button>
                   <p style={{ marginTop: 10, fontSize: '0.78rem', color: '#9a9a9a', maxWidth: 520, lineHeight: 1.4 }}>
                     Start Game will <strong style={{ color: '#cfcfcf' }}>finalize the mix automatically</strong> if you have not tapped Finalize Mix yet
@@ -8308,7 +8411,7 @@ const HostView: React.FC = () => {
                       {mixPlaylistSelection.length === 0
                         ? 'Use Connection for Spotify and/or YouTube Music as needed, then the Manager tab to select playlists (and optional catalog packs). YouTube-only mixes do not require Spotify. Return here to finalize or start the game.'
                         : savedRoundSnapshotMakesFinalizeRedundant
-                          ? 'Start Game, Save round, or Print PDF will finalize and build the bingo pool from your selected playlists.'
+                          ? 'Load this round for prep on Game tab or Round Manager — Tempo syncs the room from your saved snapshot (projector grid + cards). Then tap Start Game when ready.'
                           : 'Tap Finalize Mix or Start Game to build the bingo song pool from your selected playlists.'}
                     </p>
                   </div>
