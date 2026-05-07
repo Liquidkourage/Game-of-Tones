@@ -1966,6 +1966,7 @@ const HostView: React.FC = () => {
             }))
           : [];
         if (arr.length > 0) {
+          finalizedOrderRef.current = arr;
           setFinalizedOrder(arr);
           addLog(`Finalized order received (${arr.length} tracks)`, 'info');
         }
@@ -5367,7 +5368,7 @@ const HostView: React.FC = () => {
       if (!ok) return;
 
       let pool: Song[] = [];
-      const deadline = Date.now() + 4500;
+      const deadline = Date.now() + 12000;
       while (Date.now() < deadline) {
         const fo = finalizedOrderRef.current;
         if (fo && fo.length > 0) {
@@ -5377,12 +5378,8 @@ const HostView: React.FC = () => {
         await new Promise((r) => setTimeout(r, 75));
       }
       if (pool.length === 0) {
-        const fb = lastFinalizeMixSongListRef.current;
-        if (fb && fb.length > 0) pool = fb.map(cloneSongForSnapshot);
-      }
-      if (pool.length === 0) {
         window.alert(
-          'No finalized song list arrived yet. Wait a second after finalize and click Save round again.',
+          'The server did not send the finalized playback order in time. Wait until you see “Finalized order received” in the activity log, or tap Finalize mix again, then Save round. Saved rounds must match projector/host playback order, not the longer prep list.',
         );
         return;
       }
