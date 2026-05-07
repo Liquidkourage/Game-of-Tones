@@ -2479,8 +2479,8 @@ const PublicDisplay: React.FC = () => {
       case 'line':
       default:
         return linesRequired > 1
-          ? `Pattern: ${linesRequired} lines (rows, columns, or diagonals)`
-          : 'Pattern: Single line (any direction)';
+          ? `Pattern: Any ${linesRequired} complete lines (rows, columns, or diagonals)`
+          : 'Pattern: Single complete line (row, column, or diagonal)';
     }
   };
 
@@ -2508,7 +2508,7 @@ const PublicDisplay: React.FC = () => {
         return patternComposite ? `Combined (${patternComposite.op})` : 'Combined';
       case 'line':
       default:
-        return linesRequired > 1 ? `${linesRequired} lines` : 'Single line';
+        return linesRequired > 1 ? `Any ${linesRequired} lines` : 'Single line';
     }
   };
 
