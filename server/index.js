@@ -13,6 +13,7 @@ const path = require('path');
 const hostAuth = require('./hostAuth');
 const usersStore = require('./users');
 const organizationsStore = require('./organizations');
+const hostRoomPrepStore = require('./hostRoomPrep');
 const venueLogoCache = require('./venueLogoCache');
 const credentialCrypto = require('./credentialCrypto');
 const spotifyPipelineLog = require('./spotifyPipelineLog');
@@ -350,7 +351,7 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '8mb' }));
 app.use(cookieParser());
 app.use(express.static('public'));
 venueLogoCache.registerVenueLogoRoutes(app);
@@ -959,6 +960,7 @@ async function initializeDatabase() {
     await usersStore.ensureUsersTable(db);
     await usersStore.ensureHostAllowlistTable(db);
     await organizationsStore.ensureOrganizationsTable(db);
+    await hostRoomPrepStore.ensureHostRoomPrepTable(db);
     await db.query(`
       CREATE TABLE IF NOT EXISTS host_spotify_playlist_list_cache (
         organization_id VARCHAR(50) PRIMARY KEY,
@@ -8588,6 +8590,73 @@ app.post('/api/host/rooms', async (req, res) => {
   } catch (e) {
     console.error('POST /api/host/rooms:', e);
     res.status(500).json({ error: 'Failed to create room', message: e?.message || 'Failed to create room' });
+  }
+});
+
+function sanitizeHostPrepRoomId(raw) {
+  if (raw == null || typeof raw !== 'string') return null;
+  try {
+    const s = decodeURIComponent(raw).trim();
+    if (s.length === 0 || s.length > 64) return null;
+    if (!/^[a-zA-Z0-9_-]+$/.test(s)) return null;
+    return s;
+  } catch {
+    return null;
+  }
+}
+
+/** Load persisted prep rounds for this host + room (survives browser clearing site data). */
+app.get('/api/host/rooms/:roomId/prep', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_unavailable', message: 'DATABASE_URL required for cloud prep.' });
+    const roomId = sanitizeHostPrepRoomId(req.params.roomId);
+    if (!roomId) return res.status(400).json({ error: 'invalid_room_id' });
+    const row = await hostRoomPrepStore.getHostRoomPrep(db, uid, roomId);
+    if (!row) return res.status(404).json({ error: 'not_found' });
+    const p = row.payload && typeof row.payload === 'object' ? row.payload : {};
+    const updatedAt =
+      row.updatedAt instanceof Date
+        ? row.updatedAt.toISOString()
+        : row.updatedAt != null
+          ? String(row.updatedAt)
+          : new Date().toISOString();
+    res.json({
+      rounds: Array.isArray(p.rounds) ? p.rounds : [],
+      currentRoundIndex: typeof p.currentRoundIndex === 'number' ? p.currentRoundIndex : -1,
+      updatedAt,
+    });
+  } catch (e) {
+    console.error('GET /api/host/rooms/:roomId/prep:', e?.message || e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed to load prep' });
+  }
+});
+
+/** Save prep rounds for this host + room (debounced client uploads). */
+app.put('/api/host/rooms/:roomId/prep', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_unavailable', message: 'DATABASE_URL required for cloud prep.' });
+    const roomId = sanitizeHostPrepRoomId(req.params.roomId);
+    if (!roomId) return res.status(400).json({ error: 'invalid_room_id' });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    if (!Array.isArray(body.rounds)) {
+      return res.status(400).json({ error: 'invalid_body', message: '`rounds` array required' });
+    }
+    if (body.rounds.length > 64) {
+      return res.status(400).json({ error: 'too_many_rounds', message: 'At most 64 rounds per save.' });
+    }
+    const currentRoundIndex = typeof body.currentRoundIndex === 'number' ? body.currentRoundIndex : -1;
+    const payload = { v: 1, rounds: body.rounds, currentRoundIndex };
+    const updatedAt = await hostRoomPrepStore.upsertHostRoomPrep(db, uid, roomId, payload);
+    const iso =
+      updatedAt instanceof Date ? updatedAt.toISOString() : updatedAt != null ? String(updatedAt) : new Date().toISOString();
+    res.json({ ok: true, updatedAt: iso });
+  } catch (e) {
+    console.error('PUT /api/host/rooms/:roomId/prep:', e?.message || e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed to save prep' });
   }
 });
 

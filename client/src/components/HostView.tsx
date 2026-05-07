@@ -264,6 +264,81 @@ function eventRoundSnapshotMeetsSaveThreshold(round: EventRound, hostDefaultFree
   return n >= need;
 }
 
+/** Migrate stored JSON → EventRound[] (localStorage + Tempo cloud prep). */
+function migrateRawEventRounds(raw: unknown): EventRound[] {
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+  return raw.map((round: any) => {
+    if (round.playlistId && !round.playlistIds) {
+      return {
+        ...round,
+        playlistIds: round.playlistId ? [round.playlistId] : [],
+        playlistNames: round.playlistName ? [round.playlistName] : [],
+        playlistId: undefined,
+        playlistName: undefined,
+        bingoPattern: round.bingoPattern ?? 'line',
+      };
+    }
+    return {
+      ...round,
+      playlistIds: round.playlistIds || [],
+      playlistNames: round.playlistNames || [],
+      bingoPattern: round.bingoPattern ?? 'line',
+    };
+  }) as EventRound[];
+}
+
+function promoteRoundStatusesAfterPrepLoad(rounds: EventRound[], hostFsDefault: boolean): EventRound[] {
+  return rounds.map((r: EventRound) => {
+    if (
+      r.status !== 'active' &&
+      r.status !== 'completed' &&
+      (r.playlistIds || []).length > 0 &&
+      eventRoundSnapshotMeetsSaveThreshold(r, hostFsDefault)
+    ) {
+      return r.status === 'unplanned' ? { ...r, status: 'planned' as const } : r;
+    }
+    return r;
+  });
+}
+
+function readHostDefaultFreeSpaceFlag(): boolean {
+  try {
+    return localStorage.getItem('bingo-free-space') === '1';
+  } catch {
+    return false;
+  }
+}
+
+function prepCloudAckStorageKey(roomId: string): string {
+  return `event-rounds-cloud-ack-${roomId}`;
+}
+
+function readPrepCloudAckMs(roomId: string): number {
+  try {
+    const v = localStorage.getItem(prepCloudAckStorageKey(roomId));
+    const n = v ? parseInt(v, 10) : 0;
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writePrepCloudAckMs(roomId: string, ms: number): void {
+  try {
+    localStorage.setItem(prepCloudAckStorageKey(roomId), String(ms));
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearPrepCloudAck(roomId: string): void {
+  try {
+    localStorage.removeItem(prepCloudAckStorageKey(roomId));
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Same playlist ids in the same order as the round bucket and current mix (column order matters for 5×15). */
 function prepRoundPlaylistOrderMatchesMix(
   roundIds: string[] | undefined,
@@ -761,6 +836,14 @@ const HostView: React.FC = () => {
   useEffect(() => {
     currentRoundIndexRef.current = currentRoundIndex;
   }, [currentRoundIndex]);
+
+  /** Wait for Tempo cloud prep pull (or skip if not signed in) before autosaving PUTs. */
+  const [prepCloudHydrated, setPrepCloudHydrated] = useState(false);
+  const prepPutTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setPrepCloudHydrated(false);
+  }, [roomId]);
 
   // License key management
   const [licenseKey, setLicenseKey] = useState<string>(() => {
@@ -4190,6 +4273,7 @@ const HostView: React.FC = () => {
       !window.confirm(
         'Clear ALL saved round prep for THIS ROOM on THIS browser?\n\n' +
           '• Deletes localStorage event-rounds (round buckets + Save-round snapshots)\n' +
+          '• Clears cloud-sync marker so the next load can restore from your Tempo account if you’re signed in\n' +
           '• Leaves one empty Round 1\n' +
           '• Clears mix selection & finalized pool in this tab\n' +
           '• Ends the live game if playing\n\n' +
@@ -4205,6 +4289,7 @@ const HostView: React.FC = () => {
 
     try {
       localStorage.removeItem(`event-rounds-${roomId}`);
+      clearPrepCloudAck(roomId);
     } catch {
       /* ignore */
     }
@@ -5671,79 +5756,174 @@ const HostView: React.FC = () => {
     return { completed, active, planned, unplanned, total: eventRounds.length };
   }, [eventRounds]);
 
-  // Load rounds from localStorage on component mount
+  // Load rounds from localStorage on component mount (browser-local; cloud may overlay after auth).
   useEffect(() => {
     if (!roomId) return;
-    
+
     try {
       const savedRounds = localStorage.getItem(`event-rounds-${roomId}`);
-      if (savedRounds) {
-        const rounds = JSON.parse(savedRounds);
-        if (Array.isArray(rounds) && rounds.length > 0) {
-          // Migrate old single-playlist format to new multi-playlist format
-          const migratedRounds = rounds.map((round: any) => {
-            // Check if this is old format (has playlistId instead of playlistIds)
-            if (round.playlistId && !round.playlistIds) {
-              return {
-                ...round,
-                playlistIds: round.playlistId ? [round.playlistId] : [],
-                playlistNames: round.playlistName ? [round.playlistName] : [],
-                // Remove old properties
-                playlistId: undefined,
-                playlistName: undefined,
-                bingoPattern: round.bingoPattern ?? 'line',
-              };
-            }
-            // Ensure new format has required arrays
-            return {
-              ...round,
-              playlistIds: round.playlistIds || [],
-              playlistNames: round.playlistNames || [],
-              bingoPattern: round.bingoPattern ?? 'line',
-            };
-          });
+      if (!savedRounds) return;
+      const parsed = JSON.parse(savedRounds);
+      const migratedRounds = migrateRawEventRounds(parsed);
+      if (migratedRounds.length === 0) return;
 
-          let hostFsDefault = false;
-          try {
-            hostFsDefault = localStorage.getItem('bingo-free-space') === '1';
-          } catch {
-            /* ignore */
-          }
+      const hostFsDefault = readHostDefaultFreeSpaceFlag();
+      const withPromotedStatus = promoteRoundStatusesAfterPrepLoad(migratedRounds, hostFsDefault);
 
-          const withPromotedStatus: EventRound[] = migratedRounds.map((r: EventRound) => {
-            if (
-              r.status !== 'active' &&
-              r.status !== 'completed' &&
-              (r.playlistIds || []).length > 0 &&
-              eventRoundSnapshotMeetsSaveThreshold(r, hostFsDefault)
-            ) {
-              return r.status === 'unplanned' ? { ...r, status: 'planned' as const } : r;
-            }
-            return r;
-          });
+      setEventRounds(withPromotedStatus);
+      localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(withPromotedStatus));
 
-          setEventRounds(withPromotedStatus);
-
-          // Save migrated / promoted data back to localStorage
-          localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(withPromotedStatus));
-
-          let pickIdx = withPromotedStatus.findIndex((r: EventRound) => r.status === 'active');
-          if (pickIdx < 0) {
-            pickIdx = withPromotedStatus.findIndex(
-              (r: EventRound) =>
-                (r.playlistIds || []).length > 0 &&
-                eventRoundSnapshotMeetsSaveThreshold(r, hostFsDefault),
-            );
-          }
-          if (pickIdx >= 0) {
-            setCurrentRoundIndex(pickIdx);
-          }
-        }
+      let pickIdx = withPromotedStatus.findIndex((r: EventRound) => r.status === 'active');
+      if (pickIdx < 0) {
+        pickIdx = withPromotedStatus.findIndex(
+          (r: EventRound) =>
+            (r.playlistIds || []).length > 0 &&
+            eventRoundSnapshotMeetsSaveThreshold(r, hostFsDefault),
+        );
+      }
+      if (pickIdx >= 0) {
+        setCurrentRoundIndex(pickIdx);
       }
     } catch (error) {
       console.warn('Failed to load rounds from localStorage:', error);
     }
   }, [roomId]);
+
+  /** Signed-in hosts: pull newer prep from API (Postgres) so site-data clears can be recovered. */
+  useEffect(() => {
+    if (!roomId) return;
+
+    if (!hostAccount?.id || !getHostJwt()) {
+      setPrepCloudHydrated(true);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await hostFetch(
+          `${API_BASE || ''}/api/host/rooms/${encodeURIComponent(roomId)}/prep`,
+          { cache: 'no-store' },
+        );
+        if (cancelled) return;
+
+        if (r.status === 404 || r.status === 503 || !r.ok) {
+          setPrepCloudHydrated(true);
+          return;
+        }
+
+        const data = (await r.json()) as {
+          rounds?: unknown;
+          currentRoundIndex?: number;
+          updatedAt?: string;
+        };
+
+        const serverTs = data.updatedAt ? Date.parse(data.updatedAt) : NaN;
+        const ack = readPrepCloudAckMs(roomId);
+        const localRaw = localStorage.getItem(`event-rounds-${roomId}`);
+        let hasLocalPrep = false;
+        if (localRaw) {
+          try {
+            const a = JSON.parse(localRaw);
+            hasLocalPrep = Array.isArray(a) && a.length > 0;
+          } catch {
+            hasLocalPrep = false;
+          }
+        }
+
+        if (!Number.isFinite(serverTs) || serverTs <= ack) {
+          setPrepCloudHydrated(true);
+          return;
+        }
+
+        /** Avoid overwriting unsynced local prep when the host signs in mid-session (ack never set). */
+        if (ack === 0 && hasLocalPrep) {
+          setPrepCloudHydrated(true);
+          return;
+        }
+
+        const migrated = migrateRawEventRounds(data.rounds);
+        if (migrated.length === 0) {
+          setPrepCloudHydrated(true);
+          return;
+        }
+
+        const hostFsDefault = readHostDefaultFreeSpaceFlag();
+        const withPromoted = promoteRoundStatusesAfterPrepLoad(migrated, hostFsDefault);
+
+        if (cancelled) return;
+        setEventRounds(withPromoted);
+        localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(withPromoted));
+
+        let pickIdx =
+          typeof data.currentRoundIndex === 'number' ? data.currentRoundIndex : -1;
+        if (pickIdx < 0 || pickIdx >= withPromoted.length) {
+          pickIdx = withPromoted.findIndex((rr: EventRound) => rr.status === 'active');
+        }
+        if (pickIdx < 0) {
+          pickIdx = withPromoted.findIndex(
+            (rr: EventRound) =>
+              (rr.playlistIds || []).length > 0 &&
+              eventRoundSnapshotMeetsSaveThreshold(rr, hostFsDefault),
+          );
+        }
+        if (pickIdx >= 0) {
+          setCurrentRoundIndex(pickIdx);
+        }
+
+        writePrepCloudAckMs(roomId, serverTs);
+        addLog('Restored round prep from your Tempo account (cloud backup).', 'info');
+      } catch {
+        /* ignore */
+      } finally {
+        if (!cancelled) setPrepCloudHydrated(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId, hostAccount?.id, addLog]);
+
+  /** Autosave prep to Tempo account (debounced). */
+  useEffect(() => {
+    if (!roomId || !prepCloudHydrated || !hostAccount?.id || !getHostJwt()) return;
+
+    if (prepPutTimerRef.current) {
+      window.clearTimeout(prepPutTimerRef.current);
+      prepPutTimerRef.current = null;
+    }
+
+    prepPutTimerRef.current = window.setTimeout(() => {
+      prepPutTimerRef.current = null;
+      void (async () => {
+        try {
+          const r = await hostFetch(`${API_BASE || ''}/api/host/rooms/${encodeURIComponent(roomId)}/prep`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              rounds: eventRounds,
+              currentRoundIndex,
+            }),
+          });
+          if (r.ok) {
+            const d = (await r.json()) as { updatedAt?: string };
+            const ts = d.updatedAt ? Date.parse(d.updatedAt) : NaN;
+            if (Number.isFinite(ts)) writePrepCloudAckMs(roomId, ts);
+          }
+        } catch {
+          /* ignore */
+        }
+      })();
+    }, 1000);
+
+    return () => {
+      if (prepPutTimerRef.current) {
+        window.clearTimeout(prepPutTimerRef.current);
+        prepPutTimerRef.current = null;
+      }
+    };
+  }, [eventRounds, currentRoundIndex, roomId, hostAccount?.id, prepCloudHydrated]);
 
   /** Tracks shown in the host bingo pool list (finalized server order, or pre-finalize 1×75/5×15 preview). */
   const bingoPoolPreview = useMemo(
@@ -7657,7 +7837,7 @@ const HostView: React.FC = () => {
                           type="button"
                           onClick={clearRoomRoundPrepStorage}
                           className="btn-secondary"
-                          title="Remove browser-only round buckets and Save-round snapshots for this room; resets mix UI."
+                          title="Remove browser-only round buckets and Save-round snapshots for this room; resets mix UI. Signed-in hosts keep a Postgres backup — reload to restore."
                           style={{
                             borderColor: 'rgba(248, 113, 113, 0.45)',
                             color: '#fecaca',
@@ -7667,7 +7847,7 @@ const HostView: React.FC = () => {
                           Clear prep cache (browser)
                         </button>
                         <span className="host-manager-round__reset-hint">
-                          Fresh instantiation for testing Save round / PDF: wipes snapshots & bucket assignments stored here — not your Spotify lists.
+                          Wipes local copies + sync marker. If you’re signed in to Tempo, prep is also saved on the server — reload this room to pull it back.
                         </span>
                       </div>
                   </div>
