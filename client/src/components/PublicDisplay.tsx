@@ -843,12 +843,11 @@ const PublicDisplay: React.FC = () => {
   /** Cycle orientation variants (custom) or clause highlights (composite) on the projector wall. */
   const [customPatternDemoIndex, setCustomPatternDemoIndex] = useState(0);
   const [compositePatternDemoIndex, setCompositePatternDemoIndex] = useState(0);
-  /** Full-card / blackout: traveling highlight across all 25 cells. */
-  const [fullCardWaveIndex, setFullCardWaveIndex] = useState(0);
+  /** Full card / blackout: cumulative fill (-1 = start empty before sweep). */
+  const [fullCardFillPhase, setFullCardFillPhase] = useState(-1);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const customDemoIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const compositeDemoIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const fullCardWaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [gameState, setGameState] = useState<GameState>({
     isPlaying: false,
     currentSong: null,
@@ -2820,23 +2819,45 @@ const PublicDisplay: React.FC = () => {
   }, [pattern, compositeDemoSequences]);
 
   useEffect(() => {
-    setFullCardWaveIndex(0);
+    setFullCardFillPhase(-1);
   }, [pattern]);
 
   useEffect(() => {
-    if (fullCardWaveIntervalRef.current) {
-      clearInterval(fullCardWaveIntervalRef.current);
-      fullCardWaveIntervalRef.current = null;
+    if (pattern !== 'full_card' && pattern !== 'blackout') {
+      return;
     }
-    if (pattern !== 'full_card' && pattern !== 'blackout') return;
-    fullCardWaveIntervalRef.current = setInterval(() => {
-      setFullCardWaveIndex((i) => (i + 1) % STANDARD_BINGO_POSITIONS.length);
-    }, 380);
+    let cancelled = false;
+    const STEP_MS = 112;
+    const HOLD_FULL_MS = 520;
+    const AFTER_EMPTY_MS = 160;
+
+    const safeLater = (fn: () => void, ms: number) => {
+      setTimeout(() => {
+        if (!cancelled) fn();
+      }, ms);
+    };
+
+    const runCycle = () => {
+      setFullCardFillPhase(-1);
+      safeLater(() => {
+        let p = 0;
+        const advance = () => {
+          if (cancelled) return;
+          setFullCardFillPhase(p);
+          if (p < 24) {
+            p += 1;
+            safeLater(advance, STEP_MS);
+          } else {
+            safeLater(runCycle, HOLD_FULL_MS);
+          }
+        };
+        advance();
+      }, AFTER_EMPTY_MS);
+    };
+
+    runCycle();
     return () => {
-      if (fullCardWaveIntervalRef.current) {
-        clearInterval(fullCardWaveIntervalRef.current);
-        fullCardWaveIntervalRef.current = null;
-      }
+      cancelled = true;
     };
   }, [pattern]);
 
@@ -2853,8 +2874,8 @@ const PublicDisplay: React.FC = () => {
         );
         
         if (square) {
-          // Check if this square is part of the current winning line
-          const isWinningLine = isWinningSquare(row, col);
+          const posKey = `${row}-${col}`;
+          let isWinningLine = isWinningSquare(row, col);
           let linePatternDemoClass = '';
           if (pattern === 'line' && linesRequired > 1 && isWinningLine) {
             const tuple =
@@ -2869,7 +2890,15 @@ const PublicDisplay: React.FC = () => {
             else if (hitSlots.length === 1) linePatternDemoClass = ` winning-line-slot-${hitSlots[0] % 4}`;
           }
 
-          const posKey = `${row}-${col}`;
+          const isFullCardPattern = pattern === 'full_card' || pattern === 'blackout';
+          let fullCardPendingClass = '';
+          if (isFullCardPattern) {
+            const seqIdx = STANDARD_BINGO_POSITIONS.indexOf(posKey);
+            const filled = fullCardFillPhase >= 0 && seqIdx <= fullCardFillPhase;
+            isWinningLine = filled;
+            if (!filled) fullCardPendingClass = ' full-card-slot-pending';
+          }
+
           let compositeDemoExtraClass = '';
           if (
             pattern === 'composite' &&
@@ -2884,16 +2913,6 @@ const PublicDisplay: React.FC = () => {
             compositeDemoExtraClass = frame.positions.includes(posKey) ? ' composite-demo-focus' : ' composite-demo-dim';
           }
 
-          const wavePos =
-            STANDARD_BINGO_POSITIONS[
-              STANDARD_BINGO_POSITIONS.length === 0 ? 0 : fullCardWaveIndex % STANDARD_BINGO_POSITIONS.length
-            ];
-          const isFullCardWaveCell =
-            isWinningLine && (pattern === 'full_card' || pattern === 'blackout') && wavePos === posKey;
-
-          const pulseFullCardFamily =
-            isWinningLine && (pattern === 'full_card' || pattern === 'blackout');
-
           const pulseShapeGlow =
             isWinningLine &&
             (pattern === 'custom' ||
@@ -2902,24 +2921,11 @@ const PublicDisplay: React.FC = () => {
           rowSquares.push(
             <motion.div
               key={`${row}-${col}`}
-              className={`bingo-square ${square.isPlayed ? 'played' : ''} ${isWinningLine ? 'winning' : ''}${linePatternDemoClass}${compositeDemoExtraClass}`}
+              className={`bingo-square ${square.isPlayed ? 'played' : ''} ${isWinningLine ? 'winning' : ''}${linePatternDemoClass}${compositeDemoExtraClass}${fullCardPendingClass}`}
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{
                 opacity: 1,
                 scale: 1,
-                ...(pulseFullCardFamily && {
-                  boxShadow: isFullCardWaveCell
-                    ? [
-                        '0 0 4px rgba(0, 255, 136, 0.35)',
-                        '0 0 42px rgba(0, 255, 200, 0.95)',
-                        '0 0 4px rgba(0, 255, 136, 0.35)',
-                      ]
-                    : [
-                        '0 0 0 rgba(0, 255, 136, 0.12)',
-                        '0 0 14px rgba(0, 255, 136, 0.32)',
-                        '0 0 0 rgba(0, 255, 136, 0.12)',
-                      ],
-                }),
                 ...(pulseShapeGlow && {
                   boxShadow: [
                     '0 0 0 rgba(0, 255, 136, 0.3)',
@@ -2931,21 +2937,13 @@ const PublicDisplay: React.FC = () => {
               transition={{
                 duration: 0.3,
                 delay: (row + col) * 0.05,
-                ...(pulseFullCardFamily && {
+                ...(pulseShapeGlow && {
                   boxShadow: {
-                    duration: isFullCardWaveCell ? 1.05 : 2.5,
+                    duration: 2,
                     repeat: Infinity,
                     ease: 'easeInOut',
                   },
                 }),
-                ...(pulseShapeGlow &&
-                  !pulseFullCardFamily && {
-                    boxShadow: {
-                      duration: 2,
-                      repeat: Infinity,
-                      ease: 'easeInOut',
-                    },
-                  }),
               }}
               whileHover={{ scale: 1.05 }}
             >
