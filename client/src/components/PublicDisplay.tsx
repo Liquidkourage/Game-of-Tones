@@ -2774,6 +2774,16 @@ const PublicDisplay: React.FC = () => {
       return true;
     }
     if (pattern === 'composite' && patternComposite) {
+      // Line / full-card clauses intentionally union to the whole board in patternDefinitions
+      // (they represent flexible win shapes). For projector demos we cycle concrete frames;
+      // highlighting the union paints every square green and breaks the spotlight.
+      if (compositeDemoSequences.length >= 2) {
+        const frame =
+          compositeDemoSequences[
+            compositeDemoSequences.length === 0 ? 0 : compositePatternDemoIndex % compositeDemoSequences.length
+          ];
+        return frame?.positions.includes(`${row}-${col}`) ?? false;
+      }
       return unionCompositeHighlightPositions(patternComposite).includes(`${row}-${col}`);
     }
     if (pattern === 'custom' && customMask && customMask.size > 0) {
@@ -2902,7 +2912,6 @@ const PublicDisplay: React.FC = () => {
         );
         
         if (square) {
-          const posKey = `${row}-${col}`;
           let isWinningLine = isWinningSquare(row, col);
           let linePatternDemoClass = '';
           if (pattern === 'line' && linesRequired > 1 && isWinningLine) {
@@ -2920,19 +2929,8 @@ const PublicDisplay: React.FC = () => {
 
           const isFullCardPattern = pattern === 'full_card' || pattern === 'blackout';
 
-          let compositeDemoExtraClass = '';
-          if (
-            pattern === 'composite' &&
-            patternComposite &&
-            compositeDemoSequences.length >= 2 &&
-            isWinningLine
-          ) {
-            const frame =
-              compositeDemoSequences[
-                compositeDemoSequences.length === 0 ? 0 : compositePatternDemoIndex % compositeDemoSequences.length
-              ];
-            compositeDemoExtraClass = frame.positions.includes(posKey) ? ' composite-demo-focus' : ' composite-demo-dim';
-          }
+          // When cycling demos, every highlighted square is already in the current frame (see isWinningSquare).
+          const compositeDemoExtraClass = '';
 
           const pulseFullCardFamily = isWinningLine && isFullCardPattern;
 
