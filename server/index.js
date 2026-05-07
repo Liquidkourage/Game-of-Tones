@@ -4101,18 +4101,34 @@ io.on('connection', (socket) => {
           let songOrderForCards;
           if (useSavedRoundPlayback) {
             routineServerLog(`📋 Saved-round playback: generating cards from ${savedRoundSongs.length} snapshot tracks`);
-            room.fiveByFifteenColumnsIds = null;
-            room.fiveByFifteenColumns = null;
-            room.fiveByFifteenPlaylistNames = null;
-            room.fiveByFifteenMeta = null;
             room.oneBySeventyFivePool = null;
-            const tagged = savedRoundSongs.map((s) => ({
-              ...s,
-              sourcePlaylistId: SNAP,
-              sourcePlaylistName: 'Saved round',
-            }));
-            playlistsToUse = [{ id: SNAP, name: 'Saved round snapshot', songs: tagged }];
-            songOrderForCards = tagged;
+            const useFiveByFifteenSnap = snapshotSupportsFiveByFifteenStartGame(playlists, savedRoundSongs);
+            if (useFiveByFifteenSnap) {
+              routineServerLog(
+                '📋 Saved-round 5×15: partitioning snapshot by sourcePlaylistId into host five playlists (display columns)',
+              );
+              playlistsToUse = playlists;
+              songOrderForCards = savedRoundSongs;
+            } else {
+              routineServerLog('📋 Saved-round playback: synthetic single pool (1×75 / merged fallback)');
+              room.fiveByFifteenColumnsIds = null;
+              room.fiveByFifteenColumns = null;
+              room.fiveByFifteenPlaylistNames = null;
+              room.fiveByFifteenMeta = null;
+              const tagged = savedRoundSongs.map((s) => ({
+                ...s,
+                sourcePlaylistId: SNAP,
+                sourcePlaylistName: 'Saved round',
+              }));
+              playlistsToUse = [{ id: SNAP, name: 'Saved round snapshot', songs: tagged }];
+              songOrderForCards = tagged;
+            }
+            if (useFiveByFifteenSnap) {
+              room.fiveByFifteenColumnsIds = null;
+              room.fiveByFifteenColumns = null;
+              room.fiveByFifteenPlaylistNames = null;
+              room.fiveByFifteenMeta = null;
+            }
           } else {
             playlistsToUse =
               room.finalizedPlaylists && room.finalizedPlaylists.length > 0
@@ -4129,10 +4145,14 @@ io.on('connection', (socket) => {
           if (useSavedRoundPlayback) {
             room.finalizedSongOrder = savedRoundSongs.map((s) => ({ ...s }));
             room.oneBySeventyFivePool = null;
-            room.fiveByFifteenColumnsIds = null;
-            room.fiveByFifteenColumns = null;
-            room.fiveByFifteenPlaylistNames = null;
-            room.fiveByFifteenMeta = null;
+            // Do not wipe 5×15 column caches after generate — Public Display needs fiveby15-pool.
+            // (Older bug: always nulling here forced oneby75-style layouts during saved playback.)
+            if (!(Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5)) {
+              room.fiveByFifteenColumnsIds = null;
+              room.fiveByFifteenColumns = null;
+              room.fiveByFifteenPlaylistNames = null;
+              room.fiveByFifteenMeta = null;
+            }
             try {
               io.to(roomId).emit('finalized-order', {
                 order: savedRoundSongs.map((s) => ({
@@ -5037,6 +5057,15 @@ function playlistsWithSongsFromHostSongOrder(playlists, songOrder) {
   }
   if (!rows.every((r) => r.songs.length > 0)) return null;
   return rows;
+}
+
+/** Saved-round Start Game: use real 5 playlists + snapshot only when each playlist has ≥15 snapshot tracks (real sourcePlaylistIds). */
+function snapshotSupportsFiveByFifteenStartGame(playlists, savedRoundSongs) {
+  if (!Array.isArray(playlists) || playlists.length !== 5) return false;
+  if (!Array.isArray(savedRoundSongs) || savedRoundSongs.length === 0) return false;
+  const rows = playlistsWithSongsFromHostSongOrder(playlists, savedRoundSongs);
+  if (!rows) return false;
+  return rows.every((r) => Array.isArray(r.songs) && r.songs.length >= 15);
 }
 
 /**
