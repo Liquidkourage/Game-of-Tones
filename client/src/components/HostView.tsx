@@ -893,6 +893,21 @@ const HostView: React.FC = () => {
   useEffect(() => {
     finalizedOrderRef.current = finalizedOrder;
   }, [finalizedOrder]);
+
+  /** Sort-stable fingerprint of current Game-tab mix (same grouping rule as finalize — playlist ids sorted). */
+  const mixPlaylistSelectionKeyRef = useRef('');
+  useEffect(() => {
+    mixPlaylistSelectionKeyRef.current = selectionPlaylistKey(mixPlaylistSelection);
+  }, [mixPlaylistSelection]);
+
+  /**
+   * Playlist key for which `finalizedOrder` was produced. Without this, Save round #2 can reuse round #1's pool
+   * when `ensureFinalizedOrderFromServer` sees a non-empty ref and skips waiting for the new finalize.
+   */
+  const finalizedOrderPlaylistKeyRef = useRef<string | null>(null);
+  /** Tag the next `finalized-order` event while a finalize or replay is in flight. */
+  const pendingFinalizePlaylistKeyRef = useRef<string | null>(null);
+
   // Playlists state
   const [visiblePlaylists, setVisiblePlaylists] = useState<Playlist[]>([]);
   const [playlistQuery, setPlaylistQuery] = useState('');
@@ -1990,6 +2005,9 @@ const HostView: React.FC = () => {
         if (arr.length > 0) {
           finalizedOrderRef.current = arr;
           setFinalizedOrder(arr);
+          finalizedOrderPlaylistKeyRef.current =
+            pendingFinalizePlaylistKeyRef.current ?? mixPlaylistSelectionKeyRef.current;
+          pendingFinalizePlaylistKeyRef.current = null;
           addLog(`Finalized order received (${arr.length} tracks)`, 'info');
         }
       } catch (e) {
@@ -2180,6 +2198,8 @@ const HostView: React.FC = () => {
       setPlayedSoFar([]);
       setSongList([]);
       setFinalizedOrder([]);
+      finalizedOrderPlaylistKeyRef.current = null;
+      pendingFinalizePlaylistKeyRef.current = null;
       lastFinalizeMixSongListRef.current = null;
       invalidateSetlistBuildCache();
       
@@ -2904,24 +2924,65 @@ const HostView: React.FC = () => {
    * Ensures `finalizedOrderRef` is populated from `finalized-order` (grace window for race after finalize,
    * then host-only replay via `request-finalized-order`).
    */
-  const ensureFinalizedOrderFromServer = useCallback(async (): Promise<boolean> => {
-    if (!socket || !roomId) return false;
-    if (finalizedOrderRef.current && finalizedOrderRef.current.length > 0) return true;
-    const graceUntil = Date.now() + 500;
-    while (Date.now() < graceUntil) {
-      if (finalizedOrderRef.current && finalizedOrderRef.current.length > 0) return true;
-      await new Promise((r) => setTimeout(r, 50));
-    }
-    if (finalizedOrderRef.current && finalizedOrderRef.current.length > 0) return true;
-    socket.emit('request-finalized-order', { roomId });
-    addLog('Requested finalized playback order from server…', 'info');
-    const deadline = Date.now() + 16000;
-    while (Date.now() < deadline) {
-      if (finalizedOrderRef.current && finalizedOrderRef.current.length > 0) return true;
-      await new Promise((r) => setTimeout(r, 75));
-    }
-    return !!(finalizedOrderRef.current && finalizedOrderRef.current.length > 0);
-  }, [socket, roomId, addLog]);
+  const ensureFinalizedOrderFromServer = useCallback(
+    async (expectedPlaylistKey: string | null): Promise<boolean> => {
+      if (!socket || !roomId) return false;
+
+      if (
+        expectedPlaylistKey != null &&
+        (finalizedOrderRef.current?.length ?? 0) > 0 &&
+        finalizedOrderPlaylistKeyRef.current !== expectedPlaylistKey
+      ) {
+        finalizedOrderRef.current = null;
+        finalizedOrderPlaylistKeyRef.current = null;
+        setFinalizedOrder(null);
+      }
+
+      if (
+        (finalizedOrderRef.current?.length ?? 0) > 0 &&
+        (expectedPlaylistKey == null || finalizedOrderPlaylistKeyRef.current === expectedPlaylistKey)
+      ) {
+        return true;
+      }
+
+      const graceUntil = Date.now() + 500;
+      while (Date.now() < graceUntil) {
+        if (
+          (finalizedOrderRef.current?.length ?? 0) > 0 &&
+          (expectedPlaylistKey == null || finalizedOrderPlaylistKeyRef.current === expectedPlaylistKey)
+        ) {
+          return true;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      if (
+        (finalizedOrderRef.current?.length ?? 0) > 0 &&
+        (expectedPlaylistKey == null || finalizedOrderPlaylistKeyRef.current === expectedPlaylistKey)
+      ) {
+        return true;
+      }
+
+      pendingFinalizePlaylistKeyRef.current =
+        expectedPlaylistKey ?? mixPlaylistSelectionKeyRef.current ?? null;
+      socket.emit('request-finalized-order', { roomId });
+      addLog('Requested finalized playback order from server…', 'info');
+      const deadline = Date.now() + 16000;
+      while (Date.now() < deadline) {
+        if (
+          (finalizedOrderRef.current?.length ?? 0) > 0 &&
+          (expectedPlaylistKey == null || finalizedOrderPlaylistKeyRef.current === expectedPlaylistKey)
+        ) {
+          return true;
+        }
+        await new Promise((r) => setTimeout(r, 75));
+      }
+      return !!(
+        (finalizedOrderRef.current?.length ?? 0) > 0 &&
+        (expectedPlaylistKey == null || finalizedOrderPlaylistKeyRef.current === expectedPlaylistKey)
+      );
+    },
+    [socket, roomId, addLog],
+  );
 
   /** Returns true when server confirms mix-finalized (or already finalized on client). */
   const finalizeMix = async (opts?: { playlists?: Playlist[] }): Promise<boolean> => {
@@ -2935,9 +2996,15 @@ const HostView: React.FC = () => {
       targetKey === uiKey &&
       lastFinalizePlaylistKeyRef.current === targetKey
     ) {
-      if (finalizedOrderRef.current && finalizedOrderRef.current.length > 0) return true;
+      if (
+        finalizedOrderRef.current &&
+        finalizedOrderRef.current.length > 0 &&
+        finalizedOrderPlaylistKeyRef.current === targetKey
+      ) {
+        return true;
+      }
       addLog('Fetching finalized playback order from server…', 'info');
-      return ensureFinalizedOrderFromServer();
+      return ensureFinalizedOrderFromServer(targetKey);
     }
 
     const inFlight = finalizeMixPromiseRef.current;
@@ -3029,6 +3096,8 @@ const HostView: React.FC = () => {
           const onFinalized = (data: any) => {
             cleanup();
             console.log('Mix finalized:', data);
+            pendingFinalizePlaylistKeyRef.current = null;
+            finalizedOrderPlaylistKeyRef.current = selectionPlaylistKey(playlists);
             lastFinalizePlaylistKeyRef.current = selectionPlaylistKey(playlists);
             if (Array.isArray(data?.songList) && data.songList.length > 0) {
               setSongList(data.songList as Song[]);
@@ -3041,6 +3110,7 @@ const HostView: React.FC = () => {
             resolve(true);
           };
 
+          pendingFinalizePlaylistKeyRef.current = selectionPlaylistKey(playlists);
           lastFinalizeMixSongListRef.current = listToSend;
           socket.on('mix-finalized', onFinalized);
           socket.on('finalize-mix-failed', onFailed);
@@ -5439,7 +5509,8 @@ const HostView: React.FC = () => {
         return;
       }
 
-      const orderReady = await ensureFinalizedOrderFromServer();
+      const saveMixKey = selectionPlaylistKey(mixRows);
+      const orderReady = await ensureFinalizedOrderFromServer(saveMixKey);
       const fo = finalizedOrderRef.current;
       if (!orderReady || !fo || fo.length === 0) {
         window.alert(
