@@ -1382,6 +1382,26 @@ function buildSongPlayingPayload(room, song, currentIndex) {
   return payload;
 }
 
+/** Display titles for room-state: matches song-playing (host overrides + cleaned Spotify titles). */
+function clientSongMetaFromPlaylistSong(foundSong) {
+  if (!foundSong) return null;
+  return {
+    id: foundSong.id,
+    name: foundSong.name,
+    artist: foundSong.artist,
+    customSongName: customSongTitles.get(foundSong.id) || cleanSongTitle(foundSong.name),
+  };
+}
+
+function currentSongPayloadForRoomState(currentSong) {
+  if (!currentSong || !currentSong.id) return currentSong || null;
+  return {
+    ...currentSong,
+    customSongName:
+      customSongTitles.get(currentSong.id) || cleanSongTitle(currentSong.name || ''),
+  };
+}
+
 function syncRoomStateAfterSongStart(roomId, room) {
   const playedSongIds = Array.isArray(room.calledSongIds) ? [...room.calledSongIds] : [];
   if (room.currentSong && room.currentSong.id && !playedSongIds.includes(room.currentSong.id)) {
@@ -1393,7 +1413,7 @@ function syncRoomStateAfterSongStart(roomId, room) {
     customMask: Array.from(room.customPattern || []),
     patternComposite: patternCompositeForClient(room),
     ...patternExtrasForClient(room),
-    currentSong: room.currentSong || null,
+    currentSong: currentSongPayloadForRoomState(room.currentSong),
     snippetLength: room.snippetLength || 30,
     playerCount: getNonHostPlayerCount(room),
     gameState: room.gameState,
@@ -1407,13 +1427,7 @@ function syncRoomStateAfterSongStart(roomId, room) {
     playedSongs: playedSongIds
       .map((songId) => {
         const foundSong = room.playlistSongs?.find((s) => s.id === songId);
-        return foundSong
-          ? {
-              id: foundSong.id,
-              name: foundSong.name,
-              artist: foundSong.artist,
-            }
-          : null;
+        return clientSongMetaFromPlaylistSong(foundSong);
       })
       .filter(Boolean),
     playedSongIds,
@@ -1714,7 +1728,7 @@ async function playNextSongSimple(roomId, deviceId) {
       customMask: Array.from(room.customPattern || []),
       patternComposite: patternCompositeForClient(room),
       ...patternExtrasForClient(room),
-      currentSong: room.currentSong || null,
+      currentSong: currentSongPayloadForRoomState(room.currentSong),
       snippetLength: room.snippetLength || 30,
       playerCount: getNonHostPlayerCount(room),
       gameState: room.gameState,
@@ -1727,11 +1741,7 @@ async function playNextSongSimple(roomId, deviceId) {
       venueBranding: venueBrandingForRoom(room),
       playedSongs: playedSongIds.map(songId => {
         const foundSong = room.playlistSongs?.find(s => s.id === songId);
-        return foundSong ? {
-          id: foundSong.id,
-          name: foundSong.name,
-          artist: foundSong.artist
-        } : null;
+        return clientSongMetaFromPlaylistSong(foundSong);
       }).filter(Boolean),
       playedSongIds: playedSongIds,
       totalPlayedCount: playedSongIds.length,
@@ -3852,7 +3862,7 @@ io.on('connection', (socket) => {
         customMask: Array.from(room.customPattern || []),
         patternComposite: patternCompositeForClient(room),
         ...patternExtrasForClient(room),
-        currentSong: room.currentSong || null,
+        currentSong: currentSongPayloadForRoomState(room.currentSong),
         snippetLength: room.snippetLength || 30,
         playerCount: getNonHostPlayerCount(room),
         gameState: room.gameState,
@@ -3866,11 +3876,7 @@ io.on('connection', (socket) => {
         // Include played songs for PublicDisplay sync (includes current song)
         playedSongs: playedSongIds.map(songId => {
           const foundSong = room.playlistSongs?.find(s => s.id === songId);
-          return foundSong ? {
-            id: foundSong.id,
-            name: foundSong.name,
-            artist: foundSong.artist
-          } : null;
+          return clientSongMetaFromPlaylistSong(foundSong);
         }).filter(Boolean),
         // Also send song IDs array for client state sync
         playedSongIds: playedSongIds,

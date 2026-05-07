@@ -33,6 +33,25 @@ import {
   customMaskHighlightPositions,
 } from '../patternDefinitions';
 
+/** Match song-playing / bingo card display titles when syncing from room-state. */
+function displayTitleFromSyncedSong(song: {
+  name?: string;
+  customSongName?: string | null;
+} | null | undefined): string {
+  if (!song) return '';
+  const custom = song.customSongName;
+  if (custom != null && String(custom).trim() !== '') return String(custom);
+  return cleanSongTitle(String(song.name || ''));
+}
+
+function normalizeSyncedSongForDisplay(song: any): Song | null {
+  if (!song || typeof song !== 'object') return null;
+  const id = typeof song.id === 'string' ? song.id : null;
+  if (!id) return null;
+  const artist = typeof song.artist === 'string' ? song.artist : '';
+  return { id, name: displayTitleFromSyncedSong(song), artist };
+}
+
 interface GameState {
   isPlaying: boolean;
   currentSong: Song | null;
@@ -1030,16 +1049,16 @@ const PublicDisplay: React.FC = () => {
           setGameState(prev => ({
             ...prev,
             isPlaying: !!payload.isPlaying,
-            currentSong: payload.currentSong || null,
+            currentSong: normalizeSyncedSongForDisplay(payload.currentSong),
             playerCount: payload.playerCount || 0,
             snippetLength: payload.snippetLength || 30,
             winners: payload.winners || prev.winners,
             playedSongs: (() => {
               if (Array.isArray(payload.playedSongs)) {
                 payload.playedSongs.forEach((song: any) => {
-                  if (song && typeof song === 'object' && song.id && song.name) {
+                  if (song && typeof song === 'object' && song.id && song.name != null) {
                     idMetaRef.current[song.id] = {
-                      name: song.name,
+                      name: displayTitleFromSyncedSong(song),
                       artist: song.artist || ''
                     };
                   }
@@ -1050,8 +1069,8 @@ const PublicDisplay: React.FC = () => {
                     if (!id) return null;
                     const meta = idMetaRef.current[id];
                     const name =
-                      typeof song === 'object' && song.name
-                        ? song.name
+                      typeof song === 'object' && song.name != null
+                        ? displayTitleFromSyncedSong(song)
                         : meta?.name || 'Unknown';
                     const artist =
                       typeof song === 'object' && song.artist
@@ -1163,9 +1182,9 @@ const PublicDisplay: React.FC = () => {
             // Update metadata cache
             payload.playedSongs.forEach((song: any) => {
               const sid = typeof song === 'string' ? song : song?.id;
-              if (sid && typeof song === 'object' && song.name) {
+              if (sid && typeof song === 'object' && song.name != null) {
                 idMetaRef.current[sid] = {
-                  name: song.name,
+                  name: displayTitleFromSyncedSong(song),
                   artist: song.artist || ''
                 };
               }
@@ -1327,7 +1346,10 @@ const PublicDisplay: React.FC = () => {
           // Preload metadata for revealed titles to avoid 'Unknown'
           if (data?.meta && typeof data.meta === 'object') {
             Object.entries(data.meta).forEach(([id, m]: any) => {
-              idMetaRef.current[id] = { name: m?.name || 'Unknown', artist: m?.artist || '' };
+              idMetaRef.current[id] = {
+                name: cleanSongTitle(String(m?.name || 'Unknown')),
+                artist: m?.artist || ''
+              };
             });
           }
           // Flatten for meta resolution and baseline tracking order
@@ -1731,6 +1753,10 @@ const PublicDisplay: React.FC = () => {
 
     // Handle bingo verification pending (someone called bingo, awaiting host verification)
     newSocket.on('bingo-verification-pending', (data: any) => {
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current);
+        countdownRef.current = null;
+      }
       setIsVerificationPending(true);
       console.log(`${data.playerName} called BINGO - awaiting verification`);
     });
@@ -1929,15 +1955,28 @@ const PublicDisplay: React.FC = () => {
     newSocket.on('call-revealed', (payload: any) => {
       console.log('📣 Call revealed:', payload);
       if (payload?.revealToDisplay) {
-        // Update the header Now Playing banner content without marking grid
-        setGameState(prev => ({
-          ...prev,
-          currentSong: {
-            id: payload.songId || prev.currentSong?.id,
-            name: payload.songName || prev.currentSong?.name || '',
-            artist: payload.artistName || prev.currentSong?.artist || ''
+        const rawTitle = payload.songName != null ? String(payload.songName) : '';
+        const cleanedHintTitle = rawTitle ? cleanSongTitle(rawTitle) : '';
+        const sid = typeof payload.songId === 'string' ? payload.songId : undefined;
+        setGameState(prev => {
+          const resolvedId = sid || prev.currentSong?.id || '';
+          const nextName = cleanedHintTitle || prev.currentSong?.name || '';
+          const nextArtist = payload.artistName || prev.currentSong?.artist || '';
+          if (resolvedId && cleanedHintTitle) {
+            idMetaRef.current[resolvedId] = {
+              name: cleanedHintTitle,
+              artist: nextArtist || idMetaRef.current[resolvedId]?.artist || ''
+            };
           }
-        }));
+          return {
+            ...prev,
+            currentSong: {
+              id: resolvedId,
+              name: nextName,
+              artist: nextArtist
+            }
+          };
+        });
         
         // Update reveal sequence for wheel of fortune masking (letter-by-letter mode only)
         if (titleRevealModeRef.current === 'letter') {
@@ -1956,18 +1995,18 @@ const PublicDisplay: React.FC = () => {
               }
             });
           } else if (hint === 'title' && songName) {
-            revealText = `Song: ${songName}`;
-            // Reveal all letters in song title
-            const titleChars = songName.toUpperCase().split('');
+            const t = cleanSongTitle(String(songName));
+            revealText = `Song: ${t}`;
+            const titleChars = t.toUpperCase().split('');
             titleChars.forEach((ch: string) => {
               if (/^[A-Z0-9]$/.test(ch) && !revealSequenceRef.current.includes(ch)) {
                 lettersToReveal.push(ch);
               }
             });
           } else if (hint === 'full' && songName && artistName) {
-            revealText = `${songName} - ${artistName}`;
-            // Reveal all letters in both
-            const fullText = `${songName} ${artistName}`;
+            const t = cleanSongTitle(String(songName));
+            revealText = `${t} - ${artistName}`;
+            const fullText = `${t} ${artistName}`;
             const fullChars = fullText.toUpperCase().split('');
             fullChars.forEach((ch: string) => {
               if (/^[A-Z0-9]$/.test(ch) && !revealSequenceRef.current.includes(ch)) {
@@ -3448,6 +3487,7 @@ const PublicDisplay: React.FC = () => {
 
       {typeof document !== 'undefined' &&
         createPortal(
+      <>
       <AnimatePresence>
         {showWinnerBanner && (() => {
           const isBigWinCelebration = winnerName && !winnerName.startsWith('🔄');
@@ -3590,7 +3630,57 @@ const PublicDisplay: React.FC = () => {
             Revealed: {revealToast}
           </motion.div>
         )}
-      </AnimatePresence>,
+      </AnimatePresence>
+      <AnimatePresence>
+        {isVerificationPending && (
+          <motion.div
+            key="bingo-verify-freeze"
+            role="status"
+            aria-live="assertive"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.22 }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 10015,
+              pointerEvents: 'none',
+              background: 'rgba(6, 12, 22, 0.78)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 'clamp(16px, 4vmin, 56px)',
+              boxSizing: 'border-box',
+            }}
+          >
+            <div
+              style={{
+                maxWidth: 'min(96vw, 920px)',
+                textAlign: 'center',
+                fontWeight: 900,
+                letterSpacing: '0.04em',
+                lineHeight: 1.25,
+                fontSize: 'clamp(1.65rem, min(4.8vmin, 3.8vh), 3.35rem)',
+                color: '#f4fffb',
+                textShadow: '0 4px 28px rgba(0,0,0,0.65), 0 0 48px rgba(0,255,190,0.35)',
+                padding: 'clamp(28px, 5vmin, 52px) clamp(24px, 5vmin, 56px)',
+                borderRadius: 'clamp(18px, 2.5vmin, 28px)',
+                background:
+                  'linear-gradient(165deg, rgba(0,48,40,0.94) 0%, rgba(8,22,38,0.92) 55%, rgba(12,18,32,0.94) 100%)',
+                border: 'max(2px, 0.22vmin) solid rgba(0,255,200,0.42)',
+                boxShadow:
+                  '0 24px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.08) inset, 0 0 72px rgba(0,255,170,0.22)',
+              }}
+            >
+              Bingo called, confirming now... please wait!
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      </>,
       document.body
         )}
       <AnimatePresence>
@@ -4739,8 +4829,11 @@ const PublicDisplay: React.FC = () => {
                     if (!idMetaRef.current[songId]) {
                       // Fallback: try to get from gameState.playedSongs
                       const song = gameState.playedSongs.find(s => s.id === songId);
-                      if (song && song.name && song.artist) {
-                        idMetaRef.current[songId] = { name: song.name, artist: song.artist };
+                      if (song && song.name) {
+                        idMetaRef.current[songId] = {
+                          name: cleanSongTitle(song.name),
+                          artist: song.artist || ''
+                        };
                       }
                     }
                     // Set currentIndexRef to track how many songs have been played
@@ -4749,8 +4842,11 @@ const PublicDisplay: React.FC = () => {
                 } else if (gameState.playedSongs && gameState.playedSongs.length > 0) {
                   // Fallback to gameState.playedSongs if playedOrderRef is empty
                   gameState.playedSongs.forEach((song, idx) => {
-                    if (song.id && song.name && song.artist) {
-                      idMetaRef.current[song.id] = { name: song.name, artist: song.artist };
+                    if (song.id && song.name) {
+                      idMetaRef.current[song.id] = {
+                        name: cleanSongTitle(song.name),
+                        artist: song.artist || ''
+                      };
                       currentIndexRef.current = idx;
                     }
                   });
