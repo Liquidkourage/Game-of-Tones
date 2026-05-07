@@ -9732,22 +9732,35 @@ app.get('/api/spotify/playlists', async (req, res) => {
         organizationId: orgId,
       });
     }
+
+    /** Host asks for live Spotify list (`?refresh=1`). Normal loads use DB cache when present — avoids redundant GET /v1/me/playlists. */
+    const forceLivePlaylistList =
+      String(process.env.SPOTIFY_PLAYLIST_LIST_ALWAYS_LIVE || '').trim() === '1' ||
+      req.query.refresh === '1' ||
+      req.query.force_refresh === '1';
+
+    const playlistListCacheRow = await loadHostPlaylistListCache(orgId);
+    const playlistListCacheUsable =
+      playlistListCacheRow &&
+      Array.isArray(playlistListCacheRow.playlists) &&
+      playlistListCacheRow.playlists.length > 0;
+
     if (svc.isQuarantined()) {
-      const cachedQ = await loadHostPlaylistListCache(orgId);
-      if (cachedQ && Array.isArray(cachedQ.playlists) && cachedQ.playlists.length > 0) {
+      if (playlistListCacheUsable) {
         if (spotifyPipelineLog.isEnabled()) {
           spotifyPipelineLog.log('playlists_serving_from_list_cache', { org_key: orgId, reason: 'in_process_quarantine' });
         }
         return res.json({
           success: true,
-          playlists: cachedQ.playlists,
+          playlists: playlistListCacheRow.playlists,
           organizationId: orgId,
-          spotifyListTotal: cachedQ.spotifyListTotal != null ? cachedQ.spotifyListTotal : undefined,
+          spotifyListTotal:
+            playlistListCacheRow.spotifyListTotal != null ? playlistListCacheRow.spotifyListTotal : undefined,
           fromSpotifyListCache: true,
           stale: true,
-          cacheUpdatedAt: cachedQ.updatedAt,
+          cacheUpdatedAt: playlistListCacheRow.updatedAt,
           cacheMessage:
-            'TEMPO is pausing Spotify calls after a recent rate limit. Showing the last library list we saved. Use Add by link below or try Refresh later.',
+            'TEMPO is pausing Spotify calls after a recent rate limit. Showing the last library list we saved. Use Add by link below or tap Refresh Spotify library after cooldown.',
           webApiQuarantine: svc.getWebApiQuarantineInfo(),
         });
       }
@@ -9765,6 +9778,30 @@ app.get('/api/spotify/playlists', async (req, res) => {
         webApiQuarantine: svc.getWebApiQuarantineInfo(),
       });
     }
+
+    if (!forceLivePlaylistList && playlistListCacheUsable) {
+      if (spotifyPipelineLog.isEnabled()) {
+        spotifyPipelineLog.log('playlists_serving_from_list_cache', {
+          org_key: orgId,
+          host_user_id: String(uid),
+          reason: 'server_playlist_list_cache_no_live_fetch',
+        });
+      }
+      return res.json({
+        success: true,
+        playlists: playlistListCacheRow.playlists,
+        organizationId: orgId,
+        spotifyListTotal:
+          playlistListCacheRow.spotifyListTotal != null ? playlistListCacheRow.spotifyListTotal : undefined,
+        fromSpotifyListCache: true,
+        stale: true,
+        cacheUpdatedAt: playlistListCacheRow.updatedAt,
+        cacheMessage:
+          'Showing your Spotify library list cached on Tempo (no Spotify request for this load). Tap Refresh Spotify library when you create or follow new playlists — fewer live refreshes reduce Spotify rate limits.',
+        webApiQuarantine: svc.getWebApiQuarantineInfo(),
+      });
+    }
+
     if (spotifyPipelineLog.isEnabled()) {
       const copt = organizationsStore.getCredentialOptionsForUser(uid);
       spotifyPipelineLog.log('playlists_route_pre_getUserPlaylists', {
@@ -9775,8 +9812,10 @@ app.get('/api/spotify/playlists', async (req, res) => {
         server_env_client_id_prefix: spotifyPipelineLog.clientIdPrefix(process.env.SPOTIFY_CLIENT_ID),
         spotifyService_client_id_prefix: svc._pipelineClientIdPrefix,
         spotifyService_cred_mode: svc._pipelineCredentialMode,
+        force_live_playlist_list: String(forceLivePlaylistList),
       });
     }
+
     const { playlists, spotifyListTotal } = await svc.getUserPlaylists();
     await saveHostPlaylistListCache(orgId, { playlists, spotifyListTotal });
     logSpotifyPlaylistSuccessProof(orgId, svc, { spotifyListTotal, playlists });

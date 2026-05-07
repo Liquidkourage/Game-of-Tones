@@ -641,8 +641,10 @@ const HostView: React.FC = () => {
     });
   }, []);
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
-  /** Server served GET /v1/me/playlists from last successful DB copy (Spotify 429 or TEMPO quarantine). */
+  /** Server served playlist list from DB (429/quarantine, or normal cache-first load without hitting Spotify). */
   const [spotifyListCacheInfo, setSpotifyListCacheInfo] = useState<string | null>(null);
+  /** True while GET /api/spotify/playlists?refresh=1 is in flight (explicit host sync). */
+  const [spotifyPlaylistsRefreshing, setSpotifyPlaylistsRefreshing] = useState(false);
   /** Spotify Web API 429 in-process quarantine (source, Retry-After, remaining). */
   const [webApiQuarantine, setWebApiQuarantine] = useState<WebApiQuarantineState>({ active: false });
   /** High-salience notice; blocks UI until the host dismisses (API / rate / failsafe). */
@@ -1315,8 +1317,10 @@ const HostView: React.FC = () => {
     };
   }, []);
 
-  const loadPlaylists = useCallback(async () => {
+  const loadPlaylists = useCallback(async (opts?: { forceRefresh?: boolean }) => {
+    const forceRefresh = opts?.forceRefresh === true;
     if (!readHostSpotifyWebEnabled()) return;
+    if (forceRefresh) setSpotifyPlaylistsRefreshing(true);
     try {
       const assignedForQuery = eventRoundsRef.current
         .flatMap((r) => r.playlistIds || [])
@@ -1325,6 +1329,9 @@ const HostView: React.FC = () => {
       const qs = new URLSearchParams();
       if (assignedForQuery.length > 0) {
         qs.set('assigned', assignedForQuery.join(','));
+      }
+      if (forceRefresh) {
+        qs.set('refresh', '1');
       }
       const response = await hostFetch(`${API_BASE || ''}/api/spotify/playlists?${qs.toString()}`);
       if (response.status === 401) {
@@ -1358,7 +1365,7 @@ const HostView: React.FC = () => {
           id: 'playlists-http-429',
           title: 'Spotify rate limit',
           variant: 'warning',
-          message: `Spotify is rate-limiting this app right now${retryMin}. Wait, then tap Refresh on your library, or check your app in the Spotify Developer Dashboard (quota / usage).`,
+          message: `Spotify is rate-limiting this app right now${retryMin}. Wait, then tap Refresh Spotify library under Playlist library, or check your app in the Spotify Developer Dashboard (quota / usage).`,
         });
         return;
       }
@@ -1421,6 +1428,8 @@ const HostView: React.FC = () => {
     } catch (error) {
       setSpotifyMyPlaylistsTotal(null);
       console.error('Error loading playlists:', error);
+    } finally {
+      if (forceRefresh) setSpotifyPlaylistsRefreshing(false);
     }
   }, [showHostAckNotification, scheduleCatalogPacksLoad]);
 
@@ -1822,7 +1831,7 @@ const HostView: React.FC = () => {
         if (ok) {
           setIsSpotifyConnected(true);
           setIsSpotifyConnecting(false);
-          await loadPlaylists();
+          await loadPlaylists({ forceRefresh: true });
           await new Promise((r) => setTimeout(r, 800));
           await loadDevices();
           // Devices often appear a few seconds after Spotify app / Web Player activates.
@@ -7220,10 +7229,24 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1 }}
                     transition={{ delay: 0.4 }}
                   >
-                    <h3 style={{ marginBottom: 6, fontSize: '1.05rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+                    <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Library className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
                       Playlist library
                     </h3>
+                    {isSpotifyConnected ? (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        disabled={spotifyPlaylistsRefreshing || playlistByLinkLoading}
+                        style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+                        title="Fetches your latest playlists from Spotify (uses Web API quota). Routine page loads use Tempo’s saved list instead."
+                        onClick={() => void loadPlaylists({ forceRefresh: true })}
+                      >
+                        {spotifyPlaylistsRefreshing ? 'Syncing library…' : 'Refresh Spotify library'}
+                      </button>
+                    ) : null}
+                    </div>
                     <p style={{ fontSize: '0.85rem', color: '#a8a8a8', marginBottom: 12, lineHeight: 1.45, maxWidth: 720 }}>
                       <strong style={{ color: '#fff' }}>In mix</strong>: playlists checked here are included when you{' '}
                       <strong style={{ color: '#fff' }}>finalize the bingo pool</strong> (song source for the game). You can still{' '}
@@ -7313,7 +7336,7 @@ const HostView: React.FC = () => {
                           style={{ fontSize: '0.85rem' }}
                           onClick={() => {
                             setSpotifyError(null);
-                            void loadPlaylists();
+                            void loadPlaylists({ forceRefresh: true });
                           }}
                         >
                           Retry loading playlists
