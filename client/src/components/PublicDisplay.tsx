@@ -52,7 +52,25 @@ const WINNING_LINE_PREDICATES: Array<(r: number, c: number) => boolean> = [
 
 const LINE_PREDICATE_COUNT = WINNING_LINE_PREDICATES.length;
 
-/** Rotating demos: single-line cycles each line alone; multi-line shows N lines at once (distinct indices). */
+/** Indices 0–4 = rows top→bottom, 5–9 = cols left→right, 10 = \\ diag, 11 = / diag. */
+
+/** When curated demos skip N, build ~5 tuples spaced around the clock (distinct indices). */
+function spreadFallbackDemoTuples(n: number): number[][] {
+  const seeds = [0, 2, 5, 7, 9];
+  const out: number[][] = [];
+  for (const s of seeds) {
+    const t = Array.from({ length: n }, (_, i) =>
+      (s + Math.round((i * LINE_PREDICATE_COUNT) / Math.max(n, 1))) % LINE_PREDICATE_COUNT,
+    );
+    if (new Set(t).size === n) out.push(t);
+  }
+  return out.length ? out : [Array.from({ length: n }, (_, i) => i % LINE_PREDICATE_COUNT)];
+}
+
+/**
+ * Rotating demos: N===1 cycles all 12 lines alone; N>1 uses a short curated list (mixed geometry),
+ * not consecutive indices, so the wall reads as “examples” rather than chasing adjacent lines.
+ */
 function buildLinePatternDemoTuples(linesRequiredNorm: number): number[][] {
   const n = Math.min(LINE_PATTERN_MAX_LINES, Math.max(1, Math.round(linesRequiredNorm)));
   if (n === 1) {
@@ -61,9 +79,56 @@ function buildLinePatternDemoTuples(linesRequiredNorm: number): number[][] {
   if (n >= LINE_PREDICATE_COUNT) {
     return [Array.from({ length: LINE_PREDICATE_COUNT }, (_, i) => i)];
   }
-  return Array.from({ length: LINE_PREDICATE_COUNT }, (_, d) =>
-    Array.from({ length: n }, (_, i) => (d + i) % LINE_PREDICATE_COUNT),
-  );
+
+  const curated: Record<number, number[][]> = {
+    2: [
+      [0, 5],
+      [2, 7],
+      [10, 11],
+      [1, 9],
+      [4, 6],
+      [0, 11],
+      [5, 10],
+    ],
+    3: [
+      [0, 5, 10],
+      [2, 7, 11],
+      [1, 6, 9],
+      [4, 8, 10],
+      [10, 11, 2],
+    ],
+    4: [
+      [0, 4, 5, 9],
+      [2, 7, 10, 11],
+      [1, 3, 6, 8],
+      [0, 2, 5, 10],
+    ],
+    5: [
+      [0, 2, 4, 5, 9],
+      [1, 3, 10, 11, 7],
+      [0, 5, 10, 4, 9],
+    ],
+    6: [
+      [0, 2, 4, 5, 7, 9],
+      [1, 3, 10, 11, 6, 8],
+    ],
+    7: [
+      [0, 1, 2, 5, 7, 10, 11],
+      [2, 3, 4, 6, 8, 10, 11],
+    ],
+    8: [
+      [0, 1, 2, 3, 5, 7, 10, 11],
+      [1, 2, 4, 9, 6, 8, 10, 11],
+    ],
+    9: [[0, 1, 2, 3, 4, 5, 9, 10, 11]],
+    10: [[0, 1, 2, 3, 4, 5, 6, 8, 10, 11]],
+    11: [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]],
+  };
+
+  const fixed = curated[n];
+  if (fixed?.length) return fixed;
+
+  return spreadFallbackDemoTuples(n);
 }
 
 /** Match song-playing / bingo card display titles when syncing from room-state. */
