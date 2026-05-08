@@ -2044,6 +2044,129 @@ io.use((socket, next) => {
 });
 
 // Socket.io connection handling
+
+/** Attach queue depth so host UI can show “N waiting behind this one”. */
+function attachVerificationQueueMeta(room, verificationData) {
+  const depth = Array.isArray(room.bingoVerificationQueue) ? room.bingoVerificationQueue.length : 0;
+  verificationData.verificationQueueDepth = Math.max(1, depth);
+  verificationData.verificationQueueAheadCount = Math.max(0, depth - 1);
+}
+
+function emitBingoVerificationToHosts(io, room, roomId, verificationData) {
+  attachVerificationQueueMeta(room, verificationData);
+  let hostsFound = 0;
+  room.players.forEach((playerData, pid) => {
+    if (playerData.isHost) {
+      const hostSocket = io.sockets.sockets.get(pid);
+      if (hostSocket) {
+        hostSocket.emit('bingo-verification-needed', verificationData);
+        hostsFound++;
+        routineServerLog(`📤 Sent bingo verification to host: ${playerData.name} (${pid})`);
+      } else {
+        console.warn(`⚠️ Host socket not found for ${playerData.name} (${pid}) - may have disconnected`);
+      }
+    }
+  });
+  if (hostsFound === 0 && room.host) {
+    const fallbackHostSocket = io.sockets.sockets.get(room.host);
+    if (fallbackHostSocket) {
+      fallbackHostSocket.emit('bingo-verification-needed', verificationData);
+      routineServerLog(`📤 Sent bingo verification to fallback host (${room.host})`);
+    } else {
+      console.error(
+        `❌ CRITICAL: No host sockets found! Room host: ${room.host}, Hosts in players: ${Array.from(room.players.entries())
+          .filter(([_, p]) => p.isHost)
+          .map(([id, p]) => `${p.name}(${id})`)
+          .join(', ')}`,
+      );
+      io.to(roomId).emit('bingo-verification-needed', verificationData);
+      routineServerLog(`📤 Emitted bingo verification to entire room as fallback`);
+    }
+  }
+}
+
+function enqueueBingoVerification(io, room, roomId, verificationData, callerDisplayName) {
+  if (!room.bingoVerificationQueue) room.bingoVerificationQueue = [];
+  room.bingoVerificationQueue.push({
+    verificationData,
+    enqueuedAt: Date.now(),
+  });
+  const depth = room.bingoVerificationQueue.length;
+  if (depth === 1) {
+    emitBingoVerificationToHosts(io, room, roomId, verificationData);
+  } else {
+    routineServerLog(`📋 Bingo verification queued (${depth} total): ${callerDisplayName}`);
+    io.to(roomId).emit('bingo-verification-queued', {
+      playerId: verificationData.playerId,
+      playerName: callerDisplayName,
+      queueDepth: depth,
+      waitingAhead: depth - 1,
+    });
+  }
+}
+
+function supersedeRemainingBingoQueue(room, roomId, io) {
+  if (!Array.isArray(room.bingoVerificationQueue)) return;
+  while (room.bingoVerificationQueue.length > 0) {
+    const item = room.bingoVerificationQueue.shift();
+    const vd = item.verificationData;
+    let pid = vd.playerId;
+    if (!room.players.has(pid) && vd.playerName) {
+      for (const [id, p] of room.players) {
+        if (p.name === vd.playerName && !p.isHost) {
+          pid = id;
+          break;
+        }
+      }
+    }
+    const victim = room.players.get(pid);
+    if (victim) {
+      victim.hasBingo = false;
+      victim.patternComplete = false;
+    }
+    room.winners = room.winners.filter((w) => w.playerId !== pid);
+    io.to(pid).emit('bingo-result', {
+      success: false,
+      rejected: true,
+      superseded: true,
+      message: "Another player's bingo was confirmed first.",
+    });
+  }
+}
+
+function resumeGameAfterVerificationQueueEmpty(roomId, room) {
+  if (room.gameState !== 'paused_for_verification') return;
+  room.gameState = 'playing';
+  (async () => {
+    try {
+      const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
+      if (deviceId) {
+        await spotifyFor(roomId).resumePlayback(deviceId);
+        routineServerLog(`▶️ Spotify resumed — bingo verification queue empty`);
+      } else {
+        routineServerLog(`⚠️ No device ID available for resuming after bingo verification`);
+      }
+      startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
+    } catch (error) {
+      routineServerLog(`⚠️ Failed to resume Spotify after bingo verification: ${error.message}`);
+      startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
+    }
+  })();
+  io.to(roomId).emit('game-resumed', { reason: 'Bingo verification queue cleared' });
+}
+
+function advanceBingoVerificationQueueAfterReject(io, room, roomId) {
+  const q = room.bingoVerificationQueue;
+  if (!Array.isArray(q)) return;
+  q.shift();
+  if (q.length > 0) {
+    emitBingoVerificationToHosts(io, room, roomId, q[0].verificationData);
+  } else {
+    room.bingoVerificationQueue = [];
+    resumeGameAfterVerificationQueueEmpty(roomId, room);
+  }
+}
+
 io.on('connection', (socket) => {
   logger.log('User connected:', 'user-connect', 20);
 
@@ -2397,9 +2520,16 @@ io.on('connection', (socket) => {
           
           // Immediately send player cards to reconnecting host
           sendPlayerCardUpdates(roomId, true); // Immediate update for reconnecting host
+
+          if (Array.isArray(room.bingoVerificationQueue) && room.bingoVerificationQueue.length > 0) {
+            const head = room.bingoVerificationQueue[0]?.verificationData;
+            if (head) {
+              emitBingoVerificationToHosts(io, room, roomId, head);
+              routineServerLog(`📤 Re-sent head bingo verification to reconnecting host (${room.bingoVerificationQueue.length} in queue)`);
+            }
+          }
           
-          // Note: Pending verifications are sent to all hosts when bingo is called,
-          // so if host reconnects during verification, they'll receive it via the normal flow
+          // Note: Pending verifications use bingoVerificationQueue; head is replayed above.
           
           routineServerLog(`✅ Host reconnection state sync complete for ${playerName}`);
         } else {
@@ -3052,36 +3182,9 @@ io.on('connection', (socket) => {
           cardSource: room.bingoCards?.get(socket.id) ? 'room.bingoCards' : 'player.bingoCard'
         }
       };
-      
-      // Send to ALL hosts in the room (handles reconnection case)
-      let hostsFound = 0;
-      room.players.forEach((playerData, playerId) => {
-        if (playerData.isHost) {
-          const hostSocket = io.sockets.sockets.get(playerId);
-          if (hostSocket) {
-            hostSocket.emit('bingo-verification-needed', verificationData);
-            hostsFound++;
-            routineServerLog(`📤 Sent bingo verification to host: ${playerData.name} (${playerId})`);
-          } else {
-            console.warn(`⚠️ Host socket not found for ${playerData.name} (${playerId}) - may have disconnected`);
-          }
-        }
-      });
-      
-      // Fallback: Also try room.host if no hosts found via player list
-      if (hostsFound === 0 && room.host) {
-        const fallbackHostSocket = io.sockets.sockets.get(room.host);
-        if (fallbackHostSocket) {
-          fallbackHostSocket.emit('bingo-verification-needed', verificationData);
-          routineServerLog(`📤 Sent bingo verification to fallback host (${room.host})`);
-        } else {
-          console.error(`❌ CRITICAL: No host sockets found! Room host: ${room.host}, Hosts in players: ${Array.from(room.players.entries()).filter(([_, p]) => p.isHost).map(([id, p]) => `${p.name}(${id})`).join(', ')}`);
-          // Emit to room as last resort - host should still receive it
-          io.to(roomId).emit('bingo-verification-needed', verificationData);
-          routineServerLog(`📤 Emitted bingo verification to entire room as fallback`);
-        }
-      }
-      
+
+      enqueueBingoVerification(io, room, roomId, verificationData, player.name);
+
       // Notify all players about the bingo call (but not confirmed yet)
       io.to(roomId).emit('bingo-verification-pending', { 
         playerId: socket.id, 
@@ -3163,31 +3266,9 @@ io.on('connection', (socket) => {
         winningPatternPositions: winningPatternPositions,
         winningPatternType: validationResult.type || room.pattern
       };
-      
-      // Send to ALL hosts even though validation failed
-      let hostsFound = 0;
-      room.players.forEach((playerData, playerId) => {
-        if (playerData.isHost) {
-          const hostSocket = io.sockets.sockets.get(playerId);
-          if (hostSocket) {
-            hostSocket.emit('bingo-verification-needed', verificationData);
-            hostsFound++;
-            routineServerLog(`📤 Sent invalid bingo verification to host: ${playerData.name} (${playerId})`);
-          }
-        }
-      });
-      
-      if (hostsFound === 0 && room.host) {
-        const fallbackHostSocket = io.sockets.sockets.get(room.host);
-        if (fallbackHostSocket) {
-          fallbackHostSocket.emit('bingo-verification-needed', verificationData);
-          routineServerLog(`📤 Sent invalid bingo verification to fallback host (${room.host})`);
-        } else {
-          io.to(roomId).emit('bingo-verification-needed', verificationData);
-          routineServerLog(`📤 Emitted invalid bingo verification to entire room as fallback`);
-        }
-      }
-      
+
+      enqueueBingoVerification(io, room, roomId, verificationData, player.name);
+
       // Notify player that bingo call was received (awaiting host verification)
       socket.emit('bingo-result', { 
         success: true, 
@@ -3230,30 +3311,56 @@ io.on('connection', (socket) => {
       return;
     }
     
-    let resolvedPlayerId = playerId;
-    let player = room.players.get(playerId);
-    // If caller reconnected, socket id in verification payload may be stale — resolve by display name
-    if (!player && bodyPlayerName) {
+    const q = room.bingoVerificationQueue;
+    if (!Array.isArray(q) || q.length === 0) {
+      socket.emit('bingo-verified', {
+        approved: false,
+        error: 'no_pending',
+        reason: 'No bingo claim is pending verification.',
+        playerName: bodyPlayerName || 'Unknown',
+      });
+      return;
+    }
+
+    const headData = q[0].verificationData;
+    let resolvedPlayerId = headData.playerId;
+    let player = room.players.get(resolvedPlayerId);
+
+    if (!player && headData.playerName) {
       for (const [pid, p] of room.players) {
-        if (p.name === bodyPlayerName && !p.isHost) {
+        if (p.name === headData.playerName && !p.isHost) {
           player = p;
           resolvedPlayerId = pid;
-          routineServerLog(`verify-bingo: resolved "${bodyPlayerName}" by name → socket ${pid}`);
+          routineServerLog(`verify-bingo: queue head "${headData.playerName}" → socket ${pid}`);
           break;
         }
       }
     }
+
     if (!player) {
-      console.warn(`verify-bingo: player not found (id=${playerId}, name=${bodyPlayerName || 'n/a'}) — host UI was waiting forever`);
-      socket.emit('bingo-verified', {
-        approved: false,
-        error: 'player_not_found',
-        reason: 'That player disconnected or reconnected before approval. Dismiss and continue.',
-        playerName: bodyPlayerName || 'Unknown'
-      });
+      routineServerLog(
+        `verify-bingo: dropping stale queue head ${headData.playerName || headData.playerId} — player gone`,
+      );
+      q.shift();
+      if (q.length > 0) {
+        emitBingoVerificationToHosts(io, room, roomId, q[0].verificationData);
+      } else {
+        room.bingoVerificationQueue = [];
+        resumeGameAfterVerificationQueueEmpty(roomId, room);
+      }
       return;
     }
-    
+
+    if (
+      playerId &&
+      playerId !== resolvedPlayerId &&
+      bodyPlayerName &&
+      bodyPlayerName !== headData.playerName
+    ) {
+      routineServerLog(
+        `verify-bingo: host sent (${playerId} / ${bodyPlayerName}) but FIFO queue head is (${resolvedPlayerId} / ${headData.playerName}) — using queue`,
+      );
+    }
     if (approved) {
       // APPROVED: Confirm the win and resume/end game
       routineServerLog(`✅ Host approved bingo for ${player.name}`);
@@ -3417,13 +3524,19 @@ io.on('connection', (socket) => {
         roundWinners: room.roundWinners,
         message: `Round ${room.roundWinners.length} complete! Waiting for next round...`
       });
+
+      // Pop confirmed winner from FIFO queue; dismiss anyone still waiting (same round ended)
+      if (Array.isArray(room.bingoVerificationQueue) && room.bingoVerificationQueue.length > 0) {
+        room.bingoVerificationQueue.shift();
+      }
+      supersedeRemainingBingoQueue(room, roomId, io);
       
     } else {
       // REJECTED: Remove from winners, notify player, resume game
       routineServerLog(`❌ Host rejected bingo for ${player.name}: ${reason}`);
       
       // Remove from winners list (drop both stale and resolved ids after reconnect)
-      room.winners = room.winners.filter(w => w.playerId !== playerId && w.playerId !== resolvedPlayerId);
+      room.winners = room.winners.filter((w) => w.playerId !== resolvedPlayerId);
       player.hasBingo = false;
       player.patternComplete = false; // Allow them to call again
       
@@ -3441,34 +3554,8 @@ io.on('connection', (socket) => {
         reason: reason 
       });
       
-      // Current song already marked as played during bingo call
-      
-      // Auto-resume the game
-      if (room.gameState === 'paused_for_verification') {
-        room.gameState = 'playing';
-        // Resume from where we left off - first resume Spotify playback, then start progression timer
-        (async () => {
-          try {
-            const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
-            if (deviceId) {
-              await spotifyFor(roomId).resumePlayback(deviceId);
-              routineServerLog(`▶️ Spotify resumed after rejecting ${player.name}'s bingo`);
-            } else {
-              routineServerLog(`⚠️ No device ID available for resuming after bingo rejection`);
-            }
-            // Now start the progression timer for the remainder of the current song
-            startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
-          } catch (error) {
-            routineServerLog(`⚠️ Failed to resume Spotify after bingo rejection: ${error.message}`);
-            // Still start progression timer as fallback
-            startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
-          }
-        })();
-        routineServerLog(`▶️ Game resumed after rejecting ${player.name}'s bingo`);
-        
-        // Notify all clients that game has resumed
-        io.to(roomId).emit('game-resumed', { reason: 'Bingo rejected, game continues' });
-      }
+      // Advance FIFO: show next pending bingo, or resume if queue empty
+      advanceBingoVerificationQueueAfterReject(io, room, roomId);
     }
   });
 
@@ -3481,6 +3568,16 @@ io.on('connection', (socket) => {
     // Verify this is the host
     const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
     if (!isHost) return;
+
+    if (Array.isArray(room.bingoVerificationQueue) && room.bingoVerificationQueue.length > 0) {
+      routineServerLog(
+        `⚠️ manual-resume blocked: ${room.bingoVerificationQueue.length} bingo verification(s) pending`,
+      );
+      socket.emit('error', {
+        message: `Finish bingo verification first (${room.bingoVerificationQueue.length} pending).`,
+      });
+      return;
+    }
     
     // Only resume if game is paused for verification
     if (room.gameState === 'paused_for_verification') {
@@ -3595,6 +3692,7 @@ io.on('connection', (socket) => {
     room.winners = [];
     room.playedSongs = [];
     room.calledSongIds = [];
+    room.bingoVerificationQueue = [];
     room.roundWinners = []; // Reset round winners
     
     // Reset all player bingo status but keep their cards
@@ -3688,6 +3786,7 @@ io.on('connection', (socket) => {
     room.winners = [];
     room.playedSongs = [];
     room.calledSongIds = [];
+    room.bingoVerificationQueue = [];
     
     // Reset playlist and mix state - host needs to select playlists again
     room.playlists = [];
@@ -4045,6 +4144,7 @@ io.on('connection', (socket) => {
         room.randomStarts = randomStarts || 'none';
         // Initialize call history and round
         room.calledSongIds = [];
+        room.bingoVerificationQueue = [];
         room.round = (room.round || 0) + 1;
         // Apply pattern from host if provided; default to 'line' if still unset
         try {

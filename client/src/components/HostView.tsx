@@ -644,6 +644,8 @@ const HostView: React.FC = () => {
   /** Mirrors isSpotifyConnected for callbacks declared above sync effects (catalog schedule, socket reconnect). */
   const isSpotifyConnectedRef = useRef(false);
   const [pendingVerification, setPendingVerification] = useState<any>(null);
+  /** Additional bingo claims waiting after the current verification modal (FIFO). */
+  const [bingoVerificationBehindCount, setBingoVerificationBehindCount] = useState(0);
   const [gamePaused, setGamePaused] = useState(false);
   const [mixFinalized, setMixFinalized] = useState(false);
   /** Printable PDF export (physical daubers) — count capped server-side at 200. */
@@ -2053,10 +2055,17 @@ const HostView: React.FC = () => {
     newSocket.on('bingo-verification-needed', (data: any) => {
       console.log('?? Bingo verification needed:', data?.playerName);
       setPendingVerification(data);
+      setBingoVerificationBehindCount(Math.max(0, Number(data?.verificationQueueAheadCount) || 0));
       setGamePaused(true);
       addLog(`?? ${data.playerName} called BINGO - verification needed!`, 'warn');
       playHostAlertSound();
       schedulePlayerCardsRefresh(120);
+    });
+
+    newSocket.on('bingo-verification-queued', (data: any) => {
+      const n = Math.max(0, Number(data?.waitingAhead) || 0);
+      setBingoVerificationBehindCount(n);
+      addLog(`${data?.playerName || 'Player'} bingo queued — ${n} waiting behind current verification`, 'warn');
     });
 
     newSocket.on('bingo-verified', (data: any) => {
@@ -2066,8 +2075,14 @@ const HostView: React.FC = () => {
       }
       console.log('Bingo verified:', data);
       setPendingVerification(null);
+      setBingoVerificationBehindCount(0);
       setIsProcessingVerification(false);
 
+      if (data.error === 'no_pending') {
+        addLog(data.reason || 'No bingo claim was pending.', 'warn');
+        setGamePaused(false);
+        return;
+      }
       if (data.error === 'player_not_found' || data.error === 'no_room' || data.error === 'not_host') {
         addLog(data.reason || 'Could not complete verification.', 'error');
         setGamePaused(false);
@@ -2261,6 +2276,7 @@ const HostView: React.FC = () => {
       setIsPlaying(false);
       setGamePaused(false);
       setPendingVerification(null);
+      setBingoVerificationBehindCount(0);
       setCurrentSong(null);
       setYoutubeHostPlayback(null);
       addLog('Game restarted by host', 'info');
@@ -2298,6 +2314,7 @@ const HostView: React.FC = () => {
       // CRITICAL: Clear round complete modal and pending verification
       setRoundComplete(null);
       setPendingVerification(null);
+      setBingoVerificationBehindCount(0);
       setIsProcessingVerification(false);
       
       // Reset all game state
@@ -9464,6 +9481,23 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
               <p style={{ color: '#ccc', fontSize: '0.9rem' }}>
                 Pattern: <strong>{pendingVerification.winningPatternType || pendingVerification.requiredPattern}</strong>
               </p>
+              {bingoVerificationBehindCount > 0 ? (
+                <p
+                  style={{
+                    marginTop: 12,
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    background: 'rgba(245, 208, 97, 0.12)',
+                    border: '1px solid rgba(245, 208, 97, 0.45)',
+                    color: '#f5d061',
+                    fontSize: '0.95rem',
+                    fontWeight: 700,
+                  }}
+                >
+                  + {bingoVerificationBehindCount} more bingo call
+                  {bingoVerificationBehindCount === 1 ? '' : 's'} queued — resolve this one first (first-in, first-out).
+                </p>
+              ) : null}
             </div>
 
             {/* Full Card Visualization */}

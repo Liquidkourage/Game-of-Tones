@@ -652,7 +652,11 @@ const PlayerView: React.FC = () => {
         }, 5000);
       } else {
         setBingoStatus('failed');
-        setBingoMessage(data.reason || 'Invalid bingo pattern');
+        const msg = data.message || data.reason || 'Invalid bingo pattern';
+        setBingoMessage(msg);
+        if (data.rejected || data.superseded) {
+          setGameState((prev) => ({ ...prev, hasBingo: false }));
+        }
         // Play error sound
         playErrorSound();
         // Single vibration for failed bingo
