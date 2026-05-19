@@ -118,9 +118,13 @@ async function getCredentialsForUserId(db, userId) {
       return null;
     }
   }
+  const clientId = String(row.spotify_client_id || '').trim().replace(/^\uFEFF/, '');
+  const clientSecret = String(secret || '')
+    .replace(/^\uFEFF/, '')
+    .trim();
   return {
-    clientId: String(row.spotify_client_id || '').trim(),
-    clientSecret: secret,
+    clientId,
+    clientSecret,
   };
 }
 

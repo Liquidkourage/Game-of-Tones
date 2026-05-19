@@ -18,6 +18,10 @@
  * - TEMPO_CATALOG_PUBLIC_FETCH_DISABLED — true: skip all catalog Spotify reads for pack list; API returns
  *   configured=false (Official packs hidden) until unset.
  * - TEMPO_CATALOG_SPOTIFY_CLIENT_ID / TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET — optional; default SPOTIFY_*
+ * - TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET (alone) — optional; non-empty value replaces **only the client secret**
+ *   used for catalog token refresh (client id still comes from CREDENTIALS_USER_ID row, TEMPO_CATALOG_* pair, or SPOTIFY_*).
+ *   Use when Postgres decrypt succeeds but the stored secret does not match Spotify (persistent invalid_client) while
+ *   the Dashboard secret pasted into Railway is correct.
  * - TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID — optional host **users.id** (integer). When set, the server loads
  *   that row’s Spotify Developer **client id + decrypted client secret** from the organizations table and uses them
  *   for catalog refresh (same app as host OAuth). Use this when Railway has no reliable SPOTIFY_CLIENT_SECRET but
@@ -38,6 +42,18 @@
 
 const crypto = require('crypto');
 const SpotifyService = require('./spotify');
+
+/** Railway/env sometimes wraps tokens in quotes — normalize for refresh_token grant. */
+function normalizeCatalogRefreshTokenFromEnv() {
+  let s = String(process.env.TEMPO_CATALOG_SPOTIFY_REFRESH_TOKEN || '').trim();
+  if (
+    (s.startsWith('"') && s.endsWith('"') && s.length >= 2) ||
+    (s.startsWith("'") && s.endsWith("'") && s.length >= 2)
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  return s;
+}
 
 /** @returns {{ id: string, label?: string }[]} */
 function parseCatalogAllowlistEntries() {
@@ -70,8 +86,7 @@ function parseCatalogAllowlistEntries() {
 }
 
 function hasCatalogRefreshToken() {
-  const rt = process.env.TEMPO_CATALOG_SPOTIFY_REFRESH_TOKEN;
-  return !!(rt && String(rt).trim());
+  return normalizeCatalogRefreshTokenFromEnv() !== '';
 }
 
 /** @returns {string} trimmed prefix or '' */
@@ -279,8 +294,8 @@ let catalogOrgCredentials = null;
  */
 function primeCatalogSpotifyCredentialsFromOrg(creds) {
   if (!creds || typeof creds.clientId !== 'string' || typeof creds.clientSecret !== 'string') return;
-  const clientId = creds.clientId.trim();
-  const clientSecret = creds.clientSecret.trim();
+  const clientId = creds.clientId.trim().replace(/^\uFEFF/, '');
+  const clientSecret = creds.clientSecret.trim().replace(/^\uFEFF/, '');
   if (!clientId || !clientSecret) return;
   catalogOrgCredentials = { clientId, clientSecret };
   catalogServiceSingleton = null;
@@ -300,13 +315,12 @@ function getCatalogSpotifyService() {
     } else {
       const ecid = process.env.TEMPO_CATALOG_SPOTIFY_CLIENT_ID;
       const esec = process.env.TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET;
-      const hasCatalogPair =
-        ecid && esec && String(ecid).trim() !== '' && String(esec).trim() !== '';
-      const hasPartialCatalogEnv =
-        (ecid && String(ecid).trim() !== '') !== (esec && String(esec).trim() !== '');
-      if (hasPartialCatalogEnv) {
+      const ecidTrim = ecid && String(ecid).trim() !== '';
+      const esecTrim = esec && String(esec).trim() !== '';
+      const hasCatalogPair = ecidTrim && esecTrim;
+      if (ecidTrim && !esecTrim) {
         console.warn(
-          '[catalog] Set both TEMPO_CATALOG_SPOTIFY_CLIENT_ID and TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET, or omit both. Partial env falls back to SPOTIFY_* and often causes invalid_client if those do not match the app that issued TEMPO_CATALOG_SPOTIFY_REFRESH_TOKEN.'
+          '[catalog] TEMPO_CATALOG_SPOTIFY_CLIENT_ID is set without TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET — falling back to SPOTIFY_* secret or org row; set the catalog secret or omit the catalog client id.'
         );
       }
       if (hasCatalogPair) {
@@ -318,6 +332,14 @@ function getCatalogSpotifyService() {
         resolvedSecret = String(process.env.SPOTIFY_CLIENT_SECRET || '').trim();
         credSource = 'SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET';
       }
+    }
+
+    const catalogSecretOverride = String(process.env.TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET || '')
+      .trim()
+      .replace(/^\uFEFF/, '');
+    if (catalogSecretOverride && resolvedId && catalogSecretOverride !== resolvedSecret) {
+      resolvedSecret = catalogSecretOverride;
+      credSource = `${credSource} (client secret from TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET override)`;
     }
 
     if (!resolvedId || !resolvedSecret) {
@@ -333,7 +355,7 @@ function getCatalogSpotifyService() {
     if (credSource) {
       console.info(`[catalog] Pack/list token refresh uses ${credSource}`);
     }
-    const rt = String(process.env.TEMPO_CATALOG_SPOTIFY_REFRESH_TOKEN || '').trim();
+    const rt = normalizeCatalogRefreshTokenFromEnv();
     catalogServiceSingleton.setTokens('', rt);
   }
   return catalogServiceSingleton;
