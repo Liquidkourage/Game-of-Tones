@@ -270,7 +270,7 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
           <div className="min-w-0">
             <h3 className="text-xl font-semibold text-white leading-tight">Round buckets</h3>
             <p className="text-sm text-gray-400 mt-1">
-              Drag playlists from the list above into each bucket. Up to {MAX_ROUND_BUCKETS} rounds.
+              Drag playlists from your library into each bucket (or use <strong className="text-white font-semibold">Add to round</strong> on a library row). Up to {MAX_ROUND_BUCKETS} rounds.
             </p>
           </div>
         </div>

@@ -846,6 +846,59 @@
   letter-spacing: 0.03em;
 }
 
+/* Round buckets + playlist library: side‑by‑side on wide screens, stacks with buckets first on narrow. */
+.host-music-two-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.host-music-two-pane__rounds {
+  order: -1;
+}
+
+.host-music-two-pane__library {
+  min-width: 0;
+}
+
+@media (min-width: 1080px) {
+  .host-music-two-pane {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 1fr);
+    gap: 20px;
+    align-items: start;
+  }
+
+  .host-music-two-pane__rounds {
+    order: 0;
+  }
+
+  .host-music-two-pane__library {
+    padding-right: 16px;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .host-music-two-pane__rounds > div.mb-6 {
+    margin-bottom: 0 !important;
+  }
+}
+
+.host-playlist-add-to-round {
+  font-size: 0.78rem;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  max-width: 168px;
+  cursor: pointer;
+}
+
+.host-playlist-add-to-round:focus {
+  outline: 2px solid rgba(0, 255, 136, 0.45);
+  outline-offset: 1px;
+}
+
 .host-manager-playlist-export {
   margin-top: 14px;
   padding-top: 14px;

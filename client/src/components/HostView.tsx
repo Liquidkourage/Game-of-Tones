@@ -5515,6 +5515,35 @@ const HostView: React.FC = () => {
     }
   }, [roomId]);
 
+  /** Same behavior as dragging a library row into a round bucket (RoundPlanner drop). */
+  const addPlaylistToRoundBucket = useCallback(
+    (roundIndex: number, playlistId: string) => {
+      const playlist = playlistsForRoundPlanner.find((p) => String(p.id) === String(playlistId));
+      if (!playlist) return;
+      setEventRounds((prev) => {
+        if (roundIndex < 0 || roundIndex >= prev.length) return prev;
+        const round = prev[roundIndex];
+        if (round.playlistIds.some((id) => String(id) === String(playlistId))) return prev;
+        const newRounds = [...prev];
+        const tracks = Math.max(0, Number(playlist.tracks) || 0);
+        newRounds[roundIndex] = {
+          ...round,
+          playlistIds: [...round.playlistIds, playlist.id],
+          playlistNames: [...round.playlistNames, playlist.name],
+          songCount: round.songCount + tracks,
+          status: round.status === 'unplanned' ? 'planned' : round.status,
+        };
+        try {
+          localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(newRounds));
+        } catch (error) {
+          console.warn('Failed to save rounds to localStorage:', error);
+        }
+        return newRounds;
+      });
+    },
+    [playlistsForRoundPlanner, roomId],
+  );
+
 
   const handleUpdateRoundBingoFields = useCallback(
     (
@@ -7269,20 +7298,12 @@ const HostView: React.FC = () => {
               {!isSpotifyConnected && showYoutubeMusicInConnectionModal ? (
                 <p style={{ fontSize: '0.84rem', color: '#b8c4cc', margin: '0 0 14px', lineHeight: 1.5, maxWidth: 720 }}>
                   Spotify isn&apos;t connected or your library didn&apos;t load (for example rate limits). Your{' '}
-                  <strong style={{ color: '#ffb4b4' }}>YouTube Music</strong> playlists still appear below. Use{' '}
+                  <strong style={{ color: '#ffb4b4' }}>YouTube Music</strong> playlists still appear in the playlist library. Use{' '}
                   <strong style={{ color: '#fff' }}>Connection</strong> to link Spotify when you need the Spotify playlist grid and devices.
                 </p>
               ) : null}
-            <RoundPlanner
-              rounds={eventRounds}
-              onUpdateRounds={handleUpdateRounds}
-              playlists={playlistsForRoundPlanner}
-              currentRound={currentRoundIndex}
-              onStartRound={handleStartRound}
-              onSelectRoundForPrep={handleSelectRoundForPrep}
-              gameState={gameState}
-            />
-
+            <div className="host-music-two-pane">
+              <div className="host-music-two-pane__library">
           <motion.div 
                     className="playlists-section"
             initial={{ opacity: 0 }}
@@ -7309,8 +7330,8 @@ const HostView: React.FC = () => {
                     </div>
                     <p style={{ fontSize: '0.85rem', color: '#a8a8a8', marginBottom: 12, lineHeight: 1.45, maxWidth: 720 }}>
                       <strong style={{ color: '#fff' }}>In mix</strong>: playlists checked here are included when you{' '}
-                      <strong style={{ color: '#fff' }}>finalize the bingo pool</strong> (song source for the game). You can still{' '}
-                      <strong style={{ color: '#fff' }}>drag any row</strong> into round buckets for round-specific setup.
+                      <strong style={{ color: '#fff' }}>finalize the bingo pool</strong> (song source for the game). Assign playlists to a round with{' '}
+                      <strong style={{ color: '#fff' }}>Add to round</strong> or by <strong style={{ color: '#fff' }}>dragging a row</strong> into a bucket (wide screens: library on the left, round buckets on the right).
                     </p>
                     <HostYoutubeMusicPlaylistLibrary
                       hostSessionReady={hostAuthBootstrapDone}
@@ -7670,10 +7691,6 @@ const HostView: React.FC = () => {
                         </div>
                         ) : (
                           sortedFilteredPlaylists.map((p) => {
-                            // Debug: log playlists being rendered (first 10 only)
-                            if (sortedFilteredPlaylists.indexOf(p) < 10) {
-                              console.log(`?? Rendering playlist ${sortedFilteredPlaylists.indexOf(p) + 1}: "${p.name}" (display: "${stripGoTPrefix ? p.name.replace(/^GoT\s*[-�:]*\s*/i, '') : p.name}")`);
-                            }
                           const isSelected = selectedPlaylists.some(sp => sp.id === p.id);
                           const trackCount = Math.max(0, Number(p.tracks) || 0);
                           // Insufficient: < 15 songs (not enough for any mode)
@@ -7803,6 +7820,35 @@ const HostView: React.FC = () => {
                                   </span>
                                 </span>
                               </span>
+                              <span
+                                role="presentation"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                style={{ flexShrink: 0, alignSelf: 'flex-start', paddingTop: 2 }}
+                              >
+                                <select
+                                  className="host-playlist-add-to-round"
+                                  aria-label={`Add playlist to round: ${stripGoTPrefix ? stripGotPlaylistPrefix(p.name) : p.name}`}
+                                  value=""
+                                  title="Add this playlist to a round bucket (same as dragging into a bucket)"
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    if (v !== '') {
+                                      addPlaylistToRoundBucket(Number(v), p.id);
+                                      e.target.value = '';
+                                    }
+                                  }}
+                                >
+                                  <option value="">Add to round…</option>
+                                  {eventRounds.map((r, i) => (
+                                    <option key={r.id} value={String(i)}>
+                                      {r.name}
+                                      {(r.playlistIds?.length ?? 0) > 0
+                                        ? ` (${r.playlistIds!.length})`
+                                        : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                              </span>
                               {isInsufficient && (
                                 <span
                                   style={{
@@ -7856,6 +7902,19 @@ const HostView: React.FC = () => {
                         Create output playlist
                       </button>
                     </div>
+              </div>
+              <div className="host-music-two-pane__rounds">
+                <RoundPlanner
+                  rounds={eventRounds}
+                  onUpdateRounds={handleUpdateRounds}
+                  playlists={playlistsForRoundPlanner}
+                  currentRound={currentRoundIndex}
+                  onStartRound={handleStartRound}
+                  onSelectRoundForPrep={handleSelectRoundForPrep}
+                  gameState={gameState}
+                />
+              </div>
+            </div>
               </>
               ) : null}
             </div>
