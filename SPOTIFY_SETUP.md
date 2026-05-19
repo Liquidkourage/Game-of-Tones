@@ -116,6 +116,14 @@
    - Make sure Spotify is actively playing on a device
    - Try refreshing the page and reconnecting
 
+5. **`invalid_client` on `/api/spotify/catalog/packs` (Official packs)**  
+   Catalog playlists use **`TEMPO_CATALOG_SPOTIFY_REFRESH_TOKEN`** on the server. Refreshing that token requires a **Spotify Developer client id + secret** that belong to the **same app** that issued the refresh token.  
+   Host “Connect Spotify” may still work if your server loads **client secret from the organizations table**, while catalog refresh uses **`SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET`** from the environment by default. If the env secret is missing or wrong, Spotify returns **`invalid_client`**.  
+   **Fix (pick one):**
+   - Set **`SPOTIFY_CLIENT_SECRET`** on the host (e.g. Railway) to match the Client Secret for that Client ID in the Spotify Dashboard (same app hosts use), **or**
+   - Set **`TEMPO_CATALOG_SPOTIFY_CLIENT_ID`** and **`TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET`** to that same pair, **or**
+   - Set **`TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID`** to the host’s **`users.id`** (e.g. `1`) so the server reuses the decrypted credentials from the organizations row for catalog refresh only.
+
 ### Debug Steps:
 
 1. **Check server logs** for detailed error messages

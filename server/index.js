@@ -11559,6 +11559,28 @@ server.listen(PORT, async () => {
       for (const row of r.rows) {
         await organizationsStore.primeTenantSpotifyCredentials(db, multiTenantSpotify, row.id);
       }
+      const catalogCredUid = Number(process.env.TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID);
+      if (
+        Number.isFinite(catalogCredUid) &&
+        catalogCredUid > 0 &&
+        catalogSpotify.isCatalogFeatureConfigured()
+      ) {
+        try {
+          const catalogCreds = await organizationsStore.getCredentialsForUserId(db, catalogCredUid);
+          if (catalogCreds && catalogCreds.clientId && catalogCreds.clientSecret) {
+            catalogSpotify.primeCatalogSpotifyCredentialsFromOrg(catalogCreds);
+            routineServerLog(
+              `[catalog] Spotify client credentials for official packs loaded from organizations row (users.id=${catalogCredUid}); refresh token must be from this same Developer app.`
+            );
+          } else {
+            console.warn(
+              `[catalog] TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID=${catalogCredUid} but no decrypted credentials for that user — pack refresh may fail with invalid_client until SPOTIFY_CLIENT_SECRET or TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET is set.`
+            );
+          }
+        } catch (catalogPrimeErr) {
+          console.warn('[catalog] Failed to prime org credentials:', catalogPrimeErr?.message || catalogPrimeErr);
+        }
+      }
     } catch (e) {
       console.error('Startup tenant Spotify prime:', e?.message || e);
     }

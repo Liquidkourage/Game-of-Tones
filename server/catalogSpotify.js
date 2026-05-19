@@ -18,6 +18,10 @@
  * - TEMPO_CATALOG_PUBLIC_FETCH_DISABLED — true: skip all catalog Spotify reads for pack list; API returns
  *   configured=false (Official packs hidden) until unset.
  * - TEMPO_CATALOG_SPOTIFY_CLIENT_ID / TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET — optional; default SPOTIFY_*
+ * - TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID — optional host **users.id** (integer). When set, the server loads
+ *   that row’s Spotify Developer **client id + decrypted client secret** from the organizations table and uses them
+ *   for catalog refresh (same app as host OAuth). Use this when Railway has no reliable SPOTIFY_CLIENT_SECRET but
+ *   hosts already work via encrypted org credentials — avoids `invalid_client` on GET /api/spotify/catalog/packs.
  *
  * Catalog OAuth must use the same Spotify Developer app as the refresh token was issued for.
  *
@@ -265,16 +269,70 @@ async function resolveCatalogAllowlistEntries() {
 
 let catalogServiceSingleton = null;
 
+/** When primed at startup, catalog refresh uses these instead of env-only SPOTIFY_* (see TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID). */
+let catalogOrgCredentials = null;
+
+/**
+ * Load Spotify Developer app credentials from an organizations row for catalog token refresh only.
+ * Resets the catalog service singleton so the next request picks up the new client id/secret.
+ * @param {{ clientId: string, clientSecret: string } | null | undefined} creds
+ */
+function primeCatalogSpotifyCredentialsFromOrg(creds) {
+  if (!creds || typeof creds.clientId !== 'string' || typeof creds.clientSecret !== 'string') return;
+  const clientId = creds.clientId.trim();
+  const clientSecret = creds.clientSecret.trim();
+  if (!clientId || !clientSecret) return;
+  catalogOrgCredentials = { clientId, clientSecret };
+  catalogServiceSingleton = null;
+}
+
 function getCatalogSpotifyService() {
   if (!isCatalogFeatureConfigured()) return null;
   if (!catalogServiceSingleton) {
-    const cid = process.env.TEMPO_CATALOG_SPOTIFY_CLIENT_ID;
-    const sec = process.env.TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET;
-    const useOverride =
-      cid && sec && String(cid).trim() !== '' && String(sec).trim() !== '';
-    catalogServiceSingleton = useOverride
-      ? new SpotifyService({ clientId: String(cid).trim(), clientSecret: String(sec).trim() })
-      : new SpotifyService();
+    let resolvedId = '';
+    let resolvedSecret = '';
+    let credSource = '';
+
+    if (catalogOrgCredentials && catalogOrgCredentials.clientId && catalogOrgCredentials.clientSecret) {
+      resolvedId = catalogOrgCredentials.clientId;
+      resolvedSecret = catalogOrgCredentials.clientSecret;
+      credSource = 'organizations table (TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID)';
+    } else {
+      const ecid = process.env.TEMPO_CATALOG_SPOTIFY_CLIENT_ID;
+      const esec = process.env.TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET;
+      const hasCatalogPair =
+        ecid && esec && String(ecid).trim() !== '' && String(esec).trim() !== '';
+      const hasPartialCatalogEnv =
+        (ecid && String(ecid).trim() !== '') !== (esec && String(esec).trim() !== '');
+      if (hasPartialCatalogEnv) {
+        console.warn(
+          '[catalog] Set both TEMPO_CATALOG_SPOTIFY_CLIENT_ID and TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET, or omit both. Partial env falls back to SPOTIFY_* and often causes invalid_client if those do not match the app that issued TEMPO_CATALOG_SPOTIFY_REFRESH_TOKEN.'
+        );
+      }
+      if (hasCatalogPair) {
+        resolvedId = String(ecid).trim();
+        resolvedSecret = String(esec).trim();
+        credSource = 'TEMPO_CATALOG_SPOTIFY_CLIENT_ID / TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET';
+      } else {
+        resolvedId = String(process.env.SPOTIFY_CLIENT_ID || '').trim();
+        resolvedSecret = String(process.env.SPOTIFY_CLIENT_SECRET || '').trim();
+        credSource = 'SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET';
+      }
+    }
+
+    if (!resolvedId || !resolvedSecret) {
+      console.error(
+        '[catalog] Missing Spotify client id or secret for catalog token refresh. Host OAuth may still work via organizations table while GET /api/spotify/catalog/packs fails with invalid_client — set TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID, or set matching TEMPO_CATALOG_SPOTIFY_CLIENT_* / SPOTIFY_CLIENT_SECRET in env.'
+      );
+    }
+
+    catalogServiceSingleton =
+      resolvedId && resolvedSecret
+        ? new SpotifyService({ clientId: resolvedId, clientSecret: resolvedSecret })
+        : new SpotifyService();
+    if (credSource) {
+      console.info(`[catalog] Pack/list token refresh uses ${credSource}`);
+    }
     const rt = String(process.env.TEMPO_CATALOG_SPOTIFY_REFRESH_TOKEN || '').trim();
     catalogServiceSingleton.setTokens('', rt);
   }
@@ -417,4 +475,5 @@ module.exports = {
   fetchCatalogPlaylistTracks,
   assertCatalogPlaylistAllowlisted,
   ensureCatalogAccessToken,
+  primeCatalogSpotifyCredentialsFromOrg,
 };
