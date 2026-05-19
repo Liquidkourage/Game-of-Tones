@@ -4,6 +4,17 @@
 - Spotify Premium account (required for playback control)
 - Node.js and npm installed
 
+## Organizations table (Postgres, multi-tenant hosts)
+
+Per-tenant Spotify **Developer app** credentials live on the **`organizations`** row referenced by each host’s **`users.organization_id`**:
+
+| Column | Meaning |
+|--------|---------|
+| **`spotify_client_id`** | Spotify Dashboard **Client ID** (stored as plain text). |
+| **`spotify_client_secret_encrypted`** | Spotify Dashboard **Client Secret**: normally **AES-256-GCM ciphertext** (see `TEMPO_ORG_CREDENTIALS_KEY` in `server/credentialCrypto.js`). With **`TEMPO_ORG_PLAINTEXT_SECRETS=1`** only for diagnosis, this column holds the raw secret (still misnamed `_encrypted`). |
+
+The server resolves **`{ clientId, clientSecret }`** with `users` ⋈ `organizations` (see `getCredentialsForUserId` in `server/organizations.js`). That powers host OAuth/token refresh when primed, **`TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID`**, and related pipeline logs—**not** the literal env vars `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET`, unless there is no org row and the code falls back to env.
+
 ## Step 1: Create Spotify App
 
 1. **Go to Spotify Developer Dashboard**
