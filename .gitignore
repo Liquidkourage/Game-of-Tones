@@ -44,3 +44,6 @@ data/venue-logos/
 # YouTube → iTunes metadata cache (path overridable via TEMPO_YT_METADATA_CACHE_PATH)
 data/youtube-metadata-cache.json
 
+# Local / duplicate host docs (tracked copies live under other filenames in docs/)
+docs/HostInstructionBook.pdf
+
