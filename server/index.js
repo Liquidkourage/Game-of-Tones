@@ -11543,61 +11543,66 @@ function startDeviceKeepAlive() {
   }, 10 * 60 * 1000); // Every 10 minutes (5 was often enough activation; halves token/device churn)
 }
 
-// Start the server
+// Start the server only after DB + tenant/catalog Spotify credential maps are primed (avoids accepting HTTP
+// traffic during initializeDatabase and creating a stale catalog SpotifyService singleton).
 const PORT = process.env.PORT || 7093;
-server.listen(PORT, async () => {
-  console.log(`🎵 TEMPO - Music Bingo server running on port ${PORT}`);
-  routineServerLog('🎮 Ready for some musical bingo action!');
-  routineServerLog('🚀 Cache-busting fix deployed - version 2.0');
-  
-  // Initialize database
-  await initializeDatabase();
+(async function tempoServerBootstrap() {
+  try {
+    await initializeDatabase();
 
-  if (db) {
-    try {
-      const r = await db.query('SELECT id FROM users WHERE organization_id IS NOT NULL');
-      for (const row of r.rows) {
-        await organizationsStore.primeTenantSpotifyCredentials(db, multiTenantSpotify, row.id);
-      }
-      const catalogCredUid = Number(process.env.TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID);
-      if (
-        Number.isFinite(catalogCredUid) &&
-        catalogCredUid > 0 &&
-        catalogSpotify.isCatalogFeatureConfigured()
-      ) {
-        try {
-          const catalogCreds = await organizationsStore.getCredentialsForUserId(db, catalogCredUid);
-          if (catalogCreds && catalogCreds.clientId && catalogCreds.clientSecret) {
-            catalogSpotify.primeCatalogSpotifyCredentialsFromOrg(catalogCreds);
-            routineServerLog(
-              `[catalog] Spotify client credentials for official packs loaded from organizations row (users.id=${catalogCredUid}); refresh token must be from this same Developer app.`
-            );
-          } else {
-            console.warn(
-              `[catalog] TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID=${catalogCredUid} but no decrypted credentials for that user — pack refresh may fail with invalid_client until SPOTIFY_CLIENT_SECRET or TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET is set.`
-            );
-          }
-        } catch (catalogPrimeErr) {
-          console.warn('[catalog] Failed to prime org credentials:', catalogPrimeErr?.message || catalogPrimeErr);
+    if (db) {
+      try {
+        const r = await db.query('SELECT id FROM users WHERE organization_id IS NOT NULL');
+        for (const row of r.rows) {
+          await organizationsStore.primeTenantSpotifyCredentials(db, multiTenantSpotify, row.id);
         }
+        const catalogCredUid = Number(process.env.TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID);
+        if (
+          Number.isFinite(catalogCredUid) &&
+          catalogCredUid > 0 &&
+          catalogSpotify.isCatalogFeatureConfigured()
+        ) {
+          try {
+            const catalogCreds = await organizationsStore.getCredentialsForUserId(db, catalogCredUid);
+            if (catalogCreds && catalogCreds.clientId && catalogCreds.clientSecret) {
+              catalogSpotify.primeCatalogSpotifyCredentialsFromOrg(catalogCreds);
+              routineServerLog(
+                `[catalog] Spotify client credentials for official packs loaded from organizations row (users.id=${catalogCredUid}); refresh token must be from this same Developer app.`
+              );
+            } else {
+              console.warn(
+                `[catalog] TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID=${catalogCredUid} but no decrypted credentials for that user — pack refresh may fail with invalid_client until SPOTIFY_CLIENT_SECRET or TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET is set.`
+              );
+            }
+          } catch (catalogPrimeErr) {
+            console.warn('[catalog] Failed to prime org credentials:', catalogPrimeErr?.message || catalogPrimeErr);
+          }
+        }
+      } catch (e) {
+        console.error('Startup tenant Spotify prime:', e?.message || e);
       }
-    } catch (e) {
-      console.error('Startup tenant Spotify prime:', e?.message || e);
     }
-  }
 
-  if (usersStore.isApprovedHostsOnlyMode()) {
-    routineServerLog(
-      '🔒 TEMPO_APPROVED_HOSTS_ONLY: only allowlisted emails may sign in as hosts, create rooms, or join as host (see TEMPO_HOST_ALLOWLIST_EMAILS + host_allowlist).'
-    );
+    if (usersStore.isApprovedHostsOnlyMode()) {
+      routineServerLog(
+        '🔒 TEMPO_APPROVED_HOSTS_ONLY: only allowlisted emails may sign in as hosts, create rooms, or join as host (see TEMPO_HOST_ALLOWLIST_EMAILS + host_allowlist).'
+      );
+    }
+
+    server.listen(PORT, async () => {
+      console.log(`🎵 TEMPO - Music Bingo server running on port ${PORT}`);
+      routineServerLog('🎮 Ready for some musical bingo action!');
+      routineServerLog('🚀 Cache-busting fix deployed - version 2.0');
+
+      await autoConnectSpotify();
+
+      startDeviceKeepAlive();
+    });
+  } catch (bootstrapErr) {
+    console.error('❌ Server bootstrap failed:', bootstrapErr?.message || bootstrapErr);
+    process.exit(1);
   }
-  
-  // Auto-connect to Spotify
-  await autoConnectSpotify();
-  
-  // Start device keep-alive
-  startDeviceKeepAlive();
-});
+})();
 
 // Auto-connect to Spotify on server startup (SIMPLIFIED FOR TONIGHT)
 async function autoConnectSpotify() {

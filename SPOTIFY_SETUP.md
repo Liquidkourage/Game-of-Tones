@@ -134,7 +134,8 @@ The server resolves **`{ clientId, clientSecret }`** with `users` ⋈ `organizat
    - Set **`SPOTIFY_CLIENT_SECRET`** on the host (e.g. Railway) to match the Client Secret for that Client ID in the Spotify Dashboard (same app hosts use), **or**
    - Set **`TEMPO_CATALOG_SPOTIFY_CLIENT_ID`** and **`TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET`** to that same pair, **or**
    - Set **`TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID`** to the host’s **`users.id`** (e.g. `1`) so catalog refresh uses the organizations row’s client id + decrypted secret.  
-   If **`invalid_client` continues**, the ciphertext in Postgres may not match the Dashboard secret (wrong value when encrypted, old key, etc.). Set **`TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET`** on the server to the **current** Client Secret from the Spotify Dashboard; it overrides **only** the secret used for catalog refresh while keeping the client id from the row (or from env).
+   If **`invalid_client` continues**, the ciphertext in Postgres may not match the Dashboard secret (wrong value when encrypted, old key, etc.). Set **`TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET`** on the server to the **current** Client Secret from the Spotify Dashboard; it overrides **only** the secret used for catalog refresh while keeping the client id from the row (or from env).  
+   If **`invalid_client` persists after that**, **`TEMPO_CATALOG_SPOTIFY_REFRESH_TOKEN`** is almost certainly wrong for this app (truncated Railway variable, stale token from another Developer app, or not a user refresh token). Complete Spotify OAuth again for the **catalog** account using this same Client ID and replace the env value with the new refresh token.
 ### Debug Steps:
 
 1. **Check server logs** for detailed error messages

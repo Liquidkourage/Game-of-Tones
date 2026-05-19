@@ -42,6 +42,7 @@
 
 const crypto = require('crypto');
 const SpotifyService = require('./spotify');
+const organizationsStore = require('./organizations');
 
 /** Railway/env sometimes wraps tokens in quotes — normalize for refresh_token grant. */
 function normalizeCatalogRefreshTokenFromEnv() {
@@ -308,29 +309,48 @@ function getCatalogSpotifyService() {
     let resolvedSecret = '';
     let credSource = '';
 
-    if (catalogOrgCredentials && catalogOrgCredentials.clientId && catalogOrgCredentials.clientSecret) {
-      resolvedId = catalogOrgCredentials.clientId;
-      resolvedSecret = catalogOrgCredentials.clientSecret;
-      credSource = 'organizations table (TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID)';
-    } else {
-      const ecid = process.env.TEMPO_CATALOG_SPOTIFY_CLIENT_ID;
-      const esec = process.env.TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET;
-      const ecidTrim = ecid && String(ecid).trim() !== '';
-      const esecTrim = esec && String(esec).trim() !== '';
-      const hasCatalogPair = ecidTrim && esecTrim;
-      if (ecidTrim && !esecTrim) {
-        console.warn(
-          '[catalog] TEMPO_CATALOG_SPOTIFY_CLIENT_ID is set without TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET — falling back to SPOTIFY_* secret or org row; set the catalog secret or omit the catalog client id.'
-        );
+    /** Same `{ clientId, clientSecret }` object path as `multiTenantSpotify.getService('user_<id>')` after tenant prime. */
+    const catalogCredUid = Number(process.env.TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID);
+    if (Number.isFinite(catalogCredUid) && catalogCredUid > 0) {
+      const o = organizationsStore.getCredentialOptionsForUser(catalogCredUid);
+      if (
+        o &&
+        typeof o.clientId === 'string' &&
+        typeof o.clientSecret === 'string' &&
+        o.clientId.trim() &&
+        o.clientSecret.trim()
+      ) {
+        resolvedId = o.clientId.trim().replace(/^\uFEFF/, '');
+        resolvedSecret = o.clientSecret.trim().replace(/^\uFEFF/, '');
+        credSource = `organizations credential map (users.id=${catalogCredUid}, same as host SpotifyService)`;
       }
-      if (hasCatalogPair) {
-        resolvedId = String(ecid).trim();
-        resolvedSecret = String(esec).trim();
-        credSource = 'TEMPO_CATALOG_SPOTIFY_CLIENT_ID / TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET';
+    }
+
+    if (!resolvedId || !resolvedSecret) {
+      if (catalogOrgCredentials && catalogOrgCredentials.clientId && catalogOrgCredentials.clientSecret) {
+        resolvedId = catalogOrgCredentials.clientId;
+        resolvedSecret = catalogOrgCredentials.clientSecret;
+        credSource = 'organizations table startup snapshot (TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID)';
       } else {
-        resolvedId = String(process.env.SPOTIFY_CLIENT_ID || '').trim();
-        resolvedSecret = String(process.env.SPOTIFY_CLIENT_SECRET || '').trim();
-        credSource = 'SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET';
+        const ecid = process.env.TEMPO_CATALOG_SPOTIFY_CLIENT_ID;
+        const esec = process.env.TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET;
+        const ecidTrim = ecid && String(ecid).trim() !== '';
+        const esecTrim = esec && String(esec).trim() !== '';
+        const hasCatalogPair = ecidTrim && esecTrim;
+        if (ecidTrim && !esecTrim) {
+          console.warn(
+            '[catalog] TEMPO_CATALOG_SPOTIFY_CLIENT_ID is set without TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET — falling back to SPOTIFY_* secret or org row; set the catalog secret or omit the catalog client id.'
+          );
+        }
+        if (hasCatalogPair) {
+          resolvedId = String(ecid).trim();
+          resolvedSecret = String(esec).trim();
+          credSource = 'TEMPO_CATALOG_SPOTIFY_CLIENT_ID / TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET';
+        } else {
+          resolvedId = String(process.env.SPOTIFY_CLIENT_ID || '').trim();
+          resolvedSecret = String(process.env.SPOTIFY_CLIENT_SECRET || '').trim();
+          credSource = 'SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET';
+        }
       }
     }
 
