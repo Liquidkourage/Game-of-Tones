@@ -1106,7 +1106,7 @@ async function loadHostPlaylistListCache(organizationId) {
   }
 }
 
-/** TTL for Postgres snapshot of official catalog packs (`TEMPO_CATALOG_PACKS_SERVER_CACHE_MS`). Default 7d; 0 = always fetch live (still use stale row on hard errors). */
+/** TTL  for Postgres snapshot of official catalog packs (`TEMPO_CATALOG_PACKS_SERVER_CACHE_MS`). Default 7d; 0 = always fetch live (still use stale row on hard errors). */
 function readCatalogPacksServerCacheTtlMs() {
   const raw = process.env.TEMPO_CATALOG_PACKS_SERVER_CACHE_MS;
   if (raw === '0') return 0;
