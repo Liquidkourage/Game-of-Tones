@@ -137,6 +137,9 @@ interface Playlist {
   youtubeMusic?: boolean;
 }
 
+/** Playlists shown per page in the host library table (modal and inline). */
+const PLAYLIST_LIBRARY_PAGE_SIZE = 25;
+
 /** In-process Web API 429 cool-down (from GET /api/spotify/status and error bodies). */
 type WebApiQuarantineState =
   | { active: false }
@@ -1035,6 +1038,7 @@ const HostView: React.FC = () => {
     key: 'none' | 'name' | 'tracks';
     dir: 'asc' | 'desc';
   }>({ key: 'none', dir: 'asc' });
+  const [playlistLibraryPage, setPlaylistLibraryPage] = useState(0);
   // const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]); // duplicate removed
   
   // Pause position tracking (duplicates removed below)
@@ -1560,6 +1564,39 @@ const HostView: React.FC = () => {
     });
     return rows;
   }, [filteredPlaylists, playlistSort]);
+
+  const playlistLibraryPageCount = useMemo(
+    () => Math.max(1, Math.ceil(sortedFilteredPlaylists.length / PLAYLIST_LIBRARY_PAGE_SIZE)),
+    [sortedFilteredPlaylists.length]
+  );
+
+  const playlistLibraryPageClamped = useMemo(
+    () => Math.min(playlistLibraryPage, playlistLibraryPageCount - 1),
+    [playlistLibraryPage, playlistLibraryPageCount]
+  );
+
+  const paginatedPlaylists = useMemo(() => {
+    const start = playlistLibraryPageClamped * PLAYLIST_LIBRARY_PAGE_SIZE;
+    return sortedFilteredPlaylists.slice(start, start + PLAYLIST_LIBRARY_PAGE_SIZE);
+  }, [sortedFilteredPlaylists, playlistLibraryPageClamped]);
+
+  const playlistLibraryPageRangeLabel = useMemo(() => {
+    if (sortedFilteredPlaylists.length === 0) return '';
+    const start = playlistLibraryPageClamped * PLAYLIST_LIBRARY_PAGE_SIZE + 1;
+    const end = Math.min(
+      sortedFilteredPlaylists.length,
+      (playlistLibraryPageClamped + 1) * PLAYLIST_LIBRARY_PAGE_SIZE
+    );
+    return `${start}–${end} of ${sortedFilteredPlaylists.length}`;
+  }, [sortedFilteredPlaylists.length, playlistLibraryPageClamped]);
+
+  useEffect(() => {
+    setPlaylistLibraryPage(0);
+  }, [playlistQuery, showAllPlaylists, playlistSort.key, playlistSort.dir]);
+
+  useEffect(() => {
+    setPlaylistLibraryPage((p) => Math.min(p, Math.max(0, playlistLibraryPageCount - 1)));
+  }, [playlistLibraryPageCount]);
 
   /** Spotify + YouTube Music rows so round buckets resolve dragged ids from either source. */
   const playlistsForRoundPlanner = useMemo(() => {
@@ -6726,11 +6763,46 @@ const HostView: React.FC = () => {
                       </details>
                     </div>
 
+                    {sortedFilteredPlaylists.length > PLAYLIST_LIBRARY_PAGE_SIZE ? (
+                      <div
+                        className="host-playlist-library-pagination"
+                        role="navigation"
+                        aria-label="Playlist library pages"
+                      >
+                        <span className="host-playlist-library-pagination__range">
+                          Showing {playlistLibraryPageRangeLabel}
+                        </span>
+                        <div className="host-playlist-library-pagination__actions">
+                          <button
+                            type="button"
+                            className="btn-secondary host-playlist-library-pagination__btn"
+                            disabled={playlistLibraryPageClamped <= 0}
+                            onClick={() => setPlaylistLibraryPage((p) => Math.max(0, p - 1))}
+                          >
+                            Previous
+                          </button>
+                          <span className="host-playlist-library-pagination__page">
+                            Page {playlistLibraryPageClamped + 1} of {playlistLibraryPageCount}
+                          </span>
+                          <button
+                            type="button"
+                            className="btn-secondary host-playlist-library-pagination__btn"
+                            disabled={playlistLibraryPageClamped >= playlistLibraryPageCount - 1}
+                            onClick={() =>
+                              setPlaylistLibraryPage((p) =>
+                                Math.min(playlistLibraryPageCount - 1, p + 1)
+                              )
+                            }
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
                         <div
                       className="host-playlist-library-table"
                       style={{
-                      maxHeight: 400,
-                      overflowY: 'auto',
                       border: '1px solid rgba(255,255,255,0.1)',
                       borderRadius: 8,
                       padding: 8
@@ -6850,7 +6922,7 @@ const HostView: React.FC = () => {
                             {playlistLibraryEmptyMessage}
                         </div>
                         ) : (
-                          sortedFilteredPlaylists.map((p) => {
+                          paginatedPlaylists.map((p) => {
                           const isSelected = selectedPlaylists.some(sp => sp.id === p.id);
                           const trackCount = Math.max(0, Number(p.tracks) || 0);
                           // Insufficient: < 15 songs (not enough for any mode)

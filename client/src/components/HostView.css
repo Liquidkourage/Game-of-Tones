@@ -649,9 +649,12 @@
 .host-connection-modal.host-connection-modal--playlist-rounds .host-connection-modal__body--playlist-rounds {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   padding-top: 10px;
   padding-inline: 14px 16px;
+  padding-bottom: 16px;
 }
 
 /* Playlist ↔ rounds modal: onboarding strip + denser stacking */
@@ -659,6 +662,34 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.host-playlist-round-modal-root .host-playlist-round-modal__hint {
+  flex-shrink: 0;
+}
+
+/* Two-pane fills modal height; only the library column scrolls (buckets stay put for drag-and-drop). */
+.host-playlist-round-modal-root .host-music-two-pane {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.host-playlist-round-modal-root .host-music-two-pane__library {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.host-playlist-round-modal-root .host-music-two-pane__rounds {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 .host-playlist-round-modal__hint {
@@ -716,19 +747,81 @@
   transform: rotate(90deg);
 }
 
-/* Narrow modal / mobile: playlist column before round buckets */
+/* Narrow modal: round buckets on top (fixed band), library scrolls underneath */
 @media (max-width: 1079px) {
-  .host-playlist-round-modal-root .host-music-two-pane__library {
-    order: -2;
+  .host-playlist-round-modal-root .host-music-two-pane {
+    display: flex;
+    flex-direction: column;
   }
 
   .host-playlist-round-modal-root .host-music-two-pane__rounds {
+    order: -1;
+    flex: 0 1 auto;
+    max-height: min(42vh, 360px);
+  }
+
+  .host-playlist-round-modal-root .host-music-two-pane__library {
     order: 0;
+    flex: 1 1 0;
   }
 }
 
+@media (min-width: 1080px) {
+  .host-playlist-round-modal-root .host-music-two-pane {
+    align-items: stretch;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .host-playlist-round-modal-root .host-music-two-pane__library {
+    max-height: none;
+  }
+
+  .host-playlist-round-modal-root .host-music-two-pane__rounds {
+    align-self: stretch;
+  }
+}
+
+/* Let the library column scroll as a whole (not a nested short table only) */
 .host-playlist-round-modal-root .host-playlist-library-table {
-  max-height: min(52vh, 560px) !important;
+  max-height: none !important;
+}
+
+.host-playlist-library-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.host-playlist-library-pagination__range {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.host-playlist-library-pagination__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.host-playlist-library-pagination__page {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.55);
+  min-width: 7rem;
+  text-align: center;
+}
+
+.host-playlist-library-pagination__btn {
+  font-size: 0.82rem;
+  padding: 8px 14px;
+  min-height: 36px;
 }
 
 .host-connection-modal__header {
