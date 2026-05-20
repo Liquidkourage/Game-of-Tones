@@ -6422,7 +6422,7 @@ const HostView: React.FC = () => {
   );
 
   const playlistRoundBuilderBody = (
-              <>
+              <div className="host-playlist-round-modal-root">
               {!isSpotifyConnected && showYoutubeMusicInConnectionModal ? (
                 <p style={{ fontSize: '0.84rem', color: '#b8c4cc', margin: '0 0 14px', lineHeight: 1.5, maxWidth: 720 }}>
                   Spotify isn&apos;t connected or your library didn&apos;t load (for example rate limits). Your{' '}
@@ -6430,6 +6430,22 @@ const HostView: React.FC = () => {
                   <strong style={{ color: '#fff' }}>Connection</strong> to link Spotify when you need the Spotify playlist grid and devices.
                 </p>
               ) : null}
+              <section className="host-playlist-round-modal__hint" aria-labelledby="playlist-round-modal-steps-heading">
+                <h3 id="playlist-round-modal-steps-heading" className="host-playlist-round-modal__hint-title">
+                  Quick steps
+                </h3>
+                <ol className="host-playlist-round-modal__steps">
+                  <li>
+                    Use each row&apos;s <strong>Mix</strong> checkbox so that playlist feeds the bingo song pool when you finalize.
+                  </li>
+                  <li>
+                    <strong>Drag</strong> a playlist onto a round — or choose <strong>Add to round</strong> from the dropdown.
+                  </li>
+                  <li>
+                    Close this window when you&apos;re done — run <strong>Finalize mix</strong> from the Manager tab when ready.
+                  </li>
+                </ol>
+              </section>
             <div className="host-music-two-pane">
               <div className="host-music-two-pane__library">
           <motion.div 
@@ -6456,10 +6472,8 @@ const HostView: React.FC = () => {
                       </button>
                     ) : null}
                     </div>
-                    <p style={{ fontSize: '0.85rem', color: '#a8a8a8', marginBottom: 12, lineHeight: 1.45, maxWidth: 720 }}>
-                      <strong style={{ color: '#fff' }}>In mix</strong>: playlists checked here are included when you{' '}
-                      <strong style={{ color: '#fff' }}>finalize the bingo pool</strong> (song source for the game). Assign playlists to a round with{' '}
-                      <strong style={{ color: '#fff' }}>Add to round</strong> or by <strong style={{ color: '#fff' }}>dragging a row</strong> into a bucket (wide screens: library on the left, round buckets on the right).
+                    <p style={{ fontSize: '0.84rem', color: '#aeb8bf', marginBottom: 12, lineHeight: 1.5, maxWidth: 720 }}>
+                      Rows with a green outline have fifteen or more tracks (or videos). The <strong style={{ color: '#fff' }}>Quick steps</strong> card above summarizes Mix, drag targets, and where to finalize.
                     </p>
                     <HostYoutubeMusicPlaylistLibrary
                       hostSessionReady={hostAuthBootstrapDone}
@@ -6567,21 +6581,36 @@ const HostView: React.FC = () => {
                       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, maxWidth: 560, width: '100%' }}>
                         <input type="search" placeholder="Search playlists by name…" value={playlistQuery} onChange={(e) => setPlaylistQuery(e.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.35)', color: '#fff', flex: '1 1 220px', minWidth: 180 }} />
                       </div>
-                      <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)', margin: 0, lineHeight: 1.45, maxWidth: 640 }}>
-                        After Tempo loads tracks for playlists you include in the mix (selection debounce or Finalize), any playlist that contains a Spotify explicit song shows{' '}
-                        <SpotifyExplicitBadge size="sm" title="At least one explicit track in this playlist" /> next to its song count — no extra Spotify calls beyond that load.
-                      </p>
-                      <div
-                        style={{
-                          padding: '12px 14px',
-                          borderRadius: 10,
-                          border: '1px solid rgba(120, 180, 255, 0.35)',
-                          background: 'rgba(60, 120, 200, 0.12)',
-                        }}
-                      >
-                        <p style={{ margin: '0 0 6px', fontSize: '0.82rem', color: '#b8dcff', fontWeight: 700 }}>
-                          Official packs (catalog)
-                        </p>
+                      <details className="host-playlist-round-modal__fine-print">
+                        <summary style={{ cursor: 'pointer', fontSize: '0.8rem', color: '#8899aa' }}>
+                          When does the Mix column show explicit-song badges?
+                        </summary>
+                        <div style={{ marginTop: 8 }}>
+                          <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)', margin: 0, lineHeight: 1.45, maxWidth: 640 }}>
+                            After Tempo loads tracks for playlists in your mix (selection debounce or Finalize), playlists that contain a Spotify explicit track show{' '}
+                            <SpotifyExplicitBadge size="sm" title="At least one explicit track in this playlist" /> next to their counts — without extra Spotify calls.
+                          </p>
+                        </div>
+                      </details>
+                      <details className="host-playlist-round-modal__catalog">
+                        <summary style={{ cursor: 'pointer', fontSize: '0.9rem', color: '#b8dcff', fontWeight: 700 }}>
+                          {!catalogPacksProbeDone || !catalogPacksFetchOk
+                            ? 'Official packs (catalog) — tap to expand'
+                            : catalogPacksConfigured
+                              ? catalogPackOptions.length > 0
+                                ? `Official packs — ${catalogPackOptions.length} from catalog · tap for checkboxes`
+                                : 'Official packs (catalog)'
+                              : 'Official packs — server not configured (tap for details)'}
+                        </summary>
+                        <div
+                          style={{
+                            marginTop: 10,
+                            padding: '12px 14px',
+                            borderRadius: 10,
+                            border: '1px solid rgba(120, 180, 255, 0.35)',
+                            background: 'rgba(60, 120, 200, 0.12)',
+                          }}
+                        >
                         {!catalogPacksProbeDone ? (
                           <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
                             Contacting server…
@@ -6693,15 +6722,18 @@ const HostView: React.FC = () => {
                             )}
                           </>
                         )}
-                      </div>
+                        </div>
+                      </details>
                     </div>
 
-                        <div style={{ 
-                      maxHeight: 400, 
-                      overflowY: 'auto', 
-                      border: '1px solid rgba(255,255,255,0.1)', 
-                      borderRadius: 8, 
-                      padding: 8 
+                        <div
+                      className="host-playlist-library-table"
+                      style={{
+                      maxHeight: 400,
+                      overflowY: 'auto',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: 8,
+                      padding: 8
                     }}>
                       <div
                         style={{
@@ -7043,7 +7075,7 @@ const HostView: React.FC = () => {
                 />
               </div>
             </div>
-              </>
+            </div>
   );
 
   return (
@@ -7092,7 +7124,7 @@ const HostView: React.FC = () => {
         <div className="host-header">
           <h1 style={{ display: 'flex', alignItems: 'center', gap: 10, margin: 0 }}>
             <Gamepad2 className="w-8 h-8" style={{ color: '#00ff88' }} aria-hidden />
-            Game Host
+            Game Host 1
           </h1>
           <div className="room-info" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <button
@@ -9062,7 +9094,6 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
           className="host-connection-modal-backdrop"
           onClick={() => setShowPlaylistRoundModal(false)}
           role="presentation"
-          style={{ zIndex: 10052 }}
         >
           <div
             className="host-connection-modal host-connection-modal--playlist-rounds"

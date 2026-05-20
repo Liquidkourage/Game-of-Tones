@@ -650,7 +650,85 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding-top: 12px;
+  padding-top: 10px;
+  padding-inline: 14px 16px;
+}
+
+/* Playlist ↔ rounds modal: onboarding strip + denser stacking */
+.host-playlist-round-modal-root {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.host-playlist-round-modal__hint {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 255, 163, 0.22);
+  background: rgba(0, 255, 163, 0.07);
+}
+
+.host-playlist-round-modal__hint-title {
+  margin: 0 0 10px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #eaf8f3;
+}
+
+.host-playlist-round-modal__steps {
+  margin: 0;
+  padding-left: 1.35rem;
+  font-size: 0.82rem;
+  color: rgba(230, 240, 245, 0.88);
+  line-height: 1.55;
+  display: grid;
+  gap: 8px;
+}
+
+.host-playlist-round-modal__steps li::marker {
+  color: rgba(0, 255, 163, 0.75);
+}
+
+.host-playlist-round-modal__fine-print summary,
+.host-playlist-round-modal__catalog summary {
+  list-style: none;
+  outline: none;
+}
+
+.host-playlist-round-modal__fine-print summary::-webkit-details-marker,
+.host-playlist-round-modal__catalog summary::-webkit-details-marker {
+  display: none;
+}
+
+.host-playlist-round-modal__fine-print summary::before,
+.host-playlist-round-modal__catalog summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 8px;
+  color: rgba(0, 255, 163, 0.55);
+  transform: rotate(0deg);
+  transition: transform 0.15s ease;
+}
+
+.host-playlist-round-modal__fine-print[open] summary::before,
+.host-playlist-round-modal__catalog[open] summary::before {
+  transform: rotate(90deg);
+}
+
+/* Narrow modal / mobile: playlist column before round buckets */
+@media (max-width: 1079px) {
+  .host-playlist-round-modal-root .host-music-two-pane__library {
+    order: -2;
+  }
+
+  .host-playlist-round-modal-root .host-music-two-pane__rounds {
+    order: 0;
+  }
+}
+
+.host-playlist-round-modal-root .host-playlist-library-table {
+  max-height: min(52vh, 560px) !important;
 }
 
 .host-connection-modal__header {
