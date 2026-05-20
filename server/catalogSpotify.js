@@ -15,6 +15,8 @@
  * - TEMPO_CATALOG_PREFIX_CACHE_MS — ms to cache prefix discovery in-memory per process (default 300000).
  * - TEMPO_CATALOG_PACKS_SERVER_CACHE_MS — Postgres TTL for `/api/spotify/catalog/packs` snapshots (default 604800000 = 7d).
  *   Set to 0 to always try live Spotify for packs (still uses stale DB row on hard failure).
+ * - TEMPO_CATALOG_PACKS_BACKGROUND_WARM_MS — optional interval (ms) to refresh that Postgres snapshot in the
+ *   background so hosts rarely trigger live Spotify when TTL is fresh. Minimum 300000 (5 min); unset disables.
  * - TEMPO_CATALOG_PUBLIC_FETCH_DISABLED — true: skip all catalog Spotify reads for pack list; API returns
  *   configured=false (Official packs hidden) until unset.
  * - TEMPO_CATALOG_SPOTIFY_CLIENT_ID / TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET — optional; default SPOTIFY_*

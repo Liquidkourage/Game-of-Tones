@@ -799,6 +799,9 @@ const HostView: React.FC = () => {
   const [showRoundManager, setShowRoundManager] = useState<boolean>(false);
   const showRoundManagerScrollRef = useRef(showRoundManager);
   showRoundManagerScrollRef.current = showRoundManager;
+  const [showPlaylistRoundModal, setShowPlaylistRoundModal] = useState(false);
+  const showPlaylistRoundModalScrollRef = useRef(showPlaylistRoundModal);
+  showPlaylistRoundModalScrollRef.current = showPlaylistRoundModal;
   const [activeTab, setActiveTab] = useState<'setup' | 'play'>('setup');
   /** In-person + online: only in-person verified bingos end the round / prize */
   const [hybridInPersonPlusOnline, setHybridInPersonPlusOnline] = useState(false);
@@ -1729,16 +1732,20 @@ const HostView: React.FC = () => {
   }, [showConnectionModal]);
 
   useEffect(() => {
-    const needLock = showConnectionModal || showRoundManager;
+    const needLock = showConnectionModal || showRoundManager || showPlaylistRoundModal;
     if (!needLock) return;
     const restoreTo = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
-      if (!showConnectionModalScrollRef.current && !showRoundManagerScrollRef.current) {
+      if (
+        !showConnectionModalScrollRef.current &&
+        !showRoundManagerScrollRef.current &&
+        !showPlaylistRoundModalScrollRef.current
+      ) {
         document.body.style.overflow = restoreTo;
       }
     };
-  }, [showConnectionModal, showRoundManager]);
+  }, [showConnectionModal, showRoundManager, showPlaylistRoundModal]);
 
   useEffect(() => {
     if (!showRoundManager) return;
@@ -1748,6 +1755,15 @@ const HostView: React.FC = () => {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [showRoundManager]);
+
+  useEffect(() => {
+    if (!showPlaylistRoundModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowPlaylistRoundModal(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showPlaylistRoundModal]);
 
   const refreshRooms = useCallback(async () => {
     try {
@@ -6405,6 +6421,631 @@ const HostView: React.FC = () => {
     </motion.div>
   );
 
+  const playlistRoundBuilderBody = (
+              <>
+              {!isSpotifyConnected && showYoutubeMusicInConnectionModal ? (
+                <p style={{ fontSize: '0.84rem', color: '#b8c4cc', margin: '0 0 14px', lineHeight: 1.5, maxWidth: 720 }}>
+                  Spotify isn&apos;t connected or your library didn&apos;t load (for example rate limits). Your{' '}
+                  <strong style={{ color: '#ffb4b4' }}>YouTube Music</strong> playlists still appear in the playlist library. Use{' '}
+                  <strong style={{ color: '#fff' }}>Connection</strong> to link Spotify when you need the Spotify playlist grid and devices.
+                </p>
+              ) : null}
+            <div className="host-music-two-pane">
+              <div className="host-music-two-pane__library">
+          <motion.div 
+                    className="playlists-section"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+                    transition={{ delay: 0.4 }}
+                  >
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+                    <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Library className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
+                      Playlist library
+                    </h3>
+                    {isSpotifyConnected ? (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        disabled={spotifyPlaylistsRefreshing || playlistByLinkLoading}
+                        style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+                        title="Fetches your latest playlists from Spotify (uses Web API quota). Routine page loads use Tempo’s saved list instead."
+                        onClick={() => void loadPlaylists({ forceRefresh: true })}
+                      >
+                        {spotifyPlaylistsRefreshing ? 'Syncing library…' : 'Refresh Spotify library'}
+                      </button>
+                    ) : null}
+                    </div>
+                    <p style={{ fontSize: '0.85rem', color: '#a8a8a8', marginBottom: 12, lineHeight: 1.45, maxWidth: 720 }}>
+                      <strong style={{ color: '#fff' }}>In mix</strong>: playlists checked here are included when you{' '}
+                      <strong style={{ color: '#fff' }}>finalize the bingo pool</strong> (song source for the game). Assign playlists to a round with{' '}
+                      <strong style={{ color: '#fff' }}>Add to round</strong> or by <strong style={{ color: '#fff' }}>dragging a row</strong> into a bucket (wide screens: library on the left, round buckets on the right).
+                    </p>
+                    <HostYoutubeMusicPlaylistLibrary
+                      hostSessionReady={hostAuthBootstrapDone}
+                      refreshNonce={ytMusicLibraryRefreshNonce}
+                      onMixPlaylistsChange={handleYoutubeMusicMixPlaylistsChange}
+                    />
+                    {spotifyListCacheInfo ? (
+                      <div
+                        style={{
+                          marginBottom: 12,
+                          maxWidth: 720,
+                          padding: '12px 14px',
+                          borderRadius: 10,
+                          border: '1px solid rgba(255,193,7,0.45)',
+                          background: 'rgba(255,193,7,0.1)',
+                          color: '#f5e6c8',
+                          fontSize: '0.88rem',
+                          lineHeight: 1.5,
+                      }}
+                        role="status"
+                    >
+                        <strong style={{ color: '#ffc857' }}>Library list: saved copy</strong> — {spotifyListCacheInfo} Use
+                        &quot;Add by link&quot; below to pull in one playlist if Spotify is still blocking a full library refresh.
+                  </div>
+                    ) : null}
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        gap: 10,
+                        marginBottom: 12,
+                        maxWidth: 720,
+                        padding: '12px 14px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(0,255,136,0.25)',
+                        background: 'rgba(0,255,136,0.06)',
+                      }}
+                    >
+                      <span style={{ fontSize: '0.82rem', color: '#c8d8d0', fontWeight: 600 }}>Add by link</span>
+                      <input
+                        type="text"
+                        value={playlistByLinkInput}
+                        onChange={(e) => setPlaylistByLinkInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') void addPlaylistByLink();
+                        }}
+                        placeholder="https://open.spotify.com/playlist/… or id"
+                        disabled={!isSpotifyConnected || playlistByLinkLoading}
+                        style={{
+                          flex: '1 1 220px',
+                          minWidth: 180,
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          background: 'rgba(0,0,0,0.35)',
+                          color: '#fff',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+                        disabled={!isSpotifyConnected || playlistByLinkLoading}
+                        onClick={() => void addPlaylistByLink()}
+                      >
+                        {playlistByLinkLoading ? 'Adding…' : 'Add playlist'}
+                      </button>
+                    </div>
+                    {playlistByLinkError ? (
+                      <p style={{ fontSize: '0.82rem', color: '#ff9e6e', margin: '0 0 10px' }}>{playlistByLinkError}</p>
+                    ) : null}
+                    {spotifyError ? (
+                      <div
+                        className="spotify-error"
+                        style={{ marginBottom: 12, maxWidth: 720, padding: '12px 14px' }}
+                        role="alert"
+                      >
+                        <p style={{ margin: '0 0 10px', lineHeight: 1.5 }}>{spotifyError}</p>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          style={{ fontSize: '0.85rem' }}
+                          onClick={() => {
+                            setSpotifyError(null);
+                            void loadPlaylists({ forceRefresh: true });
+                          }}
+                        >
+                          Retry loading playlists
+                        </button>
+                      </div>
+                    ) : null}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: '0.72rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>Library scope</span>
+                        <div role="group" aria-label="Playlist library scope" style={{ display: 'inline-flex', borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(0,0,0,0.25)' }}>
+                          <button type="button" onClick={() => { setShowAllPlaylists(false); setPlaylistQuery(''); }} style={{ border: 'none', padding: '10px 16px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', background: !showAllPlaylists ? 'rgba(0,255,136,0.22)' : 'transparent', color: !showAllPlaylists ? '#00ff88' : '#ccc', borderRight: '1px solid rgba(255,255,255,0.12)' }}>GoT picks</button>
+                          <button type="button" onClick={() => { setShowAllPlaylists(true); setPlaylistQuery(''); }} style={{ border: 'none', padding: '10px 16px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', background: showAllPlaylists ? 'rgba(0,255,136,0.22)' : 'transparent', color: showAllPlaylists ? '#00ff88' : '#ccc' }}>All my playlists</button>
+                        </div>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: '0.82rem', color: '#c8c8c8', cursor: 'pointer', userSelect: 'none' }}>
+                          <input type="checkbox" checked={stripGoTPrefix} onChange={(e) => setStripGoTPrefix(e.target.checked)} />
+                          Short names (hide &quot;GoT-&quot; prefix in this list)
+                        </label>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, maxWidth: 560, width: '100%' }}>
+                        <input type="search" placeholder="Search playlists by name…" value={playlistQuery} onChange={(e) => setPlaylistQuery(e.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.35)', color: '#fff', flex: '1 1 220px', minWidth: 180 }} />
+                      </div>
+                      <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)', margin: 0, lineHeight: 1.45, maxWidth: 640 }}>
+                        After Tempo loads tracks for playlists you include in the mix (selection debounce or Finalize), any playlist that contains a Spotify explicit song shows{' '}
+                        <SpotifyExplicitBadge size="sm" title="At least one explicit track in this playlist" /> next to its song count — no extra Spotify calls beyond that load.
+                      </p>
+                      <div
+                        style={{
+                          padding: '12px 14px',
+                          borderRadius: 10,
+                          border: '1px solid rgba(120, 180, 255, 0.35)',
+                          background: 'rgba(60, 120, 200, 0.12)',
+                        }}
+                      >
+                        <p style={{ margin: '0 0 6px', fontSize: '0.82rem', color: '#b8dcff', fontWeight: 700 }}>
+                          Official packs (catalog)
+                        </p>
+                        {!catalogPacksProbeDone ? (
+                          <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+                            Contacting server…
+                          </p>
+                        ) : !catalogPacksFetchOk ? (
+                          <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+                            {catalogPacksFetchUnauthorized ? (
+                              <>
+                                Host session required — sign in with <strong style={{ color: '#c8dcff' }}>Google</strong> as
+                                host, then retry <strong style={{ color: '#c8dcff' }}>Refresh</strong> on your library (or reload).
+                              </>
+                            ) : (
+                              <>
+                                Couldn&apos;t load Official packs (network or server error). Reload the page or use{' '}
+                                <strong style={{ color: '#c8dcff' }}>Retry loading playlists</strong> above if Spotify failed.
+                              </>
+                            )}
+                          </p>
+                        ) : !catalogPacksConfigured ? (
+                          <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+                            <strong style={{ color: '#c8dcff' }}>Not enabled on this server.</strong> Set{' '}
+                            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_SPOTIFY_REFRESH_TOKEN</code> plus{' '}
+                            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_NAME_PREFIX</code> or{' '}
+                            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> /{' '}
+                            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code> on the API host (e.g.
+                            Railway), then redeploy. Your <strong style={{ color: '#c8dcff' }}>GoT picks</strong> list above is
+                            only your personal Spotify library — it is not the catalog.
+                          </p>
+                        ) : (
+                          <>
+                            <p style={{ margin: '0 0 12px', fontSize: '0.76rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
+                              Loaded with Tempo&apos;s allowlisted Spotify account — not your personal library token. Your
+                              Spotify is still used for playback. Appended after your own playlist selections.
+                            </p>
+                            {catalogPackOptions.length > 0 ? (
+                              <div className="host-catalog-pack-list">
+                                {catalogPackOptions.map((pack) => {
+                                  const isSel = selectedCatalogPlaylists.some((p) => p.id === pack.id);
+                                  return (
+                                    <label
+                                      key={pack.id}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 10,
+                                        cursor: 'pointer',
+                                        fontSize: '0.88rem',
+                                      }}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={isSel}
+                                        onChange={() => {
+                                          setSelectedCatalogPlaylists((prev) =>
+                                            isSel ? prev.filter((p) => p.id !== pack.id) : [...prev, { ...pack, catalog: true }]
+                                          );
+                                        }}
+                                      />
+                                      <span style={{ color: '#fff', flex: 1, minWidth: 0 }}>{pack.name}</span>
+                                      <span style={{ color: '#8899aa', fontSize: '0.78rem', flexShrink: 0 }}>
+                                        {pack.tracks} songs
+                                      </span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            ) : catalogPrefixDiscoverySkipped ? (
+                              <p
+                                style={{
+                                  margin: 0,
+                                  fontSize: '0.78rem',
+                                  color: 'rgba(255,255,255,0.65)',
+                                  lineHeight: 1.5,
+                                }}
+                              >
+                                <strong style={{ color: '#ffc857' }}>Spotify blocked catalog discovery</strong> (rate limit /
+                                quarantine on the Web API). Tempo could not list playlists for the{' '}
+                                <strong style={{ color: '#c8dcff' }}>catalog</strong> token, so{' '}
+                                <strong style={{ color: '#c8dcff' }}>prefix-based packs</strong> won&apos;t appear until Spotify
+                                accepts <code style={{ fontSize: '0.72rem' }}>GET /v1/me/playlists</code> again. This is the same
+                                quota pressure as the library warning above if host and catalog share one Spotify app.{' '}
+                                <strong style={{ color: '#c8dcff' }}>Workarounds:</strong> set{' '}
+                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> or{' '}
+                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code> (no listing call); or use
+                                a <strong style={{ color: '#c8dcff' }}>second Spotify Developer app</strong> for catalog (
+                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_SPOTIFY_CLIENT_ID</code>
+                                ). Reload Official packs after cooldown.
+                              </p>
+                            ) : (
+                              <p
+                                style={{
+                                  margin: 0,
+                                  fontSize: '0.78rem',
+                                  color: 'rgba(255,255,255,0.65)',
+                                  lineHeight: 1.5,
+                                }}
+                              >
+                                No catalog packs matched yet. If you use{' '}
+                                <strong style={{ color: '#c8dcff' }}>TEMPO_CATALOG_PLAYLIST_NAME_PREFIX</strong>, playlist
+                                titles on the <strong style={{ color: '#c8dcff' }}>catalog</strong> Spotify account must{' '}
+                                <strong style={{ color: '#c8dcff' }}>start with that exact prefix</strong> (e.g.{' '}
+                                <code style={{ fontSize: '0.72rem' }}>GoT Friday Hits</code>, not{' '}
+                                <code style={{ fontSize: '0.72rem' }}>Music Bingo - …</code>
+                                ). Or set{' '}
+                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> /{' '}
+                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code>. New matches can take
+                                up to the prefix cache window unless the server restarts.
+                              </p>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                        <div style={{ 
+                      maxHeight: 400, 
+                      overflowY: 'auto', 
+                      border: '1px solid rgba(255,255,255,0.1)', 
+                      borderRadius: 8, 
+                      padding: 8 
+                    }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          padding: '6px 8px 8px',
+                          fontSize: '0.68rem',
+                          color: '#888',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                          borderBottom: '1px solid rgba(255,255,255,0.08)',
+                          marginBottom: 4,
+                        }}
+                      >
+                        <span style={{ width: 18, textAlign: 'center' }} title="Include in game mix">Mix</span>
+                        <button
+                          type="button"
+                          className="host-playlist-sort-btn"
+                          onClick={() => togglePlaylistSort('name')}
+                          aria-sort={
+                            playlistSort.key === 'name'
+                              ? playlistSort.dir === 'asc'
+                                ? 'ascending'
+                                : 'descending'
+                              : 'none'
+                          }
+                          title="Sort by playlist name"
+                          style={{
+                            flex: 1,
+                            textAlign: 'left',
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            color: 'inherit',
+                            font: 'inherit',
+                            letterSpacing: 'inherit',
+                            textTransform: 'inherit',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          Playlist
+                          {playlistSort.key === 'name' && (
+                            <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
+                              {playlistSort.dir === 'asc' ? '?' : '?'}
+                            </span>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          className="host-playlist-sort-btn"
+                          onClick={() => togglePlaylistSort('tracks')}
+                          aria-sort={
+                            playlistSort.key === 'tracks'
+                              ? playlistSort.dir === 'asc'
+                                ? 'ascending'
+                                : 'descending'
+                              : 'none'
+                          }
+                          title="Sort by track count"
+                          style={{
+                            minWidth: 72,
+                            textAlign: 'right',
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            color: 'inherit',
+                            font: 'inherit',
+                            letterSpacing: 'inherit',
+                            textTransform: 'inherit',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'flex-end',
+                            gap: 4,
+                          }}
+                        >
+                          Tracks
+                          {playlistSort.key === 'tracks' && (
+                            <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
+                              {playlistSort.dir === 'asc' ? '?' : '?'}
+                            </span>
+                          )}
+                        </button>
+                        <span style={{ minWidth: 72, textAlign: 'right' }}>
+                          {playlistSort.key !== 'none' && (
+                            <button
+                              type="button"
+                              onClick={() => setPlaylistSort({ key: 'none', dir: 'asc' })}
+                              className="host-playlist-sort-reset"
+                              title="Restore Spotify library order"
+                              style={{
+                                fontSize: '0.62rem',
+                                textTransform: 'none',
+                                letterSpacing: '0.02em',
+                                background: 'rgba(255,255,255,0.08)',
+                                border: '1px solid rgba(255,255,255,0.15)',
+                                borderRadius: 6,
+                                padding: '3px 8px',
+                                cursor: 'pointer',
+                                color: '#c8c8c8',
+                              }}
+                            >
+                              Default order
+                            </button>
+                          )}
+                        </span>
+                      </div>
+                      {sortedFilteredPlaylists.length === 0 ? (
+                          <div style={{ padding: 20, textAlign: 'center', opacity: 0.7, lineHeight: 1.5 }}>
+                            {playlistLibraryEmptyMessage}
+                        </div>
+                        ) : (
+                          sortedFilteredPlaylists.map((p) => {
+                          const isSelected = selectedPlaylists.some(sp => sp.id === p.id);
+                          const trackCount = Math.max(0, Number(p.tracks) || 0);
+                          // Insufficient: < 15 songs (not enough for any mode)
+                          const isInsufficient = trackCount < 15;
+                          // Acceptable: 15+ songs (good for 5x15 mode) and 75+ songs (good for both modes)
+                          const isAcceptable = trackCount >= 15;
+                          
+                          return (
+                            <div 
+                              key={p.id} 
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData('text/plain', p.id);
+                                e.dataTransfer.effectAllowed = 'copy';
+                              }}
+                              style={{ 
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: 10, 
+                                padding: '6px 8px', 
+                                borderBottom: '1px solid rgba(255,255,255,0.08)',
+                                backgroundColor: isAcceptable ? 'rgba(0, 255, 136, 0.1)' : 'transparent',
+                                border: isAcceptable ? '1px solid rgba(0, 255, 136, 0.3)' : 'none',
+                                borderRadius: isAcceptable ? '4px' : '0',
+                                margin: isAcceptable ? '2px 0' : '0',
+                                cursor: 'grab'
+                              }}
+                              onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
+                              onMouseUp={(e) => e.currentTarget.style.cursor = 'grab'}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                aria-label={"Include in game mix: " + (p.name || "playlist")}
+                                title="Include in game mix — used when you finalize the bingo song pool"
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedPlaylists([...selectedPlaylists, p]);
+                                  } else {
+                                    setSelectedPlaylists(selectedPlaylists.filter(sp => sp.id !== p.id));
+                                  }
+                                }}
+                                style={{ marginTop: 3 }}
+                              />
+                              <span style={{ 
+                                flex: 1, 
+                                minWidth: 0,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 5,
+                                alignItems: 'flex-start',
+                              }}>
+                                <span style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  flexWrap: 'wrap',
+                                  gap: 8,
+                                  fontSize: '0.9rem',
+                                  color: isAcceptable ? '#00ff88' : '#fff',
+                                }}>
+                                  {stripGoTPrefix ? p.name.replace(/^GoT\s*[-�:]*\s*/i, '') : p.name}
+                                  {p.youtubeMusic ? (
+                                    <span
+                                      style={{
+                                        fontSize: '0.7rem',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        background: 'rgba(255, 68, 68, 0.18)',
+                                        color: '#ffb4b4',
+                                        border: '1px solid rgba(255, 68, 68, 0.35)',
+                                      }}
+                                      title="YouTube Music playlist (items are videos)"
+                                    >
+                                      YT
+                                    </span>
+                                  ) : null}
+                                  {!p.youtubeMusic &&
+                                    !showAllPlaylists &&
+                                    stripGoTPrefix &&
+                                    (/^got\s*[-�:]*\s*/i.test(p.name) ||
+                                      p.name.toLowerCase().includes('game of tones') ||
+                                      p.name.toLowerCase().includes('gameoftones')) && (
+                                      <span
+                                        style={{
+                                          fontSize: '0.7rem',
+                                          padding: '2px 6px',
+                                          borderRadius: '4px',
+                                          background: 'rgba(0, 255, 136, 0.2)',
+                                          color: '#00ff88',
+                                          border: '1px solid rgba(0, 255, 136, 0.3)',
+                                        }}
+                                      >
+                                        GoT
+                                      </span>
+                                    )}
+                                </span>
+                                {(() => {
+                                  const plain = p.description ? stripPlaylistDescriptionHtml(p.description) : '';
+                                  if (!plain) return null;
+                                  return (
+                                    <span className="host-playlist-desc" title={plain}>
+                                      {plain}
+                                    </span>
+                                  );
+                                })()}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: '0.8rem',
+                                  opacity: 0.7,
+                                  color: isAcceptable ? '#00ff88' : '#b3b3b3',
+                                  flexShrink: 0,
+                                  paddingTop: 2,
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'flex-end',
+                                  gap: 4,
+                                  textAlign: 'right',
+                                }}
+                              >
+                                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                                  {!p.youtubeMusic && p.hasExplicitTracks === true && (
+                                    <SpotifyExplicitBadge size="sm" title="This playlist includes at least one Spotify explicit track" />
+                                  )}
+                                  <span>
+                                    {trackCount} {p.youtubeMusic ? 'videos' : 'songs'}
+                                  </span>
+                                </span>
+                              </span>
+                              <span
+                                role="presentation"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                style={{ flexShrink: 0, alignSelf: 'flex-start', paddingTop: 2 }}
+                              >
+                                <select
+                                  className="host-playlist-add-to-round"
+                                  aria-label={`Add playlist to round: ${stripGoTPrefix ? stripGotPlaylistPrefix(p.name) : p.name}`}
+                                  value=""
+                                  title="Add this playlist to a round bucket (same as dragging into a bucket)"
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    if (v !== '') {
+                                      addPlaylistToRoundBucket(Number(v), p.id);
+                                      e.target.value = '';
+                                    }
+                                  }}
+                                >
+                                  <option value="">Add to round…</option>
+                                  {eventRounds.map((r, i) => (
+                                    <option key={r.id} value={String(i)}>
+                                      {r.name}
+                                      {(r.playlistIds?.length ?? 0) > 0
+                                        ? ` (${r.playlistIds!.length})`
+                                        : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                              </span>
+                              {isInsufficient && (
+                                <span
+                                  style={{
+                                    fontSize: '0.72rem',
+                                    color: '#ffb347',
+                                    whiteSpace: 'nowrap',
+                                    padding: '4px 8px',
+                                    borderRadius: 6,
+                                    border: '1px solid rgba(255,179,71,0.35)',
+                                    background: 'rgba(255,179,71,0.08)',
+                                    flexShrink: 0,
+                                    paddingTop: 6,
+                                  }}
+                                  title={
+                                    p.youtubeMusic
+                                      ? 'Need at least 15 videos for a standard round'
+                                      : 'Need at least 15 tracks for a standard round; add songs in Spotify'
+                                  }
+                                >
+                                  Need 15+
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })
+                        )}
+                        </div>
+                  </motion.div>
+
+                    <div className="host-manager-playlist-export">
+                      <p>
+                        Export a Spotify playlist from the songs used in this session (after you have a finalized mix or have played).
+                      </p>
+                      <button
+                        type="button"
+                        onClick={createOutputPlaylist}
+                        disabled={!songList || songList.length === 0 || isSpotifyConnecting}
+                        className="btn-secondary"
+                        style={{
+                          backgroundColor: '#6b46c1',
+                          borderColor: '#8b5cf6',
+                          color: 'white',
+                          fontSize: '0.9rem',
+                          padding: '10px 16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}
+                      >
+                        <ListPlus className="w-4 h-4" aria-hidden />
+                        Create output playlist
+                      </button>
+                    </div>
+              </div>
+              <div className="host-music-two-pane__rounds">
+                <RoundPlanner
+                  rounds={eventRounds}
+                  onUpdateRounds={handleUpdateRounds}
+                  playlists={playlistsForRoundPlanner}
+                  currentRound={currentRoundIndex}
+                  onStartRound={handleStartRound}
+                  onSelectRoundForPrep={handleSelectRoundForPrep}
+                  gameState={gameState}
+                />
+              </div>
+            </div>
+              </>
+  );
+
   return (
     <div className="host-view">
       {!hideYoutubeCornerPlayer ? (
@@ -7295,626 +7936,42 @@ const HostView: React.FC = () => {
               </div>
               {!hostManagerCollapse['mgr-music-rounds'] ? (
               <>
-              {!isSpotifyConnected && showYoutubeMusicInConnectionModal ? (
-                <p style={{ fontSize: '0.84rem', color: '#b8c4cc', margin: '0 0 14px', lineHeight: 1.5, maxWidth: 720 }}>
-                  Spotify isn&apos;t connected or your library didn&apos;t load (for example rate limits). Your{' '}
-                  <strong style={{ color: '#ffb4b4' }}>YouTube Music</strong> playlists still appear in the playlist library. Use{' '}
-                  <strong style={{ color: '#fff' }}>Connection</strong> to link Spotify when you need the Spotify playlist grid and devices.
-                </p>
-              ) : null}
-            <div className="host-music-two-pane">
-              <div className="host-music-two-pane__library">
-          <motion.div 
-                    className="playlists-section"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-                    transition={{ delay: 0.4 }}
-                  >
-                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-                    <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Library className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
-                      Playlist library
-                    </h3>
-                    {isSpotifyConnected ? (
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        disabled={spotifyPlaylistsRefreshing || playlistByLinkLoading}
-                        style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}
-                        title="Fetches your latest playlists from Spotify (uses Web API quota). Routine page loads use Tempo’s saved list instead."
-                        onClick={() => void loadPlaylists({ forceRefresh: true })}
-                      >
-                        {spotifyPlaylistsRefreshing ? 'Syncing library…' : 'Refresh Spotify library'}
-                      </button>
-                    ) : null}
-                    </div>
-                    <p style={{ fontSize: '0.85rem', color: '#a8a8a8', marginBottom: 12, lineHeight: 1.45, maxWidth: 720 }}>
-                      <strong style={{ color: '#fff' }}>In mix</strong>: playlists checked here are included when you{' '}
-                      <strong style={{ color: '#fff' }}>finalize the bingo pool</strong> (song source for the game). Assign playlists to a round with{' '}
-                      <strong style={{ color: '#fff' }}>Add to round</strong> or by <strong style={{ color: '#fff' }}>dragging a row</strong> into a bucket (wide screens: library on the left, round buckets on the right).
+                <div
+                  style={{
+                    padding: '14px 16px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(0, 255, 136, 0.22)',
+                    background: 'rgba(0, 255, 136, 0.06)',
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    gap: 14,
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <div style={{ minWidth: 0, flex: '1 1 240px' }}>
+                    <p style={{ margin: '0 0 6px', fontSize: '0.95rem', fontWeight: 700, color: '#fff' }}>
+                      Playlists & round setlists
                     </p>
-                    <HostYoutubeMusicPlaylistLibrary
-                      hostSessionReady={hostAuthBootstrapDone}
-                      refreshNonce={ytMusicLibraryRefreshNonce}
-                      onMixPlaylistsChange={handleYoutubeMusicMixPlaylistsChange}
-                    />
-                    {spotifyListCacheInfo ? (
-                      <div
-                        style={{
-                          marginBottom: 12,
-                          maxWidth: 720,
-                          padding: '12px 14px',
-                          borderRadius: 10,
-                          border: '1px solid rgba(255,193,7,0.45)',
-                          background: 'rgba(255,193,7,0.1)',
-                          color: '#f5e6c8',
-                          fontSize: '0.88rem',
-                          lineHeight: 1.5,
-                      }}
-                        role="status"
-                    >
-                        <strong style={{ color: '#ffc857' }}>Library list: saved copy</strong> — {spotifyListCacheInfo} Use
-                        &quot;Add by link&quot; below to pull in one playlist if Spotify is still blocking a full library refresh.
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: '#a8b4bc', lineHeight: 1.45, maxWidth: 560 }}>
+                      Choose playlists for the mix, assign them to rounds, and drag rows into round buckets — opens in a focused window.
+                    </p>
+                    <p style={{ margin: '10px 0 0', fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)' }}>
+                      <strong style={{ color: '#c5dccf' }}>{selectedPlaylists.length}</strong> in mix ·{' '}
+                      <strong style={{ color: '#c5dccf' }}>{eventRounds.length}</strong> rounds ·{' '}
+                      <strong style={{ color: '#c5dccf' }}>{playlists.length}</strong> library rows
+                    </p>
                   </div>
-                    ) : null}
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        alignItems: 'center',
-                        gap: 10,
-                        marginBottom: 12,
-                        maxWidth: 720,
-                        padding: '12px 14px',
-                        borderRadius: 10,
-                        border: '1px solid rgba(0,255,136,0.25)',
-                        background: 'rgba(0,255,136,0.06)',
-                      }}
-                    >
-                      <span style={{ fontSize: '0.82rem', color: '#c8d8d0', fontWeight: 600 }}>Add by link</span>
-                      <input
-                        type="text"
-                        value={playlistByLinkInput}
-                        onChange={(e) => setPlaylistByLinkInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') void addPlaylistByLink();
-                        }}
-                        placeholder="https://open.spotify.com/playlist/… or id"
-                        disabled={!isSpotifyConnected || playlistByLinkLoading}
-                        style={{
-                          flex: '1 1 220px',
-                          minWidth: 180,
-                          padding: '10px 12px',
-                          borderRadius: 8,
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          background: 'rgba(0,0,0,0.35)',
-                          color: '#fff',
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}
-                        disabled={!isSpotifyConnected || playlistByLinkLoading}
-                        onClick={() => void addPlaylistByLink()}
-                      >
-                        {playlistByLinkLoading ? 'Adding…' : 'Add playlist'}
-                      </button>
-                    </div>
-                    {playlistByLinkError ? (
-                      <p style={{ fontSize: '0.82rem', color: '#ff9e6e', margin: '0 0 10px' }}>{playlistByLinkError}</p>
-                    ) : null}
-                    {spotifyError ? (
-                      <div
-                        className="spotify-error"
-                        style={{ marginBottom: 12, maxWidth: 720, padding: '12px 14px' }}
-                        role="alert"
-                      >
-                        <p style={{ margin: '0 0 10px', lineHeight: 1.5 }}>{spotifyError}</p>
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          style={{ fontSize: '0.85rem' }}
-                          onClick={() => {
-                            setSpotifyError(null);
-                            void loadPlaylists({ forceRefresh: true });
-                          }}
-                        >
-                          Retry loading playlists
-                        </button>
-                      </div>
-                    ) : null}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontSize: '0.72rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>Library scope</span>
-                        <div role="group" aria-label="Playlist library scope" style={{ display: 'inline-flex', borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(0,0,0,0.25)' }}>
-                          <button type="button" onClick={() => { setShowAllPlaylists(false); setPlaylistQuery(''); }} style={{ border: 'none', padding: '10px 16px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', background: !showAllPlaylists ? 'rgba(0,255,136,0.22)' : 'transparent', color: !showAllPlaylists ? '#00ff88' : '#ccc', borderRight: '1px solid rgba(255,255,255,0.12)' }}>GoT picks</button>
-                          <button type="button" onClick={() => { setShowAllPlaylists(true); setPlaylistQuery(''); }} style={{ border: 'none', padding: '10px 16px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', background: showAllPlaylists ? 'rgba(0,255,136,0.22)' : 'transparent', color: showAllPlaylists ? '#00ff88' : '#ccc' }}>All my playlists</button>
-                        </div>
-                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: '0.82rem', color: '#c8c8c8', cursor: 'pointer', userSelect: 'none' }}>
-                          <input type="checkbox" checked={stripGoTPrefix} onChange={(e) => setStripGoTPrefix(e.target.checked)} />
-                          Short names (hide &quot;GoT-&quot; prefix in this list)
-                        </label>
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, maxWidth: 560, width: '100%' }}>
-                        <input type="search" placeholder="Search playlists by name…" value={playlistQuery} onChange={(e) => setPlaylistQuery(e.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.35)', color: '#fff', flex: '1 1 220px', minWidth: 180 }} />
-                      </div>
-                      <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)', margin: 0, lineHeight: 1.45, maxWidth: 640 }}>
-                        After Tempo loads tracks for playlists you include in the mix (selection debounce or Finalize), any playlist that contains a Spotify explicit song shows{' '}
-                        <SpotifyExplicitBadge size="sm" title="At least one explicit track in this playlist" /> next to its song count — no extra Spotify calls beyond that load.
-                      </p>
-                      <div
-                        style={{
-                          padding: '12px 14px',
-                          borderRadius: 10,
-                          border: '1px solid rgba(120, 180, 255, 0.35)',
-                          background: 'rgba(60, 120, 200, 0.12)',
-                        }}
-                      >
-                        <p style={{ margin: '0 0 6px', fontSize: '0.82rem', color: '#b8dcff', fontWeight: 700 }}>
-                          Official packs (catalog)
-                        </p>
-                        {!catalogPacksProbeDone ? (
-                          <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
-                            Contacting server…
-                          </p>
-                        ) : !catalogPacksFetchOk ? (
-                          <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
-                            {catalogPacksFetchUnauthorized ? (
-                              <>
-                                Host session required — sign in with <strong style={{ color: '#c8dcff' }}>Google</strong> as
-                                host, then retry <strong style={{ color: '#c8dcff' }}>Refresh</strong> on your library (or reload).
-                              </>
-                            ) : (
-                              <>
-                                Couldn&apos;t load Official packs (network or server error). Reload the page or use{' '}
-                                <strong style={{ color: '#c8dcff' }}>Retry loading playlists</strong> above if Spotify failed.
-                              </>
-                            )}
-                          </p>
-                        ) : !catalogPacksConfigured ? (
-                          <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
-                            <strong style={{ color: '#c8dcff' }}>Not enabled on this server.</strong> Set{' '}
-                            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_SPOTIFY_REFRESH_TOKEN</code> plus{' '}
-                            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_NAME_PREFIX</code> or{' '}
-                            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> /{' '}
-                            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code> on the API host (e.g.
-                            Railway), then redeploy. Your <strong style={{ color: '#c8dcff' }}>GoT picks</strong> list above is
-                            only your personal Spotify library — it is not the catalog.
-                          </p>
-                        ) : (
-                          <>
-                            <p style={{ margin: '0 0 12px', fontSize: '0.76rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
-                              Loaded with Tempo&apos;s allowlisted Spotify account — not your personal library token. Your
-                              Spotify is still used for playback. Appended after your own playlist selections.
-                            </p>
-                            {catalogPackOptions.length > 0 ? (
-                              <div className="host-catalog-pack-list">
-                                {catalogPackOptions.map((pack) => {
-                                  const isSel = selectedCatalogPlaylists.some((p) => p.id === pack.id);
-                                  return (
-                                    <label
-                                      key={pack.id}
-                                      style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 10,
-                                        cursor: 'pointer',
-                                        fontSize: '0.88rem',
-                                      }}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={isSel}
-                                        onChange={() => {
-                                          setSelectedCatalogPlaylists((prev) =>
-                                            isSel ? prev.filter((p) => p.id !== pack.id) : [...prev, { ...pack, catalog: true }]
-                                          );
-                                        }}
-                                      />
-                                      <span style={{ color: '#fff', flex: 1, minWidth: 0 }}>{pack.name}</span>
-                                      <span style={{ color: '#8899aa', fontSize: '0.78rem', flexShrink: 0 }}>
-                                        {pack.tracks} songs
-                                      </span>
-                                    </label>
-                                  );
-                                })}
-                              </div>
-                            ) : catalogPrefixDiscoverySkipped ? (
-                              <p
-                                style={{
-                                  margin: 0,
-                                  fontSize: '0.78rem',
-                                  color: 'rgba(255,255,255,0.65)',
-                                  lineHeight: 1.5,
-                                }}
-                              >
-                                <strong style={{ color: '#ffc857' }}>Spotify blocked catalog discovery</strong> (rate limit /
-                                quarantine on the Web API). Tempo could not list playlists for the{' '}
-                                <strong style={{ color: '#c8dcff' }}>catalog</strong> token, so{' '}
-                                <strong style={{ color: '#c8dcff' }}>prefix-based packs</strong> won&apos;t appear until Spotify
-                                accepts <code style={{ fontSize: '0.72rem' }}>GET /v1/me/playlists</code> again. This is the same
-                                quota pressure as the library warning above if host and catalog share one Spotify app.{' '}
-                                <strong style={{ color: '#c8dcff' }}>Workarounds:</strong> set{' '}
-                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> or{' '}
-                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code> (no listing call); or use
-                                a <strong style={{ color: '#c8dcff' }}>second Spotify Developer app</strong> for catalog (
-                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_SPOTIFY_CLIENT_ID</code>
-                                ). Reload Official packs after cooldown.
-                              </p>
-                            ) : (
-                              <p
-                                style={{
-                                  margin: 0,
-                                  fontSize: '0.78rem',
-                                  color: 'rgba(255,255,255,0.65)',
-                                  lineHeight: 1.5,
-                                }}
-                              >
-                                No catalog packs matched yet. If you use{' '}
-                                <strong style={{ color: '#c8dcff' }}>TEMPO_CATALOG_PLAYLIST_NAME_PREFIX</strong>, playlist
-                                titles on the <strong style={{ color: '#c8dcff' }}>catalog</strong> Spotify account must{' '}
-                                <strong style={{ color: '#c8dcff' }}>start with that exact prefix</strong> (e.g.{' '}
-                                <code style={{ fontSize: '0.72rem' }}>GoT Friday Hits</code>, not{' '}
-                                <code style={{ fontSize: '0.72rem' }}>Music Bingo - …</code>
-                                ). Or set{' '}
-                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> /{' '}
-                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code>. New matches can take
-                                up to the prefix cache window unless the server restarts.
-                              </p>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                        <div style={{ 
-                      maxHeight: 400, 
-                      overflowY: 'auto', 
-                      border: '1px solid rgba(255,255,255,0.1)', 
-                      borderRadius: 8, 
-                      padding: 8 
-                    }}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          padding: '6px 8px 8px',
-                          fontSize: '0.68rem',
-                          color: '#888',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                          borderBottom: '1px solid rgba(255,255,255,0.08)',
-                          marginBottom: 4,
-                        }}
-                      >
-                        <span style={{ width: 18, textAlign: 'center' }} title="Include in game mix">Mix</span>
-                        <button
-                          type="button"
-                          className="host-playlist-sort-btn"
-                          onClick={() => togglePlaylistSort('name')}
-                          aria-sort={
-                            playlistSort.key === 'name'
-                              ? playlistSort.dir === 'asc'
-                                ? 'ascending'
-                                : 'descending'
-                              : 'none'
-                          }
-                          title="Sort by playlist name"
-                          style={{
-                            flex: 1,
-                            textAlign: 'left',
-                            background: 'none',
-                            border: 'none',
-                            padding: 0,
-                            cursor: 'pointer',
-                            color: 'inherit',
-                            font: 'inherit',
-                            letterSpacing: 'inherit',
-                            textTransform: 'inherit',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 4,
-                          }}
-                        >
-                          Playlist
-                          {playlistSort.key === 'name' && (
-                            <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
-                              {playlistSort.dir === 'asc' ? '?' : '?'}
-                            </span>
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          className="host-playlist-sort-btn"
-                          onClick={() => togglePlaylistSort('tracks')}
-                          aria-sort={
-                            playlistSort.key === 'tracks'
-                              ? playlistSort.dir === 'asc'
-                                ? 'ascending'
-                                : 'descending'
-                              : 'none'
-                          }
-                          title="Sort by track count"
-                          style={{
-                            minWidth: 72,
-                            textAlign: 'right',
-                            background: 'none',
-                            border: 'none',
-                            padding: 0,
-                            cursor: 'pointer',
-                            color: 'inherit',
-                            font: 'inherit',
-                            letterSpacing: 'inherit',
-                            textTransform: 'inherit',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'flex-end',
-                            gap: 4,
-                          }}
-                        >
-                          Tracks
-                          {playlistSort.key === 'tracks' && (
-                            <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
-                              {playlistSort.dir === 'asc' ? '?' : '?'}
-                            </span>
-                          )}
-                        </button>
-                        <span style={{ minWidth: 72, textAlign: 'right' }}>
-                          {playlistSort.key !== 'none' && (
-                            <button
-                              type="button"
-                              onClick={() => setPlaylistSort({ key: 'none', dir: 'asc' })}
-                              className="host-playlist-sort-reset"
-                              title="Restore Spotify library order"
-                              style={{
-                                fontSize: '0.62rem',
-                                textTransform: 'none',
-                                letterSpacing: '0.02em',
-                                background: 'rgba(255,255,255,0.08)',
-                                border: '1px solid rgba(255,255,255,0.15)',
-                                borderRadius: 6,
-                                padding: '3px 8px',
-                                cursor: 'pointer',
-                                color: '#c8c8c8',
-                              }}
-                            >
-                              Default order
-                            </button>
-                          )}
-                        </span>
-                      </div>
-                      {sortedFilteredPlaylists.length === 0 ? (
-                          <div style={{ padding: 20, textAlign: 'center', opacity: 0.7, lineHeight: 1.5 }}>
-                            {playlistLibraryEmptyMessage}
-                        </div>
-                        ) : (
-                          sortedFilteredPlaylists.map((p) => {
-                          const isSelected = selectedPlaylists.some(sp => sp.id === p.id);
-                          const trackCount = Math.max(0, Number(p.tracks) || 0);
-                          // Insufficient: < 15 songs (not enough for any mode)
-                          const isInsufficient = trackCount < 15;
-                          // Acceptable: 15+ songs (good for 5x15 mode) and 75+ songs (good for both modes)
-                          const isAcceptable = trackCount >= 15;
-                          
-                          return (
-                            <div 
-                              key={p.id} 
-                              draggable
-                              onDragStart={(e) => {
-                                e.dataTransfer.setData('text/plain', p.id);
-                                e.dataTransfer.effectAllowed = 'copy';
-                              }}
-                              style={{ 
-                                display: 'flex',
-                                alignItems: 'flex-start',
-                                gap: 10, 
-                                padding: '6px 8px', 
-                                borderBottom: '1px solid rgba(255,255,255,0.08)',
-                                backgroundColor: isAcceptable ? 'rgba(0, 255, 136, 0.1)' : 'transparent',
-                                border: isAcceptable ? '1px solid rgba(0, 255, 136, 0.3)' : 'none',
-                                borderRadius: isAcceptable ? '4px' : '0',
-                                margin: isAcceptable ? '2px 0' : '0',
-                                cursor: 'grab'
-                              }}
-                              onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
-                              onMouseUp={(e) => e.currentTarget.style.cursor = 'grab'}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                aria-label={"Include in game mix: " + (p.name || "playlist")}
-                                title="Include in game mix — used when you finalize the bingo song pool"
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedPlaylists([...selectedPlaylists, p]);
-                                  } else {
-                                    setSelectedPlaylists(selectedPlaylists.filter(sp => sp.id !== p.id));
-                                  }
-                                }}
-                                style={{ marginTop: 3 }}
-                              />
-                              <span style={{ 
-                                flex: 1, 
-                                minWidth: 0,
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: 5,
-                                alignItems: 'flex-start',
-                              }}>
-                                <span style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  flexWrap: 'wrap',
-                                  gap: 8,
-                                  fontSize: '0.9rem',
-                                  color: isAcceptable ? '#00ff88' : '#fff',
-                                }}>
-                                  {stripGoTPrefix ? p.name.replace(/^GoT\s*[-�:]*\s*/i, '') : p.name}
-                                  {p.youtubeMusic ? (
-                                    <span
-                                      style={{
-                                        fontSize: '0.7rem',
-                                        padding: '2px 6px',
-                                        borderRadius: '4px',
-                                        background: 'rgba(255, 68, 68, 0.18)',
-                                        color: '#ffb4b4',
-                                        border: '1px solid rgba(255, 68, 68, 0.35)',
-                                      }}
-                                      title="YouTube Music playlist (items are videos)"
-                                    >
-                                      YT
-                                    </span>
-                                  ) : null}
-                                  {!p.youtubeMusic &&
-                                    !showAllPlaylists &&
-                                    stripGoTPrefix &&
-                                    (/^got\s*[-�:]*\s*/i.test(p.name) ||
-                                      p.name.toLowerCase().includes('game of tones') ||
-                                      p.name.toLowerCase().includes('gameoftones')) && (
-                                      <span
-                                        style={{
-                                          fontSize: '0.7rem',
-                                          padding: '2px 6px',
-                                          borderRadius: '4px',
-                                          background: 'rgba(0, 255, 136, 0.2)',
-                                          color: '#00ff88',
-                                          border: '1px solid rgba(0, 255, 136, 0.3)',
-                                        }}
-                                      >
-                                        GoT
-                                      </span>
-                                    )}
-                                </span>
-                                {(() => {
-                                  const plain = p.description ? stripPlaylistDescriptionHtml(p.description) : '';
-                                  if (!plain) return null;
-                                  return (
-                                    <span className="host-playlist-desc" title={plain}>
-                                      {plain}
-                                    </span>
-                                  );
-                                })()}
-                              </span>
-                              <span
-                                style={{
-                                  fontSize: '0.8rem',
-                                  opacity: 0.7,
-                                  color: isAcceptable ? '#00ff88' : '#b3b3b3',
-                                  flexShrink: 0,
-                                  paddingTop: 2,
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  alignItems: 'flex-end',
-                                  gap: 4,
-                                  textAlign: 'right',
-                                }}
-                              >
-                                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-                                  {!p.youtubeMusic && p.hasExplicitTracks === true && (
-                                    <SpotifyExplicitBadge size="sm" title="This playlist includes at least one Spotify explicit track" />
-                                  )}
-                                  <span>
-                                    {trackCount} {p.youtubeMusic ? 'videos' : 'songs'}
-                                  </span>
-                                </span>
-                              </span>
-                              <span
-                                role="presentation"
-                                onMouseDown={(e) => e.stopPropagation()}
-                                style={{ flexShrink: 0, alignSelf: 'flex-start', paddingTop: 2 }}
-                              >
-                                <select
-                                  className="host-playlist-add-to-round"
-                                  aria-label={`Add playlist to round: ${stripGoTPrefix ? stripGotPlaylistPrefix(p.name) : p.name}`}
-                                  value=""
-                                  title="Add this playlist to a round bucket (same as dragging into a bucket)"
-                                  onChange={(e) => {
-                                    const v = e.target.value;
-                                    if (v !== '') {
-                                      addPlaylistToRoundBucket(Number(v), p.id);
-                                      e.target.value = '';
-                                    }
-                                  }}
-                                >
-                                  <option value="">Add to round…</option>
-                                  {eventRounds.map((r, i) => (
-                                    <option key={r.id} value={String(i)}>
-                                      {r.name}
-                                      {(r.playlistIds?.length ?? 0) > 0
-                                        ? ` (${r.playlistIds!.length})`
-                                        : ''}
-                                    </option>
-                                  ))}
-                                </select>
-                              </span>
-                              {isInsufficient && (
-                                <span
-                                  style={{
-                                    fontSize: '0.72rem',
-                                    color: '#ffb347',
-                                    whiteSpace: 'nowrap',
-                                    padding: '4px 8px',
-                                    borderRadius: 6,
-                                    border: '1px solid rgba(255,179,71,0.35)',
-                                    background: 'rgba(255,179,71,0.08)',
-                                    flexShrink: 0,
-                                    paddingTop: 6,
-                                  }}
-                                  title={
-                                    p.youtubeMusic
-                                      ? 'Need at least 15 videos for a standard round'
-                                      : 'Need at least 15 tracks for a standard round; add songs in Spotify'
-                                  }
-                                >
-                                  Need 15+
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })
-                        )}
-                        </div>
-                  </motion.div>
-
-                    <div className="host-manager-playlist-export">
-                      <p>
-                        Export a Spotify playlist from the songs used in this session (after you have a finalized mix or have played).
-                      </p>
-                      <button
-                        type="button"
-                        onClick={createOutputPlaylist}
-                        disabled={!songList || songList.length === 0 || isSpotifyConnecting}
-                        className="btn-secondary"
-                        style={{
-                          backgroundColor: '#6b46c1',
-                          borderColor: '#8b5cf6',
-                          color: 'white',
-                          fontSize: '0.9rem',
-                          padding: '10px 16px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px'
-                        }}
-                      >
-                        <ListPlus className="w-4 h-4" aria-hidden />
-                        Create output playlist
-                      </button>
-                    </div>
-              </div>
-              <div className="host-music-two-pane__rounds">
-                <RoundPlanner
-                  rounds={eventRounds}
-                  onUpdateRounds={handleUpdateRounds}
-                  playlists={playlistsForRoundPlanner}
-                  currentRound={currentRoundIndex}
-                  onStartRound={handleStartRound}
-                  onSelectRoundForPrep={handleSelectRoundForPrep}
-                  gameState={gameState}
-                />
-              </div>
-            </div>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => setShowPlaylistRoundModal(true)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, flexShrink: 0 }}
+                  >
+                    <ListMusic className="w-5 h-5" aria-hidden />
+                    Open playlist & round builder
+                  </button>
+                </div>
               </>
               ) : null}
             </div>
@@ -8997,6 +9054,40 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
               </button>
             </div>
             <div className="host-connection-modal__body">{hostConnectionPanel}</div>
+          </div>
+        </div>
+      )}
+      {showPlaylistRoundModal && (
+        <div
+          className="host-connection-modal-backdrop"
+          onClick={() => setShowPlaylistRoundModal(false)}
+          role="presentation"
+          style={{ zIndex: 10052 }}
+        >
+          <div
+            className="host-connection-modal host-connection-modal--playlist-rounds"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="host-playlist-round-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="host-connection-modal__header">
+              <h2 id="host-playlist-round-modal-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <ListMusic className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
+                Playlist library & rounds
+              </h2>
+              <button
+                type="button"
+                className="host-connection-modal__close"
+                aria-label="Close"
+                onClick={() => setShowPlaylistRoundModal(false)}
+              >
+                <X className="w-5 h-5" aria-hidden />
+              </button>
+            </div>
+            <div className="host-connection-modal__body host-connection-modal__body--playlist-rounds">
+              {playlistRoundBuilderBody}
+            </div>
           </div>
         </div>
       )}

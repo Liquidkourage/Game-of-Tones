@@ -637,6 +637,22 @@
   overflow-y: auto;
 }
 
+/* Playlist library + RoundPlanner (same shell as round manager — wide, scroll body) */
+.host-connection-modal.host-connection-modal--playlist-rounds {
+  width: min(100%, 1100px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: min(94vh, 980px);
+}
+
+.host-connection-modal.host-connection-modal--playlist-rounds .host-connection-modal__body--playlist-rounds {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-top: 12px;
+}
+
 .host-connection-modal__header {
   display: flex;
   align-items: center;

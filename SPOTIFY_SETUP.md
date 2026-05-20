@@ -136,6 +136,11 @@ The server resolves **`{ clientId, clientSecret }`** with `users` ⋈ `organizat
    - Set **`TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID`** to the host’s **`users.id`** (e.g. `1`) so catalog refresh uses the organizations row’s client id + decrypted secret.  
    If **`invalid_client` continues**, the ciphertext in Postgres may not match the Dashboard secret (wrong value when encrypted, old key, etc.). Set **`TEMPO_CATALOG_SPOTIFY_CLIENT_SECRET`** on the server to the **current** Client Secret from the Spotify Dashboard; it overrides **only** the secret used for catalog refresh while keeping the client id from the row (or from env).  
    If **`invalid_client` persists after that**, **`TEMPO_CATALOG_SPOTIFY_REFRESH_TOKEN`** is almost certainly wrong for this app (truncated Railway variable, stale token from another Developer app, or not a user refresh token). Complete Spotify OAuth again for the **catalog** account using this same Client ID and replace the env value with the new refresh token.
+
+### Official catalog pack caching
+
+The server keeps a Postgres snapshot for **`GET /api/spotify/catalog/packs`**. **`TEMPO_CATALOG_PACKS_SERVER_CACHE_MS`** is how long that snapshot is treated as fresh before a host request triggers a live Spotify refresh (default seven days; **`0`** means always try live first, with stale Postgres still used if Spotify errors). **`TEMPO_CATALOG_PACKS_BACKGROUND_WARM_MS`** optionally refreshes that snapshot on an interval (minimum **`300000`** ms = five minutes) so traffic mostly reads Postgres instead of hitting Spotify after cold starts or TTL expiry.
+
 ### Debug Steps:
 
 1. **Check server logs** for detailed error messages

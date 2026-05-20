@@ -1115,6 +1115,15 @@ function readCatalogPacksServerCacheTtlMs() {
   return 7 * 86400000;
 }
 
+/** Optional background refresh interval for Postgres catalog pack snapshots (`TEMPO_CATALOG_PACKS_BACKGROUND_WARM_MS`). Minimum 300000 (5m); unset or lower disables. */
+function readCatalogPacksBackgroundWarmIntervalMs() {
+  const raw = process.env.TEMPO_CATALOG_PACKS_BACKGROUND_WARM_MS;
+  if (raw == null || String(raw).trim() === '') return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 300000) return 0;
+  return Math.floor(n);
+}
+
 /**
  * @returns {Promise<null | { data: { packs: unknown[], catalogPrefixDiscoverySkipped: boolean }, updatedAtMs: number, updatedAtIso: string }>}
  */
@@ -1162,6 +1171,24 @@ async function saveCatalogPackSummariesCacheRow(cacheKey, payload) {
     console.error('saveCatalogPackSummariesCacheRow:', e?.message || e);
     return false;
   }
+}
+
+/**
+ * Persist live catalog pack summaries to Postgres using the same rules as GET /api/spotify/catalog/packs.
+ * @returns {Promise<boolean>} true if a row was written
+ */
+async function persistCatalogPackSummariesToPostgresIfAllowed(catalogResult) {
+  if (!db || !catalogResult || !Array.isArray(catalogResult.packs)) return false;
+  const ttlMs = readCatalogPacksServerCacheTtlMs();
+  const prefixSkipped = catalogResult.catalogPrefixDiscoverySkipped === true;
+  const wipeWouldErasePrior = catalogResult.packs.length === 0 && prefixSkipped && ttlMs > 0;
+  if (wipeWouldErasePrior) return false;
+  const cacheKey = catalogSpotify.getCatalogPackSummariesCacheKey();
+  await saveCatalogPackSummariesCacheRow(cacheKey, {
+    packs: catalogResult.packs,
+    catalogPrefixDiscoverySkipped: prefixSkipped,
+  });
+  return true;
 }
 
 // Initialize Multi-Tenant Spotify Manager
@@ -10566,15 +10593,7 @@ app.get('/api/spotify/catalog/packs', async (req, res) => {
     }
 
     if (db && catalogResult && Array.isArray(catalogResult.packs)) {
-      const prefixSkipped = catalogResult.catalogPrefixDiscoverySkipped === true;
-      const wipeWouldErasePrior =
-        catalogResult.packs.length === 0 && prefixSkipped && ttlMs > 0;
-      if (!wipeWouldErasePrior) {
-        await saveCatalogPackSummariesCacheRow(cacheKey, {
-          packs: catalogResult.packs,
-          catalogPrefixDiscoverySkipped: prefixSkipped,
-        });
-      }
+      await persistCatalogPackSummariesToPostgresIfAllowed(catalogResult);
     }
 
     const packs = catalogResult.packs;
@@ -11597,6 +11616,30 @@ const PORT = process.env.PORT || 7093;
       await autoConnectSpotify();
 
       startDeviceKeepAlive();
+
+      const catalogWarmMs = readCatalogPacksBackgroundWarmIntervalMs();
+      if (
+        catalogWarmMs > 0 &&
+        db &&
+        catalogSpotify.isCatalogFeatureConfigured() &&
+        !catalogSpotify.isCatalogPublicFetchDisabled()
+      ) {
+        routineServerLog(
+          `[catalog] Background Postgres warm every ${Math.round(catalogWarmMs / 1000)}s (TEMPO_CATALOG_PACKS_BACKGROUND_WARM_MS)`
+        );
+        const runCatalogPackCacheWarm = async () => {
+          try {
+            const catalogResult = await catalogSpotify.loadCatalogPackSummariesForApi();
+            await persistCatalogPackSummariesToPostgresIfAllowed(catalogResult);
+          } catch (e) {
+            console.warn('[catalog] Background pack cache warm failed:', e?.message || e);
+          }
+        };
+        setTimeout(() => {
+          void runCatalogPackCacheWarm();
+          setInterval(runCatalogPackCacheWarm, catalogWarmMs);
+        }, catalogWarmMs);
+      }
     });
   } catch (bootstrapErr) {
     console.error('❌ Server bootstrap failed:', bootstrapErr?.message || bootstrapErr);
