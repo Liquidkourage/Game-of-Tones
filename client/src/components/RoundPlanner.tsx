@@ -59,6 +59,7 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   onSelectRoundForPrep?: (roundIndex: number) => void;
   /** Playlist-only sync for the current prep round (avoids resetting pattern/playback). */
   onSyncMixFromRound?: (roundIndex: number) => void;
+  onOpenConnection?: () => void;
   gameState: 'waiting' | 'playing' | 'ended';
   hostDefaultFreeSpace: boolean;
   savedCustomPatterns: SavedCustomPattern[];
@@ -103,6 +104,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   onStartRound,
   onSelectRoundForPrep,
   onSyncMixFromRound,
+  onOpenConnection,
   gameState,
   hostDefaultFreeSpace,
   savedCustomPatterns,
@@ -389,12 +391,15 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
           spotifyConnected={prepHints.spotifyConnected}
           deviceNeeded={prepHints.deviceNeeded}
           deviceSelected={prepHints.deviceSelected}
+          onOpenConnection={onOpenConnection}
         />
       ) : null}
 
       {onResetEvent || onClearPrepCache || onCompleteCurrentRound ? (
-        <details className="round-planner__event-actions">
-          <summary>Event actions</summary>
+        <section className="round-planner__event-actions" aria-labelledby="round-planner-event-actions-title">
+          <h4 id="round-planner-event-actions-title" className="round-planner__event-actions-title">
+            Event actions
+          </h4>
           <div className="round-planner__event-actions-row">
             {gameState === 'playing' && onCompleteCurrentRound ? (
               <button type="button" className="round-planner-btn round-planner-btn--ghost" onClick={onCompleteCurrentRound}>
@@ -427,7 +432,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
               </button>
             ) : null}
           </div>
-        </details>
+        </section>
       ) : null}
 
       <div className="round-planner__main">

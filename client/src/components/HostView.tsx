@@ -41,8 +41,6 @@ import {
   Printer,
   Save,
   Eraser,
-  ChevronDown,
-  ChevronUp,
   HelpCircle,
 } from 'lucide-react';
 import io from 'socket.io-client';
@@ -137,7 +135,7 @@ interface Playlist {
 }
 
 /** Playlists per page in the playlist-round modal (fits viewport without scrolling). */
-const PLAYLIST_LIBRARY_PAGE_SIZE = 8;
+const PLAYLIST_LIBRARY_PAGE_SIZE = 15;
 
 /** In-process Web API 429 cool-down (from GET /api/spotify/status and error bodies). */
 type WebApiQuarantineState =
@@ -505,41 +503,6 @@ function filterBasePlaylistsForMix(playlists: Playlist[], showAllPlaylists: bool
   return [...spotifyPart, ...ytm];
 }
 
-const HOST_MANAGER_COLLAPSE_STORAGE_KEY = 'game-host-manager-collapse-v1';
-
-function loadHostManagerCollapsePrefs(): Record<string, boolean> {
-  try {
-    const raw = localStorage.getItem(HOST_MANAGER_COLLAPSE_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-    return parsed as Record<string, boolean>;
-  } catch {
-    return {};
-  }
-}
-
-function HostManagerCollapseToggle({
-  collapsed,
-  onToggle,
-}: {
-  collapsed: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className="host-manager-section__collapse"
-      aria-expanded={!collapsed}
-      title={collapsed ? 'Expand section' : 'Collapse section'}
-      aria-label={collapsed ? 'Expand section' : 'Collapse section'}
-      onClick={onToggle}
-    >
-      {collapsed ? <ChevronDown className="w-4 h-4" aria-hidden /> : <ChevronUp className="w-4 h-4" aria-hidden />}
-    </button>
-  );
-}
-
 const HostView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -654,19 +617,6 @@ const HostView: React.FC = () => {
   const [printableCardCount, setPrintableCardCount] = useState(30);
   const [saveRoundBusy, setSaveRoundBusy] = useState(false);
   const [printablePdfLoading, setPrintablePdfLoading] = useState(false);
-  /** Manager tab: optional collapsed framed sections (persisted per browser). */
-  const [hostManagerCollapse, setHostManagerCollapse] = useState<Record<string, boolean>>(loadHostManagerCollapsePrefs);
-  const toggleHostManagerCollapse = useCallback((sectionId: string) => {
-    setHostManagerCollapse((prev) => {
-      const next = { ...prev, [sectionId]: !prev[sectionId] };
-      try {
-        localStorage.setItem(HOST_MANAGER_COLLAPSE_STORAGE_KEY, JSON.stringify(next));
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
-  }, []);
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
   /** Server served playlist list from DB (429/quarantine, or normal cache-first load without hitting Spotify). */
   const [spotifyListCacheInfo, setSpotifyListCacheInfo] = useState<string | null>(null);
@@ -6677,8 +6627,8 @@ const HostView: React.FC = () => {
                         ) : null}
                       </div>
                     )}
-                    <details className="host-playlist-round-modal__tools">
-                      <summary>More options…</summary>
+                    <div className="host-playlist-round-modal__tools">
+                      <h3 className="host-playlist-round-modal__tools-title">More options</h3>
                       <div className="host-playlist-round-modal__tools-body">
                     <HostYoutubeMusicPlaylistLibrary
                       hostSessionReady={hostAuthBootstrapDone}
@@ -6732,27 +6682,25 @@ const HostView: React.FC = () => {
                     {playlistByLinkError ? (
                       <p style={{ fontSize: '0.82rem', color: '#ff9e6e', margin: '0 0 10px' }}>{playlistByLinkError}</p>
                     ) : null}
-                      <details className="host-playlist-round-modal__fine-print">
-                        <summary style={{ cursor: 'pointer', fontSize: '0.8rem', color: '#8899aa' }}>
+                      <div className="host-playlist-round-modal__fine-print">
+                        <p className="host-playlist-round-modal__fine-print-title">
                           When does the Mix column show explicit-song badges?
-                        </summary>
-                        <div style={{ marginTop: 8 }}>
-                          <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)', margin: 0, lineHeight: 1.45, maxWidth: 640 }}>
-                            After Tempo loads tracks for playlists in your mix (selection debounce or Finalize), playlists that contain a Spotify explicit track show{' '}
-                            <SpotifyExplicitBadge size="sm" title="At least one explicit track in this playlist" /> next to their counts — without extra Spotify calls.
-                          </p>
-                        </div>
-                      </details>
-                      <details className="host-playlist-round-modal__catalog">
-                        <summary style={{ cursor: 'pointer', fontSize: '0.9rem', color: '#b8dcff', fontWeight: 700 }}>
+                        </p>
+                        <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)', margin: 0, lineHeight: 1.45, maxWidth: 640 }}>
+                          After Tempo loads tracks for playlists in your mix (selection debounce or Finalize), playlists that contain a Spotify explicit track show{' '}
+                          <SpotifyExplicitBadge size="sm" title="At least one explicit track in this playlist" /> next to their counts — without extra Spotify calls.
+                        </p>
+                      </div>
+                      <div className="host-playlist-round-modal__catalog">
+                        <h4 className="host-playlist-round-modal__catalog-title">
                           {!catalogPacksProbeDone || !catalogPacksFetchOk
-                            ? 'Official packs (catalog) — tap to expand'
+                            ? 'Official packs (catalog)'
                             : catalogPacksConfigured
                               ? catalogPackOptions.length > 0
-                                ? `Official packs — ${catalogPackOptions.length} from catalog · tap for checkboxes`
+                                ? `Official packs — ${catalogPackOptions.length} from catalog`
                                 : 'Official packs (catalog)'
-                              : 'Official packs — server not configured (tap for details)'}
-                        </summary>
+                              : 'Official packs — server not configured'}
+                        </h4>
                         <div
                           style={{
                             marginTop: 10,
@@ -6874,7 +6822,7 @@ const HostView: React.FC = () => {
                           </>
                         )}
                         </div>
-                      </details>
+                      </div>
                     <div className="host-manager-playlist-export">
                       <p>Export a Spotify playlist from songs used this session (after finalize or play).</p>
                       <button
@@ -6898,7 +6846,7 @@ const HostView: React.FC = () => {
                       </button>
                     </div>
                       </div>
-                    </details>
+                    </div>
 
                     <div className="host-playlist-library-table-zone">
                         <div className="host-playlist-library-table">
@@ -7234,6 +7182,7 @@ const HostView: React.FC = () => {
                   onStartRound={handleStartRound}
                   onSelectRoundForPrep={handleSelectRoundForPrep}
                   onSyncMixFromRound={syncMixFromRound}
+                  onOpenConnection={() => setShowConnectionModal(true)}
                   gameState={gameState}
                   hostDefaultFreeSpace={freeSpaceEnabled}
                   savedCustomPatterns={savedCustomPatterns}
@@ -7407,39 +7356,142 @@ const HostView: React.FC = () => {
             {activeTab === 'setup' && (
               <div className="setup-tab host-manager">
                 <div className="host-manager-setup-flow">
-                <div className="host-manager-setup-flow__grid">
-                <div className="host-manager-grid host-manager-grid--split">
+                <motion.section
+                  className="host-manager-hero host-manager-section"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.15 }}
+                >
+                  <h2 className="host-manager-hero__title">
+                    <ListMusic className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
+                    Setup
+                  </h2>
+                  <p className="host-manager-section__lead">
+                    <strong style={{ color: '#c5dccf' }}>Connection</strong> (header) →{' '}
+                    <strong style={{ color: '#c5dccf' }}>Round builder</strong> (playlists, rounds, pattern, save/print) →{' '}
+                    <strong style={{ color: '#c5dccf' }}>Game</strong> tab (finalize &amp; start).
+                  </p>
+                  <div className="host-manager-hero__status">
+                    <span className={`host-manager-hero__chip${isSpotifyConnected ? ' host-manager-hero__chip--ok' : ''}`}>
+                      Spotify {isSpotifyConnected ? 'connected' : 'not connected'}
+                    </span>
+                    {showYoutubeMusicInConnectionModal ? (
+                      <span className="host-manager-hero__chip">YouTube Music available</span>
+                    ) : null}
+                    {currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length ? (
+                      <span className="host-manager-hero__chip host-manager-hero__chip--active">
+                        Prep: {eventRounds[currentRoundIndex].name}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="host-manager-hero__actions">
+                    <button
+                      type="button"
+                      className="btn-primary host-manager-hero__cta"
+                      onClick={() => openRoundBuilder()}
+                    >
+                      <ListMusic className="w-5 h-5" aria-hidden />
+                      Open Round builder
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => setShowConnectionModal(true)}
+                    >
+                      <Link2 className="w-4 h-4" aria-hidden />
+                      Connection
+                    </button>
+                  </div>
+                </motion.section>
 
-          <div className="host-manager-grid__primary">
-            <motion.div
-              className="host-manager-section host-manager-section--round-hub-cta"
+          {(isSpotifyConnected || showYoutubeMusicInConnectionModal) ? (
+          <motion.section
+            className="host-manager-music host-manager-section"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.25 }}
+          >
+            <h2 className="host-manager-section__title">Music &amp; rounds</h2>
+            <p className="host-manager-section__lead">
+              All playlist buckets, patterns, playback per round, PDFs, and event resets live in Round builder.
+            </p>
+            <p className="host-manager-hero__stats">
+              <strong>{selectedPlaylists.length}</strong> in mix · <strong>{eventRounds.length}</strong> rounds ·{' '}
+              <strong>{playlists.length}</strong> library rows
+            </p>
+          </motion.section>
+          ) : (
+            <motion.section
+              className="host-manager-section host-manager-section--notice"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
             >
-              <h2 style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 10px', fontSize: '1rem' }}>
-                <Grid3x3 className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
-                Bingo pattern
-              </h2>
-              <p style={{ margin: '0 0 12px', fontSize: '0.82rem', color: '#9aa5b1', lineHeight: 1.45 }}>
-                Pattern, free center, custom shapes, and combined rules are per round in{' '}
-                <strong style={{ color: '#c5dccf' }}>Round builder</strong> (use the round number buttons).
+              <p className="host-manager-section__lead" style={{ margin: 0 }}>
+                Connect <strong>Spotify</strong> and/or <strong>YouTube Music</strong> via{' '}
+                <button type="button" className="host-inline-link" onClick={() => setShowConnectionModal(true)}>
+                  Connection
+                </button>{' '}
+                before opening Round builder.
               </p>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={() => openRoundBuilder()}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-              >
-                Open Round builder
-              </button>
-            </motion.div>
-          </div>
-                  <div className="host-manager-grid__secondary">
+            </motion.section>
+          )}
+
+          <motion.section
+            className="host-manager-round host-manager-section"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+          >
+            <h2 className="host-manager-section__title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <CalendarRange className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
+              Event rules
+            </h2>
+            <label className="host-manager-hybrid">
+              <input
+                type="checkbox"
+                className="host-control-checkbox"
+                checked={hybridInPersonPlusOnline}
+                onChange={(e) => {
+                  const v = e.target.checked;
+                  setHybridInPersonPlusOnline(v);
+                  try {
+                    socket?.emit('set-hybrid-mode', { roomId, hybridInPersonPlusOnline: v });
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+              />
+              <span>
+                <strong style={{ color: '#00ff88' }}>Hybrid in-person + online</strong> — remote players can play, but only
+                an in-person bingo ends the round and awards prizes.
+              </span>
+            </label>
+            {gameState === 'playing' ? (
+              <div className="host-manager-round__row" style={{ marginTop: 14 }}>
+                <button type="button" onClick={completeCurrentRound} className="host-manager-round__btn host-manager-round__btn--green">
+                  <CheckCircle2 className="w-4 h-4" aria-hidden />
+                  Complete round
+                </button>
+                <button type="button" onClick={resetCurrentRound} className="host-manager-round__btn host-manager-round__btn--yellow">
+                  <RotateCcw className="w-4 h-4" aria-hidden />
+                  Reset round
+                </button>
+                {getNextPlannedRound() >= 0 ? (
+                  <button type="button" onClick={() => jumpToRound(getNextPlannedRound())} className="host-manager-round__btn host-manager-round__btn--blue">
+                    <SkipForward className="w-4 h-4" aria-hidden />
+                    Next planned
+                  </button>
+                ) : null}
+              </div>
+            ) : (
+              <p className="host-manager-section__lead" style={{ marginTop: 12, marginBottom: 0 }}>
+                Save, print, reset event, and clear prep cache: use <strong>Event actions</strong> inside Round builder.
+              </p>
+            )}
+          </motion.section>
+
           <motion.div
-            className={`host-manager-section host-manager-section--display font-size-section host-manager-section--collapsible${
-              hostManagerCollapse['mgr-public-display'] ? ' host-manager-section--collapsed' : ''
-            }`}
+            className="host-manager-section host-manager-section--display font-size-section"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4 }}
@@ -7452,12 +7504,7 @@ const HostView: React.FC = () => {
                 <Monitor className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
                 Public display
               </h2>
-              <HostManagerCollapseToggle
-                collapsed={!!hostManagerCollapse['mgr-public-display']}
-                onToggle={() => toggleHostManagerCollapse('mgr-public-display')}
-              />
             </div>
-            {!hostManagerCollapse['mgr-public-display'] ? (
             <>
             <p className="host-manager-section__lead">
               Text size and what appears on the projector or TV for players.
@@ -7704,230 +7751,9 @@ const HostView: React.FC = () => {
               </>
             ) : null}
             </>
-            ) : null}
           </motion.div>
-                  </div>
                 </div>
-                </div>
-
-          {/* Music & rounds: planner + playlists — show when Spotify is linked OR YouTube Music OAuth is available on server */}
-          {(isSpotifyConnected || showYoutubeMusicInConnectionModal) ? (
-          <div className="host-manager-setup-flow__music">
-            <div
-              className={`host-manager-music host-manager-section host-manager-section--collapsible${
-                hostManagerCollapse['mgr-music-rounds'] ? ' host-manager-section--collapsed' : ''
-              }`}
-            >
-              <div className="host-manager-section__topbar">
-                <h2 className="host-manager-music__title" style={{ margin: 0, flex: 1, minWidth: 0 }}>
-                  Music &amp; rounds
-                </h2>
-                <HostManagerCollapseToggle
-                  collapsed={!!hostManagerCollapse['mgr-music-rounds']}
-                  onToggle={() => toggleHostManagerCollapse('mgr-music-rounds')}
-                />
               </div>
-              {!hostManagerCollapse['mgr-music-rounds'] ? (
-              <>
-                <div
-                  style={{
-                    padding: '14px 16px',
-                    borderRadius: 12,
-                    border: '1px solid rgba(0, 255, 136, 0.22)',
-                    background: 'rgba(0, 255, 136, 0.06)',
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    alignItems: 'center',
-                    gap: 14,
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <div style={{ minWidth: 0, flex: '1 1 240px' }}>
-                    <p style={{ margin: '0 0 6px', fontSize: '0.95rem', fontWeight: 700, color: '#fff' }}>
-                      Playlists & round setlists
-                    </p>
-                    <p style={{ margin: 0, fontSize: '0.82rem', color: '#a8b4bc', lineHeight: 1.45, maxWidth: 560 }}>
-                      Playlists, buckets, pattern, save/print, and event actions — one place.
-                    </p>
-                    <p style={{ margin: '10px 0 0', fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)' }}>
-                      <strong style={{ color: '#c5dccf' }}>{selectedPlaylists.length}</strong> in mix ·{' '}
-                      <strong style={{ color: '#c5dccf' }}>{eventRounds.length}</strong> rounds ·{' '}
-                      <strong style={{ color: '#c5dccf' }}>{playlists.length}</strong> library rows
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={() => openRoundBuilder()}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, flexShrink: 0 }}
-                  >
-                    <ListMusic className="w-5 h-5" aria-hidden />
-                    Open Round builder
-                  </button>
-                </div>
-              </>
-              ) : null}
-            </div>
-          </div>
-          ) : null}
-
-                {/* Round & event actions (during or between rounds) */}
-                <div className="host-manager-setup-flow__round">
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.4 }}
-                  className={`host-manager-round host-manager-section--collapsible${
-                    hostManagerCollapse['mgr-round-event'] ? ' host-manager-section--collapsed' : ''
-                  }`}
-                >
-                  <div className="host-manager-section__topbar">
-                    <h2 style={{ display: 'flex', alignItems: 'center', gap: 10, margin: 0, flex: 1, minWidth: 0 }}>
-                      <CalendarRange className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
-                      Round & event
-                    </h2>
-                    <HostManagerCollapseToggle
-                      collapsed={!!hostManagerCollapse['mgr-round-event']}
-                      onToggle={() => toggleHostManagerCollapse('mgr-round-event')}
-                    />
-                  </div>
-                  {!hostManagerCollapse['mgr-round-event'] ? (
-                  <>
-                  <div
-                    style={{
-                      marginBottom: 16,
-                      padding: '12px 14px',
-                      borderRadius: 10,
-                      border: '1px solid rgba(0, 255, 136, 0.25)',
-                      background: 'rgba(0, 255, 136, 0.06)',
-                    }}
-                  >
-                    <label
-                      style={{
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: 12,
-                        cursor: 'pointer',
-                        margin: 0,
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        className="host-control-checkbox"
-                        checked={hybridInPersonPlusOnline}
-                        onChange={(e) => {
-                          const v = e.target.checked;
-                          setHybridInPersonPlusOnline(v);
-                          try {
-                            socket?.emit('set-hybrid-mode', { roomId, hybridInPersonPlusOnline: v });
-                          } catch {
-                            /* ignore */
-                          }
-                        }}
-                        style={{ marginTop: 4 }}
-                      />
-                      <span style={{ fontSize: '0.88rem', lineHeight: 1.45, color: 'rgba(255,255,255,0.9)' }}>
-                        <strong style={{ color: '#00ff88' }}>Hybrid in-person + online</strong>
-                        <br />
-                        Remote players who join with &quot;online&quot; can play, but a valid bingo from them does{' '}
-                        <strong>not</strong> pause the game or award the round — only an <strong>in-person</strong> player&apos;s
-                        bingo does. They still see when they complete the pattern.
-                      </span>
-                    </label>
-                  </div>
-                  <p style={{ margin: '8px 0 12px', fontSize: '0.82rem', color: '#9aa5b1', lineHeight: 1.45, maxWidth: 620 }}>
-                    Save round, Print PDF, call sheet, and event resets are in{' '}
-                    <strong style={{ color: '#c5cdd6' }}>Round builder</strong> (each round bucket). Live handoff: Game tab →
-                    Finalize mix → Start Game.
-                  </p>
-                  <p className="host-manager-round__actions-head">Quick actions</p>
-                  <div className="host-manager-round__row">
-                      <button
-                        type="button"
-                        className="btn-accent"
-                        onClick={() => openRoundBuilder()}
-                        title="Playlists, rounds, save/print, pattern, event actions"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-                      >
-                        <ListChecks className="w-4 h-4" aria-hidden />
-                        Open Round builder
-                      </button>
-                      {gameState === 'playing' && (
-                        <>
-                          <button 
-                            type="button"
-                            onClick={completeCurrentRound}
-                            className="host-manager-round__btn host-manager-round__btn--green"
-                          >
-                            <CheckCircle2 className="w-4 h-4" aria-hidden />
-                            Complete current round
-                          </button>
-                          <button 
-                            type="button"
-                            onClick={resetCurrentRound}
-                            className="host-manager-round__btn host-manager-round__btn--yellow"
-                          >
-                            <RotateCcw className="w-4 h-4" aria-hidden />
-                            Reset current round
-                          </button>
-                        </>
-                      )}
-                      {(() => {
-                        const nextRound = getNextPlannedRound();
-                        return nextRound >= 0 ? (
-                          <button 
-                            type="button"
-                            onClick={() => jumpToRound(nextRound)}
-                            className="host-manager-round__btn host-manager-round__btn--blue"
-                          >
-                            <SkipForward className="w-4 h-4" aria-hidden />
-                            Start next planned round
-                          </button>
-                        ) : null;
-                      })()}
-                      <div className="host-manager-round__reset-wrap">
-                        <button
-                          type="button"
-                          onClick={resetEvent}
-                          className="btn-danger-outline"
-                          title="Reset entire event back to the beginning"
-                        >
-                          <Trash2 className="w-4 h-4" aria-hidden />
-                          Reset event
-                        </button>
-                        <span className="host-manager-round__reset-hint">
-                          Clears draft round buckets; rounds with a valid Save round snapshot keep playlists & PDF data. Mix UI cleared.
-                        </span>
-                      </div>
-                      <div className="host-manager-round__reset-wrap">
-                        <button
-                          type="button"
-                          onClick={clearRoomRoundPrepStorage}
-                          className="btn-secondary"
-                          title="Remove browser-only round buckets and Save-round snapshots for this room; resets mix UI. Signed-in hosts keep a Postgres backup — reload to restore."
-                          style={{
-                            borderColor: 'rgba(248, 113, 113, 0.45)',
-                            color: '#fecaca',
-                          }}
-                        >
-                          <Eraser className="w-4 h-4" aria-hidden />
-                          Clear prep cache (browser)
-                        </button>
-                        <span className="host-manager-round__reset-hint">
-                          Wipes local copies + sync marker. If you’re signed in to Tempo, prep is also saved on the server — reload this room to pull it back.
-                        </span>
-                      </div>
-                  </div>
-                  </>
-                  ) : (
-                    <p style={{ margin: '8px 0 0', fontSize: '0.82rem', color: 'rgba(255,255,255,0.68)', lineHeight: 1.45 }}>
-                      Expand for hybrid mode, PDF settings, Round Manager (cards + call sheet), and event resets.
-                    </p>
-                  )}
-                </motion.div>
-              </div>
-            </div>
-            </div>
             )}
 
             {activeTab === 'play' && (
@@ -7944,168 +7770,42 @@ const HostView: React.FC = () => {
               Game Controls
             </h2>
 
-            {gameState === 'waiting' && !currentSong && eventRounds.length > 0 && (
-                <div
-                  style={{
-                    marginBottom: 18,
-                    padding: '12px 14px',
-                    borderRadius: 10,
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    background: 'rgba(255,255,255,0.04)',
-                    maxWidth: 560,
-                  }}
-                >
-                  <label
-                    htmlFor="host-game-tab-active-round"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      fontSize: '0.88rem',
-                      fontWeight: 700,
-                      color: '#c8e6ff',
-                      marginBottom: 8,
-                    }}
-                  >
-                    <CalendarRange className="w-4 h-4" style={{ color: '#00ff88' }} aria-hidden />
-                    Round for Game tab prep
-                  </label>
-                  <select
-                    id="host-game-tab-active-round"
-                    aria-label="Select round for game prep"
-                    value={currentRoundIndex >= 0 ? String(currentRoundIndex) : ''}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (v === '') {
-                        setCurrentRoundIndex(-1);
-                        return;
-                      }
-                      const idx = Number.parseInt(v, 10);
-                      if (!Number.isFinite(idx) || idx < 0 || idx >= eventRounds.length) return;
-                      handleSelectRoundForPrep(idx);
-                    }}
-                    style={{
-                      width: '100%',
-                      maxWidth: 440,
-                      padding: '10px 12px',
-                      borderRadius: 8,
-                      border: '1px solid rgba(255,255,255,0.18)',
-                      background: 'rgba(0,0,0,0.35)',
-                      color: '#fff',
-                      fontSize: '0.9rem',
-                    }}
-                  >
-                    <option value="">— Choose round —</option>
-                    {eventRounds.map((round, index) => {
-                      const empty = (round.playlistIds || []).length === 0;
-                      const savedOk = eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled);
-                      return (
-                        <option key={round.id} value={String(index)} disabled={empty}>
-                          {round.name}
-                          {savedOk ? ' · snapshot saved' : ''}
-                          {empty ? ' (no playlists)' : ''}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  <p style={{ margin: '10px 0 0', fontSize: '0.78rem', color: '#9aa5b1', lineHeight: 1.45 }}>
-                    Same as picking a round in <strong style={{ color: '#dfe7ee' }}>Round builder</strong>: syncs that round&apos;s playlists and pattern to the Game tab mix.
-                  </p>
+            {gameState === 'waiting' && !currentSong && eventRounds.length > 0 ? (
+                <div className="host-game-prep-bar">
+                  <div>
+                    <p className="host-game-prep-bar__label">Active prep round</p>
+                    <p className="host-game-prep-bar__value">
+                      {currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length
+                        ? eventRounds[currentRoundIndex].name
+                        : 'Pick a round in Round builder'}
+                    </p>
+                  </div>
+                  <button type="button" className="btn-secondary" onClick={() => openRoundBuilder()}>
+                    <ListMusic className="w-4 h-4" aria-hidden />
+                    Round builder
+                  </button>
                 </div>
-              )}
+              ) : null}
 
-                  {/* Game Settings */}
                   <div className="host-game-settings-panel">
-                    {/* Track Length Control */}
-                    <div style={{ marginBottom: 16 }}>
-                      <h4 style={{ fontSize: '0.9rem', color: '#00ff88', marginBottom: 8, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Radio className="w-4 h-4" style={{ color: '#00ff88' }} aria-hidden />
-                        Track Playback Settings
-                      </h4>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ opacity: 0.85, minWidth: '80px' }}>Track Length:</span>
-                <input
-                  type="range"
-                  className="host-range host-range--snippet"
-                  min="5"
-                  max="60"
-                  value={snippetLength}
-                            onChange={(e) => {
-                              const newLength = Number(e.target.value);
-                              setSnippetLength(newLength);
-                              localStorage.setItem('game-snippet-length', newLength.toString());
-                            }}
-                          />
-                          <span style={{ width: 40, textAlign: 'right', color: '#00ff88', fontWeight: 'bold' }}>
-                            {snippetLength}s
-                          </span>
-              </label>
-                      </div>
-                      
-                      {/* Start Position Control */}
-                      <div className="host-radio-row">
-                        <span style={{ opacity: 0.85, minWidth: '80px' }}>Start Position:</span>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                            type="radio"
-                            className="host-control-radio"
-                            name="startPosition"
-                            checked={randomStarts === 'none'}
-                            onChange={() => {
-                              setRandomStarts('none');
-                              localStorage.setItem('game-random-starts', 'none');
-                            }}
-                          />
-                          <span>From beginning</span>
-                        </label>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <input
-                            type="radio"
-                            className="host-control-radio"
-                            name="startPosition"
-                            checked={randomStarts === 'early'}
-                            onChange={() => {
-                              setRandomStarts('early');
-                              localStorage.setItem('game-random-starts', 'early');
-                            }}
-                          />
-                          <span>Early random (first 90s)</span>
-                        </label>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <input
-                            type="radio"
-                            className="host-control-radio"
-                            name="startPosition"
-                            checked={randomStarts === 'random'}
-                            onChange={() => {
-                              setRandomStarts('random');
-                              localStorage.setItem('game-random-starts', 'random');
-                            }}
-                          />
-                          <span>Random position</span>
-              </label>
-            </div>
-                      
-                      {/* Description */}
-                      <div style={{ 
-                        fontSize: '0.8rem', 
-                        color: '#b3b3b3', 
-                        marginTop: 8, 
-                        padding: '8px 12px', 
-                        background: 'rgba(255,255,255,0.03)', 
-                        borderRadius: 4,
-                        borderLeft: '3px solid #00ff88'
-                      }}>
-                        {randomStarts === 'none' 
-                          ? `Each track will play for ${snippetLength} seconds starting from the beginning`
+                    <div className="host-game-playback-note">
+                      <p>
+                        <strong>Playback:</strong> {snippetLength}s snippets ·{' '}
+                        {randomStarts === 'none'
+                          ? 'from start'
                           : randomStarts === 'early'
-                          ? `Each track will play for ${snippetLength} seconds starting from a random position within the first 90 seconds`
-                          : `Each track will play for ${snippetLength} seconds starting from a random position (avoiding the last 30+ seconds)`
-                        }
-                      </div>
+                            ? 'early random'
+                            : 'random position'}
+                      </p>
+                      <p>
+                        Change per round in{' '}
+                        <button type="button" className="host-inline-link" onClick={() => openRoundBuilder()}>
+                          Round builder → Playback
+                        </button>
+                        . Offline card count &amp; PDFs are there too.
+                      </p>
                     </div>
-                    
+
             <div style={{ marginBottom: 12 }}>
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16, marginBottom: 6 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8 }} title="Polls Spotify playback more often and tightens recovery after context glitches. Uses more API traffic; use if you fight hijacked playback.">
@@ -8308,10 +8008,8 @@ const HostView: React.FC = () => {
                      Printable cards (daubers)
                    </div>
                    <p style={{ margin: '0 0 12px', fontSize: '0.8rem', color: '#9aa5b1', lineHeight: 1.45 }}>
-                     Generate random cards from your bingo pool and download a PDF.{' '}
-                     <strong style={{ color: '#c5cdd6' }}>Download PDF</strong> runs finalize automatically when needed so the pool is truncated (5×15 / 1×75) before cards are built.{' '}
-                     <strong style={{ color: '#c5cdd6' }}>Round & event management → Print PDF</strong> uses the same generator (PDF subtitle names the round). Set card count on the{' '}
-                     <strong style={{ color: '#c5cdd6' }}>Manager</strong> tab or inside <strong style={{ color: '#c5cdd6' }}>Round & event management</strong> when prepping offline packs — no need to visit Game tab first.
+                     Quick download from the current mix. For per-round packs, use{' '}
+                     <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> in Round builder (set card count there).
                    </p>
                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: '#c8d0d8' }}>
@@ -8372,9 +8070,9 @@ const HostView: React.FC = () => {
                       maxWidth: 520,
                     }}>
                       {mixPlaylistSelection.length === 0
-                        ? 'Use Connection for Spotify and/or YouTube Music as needed, then the Manager tab to select playlists (and optional catalog packs). YouTube-only mixes do not require Spotify. Return here to finalize or start the game.'
+                        ? 'Open Round builder (Manager tab) to add playlists to a round. Connect Spotify and/or YouTube Music in Connection if needed.'
                         : savedRoundSnapshotMakesFinalizeRedundant
-                          ? 'Load this round for prep on Game tab or Round Manager — Tempo syncs the room from your saved snapshot (projector grid + cards). Then tap Start Game when ready.'
+                          ? 'Your saved round snapshot can sync the room automatically. Tap Start Game when ready, or Finalize Mix if the display looks stale.'
                           : 'Tap Finalize Mix or Start Game to build the bingo song pool from your selected playlists.'}
                     </p>
                   </div>

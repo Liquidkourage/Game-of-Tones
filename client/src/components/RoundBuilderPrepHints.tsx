@@ -6,6 +6,7 @@ interface RoundBuilderPrepHintsProps {
   spotifyConnected: boolean;
   deviceNeeded: boolean;
   deviceSelected: boolean;
+  onOpenConnection?: () => void;
 }
 
 const RoundBuilderPrepHints: React.FC<RoundBuilderPrepHintsProps> = ({
@@ -13,6 +14,7 @@ const RoundBuilderPrepHints: React.FC<RoundBuilderPrepHintsProps> = ({
   spotifyConnected,
   deviceNeeded,
   deviceSelected,
+  onOpenConnection,
 }) => {
   if (!spotifyNeeded && !deviceNeeded) return null;
 
@@ -45,6 +47,11 @@ const RoundBuilderPrepHints: React.FC<RoundBuilderPrepHintsProps> = ({
             <AlertCircle className="w-3.5 h-3.5" aria-hidden />
           )}
           {item.label}
+          {!item.ok && onOpenConnection ? (
+            <button type="button" className="round-builder-prep-hints__link" onClick={onOpenConnection}>
+              Connection
+            </button>
+          ) : null}
         </span>
       ))}
     </div>

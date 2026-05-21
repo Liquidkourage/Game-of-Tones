@@ -533,9 +533,21 @@
 .round-builder-prep-hints__item {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   font-size: 0.72rem;
   color: rgba(255, 255, 255, 0.75);
+}
+
+.round-builder-prep-hints__link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #7dd3fc;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
 }
 
 .round-builder-prep-hints--ok .round-builder-prep-hints__item {
@@ -547,26 +559,20 @@
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(0, 0, 0, 0.2);
+  padding: 8px 10px;
 }
 
-.round-builder-playback__summary {
+.round-builder-playback__title {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
-  cursor: pointer;
+  margin: 0 0 8px;
   font-size: 0.78rem;
-  font-weight: 600;
+  font-weight: 700;
   color: rgba(255, 255, 255, 0.75);
-  list-style: none;
-}
-
-.round-builder-playback__summary::-webkit-details-marker {
-  display: none;
 }
 
 .round-builder-playback__body {
-  padding: 0 10px 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -765,26 +771,20 @@
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(0, 0, 0, 0.2);
+  padding: 8px 10px;
 }
 
-.round-planner__event-actions summary {
-  padding: 6px 10px;
+.round-planner__event-actions-title {
+  margin: 0 0 6px;
   font-size: 0.72rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
-  cursor: pointer;
-  list-style: none;
-}
-
-.round-planner__event-actions summary::-webkit-details-marker {
-  display: none;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .round-planner__event-actions-row {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 8px 8px;
 }
 
 .round-planner__cards-pdf {

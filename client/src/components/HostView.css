@@ -1212,16 +1212,25 @@
   background: rgba(0, 0, 0, 0.18);
 }
 
-.host-playlist-round-modal__tools > summary {
-  padding: 8px 12px;
-  cursor: pointer;
-  font-weight: 600;
+.host-playlist-round-modal__tools-title {
+  padding: 10px 12px 0;
 }
 
 .host-playlist-round-modal__tools-body {
   padding: 0 12px 12px;
-  max-height: min(28vh, 220px);
-  overflow-y: auto;
+}
+
+.host-playlist-round-modal__fine-print-title {
+  margin: 12px 0 6px;
+  font-size: 0.8rem;
+  color: #8899aa;
+}
+
+.host-playlist-round-modal__catalog-title {
+  margin: 14px 0 10px;
+  font-size: 0.9rem;
+  color: #b8dcff;
+  font-weight: 700;
 }
 
 .host-playlist-library-table-zone {
@@ -1522,18 +1531,143 @@
   display: flex;
   flex-direction: column;
   gap: 18px;
+  max-width: 920px;
 }
 
-.host-manager-setup-flow__music {
-  order: 1;
+.host-manager-hero {
+  border-color: rgba(0, 255, 136, 0.28);
+  background: linear-gradient(135deg, rgba(0, 255, 136, 0.08) 0%, rgba(0, 0, 0, 0.2) 100%);
 }
 
-.host-manager-setup-flow__grid {
-  order: 2;
+.host-manager-hero__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
 }
 
-.host-manager-setup-flow__round {
-  order: 3;
+.host-manager-hero__status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 14px;
+}
+
+.host-manager-hero__chip {
+  font-size: 0.72rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.host-manager-hero__chip--ok {
+  background: rgba(0, 255, 136, 0.12);
+  color: #b8f0d4;
+}
+
+.host-manager-hero__chip--active {
+  background: rgba(56, 189, 248, 0.15);
+  color: #7dd3fc;
+}
+
+.host-manager-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.host-manager-hero__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+}
+
+.host-manager-hero__stats {
+  margin: 0;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.host-manager-hybrid {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.host-manager-section--notice {
+  border-color: rgba(255, 193, 7, 0.35);
+  background: rgba(255, 193, 7, 0.06);
+}
+
+.host-inline-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #7dd3fc;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.host-game-prep-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  max-width: 560px;
+}
+
+.host-game-prep-bar__label {
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.host-game-prep-bar__value {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #e8f4ff;
+}
+
+.host-game-playback-note {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.22);
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.45;
+  max-width: 560px;
+}
+
+.host-game-playback-note p {
+  margin: 0 0 6px;
+}
+
+.host-game-playback-note p:last-child {
+  margin-bottom: 0;
 }
 
 .host-manager-grid {

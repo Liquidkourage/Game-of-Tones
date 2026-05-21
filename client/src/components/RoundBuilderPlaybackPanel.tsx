@@ -14,11 +14,11 @@ const RoundBuilderPlaybackPanel: React.FC<RoundBuilderPlaybackPanelProps> = ({
   randomStarts,
   onRandomStartsChange,
 }) => (
-  <details className="round-builder-playback">
-    <summary className="round-builder-playback__summary">
+  <section className="round-builder-playback" aria-labelledby="round-builder-playback-title">
+    <h4 id="round-builder-playback-title" className="round-builder-playback__title">
       <Radio className="w-4 h-4" aria-hidden />
-      Playback (optional)
-    </summary>
+      Playback
+    </h4>
     <div className="round-builder-playback__body">
       <label className="round-builder-playback__slider">
         <span>Snippet</span>
@@ -79,7 +79,7 @@ const RoundBuilderPlaybackPanel: React.FC<RoundBuilderPlaybackPanelProps> = ({
         under <strong>Connection</strong> in the header.
       </p>
     </div>
-  </details>
+  </section>
 );
 
 export default RoundBuilderPlaybackPanel;
