@@ -734,7 +734,6 @@ const HostView: React.FC = () => {
     if (pattern !== 'composite') {
       setEditingMaskClauseIndex(null);
       setCompositePaintDraft([]);
-      setCombinedPatternModalOpen(false);
     }
   }, [pattern]);
 
@@ -1765,11 +1764,20 @@ const HostView: React.FC = () => {
     if (!showPlaylistRoundModal) return;
     setPlaylistRoundModalPane('library');
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowPlaylistRoundModal(false);
+      if (e.key !== 'Escape') return;
+      if (combinedPatternModalOpen) {
+        setCombinedPatternModalOpen(false);
+        return;
+      }
+      if (showCustomPatternModal) {
+        setShowCustomPatternModal(false);
+        return;
+      }
+      setShowPlaylistRoundModal(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [showPlaylistRoundModal]);
+  }, [showPlaylistRoundModal, combinedPatternModalOpen, showCustomPatternModal]);
 
   const refreshRooms = useCallback(async () => {
     try {
@@ -4521,14 +4529,45 @@ const HostView: React.FC = () => {
     }
   };
 
-  const handleNewCustomPattern = () => {
+  const handleNewCustomPattern = useCallback((roundIndex: number) => {
+    compositeEditRoundIndexRef.current = roundIndex;
     setShowCustomPatternModal(true);
-  };
+  }, []);
 
   const handleSaveCustomPattern = (patternData: CustomPatternSavePayload) => {
     const savedPattern = saveCustomPattern(patternData);
     setSavedCustomPatterns(getSavedCustomPatterns());
-    handleCustomPatternSelect(savedPattern);
+    const idx = compositeEditRoundIndexRef.current;
+    const rot = savedPattern.matchAllowRotation === true;
+    const mir = savedPattern.matchAllowMirror === true;
+    handleUpdateRoundBingoFields(idx, {
+      bingoPattern: 'custom',
+      customPatternMask: [...savedPattern.positions],
+      patternComposite: undefined,
+      customMatchAllowRotation: rot,
+      customMatchAllowMirror: mir,
+    });
+    if (idx === currentRoundIndexRef.current) {
+      setSelectedCustomPattern(savedPattern);
+      setPattern('custom');
+      setCustomPattern(savedPattern.positions);
+      setCustomMask(savedPattern.positions);
+      setCustomMatchAllowRotation(rot);
+      setCustomMatchAllowMirror(mir);
+      if (socket && roomId) {
+        socket.emit('set-pattern', {
+          roomId,
+          pattern: 'custom',
+          customMask: savedPattern.positions,
+          customMatchAllowRotation: rot,
+          customMatchAllowMirror: mir,
+          customPatternName:
+            customPatternDisplayNameForEmit(savedPattern.positions, savedPattern, getSavedCustomPatterns()) ??
+            '',
+        });
+      }
+      addLog(`Custom pattern set to ${savedPattern.name}`, 'info');
+    }
     setShowCustomPatternModal(false);
   };
 

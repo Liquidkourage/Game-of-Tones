@@ -1,6 +1,6 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Save, Trash2, X } from 'lucide-react';
+import { Save, Trash2 } from 'lucide-react';
+import HostSubmodalPortal from './HostSubmodalPortal';
 import {
   BingoPattern,
   BINGO_PATTERNS,
@@ -59,73 +59,14 @@ const CombinedPatternModal: React.FC<CombinedPatternModalProps> = (props) => {
   if (!isOpen) return null;
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="modal-overlay"
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.82)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10000,
-          padding: '16px',
-        }}
-        onClick={onClose}
-      >
-        <motion.div
-          initial={{ scale: 0.96, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.96, opacity: 0 }}
-          className="modal-content"
-          style={{
-            backgroundColor: 'rgba(20, 20, 20, 0.97)',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-            borderRadius: '16px',
-            padding: '22px 20px 18px',
-            maxWidth: '560px',
-            width: '100%',
-            maxHeight: '92vh',
-            overflow: 'auto',
-            backdropFilter: 'blur(10px)',
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: '1.45rem', color: '#ffffff' }}>Combined pattern</h2>
-              <p style={{ margin: '6px 0 0', fontSize: '0.78rem', color: '#9aa5b1', lineHeight: 1.45, maxWidth: 440 }}>
-                Configure AND/OR clauses and painted shapes. Changes apply immediately.
-              </p>
-            </div>
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={onClose}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#ffffff',
-                cursor: 'pointer',
-                padding: '8px',
-                borderRadius: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}
-            >
-              <X size={22} />
-            </button>
-          </div>
-
+    <HostSubmodalPortal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Combined pattern"
+      subtitle="Configure AND/OR clauses and painted shapes. Changes apply to this round immediately."
+      titleId="host-combined-pattern-title"
+      maxWidth="600px"
+    >
           <div
             style={{
               padding: 14,
@@ -795,13 +736,11 @@ const CombinedPatternModal: React.FC<CombinedPatternModalProps> = (props) => {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18, gap: 10 }}>
-            <button type="button" className="btn-secondary" onClick={onClose} style={{ fontSize: '0.85rem', padding: '8px 22px' }}>
+            <button type="button" className="btn-primary" onClick={onClose} style={{ fontSize: '0.85rem', padding: '8px 22px' }}>
               Done
             </button>
           </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+    </HostSubmodalPortal>
   );
 };
 

@@ -47,7 +47,7 @@ interface RoundBucketSettingsProps {
   onPrintPdf?: () => void;
   onCallSheet?: () => void;
   onOpenComposite?: () => void;
-  onNewCustomPattern?: () => void;
+  onNewCustomPattern?: (roundIndex: number) => void;
 }
 
 const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
@@ -72,6 +72,12 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
     round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : hostDefaultFreeSpace;
   const needTracks = freeCenter ? 24 : 25;
 
+  const openCombinedEditor = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    onOpenComposite?.();
+  };
+
   const selectPattern = (v: BingoPattern) => {
     onUpdateBingo(roundIndex, {
       bingoPattern: v,
@@ -81,7 +87,10 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
         ? { customMatchAllowRotation: undefined, customMatchAllowMirror: undefined }
         : {}),
     });
-    if (v === 'composite') onOpenComposite?.();
+    if (v === 'composite') {
+      window.setTimeout(() => openCombinedEditor(), 0);
+    }
+    if (v === 'custom') onNewCustomPattern?.(roundIndex);
   };
 
   return (
@@ -149,12 +158,34 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
             </button>
           );
         })}
-        {pattern === 'composite' ? (
-          <button type="button" className="round-bucket-settings__shape" onClick={() => onOpenComposite?.()}>
-            Edit combined…
-          </button>
-        ) : null}
       </div>
+
+      {(pattern === 'composite' || pattern === 'custom') && (onOpenComposite || onNewCustomPattern) ? (
+        <div className="round-bucket-settings__pattern-editor">
+          {pattern === 'composite' && onOpenComposite ? (
+            <button
+              type="button"
+              className="round-bucket-settings__pattern-editor-btn round-bucket-settings__pattern-editor-btn--primary"
+              onClick={openCombinedEditor}
+            >
+              Edit combined pattern…
+            </button>
+          ) : null}
+          {pattern === 'custom' && onNewCustomPattern ? (
+            <button
+              type="button"
+              className="round-bucket-settings__pattern-editor-btn round-bucket-settings__pattern-editor-btn--primary"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onNewCustomPattern(roundIndex);
+              }}
+            >
+              Draw custom pattern…
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {pattern === 'custom' ? (
         <div className="round-bucket-settings__custom">
@@ -192,7 +223,15 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
             </select>
           </label>
           {onNewCustomPattern ? (
-            <button type="button" className="round-bucket-settings__link-btn" onClick={onNewCustomPattern}>
+            <button
+              type="button"
+              className="round-bucket-settings__link-btn"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onNewCustomPattern(roundIndex);
+              }}
+            >
               New custom
             </button>
           ) : null}

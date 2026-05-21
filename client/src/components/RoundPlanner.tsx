@@ -87,7 +87,7 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   onPrintPdf?: (roundIndex: number) => void;
   onCallSheet?: (roundIndex: number) => void;
   onOpenComposite?: (roundIndex: number) => void;
-  onNewCustomPattern?: () => void;
+  onNewCustomPattern?: (roundIndex: number) => void;
   printablePdfLoading?: boolean;
   printableCardCount: number;
   onPrintableCardCountChange: (n: number) => void;

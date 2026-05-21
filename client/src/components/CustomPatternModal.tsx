@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Save, Trash2 } from 'lucide-react';
+import { Save, Trash2 } from 'lucide-react';
 import { saveCustomPattern, validatePatternPositions } from '../patternDefinitions';
+import HostSubmodalPortal from './HostSubmodalPortal';
 
 export interface CustomPatternSavePayload {
   name: string;
@@ -74,68 +74,17 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="modal-overlay"
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10000,
-          padding: '20px',
-        }}
-        onClick={onClose}
-      >
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.9, opacity: 0 }}
-          className="modal-content"
-          style={{
-            backgroundColor: 'rgba(20, 20, 20, 0.95)',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-            borderRadius: '16px',
-            padding: '24px',
-            maxWidth: '500px',
-            width: '100%',
-            maxHeight: '90vh',
-            overflow: 'auto',
-            backdropFilter: 'blur(10px)',
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h2 style={{ margin: 0, fontSize: '1.5rem', color: '#ffffff' }}>
-              {initialPattern ? 'Edit Custom Pattern' : 'Create Custom Pattern'}
-            </h2>
-            <button
-              onClick={onClose}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#ffffff',
-                cursor: 'pointer',
-                padding: '8px',
-                borderRadius: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <X size={20} />
-            </button>
-          </div>
+  const modalTitle = initialPattern ? 'Edit custom pattern' : 'Create custom pattern';
 
+  return (
+    <HostSubmodalPortal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={modalTitle}
+      subtitle="Paint squares on the 5×5 grid, then save to use this shape on the current round."
+      titleId="host-custom-pattern-title"
+      maxWidth="520px"
+    >
           <div style={{ marginBottom: '20px' }}>
             <label style={{ display: 'block', marginBottom: '8px', color: '#ffffff', fontWeight: '500' }}>
               Pattern Name
@@ -309,9 +258,7 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
               {initialPattern ? 'Update Pattern' : 'Save Pattern'}
             </button>
           </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+    </HostSubmodalPortal>
   );
 };
 
