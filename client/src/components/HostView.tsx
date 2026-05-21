@@ -8830,7 +8830,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   type="button"
                   className="host-playlist-round-modal__help"
                   aria-label="How the round builder works"
-                  title="Library left, round buckets right. Use numbered buttons to switch rounds — each bucket has playlists, pattern, save/print, and start. Then Game tab → Finalize mix → Start Game."
+                  title="Library left, round buckets right. Numbered buttons switch rounds and sync the Game tab mix (blue Mix outline). Each bucket: playlists, pattern, save/print, start. Then Game tab → Finalize mix → Start Game."
                 >
                   <HelpCircle className="w-4 h-4" aria-hidden />
                 </button>
