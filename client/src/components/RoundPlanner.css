@@ -651,6 +651,14 @@
   color: #fff;
 }
 
+.round-planner__picker-btn--mix {
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.5);
+}
+
+.round-planner__picker-btn--mix.round-planner__picker-btn--active {
+  box-shadow: 0 0 0 1px rgba(0, 255, 136, 0.65), 0 0 0 3px rgba(56, 189, 248, 0.25);
+}
+
 .round-planner__picker-btn--ready {
   border-color: rgba(56, 189, 248, 0.45);
 }

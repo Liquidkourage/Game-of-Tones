@@ -802,8 +802,12 @@ const HostView: React.FC = () => {
   const [roundBuilderFocusIndex, setRoundBuilderFocusIndex] = useState(0);
   const compositeEditRoundIndexRef = useRef(0);
   const [playlistRoundModalPane, setPlaylistRoundModalPane] = useState<'library' | 'rounds'>('library');
-  const openRoundBuilder = useCallback((focusIndex = 0) => {
-    setRoundBuilderFocusIndex(Math.max(0, focusIndex));
+  const openRoundBuilder = useCallback((focusIndex?: number) => {
+    const idx =
+      focusIndex !== undefined
+        ? focusIndex
+        : Math.max(0, currentRoundIndexRef.current >= 0 ? currentRoundIndexRef.current : 0);
+    setRoundBuilderFocusIndex(idx);
     setShowPlaylistRoundModal(true);
   }, []);
   const showPlaylistRoundModalScrollRef = useRef(showPlaylistRoundModal);
@@ -5735,10 +5739,13 @@ const HostView: React.FC = () => {
       }
       const mixRows = resolveMixPlaylistRowsForRound(round);
       applyRoundBingoToHost(round);
+      const switchingRound = roundIndex !== currentRoundIndexRef.current;
       setCurrentRoundIndex(roundIndex);
       const playlistNames = round.playlistNames.join(', ');
-      showToast(`${round.name} — mix loaded for prep (${playlistNames})`, 'success');
-      addLog(`Prep select ${round.name}: ${playlistNames}`, 'info');
+      if (switchingRound) {
+        showToast(`${round.name} — mix loaded for prep (${playlistNames})`, 'success');
+        addLog(`Prep select ${round.name}: ${playlistNames}`, 'info');
+      }
 
       if (
         mixRows &&
@@ -7988,7 +7995,7 @@ const HostView: React.FC = () => {
                     })}
                   </select>
                   <p style={{ margin: '10px 0 0', fontSize: '0.78rem', color: '#9aa5b1', lineHeight: 1.45 }}>
-                    Matches <strong style={{ color: '#dfe7ee' }}>Load for prep</strong> in Round Manager: loads this round&apos;s playlists into the mix so track lists and snapshots align here.
+                    Same as picking a round in <strong style={{ color: '#dfe7ee' }}>Round builder</strong>: syncs that round&apos;s playlists and pattern to the Game tab mix.
                   </p>
                 </div>
               )}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './RoundPlanner.css';
 import type { BingoPattern, PatternCompositeSpec, SavedCustomPattern } from '../patternDefinitions';
 import RoundBucketSettings, { type RoundBucketBingoPatch } from './RoundBucketSettings';
@@ -131,10 +131,30 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [dragOverBucket, setDragOverBucket] = useState(false);
 
+  const loadPrepForRound = useCallback(
+    (roundIndex: number) => {
+      if (gameState === 'playing' || !onSelectRoundForPrep) return;
+      const round = rounds[roundIndex];
+      if (!round || !(round.playlistIds || []).length) return;
+      onSelectRoundForPrep(roundIndex);
+    },
+    [gameState, onSelectRoundForPrep, rounds],
+  );
+
+  const selectRound = useCallback(
+    (roundIndex: number) => {
+      const clamped = Math.min(Math.max(0, roundIndex), Math.max(0, rounds.length - 1));
+      setFocusedIndex(clamped);
+      loadPrepForRound(clamped);
+    },
+    [loadPrepForRound, rounds.length],
+  );
+
   useEffect(() => {
     const next = Math.min(Math.max(0, initialFocusedIndex), Math.max(0, rounds.length - 1));
     setFocusedIndex(next);
-  }, [initialFocusedIndex, rounds.length]);
+    loadPrepForRound(next);
+  }, [initialFocusedIndex, loadPrepForRound]);
 
   useEffect(() => {
     setFocusedIndex((i) => Math.min(i, Math.max(0, rounds.length - 1)));
@@ -167,6 +187,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
     const updated = ensureSequentialNumbering([...rounds, newRound]);
     onUpdateRounds(updated);
     setFocusedIndex(updated.length - 1);
+    // New bucket is empty — prep loads when playlists are added
   };
 
   const removeRound = (index: number) => {
@@ -190,6 +211,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
       status: round.status === 'unplanned' ? 'planned' : round.status,
     };
     onUpdateRounds(newRounds);
+    if (roundIndex === focusedIndex) loadPrepForRound(roundIndex);
   };
 
   const removePlaylistFromRound = (roundIndex: number, playlistId: string) => {
@@ -207,6 +229,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
       status: round.playlistIds.length === 1 ? 'unplanned' : round.status,
     };
     onUpdateRounds(newRounds);
+    if (roundIndex === focusedIndex) loadPrepForRound(roundIndex);
   };
 
   const handleBucketDragOver = (e: React.DragEvent) => {
@@ -263,8 +286,10 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
         {rounds.slice(0, MAX_ROUND_BUCKETS).map((round, i) => {
           const hasPl = (round.playlistIds || []).length > 0;
           const saved = snapshotMeetsSave(round);
+          const isPrepMix = i === currentRound && gameState !== 'playing' && hasPl;
           let cls = 'round-planner__picker-btn';
           if (i === focusedIndex) cls += ' round-planner__picker-btn--active';
+          if (isPrepMix) cls += ' round-planner__picker-btn--mix';
           if (round.status === 'completed') cls += ' round-planner__picker-btn--done';
           else if (saved) cls += ' round-planner__picker-btn--saved';
           else if (hasPl) cls += ' round-planner__picker-btn--ready';
@@ -275,8 +300,8 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
               role="tab"
               aria-selected={i === focusedIndex}
               className={cls}
-              onClick={() => setFocusedIndex(i)}
-              title={round.name}
+              onClick={() => selectRound(i)}
+              title={isPrepMix ? `${round.name} — synced to Game tab mix` : round.name}
             >
               {i + 1}
             </button>
@@ -301,7 +326,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
           className="round-planner__picker-arrow"
           disabled={focusedIndex <= 0}
           aria-label="Previous round"
-          onClick={() => setFocusedIndex((i) => Math.max(0, i - 1))}
+          onClick={() => selectRound(focusedIndex - 1)}
         >
           <ChevronLeft className="w-4 h-4" aria-hidden />
         </button>
@@ -318,7 +343,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
           className="round-planner__picker-arrow"
           disabled={focusedIndex >= rounds.length - 1}
           aria-label="Next round"
-          onClick={() => setFocusedIndex((i) => Math.min(rounds.length - 1, i + 1))}
+          onClick={() => selectRound(focusedIndex + 1)}
         >
           <ChevronRight className="w-4 h-4" aria-hidden />
         </button>
@@ -473,15 +498,6 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
         ) : null}
 
         <div className="round-planner-bucket__actions">
-          {onSelectRoundForPrep && gameState !== 'playing' && playlistIds.length > 0 ? (
-            <button
-              type="button"
-              className="round-planner-btn round-planner-btn--grow round-planner-btn--prep"
-              onClick={() => onSelectRoundForPrep(index)}
-            >
-              Load for prep
-            </button>
-          ) : null}
           {!isLive && focused.status !== 'completed' && canStartRound(focused) ? (
             <button
               type="button"
