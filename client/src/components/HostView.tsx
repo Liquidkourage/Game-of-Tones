@@ -7213,6 +7213,22 @@ const HostView: React.FC = () => {
                   onStartRound={handleStartRound}
                   onSelectRoundForPrep={handleSelectRoundForPrep}
                   gameState={gameState}
+                  hostDefaultFreeSpace={freeSpaceEnabled}
+                  savedCustomPatterns={savedCustomPatterns}
+                  onUpdateRoundBingo={handleUpdateRoundBingoFields}
+                  onSaveRound={(idx) => void handleSaveRoundAtIndex(idx)}
+                  saveRoundBusy={saveRoundBusy}
+                  snapshotMeetsSave={(r) => eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled)}
+                  snippetLength={snippetLength}
+                  onSnippetLengthChange={setSnippetLength}
+                  randomStarts={randomStarts}
+                  onRandomStartsChange={setRandomStarts}
+                  prepHints={{
+                    spotifyNeeded: mixNeedsHostSpotify,
+                    spotifyConnected: isSpotifyConnected,
+                    deviceNeeded: mixNeedsHostSpotify,
+                    deviceSelected: !!selectedDevice,
+                  }}
                 />
               </div>
             </div>
@@ -9253,7 +9269,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   type="button"
                   className="host-playlist-round-modal__help"
                   aria-label="How playlists and rounds work"
-                  title="Mix: include in the song pool. Drag a row onto a round bucket or use Add to round. Finalize the mix from the Manager tab after you close this window."
+                  title="Per round: playlists in bucket, pattern & free center, Save round. Optional: Playback snippet settings. Then Game tab → Finalize mix → Start Game. Connection/device in header."
                 >
                   <HelpCircle className="w-4 h-4" aria-hidden />
                 </button>

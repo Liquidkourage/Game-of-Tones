@@ -383,6 +383,227 @@
   opacity: 0.75;
 }
 
+/* Per-bucket bingo + save */
+.round-bucket-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.round-bucket-settings__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px 8px;
+}
+
+.round-bucket-settings__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.round-bucket-settings__field--narrow {
+  flex: 0 0 auto;
+}
+
+.round-bucket-settings__field--check {
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+  padding-bottom: 2px;
+}
+
+.round-bucket-settings__label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.round-bucket-settings__select,
+.round-bucket-settings__input {
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 0.72rem;
+  font-family: inherit;
+}
+
+.round-bucket-settings__select {
+  max-width: 9rem;
+}
+
+.round-bucket-settings__input {
+  width: 44px;
+}
+
+.round-bucket-settings__hint {
+  margin: 0;
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.35;
+}
+
+.round-bucket-settings__hint strong {
+  color: rgba(200, 220, 210, 0.9);
+  font-weight: 600;
+}
+
+.round-bucket-settings__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.round-bucket-settings__status {
+  font-size: 0.68rem;
+  color: rgba(255, 193, 7, 0.9);
+  line-height: 1.3;
+  flex: 1 1 120px;
+}
+
+.round-bucket-settings__status--ok {
+  color: #6ee7a0;
+}
+
+.round-bucket-settings__status--muted {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.round-bucket-settings__save {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 255, 136, 0.35);
+  background: rgba(0, 255, 136, 0.12);
+  color: #00ff88;
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.round-bucket-settings__save:hover:not(:disabled) {
+  background: rgba(0, 255, 136, 0.22);
+}
+
+.round-bucket-settings__save:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Prep checklist + playback (round builder) */
+.round-builder-prep-hints {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  background: rgba(255, 193, 7, 0.08);
+  flex-shrink: 0;
+}
+
+.round-builder-prep-hints--ok {
+  border-color: rgba(0, 255, 136, 0.28);
+  background: rgba(0, 255, 136, 0.06);
+}
+
+.round-builder-prep-hints__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.round-builder-prep-hints--ok .round-builder-prep-hints__item {
+  color: #b8f0d4;
+}
+
+.round-builder-playback {
+  flex-shrink: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.round-builder-playback__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+  list-style: none;
+}
+
+.round-builder-playback__summary::-webkit-details-marker {
+  display: none;
+}
+
+.round-builder-playback__body {
+  padding: 0 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.round-builder-playback__slider {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.round-builder-playback__value {
+  color: #00ff88;
+  font-weight: 700;
+  min-width: 2rem;
+}
+
+.round-builder-playback__radios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.round-builder-playback__radios label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.round-builder-playback__note {
+  margin: 0;
+  font-size: 0.66rem;
+  color: rgba(255, 255, 255, 0.45);
+  line-height: 1.4;
+}
+
+.round-builder-playback__note strong {
+  color: rgba(200, 220, 210, 0.85);
+  font-weight: 600;
+}
+
 /* Inside playlist modal: hide redundant chrome */
 .host-playlist-round-modal-root .round-planner__subtitle,
 .host-playlist-round-modal-root .round-planner__notice {

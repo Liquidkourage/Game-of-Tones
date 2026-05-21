@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import './RoundPlanner.css';
-import type { BingoPattern, PatternCompositeSpec } from '../patternDefinitions';
+import type { BingoPattern, PatternCompositeSpec, SavedCustomPattern } from '../patternDefinitions';
+import RoundBucketSettings, { type RoundBucketBingoPatch } from './RoundBucketSettings';
+import RoundBuilderPlaybackPanel from './RoundBuilderPlaybackPanel';
+import RoundBuilderPrepHints from './RoundBuilderPrepHints';
 import {
   ChevronDown,
   ChevronUp,
@@ -46,6 +49,22 @@ interface RoundPlannerProps {
   /** Sync this round's playlists into the host mix + pattern/snippet UI without starting the live game */
   onSelectRoundForPrep?: (roundIndex: number) => void;
   gameState: 'waiting' | 'playing' | 'ended';
+  hostDefaultFreeSpace: boolean;
+  savedCustomPatterns: SavedCustomPattern[];
+  onUpdateRoundBingo: (roundIndex: number, patch: RoundBucketBingoPatch) => void;
+  onSaveRound?: (roundIndex: number) => void;
+  saveRoundBusy?: boolean;
+  snapshotMeetsSave: (round: EventRound) => boolean;
+  snippetLength: number;
+  onSnippetLengthChange: (seconds: number) => void;
+  randomStarts: 'none' | 'early' | 'random';
+  onRandomStartsChange: (mode: 'none' | 'early' | 'random') => void;
+  prepHints?: {
+    spotifyNeeded: boolean;
+    spotifyConnected: boolean;
+    deviceNeeded: boolean;
+    deviceSelected: boolean;
+  };
 }
 
 /**
@@ -61,7 +80,18 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
   currentRound,
   onStartRound,
   onSelectRoundForPrep,
-  gameState
+  gameState,
+  hostDefaultFreeSpace,
+  savedCustomPatterns,
+  onUpdateRoundBingo,
+  onSaveRound,
+  saveRoundBusy,
+  snapshotMeetsSave,
+  snippetLength,
+  onSnippetLengthChange,
+  randomStarts,
+  onRandomStartsChange,
+  prepHints,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [dragOverBucket, setDragOverBucket] = useState<number | null>(null);
@@ -285,6 +315,15 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
         <p className="round-planner__notice">{startNextRoundDisabledReason()}</p>
       ) : null}
 
+      {prepHints ? (
+        <RoundBuilderPrepHints
+          spotifyNeeded={prepHints.spotifyNeeded}
+          spotifyConnected={prepHints.spotifyConnected}
+          deviceNeeded={prepHints.deviceNeeded}
+          deviceSelected={prepHints.deviceSelected}
+        />
+      ) : null}
+
       {!isCollapsed && (
         <div id="round-planner-buckets">
           <div className="round-planner-buckets-wrap">
@@ -318,6 +357,17 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                       ) : null}
                     </div>
                   </div>
+
+                  <RoundBucketSettings
+                    round={round}
+                    roundIndex={index}
+                    hostDefaultFreeSpace={hostDefaultFreeSpace}
+                    savedCustomPatterns={savedCustomPatterns}
+                    onUpdateBingo={onUpdateRoundBingo}
+                    onSaveRound={onSaveRound}
+                    saveRoundBusy={saveRoundBusy}
+                    snapshotReady={snapshotMeetsSave(round)}
+                  />
 
                   <div className="round-planner-bucket__drop">
                     {playlistIds.length === 0 ? (
@@ -421,6 +471,13 @@ const RoundPlanner: React.FC<RoundPlannerProps> = ({
                 </div>
               );
             })}
+
+            <RoundBuilderPlaybackPanel
+              snippetLength={snippetLength}
+              onSnippetLengthChange={onSnippetLengthChange}
+              randomStarts={randomStarts}
+              onRandomStartsChange={onRandomStartsChange}
+            />
 
             {rounds.length < MAX_ROUND_BUCKETS ? (
               <button type="button" className="round-planner-add" onClick={addRound}>
