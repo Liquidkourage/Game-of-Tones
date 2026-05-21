@@ -73,6 +73,8 @@ import CustomPatternModal, { type CustomPatternSavePayload } from './CustomPatte
 import CombinedPatternModal from './CombinedPatternModal';
 import SongTitleEditModal from './SongTitleEditModal';
 import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModal';
+import HostScreenTour from './HostScreenTour';
+import { buildHostScreenTourSteps } from '../hostScreenTourSteps';
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
 import { HostYoutubeMusicPlaylistLibrary, type YoutubeMixPlaylistRow } from './HostYoutubeMusicPlaylistLibrary';
 import { HostYoutubeIframePlayer, primeYoutubeHostPlaybackAudioUnlock } from './HostYoutubeIframePlayer';
@@ -770,6 +772,8 @@ const HostView: React.FC = () => {
   /** In-person + online: only in-person verified bingos end the round / prize */
   const [hybridInPersonPlusOnline, setHybridInPersonPlusOnline] = useState(false);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
+  const [hostTourOpen, setHostTourOpen] = useState(false);
+  const [hostTourStep, setHostTourStep] = useState(0);
   const showConnectionModalScrollRef = useRef(showConnectionModal);
   showConnectionModalScrollRef.current = showConnectionModal;
   /** Server has YTM OAuth env; shows Connection UI even when REACT_APP_ENABLE_YOUTUBE_MUSIC was not set at client build time. */
@@ -6316,6 +6320,35 @@ const HostView: React.FC = () => {
     mixFinalized,
   ]);
 
+  const hostTourSteps = useMemo(
+    () =>
+      buildHostScreenTourSteps({
+        gameState,
+        hasCurrentSong: Boolean(currentSong),
+        showGoLive: gameState === 'waiting' && !currentSong,
+        showLiveDock: gameState === 'playing' || Boolean(currentSong),
+        showRoundMeta:
+          gameState === 'playing' || (gameState === 'waiting' && (mixFinalized || hostActiveRoundSummary.mixFinalized)),
+        showFinalizeMix: false,
+      }),
+    [gameState, currentSong, mixFinalized, hostActiveRoundSummary.mixFinalized],
+  );
+
+  useEffect(() => {
+    if (hostTourStep >= hostTourSteps.length && hostTourSteps.length > 0) {
+      setHostTourStep(0);
+    }
+  }, [hostTourStep, hostTourSteps.length]);
+
+  useEffect(() => {
+    if (!hostTourOpen) return;
+    const step = hostTourSteps[hostTourStep];
+    if (step?.id === 'projector-settings') {
+      const el = document.querySelector<HTMLDetailsElement>('[data-host-tour="projector-settings"]');
+      if (el) el.open = true;
+    }
+  }, [hostTourOpen, hostTourStep, hostTourSteps]);
+
   const showPrimaryFinalizeMixButton =
     !mixFinalized && !savedRoundSnapshotMakesFinalizeRedundant && mixPlaylistSelection.length > 0;
   /** Round builder saved this round — host screen is go-live only (no mix/finalize/PDF chrome). */
@@ -7369,19 +7402,49 @@ const HostView: React.FC = () => {
       >
         {/* Header */}
         <div className="host-header">
-          <h1 style={{ display: 'flex', alignItems: 'center', gap: 10, margin: 0 }}>
-            <Gamepad2 className="w-8 h-8" style={{ color: '#00ff88' }} aria-hidden />
-            Game Host 1
-          </h1>
-          <div className="room-info" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div className="host-header__brand" data-host-tour="header-brand">
+            <h1 className="host-header__title">
+              <Gamepad2 className="host-header__icon" aria-hidden />
+              <span className="host-header__title-text">
+                <span className="host-header__app">TEMPO</span>
+                <span className="host-header__role">Host</span>
+              </span>
+            </h1>
+            <p className="host-header__sub">
+              Room <strong>{roomId}</strong>
+              {gameState === 'playing' ? (
+                <span className="host-header__state host-header__state--live"> · Live</span>
+              ) : gameState === 'ended' ? (
+                <span className="host-header__state"> · Ended</span>
+              ) : (
+                <span className="host-header__state"> · Setup</span>
+              )}
+            </p>
+          </div>
+          <div className="room-info host-header__toolbar">
             <button
               type="button"
               className="btn-secondary host-connection-toolbar-btn"
+              data-host-tour="connection"
               onClick={() => setShowConnectionModal(true)}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
             >
               <Link2 className="w-4 h-4" aria-hidden />
               Connection
+            </button>
+            <button
+              type="button"
+              className="btn-secondary host-tour-launcher"
+              onClick={() => {
+                setHostTourStep(0);
+                setHostTourOpen(true);
+              }}
+              aria-label="Show host screen tour"
+              title="Walk through each part of the host screen"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+            >
+              <HelpCircle className="w-4 h-4" aria-hidden />
+              Tour
             </button>
             {hostAccount ? (
               <span
@@ -7391,15 +7454,15 @@ const HostView: React.FC = () => {
                   `Host account #${hostAccount.id}`
                 }
               >
-                Tempo account · #{hostAccount.id}
-                {hostAccount.displayName ? ` · ${hostAccount.displayName}` : ''}
+                {hostAccount.displayName?.trim() ||
+                  hostAccount.email?.split('@')[0]?.trim() ||
+                  `Account #${hostAccount.id}`}
               </span>
             ) : hostAccount === null ? (
               <span className="host-account-chip host-account-chip--muted" title="Sign in from home (Google) to link a host account.">
                 No Tempo account linked
               </span>
             ) : null}
-            <span className="room-code">Room: {roomId}</span>
           </div>
         </div>
 
@@ -7425,10 +7488,10 @@ const HostView: React.FC = () => {
         ) : null}
 
         {/* Main Content */}
-        <div className="host-content" style={{ paddingBottom: '20px' }}>
+        <div className="host-content host-content--dashboard" style={{ paddingBottom: '20px' }}>
           <div className="tab-content host-unified">
             {(gameState === 'playing' || currentSong) && (
-              <section className="host-live-dock" aria-label="Live show">
+              <section className="host-live-dock" data-host-tour="live-dock" aria-label="Live show">
                 {gamePaused && (
                   <div className="host-paused-banner host-live-dock__paused">
                     <p className="host-paused-banner__title">GAME PAUSED — RESUME HERE</p>
@@ -7518,7 +7581,18 @@ const HostView: React.FC = () => {
             )}
 
             {gameState === 'waiting' && !currentSong && (
-              <section className="host-go-live" aria-label="Start show">
+              <section className="host-go-live host-go-live--banner" data-host-tour="go-live" aria-label="Start show">
+                <div className="host-go-live__summary">
+                  <p className="host-go-live__summary-label">Ready to play</p>
+                  <p className="host-go-live__summary-round">
+                    {hostActiveRoundSummary.roundName ?? 'Select a round'}
+                  </p>
+                  <p className="host-go-live__summary-meta">
+                    {hostActiveRoundSummary.poolCount > 0
+                      ? `${hostActiveRoundSummary.poolCount} tracks · ${hostActiveRoundSummary.patternLabel}`
+                      : 'Open Round builder to build your mix'}
+                  </p>
+                </div>
                 <div className="host-go-live__actions control-buttons">
                   {showPrimaryFinalizeMixButton ? (
                     <button
@@ -7552,13 +7626,13 @@ const HostView: React.FC = () => {
                         ? 'Connecting Spotify...'
                         : 'Start Game'}
                   </button>
-                  {!gameTabRoundBuilderReady ? (
-                    <p className="host-go-live__hint">
-                      Start Game will <strong>finalize the mix automatically</strong> if needed. Use Finalize Mix first only
-                      for an early card preview on the display.
-                    </p>
-                  ) : null}
                 </div>
+                {!gameTabRoundBuilderReady ? (
+                  <p className="host-go-live__hint">
+                    Start Game will <strong>finalize the mix automatically</strong> if needed. Use Finalize Mix first only
+                    for an early card preview on the display.
+                  </p>
+                ) : null}
               </section>
             )}
 
@@ -7566,22 +7640,51 @@ const HostView: React.FC = () => {
                 <div className="host-manager-grid host-manager-grid--split host-manager-grid--balanced">
                   <div className="host-manager-col">
                 <motion.section
-                  className="host-manager-hero host-manager-hero--compact host-manager-section"
+                  className="host-manager-hero host-manager-hero--dashboard host-manager-section"
+                  data-host-tour="rounds-panel"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.15 }}
                 >
-                  <div className="host-manager-hero__row">
+                  <div className="host-manager-hero__top">
                     <div className="host-manager-hero__main">
                       <h2 className="host-manager-hero__title">
                         <ListMusic className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
                         Rounds &amp; playlists
                       </h2>
                       <p className="host-manager-section__lead host-manager-hero__lead">
-                        <strong style={{ color: '#c5dccf' }}>Round builder</strong> for playlists, patterns, and{' '}
-                        <strong style={{ color: '#c5dccf' }}>Save round</strong>. Start the show at the top when ready. Spotify / device:{' '}
+                        Build rounds in <strong style={{ color: '#c5dccf' }}>Round builder</strong>, save each mix, then{' '}
+                        <strong style={{ color: '#c5dccf' }}>Start Game</strong> above. Playback:{' '}
                         <strong style={{ color: '#c5dccf' }}>Connection</strong> in the header.
                       </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-primary host-manager-hero__cta"
+                      data-host-tour="round-builder"
+                      onClick={() => openRoundBuilder()}
+                    >
+                      <ListMusic className="w-5 h-5" aria-hidden />
+                      Open Round builder
+                    </button>
+                  </div>
+                  {eventRounds.length > 0 ? (
+                    <div className="host-event-stats-mini" aria-label="Event overview">
+                      {(
+                        [
+                          { key: 'completed', label: 'Done', val: getRoundStatusSummary().completed, mod: 'done' },
+                          { key: 'active', label: 'Live', val: getRoundStatusSummary().active, mod: 'live' },
+                          { key: 'planned', label: 'Planned', val: getRoundStatusSummary().planned, mod: 'planned' },
+                          { key: 'unplanned', label: 'Empty', val: getRoundStatusSummary().unplanned, mod: 'empty' },
+                        ] as const
+                      ).map(({ key, label, val, mod }) => (
+                        <div key={key} className={`host-event-stats-mini__cell host-event-stats-mini__cell--${mod}`}>
+                          <span className="host-event-stats-mini__val">{val}</span>
+                          <span className="host-event-stats-mini__label">{label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                       <div className="host-manager-hero__status">
                         <span className={`host-manager-hero__chip${isSpotifyConnected ? ' host-manager-hero__chip--ok' : ''}`}>
                           Spotify {isSpotifyConnected ? 'connected' : 'not connected'}
@@ -7601,7 +7704,7 @@ const HostView: React.FC = () => {
                           Connect Spotify or YouTube in the header before Round builder.
                         </p>
                       ) : null}
-                      <div className="host-rounds-hero__setlist" aria-label="Active round and mix">
+                      <div className="host-rounds-hero__setlist" data-host-tour="round-setlist" aria-label="Active round and mix">
                         <p className="host-rounds-hero__setlist-title">
                           {hostActiveRoundSummary.roundName ?? 'No round selected'}
                           {hostActiveRoundSummary.roundStatus ? (
@@ -7610,15 +7713,16 @@ const HostView: React.FC = () => {
                             </span>
                           ) : null}
                         </p>
+                        {hostActiveRoundSummary.playlistNames.length > 0 ? (
+                          <ul className="host-rounds-hero__playlist-chips" aria-label="Playlists in mix">
+                            {hostActiveRoundSummary.playlistNames.map((name) => (
+                              <li key={name}>{name}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="host-rounds-hero__empty-hint">Add playlists in Round builder</p>
+                        )}
                         <dl className="host-rounds-hero__setlist-grid">
-                          <div>
-                            <dt>Playlists</dt>
-                            <dd>
-                              {hostActiveRoundSummary.playlistNames.length > 0
-                                ? hostActiveRoundSummary.playlistNames.join(' · ')
-                                : 'Add playlists in Round builder'}
-                            </dd>
-                          </div>
                           <div>
                             <dt>Pattern</dt>
                             <dd>{hostActiveRoundSummary.patternLabel}</dd>
@@ -7627,21 +7731,28 @@ const HostView: React.FC = () => {
                             <dt>Pool</dt>
                             <dd>
                               {hostActiveRoundSummary.poolCount > 0
-                                ? `${hostActiveRoundSummary.poolCount} tracks${hostActiveRoundSummary.mixFinalized ? ' (finalized)' : ''}`
+                                ? `${hostActiveRoundSummary.poolCount} tracks${hostActiveRoundSummary.mixFinalized ? ' · finalized' : ''}`
                                 : 'Not built yet'}
-                              {hostActiveRoundSummary.savedRound ? ' · saved round' : ''}
+                              {hostActiveRoundSummary.savedRound ? ' · saved' : ''}
                             </dd>
                           </div>
                           {gameState === 'playing' ? (
                             <div>
                               <dt>Played</dt>
-                              <dd>{hostActiveRoundSummary.playedCount} this round</dd>
+                              <dd>{hostActiveRoundSummary.playedCount} songs</dd>
                             </div>
                           ) : null}
+                          <div>
+                            <dt>Rounds</dt>
+                            <dd>
+                              {eventRounds.length} in event
+                              {currentRoundIndex >= 0 ? ` · #${currentRoundIndex + 1} selected` : ''}
+                            </dd>
+                          </div>
                         </dl>
                       </div>
                       {(gameState === 'playing' || hostActiveRoundSummary.mixFinalized) && (
-                        <div className="host-rounds-hero__meta" aria-label="Round controls">
+                        <div className="host-rounds-hero__meta" data-host-tour="round-meta" aria-label="Round controls">
                           {gameState === 'playing' ? (
                             <button type="button" className="btn-secondary" onClick={handleEndRound}>
                               <Flag className="w-4 h-4" aria-hidden />
@@ -7676,21 +7787,11 @@ const HostView: React.FC = () => {
                           ) : null}
                         </div>
                       )}
-                    </div>
-                    <button
-                      type="button"
-                      className="btn-primary host-manager-hero__cta"
-                      onClick={() => openRoundBuilder()}
-                    >
-                      <ListMusic className="w-5 h-5" aria-hidden />
-                      Open Round builder
-                    </button>
-                  </div>
                 </motion.section>
                   </div>
 
                   <div className="host-manager-col host-manager-col--wide">
-          <details className="host-event-settings" open={gameState !== 'playing'}>
+          <details className="host-event-settings" data-host-tour="projector-settings" open={gameState !== 'playing'}>
             <summary className="host-event-settings__summary">
               <Monitor className="w-5 h-5" aria-hidden />
               Projector &amp; event rules
@@ -9169,6 +9270,14 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
           artistName={editingSong.artist}
         />
       )}
+
+      <HostScreenTour
+        open={hostTourOpen && hostTourSteps.length > 0}
+        stepIndex={hostTourStep}
+        steps={hostTourSteps}
+        onStepIndexChange={setHostTourStep}
+        onClose={() => setHostTourOpen(false)}
+      />
 
     </div>
   );
