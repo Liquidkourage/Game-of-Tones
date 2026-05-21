@@ -1531,7 +1531,12 @@
   display: flex;
   flex-direction: column;
   gap: 18px;
-  max-width: 920px;
+  width: 100%;
+  max-width: 1280px;
+}
+
+.host-manager-setup-flow > .host-manager-grid {
+  width: 100%;
 }
 
 .host-manager-hero {
@@ -1588,10 +1593,11 @@
   font-weight: 800;
 }
 
-.host-manager-hero__stats {
-  margin: 0;
-  font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.55);
+.host-manager-hero__warn {
+  margin: 0 0 12px;
+  font-size: 0.82rem;
+  color: #fcd34d;
+  line-height: 1.45;
 }
 
 .host-manager-hybrid {
@@ -1688,7 +1694,7 @@
 }
 
 @media (min-width: 960px) {
-  /* Two columns only when Bingo Pattern sits beside Public display */
+  /* Event rules | Public display */
   .host-manager-grid--split {
     grid-template-columns: minmax(280px, 1fr) minmax(300px, 1.4fr);
   }

@@ -7383,7 +7383,17 @@ const HostView: React.FC = () => {
                         Prep: {eventRounds[currentRoundIndex].name}
                       </span>
                     ) : null}
+                    {(isSpotifyConnected || showYoutubeMusicInConnectionModal) && (
+                      <span className="host-manager-hero__chip">
+                        {selectedPlaylists.length} in mix · {eventRounds.length} rounds · {playlists.length} library
+                      </span>
+                    )}
                   </div>
+                  {!(isSpotifyConnected || showYoutubeMusicInConnectionModal) ? (
+                    <p className="host-manager-hero__warn">
+                      Connect Spotify or YouTube Music via <strong>Connection</strong> before Round builder.
+                    </p>
+                  ) : null}
                   <div className="host-manager-hero__actions">
                     <button
                       type="button"
@@ -7404,43 +7414,12 @@ const HostView: React.FC = () => {
                   </div>
                 </motion.section>
 
-          {(isSpotifyConnected || showYoutubeMusicInConnectionModal) ? (
-          <motion.section
-            className="host-manager-music host-manager-section"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.25 }}
-          >
-            <h2 className="host-manager-section__title">Music &amp; rounds</h2>
-            <p className="host-manager-section__lead">
-              All playlist buckets, patterns, playback per round, PDFs, and event resets live in Round builder.
-            </p>
-            <p className="host-manager-hero__stats">
-              <strong>{selectedPlaylists.length}</strong> in mix · <strong>{eventRounds.length}</strong> rounds ·{' '}
-              <strong>{playlists.length}</strong> library rows
-            </p>
-          </motion.section>
-          ) : (
-            <motion.section
-              className="host-manager-section host-manager-section--notice"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-            >
-              <p className="host-manager-section__lead" style={{ margin: 0 }}>
-                Connect <strong>Spotify</strong> and/or <strong>YouTube Music</strong> via{' '}
-                <button type="button" className="host-inline-link" onClick={() => setShowConnectionModal(true)}>
-                  Connection
-                </button>{' '}
-                before opening Round builder.
-              </p>
-            </motion.section>
-          )}
-
+                <div className="host-manager-grid host-manager-grid--split">
           <motion.section
             className="host-manager-round host-manager-section"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
+            transition={{ delay: 0.25 }}
           >
             <h2 className="host-manager-section__title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <CalendarRange className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
@@ -7494,7 +7473,7 @@ const HostView: React.FC = () => {
             className="host-manager-section host-manager-section--display font-size-section"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
+            transition={{ delay: 0.3 }}
           >
             <div className="host-manager-section__topbar">
               <h2
@@ -7752,6 +7731,7 @@ const HostView: React.FC = () => {
             ) : null}
             </>
           </motion.div>
+                </div>
                 </div>
               </div>
             )}
