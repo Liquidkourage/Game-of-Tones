@@ -401,7 +401,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
               aria-selected={i === focusedIndex}
               className={cls}
               onClick={() => selectRound(i)}
-              title={isPrepMix ? `${round.name} — synced to Game tab mix` : round.name}
+              title={isPrepMix ? `${round.name} — synced to host mix` : round.name}
             >
               {i + 1}
             </button>

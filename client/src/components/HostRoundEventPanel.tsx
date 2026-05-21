@@ -144,7 +144,7 @@ const HostRoundEventPanel: React.FC<HostRoundEventPanelProps> = ({
         Printable dauber cards (PDF)
       </h4>
       <p className="host-round-hub-event__hint">
-        Cards per PDF applies to <strong>Print PDF</strong> on each round and <strong>Download PDF</strong> on the Game tab.
+        Cards per PDF applies to <strong>Print PDF</strong> on each round and <strong>Download PDF</strong> on the host screen.
       </p>
       <label className="host-round-hub-event__cards-label">
         Cards per PDF

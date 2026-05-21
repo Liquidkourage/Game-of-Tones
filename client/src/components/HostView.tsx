@@ -9,7 +9,6 @@ import {
   Trophy,
   Plus,
   X,
-  LayoutDashboard,
   Gamepad2,
   Link2,
   Grid3x3,
@@ -768,7 +767,6 @@ const HostView: React.FC = () => {
   }, []);
   const showPlaylistRoundModalScrollRef = useRef(showPlaylistRoundModal);
   showPlaylistRoundModalScrollRef.current = showPlaylistRoundModal;
-  const [activeTab, setActiveTab] = useState<'setup' | 'play'>('setup');
   /** In-person + online: only in-person verified bingos end the round / prize */
   const [hybridInPersonPlusOnline, setHybridInPersonPlusOnline] = useState(false);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
@@ -1708,18 +1706,6 @@ const HostView: React.FC = () => {
     }
   }, [assignedPlaylistIds, playlists, youtubeMusicPlaylists, showAllPlaylists]);
 
-  // Auto-switch tabs based on game state (do not depend on eventRounds � round-bucket updates
-  // should not yank the host back to Manager; see handleStartRound ? Game tab).
-  useEffect(() => {
-    if (gameState === 'playing') {
-      setActiveTab('play');
-    } else if (gameState === 'waiting' && mixFinalized) {
-      setActiveTab('play');
-    } else {
-      setActiveTab('setup');
-    }
-  }, [gameState, mixFinalized]);
-
   /** After first Spotify status check: prompt once if not connected. */
   useEffect(() => {
     if (!spotifyInitialCheckDone || isSpotifyConnected) return;
@@ -1729,6 +1715,7 @@ const HostView: React.FC = () => {
       setShowConnectionModal(true);
     }
   }, [spotifyInitialCheckDone, isSpotifyConnected, showYoutubeMusicInConnectionModal]);
+
 
   /** Spotify disconnected ? reopen modal; reconnected ? close. */
   useEffect(() => {
@@ -3156,7 +3143,7 @@ const HostView: React.FC = () => {
     playlists?: Playlist[];
     /** Skip playlist fetch — use frozen Save-round order (must match `playlists` column assignment). */
     songListOverride?: Song[];
-    /** Server free-center flag for this finalize (defaults to host Game tab toggle). */
+    /** Server free-center flag for this finalize (defaults to host free-center toggle). */
     freeSpace?: boolean;
   }): Promise<boolean> => {
     const playlists = opts?.playlists ?? mixPlaylistSelection;
@@ -3545,7 +3532,7 @@ const HostView: React.FC = () => {
           normalizePatternComposite(patternComposite);
         if (!spec) {
           window.alert(
-            'This round uses a combined pattern but it could not be loaded. Configure Combined (AND/OR) on the Game tab or in Round Manager.',
+            'This round uses a combined pattern but it could not be loaded. Configure Combined (AND/OR) in Round builder.',
           );
           setIsStartingGame(false);
           return;
@@ -3555,7 +3542,7 @@ const HostView: React.FC = () => {
 
       if (patternForStart === 'custom' && maskForStart.length === 0) {
         window.alert(
-          'This round uses a custom pattern but no squares are saved. Choose a saved custom pattern on the Game tab or in Round Manager.',
+          'This round uses a custom pattern but no squares are saved. Choose a saved custom pattern in Round builder.',
         );
         setIsStartingGame(false);
         return;
@@ -5869,10 +5856,10 @@ const HostView: React.FC = () => {
       if (filtered.length < need) {
         const stalePoolHint =
           pool.length > 0 && filtered.length === 0
-            ? ' The finalized playback pool still looked like a different mix — tap Finalize mix on the Game tab once, then Save round again.'
+            ? ' The finalized playback pool still looked like a different mix — tap Finalize mix once on the host screen, then Save round again.'
             : '';
         window.alert(
-          `This round only has ${filtered.length} unique tracks from its playlists in the finalized mix (need ${need}).${stalePoolHint} Include those playlists in the mix on the Game tab, finalize, then save again.`,
+          `This round only has ${filtered.length} unique tracks from its playlists in the finalized mix (need ${need}).${stalePoolHint} Include those playlists in the mix, finalize, then save again.`,
         );
         return;
       }
@@ -5979,8 +5966,6 @@ const HostView: React.FC = () => {
       console.warn('Failed to save rounds to localStorage:', error);
     }
 
-    // Next step is Start game on the Game tab (finalize runs via Save round or Start Game)
-    setActiveTab('play');
   }, [
     eventRounds,
     currentRoundIndex,
@@ -6280,7 +6265,7 @@ const HostView: React.FC = () => {
 
   const showPrimaryFinalizeMixButton =
     !mixFinalized && !savedRoundSnapshotMakesFinalizeRedundant && mixPlaylistSelection.length > 0;
-  /** Round builder saved this round — Game tab is go-live only (no mix/finalize/PDF chrome). */
+  /** Round builder saved this round — host screen is go-live only (no mix/finalize/PDF chrome). */
   const gameTabRoundBuilderReady = savedRoundSnapshotMakesFinalizeRedundant;
 
   const webApiQuarantineBannerText = useMemo(() => {
@@ -7388,37 +7373,159 @@ const HostView: React.FC = () => {
 
         {/* Main Content */}
         <div className="host-content" style={{ paddingBottom: '20px' }}>
-          {/* Tab Navigation */}
-          <div className="tab-navigation host-tab-navigation">
-            {(
-              [
-                { id: 'setup', Icon: LayoutDashboard, label: 'Manager', desc: 'Setup & Management' },
-                { id: 'play', Icon: Gamepad2, label: 'Game', desc: 'Live Game Controls' },
-              ] as const
-            ).map((tab) => {
-              const TabIcon = tab.Icon;
-              return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id as 'setup' | 'play')}
-                className={`host-tab-button ${activeTab === tab.id ? 'active' : ''}`}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                  <TabIcon className="w-5 h-5" aria-hidden />
-                  {tab.label}
-                </div>
-                <div className="host-tab-button__desc">{tab.desc}</div>
-              </button>
-            );
-            })}
-          </div>
+          <div className="tab-content host-unified">
+            {(gameState === 'playing' || currentSong) && (
+              <section className="host-live-dock" aria-label="Live show">
+                {gamePaused && (
+                  <div className="host-paused-banner host-live-dock__paused">
+                    <p className="host-paused-banner__title">GAME PAUSED — RESUME HERE</p>
+                    <p className="host-paused-banner__sub">
+                      {pendingVerification
+                        ? `Bingo verification: ${pendingVerification.playerName}`
+                        : 'Playback paused (verification or Spotify). Use Resume when ready.'}
+                    </p>
+                    <button type="button" className="host-resume-game-btn" onClick={handleManualResumeGame}>
+                      Resume Game
+                    </button>
+                  </div>
+                )}
+                {currentSong ? (
+                  <div className="host-live-dock__now-playing now-playing-section">
+                    <h2 className="host-live-dock__heading">
+                      <Music className="w-6 h-6" aria-hidden />
+                      Now playing
+                    </h2>
+                    <div className="now-playing-content">
+                      <div className="host-live-dock__track">
+                        <div className="host-live-dock__track-title">
+                          <span>{currentSong.name}</span>
+                          {currentSong.explicit === true ? (
+                            <SpotifyExplicitBadge size="lg" title="Marked explicit on Spotify" />
+                          ) : null}
+                        </div>
+                        <div className="host-live-dock__track-artist">by {currentSong.artist}</div>
+                      </div>
+                      <div className="host-live-dock__transport">
+                        <button type="button" className="btn-secondary" onClick={pauseSong}>
+                          {!isPlaying ? 'Resume' : 'Pause'}
+                        </button>
+                        <button type="button" className="btn-secondary" onClick={skipSong}>
+                          Skip
+                        </button>
+                      </div>
+                      <div className="host-live-dock__volume">
+                        <button type="button" className="btn-secondary btn-host-icon" onClick={handleMuteToggle}>
+                          {isMuted ? <VolumeX className="w-5 h-5" aria-hidden /> : <Volume2 className="w-5 h-5" aria-hidden />}
+                        </button>
+                        <span className="host-live-dock__volume-label">{isMuted ? 0 : playbackState.volume}%</span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={isMuted ? 0 : playbackState.volume}
+                          onChange={(e) => {
+                            const newVolume = parseInt(e.target.value, 10);
+                            if (isMuted && newVolume > 0) setIsMuted(false);
+                            setPlaybackState((prev) => ({ ...prev, volume: newVolume }));
+                            handleVolumeChange(newVolume);
+                          }}
+                          className="volume-slider host-range host-range--volume"
+                          aria-label="Playback volume"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+                {gameState === 'playing' ? (
+                  <div className="host-live-dock__actions">
+                    <button type="button" className="btn-secondary" onClick={endGame}>
+                      End Game
+                    </button>
+                    <button type="button" className="btn-secondary" onClick={confirmAndNewRound} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <Flag className="w-4 h-4" aria-hidden />
+                      New Round
+                    </button>
+                    <button type="button" className="btn-accent" onClick={() => openRoundBuilder()} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <CalendarRange className="w-4 h-4" aria-hidden />
+                      Round builder
+                    </button>
+                    <button type="button" className="btn-secondary btn-host-warn" onClick={resetDisplayLetters} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <RotateCcw className="w-4 h-4" aria-hidden />
+                      Reset display letters
+                    </button>
+                    {playerCards.size > 0 && !playerCardsFullscreen ? (
+                      <button type="button" className="btn-secondary btn-host-emphasis" onClick={openPlayerCardsModal} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        <Users className="w-4 h-4" aria-hidden />
+                        View player cards
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </section>
+            )}
 
-          {/* Tab Content */}
-          <div className="tab-content">
-            {activeTab === 'setup' && (
-              <div className="setup-tab host-manager">
-                <div className="host-manager-setup-flow">
+            {gameState === 'waiting' && !currentSong && (
+              <section className="host-go-live" aria-label="Start show">
+                {eventRounds.length > 0 ? (
+                  <div className="host-game-prep-bar">
+                    <div>
+                      <p className="host-game-prep-bar__label">Active round</p>
+                      <p className="host-game-prep-bar__value">
+                        {currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length
+                          ? eventRounds[currentRoundIndex].name
+                          : 'Pick a round in Round builder'}
+                      </p>
+                    </div>
+                    <button type="button" className="btn-secondary" onClick={() => openRoundBuilder()}>
+                      <ListMusic className="w-4 h-4" aria-hidden />
+                      Round builder
+                    </button>
+                  </div>
+                ) : null}
+                <div className="host-go-live__actions control-buttons">
+                  {showPrimaryFinalizeMixButton ? (
+                    <button
+                      type="button"
+                      className="control-button finalize-mix"
+                      onClick={() => void finalizeMix()}
+                      disabled={mixGameActionsBlocked}
+                    >
+                      <ListChecks className="w-4 h-4" aria-hidden />
+                      Finalize Mix
+                    </button>
+                  ) : null}
+                  {mixFinalized && !gameTabRoundBuilderReady ? (
+                    <div className="mix-finalized-status">
+                      <p className="status-text" style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
+                        <CheckCircle2 className="w-4 h-4" style={{ color: '#00ff88' }} aria-hidden />
+                        Mix finalized — cards generated for players
+                      </p>
+                    </div>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="host-go-live__start"
+                    onClick={startGame}
+                    disabled={mixGameActionsBlocked}
+                  >
+                    <Play className="btn-icon" aria-hidden />
+                    {savedRoundRoomSyncBusy
+                      ? 'Syncing room…'
+                      : isSpotifyConnecting && mixNeedsHostSpotify
+                        ? 'Connecting Spotify...'
+                        : 'Start Game'}
+                  </button>
+                  {!gameTabRoundBuilderReady ? (
+                    <p className="host-go-live__hint">
+                      Start Game will <strong>finalize the mix automatically</strong> if needed. Use Finalize Mix first only
+                      for an early card preview on the display.
+                    </p>
+                  ) : null}
+                </div>
+              </section>
+            )}
+
+            <div className="host-manager host-manager-setup-flow">
                 <div className="host-manager-grid host-manager-grid--split host-manager-grid--balanced">
                   <div className="host-manager-col">
                 <motion.section
@@ -7434,8 +7541,8 @@ const HostView: React.FC = () => {
                         Rounds &amp; playlists
                       </h2>
                       <p className="host-manager-section__lead host-manager-hero__lead">
-                        <strong style={{ color: '#c5dccf' }}>Round builder</strong> for setlists and patterns, then{' '}
-                        <strong style={{ color: '#c5dccf' }}>Game</strong> to finalize and start. Spotify / device:{' '}
+                        <strong style={{ color: '#c5dccf' }}>Round builder</strong> for playlists, patterns, and{' '}
+                        <strong style={{ color: '#c5dccf' }}>Save round</strong>. Start the show at the top when ready. Spotify / device:{' '}
                         <strong style={{ color: '#c5dccf' }}>Connection</strong> in the header.
                       </p>
                       <div className="host-manager-hero__status">
@@ -7473,15 +7580,22 @@ const HostView: React.FC = () => {
                     </button>
                   </div>
                 </motion.section>
+                  </div>
 
+                  <div className="host-manager-col host-manager-col--wide">
+          <details className="host-event-settings" open={gameState !== 'playing'}>
+            <summary className="host-event-settings__summary">
+              <Monitor className="w-5 h-5" aria-hidden />
+              Projector &amp; event rules
+            </summary>
+            <div className="host-event-settings__body">
           <motion.section
             className="host-manager-round host-manager-section"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.25 }}
           >
-            <h2 className="host-manager-section__title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <CalendarRange className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
+            <h2 className="host-manager-section__title host-event-settings__hidden-heading">
               Event rules
             </h2>
             <label className="host-manager-hybrid">
@@ -7504,28 +7618,12 @@ const HostView: React.FC = () => {
                 an in-person bingo ends the round and awards prizes.
               </span>
             </label>
-            {gameState === 'playing' ? (
-              <div className="host-manager-round__row" style={{ marginTop: 14 }}>
-                <button type="button" onClick={completeCurrentRound} className="host-manager-round__btn host-manager-round__btn--green">
-                  <CheckCircle2 className="w-4 h-4" aria-hidden />
-                  Complete round
-                </button>
-                <button type="button" onClick={resetCurrentRound} className="host-manager-round__btn host-manager-round__btn--yellow">
-                  <RotateCcw className="w-4 h-4" aria-hidden />
-                  Reset round
-                </button>
-                {getNextPlannedRound() >= 0 ? (
-                  <button type="button" onClick={() => jumpToRound(getNextPlannedRound())} className="host-manager-round__btn host-manager-round__btn--blue">
-                    <SkipForward className="w-4 h-4" aria-hidden />
-                    Next planned
-                  </button>
-                ) : null}
-              </div>
-            ) : (
-              <p className="host-manager-section__lead" style={{ marginTop: 12, marginBottom: 0 }}>
-                Save, print, reset event, and clear prep cache: use <strong>Event actions</strong> inside Round builder.
-              </p>
-            )}
+            <p className="host-manager-section__lead" style={{ marginTop: 0, marginBottom: 0 }}>
+              Save, print, reset event, and clear prep cache: use <strong>Event actions</strong> inside Round builder.
+              {gameState === 'playing' ? (
+                <> While live, use the controls in the bar at the top of this page.</>
+              ) : null}
+            </p>
           </motion.section>
 
           <motion.section
@@ -7650,9 +7748,7 @@ const HostView: React.FC = () => {
               </button>
             </div>
           </motion.section>
-                  </div>
 
-                  <div className="host-manager-col">
           <motion.section
             className="host-manager-section host-manager-section--display host-manager-display-pane host-manager-display-pane--continued font-size-section"
             initial={{ opacity: 0 }}
@@ -7801,211 +7897,11 @@ const HostView: React.FC = () => {
               </>
             ) : null}
           </motion.section>
-                  </div>
-                </div>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'play' && (
-              <div className="play-tab">
-          {/* Game Controls */}
-          <motion.div 
-            className="controls-section"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-                  transition={{ delay: 0.2 }}
-          >
-            <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Sliders className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
-              Game Controls
-            </h2>
-
-            {gameState === 'waiting' && !currentSong && eventRounds.length > 0 ? (
-                <div className="host-game-prep-bar">
-                  <div>
-                    <p className="host-game-prep-bar__label">Active prep round</p>
-                    <p className="host-game-prep-bar__value">
-                      {currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length
-                        ? eventRounds[currentRoundIndex].name
-                        : 'Pick a round in Round builder'}
-                    </p>
-                  </div>
-                  <button type="button" className="btn-secondary" onClick={() => openRoundBuilder()}>
-                    <ListMusic className="w-4 h-4" aria-hidden />
-                    Round builder
-                  </button>
-                </div>
-              ) : null}
-
-                  <div className="host-game-settings-panel">
-                    {!gameTabRoundBuilderReady ? (
-                      <div className="host-game-playback-note">
-                        <p>
-                          <strong>Playback:</strong> {snippetLength}s snippets ·{' '}
-                          {randomStarts === 'none'
-                            ? 'from start'
-                            : randomStarts === 'early'
-                              ? 'early random'
-                              : 'random position'}
-                        </p>
-                        <p>
-                          Change per round in{' '}
-                          <button type="button" className="host-inline-link" onClick={() => openRoundBuilder()}>
-                            Round builder
-                          </button>
-                          .
-                        </p>
-                      </div>
-                    ) : null}
             </div>
-
-                  {/* Main Game Controls */}
-             <div className="control-buttons">
-               {gameState === 'waiting' && !currentSong ? (
-                 <>
-                   {showPrimaryFinalizeMixButton ? (
-                     <button
-                       className="control-button finalize-mix"
-                       onClick={() => void finalizeMix()}
-                       disabled={mixGameActionsBlocked}
-                     >
-                       <ListChecks className="w-4 h-4" aria-hidden />
-                       Finalize Mix
-                     </button>
-                   ) : null}
-                   {mixFinalized && !gameTabRoundBuilderReady ? (
-                     <div className="mix-finalized-status">
-                       <p className="status-text" style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
-                         <CheckCircle2 className="w-4 h-4" style={{ color: '#00ff88' }} aria-hidden />
-                         Mix finalized — cards generated for players
-                       </p>
-                     </div>
-                   ) : null}
-                  <button
-                    onClick={startGame}
-                    disabled={mixGameActionsBlocked}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      padding: '14px 22px',
-                      fontSize: '1.05rem',
-                      fontWeight: 900,
-                      letterSpacing: '0.02em',
-                      borderRadius: 12,
-                      border: mixGameActionsBlocked ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(0,255,136,0.6)',
-                      color: mixGameActionsBlocked ? '#c8c8c8' : '#0b0e12',
-                      background: mixGameActionsBlocked
-                        ? 'rgba(255,255,255,0.08)'
-                        : 'linear-gradient(180deg, #00ff88 0%, #00cc6d 100%)',
-                      boxShadow: mixGameActionsBlocked
-                        ? 'none'
-                        : '0 10px 30px rgba(0,255,136,0.25), inset 0 1px 0 rgba(255,255,255,0.4)',
-                      cursor: mixGameActionsBlocked ? 'not-allowed' : 'pointer',
-                      opacity: isSpotifyConnecting && mixNeedsHostSpotify ? 0.8 : 1
-                    }}
-                  >
-                    <Play className="btn-icon" />
-                    {savedRoundRoomSyncBusy
-                      ? 'Syncing room…'
-                      : isSpotifyConnecting && mixNeedsHostSpotify
-                        ? 'Connecting Spotify...'
-                        : 'Start Game'}
-                  </button>
-                  {!gameTabRoundBuilderReady ? (
-                    <p style={{ marginTop: 10, fontSize: '0.78rem', color: '#9a9a9a', maxWidth: 520, lineHeight: 1.4, marginLeft: 'auto', marginRight: 'auto' }}>
-                      Start Game will <strong style={{ color: '#cfcfcf' }}>finalize the mix automatically</strong> if needed.
-                      Use Finalize Mix first only for an early card preview on the display.
-                    </p>
-                  ) : null}
-                 </>
-               ) : (
-                 <div className="game-status">
-                  <p className="status-text" style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-                    <Sparkles className="w-4 h-4" style={{ color: '#00ff88' }} aria-hidden />
-                    Game is running — use the Now Playing controls below
-                  </p>
-                  {gamePaused && (
-                    <div
-                      className="host-paused-banner"
-                      style={{
-                        background: 'linear-gradient(180deg, rgba(255, 180, 60, 0.35) 0%, rgba(255, 120, 0, 0.22) 100%)',
-                        border: '3px solid #ffb020',
-                        borderRadius: 14,
-                        padding: '18px 16px 20px',
-                        marginBottom: 16,
-                        textAlign: 'center',
-                        boxShadow: '0 0 0 1px rgba(0,0,0,0.35), 0 12px 40px rgba(255, 160, 0, 0.25)',
-                      }}
-                    >
-                      <p style={{ color: '#1a1204', fontWeight: 900, marginBottom: 6, fontSize: '1.35rem', letterSpacing: '0.03em' }}>
-                        GAME PAUSED — RESUME HERE
-                      </p>
-                      <p style={{ color: '#2b2215', fontSize: '0.95rem', marginBottom: 14, fontWeight: 600 }}>
-                        {pendingVerification
-                          ? `Bingo verification: ${pendingVerification.playerName}`
-                          : 'Playback paused (verification or Spotify). Use Resume when ready.'}
-                      </p>
-                      <button
-                        type="button"
-                        className="host-resume-game-btn"
-                        onClick={handleManualResumeGame}
-                      >
-                        Resume Game
-                      </button>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                          <button className="btn-secondary" onClick={endGame}>End Game</button>
-                    <button className="btn-secondary" onClick={confirmAndNewRound} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      <Flag className="w-4 h-4" aria-hidden />
-                      New Round
-                    </button>
-                          <button
-                            type="button"
-                            className="btn-accent"
-                            onClick={() => openRoundBuilder()}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-                          >
-                            <CalendarRange className="w-4 h-4" aria-hidden />
-                            Round builder
-                          </button>
+          </details>
                   </div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span style={{ opacity: 0.9 }}>Public display:</span>
-                    <button 
-                      type="button"
-                      className="btn-secondary btn-host-warn" 
-                      onClick={resetDisplayLetters}
-                      title="Reset revealed letters on public display (fixes stuck letters)"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-                    >
-                      <RotateCcw className="w-4 h-4" aria-hidden />
-                      Reset Letters
-                    </button>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {playerCards.size > 0 && !playerCardsFullscreen && (
-                      <button
-                        type="button"
-                        className="btn-secondary btn-host-emphasis"
-                        onClick={openPlayerCardsModal}
-                        title="Open player cards in a window (expand to full screen inside, or Escape to close)"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-                      >
-                        <Users className="w-4 h-4" aria-hidden />
-                        View player cards
-                      </button>
-                    )}
-                    <span style={{ fontSize: '0.75rem', color: '#888', maxWidth: 340 }}>
-                      Player cards refresh automatically when the game starts, players join, songs play, or bingo verification opens.
-                    </span>
-                  </div>
-                 </div>
-               )}
-             </div>
-           </motion.div>
+                </div>
+            </div>
 
                 {gameState === 'waiting' && !currentSong && !hasFinalizedSongPool && !gameTabRoundBuilderReady && (
                   <div
@@ -8056,7 +7952,7 @@ const HostView: React.FC = () => {
                   </div>
                 )}
 
-                {/* Bingo pool — title edits; hidden on Game tab when round is saved in Round builder until live or legacy prep */}
+                {/* Bingo pool — title edits; hidden when round is saved in Round builder until live or legacy prep */}
                 {hasFinalizedSongPool && (!gameTabRoundBuilderReady || mixFinalized || gameState === 'playing') && (
                   <motion.div
                     className="finalized-playlist-section"
@@ -8275,9 +8171,6 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                     </div>
                   </motion.div>
                 )}
-                </div>
-          )}
-
 
                 {/* Player cards: compact strip � open modal or full screen to inspect grids */}
                 {playerCards.size > 0 && !playerCardsFullscreen && (
@@ -8331,118 +8224,8 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
              </motion.div>
            )}
           </div>
+        </div>
 
-
-          {/* Legacy sections removed - now in tabbed interface */}
-                  
-          {/* Now Playing � normal document flow (no sticky) so it never covers Manager / round buckets */}
-          {currentSong && (
-            <motion.div 
-              className="now-playing-section"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              style={{
-                position: 'relative',
-                zIndex: 1,
-                marginTop: 20,
-                borderRadius: 14,
-                boxShadow: '0 8px 28px rgba(0, 0, 0, 0.35)',
-                background: 'rgba(26, 26, 46, 0.98)',
-                backdropFilter: 'blur(10px)',
-              }}
-            >
-               <h2 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                 <Music className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
-                 Now Playing
-               </h2>
-               <div className="now-playing-content">
-                 {/* Song Info */}
-              <div style={{ 
-                background: 'rgba(255,255,255,0.05)', 
-                padding: 16, 
-                borderRadius: 8, 
-                marginBottom: 16,
-                textAlign: 'center'
-              }}>
-                <div
-                  style={{
-                    fontSize: '1.2rem',
-                    fontWeight: 'bold',
-                    color: '#00ff88',
-                    marginBottom: 8,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 10,
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <span>{currentSong.name}</span>
-                  {currentSong.explicit === true && (
-                    <SpotifyExplicitBadge size="lg" title="Marked explicit on Spotify" />
-                  )}
-                </div>
-                <div style={{ fontSize: '1rem', color: '#b3b3b3' }}>
-                  by {currentSong.artist}
-                   </div>
-                 </div>
-
-              {/* Playback Controls */}
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-                <button className="btn-secondary" onClick={pauseSong}>
-                  {!isPlaying ? 'Resume' : 'Pause'}
-                   </button>
-                <button className="btn-secondary" onClick={skipSong}>Skip</button>
-                 </div>
-
-                 {/* Volume Control */}
-              <div style={{ 
-                background: 'rgba(255,255,255,0.05)', 
-                padding: 16, 
-                borderRadius: 8, 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 12,
-                justifyContent: 'center'
-              }}>
-                   <button
-                  type="button"
-                  className="btn-secondary btn-host-icon"
-                     onClick={handleMuteToggle}
-                   >
-                     {isMuted ? <VolumeX className="w-5 h-5" aria-hidden /> : <Volume2 className="w-5 h-5" aria-hidden />}
-                   </button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, maxWidth: '300px' }}>
-                  <span style={{ fontSize: '0.9rem', color: '#b3b3b3', minWidth: '30px' }}>
-                    {isMuted ? 0 : playbackState.volume}%
-                  </span>
-                   <input
-                     type="range"
-                     min="0"
-                     max="100"
-                     value={isMuted ? 0 : playbackState.volume}
-                    onChange={(e) => {
-                      const newVolume = parseInt(e.target.value);
-                      if (isMuted && newVolume > 0) {
-                        setIsMuted(false);
-                      }
-                      setPlaybackState(prev => ({ ...prev, volume: newVolume }));
-                      handleVolumeChange(newVolume);
-                    }}
-                    style={{
-                      flex: 1,
-                      background: `linear-gradient(to right, #00ff88 0%, #00ff88 ${isMuted ? 0 : playbackState.volume}%, #333 ${isMuted ? 0 : playbackState.volume}%, #333 100%)`,
-                    }}
-                     className="volume-slider host-range host-range--volume"
-                   />
-                  <span style={{ fontSize: '0.8rem', color: '#666', minWidth: '40px' }}>100%</span>
-                 </div>
-                  </div>
-               </div>
-             </motion.div>
-           )}
-          </div> {/* Close host-content */}
 
       </motion.div>
 
@@ -8499,7 +8282,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   type="button"
                   className="host-playlist-round-modal__help"
                   aria-label="How the round builder works"
-                  title="Library left, round buckets right. Numbered buttons switch rounds and sync the Game tab mix (blue Mix outline). Each bucket: playlists, pattern, Save round, print/call sheet, start. Then Game tab → Start Game (Save round locks tracks; no separate finalize)."
+                  title="Library left, round buckets right. Numbered buttons switch rounds and sync the mix (blue outline). Each bucket: playlists, pattern, Save round, print/call sheet. Start the show from the host screen when ready."
                 >
                   <HelpCircle className="w-4 h-4" aria-hidden />
                 </button>
