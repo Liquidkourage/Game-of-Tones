@@ -737,6 +737,12 @@ const HostView: React.FC = () => {
     }
   }, [pattern]);
 
+  useEffect(() => {
+    if (combinedPatternModalOpen) {
+      setSavedCustomPatterns(getSavedCustomPatterns());
+    }
+  }, [combinedPatternModalOpen]);
+
   const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]);
   const [superStrict, setSuperStrict] = useState<boolean>(false);
   const [showRooms, setShowRooms] = useState<boolean>(false);
@@ -9347,6 +9353,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
         setCompositeRecipeSaveName={setCompositeRecipeSaveName}
         savedCompositePatterns={savedCompositePatterns}
         setSavedCompositePatterns={setSavedCompositePatterns}
+        savedCustomPatterns={savedCustomPatterns}
         showToast={showToast}
         addLog={addLog}
       />

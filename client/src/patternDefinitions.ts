@@ -514,8 +514,45 @@ export function clauseHighlightPositions(clause: PatternCompositeClause): string
   return unionVariantPositions(variants);
 }
 
+export function maskPositionsKey(positions: string[]): string {
+  return [...positions].sort().join(',');
+}
+
+/** Match a mask clause to a saved custom shape (same squares, order ignored). */
+export function savedCustomForMaskClause(
+  clause: PatternCompositeClause,
+  savedCustomPatterns: readonly SavedCustomPattern[],
+): SavedCustomPattern | null {
+  if (clause.kind !== 'mask' || !clause.positions?.length) return null;
+  const key = maskPositionsKey(clause.positions);
+  return savedCustomPatterns.find((s) => maskPositionsKey(s.positions) === key) ?? null;
+}
+
+/** Value for combined-pattern clause &lt;select&gt; (preset, saved custom, or ad-hoc paint). */
+export function compositeClauseSelectValue(
+  clause: PatternCompositeClause,
+  savedCustomPatterns: readonly SavedCustomPattern[],
+): string {
+  if (clause.kind === 'preset') return `preset:${clause.preset}`;
+  const sp = savedCustomForMaskClause(clause, savedCustomPatterns);
+  if (sp) return `saved:${sp.id}`;
+  return 'mask';
+}
+
+export function maskClauseFromSavedCustom(sp: SavedCustomPattern): PatternCompositeClause {
+  return {
+    kind: 'mask',
+    positions: [...sp.positions].sort(),
+    ...(sp.matchAllowRotation ? { matchAllowRotation: true } : {}),
+    ...(sp.matchAllowMirror ? { matchAllowMirror: true } : {}),
+  };
+}
+
 /** Short clause label for projector / winner UI (combined patterns). */
-export function describeCompositeClauseBrief(clause: PatternCompositeClause): string {
+export function describeCompositeClauseBrief(
+  clause: PatternCompositeClause,
+  savedCustomPatterns?: readonly SavedCustomPattern[],
+): string {
   if (clause.kind === 'preset') {
     if (clause.preset === 'line') {
       const n = normalizeLinesRequired(clause.linesRequired);
@@ -525,6 +562,8 @@ export function describeCompositeClauseBrief(clause: PatternCompositeClause): st
     const def = BINGO_PATTERNS[clause.preset];
     return def?.label ?? clause.preset;
   }
+  const sp = savedCustomPatterns?.length ? savedCustomForMaskClause(clause, savedCustomPatterns) : null;
+  if (sp) return sp.name;
   const n = clause.positions?.length ?? 0;
   return `Painted shape (${n} sq)`;
 }
@@ -555,7 +594,7 @@ export function describeCompositePatternAudienceSentence(
 export function describeCompositePatternFullSentence(spec: PatternCompositeSpec | null | undefined): string {
   if (!spec?.clauses?.length) return '';
   const sep = spec.op === 'and' ? ' AND ' : ' OR ';
-  return spec.clauses.map(describeCompositeClauseBrief).join(sep);
+  return spec.clauses.map((c) => describeCompositeClauseBrief(c)).join(sep);
 }
 
 export function unionCompositeHighlightPositions(spec: PatternCompositeSpec | null | undefined): string[] {

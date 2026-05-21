@@ -1,0 +1,126 @@
+@import './HostFormControls.css';
+
+.host-combined-pattern__panel {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 255, 136, 0.35);
+  background: rgba(0, 255, 136, 0.06);
+}
+
+.host-combined-pattern__lead {
+  font-weight: 700;
+  margin: 0 0 10px;
+  color: #e8ecf1;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.host-combined-pattern__op-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.host-combined-pattern__recipes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.host-combined-pattern__clauses {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.host-combined-pattern__clause {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 520px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.host-combined-pattern__clause-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
+.host-combined-pattern__clause-select {
+  flex: 1 1 12rem;
+  min-width: 10rem;
+  max-width: 100%;
+}
+
+.host-combined-pattern__clause-meta {
+  font-size: 0.72rem;
+  color: #9aa5b1;
+  white-space: nowrap;
+}
+
+.host-combined-pattern__lines-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 2px;
+  font-size: 0.78rem;
+  color: #c5cdd6;
+}
+
+.host-combined-pattern__variants {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 10px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+  max-width: 460px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.host-combined-pattern__variants-hint {
+  font-size: 0.68rem;
+  color: #8a96a3;
+  text-align: center;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.host-combined-pattern__paint-section {
+  margin-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding-top: 12px;
+}
+
+.host-combined-pattern__paint-hint {
+  text-align: center;
+  margin: 0 0 10px;
+}
+
+.host-combined-pattern__paint-hint-accent {
+  color: #7dd3fc;
+}
+
+.host-combined-pattern__add-clause {
+  text-align: center;
+  margin-top: 10px;
+}

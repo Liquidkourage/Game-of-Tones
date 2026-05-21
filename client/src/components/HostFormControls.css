@@ -1,0 +1,345 @@
+/**
+ * Host form chrome for .host-view and portaled sub-modals (.host-ui).
+ * Keeps selects, inputs, and buttons off the browser default look.
+ */
+
+.host-ui,
+.host-view {
+  --host-btn-radius: 10px;
+  --host-border-mint: rgba(0, 255, 163, 0.42);
+  --host-border-mint-soft: rgba(0, 255, 136, 0.22);
+}
+
+/* Buttons (match HostView) */
+.host-ui .btn-secondary,
+.host-view .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem;
+  min-height: 42px;
+  border-radius: var(--host-btn-radius);
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: inherit;
+  line-height: 1.2;
+  background: rgba(0, 255, 136, 0.06);
+  border: 1px solid var(--host-border-mint);
+  color: #c8f7e4;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.18s ease,
+    transform 0.1s ease;
+}
+
+.host-ui .btn-secondary:hover:not(:disabled),
+.host-view .btn-secondary:hover:not(:disabled) {
+  background: rgba(0, 255, 136, 0.13);
+  border-color: rgba(0, 255, 180, 0.55);
+  color: #f0fff8;
+  box-shadow: 0 0 22px rgba(0, 255, 136, 0.12);
+}
+
+.host-ui .btn-secondary:active:not(:disabled),
+.host-view .btn-secondary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.host-ui .btn-secondary:disabled,
+.host-view .btn-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.host-ui .btn-primary,
+.host-view .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1.25rem;
+  min-height: 42px;
+  border-radius: var(--host-btn-radius);
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: inherit;
+  border: 1px solid rgba(0, 255, 180, 0.55);
+  background: linear-gradient(180deg, rgba(0, 255, 136, 0.35) 0%, rgba(0, 200, 110, 0.22) 100%);
+  color: #eafff5;
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.18);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.18s ease,
+    transform 0.1s ease;
+}
+
+.host-ui .btn-primary:hover:not(:disabled),
+.host-view .btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(0, 255, 160, 0.45) 0%, rgba(0, 220, 120, 0.28) 100%);
+  box-shadow: 0 0 28px rgba(0, 255, 136, 0.28);
+}
+
+.host-ui .btn-danger-outline,
+.host-view .btn-danger-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.85rem;
+  min-height: 38px;
+  border-radius: var(--host-btn-radius);
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid rgba(255, 120, 120, 0.45);
+  color: #ffb8b8;
+  background: rgba(255, 60, 60, 0.1);
+  cursor: pointer;
+}
+
+.host-ui .btn-danger-outline:hover:not(:disabled),
+.host-view .btn-danger-outline:hover:not(:disabled) {
+  border-color: rgba(255, 160, 160, 0.65);
+  color: #ffd6d6;
+  background: rgba(255, 60, 60, 0.16);
+}
+
+.host-ui .host-btn--sm,
+.host-view .host-btn--sm {
+  min-height: 34px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.78rem;
+}
+
+.host-ui .host-btn--active,
+.host-view .host-btn--active {
+  background: rgba(0, 255, 136, 0.18) !important;
+  border-color: rgba(0, 255, 180, 0.65) !important;
+  color: #00ff88 !important;
+  box-shadow: 0 0 0 1px rgba(0, 255, 136, 0.35);
+}
+
+/* Fields */
+.host-ui .host-field-label,
+.host-view .host-field-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #9aa5b1;
+}
+
+.host-ui .host-field-label--inline,
+.host-view .host-field-label--inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.host-ui .host-field-select,
+.host-ui .host-field-input,
+.host-ui .host-field-text,
+.host-view .host-field-select,
+.host-view .host-field-input,
+.host-view .host-field-text {
+  font-family: inherit;
+  font-size: 0.82rem;
+  color: #f0f4f8;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 255, 136, 0.28);
+  background-color: rgba(0, 0, 0, 0.42);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.host-ui .host-field-select,
+.host-view .host-field-select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 38px;
+  padding: 8px 36px 8px 12px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2300ff88' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+
+.host-ui .host-field-select:focus-visible,
+.host-ui .host-field-input:focus-visible,
+.host-ui .host-field-text:focus-visible,
+.host-view .host-field-select:focus-visible,
+.host-view .host-field-input:focus-visible,
+.host-view .host-field-text:focus-visible {
+  outline: none;
+  border-color: rgba(0, 255, 180, 0.6);
+  box-shadow: 0 0 0 2px rgba(0, 255, 136, 0.22);
+}
+
+.host-ui .host-field-input,
+.host-view .host-field-input {
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+.host-ui .host-field-input--narrow,
+.host-view .host-field-input--narrow {
+  width: 4.5rem;
+  text-align: center;
+}
+
+.host-ui .host-field-text,
+.host-view .host-field-text {
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+.host-ui .host-field-select--wide,
+.host-view .host-field-select--wide {
+  min-width: 12rem;
+  max-width: 100%;
+}
+
+.host-ui .host-control-checkbox,
+.host-view .host-control-checkbox {
+  accent-color: #00ffa3;
+  width: 1.05rem;
+  height: 1.05rem;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.host-ui .host-check-row,
+.host-view .host-check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.78rem;
+  color: #dce4ec;
+  cursor: pointer;
+  text-align: left;
+  line-height: 1.45;
+}
+
+.host-ui .host-check-row strong,
+.host-view .host-check-row strong {
+  color: #e8ecf1;
+  font-weight: 600;
+}
+
+/* Segmented control (OR / AND) */
+.host-ui .host-segmented,
+.host-view .host-segmented {
+  display: inline-flex;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--host-border-mint-soft);
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.host-ui .host-segmented__btn,
+.host-view .host-segmented__btn {
+  border: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: #b8c4ce;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 8px 16px;
+  min-height: 36px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.host-ui .host-segmented__btn:last-child,
+.host-view .host-segmented__btn:last-child {
+  border-right: none;
+}
+
+.host-ui .host-segmented__btn--active,
+.host-view .host-segmented__btn--active {
+  background: rgba(0, 255, 136, 0.2);
+  color: #00ff88;
+}
+
+.host-ui .host-segmented__btn:hover:not(.host-segmented__btn--active),
+.host-view .host-segmented__btn:hover:not(.host-segmented__btn--active) {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e8ecf0;
+}
+
+/* Bingo paint grid */
+.host-ui .host-bingo-grid,
+.host-view .host-bingo-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+  max-width: 268px;
+  margin: 0 auto;
+}
+
+.host-ui .host-bingo-cell,
+.host-view .host-bingo-cell {
+  width: 100%;
+  aspect-ratio: 1;
+  min-height: 44px;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.host-ui .host-bingo-cell:hover,
+.host-view .host-bingo-cell:hover {
+  border-color: rgba(0, 255, 136, 0.45);
+  background: rgba(0, 255, 136, 0.08);
+}
+
+.host-ui .host-bingo-cell--on,
+.host-view .host-bingo-cell--on {
+  border-color: rgba(0, 255, 180, 0.7);
+  background: #00ff88;
+  color: #001a0d;
+}
+
+.host-ui .host-muted,
+.host-view .host-muted {
+  color: #9aa5b1;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.host-ui .host-actions-row,
+.host-view .host-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
+.host-ui .host-footer-actions,
+.host-view .host-footer-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 4px;
+}

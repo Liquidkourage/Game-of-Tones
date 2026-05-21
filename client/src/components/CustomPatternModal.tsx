@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Save, Trash2 } from 'lucide-react';
 import { saveCustomPattern, validatePatternPositions } from '../patternDefinitions';
 import HostSubmodalPortal from './HostSubmodalPortal';
+import './CustomPatternModal.css';
 
 export interface CustomPatternSavePayload {
   name: string;
@@ -85,179 +86,92 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
       titleId="host-custom-pattern-title"
       maxWidth="520px"
     >
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', color: '#ffffff', fontWeight: '500' }}>
-              Pattern Name
+      <div className="host-ui host-custom-pattern">
+        <div className="host-custom-pattern__field">
+          <label className="host-custom-pattern__field-label" htmlFor="host-custom-pattern-name">
+            Pattern name
+          </label>
+          <input
+            id="host-custom-pattern-name"
+            type="text"
+            className="host-field-text host-custom-pattern__field-text--full"
+            value={patternName}
+            onChange={(e) => setPatternName(e.target.value)}
+            placeholder="Enter pattern name…"
+          />
+        </div>
+
+        <div className="host-custom-pattern__field">
+          <div className="host-custom-pattern__grid-header">
+            <span className="host-custom-pattern__field-label">Select pattern squares</span>
+            <button type="button" className="btn-danger-outline host-btn--sm" onClick={handleClear}>
+              <Trash2 className="w-3.5 h-3.5" aria-hidden />
+              Clear grid
+            </button>
+          </div>
+
+          <div className="host-custom-pattern__variants">
+            <p className="host-custom-pattern__variants-lead">
+              After you paint the shape, optional match rules (same idea as combined-pattern painted clauses):
+            </p>
+            <label className="host-check-row">
+              <input
+                type="checkbox"
+                className="host-control-checkbox"
+                checked={matchAllowRotation}
+                onChange={(e) => setMatchAllowRotation(e.target.checked)}
+              />
+              <span>
+                <strong>Allow rotations</strong> (90° / 180° / 270°)
+              </span>
             </label>
-            <input
-              type="text"
-              value={patternName}
-              onChange={(e) => setPatternName(e.target.value)}
-              placeholder="Enter pattern name..."
-              style={{
-                width: '100%',
-                padding: '12px',
-                borderRadius: '8px',
-                border: '1px solid rgba(255, 255, 255, 0.3)',
-                backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                color: '#ffffff',
-                fontSize: '1rem',
-              }}
-            />
+            <label className="host-check-row">
+              <input
+                type="checkbox"
+                className="host-control-checkbox"
+                checked={matchAllowMirror}
+                onChange={(e) => setMatchAllowMirror(e.target.checked)}
+              />
+              <span>
+                <strong>Allow mirrors</strong> (horizontal / vertical)
+              </span>
+            </label>
           </div>
 
-          <div style={{ marginBottom: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: 8 }}>
-              <label style={{ color: '#ffffff', fontWeight: '500' }}>Select Pattern Squares</label>
-              <button
-                onClick={handleClear}
-                type="button"
-                style={{
-                  background: 'rgba(255, 0, 0, 0.2)',
-                  border: '1px solid rgba(255, 0, 0, 0.3)',
-                  color: '#ff6b6b',
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-              >
-                <Trash2 size={14} />
-                Clear
-              </button>
-            </div>
+          <div className="host-bingo-grid">
+            {Array.from({ length: 25 }, (_, index) => {
+              const row = Math.floor(index / 5);
+              const col = index % 5;
+              const position = `${row}-${col}`;
+              const isSelected = selectedPositions.includes(position);
 
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 10,
-                marginBottom: 14,
-                padding: '12px 14px',
-                borderRadius: 10,
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                background: 'rgba(0,0,0,0.25)',
-              }}
-            >
-              <div style={{ fontSize: '0.78rem', color: '#b9c3cd', lineHeight: 1.45 }}>
-                After you paint the shape, optional match rules (same idea as combined-pattern painted clauses):
-              </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', color: '#e8ecf1', fontSize: '0.88rem' }}>
-                <input
-                  type="checkbox"
-                  checked={matchAllowRotation}
-                  onChange={(e) => setMatchAllowRotation(e.target.checked)}
-                />
-                Allow rotations (90° / 180° / 270°)
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', color: '#e8ecf1', fontSize: '0.88rem' }}>
-                <input
-                  type="checkbox"
-                  checked={matchAllowMirror}
-                  onChange={(e) => setMatchAllowMirror(e.target.checked)}
-                />
-                Allow mirrors (horizontal / vertical)
-              </label>
-            </div>
-
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(5, 1fr)',
-                gap: '4px',
-                maxWidth: '300px',
-                margin: '0 auto',
-              }}
-            >
-              {Array.from({ length: 25 }, (_, index) => {
-                const row = Math.floor(index / 5);
-                const col = index % 5;
-                const position = `${row}-${col}`;
-                const isSelected = selectedPositions.includes(position);
-
-                return (
-                  <button
-                    key={index}
-                    type="button"
-                    onClick={() => togglePosition(row, col)}
-                    style={{
-                      width: '50px',
-                      height: '50px',
-                      border: '2px solid rgba(255, 255, 255, 0.3)',
-                      borderRadius: '8px',
-                      background: isSelected ? '#00ff88' : 'rgba(255, 255, 255, 0.1)',
-                      color: isSelected ? '#001a0d' : '#ffffff',
-                      cursor: 'pointer',
-                      fontSize: '12px',
-                      fontWeight: 'bold',
-                      transition: 'all 0.2s ease',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isSelected) {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isSelected) {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-                      }
-                    }}
-                  >
-                    {isSelected ? '✓' : ''}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div style={{ textAlign: 'center', marginTop: '12px', color: '#b3b3b3', fontSize: '0.9rem' }}>
-              {selectedPositions.length} squares selected
-            </div>
+              return (
+                <button
+                  key={index}
+                  type="button"
+                  className={`host-bingo-cell${isSelected ? ' host-bingo-cell--on' : ''}`}
+                  onClick={() => togglePosition(row, col)}
+                  aria-pressed={isSelected}
+                >
+                  {isSelected ? '✓' : ''}
+                </button>
+              );
+            })}
           </div>
 
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-            <button
-              type="button"
-              onClick={onClose}
-              style={{
-                padding: '12px 24px',
-                borderRadius: '8px',
-                border: '1px solid rgba(255, 255, 255, 0.3)',
-                background: 'rgba(255, 255, 255, 0.1)',
-                color: '#ffffff',
-                cursor: 'pointer',
-                fontSize: '1rem',
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={!isValid}
-              style={{
-                padding: '12px 24px',
-                borderRadius: '8px',
-                border: 'none',
-                background: isValid ? '#00ff88' : 'rgba(255, 255, 255, 0.2)',
-                color: isValid ? '#001a0d' : '#666666',
-                cursor: isValid ? 'pointer' : 'not-allowed',
-                fontSize: '1rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontWeight: '500',
-              }}
-            >
-              <Save size={16} />
-              {initialPattern ? 'Update Pattern' : 'Save Pattern'}
-            </button>
-          </div>
+          <p className="host-custom-pattern__count">{selectedPositions.length} squares selected</p>
+        </div>
+
+        <div className="host-footer-actions">
+          <button type="button" className="btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="btn-primary" onClick={handleSave} disabled={!isValid}>
+            <Save className="w-4 h-4" aria-hidden />
+            {initialPattern ? 'Update pattern' : 'Save pattern'}
+          </button>
+        </div>
+      </div>
     </HostSubmodalPortal>
   );
 };

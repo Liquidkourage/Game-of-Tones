@@ -1,0 +1,56 @@
+@import './HostFormControls.css';
+
+.host-custom-pattern__field {
+  margin-bottom: 18px;
+}
+
+.host-custom-pattern__field-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #e8ecf1;
+}
+
+.host-custom-pattern__field-text--full {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.host-custom-pattern__grid-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.host-custom-pattern__grid-header .host-custom-pattern__field-label {
+  margin-bottom: 0;
+}
+
+.host-custom-pattern__variants {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.host-custom-pattern__variants-lead {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #b9c3cd;
+  line-height: 1.45;
+}
+
+.host-custom-pattern__count {
+  text-align: center;
+  margin-top: 12px;
+  color: #9aa5b1;
+  font-size: 0.82rem;
+}
