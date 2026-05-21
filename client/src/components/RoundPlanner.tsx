@@ -57,6 +57,8 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   currentRound: number;
   onStartRound: (roundIndex: number) => void;
   onSelectRoundForPrep?: (roundIndex: number) => void;
+  /** Playlist-only sync for the current prep round (avoids resetting pattern/playback). */
+  onSyncMixFromRound?: (roundIndex: number) => void;
   gameState: 'waiting' | 'playing' | 'ended';
   hostDefaultFreeSpace: boolean;
   savedCustomPatterns: SavedCustomPattern[];
@@ -100,6 +102,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   currentRound,
   onStartRound,
   onSelectRoundForPrep,
+  onSyncMixFromRound,
   gameState,
   hostDefaultFreeSpace,
   savedCustomPatterns,
@@ -130,15 +133,34 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
 }: RoundPlannerProps<TRound>) {
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [dragOverBucket, setDragOverBucket] = useState(false);
+  const onSelectRoundForPrepRef = React.useRef(onSelectRoundForPrep);
+  onSelectRoundForPrepRef.current = onSelectRoundForPrep;
+  const onSyncMixFromRoundRef = React.useRef(onSyncMixFromRound);
+  onSyncMixFromRoundRef.current = onSyncMixFromRound;
+  const lastModalFocusRef = React.useRef<number | null>(null);
 
   const loadPrepForRound = useCallback(
     (roundIndex: number) => {
-      if (gameState === 'playing' || !onSelectRoundForPrep) return;
+      if (gameState === 'playing' || !onSelectRoundForPrepRef.current) return;
       const round = rounds[roundIndex];
       if (!round || !(round.playlistIds || []).length) return;
-      onSelectRoundForPrep(roundIndex);
+      onSelectRoundForPrepRef.current(roundIndex);
     },
-    [gameState, onSelectRoundForPrep, rounds],
+    [gameState, rounds],
+  );
+
+  const syncMixIfPrepRound = useCallback(
+    (roundIndex: number) => {
+      if (gameState === 'playing') return;
+      const round = rounds[roundIndex];
+      if (!round || !(round.playlistIds || []).length) return;
+      if (roundIndex === currentRound && onSyncMixFromRoundRef.current) {
+        onSyncMixFromRoundRef.current(roundIndex);
+        return;
+      }
+      loadPrepForRound(roundIndex);
+    },
+    [gameState, currentRound, loadPrepForRound, rounds],
   );
 
   const selectRound = useCallback(
@@ -153,8 +175,11 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   useEffect(() => {
     const next = Math.min(Math.max(0, initialFocusedIndex), Math.max(0, rounds.length - 1));
     setFocusedIndex(next);
-    loadPrepForRound(next);
-  }, [initialFocusedIndex, loadPrepForRound]);
+    if (lastModalFocusRef.current !== initialFocusedIndex) {
+      lastModalFocusRef.current = initialFocusedIndex;
+      loadPrepForRound(next);
+    }
+  }, [initialFocusedIndex, loadPrepForRound, rounds.length]);
 
   useEffect(() => {
     setFocusedIndex((i) => Math.min(i, Math.max(0, rounds.length - 1)));
@@ -211,7 +236,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
       status: round.status === 'unplanned' ? 'planned' : round.status,
     };
     onUpdateRounds(newRounds);
-    if (roundIndex === focusedIndex) loadPrepForRound(roundIndex);
+    if (roundIndex === focusedIndex) syncMixIfPrepRound(roundIndex);
   };
 
   const removePlaylistFromRound = (roundIndex: number, playlistId: string) => {
@@ -229,7 +254,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
       status: round.playlistIds.length === 1 ? 'unplanned' : round.status,
     };
     onUpdateRounds(newRounds);
-    if (roundIndex === focusedIndex) loadPrepForRound(roundIndex);
+    if (roundIndex === focusedIndex) syncMixIfPrepRound(roundIndex);
   };
 
   const handleBucketDragOver = (e: React.DragEvent) => {
@@ -405,6 +430,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
         </details>
       ) : null}
 
+      <div className="round-planner__main">
       <label className="round-planner__cards-pdf">
         Cards per PDF
         <input
@@ -527,6 +553,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
         randomStarts={randomStarts}
         onRandomStartsChange={onRandomStartsChange}
       />
+      </div>
     </div>
   );
 }

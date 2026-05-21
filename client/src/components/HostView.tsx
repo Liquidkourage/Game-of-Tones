@@ -4240,7 +4240,8 @@ const HostView: React.FC = () => {
   );
 
   const applyRoundBingoToHost = useCallback(
-    (round: EventRound) => {
+    (round: EventRound, options?: { restorePlaybackFromSnapshot?: boolean }) => {
+      const restorePlayback = options?.restorePlaybackFromSnapshot === true;
       let p = round.bingoPattern ?? 'line';
       let mask =
         p === 'custom' && round.customPatternMask && round.customPatternMask.length > 0
@@ -4296,7 +4297,7 @@ const HostView: React.FC = () => {
         }
       }
 
-      if (round.savedMixSnapshot) {
+      if (restorePlayback && round.savedMixSnapshot) {
         const snap = round.savedMixSnapshot;
         const sl = snap.snippetLength;
         if (typeof sl === 'number' && Number.isFinite(sl) && sl > 0 && sl <= 120) {
@@ -4349,7 +4350,7 @@ const HostView: React.FC = () => {
     if (currentRoundIndex < 0) return;
     const r = eventRoundsRef.current[currentRoundIndex];
     if (!r) return;
-    applyRoundBingoToHost(r);
+    applyRoundBingoToHost(r, { restorePlaybackFromSnapshot: true });
   }, [currentRoundIndex, applyRoundBingoToHost]);
 
   // Round management functions
@@ -5718,6 +5719,16 @@ const HostView: React.FC = () => {
     [resolveMixPlaylistRowsForRound],
   );
 
+  /** Sync only mix playlists for the focused round (no pattern/playback reset). */
+  const syncMixFromRound = useCallback(
+    (roundIndex: number) => {
+      const round = eventRoundsRef.current[roundIndex];
+      if (!round || !(round.playlistIds || []).length) return;
+      applyRoundPlaylistsToMixSelection(round);
+    },
+    [applyRoundPlaylistsToMixSelection],
+  );
+
   /** Pick a round for advance prep: sync mix + pattern/snippet UI without marking rounds active/completed or leaving Manager. */
   const handleSelectRoundForPrep = useCallback(
     (roundIndex: number) => {
@@ -5738,13 +5749,15 @@ const HostView: React.FC = () => {
         return;
       }
       const mixRows = resolveMixPlaylistRowsForRound(round);
-      applyRoundBingoToHost(round);
       const switchingRound = roundIndex !== currentRoundIndexRef.current;
-      setCurrentRoundIndex(roundIndex);
-      const playlistNames = round.playlistNames.join(', ');
       if (switchingRound) {
+        applyRoundBingoToHost(round, { restorePlaybackFromSnapshot: true });
+        setCurrentRoundIndex(roundIndex);
+        const playlistNames = round.playlistNames.join(', ');
         showToast(`${round.name} — mix loaded for prep (${playlistNames})`, 'success');
         addLog(`Prep select ${round.name}: ${playlistNames}`, 'info');
+      } else {
+        setCurrentRoundIndex(roundIndex);
       }
 
       if (
@@ -5926,7 +5939,7 @@ const HostView: React.FC = () => {
       addLog(`Started ${round.name}: ${playlistNames}`, 'info');
     }
 
-    applyRoundBingoToHost(round);
+    applyRoundBingoToHost(round, { restorePlaybackFromSnapshot: true });
     const mixRows = resolveMixPlaylistRowsForRound(round);
     if (
       loaded &&
@@ -7220,6 +7233,7 @@ const HostView: React.FC = () => {
                   currentRound={currentRoundIndex}
                   onStartRound={handleStartRound}
                   onSelectRoundForPrep={handleSelectRoundForPrep}
+                  onSyncMixFromRound={syncMixFromRound}
                   gameState={gameState}
                   hostDefaultFreeSpace={freeSpaceEnabled}
                   savedCustomPatterns={savedCustomPatterns}

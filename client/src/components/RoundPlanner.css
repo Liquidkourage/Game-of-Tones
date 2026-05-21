@@ -6,6 +6,17 @@
   min-height: 0;
   height: 100%;
   gap: 8px;
+  overflow: hidden;
+}
+
+.round-planner__main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .round-planner__head {
@@ -66,11 +77,10 @@
 }
 
 #round-planner-buckets {
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .round-planner-buckets-wrap {

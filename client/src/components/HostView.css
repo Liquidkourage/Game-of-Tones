@@ -1420,7 +1420,7 @@
     overflow: hidden;
   }
 
-  .host-playlist-round-modal-root .host-music-two-pane__rounds #round-planner-buckets {
+  .host-playlist-round-modal-root .host-music-two-pane__rounds .round-planner__main {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
