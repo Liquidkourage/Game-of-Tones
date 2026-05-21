@@ -618,6 +618,8 @@ const HostView: React.FC = () => {
   /** Printable PDF export (physical daubers) — count capped server-side at 200. */
   const [printableCardCount, setPrintableCardCount] = useState(30);
   const [saveRoundBusy, setSaveRoundBusy] = useState(false);
+  /** Game tab: expand manual re-sync when saved round normally covers finalize. */
+  const [finalizeResyncOpen, setFinalizeResyncOpen] = useState(false);
   const [printablePdfLoading, setPrintablePdfLoading] = useState(false);
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
   /** Server served playlist list from DB (429/quarantine, or normal cache-first load without hitting Spotify). */
@@ -5992,7 +5994,7 @@ const HostView: React.FC = () => {
       console.warn('Failed to save rounds to localStorage:', error);
     }
 
-    // Next step is Finalize mix / Start game on the Game tab
+    // Next step is Start game on the Game tab (finalize runs via Save round or Start Game)
     setActiveTab('play');
   }, [
     eventRounds,
@@ -6290,6 +6292,17 @@ const HostView: React.FC = () => {
     currentPrepRoundForFinalizeUi != null &&
     eventRoundSnapshotMeetsSaveThreshold(currentPrepRoundForFinalizeUi, freeSpaceEnabled) &&
     prepRoundPlaylistsMatchMix;
+
+  const showPrimaryFinalizeMixButton =
+    !mixFinalized && !savedRoundSnapshotMakesFinalizeRedundant && mixPlaylistSelection.length > 0;
+  const showFinalizeResyncTroubleshoot =
+    !mixFinalized && savedRoundSnapshotMakesFinalizeRedundant && mixPlaylistSelection.length > 0;
+
+  useEffect(() => {
+    if (mixFinalized || !savedRoundSnapshotMakesFinalizeRedundant) {
+      setFinalizeResyncOpen(false);
+    }
+  }, [mixFinalized, savedRoundSnapshotMakesFinalizeRedundant]);
 
   const webApiQuarantineBannerText = useMemo(() => {
     if (webApiQuarantine.active !== true) return null;
@@ -7892,29 +7905,36 @@ const HostView: React.FC = () => {
              <div className="control-buttons">
                {gameState === 'waiting' && !currentSong ? (
                  <>
-                   {!mixFinalized && savedRoundSnapshotMakesFinalizeRedundant && (
-                     <p
-                       className="status-text"
-                       style={{
-                         display: 'flex',
-                         alignItems: 'center',
-                         gap: 8,
-                         justifyContent: 'center',
-                         flexWrap: 'wrap',
-                         maxWidth: 560,
-                         margin: '0 auto 10px',
-                         fontSize: '0.85rem',
-                         color: 'rgba(255,255,255,0.72)',
-                         lineHeight: 1.4,
-                       }}
-                     >
-                       <ListChecks className="w-4 h-4" style={{ opacity: 0.85 }} aria-hidden />
-                       Saved snapshot for this round: choosing it syncs the projector and online cards automatically (same
-                       as Finalize mix). Use <strong style={{ color: 'rgba(255,255,255,0.88)' }}>Finalize Mix</strong> only if
-                       the display still shows an old mix or sync failed.
-                     </p>
+                   {showFinalizeResyncTroubleshoot && (
+                     <div className="host-finalize-resync">
+                       <button
+                         type="button"
+                         className="host-finalize-resync__toggle"
+                         aria-expanded={finalizeResyncOpen}
+                         onClick={() => setFinalizeResyncOpen((o) => !o)}
+                       >
+                         Display stale or sync failed?
+                       </button>
+                       {finalizeResyncOpen ? (
+                         <div className="host-finalize-resync__panel">
+                           <p className="host-finalize-resync__hint">
+                             This round is saved in Round builder. Start Game normally uses that snapshot. Re-sync only if
+                             the projector or player cards still show an old mix.
+                           </p>
+                           <button
+                             type="button"
+                             className="btn-secondary host-finalize-resync__btn"
+                             onClick={() => void finalizeMix()}
+                             disabled={mixGameActionsBlocked}
+                           >
+                             <RotateCcw className="w-4 h-4" aria-hidden />
+                             Re-sync mix to room
+                           </button>
+                         </div>
+                       ) : null}
+                     </div>
                    )}
-                   {!mixFinalized && (
+                   {showPrimaryFinalizeMixButton ? (
                      <button
                        className="control-button finalize-mix"
                        onClick={() => void finalizeMix()}
@@ -7923,7 +7943,7 @@ const HostView: React.FC = () => {
                        <ListChecks className="w-4 h-4" aria-hidden />
                        Finalize Mix
                      </button>
-                   )}
+                   ) : null}
                    {mixFinalized && (
                      <div className="mix-finalized-status">
                        <p className="status-text" style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
@@ -7963,9 +7983,18 @@ const HostView: React.FC = () => {
                         ? 'Connecting Spotify...'
                         : 'Start Game'}
                   </button>
-                  <p style={{ marginTop: 10, fontSize: '0.78rem', color: '#9a9a9a', maxWidth: 520, lineHeight: 1.4 }}>
-                    Start Game will <strong style={{ color: '#cfcfcf' }}>finalize the mix automatically</strong> if you have not tapped Finalize Mix yet
-                    (same server step; Finalize is optional for early card preview).
+                  <p style={{ marginTop: 10, fontSize: '0.78rem', color: '#9a9a9a', maxWidth: 520, lineHeight: 1.4, marginLeft: 'auto', marginRight: 'auto' }}>
+                    {savedRoundSnapshotMakesFinalizeRedundant ? (
+                      <>
+                        <strong style={{ color: '#cfcfcf' }}>Save round</strong> in Round builder locks this round&apos;s tracks.
+                        Tap <strong style={{ color: '#cfcfcf' }}>Start Game</strong> when ready — no separate finalize step.
+                      </>
+                    ) : (
+                      <>
+                        Start Game will <strong style={{ color: '#cfcfcf' }}>finalize the mix automatically</strong> if needed.
+                        Use Finalize Mix first only for an early card preview on the display.
+                      </>
+                    )}
                   </p>
                  </>
                ) : (
@@ -8131,7 +8160,7 @@ const HostView: React.FC = () => {
                       {mixPlaylistSelection.length === 0
                         ? 'Open Round builder (Manager tab) to add playlists to a round. Connect Spotify and/or YouTube Music in Connection if needed.'
                         : savedRoundSnapshotMakesFinalizeRedundant
-                          ? 'Your saved round snapshot can sync the room automatically. Tap Start Game when ready, or Finalize Mix if the display looks stale.'
+                          ? 'This round is saved. Tap Start Game when ready — the room syncs from your snapshot. Use “Display stale or sync failed?” above only if the projector looks wrong.'
                           : 'Tap Finalize Mix or Start Game to build the bingo song pool from your selected playlists.'}
                     </p>
                   </div>
@@ -8601,7 +8630,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   type="button"
                   className="host-playlist-round-modal__help"
                   aria-label="How the round builder works"
-                  title="Library left, round buckets right. Numbered buttons switch rounds and sync the Game tab mix (blue Mix outline). Each bucket: playlists, pattern, save/print, start. Then Game tab → Finalize mix → Start Game."
+                  title="Library left, round buckets right. Numbered buttons switch rounds and sync the Game tab mix (blue Mix outline). Each bucket: playlists, pattern, Save round, print/call sheet, start. Then Game tab → Start Game (Save round locks tracks; no separate finalize)."
                 >
                   <HelpCircle className="w-4 h-4" aria-hidden />
                 </button>

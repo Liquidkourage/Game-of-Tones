@@ -2280,6 +2280,51 @@
   cursor: not-allowed;
 }
 
+/* Saved round workflow: optional re-sync (replaces always-visible Finalize Mix) */
+.host-finalize-resync {
+  max-width: 560px;
+  margin: 0 auto 12px;
+  text-align: center;
+}
+
+.host-finalize-resync__toggle {
+  border: none;
+  background: none;
+  color: #7dd3fc;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 4px 8px;
+}
+
+.host-finalize-resync__toggle:hover {
+  color: #a5e4ff;
+}
+
+.host-finalize-resync__panel {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.28);
+  text-align: left;
+}
+
+.host-finalize-resync__hint {
+  margin: 0 0 10px;
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.65);
+  line-height: 1.45;
+}
+
+.host-finalize-resync__btn {
+  width: 100%;
+  justify-content: center;
+}
+
 .host-view .btn-accent {
   display: inline-flex;
   align-items: center;
