@@ -5,7 +5,6 @@ export type HostTourContext = {
   hasCurrentSong: boolean;
   showGoLive: boolean;
   showLiveDock: boolean;
-  showRoundMeta: boolean;
   showFinalizeMix: boolean;
 };
 
@@ -42,30 +41,23 @@ export function buildHostScreenTourSteps(ctx: HostTourContext): HostTourStep[] {
     {
       id: 'rounds-panel',
       title: 'Rounds & playlists',
-      body: 'Your event at a glance: connection status, round counts, and the active round’s playlists, pattern, and track pool.',
+      body: 'Full round prep: numbered tabs, playlist order, patterns, Save/Print, event actions, and playback settings.',
       placement: 'right',
       visible: true,
     },
     {
       id: 'round-builder',
-      title: 'Round builder',
-      body: 'Open this to drag playlists into round buckets, set bingo patterns, Save round, print PDFs, and use Event actions (reset, clear cache).',
+      title: 'Playlist library',
+      body: 'Opens the Spotify/YouTube playlist grid. Drag playlists into the active round bucket on the host screen.',
       placement: 'left',
       visible: true,
     },
     {
       id: 'round-setlist',
-      title: 'Active round & mix',
-      body: 'Shows which round is loaded, its playlists, pattern, and how many tracks are in the pool. Updates when you switch rounds in Round builder.',
-      placement: 'top',
+      title: 'Rounds & playlists',
+      body: 'Round tabs, patterns, playlist order, Save/Print/Call sheet, and event actions — same controls as before, now always visible here.',
+      placement: 'right',
       visible: true,
-    },
-    {
-      id: 'round-meta',
-      title: 'Round controls',
-      body: 'End round (stop and mark complete), Restart round (same round, fresh cards), or jump to the next planned round in your event.',
-      placement: 'top',
-      visible: ctx.showRoundMeta,
     },
     {
       id: 'projector-settings',

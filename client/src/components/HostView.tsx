@@ -759,14 +759,19 @@ const HostView: React.FC = () => {
   const [roundBuilderFocusIndex, setRoundBuilderFocusIndex] = useState(0);
   const compositeEditRoundIndexRef = useRef(0);
   const [playlistRoundModalPane, setPlaylistRoundModalPane] = useState<'library' | 'rounds'>('library');
+  const openPlaylistLibrary = useCallback(() => {
+    setPlaylistRoundModalPane('library');
+    setShowPlaylistRoundModal(true);
+  }, []);
+
   const openRoundBuilder = useCallback((focusIndex?: number) => {
     const idx =
       focusIndex !== undefined
         ? focusIndex
         : Math.max(0, currentRoundIndexRef.current >= 0 ? currentRoundIndexRef.current : 0);
     setRoundBuilderFocusIndex(idx);
-    setShowPlaylistRoundModal(true);
-  }, []);
+    openPlaylistLibrary();
+  }, [openPlaylistLibrary]);
   const showPlaylistRoundModalScrollRef = useRef(showPlaylistRoundModal);
   showPlaylistRoundModalScrollRef.current = showPlaylistRoundModal;
   /** In-person + online: only in-person verified bingos end the round / prize */
@@ -6327,11 +6332,9 @@ const HostView: React.FC = () => {
         hasCurrentSong: Boolean(currentSong),
         showGoLive: gameState === 'waiting' && !currentSong,
         showLiveDock: gameState === 'playing' || Boolean(currentSong),
-        showRoundMeta:
-          gameState === 'playing' || (gameState === 'waiting' && (mixFinalized || hostActiveRoundSummary.mixFinalized)),
         showFinalizeMix: false,
       }),
-    [gameState, currentSong, mixFinalized, hostActiveRoundSummary.mixFinalized],
+    [gameState, currentSong],
   );
 
   useEffect(() => {
@@ -6582,49 +6585,69 @@ const HostView: React.FC = () => {
     </motion.div>
   );
 
+  const hostRoundPlanner = (
+    <RoundPlanner<EventRound>
+      rounds={eventRounds}
+      onUpdateRounds={handleUpdateRounds}
+      playlists={playlistsForRoundPlanner}
+      currentRound={currentRoundIndex}
+      onStartRound={handleStartRound}
+      onSelectRoundForPrep={handleSelectRoundForPrep}
+      onSyncMixFromRound={syncMixFromRound}
+      onOpenConnection={() => setShowConnectionModal(true)}
+      gameState={gameState}
+      hostDefaultFreeSpace={freeSpaceEnabled}
+      savedCustomPatterns={savedCustomPatterns}
+      onUpdateRoundBingo={handleUpdateRoundBingoFields}
+      onSaveRound={(idx) => void handleSaveRoundAtIndex(idx)}
+      saveRoundBusy={saveRoundBusy}
+      snapshotMeetsSave={(r) => eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled)}
+      onPrintPdf={(idx) => handleDownloadRoundPrintablePdf(eventRounds[idx])}
+      onCallSheet={(idx) => handleDownloadRoundCallSheetPdf(eventRounds[idx])}
+      onOpenComposite={openCompositeForRound}
+      onNewCustomPattern={handleNewCustomPattern}
+      printablePdfLoading={printablePdfLoading}
+      printableCardCount={printableCardCount}
+      onPrintableCardCountChange={setPrintableCardCount}
+      snippetLength={snippetLength}
+      onSnippetLengthChange={setSnippetLength}
+      randomStarts={randomStarts}
+      onRandomStartsChange={setRandomStarts}
+      initialFocusedIndex={roundBuilderFocusIndex}
+      prepHints={{
+        spotifyNeeded: mixNeedsHostSpotify,
+        spotifyConnected: isSpotifyConnected,
+        deviceNeeded: mixNeedsHostSpotify,
+        deviceSelected: !!selectedDevice,
+      }}
+      statusSummary={getRoundStatusSummary()}
+      onResetEvent={resetEvent}
+      onClearPrepCache={clearRoomRoundPrepStorage}
+      onEndRound={handleEndRound}
+      onResetCurrentRound={resetCurrentRound}
+      onStartNextPlanned={() => {
+        const next = getNextPlannedRound();
+        if (next >= 0) jumpToRound(next);
+      }}
+      hasNextPlanned={getNextPlannedRound() >= 0}
+    />
+  );
+
   const playlistRoundBuilderBody = (
               <div
-                className="host-playlist-round-modal-root"
-                data-mobile-pane={playlistRoundModalPane}
+                className="host-playlist-round-modal-root host-playlist-round-modal-root--library-only"
+                data-mobile-pane="library"
               >
               {!isSpotifyConnected && showYoutubeMusicInConnectionModal ? (
                 <p className="host-playlist-round-modal__banner" role="status">
                   YouTube playlists work without Spotify — use <strong>Connection</strong> for the full Spotify grid.
                 </p>
               ) : null}
-              <div
-                className="host-playlist-round-modal__pane-switch"
-                role="tablist"
-                aria-label="Library or round buckets"
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={playlistRoundModalPane === 'library'}
-                  className={
-                    playlistRoundModalPane === 'library'
-                      ? 'host-playlist-round-modal__pane-tab host-playlist-round-modal__pane-tab--active'
-                      : 'host-playlist-round-modal__pane-tab'
-                  }
-                  onClick={() => setPlaylistRoundModalPane('library')}
-                >
-                  Library
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={playlistRoundModalPane === 'rounds'}
-                  className={
-                    playlistRoundModalPane === 'rounds'
-                      ? 'host-playlist-round-modal__pane-tab host-playlist-round-modal__pane-tab--active'
-                      : 'host-playlist-round-modal__pane-tab'
-                  }
-                  onClick={() => setPlaylistRoundModalPane('rounds')}
-                >
-                  Rounds
-                </button>
-              </div>
-            <div className="host-music-two-pane">
+              <p className="host-playlist-round-modal__library-hint">
+                Drag playlists into a round on the host screen. Round buckets, patterns, and Save live under{' '}
+                <strong>Rounds &amp; playlists</strong>.
+              </p>
+            <div className="host-music-two-pane host-music-two-pane--library-only">
               <div className="host-music-two-pane__library">
           <motion.div
                     className="playlists-section host-playlist-library-panel"
@@ -7307,53 +7330,6 @@ const HostView: React.FC = () => {
 
                   </motion.div>
               </div>
-              <div className="host-music-two-pane__rounds">
-                <RoundPlanner<EventRound>
-                  rounds={eventRounds}
-                  onUpdateRounds={handleUpdateRounds}
-                  playlists={playlistsForRoundPlanner}
-                  currentRound={currentRoundIndex}
-                  onStartRound={handleStartRound}
-                  onSelectRoundForPrep={handleSelectRoundForPrep}
-                  onSyncMixFromRound={syncMixFromRound}
-                  onOpenConnection={() => setShowConnectionModal(true)}
-                  gameState={gameState}
-                  hostDefaultFreeSpace={freeSpaceEnabled}
-                  savedCustomPatterns={savedCustomPatterns}
-                  onUpdateRoundBingo={handleUpdateRoundBingoFields}
-                  onSaveRound={(idx) => void handleSaveRoundAtIndex(idx)}
-                  saveRoundBusy={saveRoundBusy}
-                  snapshotMeetsSave={(r) => eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled)}
-                  onPrintPdf={(idx) => handleDownloadRoundPrintablePdf(eventRounds[idx])}
-                  onCallSheet={(idx) => handleDownloadRoundCallSheetPdf(eventRounds[idx])}
-                  onOpenComposite={openCompositeForRound}
-                  onNewCustomPattern={handleNewCustomPattern}
-                  printablePdfLoading={printablePdfLoading}
-                  printableCardCount={printableCardCount}
-                  onPrintableCardCountChange={setPrintableCardCount}
-                  snippetLength={snippetLength}
-                  onSnippetLengthChange={setSnippetLength}
-                  randomStarts={randomStarts}
-                  onRandomStartsChange={setRandomStarts}
-                  initialFocusedIndex={roundBuilderFocusIndex}
-                  prepHints={{
-                    spotifyNeeded: mixNeedsHostSpotify,
-                    spotifyConnected: isSpotifyConnected,
-                    deviceNeeded: mixNeedsHostSpotify,
-                    deviceSelected: !!selectedDevice,
-                  }}
-                  statusSummary={getRoundStatusSummary()}
-                  onResetEvent={resetEvent}
-                  onClearPrepCache={clearRoomRoundPrepStorage}
-                  onCompleteCurrentRound={completeCurrentRound}
-                  onResetCurrentRound={resetCurrentRound}
-                  onStartNextPlanned={() => {
-                    const next = getNextPlannedRound();
-                    if (next >= 0) jumpToRound(next);
-                  }}
-                  hasNextPlanned={getNextPlannedRound() >= 0}
-                />
-              </div>
             </div>
             </div>
   );
@@ -7561,9 +7537,9 @@ const HostView: React.FC = () => {
                       <RotateCcw className="w-4 h-4" aria-hidden />
                       New round setup
                     </button>
-                    <button type="button" className="btn-accent" onClick={() => openRoundBuilder()} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      <CalendarRange className="w-4 h-4" aria-hidden />
-                      Round builder
+                    <button type="button" className="btn-accent" onClick={() => openPlaylistLibrary()} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <ListPlus className="w-4 h-4" aria-hidden />
+                      Playlist library
                     </button>
                     <button type="button" className="btn-secondary btn-host-warn" onClick={resetDisplayLetters} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                       <RotateCcw className="w-4 h-4" aria-hidden />
@@ -7590,7 +7566,7 @@ const HostView: React.FC = () => {
                   <p className="host-go-live__summary-meta">
                     {hostActiveRoundSummary.poolCount > 0
                       ? `${hostActiveRoundSummary.poolCount} tracks · ${hostActiveRoundSummary.patternLabel}`
-                      : 'Open Round builder to build your mix'}
+                      : 'Add playlists from the library below'}
                   </p>
                 </div>
                 <div className="host-go-live__actions control-buttons">
@@ -7639,155 +7615,36 @@ const HostView: React.FC = () => {
             <div className="host-manager host-manager-setup-flow">
                 <div className="host-manager-grid host-manager-grid--split host-manager-grid--balanced">
                   <div className="host-manager-col">
-                <motion.section
-                  className="host-manager-hero host-manager-hero--dashboard host-manager-section"
+                <section
+                  className="host-rounds-panel host-manager-section"
                   data-host-tour="rounds-panel"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.15 }}
+                  aria-labelledby="host-rounds-panel-title"
                 >
-                  <div className="host-manager-hero__top">
-                    <div className="host-manager-hero__main">
-                      <h2 className="host-manager-hero__title">
+                  <div className="host-rounds-panel__header">
+                    <div>
+                      <h2 id="host-rounds-panel-title" className="host-rounds-panel__title">
                         <ListMusic className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
                         Rounds &amp; playlists
                       </h2>
-                      <p className="host-manager-section__lead host-manager-hero__lead">
-                        Build rounds in <strong style={{ color: '#c5dccf' }}>Round builder</strong>, save each mix, then{' '}
-                        <strong style={{ color: '#c5dccf' }}>Start Game</strong> above. Playback:{' '}
-                        <strong style={{ color: '#c5dccf' }}>Connection</strong> in the header.
+                      <p className="host-rounds-panel__lead">
+                        Rounds, patterns, playlists, and Save live here. Use <strong>Playlist library</strong> to drag
+                        playlists in. <strong>Start Game</strong> is above when ready.
                       </p>
                     </div>
                     <button
                       type="button"
-                      className="btn-primary host-manager-hero__cta"
+                      className="btn-primary host-rounds-panel__library-btn"
                       data-host-tour="round-builder"
-                      onClick={() => openRoundBuilder()}
+                      onClick={() => openPlaylistLibrary()}
                     >
-                      <ListMusic className="w-5 h-5" aria-hidden />
-                      Open Round builder
+                      <ListPlus className="w-5 h-5" aria-hidden />
+                      Playlist library
                     </button>
                   </div>
-                  {eventRounds.length > 0 ? (
-                    <div className="host-event-stats-mini" aria-label="Event overview">
-                      {(
-                        [
-                          { key: 'completed', label: 'Done', val: getRoundStatusSummary().completed, mod: 'done' },
-                          { key: 'active', label: 'Live', val: getRoundStatusSummary().active, mod: 'live' },
-                          { key: 'planned', label: 'Planned', val: getRoundStatusSummary().planned, mod: 'planned' },
-                          { key: 'unplanned', label: 'Empty', val: getRoundStatusSummary().unplanned, mod: 'empty' },
-                        ] as const
-                      ).map(({ key, label, val, mod }) => (
-                        <div key={key} className={`host-event-stats-mini__cell host-event-stats-mini__cell--${mod}`}>
-                          <span className="host-event-stats-mini__val">{val}</span>
-                          <span className="host-event-stats-mini__label">{label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                      <div className="host-manager-hero__status">
-                        <span className={`host-manager-hero__chip${isSpotifyConnected ? ' host-manager-hero__chip--ok' : ''}`}>
-                          Spotify {isSpotifyConnected ? 'connected' : 'not connected'}
-                        </span>
-                        {showYoutubeMusicInConnectionModal ? (
-                          <span className="host-manager-hero__chip">YouTube Music</span>
-                        ) : null}
-                        {(isSpotifyConnected || showYoutubeMusicInConnectionModal) && (
-                          <span className="host-manager-hero__chip">
-                            {selectedPlaylists.length} in mix · {eventRounds.length} rounds · {playlists.length}{' '}
-                            library
-                          </span>
-                        )}
-                      </div>
-                      {!(isSpotifyConnected || showYoutubeMusicInConnectionModal) ? (
-                        <p className="host-manager-hero__warn">
-                          Connect Spotify or YouTube in the header before Round builder.
-                        </p>
-                      ) : null}
-                      <div className="host-rounds-hero__setlist" data-host-tour="round-setlist" aria-label="Active round and mix">
-                        <p className="host-rounds-hero__setlist-title">
-                          {hostActiveRoundSummary.roundName ?? 'No round selected'}
-                          {hostActiveRoundSummary.roundStatus ? (
-                            <span className={`host-rounds-hero__status host-rounds-hero__status--${hostActiveRoundSummary.roundStatus}`}>
-                              {hostActiveRoundSummary.roundStatus}
-                            </span>
-                          ) : null}
-                        </p>
-                        {hostActiveRoundSummary.playlistNames.length > 0 ? (
-                          <ul className="host-rounds-hero__playlist-chips" aria-label="Playlists in mix">
-                            {hostActiveRoundSummary.playlistNames.map((name) => (
-                              <li key={name}>{name}</li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="host-rounds-hero__empty-hint">Add playlists in Round builder</p>
-                        )}
-                        <dl className="host-rounds-hero__setlist-grid">
-                          <div>
-                            <dt>Pattern</dt>
-                            <dd>{hostActiveRoundSummary.patternLabel}</dd>
-                          </div>
-                          <div>
-                            <dt>Pool</dt>
-                            <dd>
-                              {hostActiveRoundSummary.poolCount > 0
-                                ? `${hostActiveRoundSummary.poolCount} tracks${hostActiveRoundSummary.mixFinalized ? ' · finalized' : ''}`
-                                : 'Not built yet'}
-                              {hostActiveRoundSummary.savedRound ? ' · saved' : ''}
-                            </dd>
-                          </div>
-                          {gameState === 'playing' ? (
-                            <div>
-                              <dt>Played</dt>
-                              <dd>{hostActiveRoundSummary.playedCount} songs</dd>
-                            </div>
-                          ) : null}
-                          <div>
-                            <dt>Rounds</dt>
-                            <dd>
-                              {eventRounds.length} in event
-                              {currentRoundIndex >= 0 ? ` · #${currentRoundIndex + 1} selected` : ''}
-                            </dd>
-                          </div>
-                        </dl>
-                      </div>
-                      {(gameState === 'playing' || hostActiveRoundSummary.mixFinalized) && (
-                        <div className="host-rounds-hero__meta" data-host-tour="round-meta" aria-label="Round controls">
-                          {gameState === 'playing' ? (
-                            <button type="button" className="btn-secondary" onClick={handleEndRound}>
-                              <Flag className="w-4 h-4" aria-hidden />
-                              End round
-                            </button>
-                          ) : null}
-                          {gameState === 'playing' ||
-                          (gameState === 'waiting' && hostActiveRoundSummary.mixFinalized) ? (
-                            <button type="button" className="btn-secondary" onClick={handleRestartRound}>
-                              <RotateCcw className="w-4 h-4" aria-hidden />
-                              Restart round
-                            </button>
-                          ) : null}
-                          {getNextPlannedRound() >= 0 ? (
-                            <button
-                              type="button"
-                              className="btn-secondary"
-                              onClick={() => {
-                                const next = getNextPlannedRound();
-                                if (next >= 0) jumpToRound(next);
-                              }}
-                            >
-                              <SkipForward className="w-4 h-4" aria-hidden />
-                              Next planned
-                            </button>
-                          ) : null}
-                          {gameState === 'playing' ? (
-                            <button type="button" className="btn-secondary btn-host-warn" onClick={confirmAndNewRound}>
-                              <RotateCcw className="w-4 h-4" aria-hidden />
-                              New round setup
-                            </button>
-                          ) : null}
-                        </div>
-                      )}
-                </motion.section>
+                  <div className="host-rounds-panel__planner" data-host-tour="round-setlist">
+                    {hostRoundPlanner}
+                  </div>
+                </section>
                   </div>
 
                   <div className="host-manager-col host-manager-col--wide">
@@ -8483,14 +8340,14 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
             <div className="host-connection-modal__header host-connection-modal__header--round-hub">
               <div className="host-playlist-round-modal__title-block">
                 <h2 id="host-round-hub-modal-title">
-                  <ListMusic className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
-                  Round builder
+                  <ListPlus className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
+                  Playlist library
                 </h2>
                 <button
                   type="button"
                   className="host-playlist-round-modal__help"
-                  aria-label="How the round builder works"
-                  title="Library left, round buckets right. Numbered buttons switch rounds and sync the mix (blue outline). Each bucket: playlists, pattern, Save round, print/call sheet. Start the show from the host screen when ready."
+                  aria-label="How the playlist library works"
+                  title="Drag playlists into a round on the host screen (Rounds & playlists). Patterns, Save round, and event actions are on the main page — not in this modal."
                 >
                   <HelpCircle className="w-4 h-4" aria-hidden />
                 </button>

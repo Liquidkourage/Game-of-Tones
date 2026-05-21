@@ -2935,6 +2935,89 @@
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+/* Inline rounds panel (full RoundPlanner on host screen) */
+.host-view .host-rounds-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px 20px;
+  border-color: rgba(0, 255, 136, 0.28);
+  background: linear-gradient(160deg, rgba(0, 255, 136, 0.06) 0%, rgba(0, 0, 0, 0.25) 48%);
+  min-height: min(72vh, 820px);
+}
+
+.host-view .host-rounds-panel__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.host-view .host-rounds-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 6px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.host-view .host-rounds-panel__lead {
+  margin: 0;
+  max-width: 520px;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.host-view .host-rounds-panel__lead strong {
+  color: #c5dccf;
+}
+
+.host-view .host-rounds-panel__library-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-weight: 800;
+}
+
+.host-view .host-rounds-panel__planner {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 2px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.host-view .host-rounds-panel__planner .round-planner {
+  min-height: 100%;
+}
+
+.host-playlist-round-modal-root--library-only .host-playlist-round-modal__library-hint {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 255, 163, 0.22);
+  background: rgba(0, 255, 136, 0.06);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.host-playlist-round-modal-root--library-only .host-music-two-pane--library-only {
+  display: block;
+}
+
+.host-playlist-round-modal-root--library-only .host-music-two-pane__library {
+  width: 100%;
+  max-width: none;
+}
+
 /* Header brand (replaces legacy "Game Host 1" placeholder) */
 .host-view .host-header__brand {
   min-width: 0;

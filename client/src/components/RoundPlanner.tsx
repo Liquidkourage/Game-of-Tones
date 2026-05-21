@@ -106,6 +106,7 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   onResetEvent?: () => void;
   onClearPrepCache?: () => void;
   onCompleteCurrentRound?: () => void;
+  onEndRound?: () => void;
   onResetCurrentRound?: () => void;
   onStartNextPlanned?: () => void;
   hasNextPlanned?: boolean;
@@ -146,6 +147,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   onResetEvent,
   onClearPrepCache,
   onCompleteCurrentRound,
+  onEndRound,
   onResetCurrentRound,
   onStartNextPlanned,
   hasNextPlanned,
@@ -501,7 +503,13 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
             Event actions
           </h4>
           <div className="round-planner__event-actions-row">
-            {gameState === 'playing' && onCompleteCurrentRound ? (
+            {gameState === 'playing' && onEndRound ? (
+              <button type="button" className="round-planner-btn round-planner-btn--ghost" onClick={onEndRound}>
+                <CheckCircle2 className="w-3 h-3" aria-hidden />
+                End round
+              </button>
+            ) : null}
+            {gameState === 'playing' && onCompleteCurrentRound && !onEndRound ? (
               <button type="button" className="round-planner-btn round-planner-btn--ghost" onClick={onCompleteCurrentRound}>
                 <CheckCircle2 className="w-3 h-3" aria-hidden />
                 Complete round
