@@ -23,6 +23,23 @@ import {
   bingoColumnLetterForPlaylistName,
   remapIndexAfterMove,
 } from '../utils/bingoColumnOrder';
+import { canonicalPlaylistIdForMatch } from '../utils/effectiveBingoPoolPreview';
+
+/** Minimum unique tracks in the bingo pool for this round (matches save/PDF thresholds). */
+function minBingoPoolTracksForRound(
+  round: RoundPlannerRound,
+  hostDefaultFreeSpace: boolean,
+  playlistCount: number,
+  listedOnSpotify: number,
+): number {
+  if (playlistCount === 5) return 75;
+  if (playlistCount === 1 && round.savedMixSnapshot?.mixGeometry === '1x75') return 75;
+  if (playlistCount === 1 && round.bingoPattern === 'full_card' && listedOnSpotify >= 75) {
+    return 75;
+  }
+  const fs = round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : hostDefaultFreeSpace;
+  return fs ? 24 : 25;
+}
 import {
   applyPlaylistIdOrder,
   sortRoundPlaylistsByBingoColumns,
@@ -38,6 +55,8 @@ interface Playlist {
   id: string;
   name: string;
   tracks: number;
+  /** Unique tracks loaded this session (from full playlist-tracks fetch). */
+  tracksLoaded?: number;
   description?: string;
   youtubeMusic?: boolean;
 }
@@ -381,11 +400,34 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   const index = focusedIndex;
   const isLive = index === currentRound && gameState === 'playing';
   const isMixTarget = index === currentRound && gameState !== 'playing';
-  const poolOrListed =
-    focusedPoolTrackCount > 0 ? focusedPoolTrackCount : focused.songCount;
-  const minRequired = poolOrListed >= 60 ? 75 : 15;
-  const isInsufficient = poolOrListed > 0 && poolOrListed < minRequired;
   const playlistIds = focused.playlistIds || [];
+  const listedOnSpotify = Math.max(0, focused.songCount);
+  const poolCount = focusedPoolTrackCount > 0 ? focusedPoolTrackCount : 0;
+  const minRequired = minBingoPoolTracksForRound(
+    focused,
+    hostDefaultFreeSpace,
+    playlistIds.length,
+    listedOnSpotify,
+  );
+  const isInsufficient = poolCount > 0 && poolCount < minRequired;
+  const roundPlaylistRows = playlistIds
+    .map((id) =>
+      playlists.find(
+        (p) => canonicalPlaylistIdForMatch(p.id) === canonicalPlaylistIdForMatch(String(id)),
+      ),
+    )
+    .filter((p): p is Playlist => !!p);
+  const loadedTotal = roundPlaylistRows.reduce((n, p) => n + (p.tracksLoaded ?? 0), 0);
+  const listedTotal = roundPlaylistRows.reduce((n, p) => n + Math.max(0, p.tracks || 0), 0);
+  const fetchLooksComplete =
+    roundPlaylistRows.length > 0 &&
+    roundPlaylistRows.every((p) => (p.tracksLoaded ?? 0) > 0);
+  const spotifyUnplayableGap =
+    fetchLooksComplete && listedTotal > loadedTotal ? listedTotal - loadedTotal : 0;
+  const wants1x75Pool =
+    playlistIds.length === 1 &&
+    (focused.savedMixSnapshot?.mixGeometry === '1x75' ||
+      (focused.bingoPattern === 'full_card' && listedOnSpotify >= 75));
 
   return (
     <div className="round-planner">
@@ -710,13 +752,32 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
             ) : focused.songCount > 0 && focusedPoolTrackCount === 0 ? (
               <span> · {focused.songCount} listed on Spotify</span>
             ) : null}
-            {focusedPoolTrackCount > 0 && isInsufficient ? (
+            {poolCount > 0 && isInsufficient ? (
               <span className="round-planner-bucket__meta-warn">
                 {' '}
-                · need {minRequired - focusedPoolTrackCount} more in pool
+                · need {minRequired - poolCount} more in pool
+                {wants1x75Pool &&
+                spotifyUnplayableGap > 0 &&
+                spotifyUnplayableGap === listedOnSpotify - poolCount ? (
+                  <span>
+                    {' '}
+                    ({spotifyUnplayableGap} listed on Spotify could not be loaded — removed or unavailable)
+                  </span>
+                ) : null}
               </span>
-            ) : focusedPoolTrackCount >= minRequired ? (
+            ) : poolCount >= minRequired ? (
               <span className="round-planner-bucket__meta-ok"> · ready</span>
+            ) : null}
+            {poolCount > 0 &&
+            fetchLooksComplete &&
+            spotifyUnplayableGap > 0 &&
+            !wants1x75Pool &&
+            playlistIds.length === 1 ? (
+              <span className="round-planner-bucket__meta-muted">
+                {' '}
+                · {spotifyUnplayableGap} Spotify row{spotifyUnplayableGap !== 1 ? 's' : ''} not playable
+                (removed or unavailable); {poolCount} usable for this pattern
+              </span>
             ) : null}
             {focusedPoolTrackCount > 0 &&
             focusedPoolTrackCount < focused.songCount &&
