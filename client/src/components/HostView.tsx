@@ -6412,12 +6412,15 @@ const HostView: React.FC = () => {
   /** Round builder saved this round — host screen is go-live only (no mix/finalize/PDF chrome). */
   const gameTabRoundBuilderReady = savedRoundSnapshotMakesFinalizeRedundant;
 
-  const showRoomMixFinalizedBanner = useMemo(() => {
+  const mixFinalizedForCurrentPrep = useMemo(() => {
     if (!mixFinalized || gameTabRoundBuilderReady) return false;
     const prepKey = selectionPlaylistKey(mixPlaylistSelection);
     if (!prepKey || !finalizedMixPlaylistKey) return false;
     return finalizedMixPlaylistKey === prepKey;
   }, [mixFinalized, gameTabRoundBuilderReady, mixPlaylistSelection, finalizedMixPlaylistKey]);
+
+  /** Saved round or finalized mix for this round's playlists — one host-facing "ready" state. */
+  const prepRoundReadyForGoLive = gameTabRoundBuilderReady || mixFinalizedForCurrentPrep;
 
   const focusedRoundPoolTrackCount = useMemo(() => {
     if (currentRoundIndex < 0 || currentRoundIndex >= eventRounds.length) return 0;
@@ -7681,18 +7684,11 @@ const HostView: React.FC = () => {
                       Finalize Mix
                     </button>
                   ) : null}
-                  {showRoomMixFinalizedBanner ? (
+                  {prepRoundReadyForGoLive ? (
                     <div className="mix-finalized-status">
                       <p className="status-text" style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
                         <CheckCircle2 className="w-4 h-4" style={{ color: '#00ff88' }} aria-hidden />
-                        Mix finalized — cards generated for players
-                      </p>
-                    </div>
-                  ) : gameTabRoundBuilderReady ? (
-                    <div className="mix-finalized-status">
-                      <p className="status-text" style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
-                        <CheckCircle2 className="w-4 h-4" style={{ color: '#00ff88' }} aria-hidden />
-                        Round saved — ready to Start Game
+                        Ready to Start Game — cards and playback are set for this round
                       </p>
                     </div>
                   ) : null}
