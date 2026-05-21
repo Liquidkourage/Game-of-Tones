@@ -93,6 +93,7 @@ import {
   computeEffectiveBingoPoolPreview,
 } from '../utils/effectiveBingoPoolPreview';
 import { getYoutubeHostPlaybackChannelName } from '../utils/youtubeHostPlaybackChannel';
+import { sortRoundPlaylistsByBingoColumns } from '../utils/roundPlaylistOrder';
 import { validateSongTitle, validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
 import './HostView.css';
 
@@ -5509,15 +5510,34 @@ const HostView: React.FC = () => {
   };
 
   // Round management functions
-  const handleUpdateRounds = useCallback((newRounds: EventRound[]) => {
-    setEventRounds(newRounds);
-    // Store in localStorage for persistence
-    try {
-      localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(newRounds));
-    } catch (error) {
-      console.warn('Failed to save rounds to localStorage:', error);
-    }
-  }, [roomId]);
+  const handleUpdateRounds = useCallback(
+    (newRounds: EventRound[], meta?: { reorder?: { from: number; to: number } }) => {
+      setEventRounds(newRounds);
+      if (meta?.reorder) {
+        const { from, to } = meta.reorder;
+        setCurrentRoundIndex((cur) => {
+          if (cur < 0) return cur;
+          if (cur === from) return to;
+          if (from < to && cur > from && cur <= to) return cur - 1;
+          if (from > to && cur >= to && cur < from) return cur + 1;
+          return cur;
+        });
+        setRoundBuilderFocusIndex((cur) => {
+          if (cur < 0) return cur;
+          if (cur === from) return to;
+          if (from < to && cur > from && cur <= to) return cur - 1;
+          if (from > to && cur >= to && cur < from) return cur + 1;
+          return cur;
+        });
+      }
+      try {
+        localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(newRounds));
+      } catch (error) {
+        console.warn('Failed to save rounds to localStorage:', error);
+      }
+    },
+    [roomId],
+  );
 
   /** Same behavior as dragging a library row into a round bucket (RoundPlanner drop). */
   const addPlaylistToRoundBucket = useCallback(
@@ -5530,13 +5550,15 @@ const HostView: React.FC = () => {
         if (round.playlistIds.some((id) => String(id) === String(playlistId))) return prev;
         const newRounds = [...prev];
         const tracks = Math.max(0, Number(playlist.tracks) || 0);
-        newRounds[roundIndex] = {
+        let updated: EventRound = {
           ...round,
           playlistIds: [...round.playlistIds, playlist.id],
           playlistNames: [...round.playlistNames, playlist.name],
           songCount: round.songCount + tracks,
           status: round.status === 'unplanned' ? 'planned' : round.status,
         };
+        updated = sortRoundPlaylistsByBingoColumns(updated, playlistsForRoundPlanner);
+        newRounds[roundIndex] = updated;
         try {
           localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(newRounds));
         } catch (error) {

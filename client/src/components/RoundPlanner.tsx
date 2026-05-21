@@ -5,10 +5,13 @@ import RoundBucketSettings, { type RoundBucketBingoPatch } from './RoundBucketSe
 import RoundBuilderPlaybackPanel from './RoundBuilderPlaybackPanel';
 import RoundBuilderPrepHints from './RoundBuilderPrepHints';
 import {
+  ArrowDown,
+  ArrowUp,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Eraser,
+  GripVertical,
   Play,
   Plus,
   RotateCcw,
@@ -16,6 +19,20 @@ import {
   Trash2,
   Music,
 } from 'lucide-react';
+import {
+  bingoColumnLetterForPlaylistName,
+  remapIndexAfterMove,
+} from '../utils/bingoColumnOrder';
+import {
+  applyPlaylistIdOrder,
+  sortRoundPlaylistsByBingoColumns,
+} from '../utils/roundPlaylistOrder';
+
+export type RoundUpdateMeta = {
+  reorder?: { from: number; to: number };
+};
+
+const CHIP_REORDER_MIME = 'application/x-got-round-chip-index';
 
 interface Playlist {
   id: string;
@@ -52,7 +69,7 @@ export interface RoundPlannerRound {
 
 interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound> {
   rounds: TRound[];
-  onUpdateRounds: (rounds: TRound[]) => void;
+  onUpdateRounds: (rounds: TRound[], meta?: RoundUpdateMeta) => void;
   playlists: Playlist[];
   currentRound: number;
   onStartRound: (roundIndex: number) => void;
@@ -135,6 +152,8 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
 }: RoundPlannerProps<TRound>) {
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [dragOverBucket, setDragOverBucket] = useState(false);
+  const [dragChipIndex, setDragChipIndex] = useState<number | null>(null);
+  const [dropChipIndex, setDropChipIndex] = useState<number | null>(null);
   const onSelectRoundForPrepRef = React.useRef(onSelectRoundForPrep);
   onSelectRoundForPrepRef.current = onSelectRoundForPrep;
   const onSyncMixFromRoundRef = React.useRef(onSyncMixFromRound);
@@ -224,19 +243,62 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
     setFocusedIndex((i) => Math.min(i, updated.length - 1));
   };
 
+  const moveRound = (fromIndex: number, toIndex: number) => {
+    if (gameState === 'playing') return;
+    if (fromIndex < 0 || fromIndex >= rounds.length) return;
+    if (toIndex < 0 || toIndex >= rounds.length) return;
+    if (fromIndex === toIndex) return;
+    const next = [...rounds];
+    const [item] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, item);
+    onUpdateRounds(ensureSequentialNumbering(next), { reorder: { from: fromIndex, to: toIndex } });
+    setFocusedIndex((i) => remapIndexAfterMove(i, fromIndex, toIndex));
+  };
+
+  const setRoundPlaylistOrder = (roundIndex: number, orderedIds: string[]) => {
+    const newRounds = [...rounds];
+    const round = newRounds[roundIndex];
+    if (!round) return;
+    newRounds[roundIndex] = applyPlaylistIdOrder(round, orderedIds, playlists);
+    onUpdateRounds(newRounds);
+    if (roundIndex === focusedIndex) syncMixIfPrepRound(roundIndex);
+  };
+
+  const reorderPlaylistInRound = (roundIndex: number, fromIndex: number, toIndex: number) => {
+    const round = rounds[roundIndex];
+    if (!round) return;
+    const ids = [...(round.playlistIds || [])];
+    if (fromIndex < 0 || fromIndex >= ids.length || toIndex < 0 || toIndex >= ids.length) return;
+    if (fromIndex === toIndex) return;
+    const [id] = ids.splice(fromIndex, 1);
+    ids.splice(toIndex, 0, id);
+    setRoundPlaylistOrder(roundIndex, ids);
+  };
+
+  const sortFocusedRoundPlaylistsBingo = () => {
+    const newRounds = [...rounds];
+    const round = newRounds[focusedIndex];
+    if (!round) return;
+    newRounds[focusedIndex] = sortRoundPlaylistsByBingoColumns(round, playlists);
+    onUpdateRounds(newRounds);
+    syncMixIfPrepRound(focusedIndex);
+  };
+
   const addPlaylistToRound = (roundIndex: number, playlistId: string) => {
     const playlist = playlists.find((p) => p.id === playlistId);
     if (!playlist) return;
     const newRounds = [...rounds];
     const round = newRounds[roundIndex];
     if (round.playlistIds.includes(playlistId)) return;
-    newRounds[roundIndex] = {
+    let updated = {
       ...round,
       playlistIds: [...round.playlistIds, playlist.id],
       playlistNames: [...round.playlistNames, playlist.name],
       songCount: round.songCount + playlist.tracks,
       status: round.status === 'unplanned' ? 'planned' : round.status,
-    };
+    } as TRound;
+    updated = sortRoundPlaylistsByBingoColumns(updated, playlists);
+    newRounds[roundIndex] = updated;
     onUpdateRounds(newRounds);
     if (roundIndex === focusedIndex) syncMixIfPrepRound(roundIndex);
   };
@@ -275,11 +337,22 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
 
   const handleBucketDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    const playlistId = e.dataTransfer.getData('text/plain');
-    if (playlistId && focusedIndex >= 0 && focusedIndex < rounds.length) {
-      addPlaylistToRound(focusedIndex, playlistId);
+    const chipFromRaw = e.dataTransfer.getData(CHIP_REORDER_MIME);
+    if (chipFromRaw !== '') {
+      const from = Number(chipFromRaw);
+      const to = dropChipIndex ?? from;
+      if (Number.isFinite(from) && focusedIndex >= 0) {
+        reorderPlaylistInRound(focusedIndex, from, to);
+      }
+    } else {
+      const playlistId = e.dataTransfer.getData('text/plain');
+      if (playlistId && focusedIndex >= 0 && focusedIndex < rounds.length) {
+        addPlaylistToRound(focusedIndex, playlistId);
+      }
     }
     setDragOverBucket(false);
+    setDragChipIndex(null);
+    setDropChipIndex(null);
   };
 
   const canStartRound = (round: TRound) =>
@@ -375,6 +448,33 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
           <ChevronRight className="w-4 h-4" aria-hidden />
         </button>
       </div>
+      {gameState !== 'playing' && rounds.length > 1 ? (
+        <div className="round-planner__round-order">
+          <span className="round-planner__round-order-label">Round order</span>
+          <button
+            type="button"
+            className="round-planner-btn round-planner-btn--ghost"
+            disabled={focusedIndex <= 0}
+            aria-label="Move this round earlier in the event"
+            title="Move round earlier"
+            onClick={() => moveRound(focusedIndex, focusedIndex - 1)}
+          >
+            <ArrowUp className="w-3 h-3" aria-hidden />
+            Earlier
+          </button>
+          <button
+            type="button"
+            className="round-planner-btn round-planner-btn--ghost"
+            disabled={focusedIndex >= rounds.length - 1}
+            aria-label="Move this round later in the event"
+            title="Move round later"
+            onClick={() => moveRound(focusedIndex, focusedIndex + 1)}
+          >
+            <ArrowDown className="w-3 h-3" aria-hidden />
+            Later
+          </button>
+        </div>
+      ) : null}
 
       {statusSummary ? (
         <div className="round-planner__stats" aria-label="Event overview">
@@ -475,6 +575,20 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
         />
 
         <div className="round-planner-bucket__drop">
+          {playlistIds.length >= 2 && !isLive && focused.status !== 'completed' ? (
+            <div className="round-planner-bucket__playlist-tools">
+              <p className="round-planner-bucket__playlist-tools-hint">
+                Top = <strong>B</strong> column, then <strong>I N G O</strong> in 5×15. Drag stems or sort below.
+              </p>
+              <button
+                type="button"
+                className="round-planner-btn round-planner-btn--ghost"
+                onClick={sortFocusedRoundPlaylistsBingo}
+              >
+                Sort B–O
+              </button>
+            </div>
+          ) : null}
           {playlistIds.length === 0 ? (
             <div className={`round-planner-bucket__empty${dragOverBucket ? ' is-drag-over' : ''}`}>
               <Music className="w-4 h-4" aria-hidden />
@@ -485,16 +599,65 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
             </div>
           ) : (
             <div className="round-planner-bucket__chips">
-              {playlistIds.map((playlistId) => {
+              {playlistIds.map((playlistId, chipIndex) => {
                 const playlist = playlists.find((p) => p.id === playlistId);
                 if (!playlist) return null;
                 const cleanName = playlist.name.replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
+                const colLetter = bingoColumnLetterForPlaylistName(playlist.name);
+                const canEditChips = !isLive && focused.status !== 'completed';
+                const isDropTarget = dropChipIndex === chipIndex && dragChipIndex !== null;
                 return (
-                  <div key={playlistId} className="round-planner-chip">
+                  <div
+                    key={playlistId}
+                    className={`round-planner-chip${isDropTarget ? ' round-planner-chip--drop-target' : ''}${
+                      dragChipIndex === chipIndex ? ' round-planner-chip--dragging' : ''
+                    }`}
+                    draggable={canEditChips}
+                    onDragStart={(e) => {
+                      if (!canEditChips) return;
+                      e.dataTransfer.setData('text/plain', playlistId);
+                      e.dataTransfer.setData(CHIP_REORDER_MIME, String(chipIndex));
+                      e.dataTransfer.effectAllowed = 'move';
+                      setDragChipIndex(chipIndex);
+                    }}
+                    onDragEnd={() => {
+                      setDragChipIndex(null);
+                      setDropChipIndex(null);
+                    }}
+                    onDragOver={(e) => {
+                      if (!canEditChips || dragChipIndex === null) return;
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      setDropChipIndex(chipIndex);
+                    }}
+                    onDragLeave={() => {
+                      setDropChipIndex((cur) => (cur === chipIndex ? null : cur));
+                    }}
+                    onDrop={(e) => {
+                      if (!canEditChips) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const fromRaw = e.dataTransfer.getData(CHIP_REORDER_MIME);
+                      const from = Number(fromRaw);
+                      if (Number.isFinite(from)) {
+                        reorderPlaylistInRound(index, from, chipIndex);
+                      }
+                      setDragChipIndex(null);
+                      setDropChipIndex(null);
+                    }}
+                  >
+                    {canEditChips ? (
+                      <GripVertical className="round-planner-chip__grip" aria-hidden />
+                    ) : null}
+                    {colLetter ? (
+                      <span className="round-planner-chip__col" title={`${colLetter} column (5×15)`}>
+                        {colLetter}
+                      </span>
+                    ) : null}
                     <span className="round-planner-chip__name" title={cleanName}>
                       {cleanName}
                     </span>
-                    {!isLive && focused.status !== 'completed' ? (
+                    {canEditChips ? (
                       <button
                         type="button"
                         className="round-planner-chip__remove"
