@@ -6627,6 +6627,332 @@ const HostView: React.FC = () => {
                         ) : null}
                       </div>
                     )}
+                    <div className="host-playlist-library-table-zone">
+                    <h3 className="host-playlist-library-table-zone__title">Your Spotify playlists</h3>
+                        <div className="host-playlist-library-table">
+                      <div className="host-playlist-library-table-head">
+                      <div className="host-playlist-library-table-head__cols">
+                        <span style={{ width: 18, textAlign: 'center' }} title="Include in game mix">Mix</span>
+                        <button
+                          type="button"
+                          className="host-playlist-sort-btn"
+                          onClick={() => togglePlaylistSort('name')}
+                          aria-sort={
+                            playlistSort.key === 'name'
+                              ? playlistSort.dir === 'asc'
+                                ? 'ascending'
+                                : 'descending'
+                              : 'none'
+                          }
+                          title="Sort by playlist name"
+                          style={{
+                            flex: 1,
+                            textAlign: 'left',
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            color: 'inherit',
+                            font: 'inherit',
+                            letterSpacing: 'inherit',
+                            textTransform: 'inherit',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          Playlist
+                          {playlistSort.key === 'name' && (
+                            <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
+                              {playlistSort.dir === 'asc' ? '↑' : '↓'}
+                            </span>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          className="host-playlist-sort-btn"
+                          onClick={() => togglePlaylistSort('tracks')}
+                          aria-sort={
+                            playlistSort.key === 'tracks'
+                              ? playlistSort.dir === 'asc'
+                                ? 'ascending'
+                                : 'descending'
+                              : 'none'
+                          }
+                          title="Sort by track count"
+                          style={{
+                            minWidth: 72,
+                            textAlign: 'right',
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            color: 'inherit',
+                            font: 'inherit',
+                            letterSpacing: 'inherit',
+                            textTransform: 'inherit',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'flex-end',
+                            gap: 4,
+                          }}
+                        >
+                          Tracks
+                          {playlistSort.key === 'tracks' && (
+                            <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
+                              {playlistSort.dir === 'asc' ? '↑' : '↓'}
+                            </span>
+                          )}
+                        </button>
+                        <span style={{ minWidth: 72, textAlign: 'right' }}>
+                          {playlistSort.key !== 'none' && (
+                            <button
+                              type="button"
+                              onClick={() => setPlaylistSort({ key: 'none', dir: 'asc' })}
+                              className="host-playlist-sort-reset"
+                              title="Restore Spotify library order"
+                              style={{
+                                fontSize: '0.62rem',
+                                textTransform: 'none',
+                                letterSpacing: '0.02em',
+                                background: 'rgba(255,255,255,0.08)',
+                                border: '1px solid rgba(255,255,255,0.15)',
+                                borderRadius: 6,
+                                padding: '3px 8px',
+                                cursor: 'pointer',
+                                color: '#c8c8c8',
+                              }}
+                            >
+                              Default order
+                            </button>
+                          )}
+                        </span>
+                      </div>
+                      {libraryTablePlaylists.length > 0 ? (
+                        <nav
+                          className="host-playlist-library-table-head__pager"
+                          aria-label="Playlist pages"
+                          title={playlistLibraryPageRangeLabel}
+                        >
+                          <button
+                            type="button"
+                            className="host-playlist-library-table-head__pager-btn"
+                            disabled={playlistLibraryPageClamped <= 0}
+                            aria-label="Previous page"
+                            onClick={() => setPlaylistLibraryPage((p) => Math.max(0, p - 1))}
+                          >
+                            ‹
+                          </button>
+                          <span className="host-playlist-library-table-head__pager-label">
+                            {playlistLibraryPageClamped + 1}/{playlistLibraryPageCount}
+                          </span>
+                          <button
+                            type="button"
+                            className="host-playlist-library-table-head__pager-btn"
+                            disabled={playlistLibraryPageClamped >= playlistLibraryPageCount - 1}
+                            aria-label="Next page"
+                            onClick={() =>
+                              setPlaylistLibraryPage((p) =>
+                                Math.min(playlistLibraryPageCount - 1, p + 1)
+                              )
+                            }
+                          >
+                            ›
+                          </button>
+                        </nav>
+                      ) : null}
+                      </div>
+                      <div className="host-playlist-library-table__rows">
+                      {libraryTablePlaylists.length === 0 ? (
+                          <div className="host-playlist-library-table__empty">
+                            {playlistLibrarySource === 'spotify'
+                              ? 'No Spotify playlists in this view — try All playlists, YouTube, or widen search.'
+                              : playlistLibrarySource === 'youtube'
+                                ? 'No YouTube playlists loaded — connect under Connection, then refresh in More options.'
+                                : playlistLibraryEmptyMessage}
+                        </div>
+                        ) : (
+                          paginatedPlaylists.map((p) => {
+                          const isSelected = selectedPlaylists.some(sp => sp.id === p.id);
+                          const trackCount = Math.max(0, Number(p.tracks) || 0);
+                          // Insufficient: < 15 songs (not enough for any mode)
+                          const isInsufficient = trackCount < 15;
+                          // Acceptable: 15+ songs (good for 5x15 mode) and 75+ songs (good for both modes)
+                          const isAcceptable = trackCount >= 15;
+                          
+                          return (
+                            <div
+                              key={p.id}
+                              className={
+                                isAcceptable
+                                  ? 'host-playlist-library-row host-playlist-library-row--ok'
+                                  : 'host-playlist-library-row'
+                              }
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData('text/plain', p.id);
+                                e.dataTransfer.effectAllowed = 'copy';
+                              }}
+                              onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
+                              onMouseUp={(e) => e.currentTarget.style.cursor = 'grab'}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                aria-label={"Include in game mix: " + (p.name || "playlist")}
+                                title="Include in game mix — used when you finalize the bingo song pool"
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedPlaylists([...selectedPlaylists, p]);
+                                  } else {
+                                    setSelectedPlaylists(selectedPlaylists.filter(sp => sp.id !== p.id));
+                                  }
+                                }}
+                                style={{ marginTop: 3 }}
+                              />
+                              <span style={{ 
+                                flex: 1, 
+                                minWidth: 0,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 5,
+                                alignItems: 'flex-start',
+                              }}>
+                                <span style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  flexWrap: 'wrap',
+                                  gap: 8,
+                                  fontSize: '0.9rem',
+                                  color: isAcceptable ? '#00ff88' : '#fff',
+                                }}>
+                                  {stripGoTPrefix ? p.name.replace(/^GoT\s*[-�:]*\s*/i, '') : p.name}
+                                  {p.youtubeMusic ? (
+                                    <span
+                                      style={{
+                                        fontSize: '0.7rem',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        background: 'rgba(255, 68, 68, 0.18)',
+                                        color: '#ffb4b4',
+                                        border: '1px solid rgba(255, 68, 68, 0.35)',
+                                      }}
+                                      title="YouTube Music playlist (items are videos)"
+                                    >
+                                      YT
+                                    </span>
+                                  ) : null}
+                                  {!p.youtubeMusic &&
+                                    !showAllPlaylists &&
+                                    stripGoTPrefix &&
+                                    (/^got\s*[-�:]*\s*/i.test(p.name) ||
+                                      p.name.toLowerCase().includes('game of tones') ||
+                                      p.name.toLowerCase().includes('gameoftones')) && (
+                                      <span
+                                        style={{
+                                          fontSize: '0.7rem',
+                                          padding: '2px 6px',
+                                          borderRadius: '4px',
+                                          background: 'rgba(0, 255, 136, 0.2)',
+                                          color: '#00ff88',
+                                          border: '1px solid rgba(0, 255, 136, 0.3)',
+                                        }}
+                                      >
+                                        GoT
+                                      </span>
+                                    )}
+                                </span>
+                                {(() => {
+                                  const plain = p.description ? stripPlaylistDescriptionHtml(p.description) : '';
+                                  if (!plain) return null;
+                                  return (
+                                    <span className="host-playlist-desc" title={plain}>
+                                      {plain}
+                                    </span>
+                                  );
+                                })()}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: '0.8rem',
+                                  opacity: 0.7,
+                                  color: isAcceptable ? '#00ff88' : '#b3b3b3',
+                                  flexShrink: 0,
+                                  paddingTop: 2,
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'flex-end',
+                                  gap: 4,
+                                  textAlign: 'right',
+                                }}
+                              >
+                                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                                  {!p.youtubeMusic && p.hasExplicitTracks === true && (
+                                    <SpotifyExplicitBadge size="sm" title="This playlist includes at least one Spotify explicit track" />
+                                  )}
+                                  <span>
+                                    {trackCount} {p.youtubeMusic ? 'videos' : 'songs'}
+                                  </span>
+                                </span>
+                              </span>
+                              <span
+                                role="presentation"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                style={{ flexShrink: 0, alignSelf: 'flex-start', paddingTop: 2 }}
+                              >
+                                <select
+                                  className="host-playlist-add-to-round"
+                                  aria-label={`Add playlist to round: ${stripGoTPrefix ? stripGotPlaylistPrefix(p.name) : p.name}`}
+                                  value=""
+                                  title="Add this playlist to a round bucket (same as dragging into a bucket)"
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    if (v !== '') {
+                                      addPlaylistToRoundBucket(Number(v), p.id);
+                                      e.target.value = '';
+                                    }
+                                  }}
+                                >
+                                  <option value="">Add to round…</option>
+                                  {eventRounds.map((r, i) => (
+                                    <option key={r.id} value={String(i)}>
+                                      {r.name}
+                                      {(r.playlistIds?.length ?? 0) > 0
+                                        ? ` (${r.playlistIds!.length})`
+                                        : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                              </span>
+                              {isInsufficient && (
+                                <span
+                                  style={{
+                                    fontSize: '0.72rem',
+                                    color: '#ffb347',
+                                    whiteSpace: 'nowrap',
+                                    padding: '4px 8px',
+                                    borderRadius: 6,
+                                    border: '1px solid rgba(255,179,71,0.35)',
+                                    background: 'rgba(255,179,71,0.08)',
+                                    flexShrink: 0,
+                                    paddingTop: 6,
+                                  }}
+                                  title={
+                                    p.youtubeMusic
+                                      ? 'Need at least 15 videos for a standard round'
+                                      : 'Need at least 15 tracks for a standard round; add songs in Spotify'
+                                  }
+                                >
+                                  Need 15+
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })
+                        )}
+                      </div>
+                        </div>
+                    </div>
                     <div className="host-playlist-round-modal__tools">
                       <h3 className="host-playlist-round-modal__tools-title">More options</h3>
                       <div className="host-playlist-round-modal__tools-body">
@@ -6848,329 +7174,6 @@ const HostView: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="host-playlist-library-table-zone">
-                        <div className="host-playlist-library-table">
-                      <div className="host-playlist-library-table-head">
-                      <div className="host-playlist-library-table-head__cols">
-                        <span style={{ width: 18, textAlign: 'center' }} title="Include in game mix">Mix</span>
-                        <button
-                          type="button"
-                          className="host-playlist-sort-btn"
-                          onClick={() => togglePlaylistSort('name')}
-                          aria-sort={
-                            playlistSort.key === 'name'
-                              ? playlistSort.dir === 'asc'
-                                ? 'ascending'
-                                : 'descending'
-                              : 'none'
-                          }
-                          title="Sort by playlist name"
-                          style={{
-                            flex: 1,
-                            textAlign: 'left',
-                            background: 'none',
-                            border: 'none',
-                            padding: 0,
-                            cursor: 'pointer',
-                            color: 'inherit',
-                            font: 'inherit',
-                            letterSpacing: 'inherit',
-                            textTransform: 'inherit',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 4,
-                          }}
-                        >
-                          Playlist
-                          {playlistSort.key === 'name' && (
-                            <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
-                              {playlistSort.dir === 'asc' ? '↑' : '↓'}
-                            </span>
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          className="host-playlist-sort-btn"
-                          onClick={() => togglePlaylistSort('tracks')}
-                          aria-sort={
-                            playlistSort.key === 'tracks'
-                              ? playlistSort.dir === 'asc'
-                                ? 'ascending'
-                                : 'descending'
-                              : 'none'
-                          }
-                          title="Sort by track count"
-                          style={{
-                            minWidth: 72,
-                            textAlign: 'right',
-                            background: 'none',
-                            border: 'none',
-                            padding: 0,
-                            cursor: 'pointer',
-                            color: 'inherit',
-                            font: 'inherit',
-                            letterSpacing: 'inherit',
-                            textTransform: 'inherit',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'flex-end',
-                            gap: 4,
-                          }}
-                        >
-                          Tracks
-                          {playlistSort.key === 'tracks' && (
-                            <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
-                              {playlistSort.dir === 'asc' ? '↑' : '↓'}
-                            </span>
-                          )}
-                        </button>
-                        <span style={{ minWidth: 72, textAlign: 'right' }}>
-                          {playlistSort.key !== 'none' && (
-                            <button
-                              type="button"
-                              onClick={() => setPlaylistSort({ key: 'none', dir: 'asc' })}
-                              className="host-playlist-sort-reset"
-                              title="Restore Spotify library order"
-                              style={{
-                                fontSize: '0.62rem',
-                                textTransform: 'none',
-                                letterSpacing: '0.02em',
-                                background: 'rgba(255,255,255,0.08)',
-                                border: '1px solid rgba(255,255,255,0.15)',
-                                borderRadius: 6,
-                                padding: '3px 8px',
-                                cursor: 'pointer',
-                                color: '#c8c8c8',
-                              }}
-                            >
-                              Default order
-                            </button>
-                          )}
-                        </span>
-                      </div>
-                      {libraryTablePlaylists.length > 0 ? (
-                        <nav
-                          className="host-playlist-library-table-head__pager"
-                          aria-label="Playlist pages"
-                          title={playlistLibraryPageRangeLabel}
-                        >
-                          <button
-                            type="button"
-                            className="host-playlist-library-table-head__pager-btn"
-                            disabled={playlistLibraryPageClamped <= 0}
-                            aria-label="Previous page"
-                            onClick={() => setPlaylistLibraryPage((p) => Math.max(0, p - 1))}
-                          >
-                            ‹
-                          </button>
-                          <span className="host-playlist-library-table-head__pager-label">
-                            {playlistLibraryPageClamped + 1}/{playlistLibraryPageCount}
-                          </span>
-                          <button
-                            type="button"
-                            className="host-playlist-library-table-head__pager-btn"
-                            disabled={playlistLibraryPageClamped >= playlistLibraryPageCount - 1}
-                            aria-label="Next page"
-                            onClick={() =>
-                              setPlaylistLibraryPage((p) =>
-                                Math.min(playlistLibraryPageCount - 1, p + 1)
-                              )
-                            }
-                          >
-                            ›
-                          </button>
-                        </nav>
-                      ) : null}
-                      </div>
-                      {libraryTablePlaylists.length === 0 ? (
-                          <div className="host-playlist-library-table__empty">
-                            {playlistLibrarySource === 'spotify'
-                              ? 'No Spotify playlists in this view — try All playlists, YouTube, or widen search.'
-                              : playlistLibrarySource === 'youtube'
-                                ? 'No YouTube playlists loaded — connect under Connection, then refresh in More options.'
-                                : playlistLibraryEmptyMessage}
-                        </div>
-                        ) : (
-                          paginatedPlaylists.map((p) => {
-                          const isSelected = selectedPlaylists.some(sp => sp.id === p.id);
-                          const trackCount = Math.max(0, Number(p.tracks) || 0);
-                          // Insufficient: < 15 songs (not enough for any mode)
-                          const isInsufficient = trackCount < 15;
-                          // Acceptable: 15+ songs (good for 5x15 mode) and 75+ songs (good for both modes)
-                          const isAcceptable = trackCount >= 15;
-                          
-                          return (
-                            <div
-                              key={p.id}
-                              className={
-                                isAcceptable
-                                  ? 'host-playlist-library-row host-playlist-library-row--ok'
-                                  : 'host-playlist-library-row'
-                              }
-                              draggable
-                              onDragStart={(e) => {
-                                e.dataTransfer.setData('text/plain', p.id);
-                                e.dataTransfer.effectAllowed = 'copy';
-                              }}
-                              onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
-                              onMouseUp={(e) => e.currentTarget.style.cursor = 'grab'}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                aria-label={"Include in game mix: " + (p.name || "playlist")}
-                                title="Include in game mix — used when you finalize the bingo song pool"
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedPlaylists([...selectedPlaylists, p]);
-                                  } else {
-                                    setSelectedPlaylists(selectedPlaylists.filter(sp => sp.id !== p.id));
-                                  }
-                                }}
-                                style={{ marginTop: 3 }}
-                              />
-                              <span style={{ 
-                                flex: 1, 
-                                minWidth: 0,
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: 5,
-                                alignItems: 'flex-start',
-                              }}>
-                                <span style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  flexWrap: 'wrap',
-                                  gap: 8,
-                                  fontSize: '0.9rem',
-                                  color: isAcceptable ? '#00ff88' : '#fff',
-                                }}>
-                                  {stripGoTPrefix ? p.name.replace(/^GoT\s*[-�:]*\s*/i, '') : p.name}
-                                  {p.youtubeMusic ? (
-                                    <span
-                                      style={{
-                                        fontSize: '0.7rem',
-                                        padding: '2px 6px',
-                                        borderRadius: '4px',
-                                        background: 'rgba(255, 68, 68, 0.18)',
-                                        color: '#ffb4b4',
-                                        border: '1px solid rgba(255, 68, 68, 0.35)',
-                                      }}
-                                      title="YouTube Music playlist (items are videos)"
-                                    >
-                                      YT
-                                    </span>
-                                  ) : null}
-                                  {!p.youtubeMusic &&
-                                    !showAllPlaylists &&
-                                    stripGoTPrefix &&
-                                    (/^got\s*[-�:]*\s*/i.test(p.name) ||
-                                      p.name.toLowerCase().includes('game of tones') ||
-                                      p.name.toLowerCase().includes('gameoftones')) && (
-                                      <span
-                                        style={{
-                                          fontSize: '0.7rem',
-                                          padding: '2px 6px',
-                                          borderRadius: '4px',
-                                          background: 'rgba(0, 255, 136, 0.2)',
-                                          color: '#00ff88',
-                                          border: '1px solid rgba(0, 255, 136, 0.3)',
-                                        }}
-                                      >
-                                        GoT
-                                      </span>
-                                    )}
-                                </span>
-                                {(() => {
-                                  const plain = p.description ? stripPlaylistDescriptionHtml(p.description) : '';
-                                  if (!plain) return null;
-                                  return (
-                                    <span className="host-playlist-desc" title={plain}>
-                                      {plain}
-                                    </span>
-                                  );
-                                })()}
-                              </span>
-                              <span
-                                style={{
-                                  fontSize: '0.8rem',
-                                  opacity: 0.7,
-                                  color: isAcceptable ? '#00ff88' : '#b3b3b3',
-                                  flexShrink: 0,
-                                  paddingTop: 2,
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  alignItems: 'flex-end',
-                                  gap: 4,
-                                  textAlign: 'right',
-                                }}
-                              >
-                                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-                                  {!p.youtubeMusic && p.hasExplicitTracks === true && (
-                                    <SpotifyExplicitBadge size="sm" title="This playlist includes at least one Spotify explicit track" />
-                                  )}
-                                  <span>
-                                    {trackCount} {p.youtubeMusic ? 'videos' : 'songs'}
-                                  </span>
-                                </span>
-                              </span>
-                              <span
-                                role="presentation"
-                                onMouseDown={(e) => e.stopPropagation()}
-                                style={{ flexShrink: 0, alignSelf: 'flex-start', paddingTop: 2 }}
-                              >
-                                <select
-                                  className="host-playlist-add-to-round"
-                                  aria-label={`Add playlist to round: ${stripGoTPrefix ? stripGotPlaylistPrefix(p.name) : p.name}`}
-                                  value=""
-                                  title="Add this playlist to a round bucket (same as dragging into a bucket)"
-                                  onChange={(e) => {
-                                    const v = e.target.value;
-                                    if (v !== '') {
-                                      addPlaylistToRoundBucket(Number(v), p.id);
-                                      e.target.value = '';
-                                    }
-                                  }}
-                                >
-                                  <option value="">Add to round…</option>
-                                  {eventRounds.map((r, i) => (
-                                    <option key={r.id} value={String(i)}>
-                                      {r.name}
-                                      {(r.playlistIds?.length ?? 0) > 0
-                                        ? ` (${r.playlistIds!.length})`
-                                        : ''}
-                                    </option>
-                                  ))}
-                                </select>
-                              </span>
-                              {isInsufficient && (
-                                <span
-                                  style={{
-                                    fontSize: '0.72rem',
-                                    color: '#ffb347',
-                                    whiteSpace: 'nowrap',
-                                    padding: '4px 8px',
-                                    borderRadius: 6,
-                                    border: '1px solid rgba(255,179,71,0.35)',
-                                    background: 'rgba(255,179,71,0.08)',
-                                    flexShrink: 0,
-                                    paddingTop: 6,
-                                  }}
-                                  title={
-                                    p.youtubeMusic
-                                      ? 'Need at least 15 videos for a standard round'
-                                      : 'Need at least 15 tracks for a standard round; add songs in Spotify'
-                                  }
-                                >
-                                  Need 15+
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })
-                        )}
-                        </div>
-                    </div>
                   </motion.div>
               </div>
               <div className="host-music-two-pane__rounds">

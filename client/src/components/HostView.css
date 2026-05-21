@@ -1204,7 +1204,11 @@
 }
 
 .host-playlist-round-modal__tools {
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(240px, 34vh);
+  overflow-y: auto;
+  scrollbar-width: thin;
   font-size: 0.8rem;
   color: #9aa5b1;
   border-radius: 8px;
@@ -1234,21 +1238,39 @@
 }
 
 .host-playlist-library-table-zone {
-  flex: 1;
-  min-height: 0;
+  flex: 1 1 auto;
+  min-height: min(280px, 42vh);
   display: flex;
   flex-direction: column;
   gap: 6px;
   overflow: hidden;
 }
 
+.host-playlist-library-table-zone__title {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #00ff88;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
 .host-playlist-round-modal-root .host-playlist-library-table {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   padding: 6px 8px;
+}
+
+.host-playlist-library-table__rows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .host-playlist-library-table__empty {
