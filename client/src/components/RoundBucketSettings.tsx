@@ -1,7 +1,9 @@
 import React from 'react';
-import { Save } from 'lucide-react';
+import { ListMusic, Printer, Save } from 'lucide-react';
 import {
+  BINGO_PATTERNS,
   PATTERN_OPTIONS,
+  PRESET_SHAPE_PATTERNS,
   LINE_PATTERN_MAX_LINES,
   normalizeLinesRequired,
   type BingoPattern,
@@ -16,13 +18,15 @@ export interface RoundBucketSettingsRound {
   customPatternMask?: string[];
   linesRequired?: number;
   freeSpaceEnabled?: boolean;
+  customMatchAllowRotation?: boolean;
+  customMatchAllowMirror?: boolean;
   savedMixSnapshot?: { songs: { length: number }; mixGeometry: string; savedAt: number };
 }
 
 export interface RoundBucketBingoPatch {
   bingoPattern?: BingoPattern;
   customPatternMask?: string[];
-  patternComposite?: undefined;
+  patternComposite?: import('../patternDefinitions').PatternCompositeSpec;
   freeSpaceEnabled?: boolean;
   linesRequired?: number;
   customMatchAllowRotation?: boolean;
@@ -35,9 +39,15 @@ interface RoundBucketSettingsProps {
   hostDefaultFreeSpace: boolean;
   savedCustomPatterns: SavedCustomPattern[];
   onUpdateBingo: (roundIndex: number, patch: RoundBucketBingoPatch) => void;
-  onSaveRound?: (roundIndex: number) => void;
+  onSaveRound?: () => void;
   saveRoundBusy?: boolean;
   snapshotReady: boolean;
+  printablePdfLoading?: boolean;
+  callSheetReady?: boolean;
+  onPrintPdf?: () => void;
+  onCallSheet?: () => void;
+  onOpenComposite?: () => void;
+  onNewCustomPattern?: () => void;
 }
 
 const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
@@ -49,12 +59,30 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
   onSaveRound,
   saveRoundBusy,
   snapshotReady,
+  printablePdfLoading,
+  callSheetReady,
+  onPrintPdf,
+  onCallSheet,
+  onOpenComposite,
+  onNewCustomPattern,
 }) => {
   const pattern = round.bingoPattern ?? 'line';
   const hasPlaylists = (round.playlistIds || []).length > 0;
   const freeCenter =
     round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : hostDefaultFreeSpace;
   const needTracks = freeCenter ? 24 : 25;
+
+  const selectPattern = (v: BingoPattern) => {
+    onUpdateBingo(roundIndex, {
+      bingoPattern: v,
+      ...(v !== 'custom' ? { customPatternMask: undefined } : {}),
+      ...(v !== 'composite' ? { patternComposite: undefined } : {}),
+      ...(v !== 'custom'
+        ? { customMatchAllowRotation: undefined, customMatchAllowMirror: undefined }
+        : {}),
+    });
+    if (v === 'composite') onOpenComposite?.();
+  };
 
   return (
     <div className="round-bucket-settings">
@@ -64,14 +92,7 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
           <select
             className="round-bucket-settings__select"
             value={pattern}
-            onChange={(e) => {
-              const v = e.target.value as BingoPattern;
-              onUpdateBingo(roundIndex, {
-                bingoPattern: v,
-                ...(v !== 'custom' ? { customPatternMask: undefined } : {}),
-                ...(v !== 'composite' ? { patternComposite: undefined } : {}),
-              });
-            }}
+            onChange={(e) => selectPattern(e.target.value as BingoPattern)}
           >
             {PATTERN_OPTIONS.filter((opt) => opt.value !== 'blackout').map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -99,9 +120,46 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
           </label>
         ) : null}
 
-        {pattern === 'custom' ? (
+        <label className="round-bucket-settings__field round-bucket-settings__field--check">
+          <input
+            type="checkbox"
+            checked={freeCenter}
+            onChange={(e) => onUpdateBingo(roundIndex, { freeSpaceEnabled: e.target.checked })}
+          />
+          <span className="round-bucket-settings__label">Free center</span>
+        </label>
+      </div>
+
+      <div className="round-bucket-settings__shapes" role="group" aria-label="Pattern presets">
+        {PRESET_SHAPE_PATTERNS.map((shapeKey) => {
+          const active = pattern === shapeKey;
+          return (
+            <button
+              key={shapeKey}
+              type="button"
+              className={
+                active
+                  ? 'round-bucket-settings__shape round-bucket-settings__shape--active'
+                  : 'round-bucket-settings__shape'
+              }
+              title={BINGO_PATTERNS[shapeKey].description}
+              onClick={() => selectPattern(shapeKey)}
+            >
+              {BINGO_PATTERNS[shapeKey].label}
+            </button>
+          );
+        })}
+        {pattern === 'composite' ? (
+          <button type="button" className="round-bucket-settings__shape" onClick={() => onOpenComposite?.()}>
+            Edit combined…
+          </button>
+        ) : null}
+      </div>
+
+      {pattern === 'custom' ? (
+        <div className="round-bucket-settings__custom">
           <label className="round-bucket-settings__field">
-            <span className="round-bucket-settings__label">Shape</span>
+            <span className="round-bucket-settings__label">Saved shape</span>
             <select
               className="round-bucket-settings__select"
               value={(() => {
@@ -133,24 +191,40 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
               ))}
             </select>
           </label>
-        ) : null}
-
-        <label className="round-bucket-settings__field round-bucket-settings__field--check">
-          <input
-            type="checkbox"
-            checked={freeCenter}
-            onChange={(e) =>
-              onUpdateBingo(roundIndex, { freeSpaceEnabled: e.target.checked })
-            }
-          />
-          <span className="round-bucket-settings__label">Free center</span>
-        </label>
-      </div>
-
-      {pattern === 'composite' ? (
-        <p className="round-bucket-settings__hint">
-          Combined (AND/OR) rules: use <strong>Manager → Bingo Pattern</strong> for the full editor.
-        </p>
+          {onNewCustomPattern ? (
+            <button type="button" className="round-bucket-settings__link-btn" onClick={onNewCustomPattern}>
+              New custom
+            </button>
+          ) : null}
+          <label className="round-bucket-settings__field round-bucket-settings__field--check">
+            <input
+              type="checkbox"
+              checked={round.customMatchAllowRotation === true}
+              onChange={(e) =>
+                onUpdateBingo(roundIndex, {
+                  bingoPattern: 'custom',
+                  customPatternMask: round.customPatternMask,
+                  customMatchAllowRotation: e.target.checked,
+                })
+              }
+            />
+            <span className="round-bucket-settings__label">Rotations</span>
+          </label>
+          <label className="round-bucket-settings__field round-bucket-settings__field--check">
+            <input
+              type="checkbox"
+              checked={round.customMatchAllowMirror === true}
+              onChange={(e) =>
+                onUpdateBingo(roundIndex, {
+                  bingoPattern: 'custom',
+                  customPatternMask: round.customPatternMask,
+                  customMatchAllowMirror: e.target.checked,
+                })
+              }
+            />
+            <span className="round-bucket-settings__label">Mirrors</span>
+          </label>
+        </div>
       ) : null}
 
       <div className="round-bucket-settings__footer">
@@ -164,23 +238,46 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
           }
         >
           {!hasPlaylists
-            ? 'Add playlists to configure'
+            ? 'Drag playlists from the library'
             : snapshotReady
               ? `Saved · ${round.savedMixSnapshot!.songs.length} tracks (${round.savedMixSnapshot!.mixGeometry})`
-              : `Not saved · need ${needTracks} tracks after Save round`}
+              : `Not saved · need ${needTracks} tracks`}
         </span>
-        {hasPlaylists && onSaveRound ? (
-          <button
-            type="button"
-            className="round-bucket-settings__save"
-            disabled={saveRoundBusy}
-            title="Finalize if needed, then freeze playback order for this round"
-            onClick={() => onSaveRound(roundIndex)}
-          >
-            <Save className="w-3 h-3" aria-hidden />
-            {saveRoundBusy ? 'Saving…' : 'Save round'}
-          </button>
-        ) : null}
+        <div className="round-bucket-settings__actions">
+          {hasPlaylists && onSaveRound ? (
+            <button
+              type="button"
+              className="round-bucket-settings__action"
+              disabled={saveRoundBusy}
+              onClick={onSaveRound}
+            >
+              <Save className="w-3 h-3" aria-hidden />
+              {saveRoundBusy ? 'Saving…' : 'Save'}
+            </button>
+          ) : null}
+          {hasPlaylists && onPrintPdf ? (
+            <button
+              type="button"
+              className="round-bucket-settings__action"
+              disabled={printablePdfLoading}
+              onClick={onPrintPdf}
+            >
+              <Printer className="w-3 h-3" aria-hidden />
+              Print PDF
+            </button>
+          ) : null}
+          {hasPlaylists && onCallSheet ? (
+            <button
+              type="button"
+              className="round-bucket-settings__action"
+              disabled={printablePdfLoading || !callSheetReady}
+              onClick={onCallSheet}
+            >
+              <ListMusic className="w-3 h-3" aria-hidden />
+              Call sheet
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );

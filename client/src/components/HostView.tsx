@@ -74,8 +74,6 @@ import {
 } from '../patternDefinitions';
 import CustomPatternModal, { type CustomPatternSavePayload } from './CustomPatternModal';
 import CombinedPatternModal from './CombinedPatternModal';
-import HostRoundEventPanel from './HostRoundEventPanel';
-import HostRoundHubPatternPanel from './HostRoundHubPatternPanel';
 import SongTitleEditModal from './SongTitleEditModal';
 import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModal';
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
@@ -801,11 +799,11 @@ const HostView: React.FC = () => {
   /** 5�15 mode: playlist title per column (from `fiveby15-pool`, else five selected playlists). */
   const [bingoColumnPlaylistNames, setBingoColumnPlaylistNames] = useState<string[]>([]);
   const [showPlaylistRoundModal, setShowPlaylistRoundModal] = useState(false);
-  type RoundHubTab = 'build' | 'event' | 'pattern';
-  const [roundHubTab, setRoundHubTab] = useState<RoundHubTab>('build');
+  const [roundBuilderFocusIndex, setRoundBuilderFocusIndex] = useState(0);
+  const compositeEditRoundIndexRef = useRef(0);
   const [playlistRoundModalPane, setPlaylistRoundModalPane] = useState<'library' | 'rounds'>('library');
-  const openRoundHub = useCallback((tab: RoundHubTab = 'build') => {
-    setRoundHubTab(tab);
+  const openRoundBuilder = useCallback((focusIndex = 0) => {
+    setRoundBuilderFocusIndex(Math.max(0, focusIndex));
     setShowPlaylistRoundModal(true);
   }, []);
   const showPlaylistRoundModalScrollRef = useRef(showPlaylistRoundModal);
@@ -4537,24 +4535,6 @@ const HostView: React.FC = () => {
     }
   };
 
-  const commitPatternComposite = useCallback(
-    (next: PatternCompositeSpec) => {
-      const n = normalizePatternComposite(next);
-      if (!n) return;
-      setPatternComposite(n);
-      setPattern('composite');
-      patchActiveRoundBingo({
-        bingoPattern: 'composite',
-        patternComposite: n,
-        customPatternMask: undefined,
-      });
-      if (socket && roomId) {
-        socket.emit('set-pattern', { roomId, pattern: 'composite', patternComposite: n });
-      }
-    },
-    [socket, roomId, patchActiveRoundBingo],
-  );
-
   const handleCustomPatternSelect = (customPatternObj: SavedCustomPattern) => {
     setSelectedCustomPattern(customPatternObj);
     setPattern('custom');
@@ -5669,6 +5649,33 @@ const HostView: React.FC = () => {
     [roomId, applyRoundBingoToHost],
   );
 
+  const openCompositeForRound = useCallback((roundIndex: number) => {
+    compositeEditRoundIndexRef.current = roundIndex;
+    const r = eventRoundsRef.current[roundIndex];
+    const spec =
+      normalizePatternComposite(r?.patternComposite) ??
+      normalizePatternComposite(DEFAULT_COMPOSITE_SPEC);
+    if (spec) setPatternComposite(spec);
+    setCombinedPatternModalOpen(true);
+  }, []);
+
+  const commitPatternComposite = useCallback(
+    (next: PatternCompositeSpec) => {
+      const n = normalizePatternComposite(next);
+      if (!n) return;
+      const idx = compositeEditRoundIndexRef.current;
+      handleUpdateRoundBingoFields(idx, {
+        bingoPattern: 'composite',
+        patternComposite: n,
+        customPatternMask: undefined,
+      });
+      if (idx === currentRoundIndexRef.current) {
+        setPatternComposite(n);
+        setPattern('composite');
+      }
+    },
+    [handleUpdateRoundBingoFields],
+  );
 
   /** Resolved rows match `mixPlaylistSelection` merge order (library first, then catalog-only). */
   const resolveMixPlaylistRowsForRound = useCallback(
@@ -7199,7 +7206,7 @@ const HostView: React.FC = () => {
                   </motion.div>
               </div>
               <div className="host-music-two-pane__rounds">
-                <RoundPlanner
+                <RoundPlanner<EventRound>
                   rounds={eventRounds}
                   onUpdateRounds={handleUpdateRounds}
                   playlists={playlistsForRoundPlanner}
@@ -7213,132 +7220,38 @@ const HostView: React.FC = () => {
                   onSaveRound={(idx) => void handleSaveRoundAtIndex(idx)}
                   saveRoundBusy={saveRoundBusy}
                   snapshotMeetsSave={(r) => eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled)}
+                  onPrintPdf={(idx) => handleDownloadRoundPrintablePdf(eventRounds[idx])}
+                  onCallSheet={(idx) => handleDownloadRoundCallSheetPdf(eventRounds[idx])}
+                  onOpenComposite={openCompositeForRound}
+                  onNewCustomPattern={handleNewCustomPattern}
+                  printablePdfLoading={printablePdfLoading}
+                  printableCardCount={printableCardCount}
+                  onPrintableCardCountChange={setPrintableCardCount}
                   snippetLength={snippetLength}
                   onSnippetLengthChange={setSnippetLength}
                   randomStarts={randomStarts}
                   onRandomStartsChange={setRandomStarts}
+                  initialFocusedIndex={roundBuilderFocusIndex}
                   prepHints={{
                     spotifyNeeded: mixNeedsHostSpotify,
                     spotifyConnected: isSpotifyConnected,
                     deviceNeeded: mixNeedsHostSpotify,
                     deviceSelected: !!selectedDevice,
                   }}
+                  statusSummary={getRoundStatusSummary()}
+                  onResetEvent={resetEvent}
+                  onClearPrepCache={clearRoomRoundPrepStorage}
+                  onCompleteCurrentRound={completeCurrentRound}
+                  onResetCurrentRound={resetCurrentRound}
+                  onStartNextPlanned={() => {
+                    const next = getNextPlannedRound();
+                    if (next >= 0) jumpToRound(next);
+                  }}
+                  hasNextPlanned={getNextPlannedRound() >= 0}
                 />
               </div>
             </div>
             </div>
-  );
-
-  const roundHubTargetRound =
-    currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length
-      ? eventRounds[currentRoundIndex]
-      : null;
-
-  const roundHubEventBody = (
-    <HostRoundEventPanel
-      rounds={eventRounds}
-      currentRoundIndex={currentRoundIndex}
-      gameState={gameState}
-      statusSummary={getRoundStatusSummary()}
-      printableCardCount={printableCardCount}
-      onPrintableCardCountChange={setPrintableCardCount}
-      printablePdfLoading={printablePdfLoading}
-      saveRoundBusy={saveRoundBusy}
-      mixGameActionsBlocked={mixGameActionsBlocked}
-      snapshotMeetsSave={(idx) =>
-        eventRoundSnapshotMeetsSaveThreshold(eventRounds[idx], freeSpaceEnabled)
-      }
-      onSaveRound={(idx) => void handleSaveRoundAtIndex(idx)}
-      onPrintPdf={(idx) => handleDownloadRoundPrintablePdf(eventRounds[idx])}
-      onCallSheet={(idx) => handleDownloadRoundCallSheetPdf(eventRounds[idx])}
-      onLoadForPrep={handleSelectRoundForPrep}
-      onJumpToRound={jumpToRound}
-      onCompleteCurrentRound={completeCurrentRound}
-      onResetCurrentRound={resetCurrentRound}
-      onStartNextPlanned={() => {
-        const next = getNextPlannedRound();
-        if (next >= 0) jumpToRound(next);
-      }}
-      hasNextPlanned={getNextPlannedRound() >= 0}
-      onResetEvent={resetEvent}
-      onClearPrepCache={clearRoomRoundPrepStorage}
-    />
-  );
-
-  const roundHubPatternBody = (
-    <HostRoundHubPatternPanel
-      targetRoundLabel={roundHubTargetRound?.name ?? null}
-      pattern={pattern}
-      onSelectPattern={updatePattern}
-      linesRequired={linesRequired}
-      onLinesRequiredChange={(n) => {
-        setLinesRequired(n);
-        patchActiveRoundBingo({ bingoPattern: 'line', linesRequired: n });
-        if (socket && roomId) {
-          socket.emit('set-pattern', { roomId, pattern: 'line', linesRequired: n });
-        }
-      }}
-      patternComposite={patternComposite}
-      onOpenCompositeModal={() => setCombinedPatternModalOpen(true)}
-      freeSpaceEnabled={freeSpaceEnabled}
-      onFreeSpaceChange={(v) => {
-        setFreeSpaceEnabled(v);
-        patchActiveRoundBingo({ freeSpaceEnabled: v });
-        try {
-          localStorage.setItem('bingo-free-space', v ? '1' : '0');
-        } catch {
-          /* ignore */
-        }
-      }}
-      savedCustomPatterns={savedCustomPatterns}
-      selectedCustomPattern={selectedCustomPattern}
-      onSelectSavedCustom={handleCustomPatternSelect}
-      onNewCustomPattern={handleNewCustomPattern}
-      customMask={customMask}
-      customMatchAllowRotation={customMatchAllowRotation}
-      customMatchAllowMirror={customMatchAllowMirror}
-      onCustomMatchRotationChange={(v) => {
-        setCustomMatchAllowRotation(v);
-        patchActiveRoundBingo({
-          bingoPattern: 'custom',
-          customPatternMask: customMask,
-          customMatchAllowRotation: v,
-          customMatchAllowMirror,
-        });
-        if (socket && roomId) {
-          socket.emit('set-pattern', {
-            roomId,
-            pattern: 'custom',
-            customMask,
-            customMatchAllowRotation: v,
-            customMatchAllowMirror,
-            customPatternName:
-              customPatternDisplayNameForEmit(customMask, selectedCustomPattern, savedCustomPatterns) ?? '',
-          });
-        }
-      }}
-      onCustomMatchMirrorChange={(v) => {
-        setCustomMatchAllowMirror(v);
-        patchActiveRoundBingo({
-          bingoPattern: 'custom',
-          customPatternMask: customMask,
-          customMatchAllowRotation,
-          customMatchAllowMirror: v,
-        });
-        if (socket && roomId) {
-          socket.emit('set-pattern', {
-            roomId,
-            pattern: 'custom',
-            customMask,
-            customMatchAllowRotation,
-            customMatchAllowMirror: v,
-            customPatternName:
-              customPatternDisplayNameForEmit(customMask, selectedCustomPattern, savedCustomPatterns) ?? '',
-          });
-        }
-      }}
-      getPatternDisplayName={getPatternDisplayName}
-    />
   );
 
   return (
@@ -7488,13 +7401,13 @@ const HostView: React.FC = () => {
                 Bingo pattern
               </h2>
               <p style={{ margin: '0 0 12px', fontSize: '0.82rem', color: '#9aa5b1', lineHeight: 1.45 }}>
-                Pattern, free center, custom shapes, and combined rules live in{' '}
-                <strong style={{ color: '#c5dccf' }}>Round builder → Pattern</strong>.
+                Pattern, free center, custom shapes, and combined rules are per round in{' '}
+                <strong style={{ color: '#c5dccf' }}>Round builder</strong> (use the round number buttons).
               </p>
               <button
                 type="button"
                 className="btn-primary"
-                onClick={() => openRoundHub('pattern')}
+                onClick={() => openRoundBuilder()}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
               >
                 Open Round builder
@@ -7824,7 +7737,7 @@ const HostView: React.FC = () => {
                   <button
                     type="button"
                     className="btn-primary"
-                    onClick={() => openRoundHub('build')}
+                    onClick={() => openRoundBuilder()}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, flexShrink: 0 }}
                   >
                     <ListMusic className="w-5 h-5" aria-hidden />
@@ -7903,7 +7816,7 @@ const HostView: React.FC = () => {
                   </div>
                   <p style={{ margin: '8px 0 12px', fontSize: '0.82rem', color: '#9aa5b1', lineHeight: 1.45, maxWidth: 620 }}>
                     Save round, Print PDF, call sheet, and event resets are in{' '}
-                    <strong style={{ color: '#c5cdd6' }}>Round builder → Event &amp; PDF</strong>. Live handoff: Game tab →
+                    <strong style={{ color: '#c5cdd6' }}>Round builder</strong> (each round bucket). Live handoff: Game tab →
                     Finalize mix → Start Game.
                   </p>
                   <p className="host-manager-round__actions-head">Quick actions</p>
@@ -7911,12 +7824,12 @@ const HostView: React.FC = () => {
                       <button
                         type="button"
                         className="btn-accent"
-                        onClick={() => openRoundHub('event')}
-                        title="Event overview, save/print rounds, resets"
+                        onClick={() => openRoundBuilder()}
+                        title="Playlists, rounds, save/print, pattern, event actions"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
                       >
                         <ListChecks className="w-4 h-4" aria-hidden />
-                        Round builder (event)
+                        Open Round builder
                       </button>
                       {gameState === 'playing' && (
                         <>
@@ -8320,7 +8233,7 @@ const HostView: React.FC = () => {
                           <button
                             type="button"
                             className="btn-accent"
-                            onClick={() => openRoundHub('event')}
+                            onClick={() => openRoundBuilder()}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
                           >
                             <CalendarRange className="w-4 h-4" aria-hidden />
@@ -8910,7 +8823,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                   type="button"
                   className="host-playlist-round-modal__help"
                   aria-label="How the round builder works"
-                  title="Build: playlists & buckets. Event & PDF: save, print, resets. Pattern: win rules. Then Game tab → Finalize mix → Start Game. Connection in header."
+                  title="Library left, round buckets right. Use numbered buttons to switch rounds — each bucket has playlists, pattern, save/print, and start. Then Game tab → Finalize mix → Start Game."
                 >
                   <HelpCircle className="w-4 h-4" aria-hidden />
                 </button>
@@ -8924,38 +8837,8 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                 <X className="w-5 h-5" aria-hidden />
               </button>
             </div>
-            <div
-              className="host-round-hub-tabs"
-              role="tablist"
-              aria-label="Round builder sections"
-            >
-              {(
-                [
-                  ['build', 'Build'],
-                  ['event', 'Event & PDF'],
-                  ['pattern', 'Pattern'],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  aria-selected={roundHubTab === id}
-                  className={
-                    roundHubTab === id
-                      ? 'host-round-hub-tabs__tab host-round-hub-tabs__tab--active'
-                      : 'host-round-hub-tabs__tab'
-                  }
-                  onClick={() => setRoundHubTab(id)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
             <div className="host-connection-modal__body host-connection-modal__body--round-hub">
-              {roundHubTab === 'build' ? playlistRoundBuilderBody : null}
-              {roundHubTab === 'event' ? roundHubEventBody : null}
-              {roundHubTab === 'pattern' ? roundHubPatternBody : null}
+              {playlistRoundBuilderBody}
             </div>
           </div>
         </div>
