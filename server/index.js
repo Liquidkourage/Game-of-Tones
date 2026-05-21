@@ -1492,10 +1492,6 @@ const roomTimers = new Map();
 // Playback watchdogs per room to recover from mid-snippet stalls
 const roomPlaybackWatchers = new Map();
 
-function isStormActive(room) {
-  return !!(room && room.superStrictLock && room.stormUntilMs && Date.now() < room.stormUntilMs);
-}
-
 function clearPlaybackWatcher(roomId) {
   if (roomPlaybackWatchers.has(roomId)) {
     clearInterval(roomPlaybackWatchers.get(roomId));
@@ -1810,8 +1806,6 @@ async function playNextSongSimple(roomId, deviceId) {
 function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
   clearPlaybackWatcher(roomId);
   let attempts = 0;
-  const room = rooms.get(roomId);
-  const strict = !!room?.superStrictLock;
   const intervalId = setInterval(async () => {
     try {
       const room = rooms.get(roomId);
@@ -1906,14 +1900,6 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           try { await spotifyFor(roomId).setShuffleState(false, deviceId); } catch {}
           // Note: Do NOT set repeat to 'off' here - we want 'track' mode to prevent auto-advance
           try { const r = rooms.get(roomId); if (r) { r.songStartAtMs = now - expectedProgress; } } catch {}
-          // Clear any queued items that might cause future hijacks
-          try {
-            const r = rooms.get(roomId);
-            if (r) {
-              // Mark a storm window (e.g., 2 minutes) where we tighten cadence
-              r.stormUntilMs = Date.now() + 120000;
-            }
-          } catch {}
         } catch (e) {
           console.warn('⚠️ Correction attempt failed:', e?.message || e);
         }
@@ -2033,7 +2019,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
       // ignore
     }
   // Intervals: avoid sustained sub-3s polling of /v1/me/player (Spotify quota + enforcement risk)
-  }, ((room && room.superStrictLock && room.stormUntilMs && Date.now() < room.stormUntilMs) ? 4000 : (strict ? 4000 : Math.max(5000, Math.min(10000, snippetMs / 4)))));
+  }, Math.max(5000, Math.min(10000, snippetMs / 4)));
   roomPlaybackWatchers.set(roomId, intervalId);
 }
 
@@ -2324,7 +2310,6 @@ io.on('connection', (socket) => {
         playlistSongs: [],
         currentSongIndex: 0,
         // Pre-queue system removed for deterministic playback
-        superStrictLock: false,
         pattern: 'line', // Default pattern
         linesRequired: 1,
         customPattern: undefined, // Will be set when custom pattern is chosen
@@ -4124,26 +4109,6 @@ io.on('connection', (socket) => {
   });
 
   // Pre-queue system removed - deterministic playback only
-
-  // Toggle super-strict lock mode from Host
-  socket.on('set-super-strict', (data = {}) => {
-    try {
-      const { roomId, enabled } = data;
-      const room = rooms.get(roomId);
-      if (!room) return;
-      const isCurrentHost = room && (room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost));
-      if (!isCurrentHost) return;
-      room.superStrictLock = !!enabled;
-      io.to(roomId).emit('super-strict-updated', { enabled: room.superStrictLock });
-      routineServerLog(`🔒 Super-Strict Lock set to ${room.superStrictLock} for room ${roomId}`);
-      // Restart simple context monitor (no aggressive pausing)
-      if (room.gameState === 'playing') {
-        startSimpleContextMonitor(roomId, room.selectedDeviceId);
-      }
-    } catch (e) {
-      console.error('❌ Error setting super-strict lock:', e?.message || e);
-    }
-  });
 
   socket.on('start-game', async (data) => {
     routineServerLog('🎮 Start game event received:', data);
@@ -8776,7 +8741,6 @@ app.post('/api/host/rooms', async (req, res) => {
         hybridInPersonPlusOnline: false,
         playlistSongs: [],
         currentSongIndex: 0,
-        superStrictLock: false,
         pattern: 'line',
         customPattern: undefined,
         patternComposite: undefined,

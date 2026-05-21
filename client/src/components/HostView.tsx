@@ -745,7 +745,6 @@ const HostView: React.FC = () => {
   }, [combinedPatternModalOpen]);
 
   const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]);
-  const [superStrict, setSuperStrict] = useState<boolean>(false);
   const [showRooms, setShowRooms] = useState<boolean>(false);
   const [rooms, setRooms] = useState<Array<any>>([]);
   const [playerCards, setPlayerCards] = useState<Map<string, any>>(new Map());
@@ -2414,11 +2413,6 @@ const HostView: React.FC = () => {
 
     newSocket.on('player-left', (data: any) => {
       console.log('Player left:', data);
-    });
-
-    newSocket.on('super-strict-updated', (data: any) => {
-      setSuperStrict(!!data?.enabled);
-      addLog(`Super-Strict Lock ${data?.enabled ? 'enabled' : 'disabled'}`, 'warn');
     });
 
     newSocket.on('hybrid-mode-updated', (data: any) => {
@@ -7864,28 +7858,6 @@ const HostView: React.FC = () => {
                         </p>
                       </div>
                     ) : null}
-
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16, marginBottom: 6 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }} title="Polls Spotify playback more often and tightens recovery after context glitches. Uses more API traffic; use if you fight hijacked playback.">
-                  <input
-                    type="checkbox"
-                    className="host-control-checkbox"
-                    checked={superStrict}
-                    onChange={(e) => {
-                      const val = !!e.target.checked;
-                      setSuperStrict(val);
-                      if (socket && roomId) socket.emit('set-super-strict', { roomId, enabled: val });
-                    }}
-                  />
-                  <span>Super-Strict Lock</span>
-                </label>
-              </div>
-              <div style={{ fontSize: '0.75rem', color: '#8a8a8a', lineHeight: 1.35, maxWidth: 640 }}>
-                <strong style={{ color: '#b5b5b5' }}>Super-Strict:</strong>{' '}
-                Makes the playback watchdog check Spotify more frequently (especially after a &quot;storm&quot; recovery), so wrong device/context gets corrected faster — slightly more API load.
-              </div>
-            </div>
             </div>
 
                   {/* Main Game Controls */}
