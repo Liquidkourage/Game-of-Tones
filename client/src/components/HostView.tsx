@@ -74,7 +74,8 @@ import {
 } from '../patternDefinitions';
 import CustomPatternModal, { type CustomPatternSavePayload } from './CustomPatternModal';
 import CombinedPatternModal from './CombinedPatternModal';
-import HostRoundManagerModal from './HostRoundManagerModal';
+import HostRoundEventPanel from './HostRoundEventPanel';
+import HostRoundHubPatternPanel from './HostRoundHubPatternPanel';
 import SongTitleEditModal from './SongTitleEditModal';
 import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModal';
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
@@ -799,11 +800,14 @@ const HostView: React.FC = () => {
   const [playerCardsMaximized, setPlayerCardsMaximized] = useState<boolean>(false);
   /** 5�15 mode: playlist title per column (from `fiveby15-pool`, else five selected playlists). */
   const [bingoColumnPlaylistNames, setBingoColumnPlaylistNames] = useState<string[]>([]);
-  const [showRoundManager, setShowRoundManager] = useState<boolean>(false);
-  const showRoundManagerScrollRef = useRef(showRoundManager);
-  showRoundManagerScrollRef.current = showRoundManager;
   const [showPlaylistRoundModal, setShowPlaylistRoundModal] = useState(false);
+  type RoundHubTab = 'build' | 'event' | 'pattern';
+  const [roundHubTab, setRoundHubTab] = useState<RoundHubTab>('build');
   const [playlistRoundModalPane, setPlaylistRoundModalPane] = useState<'library' | 'rounds'>('library');
+  const openRoundHub = useCallback((tab: RoundHubTab = 'build') => {
+    setRoundHubTab(tab);
+    setShowPlaylistRoundModal(true);
+  }, []);
   const showPlaylistRoundModalScrollRef = useRef(showPlaylistRoundModal);
   showPlaylistRoundModalScrollRef.current = showPlaylistRoundModal;
   const [activeTab, setActiveTab] = useState<'setup' | 'play'>('setup');
@@ -1790,29 +1794,19 @@ const HostView: React.FC = () => {
   }, [showConnectionModal]);
 
   useEffect(() => {
-    const needLock = showConnectionModal || showRoundManager || showPlaylistRoundModal;
+    const needLock = showConnectionModal || showPlaylistRoundModal;
     if (!needLock) return;
     const restoreTo = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       if (
         !showConnectionModalScrollRef.current &&
-        !showRoundManagerScrollRef.current &&
         !showPlaylistRoundModalScrollRef.current
       ) {
         document.body.style.overflow = restoreTo;
       }
     };
-  }, [showConnectionModal, showRoundManager, showPlaylistRoundModal]);
-
-  useEffect(() => {
-    if (!showRoundManager) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowRoundManager(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [showRoundManager]);
+  }, [showConnectionModal, showPlaylistRoundModal]);
 
   useEffect(() => {
     if (!showPlaylistRoundModal) return;
@@ -4476,7 +4470,7 @@ const HostView: React.FC = () => {
     setWinners([]);
     setRoundComplete(null);
     setRoundWinners([]);
-    setShowRoundManager(false);
+    setShowPlaylistRoundModal(false);
     showToast('Prep cache cleared — fresh Round 1 (this browser)', 'success');
     addLog('Cleared room round prep storage (localStorage + UI)', 'info');
   };
@@ -5974,7 +5968,7 @@ const HostView: React.FC = () => {
       const round = eventRounds[roundIndex];
       if (round.status !== 'completed' && (round.playlistIds || []).length > 0) {
         handleStartRound(roundIndex);
-        setShowRoundManager(false);
+        setShowPlaylistRoundModal(false);
         addLog(`Jumped to ${round.name}`, 'info');
       }
     }
@@ -7235,6 +7229,118 @@ const HostView: React.FC = () => {
             </div>
   );
 
+  const roundHubTargetRound =
+    currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length
+      ? eventRounds[currentRoundIndex]
+      : null;
+
+  const roundHubEventBody = (
+    <HostRoundEventPanel
+      rounds={eventRounds}
+      currentRoundIndex={currentRoundIndex}
+      gameState={gameState}
+      statusSummary={getRoundStatusSummary()}
+      printableCardCount={printableCardCount}
+      onPrintableCardCountChange={setPrintableCardCount}
+      printablePdfLoading={printablePdfLoading}
+      saveRoundBusy={saveRoundBusy}
+      mixGameActionsBlocked={mixGameActionsBlocked}
+      snapshotMeetsSave={(idx) =>
+        eventRoundSnapshotMeetsSaveThreshold(eventRounds[idx], freeSpaceEnabled)
+      }
+      onSaveRound={(idx) => void handleSaveRoundAtIndex(idx)}
+      onPrintPdf={(idx) => handleDownloadRoundPrintablePdf(eventRounds[idx])}
+      onCallSheet={(idx) => handleDownloadRoundCallSheetPdf(eventRounds[idx])}
+      onLoadForPrep={handleSelectRoundForPrep}
+      onJumpToRound={jumpToRound}
+      onCompleteCurrentRound={completeCurrentRound}
+      onResetCurrentRound={resetCurrentRound}
+      onStartNextPlanned={() => {
+        const next = getNextPlannedRound();
+        if (next >= 0) jumpToRound(next);
+      }}
+      hasNextPlanned={getNextPlannedRound() >= 0}
+      onResetEvent={resetEvent}
+      onClearPrepCache={clearRoomRoundPrepStorage}
+    />
+  );
+
+  const roundHubPatternBody = (
+    <HostRoundHubPatternPanel
+      targetRoundLabel={roundHubTargetRound?.name ?? null}
+      pattern={pattern}
+      onSelectPattern={updatePattern}
+      linesRequired={linesRequired}
+      onLinesRequiredChange={(n) => {
+        setLinesRequired(n);
+        patchActiveRoundBingo({ bingoPattern: 'line', linesRequired: n });
+        if (socket && roomId) {
+          socket.emit('set-pattern', { roomId, pattern: 'line', linesRequired: n });
+        }
+      }}
+      patternComposite={patternComposite}
+      onOpenCompositeModal={() => setCombinedPatternModalOpen(true)}
+      freeSpaceEnabled={freeSpaceEnabled}
+      onFreeSpaceChange={(v) => {
+        setFreeSpaceEnabled(v);
+        patchActiveRoundBingo({ freeSpaceEnabled: v });
+        try {
+          localStorage.setItem('bingo-free-space', v ? '1' : '0');
+        } catch {
+          /* ignore */
+        }
+      }}
+      savedCustomPatterns={savedCustomPatterns}
+      selectedCustomPattern={selectedCustomPattern}
+      onSelectSavedCustom={handleCustomPatternSelect}
+      onNewCustomPattern={handleNewCustomPattern}
+      customMask={customMask}
+      customMatchAllowRotation={customMatchAllowRotation}
+      customMatchAllowMirror={customMatchAllowMirror}
+      onCustomMatchRotationChange={(v) => {
+        setCustomMatchAllowRotation(v);
+        patchActiveRoundBingo({
+          bingoPattern: 'custom',
+          customPatternMask: customMask,
+          customMatchAllowRotation: v,
+          customMatchAllowMirror,
+        });
+        if (socket && roomId) {
+          socket.emit('set-pattern', {
+            roomId,
+            pattern: 'custom',
+            customMask,
+            customMatchAllowRotation: v,
+            customMatchAllowMirror,
+            customPatternName:
+              customPatternDisplayNameForEmit(customMask, selectedCustomPattern, savedCustomPatterns) ?? '',
+          });
+        }
+      }}
+      onCustomMatchMirrorChange={(v) => {
+        setCustomMatchAllowMirror(v);
+        patchActiveRoundBingo({
+          bingoPattern: 'custom',
+          customPatternMask: customMask,
+          customMatchAllowRotation,
+          customMatchAllowMirror: v,
+        });
+        if (socket && roomId) {
+          socket.emit('set-pattern', {
+            roomId,
+            pattern: 'custom',
+            customMask,
+            customMatchAllowRotation,
+            customMatchAllowMirror: v,
+            customPatternName:
+              customPatternDisplayNameForEmit(customMask, selectedCustomPattern, savedCustomPatterns) ?? '',
+          });
+        }
+      }}
+      getPatternDisplayName={getPatternDisplayName}
+    />
+  );
+
   return (
     <div className="host-view">
       {!hideYoutubeCornerPlayer ? (
@@ -7366,471 +7472,35 @@ const HostView: React.FC = () => {
           <div className="tab-content">
             {activeTab === 'setup' && (
               <div className="setup-tab host-manager">
-                {/* License Status - TEMPORARILY HIDDEN */}
-                {showRoundManager && (
-                  <div style={{ display: 'none' }}>License validation disabled for tonight</div>
-                )}
-
                 <div className="host-manager-setup-flow">
                 <div className="host-manager-setup-flow__grid">
                 <div className="host-manager-grid host-manager-grid--split">
 
-          {/* Pattern Selection — applies to every mix (Spotify, YouTube Music, catalog-only, hybrid). */}
           <div className="host-manager-grid__primary">
-            <motion.div 
-              className={`pattern-section host-manager-section host-manager-section--collapsible${
-                hostManagerCollapse['mgr-bingo-pattern'] ? ' host-manager-section--collapsed' : ''
-              }`}
+            <motion.div
+              className="host-manager-section host-manager-section--round-hub-cta"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.3 }}
             >
-              <div className="host-manager-section__topbar">
-                <h2 style={{ display: 'flex', alignItems: 'center', gap: 10, margin: 0, flex: 1, minWidth: 0 }}>
-                  <Grid3x3 className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
-                  Bingo Pattern
-                </h2>
-                <HostManagerCollapseToggle
-                  collapsed={!!hostManagerCollapse['mgr-bingo-pattern']}
-                  onToggle={() => toggleHostManagerCollapse('mgr-bingo-pattern')}
-                />
-              </div>
-              {!hostManagerCollapse['mgr-bingo-pattern'] ? (
-              <>
-              <p style={{ margin: '0 0 14px', fontSize: '0.82rem', color: '#9aa5b1', lineHeight: 1.45 }}>
-                Each round stores its own pattern and free-space setting. Use <strong style={{ color: '#c5cdd6' }}>Load for prep</strong>{' '}
-                on a round bucket (or in Round prep & PDF) to sync that round&apos;s playlists into the mix without starting it — the Bingo Pattern section then applies to that round, and changes are saved on it.{' '}
-                Use <strong style={{ color: '#c5cdd6' }}>Start round</strong> when you want the live handoff (marks active and opens Game). If no round is targeted yet, picks here are not tied to a bucket until you load one for prep or start one.
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 10px', fontSize: '1rem' }}>
+                <Grid3x3 className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
+                Bingo pattern
+              </h2>
+              <p style={{ margin: '0 0 12px', fontSize: '0.82rem', color: '#9aa5b1', lineHeight: 1.45 }}>
+                Pattern, free center, custom shapes, and combined rules live in{' '}
+                <strong style={{ color: '#c5dccf' }}>Round builder → Pattern</strong>.
               </p>
-              <div className="pattern-selection">
-                {/* Classic wins + preset shapes (server-validated; marks must match played songs). */}
-                <div
-                  className="main-pattern-options"
-                  style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '12px' }}
-                >
-                  <button
-                    type="button"
-                    className={`pattern-option ${pattern === 'line' ? 'active' : ''}`}
-                    onClick={() => updatePattern('line')}
-                    style={{
-                      padding: '12px 16px',
-                      border: pattern === 'line' ? '2px solid #00ff88' : '1px solid rgba(255,255,255,0.3)',
-                      borderRadius: '8px',
-                      background: pattern === 'line' ? 'rgba(0,255,136,0.1)' : 'rgba(255,255,255,0.05)',
-                      color: pattern === 'line' ? '#00ff88' : '#ffffff',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      minWidth: '112px',
-                    }}
-                  >
-                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{BINGO_PATTERNS.line.label}</div>
-                    <div style={{ fontSize: '0.78rem', opacity: 0.82, textAlign: 'center' }}>{BINGO_PATTERNS.line.description}</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    className={`pattern-option ${pattern === 'full_card' || pattern === 'blackout' ? 'active' : ''}`}
-                    onClick={() => updatePattern('full_card')}
-                    style={{
-                      padding: '12px 16px',
-                      border:
-                        pattern === 'full_card' || pattern === 'blackout'
-                          ? '2px solid #00ff88'
-                          : '1px solid rgba(255,255,255,0.3)',
-                      borderRadius: '8px',
-                      background:
-                        pattern === 'full_card' || pattern === 'blackout'
-                          ? 'rgba(0,255,136,0.1)'
-                          : 'rgba(255,255,255,0.05)',
-                      color: pattern === 'full_card' || pattern === 'blackout' ? '#00ff88' : '#ffffff',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      minWidth: '112px',
-                    }}
-                  >
-                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-                      Full card <span style={{ fontWeight: 600, opacity: 0.85 }}>(blackout)</span>
-                    </div>
-                    <div style={{ fontSize: '0.78rem', opacity: 0.82, textAlign: 'center' }}>
-                      {BINGO_PATTERNS.full_card.description}
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    className={`pattern-option ${pattern === 'composite' ? 'active' : ''}`}
-                    onClick={() => {
-                      updatePattern('composite');
-                      setCombinedPatternModalOpen(true);
-                    }}
-                    title={BINGO_PATTERNS.composite.description}
-                    style={{
-                      padding: '12px 16px',
-                      border: pattern === 'composite' ? '2px solid #00ff88' : '1px solid rgba(255,255,255,0.3)',
-                      borderRadius: '8px',
-                      background: pattern === 'composite' ? 'rgba(0,255,136,0.1)' : 'rgba(255,255,255,0.05)',
-                      color: pattern === 'composite' ? '#00ff88' : '#ffffff',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      minWidth: '112px',
-                    }}
-                  >
-                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{BINGO_PATTERNS.composite.label}</div>
-                    <div style={{ fontSize: '0.78rem', opacity: 0.82, textAlign: 'center' }}>
-                      AND / OR presets + painted grid
-                    </div>
-                  </button>
-                </div>
-
-                {pattern === 'line' && (
-                  <div
-                    style={{
-                      marginBottom: 14,
-                      display: 'flex',
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      gap: 12,
-                      flexWrap: 'wrap',
-                      flexDirection: 'column',
-                    }}
-                  >
-                    <label
-                      style={{
-                        fontSize: '0.84rem',
-                        color: '#c5cdd6',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        flexWrap: 'wrap',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      Lines required (1–{LINE_PATTERN_MAX_LINES})
-                      <input
-                        type="number"
-                        min={1}
-                        max={LINE_PATTERN_MAX_LINES}
-                        value={linesRequired}
-                        onChange={(e) => {
-                          const v = normalizeLinesRequired(parseInt(e.target.value, 10));
-                          setLinesRequired(v);
-                          patchActiveRoundBingo({ bingoPattern: 'line', linesRequired: v });
-                          if (socket && roomId) {
-                            socket.emit('set-pattern', { roomId, pattern: 'line', linesRequired: v });
-                          }
-                        }}
-                        style={{
-                          width: 56,
-                          padding: '6px 8px',
-                          borderRadius: 8,
-                          border: '1px solid rgba(255,255,255,0.28)',
-                          background: 'rgba(0,0,0,0.35)',
-                          color: '#fff',
-                          fontSize: '0.85rem',
-                        }}
-                      />
-                    </label>
-                    <span
-                      style={{
-                        fontSize: '0.74rem',
-                        color: '#8a96a3',
-                        maxWidth: 420,
-                        textAlign: 'center',
-                        lineHeight: 1.45,
-                      }}
-                    >
-                      Players must finish this many complete rows, columns, or diagonals — each cell still needs a played song (or
-                      free space).
-                    </span>
-                  </div>
-                )}
-
-                {pattern === 'composite' && (
-                  <div
-                    style={{
-                      marginBottom: 14,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 10,
-                      maxWidth: 480,
-                      marginLeft: 'auto',
-                      marginRight: 'auto',
-                    }}
-                  >
-                    <div style={{ fontSize: '0.82rem', color: '#c5cdd6', textAlign: 'center', lineHeight: 1.5 }}>
-                      <strong style={{ color: '#00ff88' }}>{patternComposite.op.toUpperCase()}</strong> ·{' '}
-                      {patternComposite.clauses.length} clause{patternComposite.clauses.length !== 1 ? 's' : ''}
-                    </div>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => setCombinedPatternModalOpen(true)}
-                      style={{
-                        fontSize: '0.84rem',
-                        padding: '8px 18px',
-                        borderColor: 'rgba(0,255,136,0.55)',
-                        color: '#00ff88',
-                      }}
-                    >
-                      Configure combined pattern…
-                    </button>
-                  </div>
-                )}
-
-                <p style={{ margin: '0 0 10px', fontSize: '0.78rem', color: '#8a96a3', textAlign: 'center', lineHeight: 1.45 }}>
-                  Pattern bingo presets — highlight squares players watch for (verification still requires played songs / free space).
-                </p>
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: '10px',
-                    justifyContent: 'center',
-                    flexWrap: 'wrap',
-                    marginBottom: '16px',
-                  }}
-                >
-                  {PRESET_SHAPE_PATTERNS.map((shapeKey) => {
-                    const def = BINGO_PATTERNS[shapeKey];
-                    const active = pattern === shapeKey;
-                    return (
-                      <button
-                        key={shapeKey}
-                        type="button"
-                        title={def.description}
-                        className={`pattern-option ${active ? 'active' : ''}`}
-                        onClick={() => updatePattern(shapeKey)}
-                        style={{
-                          padding: '10px 12px',
-                          border: active ? '2px solid #00ff88' : '1px solid rgba(255,255,255,0.28)',
-                          borderRadius: '8px',
-                          background: active ? 'rgba(0,255,136,0.09)' : 'rgba(255,255,255,0.04)',
-                          color: active ? '#00ff88' : '#e8ecf1',
-                          cursor: 'pointer',
-                          fontSize: '0.82rem',
-                          fontWeight: 700,
-                          minWidth: '100px',
-                        }}
-                      >
-                        {def.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '10px',
-                    marginBottom: '16px',
-                    cursor: 'pointer',
-                    fontSize: '0.95rem',
-                    color: '#e0e0e0'
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={freeSpaceEnabled}
-                    onChange={(e) => {
-                      const v = e.target.checked;
-                      setFreeSpaceEnabled(v);
-                      patchActiveRoundBingo({ freeSpaceEnabled: v });
-                      try {
-                        localStorage.setItem('bingo-free-space', v ? '1' : '0');
-                      } catch {
-                        /* ignore */
-                      }
-                    }}
-                  />
-                  <span>
-                    Free space (center square counts without that song playing; set before Finalize Mix)
-                  </span>
-                </label>
-
-                {/* Custom Pattern Section */}
-                <div className="custom-pattern-section" style={{ textAlign: 'center' }}>
-                  <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
-                    <select
-                      value={selectedCustomPattern?.id || ''}
-                      onChange={(e) => {
-                        const patternId = e.target.value;
-                        if (patternId) {
-                          const customPattern = savedCustomPatterns.find(p => p.id === patternId);
-                          if (customPattern) {
-                            handleCustomPatternSelect(customPattern);
-                          }
-                        }
-                      }}
-                      style={{
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        border: '1px solid rgba(255,255,255,0.3)',
-                        background: 'rgba(0,0,0,0.3)',
-                        color: '#ffffff',
-                        fontSize: '0.9rem',
-                        minWidth: '200px'
-                      }}
-                    >
-                      <option value="">Select Custom Pattern...</option>
-                      {savedCustomPatterns.map((customPattern) => (
-                        <option key={customPattern.id} value={customPattern.id}>
-                          {customPattern.name}
-                        </option>
-                      ))}
-                    </select>
-                    
-                    <button
-                      onClick={handleNewCustomPattern}
-                      style={{
-                        padding: '8px 16px',
-                        borderRadius: '6px',
-                        border: '1px solid #00ff88',
-                        background: 'rgba(0,255,136,0.1)',
-                        color: '#00ff88',
-                        cursor: 'pointer',
-                        fontSize: '0.9rem',
-                        fontWeight: '500',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}
-                    >
-                      <Plus size={16} />
-                      New Custom Pattern
-                    </button>
-                  </div>
-                  {pattern === 'custom' && customMask.length > 0 && (
-                    <div
-                      style={{
-                        marginTop: 10,
-                        padding: '12px 14px',
-                        borderRadius: 10,
-                        border: '1px solid rgba(255, 255, 255, 0.15)',
-                        background: 'rgba(0,0,0,0.22)',
-                        maxWidth: 440,
-                        marginLeft: 'auto',
-                        marginRight: 'auto',
-                        textAlign: 'left',
-                      }}
-                    >
-                      <div style={{ fontSize: '0.78rem', color: '#9aa5b1', marginBottom: 10, lineHeight: 1.45 }}>
-                        Optional match rules for this custom shape (pick or paint squares first).
-                      </div>
-                      <label
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          cursor: 'pointer',
-                          color: '#e8ecf1',
-                          fontSize: '0.88rem',
-                          marginBottom: 8,
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={customMatchAllowRotation}
-                          onChange={(e) => {
-                            const v = e.target.checked;
-                            setCustomMatchAllowRotation(v);
-                            patchActiveRoundBingo({
-                              bingoPattern: 'custom',
-                              customPatternMask: customMask,
-                              customMatchAllowRotation: v,
-                              customMatchAllowMirror,
-                            });
-                            if (socket && roomId) {
-                              socket.emit('set-pattern', {
-                                roomId,
-                                pattern: 'custom',
-                                customMask,
-                                customMatchAllowRotation: v,
-                                customMatchAllowMirror,
-                                customPatternName:
-                                  customPatternDisplayNameForEmit(customMask, selectedCustomPattern, savedCustomPatterns) ??
-                                  '',
-                              });
-                            }
-                          }}
-                        />
-                        Allow rotations (90° / 180° / 270°)
-                      </label>
-                      <label
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          cursor: 'pointer',
-                          color: '#e8ecf1',
-                          fontSize: '0.88rem',
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={customMatchAllowMirror}
-                          onChange={(e) => {
-                            const v = e.target.checked;
-                            setCustomMatchAllowMirror(v);
-                            patchActiveRoundBingo({
-                              bingoPattern: 'custom',
-                              customPatternMask: customMask,
-                              customMatchAllowRotation,
-                              customMatchAllowMirror: v,
-                            });
-                            if (socket && roomId) {
-                              socket.emit('set-pattern', {
-                                roomId,
-                                pattern: 'custom',
-                                customMask,
-                                customMatchAllowRotation,
-                                customMatchAllowMirror: v,
-                                customPatternName:
-                                  customPatternDisplayNameForEmit(customMask, selectedCustomPattern, savedCustomPatterns) ??
-                                  '',
-                              });
-                            }
-                          }}
-                        />
-                        Allow mirrors (horizontal / vertical)
-                      </label>
-                    </div>
-                  )}
-                </div>
-              </div>
-                <div style={{ marginTop: '8px', fontSize: '0.9rem', color: '#b3b3b3' }}>
-                  Current pattern:{' '}
-                  <strong style={{ color: '#00ff88' }}>
-                    {pattern === 'custom' && selectedCustomPattern
-                      ? selectedCustomPattern.name
-                      : pattern === 'composite'
-                        ? `${BINGO_PATTERNS.composite.label} (${patternComposite.op.toUpperCase()}, ${patternComposite.clauses.length} part${patternComposite.clauses.length !== 1 ? 's' : ''})`
-                        : getPatternDisplayName(pattern)}
-                  </strong>
-                  {pattern === 'custom' && selectedCustomPattern && (
-                    <div style={{ marginTop: '8px', fontSize: '0.8rem', color: '#b3b3b3' }}>
-                      Pattern: {selectedCustomPattern.positions.length} squares selected
-                    </div>
-                  )}
-                  {pattern === 'composite' && (
-                    <div style={{ marginTop: '8px', fontSize: '0.82rem', color: '#b8d4e8', lineHeight: 1.5 }}>
-                      {describeCompositePatternAudienceSentence(patternComposite)}
-                    </div>
-                  )}
-                </div>
-              </>
-              ) : null}
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => openRoundHub('pattern')}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+              >
+                Open Round builder
+              </button>
             </motion.div>
-            </div>
+          </div>
                   <div className="host-manager-grid__secondary">
           <motion.div
             className={`host-manager-section host-manager-section--display font-size-section host-manager-section--collapsible${
@@ -8143,7 +7813,7 @@ const HostView: React.FC = () => {
                       Playlists & round setlists
                     </p>
                     <p style={{ margin: 0, fontSize: '0.82rem', color: '#a8b4bc', lineHeight: 1.45, maxWidth: 560 }}>
-                      Check Mix, assign to rounds (drag or menu), then finalize on Manager.
+                      Playlists, buckets, pattern, save/print, and event actions — one place.
                     </p>
                     <p style={{ margin: '10px 0 0', fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)' }}>
                       <strong style={{ color: '#c5dccf' }}>{selectedPlaylists.length}</strong> in mix ·{' '}
@@ -8154,11 +7824,11 @@ const HostView: React.FC = () => {
                   <button
                     type="button"
                     className="btn-primary"
-                    onClick={() => setShowPlaylistRoundModal(true)}
+                    onClick={() => openRoundHub('build')}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, flexShrink: 0 }}
                   >
                     <ListMusic className="w-5 h-5" aria-hidden />
-                    Open builder
+                    Open Round builder
                   </button>
                 </div>
               </>
@@ -8232,50 +7902,21 @@ const HostView: React.FC = () => {
                     </label>
                   </div>
                   <p style={{ margin: '8px 0 12px', fontSize: '0.82rem', color: '#9aa5b1', lineHeight: 1.45, maxWidth: 620 }}>
-                    <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> (player cards) and <strong style={{ color: '#c5cdd6' }}>Call sheet</strong> (your playback order after Save round) live in <strong style={{ color: '#c5cdd6' }}>Round prep & PDF</strong>.{' '}
-                    <strong style={{ color: '#c5cdd6' }}>Download PDF</strong> on the Game tab uses the same card generator — set card count below (1–200).
+                    Save round, Print PDF, call sheet, and event resets are in{' '}
+                    <strong style={{ color: '#c5cdd6' }}>Round builder → Event &amp; PDF</strong>. Live handoff: Game tab →
+                    Finalize mix → Start Game.
                   </p>
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      gap: 10,
-                      alignItems: 'center',
-                      marginBottom: 18,
-                    }}
-                  >
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: '#c8d0d8' }}>
-                      Cards per PDF
-                      <input
-                        type="number"
-                        min={1}
-                        max={200}
-                        value={printableCardCount}
-                        onChange={(e) => setPrintableCardCount(Number(e.target.value))}
-                        disabled={printablePdfLoading}
-                        aria-label="Number of bingo cards per printable PDF export"
-                        style={{
-                          width: 72,
-                          padding: '6px 8px',
-                          borderRadius: 8,
-                          border: '1px solid rgba(255,255,255,0.15)',
-                          background: 'rgba(0,0,0,0.25)',
-                          color: '#fff',
-                        }}
-                      />
-                    </label>
-                  </div>
                   <p className="host-manager-round__actions-head">Quick actions</p>
                   <div className="host-manager-round__row">
                       <button
                         type="button"
                         className="btn-accent"
-                        onClick={() => setShowRoundManager(true)}
-                        title="Save rounds, print PDFs, and edit per-round pattern without starting the live game"
+                        onClick={() => openRoundHub('event')}
+                        title="Event overview, save/print rounds, resets"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
                       >
                         <ListChecks className="w-4 h-4" aria-hidden />
-                        Round prep & PDF
+                        Round builder (event)
                       </button>
                       {gameState === 'playing' && (
                         <>
@@ -8679,11 +8320,11 @@ const HostView: React.FC = () => {
                           <button
                             type="button"
                             className="btn-accent"
-                            onClick={() => setShowRoundManager(true)}
+                            onClick={() => openRoundHub('event')}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
                           >
                             <CalendarRange className="w-4 h-4" aria-hidden />
-                            Round Manager
+                            Round builder
                           </button>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -9253,23 +8894,23 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
           role="presentation"
         >
           <div
-            className="host-connection-modal host-connection-modal--playlist-rounds"
+            className="host-connection-modal host-connection-modal--round-hub"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="host-playlist-round-modal-title"
+            aria-labelledby="host-round-hub-modal-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="host-connection-modal__header host-connection-modal__header--playlist-rounds">
+            <div className="host-connection-modal__header host-connection-modal__header--round-hub">
               <div className="host-playlist-round-modal__title-block">
-                <h2 id="host-playlist-round-modal-title">
+                <h2 id="host-round-hub-modal-title">
                   <ListMusic className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
-                  Playlists & rounds
+                  Round builder
                 </h2>
                 <button
                   type="button"
                   className="host-playlist-round-modal__help"
-                  aria-label="How playlists and rounds work"
-                  title="Per round: playlists in bucket, pattern & free center, Save round. Optional: Playback snippet settings. Then Game tab → Finalize mix → Start Game. Connection/device in header."
+                  aria-label="How the round builder works"
+                  title="Build: playlists & buckets. Event & PDF: save, print, resets. Pattern: win rules. Then Game tab → Finalize mix → Start Game. Connection in header."
                 >
                   <HelpCircle className="w-4 h-4" aria-hidden />
                 </button>
@@ -9283,353 +8924,41 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                 <X className="w-5 h-5" aria-hidden />
               </button>
             </div>
-            <div className="host-connection-modal__body host-connection-modal__body--playlist-rounds">
-              {playlistRoundBuilderBody}
+            <div
+              className="host-round-hub-tabs"
+              role="tablist"
+              aria-label="Round builder sections"
+            >
+              {(
+                [
+                  ['build', 'Build'],
+                  ['event', 'Event & PDF'],
+                  ['pattern', 'Pattern'],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={roundHubTab === id}
+                  className={
+                    roundHubTab === id
+                      ? 'host-round-hub-tabs__tab host-round-hub-tabs__tab--active'
+                      : 'host-round-hub-tabs__tab'
+                  }
+                  onClick={() => setRoundHubTab(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="host-connection-modal__body host-connection-modal__body--round-hub">
+              {roundHubTab === 'build' ? playlistRoundBuilderBody : null}
+              {roundHubTab === 'event' ? roundHubEventBody : null}
+              {roundHubTab === 'pattern' ? roundHubPatternBody : null}
             </div>
           </div>
         </div>
-      )}
-      {showRoundManager && (
-        <HostRoundManagerModal onClose={() => setShowRoundManager(false)}>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.08 }}
-            className="host-round-manager-panel"
-          >
-              <div className="host-round-manager-overview">
-                <h4>Event overview</h4>
-                <div className="host-round-manager-stats">
-                  {(() => {
-                    const summary = getRoundStatusSummary();
-                    return (
-                      <>
-                        <div className="host-round-manager-stat">
-                          <div className="host-round-manager-stat__val host-round-manager-stat__val--green">{summary.completed}</div>
-                          <div className="host-round-manager-stat__label">Completed</div>
-                        </div>
-                        <div className="host-round-manager-stat">
-                          <div className="host-round-manager-stat__val host-round-manager-stat__val--blue">{summary.active}</div>
-                          <div className="host-round-manager-stat__label">Active</div>
-                        </div>
-                        <div className="host-round-manager-stat">
-                          <div className="host-round-manager-stat__val host-round-manager-stat__val--yellow">{summary.planned}</div>
-                          <div className="host-round-manager-stat__label">Planned</div>
-                        </div>
-                        <div className="host-round-manager-stat">
-                          <div className="host-round-manager-stat__val host-round-manager-stat__val--gray">{summary.unplanned}</div>
-                          <div className="host-round-manager-stat__label">Unplanned</div>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              <div className="host-round-manager-printable">
-                <h4 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Printer className="w-4 h-4" style={{ color: '#00ff88' }} aria-hidden />
-                  Printable dauber cards (PDF)
-                </h4>
-                <p style={{ margin: '0 0 10px', fontSize: '0.8rem', color: '#9aa5b1', lineHeight: 1.45 }}>
-                  Set how many cards each PDF export includes — applies equally to <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> here and <strong style={{ color: '#c5cdd6' }}>Download PDF</strong> on the Game tab (same backend path).
-                </p>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: '#c8d0d8', flexWrap: 'wrap' }}>
-                  Cards per PDF
-                  <input
-                    type="number"
-                    min={1}
-                    max={200}
-                    value={printableCardCount}
-                    onChange={(e) => setPrintableCardCount(Number(e.target.value))}
-                    disabled={printablePdfLoading}
-                    aria-label="Number of bingo cards per printable PDF export"
-                    style={{
-                      width: 72,
-                      padding: '6px 8px',
-                      borderRadius: 8,
-                      border: '1px solid rgba(255,255,255,0.15)',
-                      background: 'rgba(0,0,0,0.25)',
-                      color: '#fff',
-                    }}
-                  />
-                  <span style={{ fontSize: '0.75rem', color: '#7d8795' }}>1–200</span>
-                </label>
-              </div>
-
-              <div>
-                <h4 style={{ margin: '0 0 12px', fontSize: '1rem', fontWeight: 600, color: '#fff' }}>All rounds</h4>
-                <p style={{ margin: '0 0 12px', fontSize: '0.8rem', color: '#9aa5b1', lineHeight: 1.45 }}>
-                  Use <strong style={{ color: '#c5cdd6' }}>Load for prep</strong> (or the same control on Round buckets) to put that round&apos;s playlists into the mix and sync pattern/snippet controls — no need to{' '}
-                  <strong style={{ color: '#c5cdd6' }}>Start</strong> a round just to save or print.{' '}
-                  <strong style={{ color: '#c5cdd6' }}>Save round</strong> and per-round <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> both finalize automatically when needed (server truncates the pool), then save or export.
-                  Use <strong style={{ color: '#c5cdd6' }}>Call sheet</strong> after Save round for a numbered PDF playback list from the snapshot.
-                  <strong style={{ color: '#c5cdd6' }}> Print PDF</strong> uses the same printable generator as the Game tab (subtitle names this round). At showtime, with that round loaded and a snapshot saved, <strong style={{ color: '#c5cdd6' }}>Start Game</strong> can follow the saved track order.
-                </p>
-                <div className="host-round-manager-rounds">
-                  {eventRounds.map((round, index) => {
-                    const isCurrentRound = index === currentRoundIndex;
-                    const canStart = round.status !== 'completed' && (round.playlistIds || []).length > 0;
-                    const roundClass =
-                      isCurrentRound
-                        ? 'host-round-manager-round host-round-manager-round--current'
-                        : round.status === 'completed'
-                          ? 'host-round-manager-round host-round-manager-round--done'
-                          : canStart
-                            ? 'host-round-manager-round host-round-manager-round--ready'
-                            : 'host-round-manager-round host-round-manager-round--blocked';
-
-                    return (
-                      <div key={round.id} className={roundClass}>
-                        <div className="host-round-manager-round__top">
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                              <span className="host-round-manager-round__name">{round.name}</span>
-                              {isCurrentRound && (
-                                <span className="host-round-manager-badge host-round-manager-badge--current">CURRENT</span>
-                              )}
-                              {round.status === 'completed' && (
-                                <span className="host-round-manager-badge host-round-manager-badge--done">DONE</span>
-                              )}
-                            </div>
-                            <div className="host-round-manager-round__meta">
-                              {(round.playlistIds || []).length} playlist{(round.playlistIds || []).length !== 1 ? 's' : ''} · {round.songCount} songs
-                              {round.status === 'completed' && round.completedAt && (
-                                <span style={{ marginLeft: 8 }}>
-                                  · Completed {new Date(round.completedAt).toLocaleTimeString()}
-                                </span>
-                              )}
-                              {round.savedMixSnapshot && (
-                                <>
-                                  <br />
-                                  <span style={{ color: '#7dd3fc', fontSize: '0.72rem' }}>
-                                    Snapshot · {round.savedMixSnapshot.songs.length} tracks · {round.savedMixSnapshot.mixGeometry} ·{' '}
-                                    {new Date(round.savedMixSnapshot.savedAt).toLocaleString()}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                            <div
-                              style={{
-                                marginTop: 10,
-                                display: 'flex',
-                                flexWrap: 'wrap',
-                                gap: '10px 14px',
-                                alignItems: 'center',
-                                fontSize: '0.78rem',
-                                color: '#b9c3cd',
-                              }}
-                            >
-                              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                Pattern
-                                <select
-                                  value={round.bingoPattern ?? 'line'}
-                                  onChange={(e) => {
-                                    const v = e.target.value as BingoPattern;
-                                    handleUpdateRoundBingoFields(index, {
-                                      bingoPattern: v,
-                                      ...(v !== 'custom' ? { customPatternMask: undefined } : {}),
-                                      ...(v !== 'composite' ? { patternComposite: undefined } : {}),
-                                    });
-                                  }}
-                                  style={{
-                                    padding: '4px 8px',
-                                    borderRadius: 6,
-                                    border: '1px solid rgba(255,255,255,0.25)',
-                                    background: 'rgba(0,0,0,0.35)',
-                                    color: '#fff',
-                                    fontSize: '0.78rem',
-                                  }}
-                                >
-                                  {PATTERN_OPTIONS.map((opt) => (
-                                    <option key={opt.value} value={opt.value}>
-                                      {opt.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                              {(round.bingoPattern ?? 'line') === 'custom' && (
-                                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                  Saved shape
-                                  <select
-                                    value={(() => {
-                                      const mask = round.customPatternMask;
-                                      if (!mask?.length) return '';
-                                      const norm = (arr: string[]) => [...arr].sort().join(',');
-                                      const key = norm(mask);
-                                      const sp = savedCustomPatterns.find((p) => norm(p.positions) === key);
-                                      return sp?.id ?? '';
-                                    })()}
-                                    onChange={(e) => {
-                                      const id = e.target.value;
-                                      const sp = savedCustomPatterns.find((p) => p.id === id);
-                                      if (sp) {
-                                        handleUpdateRoundBingoFields(index, {
-                                          bingoPattern: 'custom',
-                                          customPatternMask: [...sp.positions],
-                                          customMatchAllowRotation: sp.matchAllowRotation === true,
-                                          customMatchAllowMirror: sp.matchAllowMirror === true,
-                                        });
-                                      }
-                                    }}
-                                    style={{
-                                      padding: '4px 8px',
-                                      borderRadius: 6,
-                                      border: '1px solid rgba(255,255,255,0.25)',
-                                      background: 'rgba(0,0,0,0.35)',
-                                      color: '#fff',
-                                      fontSize: '0.78rem',
-                                      maxWidth: 200,
-                                    }}
-                                  >
-                                    <option value="">Select saved pattern…</option>
-                                    {savedCustomPatterns.map((sp) => (
-                                      <option key={sp.id} value={sp.id}>
-                                        {sp.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-                              )}
-                              {(round.bingoPattern ?? 'line') === 'line' && (
-                                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                  Lines
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    max={LINE_PATTERN_MAX_LINES}
-                                    value={normalizeLinesRequired(round.linesRequired ?? 1)}
-                                    onChange={(e) =>
-                                      handleUpdateRoundBingoFields(index, {
-                                        linesRequired: normalizeLinesRequired(parseInt(e.target.value, 10)),
-                                      })
-                                    }
-                                    style={{
-                                      width: 52,
-                                      padding: '4px 6px',
-                                      borderRadius: 6,
-                                      border: '1px solid rgba(255,255,255,0.25)',
-                                      background: 'rgba(0,0,0,0.35)',
-                                      color: '#fff',
-                                      fontSize: '0.78rem',
-                                    }}
-                                  />
-                                </label>
-                              )}
-                              <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <input
-                                  type="checkbox"
-                                  checked={
-                                    round.freeSpaceEnabled !== undefined
-                                      ? round.freeSpaceEnabled
-                                      : freeSpaceEnabled
-                                  }
-                                  onChange={(e) =>
-                                    handleUpdateRoundBingoFields(index, {
-                                      freeSpaceEnabled: e.target.checked,
-                                    })
-                                  }
-                                />
-                                Free center
-                              </label>
-                            </div>
-                          </div>
-                          <div className="host-round-manager-round__actions">
-                            {(round.playlistIds || []).length > 0 && (
-                              <button
-                                type="button"
-                                className="btn-secondary"
-                                disabled={saveRoundBusy || printablePdfLoading || mixGameActionsBlocked}
-                                onClick={() => void handleSaveRoundAtIndex(index)}
-                                title="Runs finalize automatically when needed (same server lock as Print PDF), then saves frozen tracks for this round."
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 6,
-                                  fontSize: '0.82rem',
-                                  marginRight: 8,
-                                }}
-                              >
-                                <Save className="w-4 h-4" aria-hidden />
-                                Save round
-                              </button>
-                            )}
-                            {(round.playlistIds || []).length > 0 && (
-                              <button
-                                type="button"
-                                className="btn-secondary"
-                                disabled={printablePdfLoading}
-                                onClick={() => handleDownloadRoundPrintablePdf(round)}
-                                title="Same printable logic as Game tab Download PDF (finalize first). PDF subtitle names this round."
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 6,
-                                  fontSize: '0.82rem',
-                                  marginRight: 8,
-                                }}
-                              >
-                                <Printer className="w-4 h-4" aria-hidden />
-                                Print PDF
-                              </button>
-                            )}
-                            {(round.playlistIds || []).length > 0 && (
-                              <button
-                                type="button"
-                                className="btn-secondary"
-                                disabled={
-                                  printablePdfLoading ||
-                                  !eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled)
-                                }
-                                onClick={() => handleDownloadRoundCallSheetPdf(round)}
-                                title="PDF host call list in playback order from this round Save round snapshot."
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 6,
-                                  fontSize: '0.82rem',
-                                  marginRight: 8,
-                                }}
-                              >
-                                <ListMusic className="w-4 h-4" aria-hidden />
-                                Call sheet
-                              </button>
-                            )}
-                            {gameState !== 'playing' && (round.playlistIds || []).length > 0 && !isCurrentRound && (
-                              <button
-                                type="button"
-                                className="btn-secondary"
-                                onClick={() => handleSelectRoundForPrep(index)}
-                                title="Put this round’s playlists in the mix and sync Bingo Pattern / snippet controls — does not change round status"
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 6,
-                                  fontSize: '0.82rem',
-                                  marginRight: 8,
-                                }}
-                              >
-                                Load for prep
-                              </button>
-                            )}
-                            {canStart && !isCurrentRound && (
-                              <button
-                                type="button"
-                                onClick={() => jumpToRound(index)}
-                                className="host-round-manager-start-btn"
-                              >
-                                Start
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-          </motion.div>
-        </HostRoundManagerModal>
       )}
       {/* Player cards: centered modal (default) or expanded full-screen panel (z-index below bingo verification) */}
       {playerCards.size > 0 && playerCardsFullscreen && (

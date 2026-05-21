@@ -638,6 +638,7 @@
 }
 
 /* Playlist library + RoundPlanner (same shell as round manager — wide, scroll body) */
+.host-connection-modal.host-connection-modal--round-hub,
 .host-connection-modal.host-connection-modal--playlist-rounds {
   width: min(100%, 1180px);
   display: flex;
@@ -646,6 +647,7 @@
   max-height: min(96vh, 920px);
 }
 
+.host-connection-modal.host-connection-modal--round-hub .host-connection-modal__body--round-hub,
 .host-connection-modal.host-connection-modal--playlist-rounds .host-connection-modal__body--playlist-rounds {
   flex: 1;
   min-height: 0;
@@ -655,6 +657,272 @@
   padding-top: 10px;
   padding-inline: 14px 16px;
   padding-bottom: 16px;
+}
+
+.host-round-hub-tabs {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0;
+  margin: 0 14px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.host-round-hub-tabs__tab {
+  flex: 1;
+  border: none;
+  padding: 10px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: transparent;
+  color: #aaa;
+  font-family: inherit;
+}
+
+.host-round-hub-tabs__tab + .host-round-hub-tabs__tab {
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.host-round-hub-tabs__tab--active {
+  background: rgba(0, 255, 136, 0.18);
+  color: #00ff88;
+}
+
+.host-round-hub-event,
+.host-round-hub-pattern {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.host-round-hub-event__hint {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  color: #9aa5b1;
+  line-height: 1.45;
+}
+
+.host-round-hub-event__actions {
+  margin-bottom: 14px;
+}
+
+.host-round-hub-event__actions-title {
+  margin: 0 0 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.host-round-hub-event__actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.host-round-hub-event__clear-cache {
+  border-color: rgba(248, 113, 113, 0.45) !important;
+  color: #fecaca !important;
+}
+
+.host-round-hub-event__cards-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: #c8d0d8;
+  flex-wrap: wrap;
+}
+
+.host-round-hub-event__cards-label input {
+  width: 72px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.25);
+  color: #fff;
+}
+
+.host-round-hub-event__rounds-section h4 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.host-round-manager-round__headline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.host-round-manager-round__snap {
+  color: #7dd3fc;
+  font-size: 0.72rem;
+}
+
+.host-round-hub-pattern__lead {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 0.8rem;
+  color: #9aa5b1;
+  line-height: 1.45;
+}
+
+.host-round-hub-pattern__main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.host-round-hub-pattern__opt {
+  flex: 1 1 140px;
+  min-width: 120px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.host-round-hub-pattern__opt--active {
+  border-color: rgba(0, 255, 136, 0.5);
+  background: rgba(0, 255, 136, 0.1);
+  color: #00ff88;
+}
+
+.host-round-hub-pattern__opt-label {
+  display: block;
+  font-weight: 700;
+  font-size: 0.82rem;
+  margin-bottom: 4px;
+}
+
+.host-round-hub-pattern__opt-desc {
+  display: block;
+  font-size: 0.68rem;
+  opacity: 0.75;
+  line-height: 1.3;
+}
+
+.host-round-hub-pattern__lines {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  font-size: 0.8rem;
+  color: #c5cdd6;
+}
+
+.host-round-hub-pattern__lines input {
+  width: 52px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+}
+
+.host-round-hub-pattern__composite {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  font-size: 0.8rem;
+  color: #c5cdd6;
+}
+
+.host-round-hub-pattern__shapes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.host-round-hub-pattern__shape {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e8ecf1;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.host-round-hub-pattern__shape--active {
+  border-color: rgba(0, 255, 136, 0.45);
+  color: #00ff88;
+  background: rgba(0, 255, 136, 0.08);
+}
+
+.host-round-hub-pattern__free {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 0.82rem;
+  color: #e0e0e0;
+  cursor: pointer;
+}
+
+.host-round-hub-pattern__custom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.host-round-hub-pattern__custom select {
+  flex: 1 1 160px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 0.82rem;
+}
+
+.host-round-hub-pattern__custom-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 0.8rem;
+  color: #e8ecf1;
+}
+
+.host-round-hub-pattern__custom-rules label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.host-round-hub-pattern__current {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #b3b3b3;
+}
+
+.host-round-hub-pattern__composite-desc {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.78rem;
+  color: #b8d4e8;
+  line-height: 1.45;
 }
 
 /* Playlist ↔ rounds modal: compact layout, no outer scroll — paginate inside table */
