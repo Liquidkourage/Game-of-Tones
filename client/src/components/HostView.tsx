@@ -618,8 +618,6 @@ const HostView: React.FC = () => {
   /** Printable PDF export (physical daubers) — count capped server-side at 200. */
   const [printableCardCount, setPrintableCardCount] = useState(30);
   const [saveRoundBusy, setSaveRoundBusy] = useState(false);
-  /** Game tab: expand manual re-sync when saved round normally covers finalize. */
-  const [finalizeResyncOpen, setFinalizeResyncOpen] = useState(false);
   const [printablePdfLoading, setPrintablePdfLoading] = useState(false);
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
   /** Server served playlist list from DB (429/quarantine, or normal cache-first load without hitting Spotify). */
@@ -3414,14 +3412,7 @@ const HostView: React.FC = () => {
     [socket, roomId, mixFinalized, printableCardCount, freeSpaceEnabled, finalizeMix],
   );
 
-  const handleDownloadPrintablePdf = useCallback(() => {
-    requestPrintablePdfDownload({
-      pdfSubtitle: `Room ${roomId}`,
-      fileSlug: 'cards',
-    });
-  }, [requestPrintablePdfDownload, roomId]);
-
-  /** Same server path + RNG rules as Game tab “Download PDF” — subtitle/filename only differ for organizers. */
+  /** Same server path + RNG rules as Round builder “Print PDF” — subtitle/filename only differ for organizers. */
   const handleDownloadRoundPrintablePdf = useCallback(
     (round: EventRound) => {
       const ids = round.playlistIds || [];
@@ -6295,14 +6286,8 @@ const HostView: React.FC = () => {
 
   const showPrimaryFinalizeMixButton =
     !mixFinalized && !savedRoundSnapshotMakesFinalizeRedundant && mixPlaylistSelection.length > 0;
-  const showFinalizeResyncTroubleshoot =
-    !mixFinalized && savedRoundSnapshotMakesFinalizeRedundant && mixPlaylistSelection.length > 0;
-
-  useEffect(() => {
-    if (mixFinalized || !savedRoundSnapshotMakesFinalizeRedundant) {
-      setFinalizeResyncOpen(false);
-    }
-  }, [mixFinalized, savedRoundSnapshotMakesFinalizeRedundant]);
+  /** Round builder saved this round — Game tab is go-live only (no mix/finalize/PDF chrome). */
+  const gameTabRoundBuilderReady = savedRoundSnapshotMakesFinalizeRedundant;
 
   const webApiQuarantineBannerText = useMemo(() => {
     if (webApiQuarantine.active !== true) return null;
@@ -7860,23 +7845,25 @@ const HostView: React.FC = () => {
               ) : null}
 
                   <div className="host-game-settings-panel">
-                    <div className="host-game-playback-note">
-                      <p>
-                        <strong>Playback:</strong> {snippetLength}s snippets ·{' '}
-                        {randomStarts === 'none'
-                          ? 'from start'
-                          : randomStarts === 'early'
-                            ? 'early random'
-                            : 'random position'}
-                      </p>
-                      <p>
-                        Change per round in{' '}
-                        <button type="button" className="host-inline-link" onClick={() => openRoundBuilder()}>
-                          Round builder → Playback
-                        </button>
-                        . Offline card count &amp; PDFs are there too.
-                      </p>
-                    </div>
+                    {!gameTabRoundBuilderReady ? (
+                      <div className="host-game-playback-note">
+                        <p>
+                          <strong>Playback:</strong> {snippetLength}s snippets ·{' '}
+                          {randomStarts === 'none'
+                            ? 'from start'
+                            : randomStarts === 'early'
+                              ? 'early random'
+                              : 'random position'}
+                        </p>
+                        <p>
+                          Change per round in{' '}
+                          <button type="button" className="host-inline-link" onClick={() => openRoundBuilder()}>
+                            Round builder
+                          </button>
+                          .
+                        </p>
+                      </div>
+                    ) : null}
 
             <div style={{ marginBottom: 12 }}>
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16, marginBottom: 6 }}>
@@ -7905,35 +7892,6 @@ const HostView: React.FC = () => {
              <div className="control-buttons">
                {gameState === 'waiting' && !currentSong ? (
                  <>
-                   {showFinalizeResyncTroubleshoot && (
-                     <div className="host-finalize-resync">
-                       <button
-                         type="button"
-                         className="host-finalize-resync__toggle"
-                         aria-expanded={finalizeResyncOpen}
-                         onClick={() => setFinalizeResyncOpen((o) => !o)}
-                       >
-                         Display stale or sync failed?
-                       </button>
-                       {finalizeResyncOpen ? (
-                         <div className="host-finalize-resync__panel">
-                           <p className="host-finalize-resync__hint">
-                             This round is saved in Round builder. Start Game normally uses that snapshot. Re-sync only if
-                             the projector or player cards still show an old mix.
-                           </p>
-                           <button
-                             type="button"
-                             className="btn-secondary host-finalize-resync__btn"
-                             onClick={() => void finalizeMix()}
-                             disabled={mixGameActionsBlocked}
-                           >
-                             <RotateCcw className="w-4 h-4" aria-hidden />
-                             Re-sync mix to room
-                           </button>
-                         </div>
-                       ) : null}
-                     </div>
-                   )}
                    {showPrimaryFinalizeMixButton ? (
                      <button
                        className="control-button finalize-mix"
@@ -7944,14 +7902,14 @@ const HostView: React.FC = () => {
                        Finalize Mix
                      </button>
                    ) : null}
-                   {mixFinalized && (
+                   {mixFinalized && !gameTabRoundBuilderReady ? (
                      <div className="mix-finalized-status">
                        <p className="status-text" style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
                          <CheckCircle2 className="w-4 h-4" style={{ color: '#00ff88' }} aria-hidden />
                          Mix finalized — cards generated for players
                        </p>
                      </div>
-                   )}
+                   ) : null}
                   <button
                     onClick={startGame}
                     disabled={mixGameActionsBlocked}
@@ -7983,19 +7941,12 @@ const HostView: React.FC = () => {
                         ? 'Connecting Spotify...'
                         : 'Start Game'}
                   </button>
-                  <p style={{ marginTop: 10, fontSize: '0.78rem', color: '#9a9a9a', maxWidth: 520, lineHeight: 1.4, marginLeft: 'auto', marginRight: 'auto' }}>
-                    {savedRoundSnapshotMakesFinalizeRedundant ? (
-                      <>
-                        <strong style={{ color: '#cfcfcf' }}>Save round</strong> in Round builder locks this round&apos;s tracks.
-                        Tap <strong style={{ color: '#cfcfcf' }}>Start Game</strong> when ready — no separate finalize step.
-                      </>
-                    ) : (
-                      <>
-                        Start Game will <strong style={{ color: '#cfcfcf' }}>finalize the mix automatically</strong> if needed.
-                        Use Finalize Mix first only for an early card preview on the display.
-                      </>
-                    )}
-                  </p>
+                  {!gameTabRoundBuilderReady ? (
+                    <p style={{ marginTop: 10, fontSize: '0.78rem', color: '#9a9a9a', maxWidth: 520, lineHeight: 1.4, marginLeft: 'auto', marginRight: 'auto' }}>
+                      Start Game will <strong style={{ color: '#cfcfcf' }}>finalize the mix automatically</strong> if needed.
+                      Use Finalize Mix first only for an early card preview on the display.
+                    </p>
+                  ) : null}
                  </>
                ) : (
                  <div className="game-status">
@@ -8081,62 +8032,10 @@ const HostView: React.FC = () => {
                   </div>
                  </div>
                )}
-               {(mixFinalized || mixPlaylistSelection.length > 0) && (
-                 <div
-                   style={{
-                     marginTop: 18,
-                     padding: '14px 16px',
-                     borderRadius: 12,
-                     border: '1px solid rgba(255, 255, 255, 0.12)',
-                     background: 'rgba(255, 255, 255, 0.04)',
-                     maxWidth: 560,
-                   }}
-                 >
-                   <div style={{ fontWeight: 800, fontSize: '0.95rem', marginBottom: 8, color: '#e8ecf1' }}>
-                     Printable cards (daubers)
-                   </div>
-                   <p style={{ margin: '0 0 12px', fontSize: '0.8rem', color: '#9aa5b1', lineHeight: 1.45 }}>
-                     Quick download from the current mix. For per-round packs, use{' '}
-                     <strong style={{ color: '#c5cdd6' }}>Print PDF</strong> in Round builder (set card count there).
-                   </p>
-                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-                     <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: '#c8d0d8' }}>
-                       Cards per PDF
-                       <input
-                         type="number"
-                         min={1}
-                         max={200}
-                         value={printableCardCount}
-                         onChange={(e) => setPrintableCardCount(Number(e.target.value))}
-                         disabled={printablePdfLoading}
-                         style={{
-                           width: 72,
-                           padding: '6px 8px',
-                           borderRadius: 8,
-                           border: '1px solid rgba(255,255,255,0.15)',
-                           background: 'rgba(0,0,0,0.25)',
-                           color: '#fff',
-                         }}
-                       />
-                     </label>
-                     <button
-                       type="button"
-                       className="btn-secondary"
-                       disabled={printablePdfLoading || mixPlaylistSelection.length === 0}
-                       onClick={handleDownloadPrintablePdf}
-                       title="Finalizes the mix automatically if needed, then builds the PDF from the locked bingo pool."
-                       style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-                     >
-                       <Printer className="w-4 h-4" aria-hidden />
-                       {printablePdfLoading ? 'Building PDF…' : 'Download PDF'}
-                     </button>
-                   </div>
-                 </div>
-               )}
              </div>
            </motion.div>
 
-                {gameState === 'waiting' && !currentSong && !hasFinalizedSongPool && (
+                {gameState === 'waiting' && !currentSong && !hasFinalizedSongPool && !gameTabRoundBuilderReady && (
                   <div
                     style={{
                       marginTop: 16,
@@ -8158,10 +8057,8 @@ const HostView: React.FC = () => {
                       maxWidth: 520,
                     }}>
                       {mixPlaylistSelection.length === 0
-                        ? 'Open Round builder (Manager tab) to add playlists to a round. Connect Spotify and/or YouTube Music in Connection if needed.'
-                        : savedRoundSnapshotMakesFinalizeRedundant
-                          ? 'This round is saved. Tap Start Game when ready — the room syncs from your snapshot. Use “Display stale or sync failed?” above only if the projector looks wrong.'
-                          : 'Tap Finalize Mix or Start Game to build the bingo song pool from your selected playlists.'}
+                        ? 'Open Round builder to add playlists to a round. Connect Spotify and/or YouTube Music in Connection if needed.'
+                        : 'Tap Finalize Mix or Start Game to build the bingo song pool from your selected playlists.'}
                     </p>
                   </div>
                 )}
@@ -8187,8 +8084,8 @@ const HostView: React.FC = () => {
                   </div>
                 )}
 
-                {/* Bingo pool / finalized playlist */}
-                {hasFinalizedSongPool && (
+                {/* Bingo pool — title edits; hidden on Game tab when round is saved in Round builder until live or legacy prep */}
+                {hasFinalizedSongPool && (!gameTabRoundBuilderReady || mixFinalized || gameState === 'playing') && (
                   <motion.div
                     className="finalized-playlist-section"
                     initial={{ opacity: 0 }}
