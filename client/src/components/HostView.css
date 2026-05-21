@@ -1678,6 +1678,22 @@
   color: #e8f4ff;
 }
 
+.host-view .host-game-prep-bar--inline {
+  max-width: none;
+  margin-bottom: 14px;
+  justify-content: center;
+  text-align: center;
+}
+
+.host-view .host-game-prep-bar--inline .host-game-prep-bar__label {
+  margin: 0 10px 0 0;
+  display: inline;
+}
+
+.host-view .host-game-prep-bar--inline .host-game-prep-bar__value {
+  display: inline;
+}
+
 .host-game-playback-note {
   margin-bottom: 14px;
   padding: 10px 12px;
@@ -2821,4 +2837,93 @@
 
 .host-view .host-manager-col--wide {
   min-width: 0;
+}
+
+.host-view .host-rounds-hero__setlist {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 255, 136, 0.2);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.host-view .host-rounds-hero__setlist-title {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #e8f4ff;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.host-view .host-rounds-hero__status {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.host-view .host-rounds-hero__status--active {
+  border-color: rgba(0, 255, 136, 0.45);
+  color: #00ff88;
+  background: rgba(0, 255, 136, 0.1);
+}
+
+.host-view .host-rounds-hero__status--completed {
+  border-color: rgba(120, 160, 255, 0.4);
+  color: #9ec5ff;
+}
+
+.host-view .host-rounds-hero__status--planned {
+  border-color: rgba(255, 193, 7, 0.35);
+  color: #ffc14a;
+}
+
+.host-view .host-rounds-hero__setlist-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px 12px;
+  margin: 0;
+}
+
+@media (min-width: 520px) {
+  .host-view .host-rounds-hero__setlist-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.host-view .host-rounds-hero__setlist-grid > div {
+  min-width: 0;
+}
+
+.host-view .host-rounds-hero__setlist-grid dt {
+  margin: 0 0 2px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.host-view .host-rounds-hero__setlist-grid dd {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.88);
+  word-break: break-word;
+}
+
+.host-view .host-rounds-hero__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }

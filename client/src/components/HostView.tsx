@@ -6004,24 +6004,47 @@ const HostView: React.FC = () => {
     }
   }, [currentRoundIndex, eventRounds, handleUpdateRounds]);
 
-  const resetCurrentRound = useCallback(() => {
-    if (gameState === 'playing') {
-      // Reset the current game state
-      setGameState('waiting');
-      setCurrentSong(null);
-      setPlayedSoFar([]);
-      setWinners([]);
-      setRoundComplete(null);
-      setRoundWinners([]);
-      
-      // Emit reset to all clients
-      if (socket) {
-        socket.emit('game-reset');
-      }
-      
-      addLog(`Reset current round`, 'info');
+  const emitRoundPlaybackReset = useCallback(() => {
+    if (!socket || !roomId) return false;
+    socket.emit('reset-game', { roomId, stopPlayback: true });
+    return true;
+  }, [socket, roomId]);
+
+  const handleRestartRound = useCallback(() => {
+    if (
+      !window.confirm(
+        'Restart this round?\n\nStops playback and clears cards. The same round stays active — use Start Game when ready.',
+      )
+    ) {
+      return;
     }
-  }, [gameState, socket]);
+    if (!emitRoundPlaybackReset()) {
+      showToast('Not connected — cannot restart round', 'error');
+      return;
+    }
+    setPlayedSoFar([]);
+    setRoundComplete(null);
+    setRoundWinners([]);
+    addLog('Restart round requested', 'info');
+  }, [emitRoundPlaybackReset, addLog, showToast]);
+
+  const handleEndRound = useCallback(() => {
+    if (
+      !window.confirm(
+        'End this round?\n\nStops playback, clears cards, and marks the round complete.',
+      )
+    ) {
+      return;
+    }
+    if (!emitRoundPlaybackReset()) {
+      showToast('Not connected — cannot end round', 'error');
+      return;
+    }
+    completeCurrentRound();
+    addLog('Round ended by host', 'info');
+  }, [emitRoundPlaybackReset, completeCurrentRound, addLog, showToast]);
+
+  const resetCurrentRound = handleRestartRound;
 
   const getNextPlannedRound = useCallback(() => {
     return eventRounds.findIndex(round => 
@@ -6262,6 +6285,36 @@ const HostView: React.FC = () => {
     currentPrepRoundForFinalizeUi != null &&
     eventRoundSnapshotMeetsSaveThreshold(currentPrepRoundForFinalizeUi, freeSpaceEnabled) &&
     prepRoundPlaylistsMatchMix;
+
+  const hostActiveRoundSummary = useMemo(() => {
+    const round =
+      currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length
+        ? eventRounds[currentRoundIndex]
+        : null;
+    const playlistNames =
+      round?.playlistNames?.length
+        ? round.playlistNames
+        : mixPlaylistSelection.map((p) => p.name);
+    const poolCount = finalizedPoolSongs.length;
+    return {
+      roundName: round?.name ?? null,
+      roundStatus: round?.status ?? null,
+      playlistNames,
+      patternLabel: getPatternDisplayName(pattern),
+      poolCount,
+      playedCount: playedSoFar.length,
+      mixFinalized,
+      savedRound: Boolean(round?.savedMixSnapshot?.songs?.length),
+    };
+  }, [
+    currentRoundIndex,
+    eventRounds,
+    mixPlaylistSelection,
+    pattern,
+    finalizedPoolSongs.length,
+    playedSoFar.length,
+    mixFinalized,
+  ]);
 
   const showPrimaryFinalizeMixButton =
     !mixFinalized && !savedRoundSnapshotMakesFinalizeRedundant && mixPlaylistSelection.length > 0;
@@ -7442,8 +7495,8 @@ const HostView: React.FC = () => {
                       End Game
                     </button>
                     <button type="button" className="btn-secondary" onClick={confirmAndNewRound} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      <Flag className="w-4 h-4" aria-hidden />
-                      New Round
+                      <RotateCcw className="w-4 h-4" aria-hidden />
+                      New round setup
                     </button>
                     <button type="button" className="btn-accent" onClick={() => openRoundBuilder()} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                       <CalendarRange className="w-4 h-4" aria-hidden />
@@ -7466,22 +7519,6 @@ const HostView: React.FC = () => {
 
             {gameState === 'waiting' && !currentSong && (
               <section className="host-go-live" aria-label="Start show">
-                {eventRounds.length > 0 ? (
-                  <div className="host-game-prep-bar">
-                    <div>
-                      <p className="host-game-prep-bar__label">Active round</p>
-                      <p className="host-game-prep-bar__value">
-                        {currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length
-                          ? eventRounds[currentRoundIndex].name
-                          : 'Pick a round in Round builder'}
-                      </p>
-                    </div>
-                    <button type="button" className="btn-secondary" onClick={() => openRoundBuilder()}>
-                      <ListMusic className="w-4 h-4" aria-hidden />
-                      Round builder
-                    </button>
-                  </div>
-                ) : null}
                 <div className="host-go-live__actions control-buttons">
                   {showPrimaryFinalizeMixButton ? (
                     <button
@@ -7552,11 +7589,6 @@ const HostView: React.FC = () => {
                         {showYoutubeMusicInConnectionModal ? (
                           <span className="host-manager-hero__chip">YouTube Music</span>
                         ) : null}
-                        {currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length ? (
-                          <span className="host-manager-hero__chip host-manager-hero__chip--active">
-                            Prep: {eventRounds[currentRoundIndex].name}
-                          </span>
-                        ) : null}
                         {(isSpotifyConnected || showYoutubeMusicInConnectionModal) && (
                           <span className="host-manager-hero__chip">
                             {selectedPlaylists.length} in mix · {eventRounds.length} rounds · {playlists.length}{' '}
@@ -7569,6 +7601,81 @@ const HostView: React.FC = () => {
                           Connect Spotify or YouTube in the header before Round builder.
                         </p>
                       ) : null}
+                      <div className="host-rounds-hero__setlist" aria-label="Active round and mix">
+                        <p className="host-rounds-hero__setlist-title">
+                          {hostActiveRoundSummary.roundName ?? 'No round selected'}
+                          {hostActiveRoundSummary.roundStatus ? (
+                            <span className={`host-rounds-hero__status host-rounds-hero__status--${hostActiveRoundSummary.roundStatus}`}>
+                              {hostActiveRoundSummary.roundStatus}
+                            </span>
+                          ) : null}
+                        </p>
+                        <dl className="host-rounds-hero__setlist-grid">
+                          <div>
+                            <dt>Playlists</dt>
+                            <dd>
+                              {hostActiveRoundSummary.playlistNames.length > 0
+                                ? hostActiveRoundSummary.playlistNames.join(' · ')
+                                : 'Add playlists in Round builder'}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Pattern</dt>
+                            <dd>{hostActiveRoundSummary.patternLabel}</dd>
+                          </div>
+                          <div>
+                            <dt>Pool</dt>
+                            <dd>
+                              {hostActiveRoundSummary.poolCount > 0
+                                ? `${hostActiveRoundSummary.poolCount} tracks${hostActiveRoundSummary.mixFinalized ? ' (finalized)' : ''}`
+                                : 'Not built yet'}
+                              {hostActiveRoundSummary.savedRound ? ' · saved round' : ''}
+                            </dd>
+                          </div>
+                          {gameState === 'playing' ? (
+                            <div>
+                              <dt>Played</dt>
+                              <dd>{hostActiveRoundSummary.playedCount} this round</dd>
+                            </div>
+                          ) : null}
+                        </dl>
+                      </div>
+                      {(gameState === 'playing' || hostActiveRoundSummary.mixFinalized) && (
+                        <div className="host-rounds-hero__meta" aria-label="Round controls">
+                          {gameState === 'playing' ? (
+                            <button type="button" className="btn-secondary" onClick={handleEndRound}>
+                              <Flag className="w-4 h-4" aria-hidden />
+                              End round
+                            </button>
+                          ) : null}
+                          {gameState === 'playing' ||
+                          (gameState === 'waiting' && hostActiveRoundSummary.mixFinalized) ? (
+                            <button type="button" className="btn-secondary" onClick={handleRestartRound}>
+                              <RotateCcw className="w-4 h-4" aria-hidden />
+                              Restart round
+                            </button>
+                          ) : null}
+                          {getNextPlannedRound() >= 0 ? (
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() => {
+                                const next = getNextPlannedRound();
+                                if (next >= 0) jumpToRound(next);
+                              }}
+                            >
+                              <SkipForward className="w-4 h-4" aria-hidden />
+                              Next planned
+                            </button>
+                          ) : null}
+                          {gameState === 'playing' ? (
+                            <button type="button" className="btn-secondary btn-host-warn" onClick={confirmAndNewRound}>
+                              <RotateCcw className="w-4 h-4" aria-hidden />
+                              New round setup
+                            </button>
+                          ) : null}
+                        </div>
+                      )}
                     </div>
                     <button
                       type="button"
