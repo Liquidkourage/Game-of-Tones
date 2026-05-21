@@ -110,6 +110,8 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   onResetCurrentRound?: () => void;
   onStartNextPlanned?: () => void;
   hasNextPlanned?: boolean;
+  /** Tracks in bingo pool for focused round (after dedupe / geometry), when songs are loaded. */
+  focusedPoolTrackCount?: number;
 }
 
 const MAX_ROUND_BUCKETS = 12;
@@ -151,6 +153,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   onResetCurrentRound,
   onStartNextPlanned,
   hasNextPlanned,
+  focusedPoolTrackCount = 0,
 }: RoundPlannerProps<TRound>) {
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [dragOverBucket, setDragOverBucket] = useState(false);
@@ -378,8 +381,10 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   const index = focusedIndex;
   const isLive = index === currentRound && gameState === 'playing';
   const isMixTarget = index === currentRound && gameState !== 'playing';
-  const minRequired = focused.songCount >= 60 ? 75 : 15;
-  const isInsufficient = focused.songCount > 0 && focused.songCount < minRequired;
+  const poolOrListed =
+    focusedPoolTrackCount > 0 ? focusedPoolTrackCount : focused.songCount;
+  const minRequired = poolOrListed >= 60 ? 75 : 15;
+  const isInsufficient = poolOrListed > 0 && poolOrListed < minRequired;
   const playlistIds = focused.playlistIds || [];
 
   return (
@@ -688,13 +693,38 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
           )}
         </div>
 
-        {focused.songCount > 0 ? (
+        {focused.songCount > 0 || focusedPoolTrackCount > 0 ? (
           <div className="round-planner-bucket__meta">
-            {playlistIds.length} playlist{playlistIds.length !== 1 ? 's' : ''} · {focused.songCount} songs
-            {isInsufficient ? (
-              <span className="round-planner-bucket__meta-warn"> · need {minRequired - focused.songCount} more</span>
-            ) : focused.songCount >= minRequired ? (
+            {playlistIds.length} playlist{playlistIds.length !== 1 ? 's' : ''}
+            {focusedPoolTrackCount > 0 ? (
+              <>
+                {' '}
+                · <strong>{focusedPoolTrackCount}</strong> in bingo pool
+              </>
+            ) : null}
+            {focused.songCount > 0 && focusedPoolTrackCount !== focused.songCount ? (
+              <span className="round-planner-bucket__meta-muted">
+                {' '}
+                · {focused.songCount} listed on Spotify (load playlists to refresh)
+              </span>
+            ) : focused.songCount > 0 && focusedPoolTrackCount === 0 ? (
+              <span> · {focused.songCount} listed on Spotify</span>
+            ) : null}
+            {focusedPoolTrackCount > 0 && isInsufficient ? (
+              <span className="round-planner-bucket__meta-warn">
+                {' '}
+                · need {minRequired - focusedPoolTrackCount} more in pool
+              </span>
+            ) : focusedPoolTrackCount >= minRequired ? (
               <span className="round-planner-bucket__meta-ok"> · ready</span>
+            ) : null}
+            {focusedPoolTrackCount > 0 &&
+            focusedPoolTrackCount < focused.songCount &&
+            playlistIds.length === 5 ? (
+              <span className="round-planner-bucket__meta-muted">
+                {' '}
+                · 5×15 uses 75 unique tracks across columns (duplicates across playlists are dropped)
+              </span>
             ) : null}
           </div>
         ) : null}

@@ -131,6 +131,8 @@ interface Playlist {
   owner?: string;
   /** Set after a full playlist-tracks fetch for this id in this session (Finalize / setlist build). */
   hasExplicitTracks?: boolean;
+  /** Unique tracks loaded this session (may be less than Spotify list total until fetched). */
+  tracksLoaded?: number;
   /** Track list loaded via server catalog token (LK-owned allowlisted playlists). */
   catalog?: boolean;
   /** User library via YouTube Music / YouTube Data API (playlist items are videos). */
@@ -1956,6 +1958,47 @@ const HostView: React.FC = () => {
     fullyLoadedPlaylistIdsRef.current.clear();
   }, []);
 
+  /** Room-level finalize applies to one playlist mix — clear when switching to another round's prep. */
+  const [finalizedMixPlaylistKey, setFinalizedMixPlaylistKey] = useState<string | null>(null);
+
+  const clearPrepMixPlaybackState = useCallback(() => {
+    setMixFinalized(false);
+    setFinalizedMixPlaylistKey(null);
+    setFinalizedOrder(null);
+    finalizedOrderRef.current = null;
+    finalizedOrderPlaylistKeyRef.current = null;
+    pendingFinalizePlaylistKeyRef.current = null;
+    lastFinalizePlaylistKeyRef.current = null;
+    lastFinalizeMixSongListRef.current = null;
+  }, []);
+
+  const applyLoadedTrackCountsFromSongs = useCallback((songs: Song[]) => {
+    const perPlaylist = new Map<string, number>();
+    const seenPerPlaylist = new Map<string, Set<string>>();
+    for (const s of songs) {
+      const pidRaw = s.sourcePlaylistId != null ? String(s.sourcePlaylistId).trim() : '';
+      if (!pidRaw || !s.id) continue;
+      const pid = canonicalPlaylistIdForMatch(pidRaw);
+      let seen = seenPerPlaylist.get(pid);
+      if (!seen) {
+        seen = new Set();
+        seenPerPlaylist.set(pid, seen);
+      }
+      if (seen.has(s.id)) continue;
+      seen.add(s.id);
+      perPlaylist.set(pid, (perPlaylist.get(pid) ?? 0) + 1);
+    }
+    const merge = (prev: Playlist[]) =>
+      prev.map((pl) => {
+        const loaded = perPlaylist.get(canonicalPlaylistIdForMatch(pl.id));
+        if (loaded == null) return pl;
+        return { ...pl, tracksLoaded: loaded };
+      });
+    setPlaylists(merge);
+    setSelectedPlaylists(merge);
+    setSelectedCatalogPlaylists(merge);
+  }, []);
+
   const disconnectSpotify = useCallback(async () => {
     try {
       writeHostSpotifyWebEnabled(false);
@@ -3279,10 +3322,13 @@ const HostView: React.FC = () => {
             cleanup();
             console.log('Mix finalized:', data);
             pendingFinalizePlaylistKeyRef.current = null;
-            finalizedOrderPlaylistKeyRef.current = selectionPlaylistKey(playlists);
-            lastFinalizePlaylistKeyRef.current = selectionPlaylistKey(playlists);
+            const fk = selectionPlaylistKey(playlists);
+            finalizedOrderPlaylistKeyRef.current = fk;
+            lastFinalizePlaylistKeyRef.current = fk;
+            setFinalizedMixPlaylistKey(fk);
             if (Array.isArray(data?.songList) && data.songList.length > 0) {
               setSongList(data.songList as Song[]);
+              applyLoadedTrackCountsFromSongs(data.songList as Song[]);
               lastFinalizeMixSongListRef.current = data.songList as Song[];
             }
             setMixFinalized(true);
@@ -4359,8 +4405,7 @@ const HostView: React.FC = () => {
       // Clear selected playlists and reset game state
       setSelectedPlaylists([]);
       setSelectedCatalogPlaylists([]);
-      setMixFinalized(false);
-      lastFinalizePlaylistKeyRef.current = null;
+      clearPrepMixPlaybackState();
       setSongList([]);
       invalidateSetlistBuildCache();
       setGameState('waiting');
@@ -4412,8 +4457,7 @@ const HostView: React.FC = () => {
     setCurrentRoundIndex(-1);
     setSelectedPlaylists([]);
     setSelectedCatalogPlaylists([]);
-    setMixFinalized(false);
-    lastFinalizePlaylistKeyRef.current = null;
+    clearPrepMixPlaybackState();
     setSongList([]);
     invalidateSetlistBuildCache();
     setGameState('waiting');
@@ -4891,6 +4935,7 @@ const HostView: React.FC = () => {
           return [];
         }
         setSongList(shuffledSongs);
+        applyLoadedTrackCountsFromSongs(shuffledSongs);
         console.log(`Setlist: ${shuffledSongs.length} songs (reused already-loaded tracks)`);
         return shuffledSongs;
       }
@@ -4945,6 +4990,7 @@ const HostView: React.FC = () => {
           return [];
         }
         setSongList(shuffledSongs);
+        applyLoadedTrackCountsFromSongs(shuffledSongs);
         console.log(`Generated ${shuffledSongs.length} shuffled songs (fetched ${toFetch.length} playlist(s), reused ${kept.length} track(s) from buffer)`);
         return shuffledSongs;
       } catch (error) {
@@ -4952,7 +4998,7 @@ const HostView: React.FC = () => {
         return [];
       }
     },
-    [mixPlaylistSelection, isSpotifyConnected, setPlaylists, setSelectedPlaylists]
+    [mixPlaylistSelection, isSpotifyConnected, setPlaylists, setSelectedPlaylists, applyLoadedTrackCountsFromSongs]
   );
 
   /** Always latest generateSongList — debounced effect must not depend on this callback (identity churn retriggers → duplicate playlist-tracks waves). */
@@ -5751,22 +5797,30 @@ const HostView: React.FC = () => {
       }
       const mixRows = resolveMixPlaylistRowsForRound(round);
       const switchingRound = roundIndex !== currentRoundIndexRef.current;
+      const hasSavedSnapshot =
+        eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled) &&
+        Boolean(round.savedMixSnapshot?.songs?.length);
+
       if (switchingRound) {
+        if (!hasSavedSnapshot) {
+          clearPrepMixPlaybackState();
+        }
         applyRoundBingoToHost(round, { restorePlaybackFromSnapshot: true });
         setCurrentRoundIndex(roundIndex);
+        setRoundBuilderFocusIndex(roundIndex);
         const playlistNames = round.playlistNames.join(', ');
         showToast(`${round.name} — mix loaded for prep (${playlistNames})`, 'success');
         addLog(`Prep select ${round.name}: ${playlistNames}`, 'info');
       } else {
         setCurrentRoundIndex(roundIndex);
+        setRoundBuilderFocusIndex(roundIndex);
       }
 
       if (
+        hasSavedSnapshot &&
         mixRows &&
         socket &&
-        roomId &&
-        eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled) &&
-        round.savedMixSnapshot?.songs?.length
+        roomId
       ) {
         void (async () => {
           setSavedRoundRoomSyncBusy(true);
@@ -5791,6 +5845,7 @@ const HostView: React.FC = () => {
       applyRoundPlaylistsToMixSelection,
       resolveMixPlaylistRowsForRound,
       applyRoundBingoToHost,
+      clearPrepMixPlaybackState,
       showToast,
       addLog,
       socket,
@@ -6357,6 +6412,34 @@ const HostView: React.FC = () => {
   /** Round builder saved this round — host screen is go-live only (no mix/finalize/PDF chrome). */
   const gameTabRoundBuilderReady = savedRoundSnapshotMakesFinalizeRedundant;
 
+  const showRoomMixFinalizedBanner = useMemo(() => {
+    if (!mixFinalized || gameTabRoundBuilderReady) return false;
+    const prepKey = selectionPlaylistKey(mixPlaylistSelection);
+    if (!prepKey || !finalizedMixPlaylistKey) return false;
+    return finalizedMixPlaylistKey === prepKey;
+  }, [mixFinalized, gameTabRoundBuilderReady, mixPlaylistSelection, finalizedMixPlaylistKey]);
+
+  const focusedRoundPoolTrackCount = useMemo(() => {
+    if (currentRoundIndex < 0 || currentRoundIndex >= eventRounds.length) return 0;
+    const round = eventRounds[currentRoundIndex];
+    if (!round?.playlistIds?.length) return 0;
+    if (
+      round.savedMixSnapshot?.songs?.length &&
+      eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled)
+    ) {
+      return round.savedMixSnapshot.songs.length;
+    }
+    const rows = resolveMixPlaylistRowsForRound(round);
+    if (!rows?.length || songList.length === 0) return 0;
+    return computeEffectiveBingoPoolPreview(rows, songList).pool.length;
+  }, [
+    currentRoundIndex,
+    eventRounds,
+    freeSpaceEnabled,
+    songList,
+    resolveMixPlaylistRowsForRound,
+  ]);
+
   const webApiQuarantineBannerText = useMemo(() => {
     if (webApiQuarantine.active !== true) return null;
     const q = webApiQuarantine;
@@ -6630,6 +6713,7 @@ const HostView: React.FC = () => {
         if (next >= 0) jumpToRound(next);
       }}
       hasNextPlanned={getNextPlannedRound() >= 0}
+      focusedPoolTrackCount={focusedRoundPoolTrackCount}
     />
   );
 
@@ -6928,10 +7012,11 @@ const HostView: React.FC = () => {
                         ) : (
                           paginatedPlaylists.map((p) => {
                           const isSelected = selectedPlaylists.some(sp => sp.id === p.id);
-                          const trackCount = Math.max(0, Number(p.tracks) || 0);
-                          // Insufficient: < 15 songs (not enough for any mode)
+                          const listedCount = Math.max(0, Number(p.tracks) || 0);
+                          const loadedCount =
+                            p.tracksLoaded != null && p.tracksLoaded > 0 ? p.tracksLoaded : null;
+                          const trackCount = loadedCount ?? listedCount;
                           const isInsufficient = trackCount < 15;
-                          // Acceptable: 15+ songs (good for 5x15 mode) and 75+ songs (good for both modes)
                           const isAcceptable = trackCount >= 15;
                           
                           return (
@@ -7044,8 +7129,23 @@ const HostView: React.FC = () => {
                                   {!p.youtubeMusic && p.hasExplicitTracks === true && (
                                     <SpotifyExplicitBadge size="sm" title="This playlist includes at least one Spotify explicit track" />
                                   )}
-                                  <span>
-                                    {trackCount} {p.youtubeMusic ? 'videos' : 'songs'}
+                                  <span title={
+                                    loadedCount != null && loadedCount !== listedCount
+                                      ? `${loadedCount} unique tracks loaded this session · ${listedCount} listed on Spotify`
+                                      : undefined
+                                  }>
+                                    {loadedCount != null && loadedCount !== listedCount ? (
+                                      <>
+                                        {loadedCount} loaded
+                                        <span style={{ opacity: 0.65, marginLeft: 4 }}>
+                                          · {listedCount} listed
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        {trackCount} {p.youtubeMusic ? 'videos' : 'songs'}
+                                      </>
+                                    )}
                                   </span>
                                 </span>
                               </span>
@@ -7581,11 +7681,18 @@ const HostView: React.FC = () => {
                       Finalize Mix
                     </button>
                   ) : null}
-                  {mixFinalized && !gameTabRoundBuilderReady ? (
+                  {showRoomMixFinalizedBanner ? (
                     <div className="mix-finalized-status">
                       <p className="status-text" style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
                         <CheckCircle2 className="w-4 h-4" style={{ color: '#00ff88' }} aria-hidden />
                         Mix finalized — cards generated for players
+                      </p>
+                    </div>
+                  ) : gameTabRoundBuilderReady ? (
+                    <div className="mix-finalized-status">
+                      <p className="status-text" style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
+                        <CheckCircle2 className="w-4 h-4" style={{ color: '#00ff88' }} aria-hidden />
+                        Round saved — ready to Start Game
                       </p>
                     </div>
                   ) : null}

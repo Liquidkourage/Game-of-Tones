@@ -282,8 +282,14 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
           {!hasPlaylists
             ? 'Drag playlists from the library'
             : snapshotReady
-              ? `Saved · ${round.savedMixSnapshot!.songs.length} tracks (${round.savedMixSnapshot!.mixGeometry})`
-              : `Not saved · need ${needTracks} tracks`}
+              ? `Saved · ${round.savedMixSnapshot!.songs.length} in bingo pool (${round.savedMixSnapshot!.mixGeometry})${
+                  round.savedMixSnapshot!.mixGeometry === '5x15'
+                    ? ' — 5 columns × 15 unique tracks (max 75), not the sum of every playlist size'
+                    : round.savedMixSnapshot!.mixGeometry === '1x75'
+                      ? ' — up to 75 tracks from the playlist'
+                      : ''
+                }`
+              : `Not saved · need ${needTracks} tracks in the bingo pool`}
         </span>
         <div className="round-bucket-settings__actions">
           {hasPlaylists && onSaveRound ? (
