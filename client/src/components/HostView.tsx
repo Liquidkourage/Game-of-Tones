@@ -7356,45 +7356,50 @@ const HostView: React.FC = () => {
             {activeTab === 'setup' && (
               <div className="setup-tab host-manager">
                 <div className="host-manager-setup-flow">
+                <div className="host-manager-grid host-manager-grid--split host-manager-grid--balanced">
+                  <div className="host-manager-col">
                 <motion.section
-                  className="host-manager-hero host-manager-section"
+                  className="host-manager-hero host-manager-hero--compact host-manager-section"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.15 }}
                 >
-                  <h2 className="host-manager-hero__title">
-                    <ListMusic className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
-                    Setup
-                  </h2>
-                  <p className="host-manager-section__lead">
-                    <strong style={{ color: '#c5dccf' }}>Connection</strong> (header) →{' '}
-                    <strong style={{ color: '#c5dccf' }}>Round builder</strong> (playlists, rounds, pattern, save/print) →{' '}
-                    <strong style={{ color: '#c5dccf' }}>Game</strong> tab (finalize &amp; start).
-                  </p>
-                  <div className="host-manager-hero__status">
-                    <span className={`host-manager-hero__chip${isSpotifyConnected ? ' host-manager-hero__chip--ok' : ''}`}>
-                      Spotify {isSpotifyConnected ? 'connected' : 'not connected'}
-                    </span>
-                    {showYoutubeMusicInConnectionModal ? (
-                      <span className="host-manager-hero__chip">YouTube Music available</span>
-                    ) : null}
-                    {currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length ? (
-                      <span className="host-manager-hero__chip host-manager-hero__chip--active">
-                        Prep: {eventRounds[currentRoundIndex].name}
-                      </span>
-                    ) : null}
-                    {(isSpotifyConnected || showYoutubeMusicInConnectionModal) && (
-                      <span className="host-manager-hero__chip">
-                        {selectedPlaylists.length} in mix · {eventRounds.length} rounds · {playlists.length} library
-                      </span>
-                    )}
-                  </div>
-                  {!(isSpotifyConnected || showYoutubeMusicInConnectionModal) ? (
-                    <p className="host-manager-hero__warn">
-                      Connect Spotify or YouTube Music via <strong>Connection</strong> before Round builder.
-                    </p>
-                  ) : null}
-                  <div className="host-manager-hero__actions">
+                  <div className="host-manager-hero__row">
+                    <div className="host-manager-hero__main">
+                      <h2 className="host-manager-hero__title">
+                        <ListMusic className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
+                        Rounds &amp; playlists
+                      </h2>
+                      <p className="host-manager-section__lead host-manager-hero__lead">
+                        <strong style={{ color: '#c5dccf' }}>Round builder</strong> for setlists and patterns, then{' '}
+                        <strong style={{ color: '#c5dccf' }}>Game</strong> to finalize and start. Spotify / device:{' '}
+                        <strong style={{ color: '#c5dccf' }}>Connection</strong> in the header.
+                      </p>
+                      <div className="host-manager-hero__status">
+                        <span className={`host-manager-hero__chip${isSpotifyConnected ? ' host-manager-hero__chip--ok' : ''}`}>
+                          Spotify {isSpotifyConnected ? 'connected' : 'not connected'}
+                        </span>
+                        {showYoutubeMusicInConnectionModal ? (
+                          <span className="host-manager-hero__chip">YouTube Music</span>
+                        ) : null}
+                        {currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length ? (
+                          <span className="host-manager-hero__chip host-manager-hero__chip--active">
+                            Prep: {eventRounds[currentRoundIndex].name}
+                          </span>
+                        ) : null}
+                        {(isSpotifyConnected || showYoutubeMusicInConnectionModal) && (
+                          <span className="host-manager-hero__chip">
+                            {selectedPlaylists.length} in mix · {eventRounds.length} rounds · {playlists.length}{' '}
+                            library
+                          </span>
+                        )}
+                      </div>
+                      {!(isSpotifyConnected || showYoutubeMusicInConnectionModal) ? (
+                        <p className="host-manager-hero__warn">
+                          Connect Spotify or YouTube in the header before Round builder.
+                        </p>
+                      ) : null}
+                    </div>
                     <button
                       type="button"
                       className="btn-primary host-manager-hero__cta"
@@ -7403,18 +7408,9 @@ const HostView: React.FC = () => {
                       <ListMusic className="w-5 h-5" aria-hidden />
                       Open Round builder
                     </button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => setShowConnectionModal(true)}
-                    >
-                      <Link2 className="w-4 h-4" aria-hidden />
-                      Connection
-                    </button>
                   </div>
                 </motion.section>
 
-                <div className="host-manager-grid host-manager-grid--split">
           <motion.section
             className="host-manager-round host-manager-section"
             initial={{ opacity: 0 }}
@@ -7469,24 +7465,23 @@ const HostView: React.FC = () => {
             )}
           </motion.section>
 
-          <motion.div
-            className="host-manager-section host-manager-section--display font-size-section"
+          <motion.section
+            className="host-manager-section host-manager-section--display host-manager-display-pane font-size-section"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3 }}
+            aria-labelledby="host-manager-display-title"
           >
-            <div className="host-manager-section__topbar">
-              <h2
-                className="host-manager-section__title host-manager-section__topbar-main"
-                style={{ display: 'flex', alignItems: 'center', gap: 10, margin: 0 }}
-              >
-                <Monitor className="w-6 h-6" style={{ color: '#00ff88' }} aria-hidden />
-                Public display
-              </h2>
-            </div>
-            <>
+            <h2
+              id="host-manager-display-title"
+              className="host-manager-section__title"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 8px' }}
+            >
+              <Monitor className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
+              Public display
+            </h2>
             <p className="host-manager-section__lead">
-              Text size and what appears on the projector or TV for players.
+              Projector / TV — text size and which screen to show.
             </p>
             <p className="host-manager-display__sub">Title &amp; artist size</p>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
@@ -7591,7 +7586,20 @@ const HostView: React.FC = () => {
                 Call List
               </button>
             </div>
-            <div className="host-manager-display__divider" style={{ marginTop: 14 }} />
+          </motion.section>
+                  </div>
+
+                  <div className="host-manager-col">
+          <motion.section
+            className="host-manager-section host-manager-section--display host-manager-display-pane host-manager-display-pane--continued font-size-section"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.35 }}
+            aria-labelledby="host-manager-display-title"
+          >
+            <p className="host-manager-section__lead host-manager-display-pane__continued-lead">
+              Titles, timing, and host playback window.
+            </p>
             <p className="host-manager-display__sub">Call list layout (projector)</p>
             <p style={{ fontSize: '0.78rem', color: '#9a9a9a', marginBottom: 10, lineHeight: 1.4, maxWidth: 520 }}>
               <strong style={{ color: '#c8c8c8' }}>5×15</strong> uses BINGO columns (B–O).{' '}
@@ -7729,8 +7737,8 @@ const HostView: React.FC = () => {
                 ) : null}
               </>
             ) : null}
-            </>
-          </motion.div>
+          </motion.section>
+                  </div>
                 </div>
                 </div>
               </div>

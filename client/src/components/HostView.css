@@ -1694,9 +1694,68 @@
 }
 
 @media (min-width: 960px) {
-  /* Event rules | Public display */
   .host-manager-grid--split {
     grid-template-columns: minmax(280px, 1fr) minmax(300px, 1.4fr);
+  }
+
+  .host-manager-grid--balanced.host-manager-grid--split {
+    grid-template-columns: 1fr 1fr;
+    align-items: stretch;
+  }
+}
+
+.host-manager-col {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.host-manager-col > .host-manager-section,
+.host-manager-col > .host-manager-display-pane {
+  flex: 1 1 auto;
+}
+
+.host-manager-hero--compact {
+  padding: 14px 16px 16px;
+}
+
+.host-manager-hero__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.host-manager-hero__main {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.host-manager-hero__lead {
+  margin-bottom: 10px;
+}
+
+.host-manager-display-pane--continued {
+  min-height: 100%;
+}
+
+.host-manager-display-pane__continued-lead {
+  margin-top: 0;
+}
+
+@media (min-width: 960px) {
+  .host-manager-display-pane--continued {
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    padding-left: 18px;
+    margin-left: -1px;
+  }
+}
+
+@media (max-width: 959px) {
+  .host-manager-display-pane--continued {
+    margin-top: 0;
   }
 }
 
