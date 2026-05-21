@@ -94,7 +94,7 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
   };
 
   return (
-    <div className="round-bucket-settings">
+    <div className="round-bucket-settings host-ui">
       <div className="round-bucket-settings__row">
         <label className="round-bucket-settings__field">
           <span className="round-bucket-settings__label">Pattern</span>
@@ -132,6 +132,7 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
         <label className="round-bucket-settings__field round-bucket-settings__field--check">
           <input
             type="checkbox"
+            className="host-control-checkbox"
             checked={freeCenter}
             onChange={(e) => onUpdateBingo(roundIndex, { freeSpaceEnabled: e.target.checked })}
           />
@@ -238,6 +239,7 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
           <label className="round-bucket-settings__field round-bucket-settings__field--check">
             <input
               type="checkbox"
+              className="host-control-checkbox"
               checked={round.customMatchAllowRotation === true}
               onChange={(e) =>
                 onUpdateBingo(roundIndex, {
@@ -252,6 +254,7 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
           <label className="round-bucket-settings__field round-bucket-settings__field--check">
             <input
               type="checkbox"
+              className="host-control-checkbox"
               checked={round.customMatchAllowMirror === true}
               onChange={(e) =>
                 onUpdateBingo(roundIndex, {
@@ -286,7 +289,7 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
           {hasPlaylists && onSaveRound ? (
             <button
               type="button"
-              className="round-bucket-settings__action"
+              className="round-bucket-settings__action round-bucket-settings__action--primary"
               disabled={saveRoundBusy}
               onClick={onSaveRound}
             >

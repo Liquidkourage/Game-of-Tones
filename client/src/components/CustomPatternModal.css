@@ -1,5 +1,11 @@
 @import './HostFormControls.css';
 
+.host-custom-pattern {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
 .host-custom-pattern__field {
   margin-bottom: 18px;
 }
@@ -53,4 +59,31 @@
   margin-top: 12px;
   color: #9aa5b1;
   font-size: 0.82rem;
+}
+
+.host-custom-pattern__grid-field {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.host-custom-pattern__grid-field .host-bingo-grid {
+  flex: 1 1 auto;
+  max-width: min(340px, 72vw);
+  width: 100%;
+  align-content: center;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (min-height: 640px) {
+  .host-submodal-panel__body .host-bingo-grid {
+    max-width: min(380px, 80vw);
+    gap: 6px;
+  }
+
+  .host-submodal-panel__body .host-bingo-cell {
+    min-height: 52px;
+  }
 }

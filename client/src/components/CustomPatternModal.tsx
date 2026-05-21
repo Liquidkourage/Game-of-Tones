@@ -101,7 +101,7 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
           />
         </div>
 
-        <div className="host-custom-pattern__field">
+        <div className="host-custom-pattern__field host-custom-pattern__grid-field">
           <div className="host-custom-pattern__grid-header">
             <span className="host-custom-pattern__field-label">Select pattern squares</span>
             <button type="button" className="btn-danger-outline host-btn--sm" onClick={handleClear}>

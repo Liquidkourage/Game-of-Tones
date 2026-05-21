@@ -14,7 +14,7 @@ const RoundBuilderPlaybackPanel: React.FC<RoundBuilderPlaybackPanelProps> = ({
   randomStarts,
   onRandomStartsChange,
 }) => (
-  <section className="round-builder-playback" aria-labelledby="round-builder-playback-title">
+  <section className="round-builder-playback host-ui" aria-labelledby="round-builder-playback-title">
     <h4 id="round-builder-playback-title" className="round-builder-playback__title">
       <Radio className="w-4 h-4" aria-hidden />
       Playback
