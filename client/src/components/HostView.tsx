@@ -18,7 +18,6 @@ import {
   Image as ImageIcon,
   ListMusic,
   List,
-  Library,
   ListPlus,
   ListChecks,
   CalendarRange,
@@ -44,6 +43,7 @@ import {
   Eraser,
   ChevronDown,
   ChevronUp,
+  HelpCircle,
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL, ENABLE_YOUTUBE_MUSIC } from '../config';
@@ -138,7 +138,7 @@ interface Playlist {
 }
 
 /** Playlists per page in the playlist-round modal (fits viewport without scrolling). */
-const PLAYLIST_LIBRARY_PAGE_SIZE = 12;
+const PLAYLIST_LIBRARY_PAGE_SIZE = 8;
 
 /** In-process Web API 429 cool-down (from GET /api/spotify/status and error bodies). */
 type WebApiQuarantineState =
@@ -803,6 +803,7 @@ const HostView: React.FC = () => {
   const showRoundManagerScrollRef = useRef(showRoundManager);
   showRoundManagerScrollRef.current = showRoundManager;
   const [showPlaylistRoundModal, setShowPlaylistRoundModal] = useState(false);
+  const [playlistRoundModalPane, setPlaylistRoundModalPane] = useState<'library' | 'rounds'>('library');
   const showPlaylistRoundModalScrollRef = useRef(showPlaylistRoundModal);
   showPlaylistRoundModalScrollRef.current = showPlaylistRoundModal;
   const [activeTab, setActiveTab] = useState<'setup' | 'play'>('setup');
@@ -1815,6 +1816,7 @@ const HostView: React.FC = () => {
 
   useEffect(() => {
     if (!showPlaylistRoundModal) return;
+    setPlaylistRoundModalPane('library');
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setShowPlaylistRoundModal(false);
     };
@@ -6479,28 +6481,47 @@ const HostView: React.FC = () => {
   );
 
   const playlistRoundBuilderBody = (
-              <div className="host-playlist-round-modal-root">
+              <div
+                className="host-playlist-round-modal-root"
+                data-mobile-pane={playlistRoundModalPane}
+              >
               {!isSpotifyConnected && showYoutubeMusicInConnectionModal ? (
-                <p style={{ fontSize: '0.84rem', color: '#b8c4cc', margin: '0 0 14px', lineHeight: 1.5, maxWidth: 720 }}>
-                  Spotify isn&apos;t connected or your library didn&apos;t load (for example rate limits). Your{' '}
-                  <strong style={{ color: '#ffb4b4' }}>YouTube Music</strong> playlists still appear in the playlist library. Use{' '}
-                  <strong style={{ color: '#fff' }}>Connection</strong> to link Spotify when you need the Spotify playlist grid and devices.
+                <p className="host-playlist-round-modal__banner" role="status">
+                  YouTube playlists work without Spotify — use <strong>Connection</strong> for the full Spotify grid.
                 </p>
               ) : null}
-              <details className="host-playlist-round-modal__hint">
-                <summary>How this works (Mix, drag to rounds, Finalize)</summary>
-                <ol className="host-playlist-round-modal__steps">
-                  <li>
-                    <strong>Mix</strong> checkbox — include that playlist when you finalize the song pool.
-                  </li>
-                  <li>
-                    <strong>Drag</strong> a row to a round bucket, or use <strong>Add to round</strong>.
-                  </li>
-                  <li>
-                    <strong>Finalize mix</strong> stays on the Manager tab after you close this window.
-                  </li>
-                </ol>
-              </details>
+              <div
+                className="host-playlist-round-modal__pane-switch"
+                role="tablist"
+                aria-label="Library or round buckets"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={playlistRoundModalPane === 'library'}
+                  className={
+                    playlistRoundModalPane === 'library'
+                      ? 'host-playlist-round-modal__pane-tab host-playlist-round-modal__pane-tab--active'
+                      : 'host-playlist-round-modal__pane-tab'
+                  }
+                  onClick={() => setPlaylistRoundModalPane('library')}
+                >
+                  Library
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={playlistRoundModalPane === 'rounds'}
+                  className={
+                    playlistRoundModalPane === 'rounds'
+                      ? 'host-playlist-round-modal__pane-tab host-playlist-round-modal__pane-tab--active'
+                      : 'host-playlist-round-modal__pane-tab'
+                  }
+                  onClick={() => setPlaylistRoundModalPane('rounds')}
+                >
+                  Rounds
+                </button>
+              </div>
             <div className="host-music-two-pane">
               <div className="host-music-two-pane__library">
           <motion.div
@@ -6509,11 +6530,7 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1 }}
                     transition={{ delay: 0.2 }}
                   >
-                    <div className="host-playlist-library-toolbar">
-                      <h3 className="host-playlist-library-toolbar__title">
-                        <Library className="w-5 h-5" aria-hidden />
-                        Playlists
-                      </h3>
+                    <div className="host-playlist-library-toolbar host-playlist-library-toolbar--single">
                       <div
                         className="host-playlist-library-toolbar__sources"
                         role="tablist"
@@ -6521,16 +6538,17 @@ const HostView: React.FC = () => {
                       >
                         {(
                           [
-                            ['spotify', `Spotify (${playlistLibrarySourceCounts.spotify})`],
-                            ['youtube', `YouTube (${playlistLibrarySourceCounts.youtube})`],
-                            ['all', `All (${playlistLibrarySourceCounts.all})`],
+                            ['spotify', 'Spotify', playlistLibrarySourceCounts.spotify],
+                            ['youtube', 'YouTube', playlistLibrarySourceCounts.youtube],
+                            ['all', 'All', playlistLibrarySourceCounts.all],
                           ] as const
-                        ).map(([id, label]) => (
+                        ).map(([id, label, count]) => (
                           <button
                             key={id}
                             type="button"
                             role="tab"
                             aria-selected={playlistLibrarySource === id}
+                            title={`${count} playlists`}
                             className={
                               playlistLibrarySource === id
                                 ? 'host-playlist-library-toolbar__tab host-playlist-library-toolbar__tab--active'
@@ -6539,55 +6557,79 @@ const HostView: React.FC = () => {
                             onClick={() => setPlaylistLibrarySource(id)}
                           >
                             {label}
+                            <span className="host-playlist-library-toolbar__tab-count" aria-hidden>
+                              {count}
+                            </span>
                           </button>
                         ))}
                       </div>
-                      {isSpotifyConnected ? (
-                        <button
-                          type="button"
-                          className="btn-secondary host-playlist-library-toolbar__refresh"
-                          disabled={spotifyPlaylistsRefreshing || playlistByLinkLoading}
-                          title="Fetch latest playlists from Spotify (uses API quota)"
-                          onClick={() => void loadPlaylists({ forceRefresh: true })}
+                      {playlistLibrarySource !== 'youtube' ? (
+                        <div
+                          role="group"
+                          aria-label="Spotify library scope"
+                          className="host-playlist-library-toolbar__scope"
                         >
-                          {spotifyPlaylistsRefreshing ? 'Syncing…' : 'Refresh Spotify'}
-                        </button>
+                          <button
+                            type="button"
+                            className={!showAllPlaylists ? 'is-active' : ''}
+                            title="Curated Game of Tones playlists"
+                            onClick={() => {
+                              setShowAllPlaylists(false);
+                              setPlaylistQuery('');
+                            }}
+                          >
+                            GoT
+                          </button>
+                          <button
+                            type="button"
+                            className={showAllPlaylists ? 'is-active' : ''}
+                            title="Your full Spotify library"
+                            onClick={() => {
+                              setShowAllPlaylists(true);
+                              setPlaylistQuery('');
+                            }}
+                          >
+                            All
+                          </button>
+                        </div>
                       ) : null}
-                    </div>
-                    <div className="host-playlist-library-toolbar host-playlist-library-toolbar--row2">
-                      <div role="group" aria-label="Playlist library scope" className="host-playlist-library-toolbar__scope">
-                        <button
-                          type="button"
-                          className={!showAllPlaylists ? 'is-active' : ''}
-                          onClick={() => {
-                            setShowAllPlaylists(false);
-                            setPlaylistQuery('');
-                          }}
-                        >
-                          GoT picks
-                        </button>
-                        <button
-                          type="button"
-                          className={showAllPlaylists ? 'is-active' : ''}
-                          onClick={() => {
-                            setShowAllPlaylists(true);
-                            setPlaylistQuery('');
-                          }}
-                        >
-                          All playlists
-                        </button>
-                      </div>
                       <input
                         type="search"
                         className="host-playlist-library-toolbar__search"
-                        placeholder="Search by name…"
+                        placeholder="Search…"
                         value={playlistQuery}
                         onChange={(e) => setPlaylistQuery(e.target.value)}
                       />
-                      <label className="host-playlist-library-toolbar__short-names">
-                        <input type="checkbox" checked={stripGoTPrefix} onChange={(e) => setStripGoTPrefix(e.target.checked)} />
-                        Short names
+                      <label
+                        className="host-playlist-library-toolbar__short-names"
+                        title="Hide GoT prefix on playlist names"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={stripGoTPrefix}
+                          onChange={(e) => setStripGoTPrefix(e.target.checked)}
+                        />
+                        <span className="host-playlist-library-toolbar__short-names-label">Short</span>
                       </label>
+                      {isSpotifyConnected ? (
+                        <button
+                          type="button"
+                          className="btn-secondary host-playlist-library-toolbar__icon-btn"
+                          disabled={spotifyPlaylistsRefreshing || playlistByLinkLoading}
+                          aria-label={
+                            spotifyPlaylistsRefreshing
+                              ? 'Syncing Spotify playlists'
+                              : 'Refresh Spotify playlists'
+                          }
+                          title="Refresh from Spotify (uses API quota)"
+                          onClick={() => void loadPlaylists({ forceRefresh: true })}
+                        >
+                          <RotateCcw
+                            className={`w-4 h-4${spotifyPlaylistsRefreshing ? ' host-playlist-library-toolbar__spin' : ''}`}
+                            aria-hidden
+                          />
+                        </button>
+                      ) : null}
                     </div>
                     {(spotifyError || spotifyListCacheInfo) && (
                       <div className="host-playlist-library-alerts">
@@ -6615,7 +6657,7 @@ const HostView: React.FC = () => {
                       </div>
                     )}
                     <details className="host-playlist-round-modal__tools">
-                      <summary>More: add by link, YouTube, official packs, export…</summary>
+                      <summary>More options…</summary>
                       <div className="host-playlist-round-modal__tools-body">
                     <HostYoutubeMusicPlaylistLibrary
                       hostSessionReady={hostAuthBootstrapDone}
@@ -6838,58 +6880,9 @@ const HostView: React.FC = () => {
                     </details>
 
                     <div className="host-playlist-library-table-zone">
-                    {libraryTablePlaylists.length > 0 ? (
-                      <div
-                        className="host-playlist-library-pagination"
-                        role="navigation"
-                        aria-label="Playlist library pages"
-                      >
-                        <span className="host-playlist-library-pagination__range">
-                          {playlistLibraryPageRangeLabel}
-                        </span>
-                        <div className="host-playlist-library-pagination__actions">
-                          <button
-                            type="button"
-                            className="btn-secondary host-playlist-library-pagination__btn"
-                            disabled={playlistLibraryPageClamped <= 0}
-                            onClick={() => setPlaylistLibraryPage((p) => Math.max(0, p - 1))}
-                          >
-                            Prev
-                          </button>
-                          <span className="host-playlist-library-pagination__page">
-                            {playlistLibraryPageClamped + 1} / {playlistLibraryPageCount}
-                          </span>
-                          <button
-                            type="button"
-                            className="btn-secondary host-playlist-library-pagination__btn"
-                            disabled={playlistLibraryPageClamped >= playlistLibraryPageCount - 1}
-                            onClick={() =>
-                              setPlaylistLibraryPage((p) =>
-                                Math.min(playlistLibraryPageCount - 1, p + 1)
-                              )
-                            }
-                          >
-                            Next
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-
                         <div className="host-playlist-library-table">
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          padding: '6px 8px 8px',
-                          fontSize: '0.68rem',
-                          color: '#888',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                          borderBottom: '1px solid rgba(255,255,255,0.08)',
-                          marginBottom: 4,
-                        }}
-                      >
+                      <div className="host-playlist-library-table-head">
+                      <div className="host-playlist-library-table-head__cols">
                         <span style={{ width: 18, textAlign: 'center' }} title="Include in game mix">Mix</span>
                         <button
                           type="button"
@@ -6922,7 +6915,7 @@ const HostView: React.FC = () => {
                           Playlist
                           {playlistSort.key === 'name' && (
                             <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
-                              {playlistSort.dir === 'asc' ? '?' : '?'}
+                              {playlistSort.dir === 'asc' ? '↑' : '↓'}
                             </span>
                           )}
                         </button>
@@ -6958,7 +6951,7 @@ const HostView: React.FC = () => {
                           Tracks
                           {playlistSort.key === 'tracks' && (
                             <span style={{ color: '#00ff88', fontSize: '0.75rem' }} aria-hidden>
-                              {playlistSort.dir === 'asc' ? '?' : '?'}
+                              {playlistSort.dir === 'asc' ? '↑' : '↓'}
                             </span>
                           )}
                         </button>
@@ -6986,6 +6979,40 @@ const HostView: React.FC = () => {
                           )}
                         </span>
                       </div>
+                      {libraryTablePlaylists.length > 0 ? (
+                        <nav
+                          className="host-playlist-library-table-head__pager"
+                          aria-label="Playlist pages"
+                          title={playlistLibraryPageRangeLabel}
+                        >
+                          <button
+                            type="button"
+                            className="host-playlist-library-table-head__pager-btn"
+                            disabled={playlistLibraryPageClamped <= 0}
+                            aria-label="Previous page"
+                            onClick={() => setPlaylistLibraryPage((p) => Math.max(0, p - 1))}
+                          >
+                            ‹
+                          </button>
+                          <span className="host-playlist-library-table-head__pager-label">
+                            {playlistLibraryPageClamped + 1}/{playlistLibraryPageCount}
+                          </span>
+                          <button
+                            type="button"
+                            className="host-playlist-library-table-head__pager-btn"
+                            disabled={playlistLibraryPageClamped >= playlistLibraryPageCount - 1}
+                            aria-label="Next page"
+                            onClick={() =>
+                              setPlaylistLibraryPage((p) =>
+                                Math.min(playlistLibraryPageCount - 1, p + 1)
+                              )
+                            }
+                          >
+                            ›
+                          </button>
+                        </nav>
+                      ) : null}
+                      </div>
                       {libraryTablePlaylists.length === 0 ? (
                           <div className="host-playlist-library-table__empty">
                             {playlistLibrarySource === 'spotify'
@@ -7004,24 +7031,17 @@ const HostView: React.FC = () => {
                           const isAcceptable = trackCount >= 15;
                           
                           return (
-                            <div 
-                              key={p.id} 
+                            <div
+                              key={p.id}
+                              className={
+                                isAcceptable
+                                  ? 'host-playlist-library-row host-playlist-library-row--ok'
+                                  : 'host-playlist-library-row'
+                              }
                               draggable
                               onDragStart={(e) => {
                                 e.dataTransfer.setData('text/plain', p.id);
                                 e.dataTransfer.effectAllowed = 'copy';
-                              }}
-                              style={{ 
-                                display: 'flex',
-                                alignItems: 'flex-start',
-                                gap: 10, 
-                                padding: '6px 8px', 
-                                borderBottom: '1px solid rgba(255,255,255,0.08)',
-                                backgroundColor: isAcceptable ? 'rgba(0, 255, 136, 0.1)' : 'transparent',
-                                border: isAcceptable ? '1px solid rgba(0, 255, 136, 0.3)' : 'none',
-                                borderRadius: isAcceptable ? '4px' : '0',
-                                margin: isAcceptable ? '2px 0' : '0',
-                                cursor: 'grab'
                               }}
                               onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
                               onMouseUp={(e) => e.currentTarget.style.cursor = 'grab'}
@@ -8107,7 +8127,7 @@ const HostView: React.FC = () => {
                       Playlists & round setlists
                     </p>
                     <p style={{ margin: 0, fontSize: '0.82rem', color: '#a8b4bc', lineHeight: 1.45, maxWidth: 560 }}>
-                      Choose playlists for the mix, assign them to rounds, and drag rows into round buckets — opens in a focused window.
+                      Check Mix, assign to rounds (drag or menu), then finalize on Manager.
                     </p>
                     <p style={{ margin: '10px 0 0', fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)' }}>
                       <strong style={{ color: '#c5dccf' }}>{selectedPlaylists.length}</strong> in mix ·{' '}
@@ -8122,7 +8142,7 @@ const HostView: React.FC = () => {
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, flexShrink: 0 }}
                   >
                     <ListMusic className="w-5 h-5" aria-hidden />
-                    Open playlist & round builder
+                    Open builder
                   </button>
                 </div>
               </>
@@ -9223,11 +9243,21 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
             aria-labelledby="host-playlist-round-modal-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="host-connection-modal__header">
-              <h2 id="host-playlist-round-modal-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <ListMusic className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
-                Playlist library & rounds
-              </h2>
+            <div className="host-connection-modal__header host-connection-modal__header--playlist-rounds">
+              <div className="host-playlist-round-modal__title-block">
+                <h2 id="host-playlist-round-modal-title">
+                  <ListMusic className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
+                  Playlists & rounds
+                </h2>
+                <button
+                  type="button"
+                  className="host-playlist-round-modal__help"
+                  aria-label="How playlists and rounds work"
+                  title="Mix: include in the song pool. Drag a row onto a round bucket or use Add to round. Finalize the mix from the Manager tab after you close this window."
+                >
+                  <HelpCircle className="w-4 h-4" aria-hidden />
+                </button>
+              </div>
               <button
                 type="button"
                 className="host-connection-modal__close"
