@@ -774,20 +774,18 @@ function poolsOrderEqual(a: string[] | null | undefined, b: string[] | null | un
   return true;
 }
 
-/**
- * How many of the 15 fixed 5-song bands in the 1×75 pool have at least one played song.
- * Pool order matches playback order after Start Game shuffle (bands = columns 1–15).
- */
-function countOccupiedBandsInPool(ids: string[] | null | undefined, playedIds: ReadonlySet<string>): number {
-  if (!ids?.length) return 0;
-  let n = 0;
-  for (let g = 0; g < 15; g++) {
-    const slice = ids.slice(g * 5, g * 5 + 5);
-    if (slice.some((id) => !id.startsWith('__placeholder_') && playedIds.has(id))) {
-      n++;
-    }
+/** Play-order columns: 5 calls stacked per column, then next column (calls 1–5 | 6–10 | 11–15 …). */
+function playOrderColumnSlices(playedOrder: readonly string[]): string[][] {
+  const ids = playedOrder.filter((id) => id && !id.startsWith('__placeholder_'));
+  const cols: string[][] = [];
+  for (let i = 0; i < ids.length; i += 5) {
+    cols.push(ids.slice(i, i + 5));
   }
-  return n;
+  return cols;
+}
+
+function countPlayOrderColumns(playedOrder: readonly string[]): number {
+  return playOrderColumnSlices(playedOrder).length;
 }
 
 /** Base pause between 1×75 carousel column steps (~5s hold + ~1s slide). */
@@ -2484,10 +2482,7 @@ const PublicDisplay: React.FC = () => {
 
   const snapCarouselAfterForwardLoop = useCallback(() => {
     if (columnCallListLayout || !animating) return;
-    const ids = oneBy75IdsRef.current;
-    if (!ids?.length) return;
-    const played = new Set(playedOrderRef.current);
-    const total = countOccupiedBandsInPool(ids, played);
+    const total = countPlayOrderColumns(playedOrderRef.current);
     if (total <= visibleCols) return;
     const idx = carouselIndexRef.current;
     if (idx < total) return;
@@ -2505,14 +2500,12 @@ const PublicDisplay: React.FC = () => {
 
     const scheduleTick = () => {
       if (cancelled) return;
-      const ids = oneBy75IdsRef.current;
-      if (!ids?.length) {
+      const total = countPlayOrderColumns(playedOrderRef.current);
+      if (total === 0) {
         carouselTickTimerRef.current = setTimeout(scheduleTick, CAROUSEL_BASE_DWELL_MS);
         return;
       }
 
-      const played = new Set(playedOrderRef.current);
-      const total = countOccupiedBandsInPool(ids, played);
       if (total <= visibleCols) {
         carouselTickTimerRef.current = setTimeout(scheduleTick, CAROUSEL_BASE_DWELL_MS);
         return;
@@ -3442,7 +3435,147 @@ const PublicDisplay: React.FC = () => {
     );
   };
 
-  // 1×75: 15 pool bands × 5 rows; carousel scrolls horizontally (visibleCols at a time, default 3).
+  const renderCarouselCallRows = (
+    group: string[],
+    gi: number,
+    idsToUse: string[],
+    isFullCardPattern: boolean,
+  ) =>
+    Array.from({ length: 5 }, (_, rowIdx) => {
+      const id = group[rowIdx];
+      if (!id) {
+        return (
+          <div
+            key={`empty-${gi}-${rowIdx}`}
+            className="call-item call-item-slot"
+            aria-hidden
+            style={{ visibility: 'hidden', pointerEvents: 'none' }}
+          />
+        );
+      }
+      const playIdx = playedOrderRef.current.indexOf(id);
+      const callNum = playIdx >= 0 ? playIdx + 1 : idsToUse.indexOf(id) + 1;
+      const meta = idMetaRef.current[id] || { name: '', artist: '' };
+      const isCurrent = gameState.currentSong?.id === id;
+      const { title, artist } = renderCallSongLines(id, meta, renderMaskedText);
+      return (
+        <div
+          key={id}
+          className={`call-item${isCurrent ? ' call-item--current' : ''}`}
+          style={{
+            display: 'flex',
+            alignItems: isFullCardPattern ? 'flex-start' : 'center',
+            gap: 8,
+            padding: '8px 10px',
+            border: '1px solid rgba(255,255,255,0.15)',
+            borderRadius: 12,
+            width: '100%',
+            maxWidth: '100%',
+            minWidth: 0,
+            boxSizing: 'border-box',
+            height: isFullCardPattern ? 'auto' : '100%',
+            overflow: 'hidden',
+            background: isCurrent ? 'rgba(0,255,136,0.12)' : 'rgba(255,255,255,0.08)',
+            boxShadow: isCurrent ? '0 0 16px rgba(0,255,136,0.35)' : 'none',
+            borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)',
+          }}
+        >
+          <div
+            className="call-number"
+            style={{
+              fontSize: '1.25rem',
+              minWidth: 32,
+              width: 32,
+              fontWeight: 900,
+              lineHeight: 1,
+              flexShrink: 0,
+            }}
+          >
+            {callNum > 0 ? callNum : ''}
+          </div>
+          <div
+            className="call-song-info"
+            style={{
+              flex: 1,
+              minWidth: 0,
+              maxWidth: '100%',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: isFullCardPattern ? 'flex-start' : 'center',
+            }}
+          >
+            <div
+              className="call-song-name"
+              style={
+                isFullCardPattern
+                  ? {
+                      fontWeight: 900,
+                      lineHeight: 1.25,
+                      fontSize: `${32 * fontSizeMultiplier}px`,
+                      color: '#ffffff',
+                      textShadow: '0 2px 6px rgba(0,0,0,0.8)',
+                      whiteSpace: 'normal',
+                      wordBreak: 'break-word',
+                      display: 'block',
+                      overflow: 'hidden',
+                    }
+                  : {
+                      fontWeight: 900,
+                      lineHeight: 1.25,
+                      fontSize: `${32 * fontSizeMultiplier}px`,
+                      color: '#ffffff',
+                      textShadow: '0 2px 6px rgba(0,0,0,0.8)',
+                      whiteSpace: 'normal',
+                      wordBreak: 'break-word',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }
+              }
+            >
+              {title}
+            </div>
+            <div
+              className="call-song-artist"
+              style={
+                isFullCardPattern
+                  ? {
+                      fontSize: `${26 * fontSizeMultiplier}px`,
+                      color: '#e0e0e0',
+                      lineHeight: 1.2,
+                      fontWeight: 800,
+                      textShadow: '0 2px 4px rgba(0,0,0,0.6)',
+                      whiteSpace: 'normal',
+                      wordBreak: 'break-word',
+                      display: 'block',
+                      overflow: 'hidden',
+                      marginTop: 6,
+                    }
+                  : {
+                      fontSize: `${26 * fontSizeMultiplier}px`,
+                      color: '#e0e0e0',
+                      lineHeight: 1.14,
+                      fontWeight: 800,
+                      textShadow: '0 2px 4px rgba(0,0,0,0.6)',
+                      whiteSpace: 'normal',
+                      wordBreak: 'break-word',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 1,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }
+              }
+            >
+              {artist}
+            </div>
+          </div>
+        </div>
+      );
+    });
+
+  // 1×75: play-order columns (5 rows ↓, then next column →); default 3 visible slots.
   const renderOneBy75GroupedColumns = () => {
     // Use state if available, otherwise fallback to ref (for fallback mode)
     const idsToUse = oneBy75Ids || oneBy75IdsRef.current;
@@ -3464,58 +3597,48 @@ const PublicDisplay: React.FC = () => {
       console.warn(`⚠️ 1x75 display: Pool has only ${idsToUse.length} songs (expected 75). This may cause songs beyond position ${idsToUse.length} to not display.`);
     }
     
-    const played = new Set(playedOrderRef.current);
+    const allPlayCols = playOrderColumnSlices(playedOrderRef.current);
+    const total = allPlayCols.length;
+    const shouldScroll = total > visibleCols;
 
-    const bandColumn = (bandIndex: number): string[] => {
-      const start = bandIndex * 5;
-      const slice = idsToUse.slice(start, start + 5);
-      return slice
-        .filter((id) => !id.startsWith('__placeholder_') && played.has(id))
-        .sort((a, b) => {
-          const sa = playedSeqRef.current[a] ?? Number.MAX_SAFE_INTEGER;
-          const sb = playedSeqRef.current[b] ?? Number.MAX_SAFE_INTEGER;
-          if (sa !== sb) return sa - sb;
-          return slice.indexOf(a) - slice.indexOf(b);
-        });
-    };
+    const staticSlots: string[][] = Array.from({ length: visibleCols }, (_, colIdx) => allPlayCols[colIdx] || []);
 
-    const occupiedBands = countOccupiedBandsInPool(idsToUse, played);
-    const shouldScroll = occupiedBands > visibleCols;
-
-    const populatedGroups: string[][] = Array.from({ length: 15 }, (_, g) => bandColumn(g)).filter(
-      (g) => g.length > 0,
-    );
-    const total = populatedGroups.length;
-
-    // Fixed viewport columns (default 3): band 1 | band 2 | band 3 — empty slots until that band has calls.
-    const fixedSlotColumns: string[][] = Array.from({ length: visibleCols }, (_, colIdx) => bandColumn(colIdx));
-
-    const extendedGroups: string[][] = shouldScroll
-      ? [...populatedGroups, ...populatedGroups.slice(0, visibleCols)]
-      : fixedSlotColumns;
+    const scrollGroups: string[][] = shouldScroll
+      ? [...allPlayCols, ...allPlayCols.slice(0, visibleCols)]
+      : staticSlots;
 
     const maxSlideIndex = shouldScroll ? total + visibleCols - 1 : 0;
     const effectiveIndex = shouldScroll ? Math.min(carouselIndex, maxSlideIndex) : 0;
     const colWidthPx = viewportWidth > 0 ? Math.floor(viewportWidth / visibleCols) : 0;
-    const trackWidthPx = shouldScroll
-      ? extendedGroups.length * colWidthPx
-      : colWidthPx > 0
-        ? visibleCols * colWidthPx
-        : 0;
+    const trackWidthPx = shouldScroll && colWidthPx > 0 ? scrollGroups.length * colWidthPx : 0;
     const xPx = colWidthPx > 0 ? -(effectiveIndex * colWidthPx) : 0;
 
     const colStyle: React.CSSProperties | undefined =
       colWidthPx > 0
-        ? {
-            flex: `0 0 ${colWidthPx}px`,
-            width: colWidthPx,
-            maxWidth: colWidthPx,
-            minWidth: 0,
-          }
+        ? { flex: `0 0 ${colWidthPx}px`, width: colWidthPx, maxWidth: colWidthPx, minWidth: 0 }
         : undefined;
 
-    const trackStyle: React.CSSProperties | undefined =
-      trackWidthPx > 0 ? { width: trackWidthPx, minWidth: trackWidthPx } : { width: '100%' };
+    if (!shouldScroll) {
+      return (
+        <div className="call-list-content">
+          <div
+            ref={carouselViewportRef}
+            className="call-carousel-viewport call-carousel-viewport--static-grid"
+            style={{
+              gridTemplateColumns: `repeat(${visibleCols}, minmax(0, 1fr))`,
+            }}
+          >
+            {staticSlots.map((group, gi) => (
+              <div key={`slot-${gi}`} className="call-carousel-col-static">
+                <div className="call-carousel-col-inner">
+                  {renderCarouselCallRows(group, gi, idsToUse, isFullCardPattern)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="call-list-content">
@@ -3526,142 +3649,17 @@ const PublicDisplay: React.FC = () => {
         >
           <motion.div
             className="call-carousel-track"
-            style={trackStyle}
-            animate={{ x: colWidthPx > 0 && shouldScroll ? xPx : 0 }}
+            style={trackWidthPx > 0 ? { width: trackWidthPx, minWidth: trackWidthPx } : undefined}
+            animate={{ x: colWidthPx > 0 ? xPx : 0 }}
             transition={{ duration: animating && shouldScroll ? 1 : 0, ease: 'easeInOut' }}
             onAnimationComplete={() => {
               if (shouldScroll) snapCarouselAfterForwardLoop();
             }}
           >
-            {extendedGroups.map((group, gi) => (
-              <div key={gi} className="call-carousel-col" style={colStyle}>
+            {scrollGroups.map((group, gi) => (
+              <div key={`scroll-${gi}`} className="call-carousel-col" style={colStyle}>
                 <div className="call-carousel-col-inner">
-                  {Array.from({ length: 5 }, (_, rowIdx) => {
-                    const id = group[rowIdx];
-                    if (!id) {
-                      return (
-                        <div
-                          key={`empty-${gi}-${rowIdx}`}
-                          className="call-item call-item-slot"
-                          aria-hidden
-                          style={{ visibility: 'hidden', pointerEvents: 'none' }}
-                        />
-                      );
-                    }
-                    const poolIdx = idsToUse.indexOf(id);
-                    const meta = idMetaRef.current[id] || { name: '', artist: '' };
-                    const isCurrent = gameState.currentSong?.id === id;
-                    const { title, artist } = renderCallSongLines(id, meta, renderMaskedText);
-                    return (
-                      <motion.div
-                        key={id}
-                        className="call-item"
-                        initial={false}
-                        animate={{
-                          backgroundColor: isCurrent ? 'rgba(0,255,136,0.12)' : 'rgba(255,255,255,0.05)',
-                          boxShadow: isCurrent ? '0 0 16px rgba(0,255,136,0.35)' : 'none',
-                          borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)'
-                        }}
-                        transition={{ duration: 0.25 }}
-                        style={{
-                          display: 'flex',
-                          alignItems: isFullCardPattern ? 'flex-start' : 'center',
-                          gap: 8,
-                          padding: '8px 10px',
-                          border: '1px solid rgba(255,255,255,0.15)',
-                          borderRadius: 12,
-                          width: '100%',
-                          maxWidth: '100%',
-                          minWidth: 0,
-                          boxSizing: 'border-box',
-                          height: isFullCardPattern ? 'auto' : '100%',
-                          overflow: 'hidden',
-                          background: 'rgba(255,255,255,0.08)'
-                        }}
-                      >
-                        <div className="call-number" style={{ fontSize: '1.25rem', minWidth: 32, width: 32, fontWeight: 900, lineHeight: 1, flexShrink: 0 }}>{poolIdx >= 0 ? poolIdx + 1 : ''}</div>
-                        <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: isFullCardPattern ? 'flex-start' : 'center' }}>
-                          <AnimatePresence mode="popLayout" initial={false}>
-                            <motion.div
-                              key={(meta?.name || '')}
-                              initial={{ opacity: 0, y: 6, scale: 0.98 }}
-                              animate={{ opacity: 1, y: 0, scale: 1 }}
-                              exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                              transition={{ duration: 0.25 }}
-                              className="call-song-name"
-                              style={
-                                isFullCardPattern
-                                  ? {
-                                      fontWeight: 900,
-                                      lineHeight: 1.25,
-                                      fontSize: `${32 * fontSizeMultiplier}px`,
-                                      color: '#ffffff',
-                                      textShadow: '0 2px 6px rgba(0,0,0,0.8)',
-                                      whiteSpace: 'normal',
-                                      wordBreak: 'break-word',
-                                      display: 'block',
-                                      overflow: 'visible'
-                                    }
-                                  : {
-                                      fontWeight: 900,
-                                      lineHeight: 1.25,
-                                      fontSize: `${32 * fontSizeMultiplier}px`,
-                                      color: '#ffffff',
-                                      textShadow: '0 2px 6px rgba(0,0,0,0.8)',
-                                      whiteSpace: 'normal',
-                                      wordBreak: 'keep-all',
-                                      display: '-webkit-box',
-                                      WebkitLineClamp: 2,
-                                      WebkitBoxOrient: 'vertical',
-                                      overflow: 'hidden'
-                                    }
-                              }
-                            >
-                              {title}
-                            </motion.div>
-                            <motion.div
-                              key={(meta?.artist || '')}
-                              initial={{ opacity: 0, y: 4 }}
-                              animate={{ opacity: 0.85, y: 0 }}
-                              exit={{ opacity: 0, y: -4 }}
-                              transition={{ duration: 0.25 }}
-                              className="call-song-artist"
-                              style={
-                                isFullCardPattern
-                                  ? {
-                                      fontSize: `${26 * fontSizeMultiplier}px`,
-                                      color: '#e0e0e0',
-                                      lineHeight: 1.2,
-                                      fontWeight: 800,
-                                      textShadow: '0 2px 4px rgba(0,0,0,0.6)',
-                                      whiteSpace: 'normal',
-                                      wordBreak: 'break-word',
-                                      display: 'block',
-                                      overflow: 'visible',
-                                      marginTop: 6
-                                    }
-                                  : {
-                                      fontSize: `${26 * fontSizeMultiplier}px`,
-                                      color: '#e0e0e0',
-                                      lineHeight: 1.14,
-                                      fontWeight: 800,
-                                      textShadow: '0 2px 4px rgba(0,0,0,0.6)',
-                                      whiteSpace: 'normal',
-                                      wordBreak: 'break-word',
-                                      display: '-webkit-box',
-                                      WebkitLineClamp: 1,
-                                      WebkitBoxOrient: 'vertical',
-                                      overflow: 'hidden'
-                                    }
-                              }
-                            >
-                              {artist}
-                            </motion.div>
-                          </AnimatePresence>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
+                  {renderCarouselCallRows(group, gi, idsToUse, isFullCardPattern)}
                 </div>
               </div>
             ))}
@@ -5289,6 +5287,7 @@ const PublicDisplay: React.FC = () => {
             {/* Tall Call List */}
             <motion.div 
               className="call-list-display"
+              data-call-cols={columnCallListLayout ? 5 : visibleCols}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}

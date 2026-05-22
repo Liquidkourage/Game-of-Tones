@@ -303,8 +303,30 @@ body {
 .App .bottom-row { height: 100%; min-height: 0; }
 .App .call-col, .App .left-col { height: 100%; min-height: 0; }
 
-.App .call-list-display { position: relative; height: 100%; }
-.App .call-list-display::after {
+.App .call-list-display { position: relative; height: 100%; width: 100%; min-width: 0; }
+/* Column guide lines — must match visible call columns (1×75 carousel default = 3, not 5). */
+.App .call-list-display[data-call-cols="3"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background:
+    linear-gradient(to right, rgba(255,255,255,0.22), rgba(255,255,255,0.22)) calc(100% / 3) 0 / 1px 100% no-repeat,
+    linear-gradient(to right, rgba(255,255,255,0.18), rgba(255,255,255,0.18)) calc(200% / 3) 0 / 1px 100% no-repeat;
+}
+.App .call-list-display[data-call-cols="4"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background:
+    linear-gradient(to right, rgba(255,255,255,0.22), rgba(255,255,255,0.22)) 25% 0 / 1px 100% no-repeat,
+    linear-gradient(to right, rgba(255,255,255,0.18), rgba(255,255,255,0.18)) 50% 0 / 1px 100% no-repeat,
+    linear-gradient(to right, rgba(255,255,255,0.18), rgba(255,255,255,0.18)) 75% 0 / 1px 100% no-repeat;
+}
+.App .call-list-display[data-call-cols="5"]::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -329,6 +351,23 @@ body {
   min-width: 0;
 }
 
+/* ≤3 play columns on screen: equal-width grid (no flex % bugs). */
+.App .call-carousel-viewport--static-grid {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.App .call-carousel-col-static {
+  min-width: 0;
+  max-width: 100%;
+  height: 100%;
+  padding: 0 4px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
 .App .call-carousel-track {
   display: flex;
   height: 100%;
@@ -336,11 +375,8 @@ body {
   will-change: transform;
 }
 
-/* Each column = 1/N of the viewport (default 3 → three narrow call columns) */
 .App .call-carousel-col {
-  flex: 0 0 calc(100% / var(--carousel-visible-cols, 3));
-  width: calc(100% / var(--carousel-visible-cols, 3));
-  max-width: calc(100% / var(--carousel-visible-cols, 3));
+  flex: 0 0 auto;
   min-width: 0;
   height: 100%;
   padding: 0 4px;
@@ -379,6 +415,10 @@ body {
 .App .call-carousel-col-inner .call-song-artist {
   max-width: 100%;
   overflow: hidden;
+}
+
+.App .call-carousel-col-inner > .call-item:hover {
+  transform: none;
 }
 
 .App .bingo-card-header.center { justify-content: center; }
