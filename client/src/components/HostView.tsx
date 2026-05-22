@@ -2381,7 +2381,10 @@ const HostView: React.FC = () => {
           finalizedOrderPlaylistKeyRef.current =
             pendingFinalizePlaylistKeyRef.current ?? mixPlaylistSelectionKeyRef.current;
           pendingFinalizePlaylistKeyRef.current = null;
-          addLog(`Finalized order received (${arr.length} tracks)`, 'info');
+          addLog(
+            `Playback order (${arr.length} tracks, #1: ${arr[0]?.name || '?'})`,
+            'info',
+          );
         }
       } catch (e) {
         console.warn('Failed to parse finalized order:', e);
@@ -8449,7 +8452,9 @@ const HostView: React.FC = () => {
                     }}>
                       <ListChecks className="w-5 h-5" aria-hidden />
                       {mixFinalized
-                        ? `Finalized Playlist (${finalizedPoolSongs.length} songs)`
+                        ? gameState === 'playing'
+                          ? `Playback order (${finalizedPoolSongs.length} songs)`
+                          : `Finalized playlist (${finalizedPoolSongs.length} songs)`
                         : `Bingo pool (${finalizedPoolSongs.length} songs)`}
                     </h3>
                     <p style={{

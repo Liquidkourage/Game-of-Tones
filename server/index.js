@@ -4498,19 +4498,7 @@ io.on('connection', (socket) => {
           }
         }
 
-        // Emit game started AFTER columns are ready so display can receive them immediately
-        io.to(roomId).emit('game-started', {
-          roomId,
-          snippetLength,
-          deviceId,
-          pattern: room.pattern,
-          customMask: Array.from(room.customPattern || []),
-          patternComposite: patternCompositeForClient(room),
-          ...patternExtrasForClient(room),
-        });
-        
-        // Sync projector call-list layout (AFTER game-started). Skip-regen can leave stale 5×15 cache;
-        // drop it when this round is 1×75 so the display gets oneby75-pool and enables the carousel.
+        // Sync projector + host pool to shuffled playback order before game-started (host may request-finalized-order immediately).
         const hasFiveBy15Start =
           Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5;
         const hasOneBy75Start =
@@ -4526,6 +4514,16 @@ io.on('connection', (socket) => {
         }
 
         emitPublicDisplayPoolLayout(roomId, room);
+
+        io.to(roomId).emit('game-started', {
+          roomId,
+          snippetLength,
+          deviceId,
+          pattern: room.pattern,
+          customMask: Array.from(room.customPattern || []),
+          patternComposite: patternCompositeForClient(room),
+          ...patternExtrasForClient(room),
+        });
 
         routineServerLog('🎵 Starting automatic playback (sequential 1→N through pool)...');
         await startAutomaticPlayback(roomId, playlists, deviceId, showDeck);
@@ -5425,6 +5423,7 @@ function applyShowPoolOrderToRoom(room, roomId, showDeck) {
   if (!room || !Array.isArray(showDeck) || showDeck.length === 0) return;
   room.finalizedSongOrder = showDeck.map((s) => ({ ...s }));
   room.finalizedSongs = showDeck.map((s) => ({ ...s }));
+  room.playlistSongs = showDeck.map((s) => ({ ...s }));
   const n = showDeck.length;
   const hasFiveBy15 =
     Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5;
@@ -5456,8 +5455,9 @@ function syncRoomPlaybackOrderAfterStartGame(room, roomId, playbackOrderSongs) {
 function buildFinalizedOrderPayloadFromRoom(room) {
   if (!room || !room.mixFinalized) return [];
 
-  if (Array.isArray(room.playlistSongs) && room.playlistSongs.length > 0) {
-    return room.playlistSongs.map((s) => ({
+  const fos = room.finalizedSongOrder;
+  if (Array.isArray(fos) && fos.length > 0 && typeof fos[0] === 'object') {
+    return fos.map((s) => ({
       id: s.id,
       name: s.name || '',
       artist: s.artist || '',
@@ -5468,7 +5468,17 @@ function buildFinalizedOrderPayloadFromRoom(room) {
     }));
   }
 
-  const fos = room.finalizedSongOrder;
+  if (Array.isArray(room.playlistSongs) && room.playlistSongs.length > 0 && room.gameState === 'playing') {
+    return room.playlistSongs.map((s) => ({
+      id: s.id,
+      name: s.name || '',
+      artist: s.artist || '',
+      explicit: s.explicit === true,
+      youtubeMusic: s.youtubeMusic === true,
+      sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
+      sourcePlaylistName: typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
+    }));
+  }
   const meta5 = room.fiveByFifteenMeta;
 
   if (

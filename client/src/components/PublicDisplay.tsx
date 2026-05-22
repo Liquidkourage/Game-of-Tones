@@ -3466,21 +3466,33 @@ const PublicDisplay: React.FC = () => {
     
     const played = new Set(playedOrderRef.current);
 
-    const groups: string[][] = Array.from({ length: 15 }, (_, g) => {
-      const start = g * 5;
+    const bandColumn = (bandIndex: number): string[] => {
+      const start = bandIndex * 5;
       const slice = idsToUse.slice(start, start + 5);
-      const playedInGroup = slice.filter((id) => !id.startsWith('__placeholder_') && played.has(id));
-      return playedInGroup.sort((a, b) => {
-        const sa = playedSeqRef.current[a] ?? Number.MAX_SAFE_INTEGER;
-        const sb = playedSeqRef.current[b] ?? Number.MAX_SAFE_INTEGER;
-        if (sa !== sb) return sa - sb;
-        return slice.indexOf(a) - slice.indexOf(b);
-      });
-    });
-    const visibleGroups = groups.filter((g) => g.length > 0);
-    const total = visibleGroups.length;
-    const shouldScroll = total > visibleCols;
-    const extendedGroups: string[][] = shouldScroll ? [...visibleGroups, ...visibleGroups.slice(0, visibleCols)] : visibleGroups;
+      return slice
+        .filter((id) => !id.startsWith('__placeholder_') && played.has(id))
+        .sort((a, b) => {
+          const sa = playedSeqRef.current[a] ?? Number.MAX_SAFE_INTEGER;
+          const sb = playedSeqRef.current[b] ?? Number.MAX_SAFE_INTEGER;
+          if (sa !== sb) return sa - sb;
+          return slice.indexOf(a) - slice.indexOf(b);
+        });
+    };
+
+    const occupiedBands = countOccupiedBandsInPool(idsToUse, played);
+    const shouldScroll = occupiedBands > visibleCols;
+
+    const populatedGroups: string[][] = Array.from({ length: 15 }, (_, g) => bandColumn(g)).filter(
+      (g) => g.length > 0,
+    );
+    const total = populatedGroups.length;
+
+    // Fixed viewport columns (default 3): band 1 | band 2 | band 3 — empty slots until that band has calls.
+    const fixedSlotColumns: string[][] = Array.from({ length: visibleCols }, (_, colIdx) => bandColumn(colIdx));
+
+    const extendedGroups: string[][] = shouldScroll
+      ? [...populatedGroups, ...populatedGroups.slice(0, visibleCols)]
+      : fixedSlotColumns;
 
     const maxSlideIndex = shouldScroll ? total + visibleCols - 1 : 0;
     const effectiveIndex = shouldScroll ? Math.min(carouselIndex, maxSlideIndex) : 0;
@@ -3502,7 +3514,18 @@ const PublicDisplay: React.FC = () => {
             {extendedGroups.map((group, gi) => (
               <div key={gi} className="call-carousel-col">
                 <div className="call-carousel-col-inner">
-                  {group.map((id) => {
+                  {Array.from({ length: 5 }, (_, rowIdx) => {
+                    const id = group[rowIdx];
+                    if (!id) {
+                      return (
+                        <div
+                          key={`empty-${gi}-${rowIdx}`}
+                          className="call-item call-item-slot"
+                          aria-hidden
+                          style={{ visibility: 'hidden', pointerEvents: 'none' }}
+                        />
+                      );
+                    }
                     const poolIdx = idsToUse.indexOf(id);
                     const meta = idMetaRef.current[id] || { name: '', artist: '' };
                     const isCurrent = gameState.currentSong?.id === id;
