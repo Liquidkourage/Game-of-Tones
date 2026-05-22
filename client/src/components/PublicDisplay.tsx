@@ -3326,7 +3326,7 @@ const PublicDisplay: React.FC = () => {
                       transition={{ duration: 0.25 }}
                       style={{
                         display: 'flex',
-                        alignItems: isFullCardPattern ? 'flex-start' : 'center',
+                        alignItems: 'flex-start',
                         gap: 10,
                         padding: '10px 12px',
                         border: '1px solid rgba(255,255,255,0.15)',
@@ -3407,34 +3407,17 @@ const PublicDisplay: React.FC = () => {
                             exit={{ opacity: 0, y: -4 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-artist"
-                            style={
-                              isFullCardPattern
-                                ? {
-                                    fontSize: `${26 * displayFontScale}px`,
-                                    color: '#e0e0e0',
-                                    lineHeight: 1.2,
-                                    fontWeight: 800,
-                                    textShadow: '0 2px 4px rgba(0,0,0,0.6)',
-                                    whiteSpace: 'normal',
-                                    wordBreak: 'break-word',
-                                    display: 'block',
-                                    overflow: 'visible',
-                                    marginTop: 6
-                                  }
-                                : {
-                                    fontSize: `${26 * displayFontScale}px`,
-                                    color: '#e0e0e0',
-                                    lineHeight: 1.14,
-                                    fontWeight: 800,
-                                    textShadow: '0 2px 4px rgba(0,0,0,0.6)',
-                                    whiteSpace: 'normal',
-                                    wordBreak: 'keep-all',
-                                    display: '-webkit-box',
-                                    WebkitLineClamp: 2,
-                                    WebkitBoxOrient: 'vertical',
-                                    overflow: 'hidden'
-                                  }
-                            }
+                            style={{
+                              fontSize: `${26 * displayFontScale}px`,
+                              color: '#e0e0e0',
+                              lineHeight: 1.15,
+                              fontWeight: 800,
+                              textShadow: '0 2px 4px rgba(0,0,0,0.6)',
+                              marginTop: 4,
+                              ...(isFullCardPattern
+                                ? { display: 'block', overflow: 'visible', whiteSpace: 'normal', wordBreak: 'break-word' }
+                                : {}),
+                            }}
                           >
                             {artist}
                           </motion.div>
@@ -3483,7 +3466,7 @@ const PublicDisplay: React.FC = () => {
           className={`call-item${isCurrent ? ' call-item--current' : ''}`}
           style={{
             display: 'flex',
-            alignItems: isFullCardPattern ? 'flex-start' : 'center',
+            alignItems: 'flex-start',
             gap: 8,
             padding: '8px 10px',
             border: '1px solid rgba(255,255,255,0.15)',
@@ -3521,71 +3504,32 @@ const PublicDisplay: React.FC = () => {
               overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
-              justifyContent: isFullCardPattern ? 'flex-start' : 'center',
+              justifyContent: 'flex-start',
             }}
           >
             <div
               className="call-song-name"
-              style={
-                isFullCardPattern
-                  ? {
-                      fontWeight: 900,
-                      lineHeight: 1.25,
-                      fontSize: `${32 * displayFontScale}px`,
-                      color: '#ffffff',
-                      textShadow: '0 2px 6px rgba(0,0,0,0.8)',
-                      whiteSpace: 'normal',
-                      wordBreak: 'break-word',
-                      display: 'block',
-                      overflow: 'hidden',
-                    }
-                  : {
-                      fontWeight: 900,
-                      lineHeight: 1.25,
-                      fontSize: `${32 * displayFontScale}px`,
-                      color: '#ffffff',
-                      textShadow: '0 2px 6px rgba(0,0,0,0.8)',
-                      whiteSpace: 'normal',
-                      wordBreak: 'break-word',
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                    }
-              }
+              style={{
+                fontWeight: 900,
+                lineHeight: 1.2,
+                fontSize: `${32 * displayFontScale}px`,
+                color: '#ffffff',
+                textShadow: '0 2px 6px rgba(0,0,0,0.8)',
+                marginTop: isFullCardPattern ? 0 : undefined,
+              }}
             >
               {title}
             </div>
             <div
               className="call-song-artist"
-              style={
-                isFullCardPattern
-                  ? {
-                      fontSize: `${26 * displayFontScale}px`,
-                      color: '#e0e0e0',
-                      lineHeight: 1.2,
-                      fontWeight: 800,
-                      textShadow: '0 2px 4px rgba(0,0,0,0.6)',
-                      whiteSpace: 'normal',
-                      wordBreak: 'break-word',
-                      display: 'block',
-                      overflow: 'hidden',
-                      marginTop: 6,
-                    }
-                  : {
-                      fontSize: `${26 * displayFontScale}px`,
-                      color: '#e0e0e0',
-                      lineHeight: 1.14,
-                      fontWeight: 800,
-                      textShadow: '0 2px 4px rgba(0,0,0,0.6)',
-                      whiteSpace: 'normal',
-                      wordBreak: 'break-word',
-                      display: '-webkit-box',
-                      WebkitLineClamp: 1,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                    }
-              }
+              style={{
+                fontSize: `${26 * displayFontScale}px`,
+                color: '#e0e0e0',
+                lineHeight: 1.15,
+                fontWeight: 800,
+                textShadow: '0 2px 4px rgba(0,0,0,0.6)',
+                marginTop: 4,
+              }}
             >
               {artist}
             </div>

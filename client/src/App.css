@@ -414,7 +414,40 @@ body {
 .App .call-carousel-col-inner .call-song-name,
 .App .call-carousel-col-inner .call-song-artist {
   max-width: 100%;
+}
+
+/* Titles: up to 2 lines; artists may wrap to multiple lines (never single-line ellipsis only). */
+.App .public-display .call-song-name {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  text-overflow: unset;
   overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.App .public-display .call-song-artist {
+  white-space: normal !important;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  text-overflow: unset;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.App .public-display .call-carousel-col-inner .call-item {
+  align-items: flex-start;
+}
+
+.App .public-display .call-carousel-col-inner .call-song-info {
+  overflow: hidden;
+  justify-content: flex-start;
 }
 
 .App .call-carousel-col-inner > .call-item:hover {
