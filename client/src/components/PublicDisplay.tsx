@@ -4712,28 +4712,7 @@ const PublicDisplay: React.FC = () => {
               </div>
             ) : null}
 
-              <div
-                className="public-display-rules-overlay__panel"
-                style={{
-                  position: 'relative',
-                  zIndex: 1,
-                  textAlign: 'center',
-                  maxWidth: 'min(98vw, 1600px)',
-                  width: '100%',
-                  margin: '0 auto',
-                  flex: '1 1 auto',
-                  minHeight: 0,
-                  maxHeight: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'flex-start',
-                  overflowX: 'hidden',
-                  overflowY: 'auto',
-                  WebkitOverflowScrolling: 'touch',
-                  paddingTop: 'clamp(2px, 0.6vmin, 8px)',
-                  paddingBottom: 'clamp(20px, 4.2vmin, 52px)',
-                }}
-              >
+              <div className="public-display-rules-overlay__panel">
               {(() => {
                 const vb = venueBranding;
                 const logoUrl = vb?.logoUrl;
@@ -4850,32 +4829,14 @@ const PublicDisplay: React.FC = () => {
                 );
               })()}
               <motion.div
-                initial={{ opacity: 0, y: 16 }}
+                className="public-display-rules-overlay__header"
+                initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.45, ease: 'easeOut' }}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 'clamp(8px, 1.85vmin, 22px)',
-                  marginBottom: 'clamp(0.45rem, 1.25vmin, 1rem)',
-                  flexWrap: 'wrap',
-                  flexShrink: 0,
-                }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
               >
-                <Sparkles
-                  style={{
-                    width: 'clamp(28px, 5vmin, 60px)',
-                    height: 'clamp(28px, 5vmin, 60px)',
-                    color: '#7bffd9',
-                    filter: 'drop-shadow(0 0 18px rgba(0,255,200,0.65))',
-                  }}
-                  strokeWidth={2.2}
-                  aria-hidden
-                />
                 <div
+                  className="public-display-rules-overlay__title-sub"
                   style={{
-                    fontSize: 'clamp(2.35rem, min(9.5vmin, 8vh), 7rem)',
                     fontWeight: 1000,
                     letterSpacing: '0.03em',
                     backgroundImage:
@@ -4883,22 +4844,12 @@ const PublicDisplay: React.FC = () => {
                     WebkitBackgroundClip: 'text',
                     backgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
-                    filter: 'drop-shadow(0 6px 28px rgba(0,255,170,0.45))',
+                    filter: 'drop-shadow(0 4px 18px rgba(0,255,170,0.35))',
                     lineHeight: 1.05,
                   }}
                 >
-                  How to Play
+                  How to Play — Game of Tones
                 </div>
-                <Sparkles
-                  style={{
-                    width: 'clamp(28px, 5vmin, 60px)',
-                    height: 'clamp(28px, 5vmin, 60px)',
-                    color: '#7bffd9',
-                    filter: 'drop-shadow(0 0 18px rgba(0,255,200,0.65))',
-                  }}
-                  strokeWidth={2.2}
-                  aria-hidden
-                />
               </motion.div>
 
               <div className="public-display-rules-steps">
@@ -4910,8 +4861,8 @@ const PublicDisplay: React.FC = () => {
                     title: 'Join & get your card',
                     body: (
                       <>
-                        Join this room on your phone. You get a <strong style={{ color: '#e8fff8' }}>5×5</strong> card built
-                        from tonight&apos;s <strong style={{ color: '#e8fff8' }}>75-song</strong> playlist — same pool for everyone.
+                        Join this room on your phone. Your <strong style={{ color: '#e8fff8' }}>5×5</strong> card uses
+                        tonight&apos;s <strong style={{ color: '#e8fff8' }}>75 songs</strong> — same pool for everyone.
                       </>
                     ),
                   },
@@ -4922,9 +4873,9 @@ const PublicDisplay: React.FC = () => {
                     title: 'Listen & mark',
                     body: (
                       <>
-                        Clips play about <strong style={{ color: '#e8fff8' }}>{gameState.snippetLength || 30}s</strong>.
-                        The projector lists calls in <strong style={{ color: '#e8fff8' }}>play order (#1, #2…)</strong>. Tap a square
-                        only when you&apos;re sure that song played.
+                        ~<strong style={{ color: '#e8fff8' }}>{gameState.snippetLength || 30}s</strong> clips. Projector shows
+                        calls <strong style={{ color: '#e8fff8' }}>#1, #2…</strong> in play order. Mark only songs you&apos;re sure
+                        you heard.
                       </>
                     ),
                   },
@@ -4935,128 +4886,52 @@ const PublicDisplay: React.FC = () => {
                     title: 'Pattern & BINGO',
                     body: (
                       <>
-                        Win with: <strong style={{ color: '#e8fff8' }}>{getPatternName()}</strong>. Every marked square must be a
-                        song that already played. Hold <strong style={{ color: '#e8fff8' }}>BINGO</strong> — the host verifies on
-                        your device before the round stops.
+                        Pattern: <strong style={{ color: '#e8fff8' }}>{getPatternName()}</strong>. All marks must be songs already
+                        called. Hold <strong style={{ color: '#e8fff8' }}>BINGO</strong> — host verifies on your phone.
                       </>
                     ),
                   },
                 ].map((step, i) => (
                   <motion.div
                     key={step.n}
-                    initial={{ opacity: 0, x: -24 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.4, delay: 0.06 + i * 0.07, ease: 'easeOut' }}
+                    className="public-display-rules-step"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.35, delay: 0.05 + i * 0.06, ease: 'easeOut' }}
                     style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'auto 1fr',
-                      alignItems: 'start',
-                      gap: 'clamp(10px, 2vmin, 22px)',
-                      padding: 'clamp(14px, 2.6vmin, 28px) clamp(16px, 3vmin, 32px)',
-                      borderRadius: 'clamp(16px, 2.5vmin, 28px)',
                       background: step.accent,
-                      border: `max(2px, 0.25vmin) solid ${step.borderGlow}`,
-                      boxShadow:
-                        '0 0 0 1px rgba(255,255,255,0.08) inset, 0 22px 56px rgba(0,0,0,0.4), 0 0 60px rgba(0,255,200,0.12)',
-                      textAlign: 'left',
+                      border: `2px solid ${step.borderGlow}`,
+                      boxShadow: '0 0 0 1px rgba(255,255,255,0.08) inset, 0 12px 32px rgba(0,0,0,0.35)',
                     }}
                   >
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        minWidth: 'clamp(52px, 9.5vmin, 96px)',
-                        width: 'clamp(52px, 9.5vmin, 96px)',
-                        borderRadius: 'clamp(14px, 2.3vmin, 22px)',
-                        background: 'linear-gradient(160deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.04) 100%)',
-                        border: '1px solid rgba(255,255,255,0.25)',
-                        fontSize: 'clamp(1.5rem, 4.8vmin, 3.1rem)',
-                        fontWeight: 1000,
-                        color: '#fff',
-                        textShadow: '0 4px 20px rgba(0,0,0,0.4)',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {step.n}
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div
-                        style={{
-                          fontSize: 'clamp(1.38rem, 4.05vmin, 2.65rem)',
-                          fontWeight: 900,
-                          color: '#f2fffb',
-                          marginBottom: 'clamp(0.3rem, 0.85vmin, 0.65rem)',
-                          lineHeight: 1.14,
-                          textShadow: '0 2px 16px rgba(0,0,0,0.35)',
-                        }}
-                      >
-                        {step.title}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 'clamp(1.12rem, 3.15vmin, 2.05rem)',
-                          lineHeight: 1.52,
-                          color: 'rgba(250,255,253,0.96)',
-                          fontWeight: 600,
-                        }}
-                      >
-                        {step.body}
-                      </div>
-                    </div>
+                    <div className="public-display-rules-step__badge">{step.n}</div>
+                    <h3 className="public-display-rules-step__title">{step.title}</h3>
+                    <p className="public-display-rules-step__body">{step.body}</p>
                   </motion.div>
                 ))}
               </div>
 
-              <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.35 }}
+              <motion.p
+                className="public-display-rules-overlay__tip"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.35, delay: 0.28 }}
                 style={{
-                  padding: 'clamp(12px, 2.2vmin, 24px) clamp(14px, 2.8vmin, 30px)',
-                  borderRadius: 'clamp(16px, 2.3vmin, 24px)',
                   background:
                     'linear-gradient(135deg, rgba(255,160,60,0.22) 0%, rgba(80,40,10,0.35) 100%)',
-                  border: 'max(2px, 0.2vmin) solid rgba(255,200,120,0.45)',
-                  boxShadow: '0 12px 40px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
-                  fontSize: 'clamp(1.08rem, 2.85vmin, 1.85rem)',
-                  lineHeight: 1.45,
+                  border: '2px solid rgba(255,200,120,0.45)',
                   color: 'rgba(255,245,220,0.98)',
                   fontWeight: 800,
                   textAlign: 'center',
-                  maxWidth: 'min(92vw, 1100px)',
-                  margin: '0 auto clamp(0.45rem, 1.2vmin, 1rem)',
-                  flexShrink: 0,
                 }}
               >
-                Only daub songs you heard in this round. The host is the final judge on every BINGO claim.
-              </motion.div>
+                Only daub songs you heard this round. The host decides every BINGO.
+              </motion.p>
 
-              <div
-                style={{
-                  fontSize: 'clamp(1.38rem, 3.85vmin, 2.65rem)',
-                  textAlign: 'center',
-                  fontWeight: 800,
-                  color: 'rgba(255,255,255,0.94)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 'clamp(10px, 1.85vmin, 20px)',
-                  flexWrap: 'wrap',
-                  textShadow: '0 2px 20px rgba(0,255,170,0.25)',
-                  flexShrink: 0,
-                  paddingBottom: 'clamp(4px, 1vmin, 12px)',
-                }}
-              >
-                <Music
-                  style={{ width: 'clamp(28px, 5vmin, 52px)', height: 'clamp(28px, 5vmin, 52px)', opacity: 0.95 }}
-                  aria-hidden
-                />
-                Good luck & have fun
-                <Music
-                  style={{ width: 'clamp(28px, 5vmin, 52px)', height: 'clamp(28px, 5vmin, 52px)', opacity: 0.95 }}
-                  aria-hidden
-                />
+              <div className="public-display-rules-overlay__footer">
+                <Music style={{ width: 22, height: 22, opacity: 0.95 }} aria-hidden />
+                Good luck &amp; have fun
+                <Music style={{ width: 22, height: 22, opacity: 0.95 }} aria-hidden />
               </div>
             </div>
           </motion.div>

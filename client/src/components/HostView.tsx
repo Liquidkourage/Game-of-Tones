@@ -6696,7 +6696,19 @@ const HostView: React.FC = () => {
     freeSpaceEnabled,
     gameState,
     currentSong,
-  ])
+  ]);
+
+  /** Tracks already played in pool order (for bingo pool checkmarks). */
+  const bingoPoolPlayedSongIds = useMemo(() => {
+    const set = new Set<string>();
+    const curId = currentSong?.id;
+    const curIdx = curId ? finalizedPoolSongs.findIndex((s) => s.id === curId) : -1;
+    if (curIdx > 0) {
+      for (let i = 0; i < curIdx; i++) set.add(finalizedPoolSongs[i].id);
+    }
+    for (const p of playedInOrder) set.add(p.id);
+    return set;
+  }, [finalizedPoolSongs, currentSong?.id, playedInOrder]);
 
   const bingoPoolUiShowsPreFinalizeSubset =
     !mixFinalized && songList.length > 0 && finalizedPoolSongs.length < songList.length;
@@ -8629,6 +8641,7 @@ const HostView: React.FC = () => {
                     <BingoPoolList
                       songs={finalizedPoolSongs}
                       currentSongId={currentSong?.id}
+                      playedSongIds={bingoPoolPlayedSongIds}
                       getDisplaySongTitle={getDisplaySongTitle}
                       customSongTitles={customSongTitles}
                       onEditSongTitle={handleEditSongTitle}

@@ -421,21 +421,104 @@ body {
   transform: none;
 }
 
-/* Game of Tones rules overlay — three steps on one screen when space allows */
-.App .public-display-rules-steps {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: clamp(10px, 1.8vmin, 20px);
-  margin-bottom: clamp(0.45rem, 1.25vmin, 1rem);
-  flex: 0 1 auto;
-  min-height: 0;
-  width: 100%;
+/* Game of Tones rules overlay — fit one screen without clipping */
+.App .public-display-rules-overlay__panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(6px, 1.2vmin, 14px);
+  overflow: hidden !important;
+  padding-bottom: clamp(8px, 1.5vmin, 16px) !important;
 }
 
-@media (min-width: 960px) and (min-height: 600px) {
+.App .public-display-rules-overlay__header {
+  flex-shrink: 0;
+}
+
+.App .public-display-rules-overlay__title-main {
+  font-size: clamp(1.6rem, min(5.5vmin, 4.5vh), 3.2rem) !important;
+}
+
+.App .public-display-rules-overlay__title-sub {
+  font-size: clamp(1.35rem, min(4.2vmin, 3.6vh), 2.4rem) !important;
+  margin-bottom: clamp(0.2rem, 0.6vmin, 0.5rem) !important;
+}
+
+.App .public-display-rules-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(8px, 1.4vmin, 16px);
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-width: min(98vw, 1500px);
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.App .public-display-rules-step {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(6px, 1vmin, 12px);
+  padding: clamp(10px, 1.6vmin, 18px) clamp(12px, 1.8vmin, 20px);
+  border-radius: clamp(12px, 1.8vmin, 20px);
+  text-align: left;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.App .public-display-rules-step__badge {
+  align-self: flex-start;
+  min-width: clamp(40px, 6.5vmin, 64px);
+  height: clamp(40px, 6.5vmin, 64px);
+  border-radius: clamp(10px, 1.5vmin, 16px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(1.2rem, 3.2vmin, 2rem);
+  font-weight: 1000;
+  color: #fff;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.04) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.App .public-display-rules-step__title {
+  font-size: clamp(1rem, 2.4vmin, 1.45rem) !important;
+  font-weight: 900;
+  color: #f2fffb;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.App .public-display-rules-step__body {
+  font-size: clamp(0.82rem, 1.65vmin, 1.12rem) !important;
+  line-height: 1.4 !important;
+  color: rgba(250, 255, 253, 0.96);
+  font-weight: 600;
+  margin: 0;
+  overflow: hidden;
+}
+
+.App .public-display-rules-overlay__tip {
+  flex-shrink: 0;
+  padding: clamp(8px, 1.4vmin, 14px) clamp(12px, 2vmin, 22px);
+  border-radius: clamp(12px, 1.6vmin, 18px);
+  font-size: clamp(0.78rem, 1.55vmin, 1.05rem) !important;
+  line-height: 1.35 !important;
+  max-width: min(98vw, 1200px);
+  margin: 0 !important;
+}
+
+.App .public-display-rules-overlay__footer {
+  flex-shrink: 0;
+  font-size: clamp(0.95rem, 2vmin, 1.35rem) !important;
+  padding-bottom: 0 !important;
+}
+
+@media (max-width: 900px), (max-height: 620px) {
   .App .public-display-rules-steps {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    align-items: stretch;
+    grid-template-columns: 1fr;
+    overflow-y: auto;
   }
 }
 

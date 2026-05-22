@@ -3352,10 +3352,43 @@
   border-left-color: #ff6b6b;
 }
 
+.host-view .bingo-pool-list__status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  flex-shrink: 0;
+}
+
+.host-view .bingo-pool-list__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.host-view .bingo-pool-list__status-icon--now {
+  color: #00ffa3;
+  filter: drop-shadow(0 0 6px rgba(0, 255, 163, 0.55));
+}
+
+.host-view .bingo-pool-list__status-icon--played {
+  color: rgba(0, 255, 163, 0.75);
+  opacity: 0.9;
+}
+
+.host-view .bingo-pool-list__row--played {
+  opacity: 0.88;
+}
+
+.host-view .bingo-pool-list__row--played .bingo-pool-list__title {
+  color: rgba(255, 255, 255, 0.82);
+}
+
 .host-view .bingo-pool-list__num {
   color: #00ff88;
   font-weight: 800;
-  min-width: 32px;
+  min-width: 28px;
   font-size: 0.82rem;
   font-variant-numeric: tabular-nums;
 }
