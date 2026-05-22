@@ -3,6 +3,10 @@
  * Prefer wrapping + optional smaller type over ellipsis (line-clamp).
  */
 
+/** Title size on call cards; artist is intentionally smaller for hierarchy. */
+export const PUBLIC_DISPLAY_CALL_TITLE_BASE_PX = 32;
+export const PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX = 22;
+
 export type CallCardTypography = {
   /** Scale factor applied to base title/artist sizes (1 = host display % only). */
   textScale: number;

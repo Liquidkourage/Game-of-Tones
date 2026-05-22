@@ -104,6 +104,7 @@ import './HostView.css';
 import './HostFormControls.css';
 
 const MAX_CUSTOM_PATTERN_NAME_EMIT = 80;
+const SPOTIFY_SKIP_AUTO_CONNECT_KEY = 'spotify_skip_auto_connect';
 
 function positionsKeyForMatch(arr: readonly string[]): string {
   return [...arr].sort().join(',');
@@ -883,6 +884,7 @@ const HostView: React.FC = () => {
   const showYoutubeMusicInConnectionModal = ENABLE_YOUTUBE_MUSIC || ytMusicServerConfigured;
   const [spotifyInitialCheckDone, setSpotifyInitialCheckDone] = useState(false);
   const initialConnectionPromptRef = useRef(false);
+  const spotifyAutoConnectAttemptedRef = useRef(false);
   const prevSpotifyConnectedRef = useRef<boolean | undefined>(undefined);
   /** Google-linked host profile from server (`users` table via /api/auth/me). */
   const [hostAccount, setHostAccount] = useState<{
@@ -2025,6 +2027,11 @@ const HostView: React.FC = () => {
         }
         if (ac.signal.aborted) return;
         if (ok) {
+          try {
+            sessionStorage.removeItem(SPOTIFY_SKIP_AUTO_CONNECT_KEY);
+          } catch {
+            /* ignore */
+          }
           setIsSpotifyConnected(true);
           setIsSpotifyConnecting(false);
           await loadPlaylists({ forceRefresh: true });
@@ -2138,6 +2145,11 @@ const HostView: React.FC = () => {
 
   const disconnectSpotify = useCallback(async () => {
     try {
+      try {
+        sessionStorage.setItem(SPOTIFY_SKIP_AUTO_CONNECT_KEY, '1');
+      } catch {
+        /* ignore */
+      }
       writeHostSpotifyWebEnabled(false);
       if (catalogPacksLoadDebounceRef.current != null) {
         clearTimeout(catalogPacksLoadDebounceRef.current);
@@ -3190,6 +3202,11 @@ const HostView: React.FC = () => {
         }
 
         if (data.connected) {
+          try {
+            sessionStorage.removeItem(SPOTIFY_SKIP_AUTO_CONNECT_KEY);
+          } catch {
+            /* ignore */
+          }
           console.log('Spotify already connected, loading playlists...');
           console.log('?? Status API returned connected=true, setting state to true');
           setIsSpotifyConnected(true);
@@ -3234,7 +3251,9 @@ const HostView: React.FC = () => {
     };
   }, [hostAuthBootstrapDone, roomId, hostPlayerName, clientId]);
 
-
+  useEffect(() => {
+    spotifyAutoConnectAttemptedRef.current = false;
+  }, [roomId]);
 
   const connectSpotify = useCallback(async () => {
     try {
@@ -3260,6 +3279,11 @@ const HostView: React.FC = () => {
         setWebApiQuarantine(normalizeWebApiQuarantine(statusData.webApiQuarantine));
       }
       if (statusData.connected) {
+        try {
+          sessionStorage.removeItem(SPOTIFY_SKIP_AUTO_CONNECT_KEY);
+        } catch {
+          /* ignore */
+        }
         console.log('Spotify already connected, loading playlists...');
         setIsSpotifyConnected(true);
         setIsSpotifyConnecting(false);
@@ -3359,8 +3383,35 @@ const HostView: React.FC = () => {
     }
   }, [roomId, searchParams, hostPlayerName]);
 
+  const connectSpotifyRef = useRef(connectSpotify);
+  useEffect(() => {
+    connectSpotifyRef.current = connectSpotify;
+  }, [connectSpotify]);
 
-
+  /** On host room load: start Spotify OAuth when tokens are missing (once per visit unless host disconnected). */
+  useEffect(() => {
+    if (!hostAuthBootstrapDone || !spotifyInitialCheckDone || !roomId) return;
+    if (isSpotifyConnected || isSpotifyConnecting) return;
+    if (showYoutubeMusicInConnectionModal && !mixNeedsHostSpotify) return;
+    try {
+      if (new URLSearchParams(window.location.search).get('spotify') === 'connected') return;
+      if (sessionStorage.getItem(SPOTIFY_SKIP_AUTO_CONNECT_KEY) === '1') return;
+    } catch {
+      /* ignore */
+    }
+    if (spotifyAutoConnectAttemptedRef.current) return;
+    spotifyAutoConnectAttemptedRef.current = true;
+    initialConnectionPromptRef.current = true;
+    void connectSpotifyRef.current();
+  }, [
+    hostAuthBootstrapDone,
+    spotifyInitialCheckDone,
+    roomId,
+    isSpotifyConnected,
+    isSpotifyConnecting,
+    showYoutubeMusicInConnectionModal,
+    mixNeedsHostSpotify,
+  ]);
 
   /** True while finalizeMix is loading tracks or waiting on socket — blocks overlapping finalize (shared finalize generation ref) and debounced setlist rebuilds. */
   const finalizeMixInFlightRef = useRef(false);

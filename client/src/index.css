@@ -1653,7 +1653,7 @@ code {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   grid-template-rows: repeat(5, 1fr);
-  gap: clamp(2px, 0.4vmin, 8px);
+  gap: 0;
   /* Size the grid to fit its container while maintaining square aspect ratio */
   /* Use the smaller dimension to ensure it fits */
   width: min(100%, 100%);
@@ -1940,7 +1940,7 @@ code {
   .display-header { padding: 24px 32px; }
   .bingo-card-display { padding: 16px; }
   .call-list-display { padding: 8px; }
-  .bingo-grid { gap: clamp(4px, 0.35vmin, 12px); }
+  .bingo-grid { gap: 0; }
 }
 
 @media (max-width: 768px) {

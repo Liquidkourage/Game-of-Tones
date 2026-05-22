@@ -30,6 +30,8 @@ import {
   computeBingoCellTextScale,
   computeCallCardTypography,
   maxHeightEm,
+  PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX,
+  PUBLIC_DISPLAY_CALL_TITLE_BASE_PX,
 } from '../utils/publicDisplayCallCardText';
 import type { PatternCompositeSpec, PatternCompositeClause } from '../patternDefinitions';
 import {
@@ -58,7 +60,8 @@ const UNREVEALED_LETTER_BOX_STYLE: React.CSSProperties = {
   verticalAlign: '0.02em',
   margin: '0 0.035em',
   boxSizing: 'border-box',
-  background: 'rgba(255, 255, 255, 0.1)',
+  background: 'rgba(255, 255, 255, 0.05)',
+  borderColor: 'rgba(255, 255, 255, 0.42)',
 };
 
 /** Non-row-major spread so full-card pulses don't read as a single sweep. */
@@ -2777,7 +2780,8 @@ const PublicDisplay: React.FC = () => {
     kind: 'title' | 'artist',
     fullCard: boolean,
   ): React.CSSProperties => {
-    const basePx = kind === 'title' ? 32 : 26;
+    const basePx =
+      kind === 'title' ? PUBLIC_DISPLAY_CALL_TITLE_BASE_PX : PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX;
     const lh = kind === 'title' ? 1.2 : 1.15;
     const lines = kind === 'title' ? typo.titleMaxLines : typo.artistMaxLines;
     const fontSize = Math.round(basePx * displayFontScale * typo.textScale);
@@ -3813,7 +3817,7 @@ const PublicDisplay: React.FC = () => {
                   display: 'grid',
                   gridTemplateColumns: 'repeat(5, 1fr)',
                   gridTemplateRows: 'repeat(5, 1fr)',
-                  gap: 'clamp(5px, 0.9vmin, 14px)',
+                  gap: 0,
                   /*
                     As large as possible: limited by column width and viewport height.
                   */
@@ -3855,7 +3859,7 @@ const PublicDisplay: React.FC = () => {
                     <div
                       key={pos}
                       style={{
-                        borderRadius: 'clamp(6px, 0.9vmin, 12px)',
+                        borderRadius: 0,
                         padding: 'clamp(2px, 0.35vmin, 6px)',
                         display: 'flex',
                         flexDirection: 'column',
@@ -3864,12 +3868,10 @@ const PublicDisplay: React.FC = () => {
                         textAlign: 'center',
                         overflow: 'hidden',
                         background: sq?.marked ? 'rgba(0,255,136,0.14)' : 'rgba(255,255,255,0.05)',
-                        border: isPattern
-                          ? 'max(4px, 0.5vmin) solid rgba(0,255,220,0.98)'
-                          : 'max(2px, 0.25vmin) solid rgba(255,255,255,0.14)',
+                        border: 'none',
                         boxShadow: isPattern
-                          ? '0 0 40px rgba(0,255,180,0.45), inset 0 0 20px rgba(0,255,200,0.08)'
-                          : undefined,
+                          ? 'inset 0 0 0 max(3px, 0.45vmin) rgba(0,255,220,0.98), 0 0 40px rgba(0,255,180,0.45), inset 0 0 20px rgba(0,255,200,0.08)'
+                          : 'inset 0 0 0 max(1px, 0.2vmin) rgba(255,255,255,0.18)',
                         minHeight: 0,
                         minWidth: 0,
                       }}
