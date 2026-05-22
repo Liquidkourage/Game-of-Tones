@@ -989,7 +989,9 @@ const PublicDisplay: React.FC = () => {
   const columnCallListLayout = useMemo((): boolean => {
     if (callListMode === 'grouped') return false;
     if (callListMode === '5x15') return true;
-    return !!(fiveBy15Columns || searchParams.get('mode') === '5x15');
+    if (searchParams.get('mode') === '5x15') return true;
+    // Auto: require five real playlist columns — stale partial state must not disable the 1×75 carousel
+    return !!(fiveBy15Columns && fiveBy15Columns.length === 5);
   }, [callListMode, fiveBy15Columns, searchParams]);
   /** Columns to render for 5×15 layout: server map or 5×15-chunks of flat 1×75 pool. */
   const layoutFiveColumns = useMemo((): string[][] | null => {
@@ -1559,7 +1561,8 @@ const PublicDisplay: React.FC = () => {
 
     // Receive 1x75 pool ordering (ids only)
     newSocket.on('oneby75-pool', (data: any) => {
-      if (Array.isArray(data?.ids) && data.ids.length === 75) {
+      const n = Array.isArray(data?.ids) ? data.ids.length : 0;
+      if (n >= 25 && n <= 75) {
         setOneBy75Ids(data.ids);
         oneBy75IdsRef.current = data.ids;
         // Do not clear playedOrder; preserve any songs already recorded

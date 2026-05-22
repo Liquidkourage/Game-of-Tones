@@ -1074,11 +1074,14 @@ class SpotifyService {
   }
 
   // Get playlist tracks (paginated via GET /playlists/{id}/items)
-  async getPlaylistTracks(playlistId, playlistInfo = null) {
+  async getPlaylistTracks(playlistId, playlistInfo = null, options = {}) {
     await this._ensureCanCallWebApi('getPlaylistTracks');
 
     const cacheKey = String(playlistId);
     const now = Date.now();
+    if (options && options.forceRefresh === true) {
+      this._playlistTracksCache.delete(cacheKey);
+    }
 
     let snapshotId = null;
     try {

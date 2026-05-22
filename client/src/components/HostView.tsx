@@ -1135,6 +1135,7 @@ const HostView: React.FC = () => {
     if (!readHostSpotifyWebEnabled()) return;
     try {
       const response = await hostFetch(`${API_BASE || ''}/api/spotify/status?_=${Date.now()}`);
+      if (!response.ok) return;
       const data = (await response.json()) as { webApiQuarantine?: unknown };
       if (data.webApiQuarantine != null) {
         setWebApiQuarantine(normalizeWebApiQuarantine(data.webApiQuarantine));
@@ -2143,6 +2144,21 @@ const HostView: React.FC = () => {
     }
   }, [selectedDevice, syncSelectedPlaybackDeviceToRoom]);
 
+  /** Room socket handlers — refs so io() is not recreated when loadPlaylists / mix selection changes. */
+  const loadPlaylistsSocketRef = useRef(loadPlaylists);
+  loadPlaylistsSocketRef.current = loadPlaylists;
+  const loadDevicesSocketRef = useRef(loadDevices);
+  loadDevicesSocketRef.current = loadDevices;
+  const disconnectSpotifySocketRef = useRef(disconnectSpotify);
+  disconnectSpotifySocketRef.current = disconnectSpotify;
+  const invalidateSetlistBuildCacheSocketRef = useRef(invalidateSetlistBuildCache);
+  invalidateSetlistBuildCacheSocketRef.current = invalidateSetlistBuildCache;
+  const showHostAckNotificationSocketRef = useRef(showHostAckNotification);
+  showHostAckNotificationSocketRef.current = showHostAckNotification;
+  const navigateSocketRef = useRef(navigate);
+  navigateSocketRef.current = navigate;
+  const spotifyStatusCheckInFlightRef = useRef(false);
+
   useEffect(() => {
     if (!hostAuthBootstrapDone) return;
 
@@ -2527,7 +2543,7 @@ const HostView: React.FC = () => {
       finalizedOrderPlaylistKeyRef.current = null;
       pendingFinalizePlaylistKeyRef.current = null;
       lastFinalizeMixSongListRef.current = null;
-      invalidateSetlistBuildCache();
+      invalidateSetlistBuildCacheSocketRef.current();
       
       // Preserve round winners history
       if (data.roundWinners) {
@@ -2544,7 +2560,7 @@ const HostView: React.FC = () => {
       setRoundComplete(null);
       setGameState('ended');
       setIsPlaying(false);
-      void disconnectSpotify();
+      void disconnectSpotifySocketRef.current();
       if (data.roundWinners) {
         setRoundWinners(data.roundWinners);
       }
@@ -2790,10 +2806,10 @@ const HostView: React.FC = () => {
             const now = Date.now();
             if (now - lastLoadPlaylistsOnSocketReconnectAtRef.current > 90_000) {
               lastLoadPlaylistsOnSocketReconnectAtRef.current = now;
-              await loadPlaylists();
+              await loadPlaylistsSocketRef.current();
             }
             await new Promise((r) => setTimeout(r, 800));
-            await loadDevices();
+            await loadDevicesSocketRef.current();
             await new Promise((r) => setTimeout(r, 800));
             await fetchPlaybackState();
           } else {
@@ -2819,7 +2835,7 @@ const HostView: React.FC = () => {
       setMixFinalized(false);
       lastFinalizePlaylistKeyRef.current = null;
       setSongList([]);
-      invalidateSetlistBuildCache();
+      invalidateSetlistBuildCacheSocketRef.current();
       console.log('?? Game reset');
     });
 
@@ -2853,7 +2869,7 @@ const HostView: React.FC = () => {
         typeof data?.count30s === 'number' && data?.max != null
           ? `\n\n(Approx. ${data.count30s} Spotify API calls in 30s; automatic disconnect threshold is ${data.max}.)`
           : '';
-      showHostAckNotification({
+      showHostAckNotificationSocketRef.current({
         id: 'server-spotify-failsafe',
         title: 'Spotify disconnected (API protection)',
         variant: 'error',
@@ -2968,7 +2984,7 @@ const HostView: React.FC = () => {
         } catch {
           /* ignore */
         }
-        navigate(`/?mode=host&auth_error=host_not_approved`);
+        navigateSocketRef.current(`/?mode=host&auth_error=host_not_approved`);
         return;
       }
       if (data.reason === 'invalid_host_secret') {
@@ -2991,7 +3007,7 @@ const HostView: React.FC = () => {
         } catch {
           /* ignore */
         }
-        navigate(`/?mode=host&prefillRoom=${encodeURIComponent(roomId || '')}`);
+        navigateSocketRef.current(`/?mode=host&prefillRoom=${encodeURIComponent(roomId || '')}`);
         return;
       }
       if (data.reason === 'not_room_owner') {
@@ -3000,7 +3016,7 @@ const HostView: React.FC = () => {
         } catch {
           /* ignore */
         }
-        navigate(`/?mode=host&prefillRoom=${encodeURIComponent(roomId || '')}`);
+        navigateSocketRef.current(`/?mode=host&prefillRoom=${encodeURIComponent(roomId || '')}`);
         return;
       }
       /** Room already has an active host socket (other tab, other device, or race). Never send the host UI to /player — that was confusing and looked like a random redirect. */
@@ -3010,7 +3026,7 @@ const HostView: React.FC = () => {
         } catch {
           /* ignore */
         }
-        navigate(`/?mode=host&prefillRoom=${encodeURIComponent(roomId || '')}`);
+        navigateSocketRef.current(`/?mode=host&prefillRoom=${encodeURIComponent(roomId || '')}`);
         return;
       }
       try {
@@ -3019,9 +3035,9 @@ const HostView: React.FC = () => {
         /* ignore */
       }
       if (roomId) {
-        navigate(`/?mode=host&prefillRoom=${encodeURIComponent(roomId || '')}`);
+        navigateSocketRef.current(`/?mode=host&prefillRoom=${encodeURIComponent(roomId || '')}`);
       } else {
-        navigate('/?mode=host');
+        navigateSocketRef.current('/?mode=host');
       }
     });
 
@@ -3058,6 +3074,8 @@ const HostView: React.FC = () => {
 
     // Check Spotify status and load playlists if connected
     const checkSpotifyStatus = async () => {
+      if (spotifyStatusCheckInFlightRef.current) return;
+      spotifyStatusCheckInFlightRef.current = true;
       try {
         // Returning from Spotify OAuth: dedicated effect handles status + loads (with delay/retry). Avoid duplicate API calls and false "not connected".
         try {
@@ -3071,6 +3089,12 @@ const HostView: React.FC = () => {
         // Add cache-busting parameter to force fresh request
         const cacheBuster = Date.now();
         const response = await hostFetch(`${API_BASE || ''}/api/spotify/status?_=${cacheBuster}`);
+        if (!response.ok) {
+          console.warn('Spotify status HTTP', response.status);
+          setIsSpotifyConnected(false);
+          setIsSpotifyConnecting(false);
+          return;
+        }
         const data = (await response.json()) as { connected?: boolean; webApiQuarantine?: unknown };
         writeHostSpotifyWebEnabled(data.connected === true);
         if (data.webApiQuarantine != null) {
@@ -3082,10 +3106,10 @@ const HostView: React.FC = () => {
           console.log('?? Status API returned connected=true, setting state to true');
           setIsSpotifyConnected(true);
           setIsSpotifyConnecting(false);
-          await loadPlaylists();
+          await loadPlaylistsSocketRef.current();
           // Stagger Web API calls (dev-mode Spotify quota is tight; parallel /devices + /playlists + /player hurts 429s)
           await new Promise((r) => setTimeout(r, 800));
-          await loadDevices(); // Load devices when connected
+          await loadDevicesSocketRef.current(); // Load devices when connected
           
           // Sync volume when Spotify connects to ensure it matches interface
           setTimeout(() => {
@@ -3102,6 +3126,7 @@ const HostView: React.FC = () => {
         setIsSpotifyConnected(false);
         setIsSpotifyConnecting(false);
       } finally {
+        spotifyStatusCheckInFlightRef.current = false;
         setSpotifyInitialCheckDone(true);
       }
     };
@@ -3113,23 +3138,13 @@ const HostView: React.FC = () => {
       newSocket.off('connect', onConnectJoin);
       if (playerCardsRefreshTimer) clearTimeout(playerCardsRefreshTimer);
       newSocket.close();
+      spotifyStatusCheckInFlightRef.current = false;
       // Clear any pending volume timeout
       if (volumeTimeout) {
         clearTimeout(volumeTimeout);
       }
     };
-  }, [
-    hostAuthBootstrapDone,
-    roomId,
-    loadPlaylists,
-    loadDevices,
-    hostPlayerName,
-    clientId,
-    navigate,
-    disconnectSpotify,
-    showHostAckNotification,
-    invalidateSetlistBuildCache,
-  ]);
+  }, [hostAuthBootstrapDone, roomId, hostPlayerName, clientId]);
 
 
 
@@ -5123,6 +5138,7 @@ const HostView: React.FC = () => {
           const playlist = toFetch[i];
           const qs = new URLSearchParams();
           if (playlist.name) qs.set('playlistName', playlist.name);
+          if (opts?.force) qs.set('refresh', '1');
           const q = qs.toString();
           const catalog = playlist.catalog === true;
           const yt = playlist.youtubeMusic === true;
@@ -7045,7 +7061,12 @@ const HostView: React.FC = () => {
                               : 'Refresh Spotify playlists'
                           }
                           title="Refresh from Spotify (uses API quota)"
-                          onClick={() => void loadPlaylists({ forceRefresh: true })}
+                          onClick={() => {
+                            invalidateSetlistBuildCache();
+                            void loadPlaylists({ forceRefresh: true }).then(() => {
+                              void generateSongListRef.current({ force: true, reason: 'selection' });
+                            });
+                          }}
                         >
                           <RotateCcw
                             className={`w-4 h-4${spotifyPlaylistsRefreshing ? ' host-playlist-library-toolbar__spin' : ''}`}
@@ -7070,7 +7091,10 @@ const HostView: React.FC = () => {
                               style={{ fontSize: '0.82rem' }}
                               onClick={() => {
                                 setSpotifyError(null);
-                                void loadPlaylists({ forceRefresh: true });
+                                invalidateSetlistBuildCache();
+                                void loadPlaylists({ forceRefresh: true }).then(() => {
+                                  void generateSongListRef.current({ force: true, reason: 'selection' });
+                                });
                               }}
                             >
                               Retry

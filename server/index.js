@@ -4408,21 +4408,19 @@ io.on('connection', (socket) => {
           ...patternExtrasForClient(room),
         });
         
-        // Emit fiveby15 columns if computed during card generation (AFTER game-started so display can sync)
-        if (room.fiveByFifteenColumnsIds) {
-          routineServerLog(`📊 Emitting fiveby15-pool with ${room.fiveByFifteenColumnsIds.length} columns`);
-          io.to(roomId).emit('fiveby15-pool', { 
-            columns: room.fiveByFifteenColumnsIds, 
-            names: room.fiveByFifteenPlaylistNames || [],
-            meta: room.fiveByFifteenMeta || {}
-          });
-          // Build id->column map for clients
-          const idToCol = {};
-          room.fiveByFifteenColumnsIds.forEach((colIds, colIdx) => {
-            colIds.forEach((id) => { idToCol[id] = colIdx; });
-          });
-          io.to(roomId).emit('fiveby15-map', { idToColumn: idToCol });
+        // Sync projector call-list layout (AFTER game-started). Skip-regen can leave stale 5×15 cache;
+        // drop it when this round is 1×75 so the display gets oneby75-pool and enables the carousel.
+        const hasFiveBy15Start =
+          Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5;
+        const hasOneBy75Start =
+          Array.isArray(room.oneBySeventyFivePool) && room.oneBySeventyFivePool.length > 0;
+        if (hasOneBy75Start && !hasFiveBy15Start) {
+          room.fiveByFifteenColumnsIds = null;
+          room.fiveByFifteenColumns = null;
+          room.fiveByFifteenPlaylistNames = null;
+          room.fiveByFifteenMeta = null;
         }
+        emitPublicDisplayPoolLayout(roomId, room);
       
         routineServerLog('🎵 Starting automatic playback...');
         const playbackSongList =
@@ -5459,6 +5457,35 @@ function buildFinalizedOrderPayloadFromRoom(room) {
   }
 
   return [];
+}
+
+/** Emit exactly one public-display pool: 5×15 columns or 1×75 ids (never both). */
+function emitPublicDisplayPoolLayout(roomId, room) {
+  const hasFiveBy15 =
+    Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5;
+  if (hasFiveBy15) {
+    routineServerLog(`📊 Emitting fiveby15-pool (${room.fiveByFifteenColumnsIds.length} columns)`);
+    io.to(roomId).emit('fiveby15-pool', {
+      columns: room.fiveByFifteenColumnsIds,
+      names: room.fiveByFifteenPlaylistNames || [],
+      meta: room.fiveByFifteenMeta || {},
+    });
+    const idToCol = {};
+    room.fiveByFifteenColumnsIds.forEach((colIds, colIdx) => {
+      colIds.forEach((id) => {
+        idToCol[id] = colIdx;
+      });
+    });
+    io.to(roomId).emit('fiveby15-map', { idToColumn: idToCol });
+    return;
+  }
+  if (room.oneBySeventyFivePool && Array.isArray(room.oneBySeventyFivePool) && room.oneBySeventyFivePool.length > 0) {
+    const oneBy75Ids = room.oneBySeventyFivePool.map((s) => s.id).filter(Boolean);
+    if (oneBy75Ids.length > 0) {
+      routineServerLog(`📊 Emitting oneby75-pool (${oneBy75Ids.length} ids)`);
+      io.to(roomId).emit('oneby75-pool', { ids: oneBy75Ids });
+    }
+  }
 }
 
 function emitFinalizedOrderFromRoomState(roomId, room) {
@@ -10648,7 +10675,11 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
       }
     }
     
-    const tracks = await svc.getPlaylistTracks(playlistId, playlistInfo);
+    const forceRefresh =
+      req.query.refresh === '1' ||
+      req.query.refresh === 'true' ||
+      req.query.forceRefresh === '1';
+    const tracks = await svc.getPlaylistTracks(playlistId, playlistInfo, { forceRefresh });
 
     // Dynamic per-host Spotify data — discourage proxy/browser caching of playlist payloads (was showing as 304 + tiny transfer in DevTools).
     res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
