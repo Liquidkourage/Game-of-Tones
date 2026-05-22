@@ -2476,6 +2476,21 @@ const PublicDisplay: React.FC = () => {
     carouselIndexRef.current = carouselIndex;
   }, [carouselIndex]);
 
+  const snapCarouselAfterForwardLoop = useCallback(() => {
+    if (columnCallListLayout || !animating) return;
+    const ids = oneBy75IdsRef.current;
+    if (!ids?.length) return;
+    const played = new Set(playedOrderRef.current);
+    const total = countOccupiedBandsInPool(ids, played);
+    if (total <= visibleCols) return;
+    const idx = carouselIndexRef.current;
+    if (idx < total) return;
+    setAnimating(false);
+    setCarouselIndex(idx - total);
+    carouselIndexRef.current = idx - total;
+    requestAnimationFrame(() => setAnimating(true));
+  }, [columnCallListLayout, animating, visibleCols]);
+
   // Auto-advance the 1×75 carousel; dwell grows for later leftmost bands (see carouselDwellMsForLeftColumn).
   useEffect(() => {
     if (columnCallListLayout) return;
@@ -2491,17 +2506,22 @@ const PublicDisplay: React.FC = () => {
       }
 
       const played = new Set(playedOrderRef.current);
-      const totalGroups = countOccupiedBandsInPool(ids, played);
+      const total = countOccupiedBandsInPool(ids, played);
+      if (total <= visibleCols) {
+        carouselTickTimerRef.current = setTimeout(scheduleTick, CAROUSEL_BASE_DWELL_MS);
+        return;
+      }
+
       const leftIdx = carouselIndexRef.current;
-      const delayMs = carouselDwellMsForLeftColumn(leftIdx, totalGroups);
+      const delayMs = carouselDwellMsForLeftColumn(leftIdx, total);
 
       carouselTickTimerRef.current = setTimeout(() => {
         if (cancelled) return;
-        if (totalGroups > visibleCols) {
-          setCarouselIndex((prev) => prev + 1);
-        } else {
-          setCarouselIndex(0);
-        }
+        setCarouselIndex((prev) => {
+          const next = prev + 1;
+          // Step into duplicate tail once (same view as index 0); layout effect snaps to 0.
+          return next > total ? prev : next;
+        });
         scheduleTick();
       }, delayMs);
     };
@@ -2514,22 +2534,7 @@ const PublicDisplay: React.FC = () => {
         carouselTickTimerRef.current = null;
       }
     };
-  }, [oneBy75Ids, visibleCols, columnCallListLayout]);
-
-  /** After forward slide into the duplicate tail, snap back to the matching primary index (no backward animation). */
-  const snapCarouselIfInDuplicateTail = useCallback(() => {
-    if (columnCallListLayout) return;
-    const ids = oneBy75IdsRef.current;
-    if (!ids?.length) return;
-    const played = new Set(playedOrderRef.current);
-    const totalGroups = countOccupiedBandsInPool(ids, played);
-    if (totalGroups <= visibleCols) return;
-    const idx = carouselIndexRef.current;
-    if (idx < totalGroups) return;
-    setAnimating(false);
-    setCarouselIndex(idx - totalGroups);
-    requestAnimationFrame(() => setAnimating(true));
-  }, [columnCallListLayout]);
+  }, [oneBy75Ids, visibleCols, columnCallListLayout, totalPlayedCount]);
 
   // Measure viewport width for pixel-perfect slides (one column per step)
   useEffect(() => {
@@ -3491,7 +3496,7 @@ const PublicDisplay: React.FC = () => {
             animate={{ x: shouldScroll ? (colWidth > 0 ? xPx : xPercent + '%') : 0 }}
             transition={{ duration: animating && shouldScroll ? 1 : 0, ease: 'easeInOut' }}
             onAnimationComplete={() => {
-              if (animating && shouldScroll) snapCarouselIfInDuplicateTail();
+              if (shouldScroll) snapCarouselAfterForwardLoop();
             }}
           >
             {extendedGroups.map((group, gi) => (
