@@ -416,29 +416,38 @@ body {
   max-width: 100%;
 }
 
-/* Titles: up to 2 lines; artists may wrap to multiple lines (never single-line ellipsis only). */
+/* Call cards: wrap freely; clip overflow without ellipsis (…) when space runs out. */
 .App .public-display .call-song-name {
   white-space: normal;
   word-break: break-word;
   overflow-wrap: anywhere;
-  text-overflow: unset;
+  text-overflow: clip;
   overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  display: block;
+  line-height: 1.2;
 }
 
 .App .public-display .call-song-artist {
   white-space: normal !important;
   word-break: break-word;
   overflow-wrap: anywhere;
-  text-overflow: unset;
+  text-overflow: clip;
   overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  display: block;
+  line-height: 1.15;
+}
+
+.App .public-display .call-song-info--dense .call-song-name,
+.App .public-display .call-song-info--dense .call-song-artist {
+  letter-spacing: 0.01em;
+}
+
+.App .public-display .bingo-square-text {
+  text-overflow: clip;
+  overflow: hidden;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .App .public-display .call-carousel-col-inner .call-item {

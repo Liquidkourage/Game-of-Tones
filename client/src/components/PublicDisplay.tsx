@@ -26,6 +26,11 @@ import {
   type PublicDisplayTitleRevealMode,
 } from '../utils/publicDisplayTitleReveal';
 import { effectivePublicDisplayFontScale } from '../utils/publicDisplayFontScale';
+import {
+  computeBingoCellTextScale,
+  computeCallCardTypography,
+  maxHeightEm,
+} from '../utils/publicDisplayCallCardText';
 import type { PatternCompositeSpec, PatternCompositeClause } from '../patternDefinitions';
 import {
   normalizePatternComposite,
@@ -2767,6 +2772,43 @@ const PublicDisplay: React.FC = () => {
     };
   };
 
+  const callCardLineStyles = (
+    typo: ReturnType<typeof computeCallCardTypography>,
+    kind: 'title' | 'artist',
+    fullCard: boolean,
+  ): React.CSSProperties => {
+    const basePx = kind === 'title' ? 32 : 26;
+    const lh = kind === 'title' ? 1.2 : 1.15;
+    const lines = kind === 'title' ? typo.titleMaxLines : typo.artistMaxLines;
+    const fontSize = Math.round(basePx * displayFontScale * typo.textScale);
+    const common: React.CSSProperties = {
+      fontWeight: kind === 'title' ? 900 : 800,
+      lineHeight: lh,
+      fontSize: `${fontSize}px`,
+      color: kind === 'title' ? '#ffffff' : '#e0e0e0',
+      textShadow:
+        kind === 'title' ? '0 2px 6px rgba(0,0,0,0.8)' : '0 2px 4px rgba(0,0,0,0.6)',
+      whiteSpace: 'normal',
+      wordBreak: 'break-word',
+      overflowWrap: 'anywhere',
+      display: 'block',
+    };
+    if (fullCard) {
+      return {
+        ...common,
+        overflow: 'visible',
+        marginTop: kind === 'artist' ? 6 : 0,
+      };
+    }
+    return {
+      ...common,
+      overflow: 'hidden',
+      textOverflow: 'clip',
+      maxHeight: maxHeightEm(lh, lines),
+      marginTop: kind === 'artist' ? 4 : 0,
+    };
+  };
+
   const renderCallSongLines = (
     songId: string,
     meta: { name: string; artist: string },
@@ -3312,6 +3354,9 @@ const PublicDisplay: React.FC = () => {
                   const poolIdx = Array.isArray(oneBy75Ids) ? oneBy75Ids.indexOf(id) : -1;
                   const meta = idMetaRef.current[id] || { name: '', artist: '' };
                   const isCurrent = gameState.currentSong?.id === id;
+                  const typo = computeCallCardTypography(meta.name, meta.artist, {
+                    fullCard: isFullCardPattern,
+                  });
                   const { title, artist } = renderCallSongLines(id, meta, renderMaskedText);
                   return (
                     <motion.div
@@ -3361,7 +3406,10 @@ const PublicDisplay: React.FC = () => {
                             return idx >= 0 ? (idx + 1) : '';
                           })()}
                         </div>
-                        <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}>
+                        <div
+                          className={`call-song-info${typo.dense ? ' call-song-info--dense' : ''}`}
+                          style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}
+                        >
                           <AnimatePresence mode="popLayout" initial={false}>
                           <motion.div
                             key={(meta?.name || '') + '-' + ri}
@@ -3370,33 +3418,7 @@ const PublicDisplay: React.FC = () => {
                             exit={{ opacity: 0, y: -6, scale: 0.98 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-name"
-                            style={
-                              isFullCardPattern
-                                ? {
-                                    fontWeight: 900,
-                                    lineHeight: 1.2,
-                                    fontSize: `${32 * displayFontScale}px`,
-                                    color: '#ffffff',
-                                    textShadow: '0 2px 4px rgba(0,0,0,0.8)',
-                                    whiteSpace: 'normal',
-                                    wordBreak: 'break-word',
-                                    display: 'block',
-                                    overflow: 'visible'
-                                  }
-                                : {
-                                    fontWeight: 900,
-                                    lineHeight: 1.12,
-                                    fontSize: `${32 * displayFontScale}px`,
-                                    color: '#ffffff',
-                                    textShadow: '0 2px 4px rgba(0,0,0,0.8)',
-                                    whiteSpace: 'normal',
-                                    wordBreak: 'keep-all',
-                                    display: '-webkit-box',
-                                    WebkitLineClamp: 3,
-                                    WebkitBoxOrient: 'vertical',
-                                    overflow: 'hidden'
-                                  }
-                            }
+                            style={callCardLineStyles(typo, 'title', isFullCardPattern)}
                           >
                             {title}
                           </motion.div>
@@ -3407,17 +3429,7 @@ const PublicDisplay: React.FC = () => {
                             exit={{ opacity: 0, y: -4 }}
                             transition={{ duration: 0.25 }}
                             className="call-song-artist"
-                            style={{
-                              fontSize: `${26 * displayFontScale}px`,
-                              color: '#e0e0e0',
-                              lineHeight: 1.15,
-                              fontWeight: 800,
-                              textShadow: '0 2px 4px rgba(0,0,0,0.6)',
-                              marginTop: 4,
-                              ...(isFullCardPattern
-                                ? { display: 'block', overflow: 'visible', whiteSpace: 'normal', wordBreak: 'break-word' }
-                                : {}),
-                            }}
+                            style={callCardLineStyles(typo, 'artist', isFullCardPattern)}
                           >
                             {artist}
                           </motion.div>
@@ -3459,6 +3471,9 @@ const PublicDisplay: React.FC = () => {
       const callNum = playIdx >= 0 ? playIdx + 1 : idsToUse.indexOf(id) + 1;
       const meta = idMetaRef.current[id] || { name: '', artist: '' };
       const isCurrent = gameState.currentSong?.id === id;
+      const typo = computeCallCardTypography(meta.name, meta.artist, {
+        fullCard: isFullCardPattern,
+      });
       const { title, artist } = renderCallSongLines(id, meta, renderMaskedText);
       return (
         <div
@@ -3496,7 +3511,7 @@ const PublicDisplay: React.FC = () => {
             {callNum > 0 ? callNum : ''}
           </div>
           <div
-            className="call-song-info"
+            className={`call-song-info${typo.dense ? ' call-song-info--dense' : ''}`}
             style={{
               flex: 1,
               minWidth: 0,
@@ -3507,30 +3522,10 @@ const PublicDisplay: React.FC = () => {
               justifyContent: 'flex-start',
             }}
           >
-            <div
-              className="call-song-name"
-              style={{
-                fontWeight: 900,
-                lineHeight: 1.2,
-                fontSize: `${32 * displayFontScale}px`,
-                color: '#ffffff',
-                textShadow: '0 2px 6px rgba(0,0,0,0.8)',
-                marginTop: isFullCardPattern ? 0 : undefined,
-              }}
-            >
+            <div className="call-song-name" style={callCardLineStyles(typo, 'title', isFullCardPattern)}>
               {title}
             </div>
-            <div
-              className="call-song-artist"
-              style={{
-                fontSize: `${26 * displayFontScale}px`,
-                color: '#e0e0e0',
-                lineHeight: 1.15,
-                fontWeight: 800,
-                textShadow: '0 2px 4px rgba(0,0,0,0.6)',
-                marginTop: 4,
-              }}
-            >
+            <div className="call-song-artist" style={callCardLineStyles(typo, 'artist', isFullCardPattern)}>
               {artist}
             </div>
           </div>
@@ -3849,6 +3844,13 @@ const PublicDisplay: React.FC = () => {
                     : { title: '', artist: '' };
                   const title = sq?.isFreeSpace ? 'FREE' : vis.title;
                   const artist = sq?.isFreeSpace ? '' : vis.artist;
+                  const cellTextScale = sq?.isFreeSpace
+                    ? 1
+                    : computeBingoCellTextScale(String(title), String(artist));
+                  const titleLineH = 1.08;
+                  const artistLineH = 1.08;
+                  const titleMaxLines = cellTextScale < 0.85 ? 5 : 4;
+                  const artistMaxLines = cellTextScale < 0.85 ? 3 : 2;
                   return (
                     <div
                       key={pos}
@@ -3873,16 +3875,19 @@ const PublicDisplay: React.FC = () => {
                       }}
                     >
                       <div
+                        className="bingo-square-text"
                         style={{
-                          /* Larger wall-readable type; scales with vmin inside each cell */
-                          fontSize: 'clamp(0.85rem, 2.65vmin, 2.2rem)',
+                          fontSize:
+                            cellTextScale === 1
+                              ? 'clamp(0.85rem, 2.65vmin, 2.2rem)'
+                              : `clamp(${0.85 * cellTextScale}rem, ${2.65 * cellTextScale}vmin, ${2.2 * cellTextScale}rem)`,
                           fontWeight: 900,
-                          lineHeight: 1.08,
+                          lineHeight: titleLineH,
                           color: '#f6fffc',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 3,
-                          WebkitBoxOrient: 'vertical',
+                          display: 'block',
                           overflow: 'hidden',
+                          textOverflow: 'clip',
+                          maxHeight: maxHeightEm(titleLineH, titleMaxLines),
                           wordBreak: 'break-word',
                           hyphens: 'auto',
                           textShadow: '0 2px 8px rgba(0,0,0,0.35)',
@@ -3904,16 +3909,21 @@ const PublicDisplay: React.FC = () => {
                       </div>
                       {!sq?.isFreeSpace && artist ? (
                         <div
+                          className="bingo-square-text"
                           style={{
-                            fontSize: 'clamp(0.72rem, 2.05vmin, 1.75rem)',
+                            fontSize:
+                              cellTextScale === 1
+                                ? 'clamp(0.72rem, 2.05vmin, 1.75rem)'
+                                : `clamp(${0.72 * cellTextScale}rem, ${2.05 * cellTextScale}vmin, ${1.75 * cellTextScale}rem)`,
                             opacity: 0.92,
                             marginTop: 'clamp(2px, 0.35vmin, 5px)',
-                            lineHeight: 1.08,
+                            lineHeight: artistLineH,
                             fontWeight: 700,
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
+                            display: 'block',
                             overflow: 'hidden',
+                            textOverflow: 'clip',
+                            maxHeight: maxHeightEm(artistLineH, artistMaxLines),
+                            wordBreak: 'break-word',
                             width: '100%',
                           }}
                         >
