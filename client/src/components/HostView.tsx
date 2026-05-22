@@ -5997,13 +5997,23 @@ const HostView: React.FC = () => {
 
     applyRoundBingoToHost(round, { restorePlaybackFromSnapshot: true });
     const mixRows = resolveMixPlaylistRowsForRound(round);
+    const hasSavedSnapshot =
+      eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled) &&
+      Boolean(round.savedMixSnapshot?.songs?.length);
+    const roundMixKey = mixRows ? selectionPlaylistKey(mixRows) : '';
+    const cardsAlreadyDealtForRound =
+      Boolean(roundMixKey) &&
+      mixFinalized &&
+      finalizedMixPlaylistKey === roundMixKey &&
+      lastFinalizePlaylistKeyRef.current === roundMixKey;
+
     if (
       loaded &&
       mixRows &&
       socket &&
       roomId &&
-      eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled) &&
-      round.savedMixSnapshot?.songs?.length
+      hasSavedSnapshot &&
+      !cardsAlreadyDealtForRound
     ) {
       void (async () => {
         setSavedRoundRoomSyncBusy(true);
@@ -6021,6 +6031,8 @@ const HostView: React.FC = () => {
           setSavedRoundRoomSyncBusy(false);
         }
       })();
+    } else if (loaded && cardsAlreadyDealtForRound) {
+      addLog(`${round.name}: Start round — keeping player cards from prep load`, 'info');
     }
 
     // Store updated rounds
@@ -6041,6 +6053,8 @@ const HostView: React.FC = () => {
     socket,
     freeSpaceEnabled,
     finalizeMix,
+    mixFinalized,
+    finalizedMixPlaylistKey,
   ]);
 
   // Advanced round management functions

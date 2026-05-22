@@ -2042,6 +2042,14 @@ function hostFinalizeNeedsPlaylistRefinal(room, playlists, freeSpace) {
   return false;
 }
 
+/** True when start-game should build a new deck (not when prep finalize already dealt cards). */
+function shouldRegenerateBingoCardsOnStartGame(room, playlists, freeSpace) {
+  if (!room?.bingoCards || room.bingoCards.size === 0) return true;
+  if (!room.mixFinalized) return true;
+  if (hostFinalizeNeedsPlaylistRefinal(room, playlists, freeSpace)) return true;
+  return false;
+}
+
 io.use((socket, next) => {
   try {
     const token = hostAuth.getHostSessionTokenFromHandshake(socket.handshake);
@@ -4187,9 +4195,11 @@ io.on('connection', (socket) => {
           savedRoundPlayback === true && savedRoundSongs.length >= minSnapTracks;
 
         routineServerLog('🎵 Generating bingo cards...');
-        const forceRegenerateCards =
-          useSavedRoundPlayback || !room.mixFinalized || !room.bingoCards || room.bingoCards.size === 0;
-        // If mix is already finalized and cards exist, do NOT regenerate to avoid reshuffle
+        const forceRegenerateCards = shouldRegenerateBingoCardsOnStartGame(
+          room,
+          playlists,
+          freeSpace,
+        );
         if (forceRegenerateCards) {
           if (freeSpace !== undefined) {
             room.freeSpaceEnabled = !!freeSpace;
@@ -4281,8 +4291,26 @@ io.on('connection', (socket) => {
             room.patternComposite = undefined;
           }
         } else {
-          routineServerLog('🛑 Skipping card regeneration (mix finalized and cards already exist)');
-          
+          routineServerLog(
+            '🛑 Skipping card regeneration (mix finalized, cards already exist — same playlists/free-center as prep)',
+          );
+          if (useSavedRoundPlayback && savedRoundSongs.length > 0) {
+            room.finalizedSongOrder = savedRoundSongs.map((s) => ({ ...s }));
+            try {
+              io.to(roomId).emit('finalized-order', {
+                order: savedRoundSongs.map((s) => ({
+                  id: s.id,
+                  name: s.name || '',
+                  artist: s.artist || '',
+                  explicit: s.explicit === true,
+                  youtubeMusic: s.youtubeMusic === true,
+                  sourcePlaylistId: s.sourcePlaylistId,
+                  sourcePlaylistName: s.sourcePlaylistName,
+                })),
+              });
+            } catch (_) {}
+          }
+
           // BUT check for any players who don't have cards (joined after finalization)
           const playersWithoutCards = [];
           room.players.forEach((player, playerId) => {
