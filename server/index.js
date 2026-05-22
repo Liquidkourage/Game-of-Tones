@@ -4373,12 +4373,10 @@ io.on('connection', (socket) => {
               : Array.isArray(room.finalizedSongs) && room.finalizedSongs.length > 0
                 ? room.finalizedSongs
                 : [];
-        const deckForShow = useSavedRoundPlayback
-          ? deckSource
-          : properShuffle(deckSource);
-        if (!useSavedRoundPlayback && deckForShow.length > 0) {
+        const deckForShow = properShuffle(deckSource);
+        if (deckForShow.length > 0) {
           routineServerLog(
-            `🎲 Start-game playback shuffle (${deckForShow.length} tracks), first id: ${deckForShow[0]?.id || '?'}`,
+            `🎲 Start-game playback shuffle (${deckForShow.length} tracks)${useSavedRoundPlayback ? ' [saved round]' : ''}, first id: ${deckForShow[0]?.id || '?'}`,
           );
         }
 
@@ -4447,7 +4445,7 @@ io.on('connection', (socket) => {
           await generateBingoCards(roomId, playlistsToUse, songOrderForCards);
 
           if (useSavedRoundPlayback) {
-            syncRoomPlaybackOrderAfterStartGame(room, roomId, savedRoundSongs);
+            syncRoomPlaybackOrderAfterStartGame(room, roomId, deckForShow);
             // Stale 1×75 pool breaks 5×15 projector columns; only clear when this round is 5×15.
             if (Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5) {
               room.oneBySeventyFivePool = null;
@@ -4470,13 +4468,9 @@ io.on('connection', (socket) => {
           routineServerLog(
             '🛑 Skipping card regeneration (mix finalized, cards already exist — same playlists/free-center as prep)',
           );
-          if (!useSavedRoundPlayback && deckForShow.length > 0) {
-            room.finalizedSongOrder = deckForShow.map((s) => ({ ...s }));
-            emitFinalizedOrderFromRoomState(roomId, room);
+          if (deckForShow.length > 0) {
+            syncRoomPlaybackOrderAfterStartGame(room, roomId, deckForShow);
             routineServerLog('📻 Updated playback call order for host (cards unchanged)');
-          }
-          if (useSavedRoundPlayback && savedRoundSongs.length > 0) {
-            syncRoomPlaybackOrderAfterStartGame(room, roomId, savedRoundSongs);
           }
 
           // BUT check for any players who don't have cards (joined after finalization)
@@ -5401,36 +5395,12 @@ function playbackSongsFromOneBySeventyFivePool(room, metadataSources = []) {
   return ordered.length > 0 ? ordered : null;
 }
 
-/**
- * After Start Game: keep playback aligned with cards from prep finalize.
- * Do not replace prep shuffle with raw snapshot order when oneBySeventyFivePool or 5×15 caches exist.
- */
-function syncRoomPlaybackOrderAfterStartGame(room, roomId, savedRoundSongs) {
-  const poolPlayback = playbackSongsFromOneBySeventyFivePool(room, [savedRoundSongs]);
-  if (poolPlayback) {
-    room.finalizedSongOrder = poolPlayback.map((s) => ({ ...s }));
-    routineServerLog(
-      `📋 Start-game: playback order aligned to 1×75 pool (${poolPlayback.length} tracks)`,
-    );
-    emitFinalizedOrderFromRoomState(roomId, room);
-    return;
-  }
-  const hasFiveByFifteen =
-    Array.isArray(room.fiveByFifteenColumnsIds) &&
-    room.fiveByFifteenColumnsIds.length === 5 &&
-    Array.isArray(room.finalizedSongOrder) &&
-    room.finalizedSongOrder.length > 0;
-  if (hasFiveByFifteen) {
-    routineServerLog(
-      '📋 Start-game: keeping prep 5×15 playback shuffle (finalizedSongOrder + column pool)',
-    );
-    emitFinalizedOrderFromRoomState(roomId, room);
-    return;
-  }
-  if (Array.isArray(savedRoundSongs) && savedRoundSongs.length > 0) {
-    room.finalizedSongOrder = savedRoundSongs.map((s) => ({ ...s }));
-    emitFinalizedOrderFromRoomState(roomId, room);
-  }
+/** Push this show's shuffled call order to hosts (not 1×75 band-layout pool order). */
+function syncRoomPlaybackOrderAfterStartGame(room, roomId, playbackOrderSongs) {
+  if (!Array.isArray(playbackOrderSongs) || playbackOrderSongs.length === 0) return;
+  room.finalizedSongOrder = playbackOrderSongs.map((s) => ({ ...s }));
+  emitFinalizedOrderFromRoomState(roomId, room);
+  routineServerLog(`📋 Start-game: host playback call order (${playbackOrderSongs.length} tracks)`);
 }
 
 /**

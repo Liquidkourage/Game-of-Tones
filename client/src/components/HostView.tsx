@@ -3785,9 +3785,14 @@ const HostView: React.FC = () => {
         ? snapPool.map(cloneSongForSnapshot)
         : resolveSongListForStart();
 
-      if (!useSavedRoundPlayback && songListForStart.length > 0) {
+      if (songListForStart.length > 0) {
         songListForStart = shuffleSongs(songListForStart);
-        addLog('Shuffled playback order for this show', 'info');
+        addLog(
+          useSavedRoundPlayback
+            ? 'Shuffled saved-round playback order for this show (cards unchanged)'
+            : 'Shuffled playback order for this show',
+          'info',
+        );
       }
 
       if (songListForStart.length === 0) {
@@ -6578,6 +6583,22 @@ const HostView: React.FC = () => {
   );
 
   const finalizedPoolSongs: Song[] = useMemo(() => {
+    const ridx = currentRoundIndex;
+    const activeRound = ridx >= 0 && ridx < eventRounds.length ? eventRounds[ridx] : null;
+    const snapshotMatchesPrep =
+      activeRound &&
+      mixPlaylistSelection.length > 0 &&
+      prepRoundPlaylistOrderMatchesMix(activeRound.playlistIds, mixPlaylistSelection) &&
+      eventRoundSnapshotMeetsSaveThreshold(activeRound, freeSpaceEnabled) &&
+      (activeRound.savedMixSnapshot?.songs?.length ?? 0) > 0;
+    const snapshotSongs = snapshotMatchesPrep ? activeRound!.savedMixSnapshot!.songs : null;
+
+    if ((gameState === 'playing' || currentSong) && finalizedOrder && finalizedOrder.length > 0) {
+      return finalizedOrder;
+    }
+    if (snapshotSongs?.length) {
+      return snapshotSongs;
+    }
     if (finalizedOrder && finalizedOrder.length > 0) {
       return finalizedOrder;
     }
@@ -6585,17 +6606,6 @@ const HostView: React.FC = () => {
       return songList;
     }
     if (!songList.length || mixPlaylistSelection.length === 0) {
-      const ridx = currentRoundIndex;
-      const r = ridx >= 0 && ridx < eventRounds.length ? eventRounds[ridx] : null;
-      if (
-        r &&
-        mixPlaylistSelection.length > 0 &&
-        prepRoundPlaylistOrderMatchesMix(r.playlistIds, mixPlaylistSelection) &&
-        eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled) &&
-        r.savedMixSnapshot?.songs?.length
-      ) {
-        return r.savedMixSnapshot.songs;
-      }
       return songList;
     }
     return bingoPoolPreview.pool as Song[];
@@ -6608,6 +6618,8 @@ const HostView: React.FC = () => {
     currentRoundIndex,
     eventRounds,
     freeSpaceEnabled,
+    gameState,
+    currentSong,
   ])
 
   const bingoPoolUiShowsPreFinalizeSubset =
