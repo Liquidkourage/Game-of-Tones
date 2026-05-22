@@ -97,6 +97,7 @@ import {
 import { getYoutubeHostPlaybackChannelName } from '../utils/youtubeHostPlaybackChannel';
 import { sortRoundPlaylistsByBingoColumns } from '../utils/roundPlaylistOrder';
 import { validateSongTitle, validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
+import { shuffleSongs } from '../utils/shuffleSongs';
 import './HostView.css';
 import './HostFormControls.css';
 
@@ -3415,21 +3416,6 @@ const HostView: React.FC = () => {
 
     const targetKey = selectionPlaylistKey(playlists);
     const uiKey = selectionPlaylistKey(mixPlaylistSelection);
-    if (
-      mixFinalized &&
-      targetKey === uiKey &&
-      lastFinalizePlaylistKeyRef.current === targetKey
-    ) {
-      if (
-        finalizedOrderRef.current &&
-        finalizedOrderRef.current.length > 0 &&
-        finalizedOrderPlaylistKeyRef.current === targetKey
-      ) {
-        return true;
-      }
-      addLog('Fetching finalized playback order from server…', 'info');
-      return ensureFinalizedOrderFromServer(targetKey);
-    }
 
     const inFlight = finalizeMixPromiseRef.current;
     if (inFlight) {
@@ -3446,6 +3432,15 @@ const HostView: React.FC = () => {
         if (opts?.songListOverride && opts.songListOverride.length > 0) {
           addLog('Applying saved round snapshot to the room (display + player cards)…', 'info');
           listToSend = opts.songListOverride.map(cloneSongForSnapshot);
+        } else if (
+          mixFinalized &&
+          targetKey === uiKey &&
+          finalizedOrderRef.current &&
+          finalizedOrderRef.current.length > 0 &&
+          finalizedOrderPlaylistKeyRef.current === targetKey
+        ) {
+          addLog('Reshuffling finalized mix for a new show order…', 'info');
+          listToSend = shuffleSongs(finalizedOrderRef.current);
         } else {
           addLog('Loading tracks from playlists before finalizing…', 'info');
           listToSend = await generateSongList({
@@ -3460,6 +3455,7 @@ const HostView: React.FC = () => {
             );
             return false;
           }
+          listToSend = shuffleSongs(listToSend);
         }
 
         if (listToSend.length === 0) {
@@ -3785,9 +3781,14 @@ const HostView: React.FC = () => {
         }
       }
 
-      const songListForStart = useSavedRoundPlayback && snapPool
+      let songListForStart = useSavedRoundPlayback && snapPool
         ? snapPool.map(cloneSongForSnapshot)
         : resolveSongListForStart();
+
+      if (!useSavedRoundPlayback && songListForStart.length > 0) {
+        songListForStart = shuffleSongs(songListForStart);
+        addLog('Shuffled playback order for this show', 'info');
+      }
 
       if (songListForStart.length === 0) {
         alert('No song pool is available. Refresh the page or load playlists again.');

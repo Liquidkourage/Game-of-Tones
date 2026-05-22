@@ -2754,6 +2754,29 @@ io.on('connection', (socket) => {
     // (Save round / switching prep rounds sends new playlists — must not reuse prior 75 pool).
     if (room.mixFinalized) {
       if (!hostFinalizeNeedsPlaylistRefinal(room, playlists, freeSpace)) {
+        const reshuffled = properShuffle(
+          Array.isArray(songList) && songList.length > 0
+            ? songList
+            : Array.isArray(room.finalizedSongs)
+              ? room.finalizedSongs
+              : [],
+        );
+        if (reshuffled.length > 0) {
+          room.finalizedSongOrder = reshuffled;
+          room.finalizedSongs = reshuffled;
+          routineServerLog(`🎲 Refinalize reshuffle (${reshuffled.length} tracks) — same playlists, new show order`);
+          const bingoOk = await generateBingoCards(roomId, playlists, reshuffled);
+          if (!bingoOk) {
+            socket.emit('finalize-mix-failed', {
+              code: 'bingo_generation_failed',
+              message: 'Could not rebuild bingo cards after reshuffle.',
+            });
+            return;
+          }
+          emitFinalizedOrderFromRoomState(roomId, room);
+          io.to(roomId).emit('mix-finalized', { playlists: room.finalizedPlaylists, songList: reshuffled });
+          return;
+        }
         routineServerLog('⚠️ Mix already finalized for room (unchanged):', roomId);
         emitFinalizedOrderFromRoomState(roomId, room);
         socket.emit('mix-finalized', { playlists: room.finalizedPlaylists });
@@ -2810,11 +2833,12 @@ io.on('connection', (socket) => {
         songListVerified = songList;
       }
 
-      room.finalizedSongOrder = songListVerified;
-      room.finalizedSongs = songListVerified;
-      routineServerLog(`📝 Stored ${songListVerified.length} finalized songs for room ${roomId}`);
+      const shuffledForShow = properShuffle(songListVerified);
+      room.finalizedSongOrder = shuffledForShow;
+      room.finalizedSongs = shuffledForShow;
+      routineServerLog(`📝 Stored ${shuffledForShow.length} finalized songs (shuffled) for room ${roomId}`);
 
-      const bingoOk = await generateBingoCards(roomId, playlists, room.finalizedSongOrder || null);
+      const bingoOk = await generateBingoCards(roomId, playlists, shuffledForShow);
       if (!bingoOk) {
         room.finalizedPlaylists = null;
         room.finalizedSongOrder = null;
@@ -2832,7 +2856,7 @@ io.on('connection', (socket) => {
 
       room.mixFinalized = true;
       
-      io.to(roomId).emit('mix-finalized', { playlists, songList: songListVerified });
+      io.to(roomId).emit('mix-finalized', { playlists, songList: shuffledForShow });
       
       routineServerLog('✅ Mix finalized for room:', roomId);
     } catch (error) {
@@ -4341,12 +4365,27 @@ io.on('connection', (socket) => {
         const useSavedRoundPlayback =
           savedRoundPlayback === true && savedRoundSongs.length >= minSnapTracks;
 
+        const deckSource =
+          useSavedRoundPlayback && savedRoundSongs.length > 0
+            ? savedRoundSongs
+            : Array.isArray(songList) && songList.length > 0
+              ? songList
+              : Array.isArray(room.finalizedSongs) && room.finalizedSongs.length > 0
+                ? room.finalizedSongs
+                : [];
+        const deckForShow = useSavedRoundPlayback
+          ? deckSource
+          : properShuffle(deckSource);
+        if (!useSavedRoundPlayback && deckForShow.length > 0) {
+          routineServerLog(
+            `🎲 Start-game playback shuffle (${deckForShow.length} tracks), first id: ${deckForShow[0]?.id || '?'}`,
+          );
+        }
+
         routineServerLog('🎵 Generating bingo cards...');
-        const forceRegenerateCards = shouldRegenerateBingoCardsOnStartGame(
-          room,
-          playlists,
-          freeSpace,
-        );
+        const forceRegenerateCards =
+          !useSavedRoundPlayback ||
+          shouldRegenerateBingoCardsOnStartGame(room, playlists, freeSpace);
         if (forceRegenerateCards) {
           if (freeSpace !== undefined) {
             room.freeSpaceEnabled = !!freeSpace;
@@ -4400,8 +4439,10 @@ io.on('connection', (socket) => {
             routineServerLog(`📋 Using ${room.finalizedPlaylists ? 'finalized' : 'regular'} playlists for card generation`);
             routineServerLog(`📋 Playlist order: ${playlistsToUse.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
             songOrderForCards =
-              room.finalizedSongOrder ||
-              (Array.isArray(songList) && songList.length > 0 ? songList : null);
+              deckForShow.length > 0
+                ? deckForShow
+                : room.finalizedSongOrder ||
+                  (Array.isArray(songList) && songList.length > 0 ? songList : null);
           }
           await generateBingoCards(roomId, playlistsToUse, songOrderForCards);
 
@@ -4482,9 +4523,7 @@ io.on('connection', (socket) => {
         emitPublicDisplayPoolLayout(roomId, room);
       
         routineServerLog('🎵 Starting automatic playback...');
-        const playbackSongList =
-          useSavedRoundPlayback && savedRoundSongs.length > 0 ? savedRoundSongs : songList;
-        await startAutomaticPlayback(roomId, playlists, deviceId, playbackSongList);
+        await startAutomaticPlayback(roomId, playlists, deviceId, deckForShow);
         
         routineServerLog('✅ Game state set and playback attempt triggered');
       } catch (error) {
@@ -6638,28 +6677,25 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     const perListFetched = [];
     
     if (songList && songList.length > 0) {
-      const poolPlayback = playbackSongsFromOneBySeventyFivePool(room, [songList]);
-      if (poolPlayback) {
-        routineServerLog(
-          `📋 1×75: using oneBySeventyFivePool order (${poolPlayback.length} songs) for playback`,
-        );
-        allSongs = poolPlayback;
-      } else if (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) {
-        const isIdArray = typeof room.finalizedSongOrder[0] === 'string';
-        if (isIdArray) {
-          routineServerLog('📋 Using finalizedSongOrder (IDs) to reorder songList');
-          const idToSong = new Map(songList.map((s) => [s.id, s]));
-          const mapped = room.finalizedSongOrder.map((id) => idToSong.get(id)).filter(Boolean);
-          allSongs = mapped.length > 0 ? mapped : songList;
-        } else {
-          routineServerLog('📋 Using finalizedSongOrder (full objects) directly');
-          allSongs = room.finalizedSongOrder;
-        }
-      } else {
-        routineServerLog(`📋 Using client-provided song list with ${songList.length} songs`);
-        allSongs = songList;
+      allSongs = [...songList];
+      routineServerLog(`📋 Using start-game deck order (${allSongs.length} songs)`);
+    } else if (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) {
+      const isIdArray = typeof room.finalizedSongOrder[0] === 'string';
+      if (isIdArray && Array.isArray(room.finalizedSongs)) {
+        const idToSong = new Map(room.finalizedSongs.filter((s) => s?.id).map((s) => [s.id, s]));
+        allSongs = room.finalizedSongOrder.map((id) => idToSong.get(id)).filter(Boolean);
+      } else if (!isIdArray) {
+        allSongs = [...room.finalizedSongOrder];
       }
+      routineServerLog(`📋 Playback from finalizedSongOrder (${allSongs.length} songs)`);
     } else {
+      const poolPlayback = playbackSongsFromOneBySeventyFivePool(room, []);
+      if (poolPlayback?.length) {
+        allSongs = poolPlayback;
+        routineServerLog(`📋 Playback from 1×75 pool (${allSongs.length} songs)`);
+      }
+    }
+    if (allSongs.length === 0) {
       // Fallback: fetch songs from playlists (for backward compatibility)
       routineServerLog('📋 Fetching songs from playlists for playback...');
       for (const playlist of playlists) {
