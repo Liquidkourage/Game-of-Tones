@@ -2788,9 +2788,10 @@ const PublicDisplay: React.FC = () => {
       wordBreak: 'break-word',
       overflowWrap: 'anywhere',
       display: 'block',
-      overflow: fullCard ? 'visible' : 'hidden',
+      overflow: fullCard || !typo.clampContentHeight ? 'visible' : 'hidden',
       textOverflow: 'clip',
       marginTop: kind === 'artist' ? (fullCard ? 6 : 4) : 0,
+      paddingBottom: kind === 'artist' && !fullCard ? 2 : 0,
     };
     return common;
   };
@@ -2807,18 +2808,20 @@ const PublicDisplay: React.FC = () => {
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'flex-start',
+      overflow: fullCard ? 'visible' : 'hidden',
     };
-    if (fullCard) {
-      return { ...base, overflow: 'visible' };
+    if (fullCard || !typo.clampContentHeight) {
+      return base;
     }
     const titlePx = Math.round(PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * displayFontScale * typo.textScale);
     const artistPx = Math.round(PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX * displayFontScale * typo.textScale);
-    const titleBlock = typo.titleMaxLines * 1.2 * titlePx;
-    const artistBlock = hasArtist ? typo.artistMaxLines * 1.15 * artistPx + 4 : 0;
+    const titleLh = 1.28;
+    const artistLh = 1.22;
+    const titleBlock = typo.titleMaxLines * titleLh * titlePx;
+    const artistBlock = hasArtist ? typo.artistMaxLines * artistLh * artistPx + 4 : 0;
     return {
       ...base,
-      overflow: 'hidden',
-      maxHeight: `${Math.round(titleBlock + artistBlock)}px`,
+      maxHeight: `${Math.round((titleBlock + artistBlock) * 1.06)}px`,
     };
   };
 

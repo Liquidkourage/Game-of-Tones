@@ -454,11 +454,11 @@ body {
   align-items: flex-start;
 }
 
-/* Song call cards: a little breathing room at the bottom of each card */
+/* Song call cards: slight inset at bottom (avoid clipping text inside call-song-info) */
 .App .public-display .call-item,
 .App .public-display .call-carousel-col-inner > .call-item,
 .App .public-display .call-carousel-col-inner > .call-item-slot {
-  padding-bottom: clamp(6px, 0.65vmin, 11px) !important;
+  padding-bottom: clamp(4px, 0.45vmin, 8px) !important;
 }
 
 /* Pattern demo bingo: flush squares (no gutters) */

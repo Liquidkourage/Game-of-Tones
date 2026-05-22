@@ -12,6 +12,9 @@ export const PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX = 22;
 /** ~how many letter-box characters fit per row in a call column at auto-fit. */
 const MASKED_CHARS_PER_LINE_TITLE = 11;
 const MASKED_CHARS_PER_LINE_ARTIST = 13;
+/** Plain revealed text wraps wider in the same column. */
+const PLAIN_CHARS_PER_LINE_TITLE = 17;
+const PLAIN_CHARS_PER_LINE_ARTIST = 22;
 /** Target visible text rows inside one call card (title + artist combined). */
 const CALL_CARD_TOTAL_LINE_BUDGET = 4;
 
@@ -23,6 +26,8 @@ export type CallCardTypography = {
   artistMaxLines: number;
   /** Scales unrevealed letter-box tiles (em-based). */
   letterBoxScale: number;
+  /** When true, call-song-info uses a computed max-height (masked tiles only). */
+  clampContentHeight: boolean;
 };
 
 function combinedLength(title: string, artist: string): number {
@@ -67,6 +72,7 @@ export function computeCallCardTypography(
       titleMaxLines: 8,
       artistMaxLines: 6,
       letterBoxScale: 1,
+      clampContentHeight: false,
     };
   }
 
@@ -107,15 +113,19 @@ export function computeCallCardTypography(
       ? Math.min(Math.max(aLines, 1), Math.max(1, CALL_CARD_TOTAL_LINE_BUDGET - titleBudget))
       : 0;
   } else {
-    const dense = textScale < 0.97;
-    titleMaxLines = dense ? 4 : 3;
-    artistMaxLines = hasArtist ? (dense ? 3 : 2) : 0;
+    const tLines = estimateMaskedWrapLines(title, PLAIN_CHARS_PER_LINE_TITLE);
+    const aLines = hasArtist ? estimateMaskedWrapLines(artist, PLAIN_CHARS_PER_LINE_ARTIST) : 0;
+    titleMaxLines = Math.min(Math.max(tLines, 1), 4);
+    artistMaxLines = hasArtist ? Math.min(Math.max(aLines, 1), 4) : 0;
+    if (tLines + aLines >= 5) textScale = Math.min(textScale, 0.88);
+    else if (tLines + aLines >= 4) textScale = Math.min(textScale, 0.93);
   }
 
   const dense = textScale < 0.97 || (opts.masked === true && titleMaxLines + artistMaxLines >= 4);
   const letterBoxScale = opts.masked === true ? Math.min(1, textScale * (dense ? 0.96 : 1)) : 1;
+  const clampContentHeight = opts.masked === true;
 
-  return { textScale, dense, titleMaxLines, artistMaxLines, letterBoxScale };
+  return { textScale, dense, titleMaxLines, artistMaxLines, letterBoxScale, clampContentHeight };
 }
 
 /** Bingo pattern / winner grid cells (vmin-based sizes get a scale multiplier). */
