@@ -106,6 +106,26 @@ function positionsKeyForMatch(arr: readonly string[]): string {
   return [...arr].sort().join(',');
 }
 
+/** Map server playback / finalized-order / mix-finalized rows to host `Song` list. */
+function songsFromServerPlaybackPayload(order: unknown): Song[] {
+  if (!Array.isArray(order)) return [];
+  return order
+    .map((o: any) => {
+      const id = o?.id;
+      if (id == null || String(id).trim() === '') return null;
+      return {
+        id: String(id),
+        name: typeof o?.name === 'string' ? o.name : '',
+        artist: typeof o?.artist === 'string' ? o.artist : '',
+        explicit: o?.explicit === true,
+        youtubeMusic: o?.youtubeMusic === true,
+        sourcePlaylistId: o?.sourcePlaylistId != null ? String(o.sourcePlaylistId) : undefined,
+        sourcePlaylistName: typeof o?.sourcePlaylistName === 'string' ? o.sourcePlaylistName : undefined,
+      } as Song;
+    })
+    .filter((s): s is Song => s != null);
+}
+
 /** Saved-pattern display name for server sync (projector / clients). */
 function customPatternDisplayNameForEmit(
   mask: readonly string[],
@@ -2356,28 +2376,33 @@ const HostView: React.FC = () => {
       addLog('Game started - state set to playing', 'info');
       setShowSongList(false);
       schedulePlayerCardsRefresh(800);
+      const playback = songsFromServerPlaybackPayload(data?.playbackOrder);
+      if (playback.length > 0) {
+        finalizedOrderRef.current = playback;
+        setFinalizedOrder(playback);
+        setSongList(playback);
+        applyLoadedTrackCountsFromSongs(playback);
+        lastFinalizeMixSongListRef.current = playback;
+        addLog(
+          `Playback order (${playback.length} tracks, #1: ${playback[0]?.name || '?'})`,
+          'info',
+        );
+      }
       if (roomId) {
         newSocket.emit('request-finalized-order', { roomId });
       }
     });
 
-    // Receive the finalized shuffled order for 5x15
+    // Receive playback order (same sequence as automatic playback / call numbers).
     newSocket.on('finalized-order', (data: any) => {
       try {
-        const arr = Array.isArray(data?.order)
-          ? data.order.map((o: any) => ({
-              id: o.id,
-              name: o.name,
-              artist: o.artist,
-              explicit: o.explicit === true,
-              youtubeMusic: o.youtubeMusic === true,
-              sourcePlaylistId: o.sourcePlaylistId != null ? String(o.sourcePlaylistId) : undefined,
-              sourcePlaylistName: typeof o.sourcePlaylistName === 'string' ? o.sourcePlaylistName : undefined,
-            }))
-          : [];
+        const arr = songsFromServerPlaybackPayload(data?.order);
         if (arr.length > 0) {
           finalizedOrderRef.current = arr;
           setFinalizedOrder(arr);
+          setSongList(arr);
+          applyLoadedTrackCountsFromSongs(arr);
+          lastFinalizeMixSongListRef.current = arr;
           finalizedOrderPlaylistKeyRef.current =
             pendingFinalizePlaylistKeyRef.current ?? mixPlaylistSelectionKeyRef.current;
           pendingFinalizePlaylistKeyRef.current = null;
@@ -3534,10 +3559,13 @@ const HostView: React.FC = () => {
             finalizedOrderPlaylistKeyRef.current = fk;
             lastFinalizePlaylistKeyRef.current = fk;
             setFinalizedMixPlaylistKey(fk);
-            if (Array.isArray(data?.songList) && data.songList.length > 0) {
-              setSongList(data.songList as Song[]);
-              applyLoadedTrackCountsFromSongs(data.songList as Song[]);
-              lastFinalizeMixSongListRef.current = data.songList as Song[];
+            const finalizedSongs = songsFromServerPlaybackPayload(data?.songList);
+            if (finalizedSongs.length > 0) {
+              finalizedOrderRef.current = finalizedSongs;
+              setFinalizedOrder(finalizedSongs);
+              setSongList(finalizedSongs);
+              applyLoadedTrackCountsFromSongs(finalizedSongs);
+              lastFinalizeMixSongListRef.current = finalizedSongs;
             }
             setMixFinalized(true);
             setTimeout(() => {
@@ -6593,7 +6621,7 @@ const HostView: React.FC = () => {
       return snapshotSongs;
     }
     if (mixFinalized) {
-      return songList;
+      return [];
     }
     if (!songList.length || mixPlaylistSelection.length === 0) {
       return songList;
@@ -8454,7 +8482,7 @@ const HostView: React.FC = () => {
                       {mixFinalized
                         ? gameState === 'playing'
                           ? `Playback order (${finalizedPoolSongs.length} songs)`
-                          : `Finalized playlist (${finalizedPoolSongs.length} songs)`
+                          : `Bingo pool (${finalizedPoolSongs.length} songs)`
                         : `Bingo pool (${finalizedPoolSongs.length} songs)`}
                     </h3>
                     <p style={{
@@ -8464,10 +8492,21 @@ const HostView: React.FC = () => {
                       lineHeight: '1.4'
                     }}>
                       {mixFinalized ? (
-                        <>These are the songs that will be used in your bingo game.</>
+                        gameState === 'playing' ? (
+                          <>
+                            Numbered #1–#{finalizedPoolSongs.length || 75} is the exact playback sequence and
+                            matches call numbers on the projector.
+                          </>
+                        ) : (
+                          <>
+                            Build pool for cards. Order shuffles once when you Start Game; #1 is the first song
+                            played.
+                          </>
+                        )
                       ) : (
                         <>
-                          Preview of the tracks that match your bingo layout (same trimming and dedupe rules as the server). Finalizing locks this order for playback and cards.
+                          Preview of the tracks that match your bingo layout (same trimming and dedupe rules as
+                          the server). Finalize to build the pool; playback order is set when you Start Game.
                         </>
                       )}{' '}
                       You can edit titles to make them more recognizable for players.

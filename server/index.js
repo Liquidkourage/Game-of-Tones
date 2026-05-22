@@ -2754,27 +2754,26 @@ io.on('connection', (socket) => {
     // (Save round / switching prep rounds sends new playlists — must not reuse prior 75 pool).
     if (room.mixFinalized) {
       if (!hostFinalizeNeedsPlaylistRefinal(room, playlists, freeSpace)) {
-        const reshuffled = properShuffle(
+        const rebuilt =
           Array.isArray(songList) && songList.length > 0
             ? songList
             : Array.isArray(room.finalizedSongs)
               ? room.finalizedSongs
-              : [],
-        );
-        if (reshuffled.length > 0) {
-          room.finalizedSongOrder = reshuffled;
-          room.finalizedSongs = reshuffled;
-          routineServerLog(`🎲 Refinalize reshuffle (${reshuffled.length} tracks) — same playlists, new show order`);
-          const bingoOk = await generateBingoCards(roomId, playlists, reshuffled);
+              : [];
+        if (rebuilt.length > 0) {
+          room.finalizedSongOrder = rebuilt;
+          room.finalizedSongs = rebuilt;
+          routineServerLog(`📝 Refinalize rebuild (${rebuilt.length} tracks) — same playlists, build pool (shuffle at Start Game)`);
+          const bingoOk = await generateBingoCards(roomId, playlists, rebuilt);
           if (!bingoOk) {
             socket.emit('finalize-mix-failed', {
               code: 'bingo_generation_failed',
-              message: 'Could not rebuild bingo cards after reshuffle.',
+              message: 'Could not rebuild bingo cards after refinalize.',
             });
             return;
           }
           emitFinalizedOrderFromRoomState(roomId, room);
-          io.to(roomId).emit('mix-finalized', { playlists: room.finalizedPlaylists, songList: reshuffled });
+          io.to(roomId).emit('mix-finalized', { playlists: room.finalizedPlaylists, songList: rebuilt });
           return;
         }
         routineServerLog('⚠️ Mix already finalized for room (unchanged):', roomId);
@@ -2833,12 +2832,13 @@ io.on('connection', (socket) => {
         songListVerified = songList;
       }
 
-      const shuffledForShow = properShuffle(songListVerified);
-      room.finalizedSongOrder = shuffledForShow;
-      room.finalizedSongs = shuffledForShow;
-      routineServerLog(`📝 Stored ${shuffledForShow.length} finalized songs (shuffled) for room ${roomId}`);
+      // Build the 75-track pool in host send order; playback shuffle happens at Start Game only.
+      const poolForCards = songListVerified;
+      room.finalizedSongOrder = poolForCards;
+      room.finalizedSongs = poolForCards;
+      routineServerLog(`📝 Stored ${poolForCards.length} finalized songs (build pool) for room ${roomId}`);
 
-      const bingoOk = await generateBingoCards(roomId, playlists, shuffledForShow);
+      const bingoOk = await generateBingoCards(roomId, playlists, poolForCards);
       if (!bingoOk) {
         room.finalizedPlaylists = null;
         room.finalizedSongOrder = null;
@@ -2856,7 +2856,7 @@ io.on('connection', (socket) => {
 
       room.mixFinalized = true;
       
-      io.to(roomId).emit('mix-finalized', { playlists, songList: shuffledForShow });
+      io.to(roomId).emit('mix-finalized', { playlists, songList: poolForCards });
       
       routineServerLog('✅ Mix finalized for room:', roomId);
     } catch (error) {
@@ -4515,6 +4515,17 @@ io.on('connection', (socket) => {
 
         emitPublicDisplayPoolLayout(roomId, room);
 
+        const playbackOrderPayload = showDeck.map((s) => ({
+          id: s.id,
+          name: s.name || '',
+          artist: s.artist || '',
+          explicit: s.explicit === true,
+          youtubeMusic: s.youtubeMusic === true,
+          sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
+          sourcePlaylistName:
+            typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
+        }));
+
         io.to(roomId).emit('game-started', {
           roomId,
           snippetLength,
@@ -4522,6 +4533,7 @@ io.on('connection', (socket) => {
           pattern: room.pattern,
           customMask: Array.from(room.customPattern || []),
           patternComposite: patternCompositeForClient(room),
+          playbackOrder: playbackOrderPayload,
           ...patternExtrasForClient(room),
         });
 
