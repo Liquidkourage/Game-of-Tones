@@ -4376,7 +4376,7 @@ io.on('connection', (socket) => {
         const showDeck = buildShowPoolDeck(room, deckSource, useSavedRoundPlayback);
         if (showDeck.length > 0) {
           routineServerLog(
-            `🎲 Show pool (${showDeck.length} tracks) — play in order 1→${showDeck.length}${useSavedRoundPlayback ? ' [saved round: new shuffle]' : ' [from Finalize Mix]'}`,
+            `🎲 Start-game playback order (${showDeck.length} tracks, shuffled) — play 1→${showDeck.length}${useSavedRoundPlayback ? ' [saved round]' : ''}`,
           );
         }
 
@@ -4445,8 +4445,10 @@ io.on('connection', (socket) => {
             routineServerLog(`📋 Using ${room.finalizedPlaylists ? 'finalized' : 'regular'} playlists for card generation`);
             routineServerLog(`📋 Playlist order: ${playlistsToUse.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
             songOrderForCards =
-              room.finalizedSongOrder ||
-              (Array.isArray(songList) && songList.length > 0 ? songList : null);
+              showDeck.length > 0
+                ? showDeck
+                : room.finalizedSongOrder ||
+                  (Array.isArray(songList) && songList.length > 0 ? songList : null);
           }
           await generateBingoCards(roomId, playlistsToUse, songOrderForCards);
 
@@ -5437,14 +5439,9 @@ function applyShowPoolOrderToRoom(room, roomId, showDeck) {
   emitFinalizedOrderFromRoomState(roomId, room);
 }
 
-/** Saved round: shuffle pool once at start. Otherwise use the pool from Finalize Mix. */
-function buildShowPoolDeck(room, deckSource, useSavedRoundPlayback) {
+/** Start Game: shuffle into playback order (finalize only builds the pool). */
+function buildShowPoolDeck(_room, deckSource, _useSavedRoundPlayback) {
   if (!Array.isArray(deckSource) || deckSource.length === 0) return [];
-  if (useSavedRoundPlayback) {
-    return properShuffle(deckSource);
-  }
-  const fromFinal = showDeckFromFinalizedOrder(room, deckSource);
-  if (fromFinal.length > 0) return fromFinal;
   return properShuffle(deckSource);
 }
 

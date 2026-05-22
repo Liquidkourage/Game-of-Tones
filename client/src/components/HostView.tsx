@@ -3846,7 +3846,9 @@ const HostView: React.FC = () => {
       }
 
       if (useSavedRoundPlayback) {
-        addLog('Starting game from saved round — server shuffles pool once, then plays 1→N', 'info');
+        addLog('Starting game from saved round — server shuffles playback order, then plays 1→N', 'info');
+      } else if (mixFinalized) {
+        addLog('Starting game — server shuffles playback order from your bingo pool, then plays 1→N', 'info');
       }
 
       socket.emit('start-game', {

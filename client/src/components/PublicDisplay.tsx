@@ -774,20 +774,20 @@ function poolsOrderEqual(a: string[] | null | undefined, b: string[] | null | un
   return true;
 }
 
-/** 1×75 call list: fill top→bottom (5 per column), then next column left→right. */
-function buildCallColumnsTopDownThenAcross(playedOrder: readonly string[]): string[][] {
-  const ids = playedOrder.filter((id) => id && !id.startsWith('__placeholder_'));
-  const cols: string[][] = [];
-  for (let i = 0; i < ids.length; i += 5) {
-    cols.push(ids.slice(i, i + 5));
+/**
+ * How many of the 15 fixed 5-song bands in the 1×75 pool have at least one played song.
+ * Pool order matches playback order after Start Game shuffle (bands = columns 1–15).
+ */
+function countOccupiedBandsInPool(ids: string[] | null | undefined, playedIds: ReadonlySet<string>): number {
+  if (!ids?.length) return 0;
+  let n = 0;
+  for (let g = 0; g < 15; g++) {
+    const slice = ids.slice(g * 5, g * 5 + 5);
+    if (slice.some((id) => !id.startsWith('__placeholder_') && playedIds.has(id))) {
+      n++;
+    }
   }
-  return cols;
-}
-
-function countPopulatedCallColumns(playedOrder: readonly string[]): number {
-  const ids = playedOrder.filter((id) => id && !id.startsWith('__placeholder_'));
-  if (ids.length === 0) return 0;
-  return Math.ceil(ids.length / 5);
+  return n;
 }
 
 /** Base pause between 1×75 carousel column steps (~5s hold + ~1s slide). */
@@ -1002,7 +1002,7 @@ const PublicDisplay: React.FC = () => {
   }, [isVerificationPending]);
   // Flag to prevent auto-reveal during reset operations
   const isResettingRef = useRef<boolean>(false);
-  // 1×75 carousel: how many call columns fit on screen (default 3 → 15 calls = 3×5 grid)
+  // Visible carousel columns (default 3; can be overridden via ?cols=5)
   const visibleCols = (() => {
     const p = Number.parseInt(searchParams.get('cols') || '', 10);
     if (Number.isFinite(p) && p >= 1 && p <= 5) return p;
@@ -2484,7 +2484,10 @@ const PublicDisplay: React.FC = () => {
 
   const snapCarouselAfterForwardLoop = useCallback(() => {
     if (columnCallListLayout || !animating) return;
-    const total = countPopulatedCallColumns(playedOrderRef.current);
+    const ids = oneBy75IdsRef.current;
+    if (!ids?.length) return;
+    const played = new Set(playedOrderRef.current);
+    const total = countOccupiedBandsInPool(ids, played);
     if (total <= visibleCols) return;
     const idx = carouselIndexRef.current;
     if (idx < total) return;
@@ -2502,12 +2505,14 @@ const PublicDisplay: React.FC = () => {
 
     const scheduleTick = () => {
       if (cancelled) return;
-      const total = countPopulatedCallColumns(playedOrderRef.current);
-      if (total === 0) {
+      const ids = oneBy75IdsRef.current;
+      if (!ids?.length) {
         carouselTickTimerRef.current = setTimeout(scheduleTick, CAROUSEL_BASE_DWELL_MS);
         return;
       }
 
+      const played = new Set(playedOrderRef.current);
+      const total = countOccupiedBandsInPool(ids, played);
       if (total <= visibleCols) {
         carouselTickTimerRef.current = setTimeout(scheduleTick, CAROUSEL_BASE_DWELL_MS);
         return;
@@ -3437,7 +3442,7 @@ const PublicDisplay: React.FC = () => {
     );
   };
 
-  // 1×75: play-order columns (5 rows top→bottom, then next column); carousel shows `visibleCols` at a time (default 3).
+  // 1×75: 15 pool bands × 5 rows; carousel scrolls horizontally (visibleCols at a time, default 3).
   const renderOneBy75GroupedColumns = () => {
     // Use state if available, otherwise fallback to ref (for fallback mode)
     const idsToUse = oneBy75Ids || oneBy75IdsRef.current;
@@ -3459,27 +3464,33 @@ const PublicDisplay: React.FC = () => {
       console.warn(`⚠️ 1x75 display: Pool has only ${idsToUse.length} songs (expected 75). This may cause songs beyond position ${idsToUse.length} to not display.`);
     }
     
-    const visibleGroups = buildCallColumnsTopDownThenAcross(playedOrderRef.current);
+    const played = new Set(playedOrderRef.current);
+
+    const groups: string[][] = Array.from({ length: 15 }, (_, g) => {
+      const start = g * 5;
+      const slice = idsToUse.slice(start, start + 5);
+      const playedInGroup = slice.filter((id) => !id.startsWith('__placeholder_') && played.has(id));
+      return playedInGroup.sort((a, b) => {
+        const sa = playedSeqRef.current[a] ?? Number.MAX_SAFE_INTEGER;
+        const sb = playedSeqRef.current[b] ?? Number.MAX_SAFE_INTEGER;
+        if (sa !== sb) return sa - sb;
+        return slice.indexOf(a) - slice.indexOf(b);
+      });
+    });
+    const visibleGroups = groups.filter((g) => g.length > 0);
     const total = visibleGroups.length;
     const shouldScroll = total > visibleCols;
-    const colsOnScreen = total > 0 ? Math.min(visibleCols, total) : visibleCols;
-    // Duplicate first N for smooth wrap
     const extendedGroups: string[][] = shouldScroll ? [...visibleGroups, ...visibleGroups.slice(0, visibleCols)] : visibleGroups;
 
     const maxSlideIndex = shouldScroll ? total + visibleCols - 1 : 0;
     const effectiveIndex = shouldScroll ? Math.min(carouselIndex, maxSlideIndex) : 0;
-    const slideDenom = shouldScroll ? visibleCols : colsOnScreen;
-    const colWidth = viewportWidth > 0 && slideDenom > 0 ? viewportWidth / slideDenom : 0;
+    const colWidth = viewportWidth > 0 ? viewportWidth / visibleCols : 0;
     const xPx = -(effectiveIndex * colWidth);
-    const xPercent = slideDenom > 0 ? -(effectiveIndex * (100 / slideDenom)) : 0;
+    const xPercent = -(effectiveIndex * (100 / visibleCols));
 
     return (
       <div className="call-list-content">
-        <div
-          ref={carouselViewportRef}
-          className="call-carousel-viewport"
-          style={{ ['--carousel-visible-cols' as any]: String(colsOnScreen) }}
-        >
+        <div ref={carouselViewportRef} className="call-carousel-viewport" style={{ ['--carousel-visible-cols' as any]: String(visibleCols) }}>
           <motion.div
             className="call-carousel-track"
             animate={{ x: shouldScroll ? (colWidth > 0 ? xPx : xPercent + '%') : 0 }}
@@ -3491,22 +3502,8 @@ const PublicDisplay: React.FC = () => {
             {extendedGroups.map((group, gi) => (
               <div key={gi} className="call-carousel-col">
                 <div className="call-carousel-col-inner">
-                  {Array.from({ length: 5 }, (_, rowIdx) => {
-                    const id = group[rowIdx];
-                    if (!id) {
-                      return (
-                        <div
-                          key={`empty-${gi}-${rowIdx}`}
-                          className="call-item call-item-slot"
-                          aria-hidden
-                          style={{ visibility: 'hidden', pointerEvents: 'none' }}
-                        />
-                      );
-                    }
-                    const playedIdx = playedOrderRef.current.indexOf(id);
+                  {group.map((id) => {
                     const poolIdx = idsToUse.indexOf(id);
-                    const callNum =
-                      playedIdx >= 0 ? playedIdx + 1 : poolIdx >= 0 ? poolIdx + 1 : 0;
                     const meta = idMetaRef.current[id] || { name: '', artist: '' };
                     const isCurrent = gameState.currentSong?.id === id;
                     const { title, artist } = renderCallSongLines(id, meta, renderMaskedText);
@@ -3533,7 +3530,7 @@ const PublicDisplay: React.FC = () => {
                           background: 'rgba(255,255,255,0.08)'
                         }}
                       >
-                        <div className="call-number" style={{ fontSize: '1.6rem', minWidth: 38, fontWeight: 900, lineHeight: 1, flexShrink: 0 }}>{callNum > 0 ? callNum : ''}</div>
+                        <div className="call-number" style={{ fontSize: '1.6rem', minWidth: 38, fontWeight: 900, lineHeight: 1, flexShrink: 0 }}>{poolIdx >= 0 ? poolIdx + 1 : ''}</div>
                         <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: isFullCardPattern ? 'flex-start' : 'center' }}>
                           <AnimatePresence mode="popLayout" initial={false}>
                             <motion.div
