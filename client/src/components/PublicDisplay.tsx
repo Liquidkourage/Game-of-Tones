@@ -3496,23 +3496,45 @@ const PublicDisplay: React.FC = () => {
 
     const maxSlideIndex = shouldScroll ? total + visibleCols - 1 : 0;
     const effectiveIndex = shouldScroll ? Math.min(carouselIndex, maxSlideIndex) : 0;
-    const colWidth = viewportWidth > 0 ? viewportWidth / visibleCols : 0;
-    const xPx = -(effectiveIndex * colWidth);
-    const xPercent = -(effectiveIndex * (100 / visibleCols));
+    const colWidthPx = viewportWidth > 0 ? Math.floor(viewportWidth / visibleCols) : 0;
+    const trackWidthPx = shouldScroll
+      ? extendedGroups.length * colWidthPx
+      : colWidthPx > 0
+        ? visibleCols * colWidthPx
+        : 0;
+    const xPx = colWidthPx > 0 ? -(effectiveIndex * colWidthPx) : 0;
+
+    const colStyle: React.CSSProperties | undefined =
+      colWidthPx > 0
+        ? {
+            flex: `0 0 ${colWidthPx}px`,
+            width: colWidthPx,
+            maxWidth: colWidthPx,
+            minWidth: 0,
+          }
+        : undefined;
+
+    const trackStyle: React.CSSProperties | undefined =
+      trackWidthPx > 0 ? { width: trackWidthPx, minWidth: trackWidthPx } : { width: '100%' };
 
     return (
       <div className="call-list-content">
-        <div ref={carouselViewportRef} className="call-carousel-viewport" style={{ ['--carousel-visible-cols' as any]: String(visibleCols) }}>
+        <div
+          ref={carouselViewportRef}
+          className="call-carousel-viewport"
+          style={{ ['--carousel-visible-cols' as any]: String(visibleCols) }}
+        >
           <motion.div
             className="call-carousel-track"
-            animate={{ x: shouldScroll ? (colWidth > 0 ? xPx : xPercent + '%') : 0 }}
+            style={trackStyle}
+            animate={{ x: colWidthPx > 0 && shouldScroll ? xPx : 0 }}
             transition={{ duration: animating && shouldScroll ? 1 : 0, ease: 'easeInOut' }}
             onAnimationComplete={() => {
               if (shouldScroll) snapCarouselAfterForwardLoop();
             }}
           >
             {extendedGroups.map((group, gi) => (
-              <div key={gi} className="call-carousel-col">
+              <div key={gi} className="call-carousel-col" style={colStyle}>
                 <div className="call-carousel-col-inner">
                   {Array.from({ length: 5 }, (_, rowIdx) => {
                     const id = group[rowIdx];
@@ -3544,16 +3566,20 @@ const PublicDisplay: React.FC = () => {
                         style={{
                           display: 'flex',
                           alignItems: isFullCardPattern ? 'flex-start' : 'center',
-                          gap: 10,
-                          padding: '12px 12px 14px 12px',
+                          gap: 8,
+                          padding: '8px 10px',
                           border: '1px solid rgba(255,255,255,0.15)',
                           borderRadius: 12,
+                          width: '100%',
+                          maxWidth: '100%',
+                          minWidth: 0,
+                          boxSizing: 'border-box',
                           height: isFullCardPattern ? 'auto' : '100%',
-                          overflow: isFullCardPattern ? 'visible' : 'hidden',
+                          overflow: 'hidden',
                           background: 'rgba(255,255,255,0.08)'
                         }}
                       >
-                        <div className="call-number" style={{ fontSize: '1.6rem', minWidth: 38, fontWeight: 900, lineHeight: 1, flexShrink: 0 }}>{poolIdx >= 0 ? poolIdx + 1 : ''}</div>
+                        <div className="call-number" style={{ fontSize: '1.25rem', minWidth: 32, width: 32, fontWeight: 900, lineHeight: 1, flexShrink: 0 }}>{poolIdx >= 0 ? poolIdx + 1 : ''}</div>
                         <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: isFullCardPattern ? 'flex-start' : 'center' }}>
                           <AnimatePresence mode="popLayout" initial={false}>
                             <motion.div
