@@ -1726,8 +1726,6 @@ function startSimpleProgression(roomId, deviceId, snippetLengthSeconds) {
   const isLast = total > 0 && idx >= total - 1;
   const delaySec = snippetLengthSeconds;
 
-  if (isLast) emitFinalSongStartedIfNeeded(roomId, room, snippetLengthSeconds);
-
   routineServerLog(
     `⏰ Starting simple progression: ${snippetLengthSeconds}s per song${isLast ? ' (final — then end game)' : ''}`,
   );
@@ -1739,7 +1737,8 @@ function startSimpleProgression(roomId, deviceId, snippetLengthSeconds) {
     roomId,
     async () => {
       if (isLast) {
-        routineServerLog('⏰ Final song timer fired — stopping playback and ending game');
+        routineServerLog('⏰ Final song timer fired — notifying host and ending game');
+        emitFinalSongStartedIfNeeded(roomId, room, snippetLengthSeconds);
         await endGamePlaylistComplete(roomId, deviceId);
         return;
       }
@@ -5340,7 +5339,7 @@ function ingestSongsIntoIdMap(idToSong, list) {
   }
 }
 
-/** Playback order that matches 1×75 bingo cards (oneBySeventyFivePool is authoritative). */
+/** 1×75 playback + host pool list order (tempo shuffle / playlistSongs, not band-layout iteration). */
 function playbackSongsFromOneBySeventyFivePool(room, metadataSources = []) {
   const pool = room?.oneBySeventyFivePool;
   if (!Array.isArray(pool) || pool.length === 0) return null;
@@ -5349,13 +5348,12 @@ function playbackSongsFromOneBySeventyFivePool(room, metadataSources = []) {
   ingestSongsIntoIdMap(idToSong, room.finalizedSongs);
   ingestSongsIntoIdMap(idToSong, room.playlistSongs);
   for (const src of metadataSources) ingestSongsIntoIdMap(idToSong, src);
-  const ordered = [];
-  for (const row of pool) {
-    const id = row && row.id != null ? String(row.id).trim() : '';
-    if (!id) continue;
-    const song = idToSong.get(id);
-    if (song) ordered.push(song);
-  }
+  const playbackIds = getPlaybackSongIdOrder(room);
+  const idOrder =
+    playbackIds && playbackIds.length > 0
+      ? playbackIds
+      : pool.map((row) => (row && row.id != null ? String(row.id).trim() : '')).filter(Boolean);
+  const ordered = idOrder.map((id) => idToSong.get(id)).filter(Boolean);
   return ordered.length > 0 ? ordered : null;
 }
 
@@ -5397,6 +5395,18 @@ function syncRoomPlaybackOrderAfterStartGame(room, roomId, savedRoundSongs) {
  */
 function buildFinalizedOrderPayloadFromRoom(room) {
   if (!room || !room.mixFinalized) return [];
+
+  if (Array.isArray(room.playlistSongs) && room.playlistSongs.length > 0) {
+    return room.playlistSongs.map((s) => ({
+      id: s.id,
+      name: s.name || '',
+      artist: s.artist || '',
+      explicit: s.explicit === true,
+      youtubeMusic: s.youtubeMusic === true,
+      sourcePlaylistId: s.sourcePlaylistId != null ? String(s.sourcePlaylistId) : undefined,
+      sourcePlaylistName: typeof s.sourcePlaylistName === 'string' ? s.sourcePlaylistName : undefined,
+    }));
+  }
 
   const fos = room.finalizedSongOrder;
   const meta5 = room.fiveByFifteenMeta;
@@ -6860,6 +6870,10 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     room.currentSongIndex = 0;
     room.finalSongNotified = false;
     room.gameState = 'playing';
+    if (room.mixFinalized) {
+      room.finalizedSongOrder = allSongs.map((s) => ({ ...s }));
+      emitFinalizedOrderFromRoomState(roomId, room);
+    }
     routineServerLog(`📝 Stored ${allSongs.length} songs in room ${roomId} for ordered playback`);
     routineServerLog(`📋 First 5 songs in order: ${allSongs.slice(0, 5).map(s => `${s.name} (${s.id})`).join(', ')}`);
     

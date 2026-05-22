@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
@@ -779,6 +779,43 @@ function countOccupiedBandsInPool(ids: string[] | null | undefined, playedIds: R
     }
   }
   return n;
+}
+
+/** Base pause between 1×75 carousel column steps (~5s hold + ~1s slide). */
+const CAROUSEL_BASE_DWELL_MS = 6000;
+
+/**
+ * Relative scroll speed for the leftmost visible band (higher = faster advance = shorter dwell).
+ * Earliest band uses max speed; latest uses 1.0× (full base dwell). Never below 1.0×.
+ */
+const CAROUSEL_EARLY_SPEED = 1.5;
+
+/**
+ * Dwell (ms) before advancing one column forward on the 1×75 carousel.
+ *
+ * Later columns get the full base pause; earlier columns scroll faster (shorter dwell only).
+ * Dwell never exceeds CAROUSEL_BASE_DWELL_MS — “more time” for late titles is relative.
+ *
+ * speed = 1.5 − 0.5 × (i/(N−1))^p
+ * dwell = base / speed   (min base/1.5, max base)
+ *
+ * @param leftColumnIndex - leftmost visible band index (0 = earliest)
+ * @param totalPopulatedBands - occupied 5-song bands (1–15)
+ */
+function carouselDwellMsForLeftColumn(leftColumnIndex: number, totalPopulatedBands: number): number {
+  const bands = Math.max(1, Math.floor(totalPopulatedBands));
+  const left = Math.max(0, Math.floor(leftColumnIndex));
+  if (bands <= 1) return CAROUSEL_BASE_DWELL_MS;
+
+  const maxIdx = bands - 1;
+  const position = Math.min(left, maxIdx) / maxIdx;
+
+  // More populated bands → steeper curve (early columns rush off faster; late still capped at base)
+  const curvePower = 1 + (bands - 1) / 14;
+  const t = Math.pow(position, curvePower);
+
+  const speed = CAROUSEL_EARLY_SPEED - (CAROUSEL_EARLY_SPEED - 1) * t;
+  return Math.round(CAROUSEL_BASE_DWELL_MS / speed);
 }
 
 const PublicDisplay: React.FC = () => {
@@ -2439,41 +2476,29 @@ const PublicDisplay: React.FC = () => {
     carouselIndexRef.current = carouselIndex;
   }, [carouselIndex]);
 
-  // Auto-advance the 15x5 grouped columns carousel (1x75 grouped layout only).
-  // Dwell scales by left-edge column: earliest band (index 0) scrolls faster (1.5× → shorter wait).
+  // Auto-advance the 1×75 carousel; dwell grows for later leftmost bands (see carouselDwellMsForLeftColumn).
   useEffect(() => {
     if (columnCallListLayout) return;
 
-    const CAROUSEL_BASE_MS = 6000;
     let cancelled = false;
 
     const scheduleTick = () => {
       if (cancelled) return;
       const ids = oneBy75IdsRef.current;
       if (!ids?.length) {
-        carouselTickTimerRef.current = setTimeout(scheduleTick, CAROUSEL_BASE_MS);
+        carouselTickTimerRef.current = setTimeout(scheduleTick, CAROUSEL_BASE_DWELL_MS);
         return;
       }
 
       const played = new Set(playedOrderRef.current);
       const totalGroups = countOccupiedBandsInPool(ids, played);
       const leftIdx = carouselIndexRef.current;
-      const speedRate = leftIdx === 0 ? 1.5 : 1.0;
-      const delayMs = CAROUSEL_BASE_MS / speedRate;
+      const delayMs = carouselDwellMsForLeftColumn(leftIdx, totalGroups);
 
       carouselTickTimerRef.current = setTimeout(() => {
         if (cancelled) return;
         if (totalGroups > visibleCols) {
-          setCarouselIndex((prev) => {
-            const next = prev + 1;
-            const wrapAt = totalGroups + visibleCols;
-            if (next >= wrapAt) {
-              setAnimating(false);
-              requestAnimationFrame(() => setAnimating(true));
-              return next - totalGroups;
-            }
-            return next;
-          });
+          setCarouselIndex((prev) => prev + 1);
         } else {
           setCarouselIndex(0);
         }
@@ -2491,22 +2516,20 @@ const PublicDisplay: React.FC = () => {
     };
   }, [oneBy75Ids, visibleCols, columnCallListLayout]);
 
-  // Keep carousel index in range when band count drops (pool / play state changes)
-  useEffect(() => {
+  /** After forward slide into the duplicate tail, snap back to the matching primary index (no backward animation). */
+  const snapCarouselIfInDuplicateTail = useCallback(() => {
     if (columnCallListLayout) return;
     const ids = oneBy75IdsRef.current;
     if (!ids?.length) return;
     const played = new Set(playedOrderRef.current);
     const totalGroups = countOccupiedBandsInPool(ids, played);
     if (totalGroups <= visibleCols) return;
-    const maxIdx = totalGroups + visibleCols - 1;
-    setCarouselIndex((prev) => {
-      if (prev <= maxIdx) return prev;
-      setAnimating(false);
-      requestAnimationFrame(() => setAnimating(true));
-      return Math.max(0, prev - totalGroups);
-    });
-  }, [oneBy75Ids, totalPlayedCount, visibleCols, columnCallListLayout]);
+    const idx = carouselIndexRef.current;
+    if (idx < totalGroups) return;
+    setAnimating(false);
+    setCarouselIndex(idx - totalGroups);
+    requestAnimationFrame(() => setAnimating(true));
+  }, [columnCallListLayout]);
 
   // Measure viewport width for pixel-perfect slides (one column per step)
   useEffect(() => {
@@ -3467,6 +3490,9 @@ const PublicDisplay: React.FC = () => {
             className="call-carousel-track"
             animate={{ x: shouldScroll ? (colWidth > 0 ? xPx : xPercent + '%') : 0 }}
             transition={{ duration: animating && shouldScroll ? 1 : 0, ease: 'easeInOut' }}
+            onAnimationComplete={() => {
+              if (animating && shouldScroll) snapCarouselIfInDuplicateTail();
+            }}
           >
             {extendedGroups.map((group, gi) => (
               <div key={gi} className="call-carousel-col">
@@ -5137,51 +5163,41 @@ const PublicDisplay: React.FC = () => {
             {/* Under pattern: Info (room + stats) */}
             <div className="info-grid">
               <motion.div 
-                className="quick-stats"
+                className="quick-stats public-info-panel"
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.6, delay: 0.2 }}
                 style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}
               >
-                {/* Removed redundant INFO header */}
-                
-                {/* Room code and stats in same row */}
-                <div style={{ display: 'flex', flexDirection: 'row', gap: 20, alignItems: 'center', justifyContent: 'space-around' }}>
-                  {/* Room code */}
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <div style={{ fontWeight: 800, fontSize: '1.8rem', color: '#b3b3b3', textAlign: 'center' }}>Room Number:</div>
-                    <div style={{ fontWeight: 900, fontSize: '3.2rem', color: '#00ff88', textAlign: 'center' }}>{roomInfo?.id || roomId}</div>
-                </div>
-                  
-                  {/* Players */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div className="public-info-panel__row">
+                  <div className="public-info-panel__block public-info-panel__block--room">
+                    <div className="public-info-panel__label">Room Number:</div>
+                    <div className="public-info-panel__value public-info-panel__value--room">{roomInfo?.id || roomId}</div>
+                  </div>
+                  <div className="public-info-panel__stat">
                     <Users className="stat-icon" />
                     <div>
-                      <div style={{ fontSize: '2.8rem', fontWeight: 900 }}>{gameState.playerCount}</div>
-                      <div style={{ fontSize: '1.8rem', color: '#b3b3b3' }}>Players</div>
-                </div>
-                </div>
-                  
-                  {/* Songs */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div className="public-info-panel__value">{gameState.playerCount}</div>
+                      <div className="public-info-panel__label">Players</div>
+                    </div>
+                  </div>
+                  <div className="public-info-panel__stat">
                     <List className="stat-icon" />
                     <div>
-                      <div style={{ fontSize: '2.8rem', fontWeight: 900 }}>{totalPlayedCount}</div>
-                      <div style={{ fontSize: '1.8rem', color: '#b3b3b3' }}>Songs</div>
-                </div>
-                      </div>
-                      
-                  {/* Round Info */}
+                      <div className="public-info-panel__value">{totalPlayedCount}</div>
+                      <div className="public-info-panel__label">Songs</div>
+                    </div>
+                  </div>
                   {gameState.currentRound && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div className="public-info-panel__stat">
                       <Crown className="stat-icon" />
                       <div>
-                        <div style={{ fontSize: '2.8rem', fontWeight: 900 }}>{gameState.currentRound.number}</div>
-                        <div style={{ fontSize: '1.8rem', color: '#b3b3b3' }}>Round</div>
+                        <div className="public-info-panel__value">{gameState.currentRound.number}</div>
+                        <div className="public-info-panel__label">Round</div>
                       </div>
                     </div>
                   )}
-                      </div>
+                </div>
                 {/* QR code below stats - fills remaining space */}
                 {roomId && (
                   <div style={{ 

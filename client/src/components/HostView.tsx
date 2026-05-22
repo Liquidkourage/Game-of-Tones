@@ -2354,9 +2354,11 @@ const HostView: React.FC = () => {
       setIsStartingGame(false);
       setBingoColumnPlaylistNames([]);
       addLog('Game started - state set to playing', 'info');
-      // Auto-collapse lists during gameplay
       setShowSongList(false);
       schedulePlayerCardsRefresh(800);
+      if (roomId) {
+        newSocket.emit('request-finalized-order', { roomId });
+      }
     });
 
     // Receive the finalized shuffled order for 5x15
@@ -2464,7 +2466,7 @@ const HostView: React.FC = () => {
       const sec = data.snippetSec ?? 30;
       showHostAckNotificationSocketRef.current({
         title: 'Final song',
-        message: `Song ${n} of ${total} is playing. Playback stops after ${sec} seconds (your snippet length).`,
+        message: `Song ${n} of ${total} finished. Playback stops now (${sec}s snippet complete).`,
         variant: 'warning',
       });
       playHostAlertSound();
@@ -6575,8 +6577,11 @@ const HostView: React.FC = () => {
   );
 
   const finalizedPoolSongs: Song[] = useMemo(() => {
+    if (finalizedOrder && finalizedOrder.length > 0) {
+      return finalizedOrder;
+    }
     if (mixFinalized) {
-      return (finalizedOrder && finalizedOrder.length > 0 ? finalizedOrder : null) || songList;
+      return songList;
     }
     if (!songList.length || mixPlaylistSelection.length === 0) {
       const ridx = currentRoundIndex;
