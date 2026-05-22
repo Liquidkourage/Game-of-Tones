@@ -4383,9 +4383,11 @@ io.on('connection', (socket) => {
         }
 
         routineServerLog('🎵 Generating bingo cards...');
-        const forceRegenerateCards =
-          !useSavedRoundPlayback ||
-          shouldRegenerateBingoCardsOnStartGame(room, playlists, freeSpace);
+        const forceRegenerateCards = shouldRegenerateBingoCardsOnStartGame(
+          room,
+          playlists,
+          freeSpace,
+        );
         if (forceRegenerateCards) {
           if (freeSpace !== undefined) {
             room.freeSpaceEnabled = !!freeSpace;
@@ -4439,10 +4441,8 @@ io.on('connection', (socket) => {
             routineServerLog(`📋 Using ${room.finalizedPlaylists ? 'finalized' : 'regular'} playlists for card generation`);
             routineServerLog(`📋 Playlist order: ${playlistsToUse.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
             songOrderForCards =
-              deckForShow.length > 0
-                ? deckForShow
-                : room.finalizedSongOrder ||
-                  (Array.isArray(songList) && songList.length > 0 ? songList : null);
+              room.finalizedSongOrder ||
+              (Array.isArray(songList) && songList.length > 0 ? songList : null);
           }
           await generateBingoCards(roomId, playlistsToUse, songOrderForCards);
 
@@ -4470,6 +4470,11 @@ io.on('connection', (socket) => {
           routineServerLog(
             '🛑 Skipping card regeneration (mix finalized, cards already exist — same playlists/free-center as prep)',
           );
+          if (!useSavedRoundPlayback && deckForShow.length > 0) {
+            room.finalizedSongOrder = deckForShow.map((s) => ({ ...s }));
+            emitFinalizedOrderFromRoomState(roomId, room);
+            routineServerLog('📻 Updated playback call order for host (cards unchanged)');
+          }
           if (useSavedRoundPlayback && savedRoundSongs.length > 0) {
             syncRoomPlaybackOrderAfterStartGame(room, roomId, savedRoundSongs);
           }
