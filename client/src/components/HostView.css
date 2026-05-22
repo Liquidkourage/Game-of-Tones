@@ -2652,10 +2652,32 @@
 .host-view .host-live-dock__heading {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 0 0 10px;
-  font-size: 1.1rem;
+  gap: 8px;
+  margin: 0;
+  font-size: 1rem;
   color: #00ff88;
+}
+
+.host-view .host-live-dock__now-playing-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.host-view .host-live-dock__song-index {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #00ff88;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.host-view .host-live-dock__song-index-sep {
+  opacity: 0.55;
+  margin: 0 2px;
+  font-weight: 600;
 }
 
 .host-view .host-live-dock__now-playing {
@@ -2666,24 +2688,38 @@
   box-shadow: none;
 }
 
+.host-view .host-live-dock__now-playing-body {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px 14px;
+  align-items: center;
+}
+
+@media (max-width: 720px) {
+  .host-view .host-live-dock__now-playing-body {
+    grid-template-columns: 1fr;
+  }
+}
+
 .host-view .host-live-dock__track {
-  text-align: center;
-  padding: 12px 14px;
-  margin-bottom: 12px;
-  border-radius: 10px;
+  text-align: left;
+  padding: 8px 10px;
+  margin: 0;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.05);
+  min-width: 0;
 }
 
 .host-view .host-live-dock__track-title {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   flex-wrap: wrap;
-  gap: 10px;
-  font-size: 1.15rem;
+  gap: 8px;
+  font-size: 1rem;
   font-weight: 700;
   color: #00ff88;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .host-view .host-live-dock__track-artist {
@@ -2695,19 +2731,20 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  justify-content: center;
-  margin-bottom: 12px;
+  justify-content: flex-end;
+  margin: 0;
 }
 
 .host-view .host-live-dock__volume {
   display: flex;
   align-items: center;
-  gap: 10px;
-  justify-content: center;
+  gap: 8px;
+  justify-content: flex-end;
   flex-wrap: wrap;
-  padding: 12px 14px;
-  border-radius: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.05);
+  margin: 0;
 }
 
 .host-view .host-live-dock__volume-label {
@@ -2722,12 +2759,16 @@
   max-width: 280px;
 }
 
-.host-view .host-live-dock__actions {
+.host-view .host-show-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   justify-content: center;
-  padding-top: 4px;
+  padding: 10px 12px 14px;
+  margin: 0 0 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.22);
 }
 
 .host-view .host-go-live {

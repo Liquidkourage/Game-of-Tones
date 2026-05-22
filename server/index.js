@@ -1437,6 +1437,7 @@ function computeSpotifySnippetRandomStartMs(room, song, contextLabel) {
 function buildSongPlayingPayload(room, song, currentIndex) {
   const yt = songUsesYoutubePlayback(song);
   const startMs = room.currentSongStartMs || 0;
+  const totalSongs = Array.isArray(room.playlistSongs) ? room.playlistSongs.length : 0;
   const payload = {
     songId: song.id,
     songName: song.name,
@@ -1445,7 +1446,9 @@ function buildSongPlayingPayload(room, song, currentIndex) {
     explicit: song.explicit === true,
     snippetLength: room.snippetLength,
     currentIndex,
-    totalSongs: room.playlistSongs.length,
+    totalSongs,
+    playbackNumber: currentIndex + 1,
+    isFinalSong: totalSongs > 0 && currentIndex >= totalSongs - 1,
     previewUrl: song.previewUrl || null,
     youtubeMusic: yt,
   };
@@ -1654,26 +1657,97 @@ function startSimpleContextMonitor(roomId, deviceId) {
   roomPlaybackWatchers.set(roomId, intervalId);
 }
 
+/** Playback order (1…N) for host pool / finalized-order — not 1×75 band layout order. */
+function getPlaybackSongIdOrder(room) {
+  if (!room) return null;
+  if (Array.isArray(room.playlistSongs) && room.playlistSongs.length > 0) {
+    return room.playlistSongs.map((s) => s.id).filter(Boolean);
+  }
+  const fos = room.finalizedSongOrder;
+  if (!Array.isArray(fos) || fos.length === 0) return null;
+  return fos
+    .map((entry) => (typeof entry === 'string' ? entry : entry?.id))
+    .filter(Boolean);
+}
+
+function emitFinalSongStartedIfNeeded(roomId, room, snippetLengthSeconds) {
+  const total = Array.isArray(room.playlistSongs) ? room.playlistSongs.length : 0;
+  const idx = room.currentSongIndex ?? 0;
+  if (total <= 0 || idx < total - 1) return;
+  if (room.finalSongNotified) return;
+  room.finalSongNotified = true;
+  const snippetSec = Number.isFinite(snippetLengthSeconds)
+    ? snippetLengthSeconds
+    : room.snippetLength || 30;
+  io.to(roomId).emit('final-song-started', {
+    roomId,
+    songNumber: idx + 1,
+    totalSongs: total,
+    snippetSec,
+  });
+}
+
+async function endGamePlaylistComplete(roomId, deviceId) {
+  routineServerLog('🏁 Playlist complete. Ending game.');
+  const room = rooms.get(roomId);
+  if (!room) return;
+  room.gameState = 'ended';
+  clearRoomTimer(roomId);
+  clearPlaybackWatcher(roomId);
+
+  const dev = deviceId || room.selectedDeviceId;
+  const needsSpotifyTransport =
+    Array.isArray(room.playlistSongs) && room.playlistSongs.some((s) => !songUsesYoutubePlayback(s));
+  if (dev && needsSpotifyTransport) {
+    try {
+      await spotifyFor(roomId).pausePlayback(dev);
+    } catch (err) {
+      console.warn('⚠️ pausePlayback on playlist complete:', err?.message || err);
+    }
+  }
+
+  if (room.temporaryPlaylistId) {
+    spotifyFor(roomId)
+      .deleteTemporaryPlaylist(room.temporaryPlaylistId)
+      .catch((err) => console.warn('⚠️ Failed to delete temporary playlist:', err));
+    room.temporaryPlaylistId = null;
+  }
+
+  io.to(roomId).emit('game-ended', { roomId, reason: 'playlist-complete' });
+}
+
 // NEW: Simple timer-based song progression - let timer control everything
 function startSimpleProgression(roomId, deviceId, snippetLengthSeconds) {
   const room = rooms.get(roomId);
   if (!room) return;
-  
-  routineServerLog(`⏰ Starting simple progression: ${snippetLengthSeconds}s per song`);
-  
-  // Clear any existing timer
+
+  const total = Array.isArray(room.playlistSongs) ? room.playlistSongs.length : 0;
+  const idx = room.currentSongIndex ?? 0;
+  const isLast = total > 0 && idx >= total - 1;
+  const delaySec = snippetLengthSeconds;
+
+  if (isLast) emitFinalSongStartedIfNeeded(roomId, room, snippetLengthSeconds);
+
+  routineServerLog(
+    `⏰ Starting simple progression: ${snippetLengthSeconds}s per song${isLast ? ' (final — then end game)' : ''}`,
+  );
+
   clearRoomTimer(roomId);
-  
-  // Start context monitor for hijack detection only
   startSimpleContextMonitor(roomId, deviceId);
-  
-  // Set timer for exact snippet duration
-  setRoomTimer(roomId, async () => {
-    routineServerLog(`⏰ Timer fired - advancing to next song`);
-    
-    // Immediately advance to next song (don't pause first to avoid dead air)
-    await playNextSongSimple(roomId, deviceId);
-  }, snippetLengthSeconds * 1000);
+
+  setRoomTimer(
+    roomId,
+    async () => {
+      if (isLast) {
+        routineServerLog('⏰ Final song timer fired — stopping playback and ending game');
+        await endGamePlaylistComplete(roomId, deviceId);
+        return;
+      }
+      routineServerLog(`⏰ Timer fired - advancing to next song`);
+      await playNextSongSimple(roomId, deviceId);
+    },
+    delaySec * 1000,
+  );
 }
 
 // NEW: Simplified song progression without complex verification
@@ -1686,22 +1760,8 @@ async function playNextSongSimple(roomId, deviceId) {
     return;
   }
 
-  // Check if we're at the end
   if (room.currentSongIndex + 1 >= room.playlistSongs.length) {
-    routineServerLog('🏁 Playlist complete. Ending game.');
-    room.gameState = 'ended';
-    clearRoomTimer(roomId);
-    clearPlaybackWatcher(roomId);
-    
-    // Clean up temporary playlist
-    if (room.temporaryPlaylistId) {
-      spotifyFor(roomId).deleteTemporaryPlaylist(room.temporaryPlaylistId).catch(err => 
-        console.warn('⚠️ Failed to delete temporary playlist:', err)
-      );
-      room.temporaryPlaylistId = null;
-    }
-    
-    io.to(roomId).emit('game-ended', { roomId, reason: 'playlist-complete' });
+    await endGamePlaylistComplete(roomId, deviceId);
     return;
   }
 
@@ -5388,10 +5448,14 @@ function buildFinalizedOrderPayloadFromRoom(room) {
     const solePlaylistId = solePl != null && solePl.id != null ? String(solePl.id).trim() : '';
     const solePlaylistName = solePl != null && typeof solePl.name === 'string' ? solePl.name : '';
 
-    return ob75
-      .map((row) => {
-        const id = row && row.id != null ? row.id : null;
-        if (!id) return null;
+    const playbackIds = getPlaybackSongIdOrder(room);
+    const idOrder =
+      playbackIds && playbackIds.length > 0
+        ? playbackIds
+        : ob75.map((row) => (row && row.id != null ? row.id : null)).filter(Boolean);
+
+    return idOrder
+      .map((id) => {
         const s = idToSong.get(id);
         return {
           id,
@@ -6794,6 +6858,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     // Store the song list in the room for ordered playback
     room.playlistSongs = allSongs;
     room.currentSongIndex = 0;
+    room.finalSongNotified = false;
     room.gameState = 'playing';
     routineServerLog(`📝 Stored ${allSongs.length} songs in room ${roomId} for ordered playback`);
     routineServerLog(`📋 First 5 songs in order: ${allSongs.slice(0, 5).map(s => `${s.name} (${s.id})`).join(', ')}`);

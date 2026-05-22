@@ -1046,6 +1046,8 @@ const PublicDisplay: React.FC = () => {
   const playedSeqCounterRef = useRef<number>(0);
   // Carousel state for grouped 15x5 columns (show 3 at a time)
   const [carouselIndex, setCarouselIndex] = useState<number>(0);
+  const carouselIndexRef = useRef(0);
+  const carouselTickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [animating, setAnimating] = useState<boolean>(true); // kept for compatibility but no longer toggled
   const carouselViewportRef = useRef<HTMLDivElement | null>(null);
   const [viewportWidth, setViewportWidth] = useState<number>(0);
@@ -2433,41 +2435,60 @@ const PublicDisplay: React.FC = () => {
     };
   }, [gameState.isPlaying, isVerificationPending, letterRevealIntervalSec, titleRevealMode]);
 
-  // Auto-advance the 15x5 grouped columns carousel (1x75 grouped layout only)
   useEffect(() => {
-    const interval = setInterval(() => {
-      // 5x15 mode uses vertical column scroll, not this horizontal carousel
-      if (columnCallListLayout) return;
+    carouselIndexRef.current = carouselIndex;
+  }, [carouselIndex]);
 
-      // Always read the latest pool from the ref — the previous code captured `ids` once when
-      // the effect ran, so the interval could keep slicing an old/partial array (e.g. before
-      // the full 75 loaded). That under-counted bands, caused premature wrap (next > totalGroups),
-      // and skipped later columns — often visible around ~45 songs / 9 bands.
+  // Auto-advance the 15x5 grouped columns carousel (1x75 grouped layout only).
+  // Dwell scales by left-edge column: earliest band (index 0) scrolls faster (1.5× → shorter wait).
+  useEffect(() => {
+    if (columnCallListLayout) return;
+
+    const CAROUSEL_BASE_MS = 6000;
+    let cancelled = false;
+
+    const scheduleTick = () => {
+      if (cancelled) return;
       const ids = oneBy75IdsRef.current;
-      if (!ids?.length) return;
+      if (!ids?.length) {
+        carouselTickTimerRef.current = setTimeout(scheduleTick, CAROUSEL_BASE_MS);
+        return;
+      }
 
       const played = new Set(playedOrderRef.current);
       const totalGroups = countOccupiedBandsInPool(ids, played);
+      const leftIdx = carouselIndexRef.current;
+      const speedRate = leftIdx === 0 ? 1.5 : 1.0;
+      const delayMs = CAROUSEL_BASE_MS / speedRate;
 
-      if (totalGroups > visibleCols) {
-        setCarouselIndex((prev) => {
-          const next = prev + 1;
-          // Extended track ends with `visibleCols` duplicate bands for a seamless forward loop.
-          // When we scroll past that tail, snap to the same visual column in the primary strip (no rewind to 0).
-          const wrapAt = totalGroups + visibleCols;
-          if (next >= wrapAt) {
-            setAnimating(false);
-            requestAnimationFrame(() => setAnimating(true));
-            return next - totalGroups;
-          }
-          return next;
-        });
-      } else {
-        setCarouselIndex(0);
+      carouselTickTimerRef.current = setTimeout(() => {
+        if (cancelled) return;
+        if (totalGroups > visibleCols) {
+          setCarouselIndex((prev) => {
+            const next = prev + 1;
+            const wrapAt = totalGroups + visibleCols;
+            if (next >= wrapAt) {
+              setAnimating(false);
+              requestAnimationFrame(() => setAnimating(true));
+              return next - totalGroups;
+            }
+            return next;
+          });
+        } else {
+          setCarouselIndex(0);
+        }
+        scheduleTick();
+      }, delayMs);
+    };
+
+    scheduleTick();
+    return () => {
+      cancelled = true;
+      if (carouselTickTimerRef.current != null) {
+        clearTimeout(carouselTickTimerRef.current);
+        carouselTickTimerRef.current = null;
       }
-    // Tick period = shift duration (~1s) + desired pause (5s) ⇒ 6000ms
-    }, 6000);
-    return () => clearInterval(interval);
+    };
   }, [oneBy75Ids, visibleCols, columnCallListLayout]);
 
   // Keep carousel index in range when band count drops (pool / play state changes)
@@ -4994,14 +5015,14 @@ const PublicDisplay: React.FC = () => {
           <div className="left-col">
             {/* Bingo Card Visualization (upper-left, fixed to ~25% viewport width) */}
             <motion.div 
-              className="bingo-card-display"
+              className="bingo-card-display public-pattern-panel"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
             >
               <div className="bingo-card-header center" style={{ justifyContent: 'center' }}>
                 <Grid3X3 className="bingo-card-icon" />
-                <h2 style={{ fontSize: '3.2rem', fontWeight: 900, textShadow: '0 2px 6px rgba(0,0,0,0.8)' }}>{getPatternName()}</h2>
+                <h2 className="pattern-title-text">{getPatternName()}</h2>
                 {pattern === 'composite' && patternComposite && patternComposite.clauses.length > 0 && (
                   <div className="composite-pattern-header-block">
                     <div
@@ -5062,6 +5083,11 @@ const PublicDisplay: React.FC = () => {
                 )}
                 {showNowPlaying && gameState.currentSong && (
                   <div className="now-playing-banner" style={{ marginTop: 6, fontSize: '0.95rem' }}>
+                    {currentIndexRef.current >= 0 && (
+                      <span style={{ fontWeight: 800, color: '#00ff88', marginRight: 10 }}>
+                        #{currentIndexRef.current + 1}
+                      </span>
+                    )}
                     Now Playing: {(() => {
                       const cid = gameState.currentSong!.id;
                       const ui = getCallSongRevealUi(cid);

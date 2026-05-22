@@ -1469,6 +1469,10 @@ code {
   min-height: 0;
 }
 
+.bingo-card-display.public-pattern-panel {
+  container-type: inline-size;
+}
+
 .bingo-card-header {
   display: flex;
   align-items: center;
@@ -1562,6 +1566,17 @@ code {
   font-size: 1.1rem;
   font-weight: 600;
   flex: 1;
+}
+
+.bingo-card-display.public-pattern-panel .bingo-card-header h2.pattern-title-text {
+  font-size: clamp(0.55rem, 5.5cqw, 2.85rem);
+  font-weight: 900;
+  line-height: 1.12;
+  text-align: center;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+  flex: 1 1 100%;
+  min-width: 0;
+  word-break: break-word;
 }
 
 .bingo-card-content {

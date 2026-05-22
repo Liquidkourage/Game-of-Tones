@@ -669,6 +669,7 @@ const HostView: React.FC = () => {
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const pendingRoomDeviceIdRef = useRef<string | null>(null);
   const connectionModalOpenedByUserRef = useRef(false);
+  const connectionModalDismissedRef = useRef(false);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
 
   const playbackDeviceNotInList = useMemo(() => {
@@ -706,6 +707,8 @@ const HostView: React.FC = () => {
   });
   const [isStartingGame, setIsStartingGame] = useState(false);
   const [playedSoFar, setPlayedSoFar] = useState<Array<{ id: string; name: string; artist: string }>>([]);
+  const [playbackTrackNumber, setPlaybackTrackNumber] = useState<number | null>(null);
+  const [playbackTrackTotal, setPlaybackTrackTotal] = useState<number | null>(null);
   const [revealMode, setRevealMode] = useState<'off' | 'artist' | 'title' | 'full'>('off');
   const [pattern, setPattern] = useState<BingoPattern>('line');
   const [linesRequired, setLinesRequired] = useState(1);
@@ -837,6 +840,15 @@ const HostView: React.FC = () => {
   /** In-person + online: only in-person verified bingos end the round / prize */
   const [hybridInPersonPlusOnline, setHybridInPersonPlusOnline] = useState(false);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
+  const dismissConnectionModal = useCallback(() => {
+    if (
+      mixNeedsHostSpotify &&
+      (!isSpotifyConnected || !selectedDevice?.id || playbackDeviceNotInList)
+    ) {
+      connectionModalDismissedRef.current = true;
+    }
+    setShowConnectionModal(false);
+  }, [mixNeedsHostSpotify, isSpotifyConnected, selectedDevice, playbackDeviceNotInList]);
   const [hostTourOpen, setHostTourOpen] = useState(false);
   const [hostTourStep, setHostTourStep] = useState(0);
   const showConnectionModalScrollRef = useRef(showConnectionModal);
@@ -1786,6 +1798,24 @@ const HostView: React.FC = () => {
     }
   }, [spotifyInitialCheckDone, isSpotifyConnected, showYoutubeMusicInConnectionModal]);
 
+  /** Spotify mix needs connection or a valid playback device — prompt hosts (unless dismissed). */
+  useEffect(() => {
+    if (!spotifyInitialCheckDone || !mixNeedsHostSpotify || isLoadingDevices) return;
+    if (isSpotifyConnected && selectedDevice?.id && !playbackDeviceNotInList) {
+      connectionModalDismissedRef.current = false;
+      return;
+    }
+    if (connectionModalDismissedRef.current) return;
+    setShowConnectionModal(true);
+  }, [
+    spotifyInitialCheckDone,
+    mixNeedsHostSpotify,
+    isSpotifyConnected,
+    isLoadingDevices,
+    selectedDevice,
+    playbackDeviceNotInList,
+  ]);
+
 
   /** Spotify lost mid-show: reopen Connection; only auto-close after reconnect if host did not open it manually. */
   useEffect(() => {
@@ -1807,11 +1837,11 @@ const HostView: React.FC = () => {
   useEffect(() => {
     if (!showConnectionModal) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowConnectionModal(false);
+      if (e.key === 'Escape') dismissConnectionModal();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [showConnectionModal]);
+  }, [showConnectionModal, dismissConnectionModal]);
 
   useEffect(() => {
     const needLock = showConnectionModal || showPlaylistRoundModal;
@@ -2401,7 +2431,15 @@ const HostView: React.FC = () => {
         if (prev.find(p => p.id === data.songId)) return prev; // prevent dupes
         return [...prev, { id: data.songId, name: displayTitleForUi, artist: ytf.artist }];
       });
-      
+      if (typeof data.playbackNumber === 'number' && data.playbackNumber > 0) {
+        setPlaybackTrackNumber(data.playbackNumber);
+      } else if (typeof data.currentIndex === 'number') {
+        setPlaybackTrackNumber(data.currentIndex + 1);
+      }
+      if (typeof data.totalSongs === 'number' && data.totalSongs > 0) {
+        setPlaybackTrackTotal(data.totalSongs);
+      }
+
       // Reset pause tracking for new song
       setPausePosition(0);
       setIsPausedByInterface(false);
@@ -2418,6 +2456,18 @@ const HostView: React.FC = () => {
         }, 500);
       }
       schedulePlayerCardsRefresh(550);
+    });
+
+    newSocket.on('final-song-started', (data: { songNumber?: number; totalSongs?: number; snippetSec?: number }) => {
+      const n = data.songNumber ?? 75;
+      const total = data.totalSongs ?? 75;
+      const sec = data.snippetSec ?? 30;
+      showHostAckNotificationSocketRef.current({
+        title: 'Final song',
+        message: `Song ${n} of ${total} is playing. Playback stops after ${sec} seconds (your snippet length).`,
+        variant: 'warning',
+      });
+      playHostAlertSound();
     });
 
     // Handle bingo verification pending
@@ -2471,6 +2521,8 @@ const HostView: React.FC = () => {
       setIsPlaying(false);
       setGameState('ended');
       setYoutubeHostPlayback(null);
+      setPlaybackTrackNumber(null);
+      setPlaybackTrackTotal(null);
     });
 
     newSocket.on('game-restarted', (data: any) => {
@@ -2485,6 +2537,8 @@ const HostView: React.FC = () => {
       setBingoVerificationBehindCount(0);
       setCurrentSong(null);
       setYoutubeHostPlayback(null);
+      setPlaybackTrackNumber(null);
+      setPlaybackTrackTotal(null);
       addLog('Game restarted by host', 'info');
     });
 
@@ -7821,16 +7875,25 @@ const HostView: React.FC = () => {
                 )}
                 {currentSong ? (
                   <div className="host-live-dock__now-playing now-playing-section">
-                    <h2 className="host-live-dock__heading">
-                      <Music className="w-6 h-6" aria-hidden />
-                      Now playing
-                    </h2>
-                    <div className="now-playing-content">
+                    <div className="host-live-dock__now-playing-row">
+                      <h2 className="host-live-dock__heading">
+                        <Music className="w-5 h-5" aria-hidden />
+                        Now playing
+                      </h2>
+                      {(playbackTrackNumber != null || playbackTrackTotal != null) && (
+                        <span className="host-live-dock__song-index" aria-label="Song position in round">
+                          {playbackTrackNumber ?? '—'}
+                          <span className="host-live-dock__song-index-sep">/</span>
+                          {playbackTrackTotal ?? 75}
+                        </span>
+                      )}
+                    </div>
+                    <div className="host-live-dock__now-playing-body">
                       <div className="host-live-dock__track">
                         <div className="host-live-dock__track-title">
                           <span>{currentSong.name}</span>
                           {currentSong.explicit === true ? (
-                            <SpotifyExplicitBadge size="lg" title="Marked explicit on Spotify" />
+                            <SpotifyExplicitBadge size="md" title="Marked explicit on Spotify" />
                           ) : null}
                         </div>
                         <div className="host-live-dock__track-artist">by {currentSong.artist}</div>
@@ -7866,33 +7929,33 @@ const HostView: React.FC = () => {
                     </div>
                   </div>
                 ) : null}
-                {gameState === 'playing' ? (
-                  <div className="host-live-dock__actions">
-                    <button type="button" className="btn-secondary" onClick={endGame}>
-                      End Game
-                    </button>
-                    <button type="button" className="btn-secondary" onClick={confirmAndNewRound} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      <RotateCcw className="w-4 h-4" aria-hidden />
-                      New round setup
-                    </button>
-                    <button type="button" className="btn-accent" onClick={() => openPlaylistLibrary()} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      <ListPlus className="w-4 h-4" aria-hidden />
-                      Playlist library
-                    </button>
-                    <button type="button" className="btn-secondary btn-host-warn" onClick={resetDisplayLetters} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      <RotateCcw className="w-4 h-4" aria-hidden />
-                      Reset display letters
-                    </button>
-                    {playerCards.size > 0 && !playerCardsFullscreen ? (
-                      <button type="button" className="btn-secondary btn-host-emphasis" onClick={openPlayerCardsModal} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                        <Users className="w-4 h-4" aria-hidden />
-                        View player cards
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
               </section>
             )}
+            {gameState === 'playing' ? (
+              <section className="host-show-actions" aria-label="Show controls">
+                <button type="button" className="btn-secondary" onClick={endGame}>
+                  End Game
+                </button>
+                <button type="button" className="btn-secondary" onClick={confirmAndNewRound} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <RotateCcw className="w-4 h-4" aria-hidden />
+                  New round setup
+                </button>
+                <button type="button" className="btn-accent" onClick={() => openPlaylistLibrary()} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <ListPlus className="w-4 h-4" aria-hidden />
+                  Playlist library
+                </button>
+                <button type="button" className="btn-secondary btn-host-warn" onClick={resetDisplayLetters} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <RotateCcw className="w-4 h-4" aria-hidden />
+                  Reset display letters
+                </button>
+                {playerCards.size > 0 && !playerCardsFullscreen ? (
+                  <button type="button" className="btn-secondary btn-host-emphasis" onClick={openPlayerCardsModal} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    <Users className="w-4 h-4" aria-hidden />
+                    View player cards
+                  </button>
+                ) : null}
+              </section>
+            ) : null}
 
             {gameState === 'waiting' && !currentSong && (
               <section className="host-go-live host-go-live--banner" data-host-tour="go-live" aria-label="Start show">
@@ -8649,7 +8712,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
       {showConnectionModal && (
         <div
           className="host-connection-modal-backdrop"
-          onClick={() => setShowConnectionModal(false)}
+          onClick={dismissConnectionModal}
           role="presentation"
         >
           <div
@@ -8667,7 +8730,7 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                 type="button"
                 className="host-connection-modal__close"
                 aria-label="Close"
-                onClick={() => setShowConnectionModal(false)}
+                onClick={dismissConnectionModal}
               >
                 <X className="w-5 h-5" aria-hidden />
               </button>
