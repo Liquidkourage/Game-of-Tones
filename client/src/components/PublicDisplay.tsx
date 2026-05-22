@@ -2452,11 +2452,13 @@ const PublicDisplay: React.FC = () => {
       if (totalGroups > visibleCols) {
         setCarouselIndex((prev) => {
           const next = prev + 1;
-          if (next > totalGroups) {
-            // seamless wrap: snap to 0 without animation; next tick resumes anim
+          // Extended track ends with `visibleCols` duplicate bands for a seamless forward loop.
+          // When we scroll past that tail, snap to the same visual column in the primary strip (no rewind to 0).
+          const wrapAt = totalGroups + visibleCols;
+          if (next >= wrapAt) {
             setAnimating(false);
             requestAnimationFrame(() => setAnimating(true));
-            return 0;
+            return next - totalGroups;
           }
           return next;
         });
@@ -2476,7 +2478,13 @@ const PublicDisplay: React.FC = () => {
     const played = new Set(playedOrderRef.current);
     const totalGroups = countOccupiedBandsInPool(ids, played);
     if (totalGroups <= visibleCols) return;
-    setCarouselIndex((prev) => Math.min(prev, totalGroups));
+    const maxIdx = totalGroups + visibleCols - 1;
+    setCarouselIndex((prev) => {
+      if (prev <= maxIdx) return prev;
+      setAnimating(false);
+      requestAnimationFrame(() => setAnimating(true));
+      return Math.max(0, prev - totalGroups);
+    });
   }, [oneBy75Ids, totalPlayedCount, visibleCols, columnCallListLayout]);
 
   // Measure viewport width for pixel-perfect slides (one column per step)
@@ -3425,8 +3433,8 @@ const PublicDisplay: React.FC = () => {
     const extendedGroups: string[][] = shouldScroll ? [...visibleGroups, ...visibleGroups.slice(0, visibleCols)] : visibleGroups;
 
     // Each column is 1/3 of the viewport width; compute translate as percentage
-    const wrap = shouldScroll ? total : 1;
-    const effectiveIndex = shouldScroll ? Math.min(carouselIndex, total) : 0;
+    const maxSlideIndex = shouldScroll ? total + visibleCols - 1 : 0;
+    const effectiveIndex = shouldScroll ? Math.min(carouselIndex, maxSlideIndex) : 0;
     const colWidth = viewportWidth > 0 ? viewportWidth / visibleCols : 0;
     const xPx = -(effectiveIndex * colWidth);
     const xPercent = -(effectiveIndex * (100 / visibleCols));
