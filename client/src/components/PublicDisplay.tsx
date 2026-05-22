@@ -25,6 +25,7 @@ import {
   normalizePublicDisplayTitleRevealMode,
   type PublicDisplayTitleRevealMode,
 } from '../utils/publicDisplayTitleReveal';
+import { effectivePublicDisplayFontScale } from '../utils/publicDisplayFontScale';
 import type { PatternCompositeSpec, PatternCompositeClause } from '../patternDefinitions';
 import {
   normalizePatternComposite,
@@ -828,6 +829,10 @@ function carouselDwellMsForLeftColumn(leftColumnIndex: number, totalPopulatedBan
 const PublicDisplay: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [fontSizeMultiplier, setFontSizeMultiplier] = useState<number>(1.0);
+  const [displayViewport, setDisplayViewport] = useState(() => ({
+    w: typeof window !== 'undefined' ? window.innerWidth : 1920,
+    h: typeof window !== 'undefined' ? window.innerHeight : 1080,
+  }));
   const navigate = useNavigate();
   const [connectCode, setConnectCode] = useState<string>('');
   const [searchParams] = useSearchParams();
@@ -836,6 +841,24 @@ const PublicDisplay: React.FC = () => {
   const displayRef = useRef<HTMLDivElement | null>(null);
   /** Pixel `top` for portaled toasts: measured from `.app-header` so placement survives Framer/header animation. */
   const [headerToastTopPx, setHeaderToastTopPx] = useState<number>(78);
+
+  useEffect(() => {
+    const onResize = () =>
+      setDisplayViewport({ w: window.innerWidth, h: window.innerHeight });
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const displayFontScale = useMemo(
+    () =>
+      effectivePublicDisplayFontScale(
+        displayViewport.w,
+        displayViewport.h,
+        fontSizeMultiplier,
+      ),
+    [displayViewport.w, displayViewport.h, fontSizeMultiplier],
+  );
 
   useLayoutEffect(() => {
     let raf = 0;
@@ -1000,12 +1023,8 @@ const PublicDisplay: React.FC = () => {
   }, [isVerificationPending]);
   // Flag to prevent auto-reveal during reset operations
   const isResettingRef = useRef<boolean>(false);
-  // Visible carousel columns (default 5; optional override via ?cols=3 etc.)
-  const visibleCols = (() => {
-    const p = Number.parseInt(searchParams.get('cols') || '', 10);
-    if (Number.isFinite(p) && p >= 1 && p <= 5) return p;
-    return 5;
-  })();
+  /** Five call columns on projector (fixed; not URL-configurable). */
+  const visibleCols = 5;
   // 1x75 call list state
   const [oneBy75Ids, setOneBy75Ids] = useState<string[] | null>(null);
   const oneBy75IdsRef = useRef<string[] | null>(null);
@@ -3356,7 +3375,7 @@ const PublicDisplay: React.FC = () => {
                                 ? {
                                     fontWeight: 900,
                                     lineHeight: 1.2,
-                                    fontSize: `${32 * fontSizeMultiplier}px`,
+                                    fontSize: `${32 * displayFontScale}px`,
                                     color: '#ffffff',
                                     textShadow: '0 2px 4px rgba(0,0,0,0.8)',
                                     whiteSpace: 'normal',
@@ -3367,7 +3386,7 @@ const PublicDisplay: React.FC = () => {
                                 : {
                                     fontWeight: 900,
                                     lineHeight: 1.12,
-                                    fontSize: `${32 * fontSizeMultiplier}px`,
+                                    fontSize: `${32 * displayFontScale}px`,
                                     color: '#ffffff',
                                     textShadow: '0 2px 4px rgba(0,0,0,0.8)',
                                     whiteSpace: 'normal',
@@ -3391,7 +3410,7 @@ const PublicDisplay: React.FC = () => {
                             style={
                               isFullCardPattern
                                 ? {
-                                    fontSize: `${26 * fontSizeMultiplier}px`,
+                                    fontSize: `${26 * displayFontScale}px`,
                                     color: '#e0e0e0',
                                     lineHeight: 1.2,
                                     fontWeight: 800,
@@ -3403,7 +3422,7 @@ const PublicDisplay: React.FC = () => {
                                     marginTop: 6
                                   }
                                 : {
-                                    fontSize: `${26 * fontSizeMultiplier}px`,
+                                    fontSize: `${26 * displayFontScale}px`,
                                     color: '#e0e0e0',
                                     lineHeight: 1.14,
                                     fontWeight: 800,
@@ -3512,7 +3531,7 @@ const PublicDisplay: React.FC = () => {
                   ? {
                       fontWeight: 900,
                       lineHeight: 1.25,
-                      fontSize: `${32 * fontSizeMultiplier}px`,
+                      fontSize: `${32 * displayFontScale}px`,
                       color: '#ffffff',
                       textShadow: '0 2px 6px rgba(0,0,0,0.8)',
                       whiteSpace: 'normal',
@@ -3523,7 +3542,7 @@ const PublicDisplay: React.FC = () => {
                   : {
                       fontWeight: 900,
                       lineHeight: 1.25,
-                      fontSize: `${32 * fontSizeMultiplier}px`,
+                      fontSize: `${32 * displayFontScale}px`,
                       color: '#ffffff',
                       textShadow: '0 2px 6px rgba(0,0,0,0.8)',
                       whiteSpace: 'normal',
@@ -3542,7 +3561,7 @@ const PublicDisplay: React.FC = () => {
               style={
                 isFullCardPattern
                   ? {
-                      fontSize: `${26 * fontSizeMultiplier}px`,
+                      fontSize: `${26 * displayFontScale}px`,
                       color: '#e0e0e0',
                       lineHeight: 1.2,
                       fontWeight: 800,
@@ -3554,7 +3573,7 @@ const PublicDisplay: React.FC = () => {
                       marginTop: 6,
                     }
                   : {
-                      fontSize: `${26 * fontSizeMultiplier}px`,
+                      fontSize: `${26 * displayFontScale}px`,
                       color: '#e0e0e0',
                       lineHeight: 1.14,
                       fontWeight: 800,
@@ -4768,7 +4787,7 @@ const PublicDisplay: React.FC = () => {
                             lineHeight: 1.05,
                           }}
                         >
-                          Music Bingo
+                          Game of Tones
                         </div>
                         <Sparkles
                           style={{
@@ -4882,26 +4901,17 @@ const PublicDisplay: React.FC = () => {
                 />
               </motion.div>
 
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 'clamp(12px, 2.35vmin, 28px)',
-                  marginBottom: 'clamp(0.45rem, 1.25vmin, 1rem)',
-                  flex: '0 1 auto',
-                  minHeight: 0,
-                }}
-              >
+              <div className="public-display-rules-steps">
                 {[
                   {
                     n: 1,
                     accent: 'linear-gradient(135deg, rgba(0,255,180,0.35) 0%, rgba(0,120,90,0.15) 100%)',
                     borderGlow: 'rgba(0,255,200,0.55)',
-                    title: '🎵 Listen & mark',
+                    title: 'Join & get your card',
                     body: (
                       <>
-                        Songs play for <strong style={{ color: '#e8fff8' }}>{gameState.snippetLength || 30}</strong> seconds.
-                        When you know the tune, tap the matching square on your card. Each square shows title and artist.
+                        Join this room on your phone. You get a <strong style={{ color: '#e8fff8' }}>5×5</strong> card built
+                        from tonight&apos;s <strong style={{ color: '#e8fff8' }}>75-song</strong> playlist — same pool for everyone.
                       </>
                     ),
                   },
@@ -4909,11 +4919,12 @@ const PublicDisplay: React.FC = () => {
                     n: 2,
                     accent: 'linear-gradient(135deg, rgba(130,110,255,0.35) 0%, rgba(40,30,90,0.2) 100%)',
                     borderGlow: 'rgba(160,140,255,0.55)',
-                    title: '🎯 Complete the pattern',
+                    title: 'Listen & mark',
                     body: (
                       <>
-                        Finish the winning pattern: <strong style={{ color: '#e8fff8' }}>{getPatternName()}</strong>. Mark in
-                        any order — every square in the pattern must be a song that has played.
+                        Clips play about <strong style={{ color: '#e8fff8' }}>{gameState.snippetLength || 30}s</strong>.
+                        The projector lists calls in <strong style={{ color: '#e8fff8' }}>play order (#1, #2…)</strong>. Tap a square
+                        only when you&apos;re sure that song played.
                       </>
                     ),
                   },
@@ -4921,11 +4932,12 @@ const PublicDisplay: React.FC = () => {
                     n: 3,
                     accent: 'linear-gradient(135deg, rgba(255,200,120,0.28) 0%, rgba(120,70,20,0.18) 100%)',
                     borderGlow: 'rgba(255,200,100,0.45)',
-                    title: '🏆 Call BINGO',
+                    title: 'Pattern & BINGO',
                     body: (
                       <>
-                        Hold <strong style={{ color: '#e8fff8' }}>BINGO</strong> when your pattern is complete. The host
-                        checks your card — only mark what you&apos;re sure about.
+                        Win with: <strong style={{ color: '#e8fff8' }}>{getPatternName()}</strong>. Every marked square must be a
+                        song that already played. Hold <strong style={{ color: '#e8fff8' }}>BINGO</strong> — the host verifies on
+                        your device before the round stops.
                       </>
                     ),
                   },
@@ -5017,7 +5029,7 @@ const PublicDisplay: React.FC = () => {
                   flexShrink: 0,
                 }}
               >
-                ⚠️ Important: only mark songs you&apos;re sure have played. Wrong marks can disqualify your bingo.
+                Only daub songs you heard in this round. The host is the final judge on every BINGO claim.
               </motion.div>
 
               <div

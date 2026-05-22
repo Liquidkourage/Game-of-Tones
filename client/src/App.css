@@ -421,6 +421,24 @@ body {
   transform: none;
 }
 
+/* Game of Tones rules overlay — three steps on one screen when space allows */
+.App .public-display-rules-steps {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: clamp(10px, 1.8vmin, 20px);
+  margin-bottom: clamp(0.45rem, 1.25vmin, 1rem);
+  flex: 0 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+@media (min-width: 960px) and (min-height: 600px) {
+  .App .public-display-rules-steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+  }
+}
+
 .App .bingo-card-header.center { justify-content: center; }
 .App .bingo-grid { transform: translateY(-5%) scale(var(--bingo-scale)); transform-origin: center center; }
 

@@ -129,6 +129,15 @@ const HostScreenTour: React.FC<HostScreenTourProps> = ({
   }, [measure, stepIndex]);
 
   useEffect(() => {
+    if (open) {
+      document.body.classList.add('host-tour-active');
+    } else {
+      document.body.classList.remove('host-tour-active');
+    }
+    return () => document.body.classList.remove('host-tour-active');
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
     const onLayout = () => measure();
     window.addEventListener('resize', onLayout);

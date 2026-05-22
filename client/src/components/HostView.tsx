@@ -76,6 +76,9 @@ import SongTitleEditModal from './SongTitleEditModal';
 import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModal';
 import HostScreenTour from './HostScreenTour';
 import { buildHostScreenTourSteps } from '../hostScreenTourSteps';
+import BingoPoolList from './BingoPoolList';
+import { loadHostPreferences, saveHostPreferences } from '../utils/hostPreferences';
+import { computeOptimalPublicDisplayFontMultiplier } from '../utils/publicDisplayFontScale';
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
 import { HostYoutubeMusicPlaylistLibrary, type YoutubeMixPlaylistRow } from './HostYoutubeMusicPlaylistLibrary';
 import { HostYoutubeIframePlayer, primeYoutubeHostPlaybackAudioUnlock } from './HostYoutubeIframePlayer';
@@ -887,6 +890,7 @@ const HostView: React.FC = () => {
     email?: string | null;
     displayName?: string | null;
   } | null | undefined>(undefined);
+  const hostPrefsHydratedRef = useRef(false);
   /** After /api/auth/me finishes (and optional hostToken → localStorage), socket can use Bearer + hostToken. */
   const [hostAuthBootstrapDone, setHostAuthBootstrapDone] = useState(false);
 
@@ -6557,6 +6561,60 @@ const HostView: React.FC = () => {
     };
   }, [roomId, hostAccount?.id, addLog]);
 
+  /** Load saved host defaults (playback, projector reveal, font %). */
+  useEffect(() => {
+    if (!hostAccount?.id) return;
+    hostPrefsHydratedRef.current = false;
+    const p = loadHostPreferences(hostAccount.id);
+    if (p.snippetLength != null) setSnippetLength(p.snippetLength);
+    if (p.randomStarts != null) setRandomStarts(p.randomStarts);
+    if (p.publicDisplayFontSize != null) setPublicDisplayFontSize(p.publicDisplayFontSize);
+    if (p.publicDisplayTitleRevealMode != null) {
+      setPublicDisplayTitleRevealMode(p.publicDisplayTitleRevealMode);
+    }
+    if (p.letterRevealIntervalSec != null) setLetterRevealIntervalSec(p.letterRevealIntervalSec);
+    if (p.freeSpaceEnabled != null) setFreeSpaceEnabled(p.freeSpaceEnabled);
+    hostPrefsHydratedRef.current = true;
+  }, [hostAccount?.id]);
+
+  /** Persist host defaults whenever controls change. */
+  useEffect(() => {
+    if (!hostAccount?.id || !hostPrefsHydratedRef.current) return;
+    saveHostPreferences(hostAccount.id, {
+      snippetLength,
+      randomStarts,
+      publicDisplayFontSize,
+      publicDisplayTitleRevealMode,
+      letterRevealIntervalSec,
+      freeSpaceEnabled,
+    });
+    try {
+      localStorage.setItem('game-snippet-length', String(snippetLength));
+      localStorage.setItem('game-random-starts', randomStarts);
+      localStorage.setItem('bingo-free-space', freeSpaceEnabled ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  }, [
+    hostAccount?.id,
+    snippetLength,
+    randomStarts,
+    publicDisplayFontSize,
+    publicDisplayTitleRevealMode,
+    letterRevealIntervalSec,
+    freeSpaceEnabled,
+  ]);
+
+  /** Push loaded prefs to the room once socket is ready. */
+  useEffect(() => {
+    if (!socket || !roomId || !hostPrefsHydratedRef.current) return;
+    updatePublicDisplayFontSize(publicDisplayFontSize);
+    updatePublicDisplayTitleRevealMode(publicDisplayTitleRevealMode);
+    updatePublicDisplayLetterRevealInterval(letterRevealIntervalSec);
+    updatePublicDisplayCallListMode('auto');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot room sync after prefs hydrate
+  }, [socket, roomId, hostAccount?.id]);
+
   /** Autosave prep to Tempo account (debounced). */
   useEffect(() => {
     if (!roomId || !prepCloudHydrated || !hostAccount?.id || !getHostJwt()) return;
@@ -7894,8 +7952,8 @@ const HostView: React.FC = () => {
         {/* Main Content */}
         <div className="host-content host-content--dashboard" style={{ paddingBottom: '20px' }}>
           <div className="tab-content host-unified">
-            {(gameState === 'playing' || currentSong) && (
-              <section className="host-live-dock" data-host-tour="live-dock" aria-label="Live show">
+            {gameState === 'playing' && (
+              <section className="host-live-dock host-live-dock--pinned" data-host-tour="live-dock" aria-label="Live show">
                 {gamePaused && (
                   <div className="host-paused-banner host-live-dock__paused">
                     <p className="host-paused-banner__title">GAME PAUSED — RESUME HERE</p>
@@ -7909,62 +7967,66 @@ const HostView: React.FC = () => {
                     </button>
                   </div>
                 )}
-                {currentSong ? (
-                  <div className="host-live-dock__now-playing now-playing-section">
-                    <div className="host-live-dock__now-playing-row">
-                      <h2 className="host-live-dock__heading">
-                        <Music className="w-5 h-5" aria-hidden />
-                        Now playing
-                      </h2>
-                      {(playbackTrackNumber != null || playbackTrackTotal != null) && (
-                        <span className="host-live-dock__song-index" aria-label="Song position in round">
-                          {playbackTrackNumber ?? '—'}
-                          <span className="host-live-dock__song-index-sep">/</span>
-                          {playbackTrackTotal ?? 75}
-                        </span>
+                <div className="host-live-dock__now-playing now-playing-section">
+                  <div className="host-live-dock__now-playing-row">
+                    <h2 className="host-live-dock__heading">
+                      <Music className="w-5 h-5" aria-hidden />
+                      Now playing
+                    </h2>
+                    {(playbackTrackNumber != null || playbackTrackTotal != null) && (
+                      <span className="host-live-dock__song-index" aria-label="Song position in round">
+                        {playbackTrackNumber ?? '—'}
+                        <span className="host-live-dock__song-index-sep">/</span>
+                        {playbackTrackTotal ?? 75}
+                      </span>
+                    )}
+                  </div>
+                  <div className="host-live-dock__now-playing-body">
+                    <div className="host-live-dock__track">
+                      {currentSong ? (
+                        <>
+                          <div className="host-live-dock__track-title">
+                            <span>{currentSong.name}</span>
+                            {currentSong.explicit === true ? (
+                              <SpotifyExplicitBadge size="md" title="Marked explicit on Spotify" />
+                            ) : null}
+                          </div>
+                          <div className="host-live-dock__track-artist">by {currentSong.artist}</div>
+                        </>
+                      ) : (
+                        <div className="host-live-dock__track-wait">Starting next track…</div>
                       )}
                     </div>
-                    <div className="host-live-dock__now-playing-body">
-                      <div className="host-live-dock__track">
-                        <div className="host-live-dock__track-title">
-                          <span>{currentSong.name}</span>
-                          {currentSong.explicit === true ? (
-                            <SpotifyExplicitBadge size="md" title="Marked explicit on Spotify" />
-                          ) : null}
-                        </div>
-                        <div className="host-live-dock__track-artist">by {currentSong.artist}</div>
-                      </div>
-                      <div className="host-live-dock__transport">
-                        <button type="button" className="btn-secondary" onClick={pauseSong}>
-                          {!isPlaying ? 'Resume' : 'Pause'}
-                        </button>
-                        <button type="button" className="btn-secondary" onClick={skipSong}>
-                          Skip
-                        </button>
-                      </div>
-                      <div className="host-live-dock__volume">
-                        <button type="button" className="btn-secondary btn-host-icon" onClick={handleMuteToggle}>
-                          {isMuted ? <VolumeX className="w-5 h-5" aria-hidden /> : <Volume2 className="w-5 h-5" aria-hidden />}
-                        </button>
-                        <span className="host-live-dock__volume-label">{isMuted ? 0 : playbackState.volume}%</span>
-                        <input
-                          type="range"
-                          min={0}
-                          max={100}
-                          value={isMuted ? 0 : playbackState.volume}
-                          onChange={(e) => {
-                            const newVolume = parseInt(e.target.value, 10);
-                            if (isMuted && newVolume > 0) setIsMuted(false);
-                            setPlaybackState((prev) => ({ ...prev, volume: newVolume }));
-                            handleVolumeChange(newVolume);
-                          }}
-                          className="volume-slider host-range host-range--volume"
-                          aria-label="Playback volume"
-                        />
-                      </div>
+                    <div className="host-live-dock__transport">
+                      <button type="button" className="btn-secondary" onClick={pauseSong}>
+                        {!isPlaying ? 'Resume' : 'Pause'}
+                      </button>
+                      <button type="button" className="btn-secondary" onClick={skipSong}>
+                        Skip
+                      </button>
+                    </div>
+                    <div className="host-live-dock__volume">
+                      <button type="button" className="btn-secondary btn-host-icon" onClick={handleMuteToggle}>
+                        {isMuted ? <VolumeX className="w-5 h-5" aria-hidden /> : <Volume2 className="w-5 h-5" aria-hidden />}
+                      </button>
+                      <span className="host-live-dock__volume-label">{isMuted ? 0 : playbackState.volume}%</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={isMuted ? 0 : playbackState.volume}
+                        onChange={(e) => {
+                          const newVolume = parseInt(e.target.value, 10);
+                          if (isMuted && newVolume > 0) setIsMuted(false);
+                          setPlaybackState((prev) => ({ ...prev, volume: newVolume }));
+                          handleVolumeChange(newVolume);
+                        }}
+                        className="volume-slider host-range host-range--volume"
+                        aria-label="Playback volume"
+                      />
                     </div>
                   </div>
-                ) : null}
+                </div>
               </section>
             )}
             {gameState === 'playing' ? (
@@ -8085,12 +8147,91 @@ const HostView: React.FC = () => {
                   </div>
 
                   <div className="host-manager-col host-manager-col--wide">
-          <details className="host-event-settings" data-host-tour="projector-settings" open={gameState !== 'playing'}>
+          <details className="host-event-settings" data-host-tour="projector-settings" open>
             <summary className="host-event-settings__summary">
               <Monitor className="w-5 h-5" aria-hidden />
               Projector &amp; event rules
             </summary>
             <div className="host-event-settings__body">
+          <motion.section
+            className="host-manager-section host-host-prefs"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            aria-labelledby="host-prefs-title"
+          >
+            <h2 id="host-prefs-title" className="host-manager-section__title">
+              Saved host preferences
+            </h2>
+            <p className="host-manager-section__lead">
+              Stored on this device for your account. Playback snippet and start position apply to new rounds; projector
+              settings sync to the room.
+            </p>
+            <div className="host-host-prefs__grid">
+              <label className="host-host-prefs__field">
+                <span className="host-host-prefs__label">Snippet length ({snippetLength}s)</span>
+                <input
+                  type="range"
+                  className="host-range host-range--snippet"
+                  min={5}
+                  max={60}
+                  value={snippetLength}
+                  onChange={(e) => setSnippetLength(Number(e.target.value))}
+                />
+              </label>
+              <fieldset className="host-host-prefs__field">
+                <legend className="host-host-prefs__label">Snippet start</legend>
+                <div className="host-host-prefs__radios">
+                  {(
+                    [
+                      ['none', 'From start'],
+                      ['early', 'Early random'],
+                      ['random', 'Random'],
+                    ] as const
+                  ).map(([val, label]) => (
+                    <label key={val} className="host-host-prefs__radio">
+                      <input
+                        type="radio"
+                        name="host-prefs-random-starts"
+                        checked={randomStarts === val}
+                        onChange={() => setRandomStarts(val)}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <label className="host-host-prefs__field">
+                <span className="host-host-prefs__label">Reveal titles on projector</span>
+                <select
+                  className="host-host-prefs__select"
+                  value={publicDisplayTitleRevealMode}
+                  onChange={(e) =>
+                    updatePublicDisplayTitleRevealMode(normalizePublicDisplayTitleRevealMode(e.target.value))
+                  }
+                >
+                  <option value="letter">By letter (timed)</option>
+                  <option value="track_start">Full title at clip start</option>
+                  <option value="track_end">Full title at clip end</option>
+                </select>
+              </label>
+              <label className="host-host-prefs__field">
+                <span className="host-host-prefs__label">Letter reveal interval</span>
+                <select
+                  className="host-host-prefs__select"
+                  value={letterRevealIntervalSec}
+                  disabled={publicDisplayTitleRevealMode !== 'letter'}
+                  onChange={(e) => updatePublicDisplayLetterRevealInterval(Number(e.target.value))}
+                >
+                  {[5, 10, 15, 20, 30, 45, 60, 90, 120].map((sec) => (
+                    <option key={sec} value={sec}>
+                      {sec} seconds
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </motion.section>
           <motion.section
             className="host-manager-round host-manager-section"
             initial={{ opacity: 0 }}
@@ -8147,6 +8288,10 @@ const HostView: React.FC = () => {
               Projector / TV — text size and which screen to show.
             </p>
             <p className="host-manager-display__sub">Title &amp; artist size</p>
+            <p style={{ fontSize: '0.82rem', color: '#9a9a9a', marginBottom: 10, lineHeight: 1.45, maxWidth: 520 }}>
+              <strong style={{ color: '#c8e8d8' }}>100%</strong> = best fit for a 1080p projector (computed from viewport).
+              The display scales automatically; adjust if the venue screen needs larger or smaller type.
+            </p>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
               <button
                 onClick={() => updatePublicDisplayFontSize(publicDisplayFontSize - 0.1)}
@@ -8178,10 +8323,17 @@ const HostView: React.FC = () => {
                   {(publicDisplayFontSize * 100).toFixed(0)}%
                 </div>
                 <div style={{ fontSize: '0.8rem', color: '#b3b3b3', marginTop: '4px' }}>
-                  {publicDisplayFontSize.toFixed(1)}x multiplier
+                  {publicDisplayFontSize.toFixed(1)}× vs auto-fit
                 </div>
               </div>
-              
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => updatePublicDisplayFontSize(1)}
+                style={{ fontSize: '0.85rem', padding: '10px 14px' }}
+              >
+                Reset to 100% (auto-fit)
+              </button>
               <button
                 onClick={() => updatePublicDisplayFontSize(publicDisplayFontSize + 0.1)}
                 disabled={publicDisplayFontSize >= 3.0}
@@ -8201,7 +8353,8 @@ const HostView: React.FC = () => {
               </button>
             </div>
             <div style={{ marginTop: '10px', fontSize: '0.82rem', color: '#b3b3b3', textAlign: 'center' }}>
-              Song and artist names on the public display
+              Reference auto-fit at 1080p:{' '}
+              {(computeOptimalPublicDisplayFontMultiplier(1920, 1080) * 100).toFixed(0)}% baseline on projector
             </div>
             <div className="host-manager-display__divider" />
             <p className="host-manager-display__sub">Screen modes</p>
@@ -8259,114 +8412,47 @@ const HostView: React.FC = () => {
             aria-labelledby="host-manager-display-title"
           >
             <p className="host-manager-section__lead host-manager-display-pane__continued-lead">
-              Titles, timing, and host playback window.
+              Production uses <strong style={{ color: '#00ff88' }}>Auto</strong> call layout (5×15 for five playlists, 1×75
+              for one). Reveal timing is under <strong>Saved host preferences</strong> above.
             </p>
-            <p className="host-manager-display__sub">Call list layout (projector)</p>
-            <p style={{ fontSize: '0.78rem', color: '#9a9a9a', marginBottom: 10, lineHeight: 1.4, maxWidth: 520 }}>
-              <strong style={{ color: '#c8c8c8' }}>5×15</strong> uses BINGO columns (B–O).{' '}
-              <strong style={{ color: '#c8c8c8' }}>1×75</strong> uses the scrolling band carousel.{' '}
-              <strong style={{ color: '#c8c8c8' }}>Auto</strong> follows your finalized mix and the display URL (<code style={{ fontSize: '0.72rem' }}>?mode=5x15</code>).
-            </p>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-              {(
-                [
-                  { mode: '5x15' as const, label: '5×15 columns', Icon: Grid3x3 },
-                  { mode: 'grouped' as const, label: '1×75 carousel', Icon: List },
-                  { mode: 'auto' as const, label: 'Auto', Icon: Sliders },
-                ]
-              ).map(({ mode, label, Icon }) => {
-                const active = publicDisplayCallListMode === mode;
-                return (
-                  <button
-                    key={mode}
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => updatePublicDisplayCallListMode(mode)}
-                    style={{
-                      fontSize: '0.88rem',
-                      padding: '10px 14px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      border: active ? '1px solid rgba(0,255,136,0.65)' : undefined,
-                      background: active ? 'rgba(0,255,136,0.14)' : undefined,
-                      color: active ? '#00ff88' : undefined,
-                    }}
-                  >
-                    <Icon className="w-4 h-4" aria-hidden />
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="host-manager-display__divider" style={{ marginTop: 14 }} />
-            <p className="host-manager-display__sub">Reveal titles on projector</p>
-            <p style={{ fontSize: '0.78rem', color: '#9a9a9a', marginBottom: 10, lineHeight: 1.4, maxWidth: 520 }}>
-              Controls how song titles and artists appear on the public display call list (masked squares vs full text).
-            </p>
-            <select
-              id="title-reveal-mode"
-              aria-label="When to reveal full song titles on the public display"
-              value={publicDisplayTitleRevealMode}
-              onChange={(e) =>
-                updatePublicDisplayTitleRevealMode(normalizePublicDisplayTitleRevealMode(e.target.value))
-              }
-              style={{
-                fontSize: '0.92rem',
-                padding: '10px 14px',
-                borderRadius: 8,
-                border: '1px solid rgba(255,255,255,0.25)',
-                background: 'rgba(0,0,0,0.35)',
-                color: '#fff',
-                minWidth: 280,
-                maxWidth: '100%',
-                cursor: 'pointer',
-                marginBottom: 12,
-              }}
-            >
-              <option value="letter">By letter (timed reveals)</option>
-              <option value="track_start">Beginning of track (full title)</option>
-              <option value="track_end">End of track (full title)</option>
-            </select>
-            <div className="host-manager-display__divider" style={{ marginTop: 4 }} />
-            <p className="host-manager-display__sub">Letter reveal timer</p>
-            <p style={{ fontSize: '0.78rem', color: '#9a9a9a', marginBottom: 10, lineHeight: 1.4, maxWidth: 520 }}>
-              {publicDisplayTitleRevealMode === 'letter' ? (
-                <>
-                  While the round is playing, the projector periodically reveals one random letter from played titles and
-                  artists. Pick how often that happens (does not run during bingo verification).
-                </>
-              ) : (
-                <>
-                  Timed letter reveals are off while using beginning-of-track or end-of-track mode. Use{' '}
-                  <strong style={{ color: '#c8c8c8' }}>By letter</strong> to bring back periodic reveals.
-                </>
-              )}
-            </p>
-            <select
-              id="letter-reveal-interval"
-              aria-label="Seconds between automatic letter reveals on the public display"
-              value={letterRevealIntervalSec}
-              onChange={(e) => updatePublicDisplayLetterRevealInterval(Number(e.target.value))}
-              disabled={publicDisplayTitleRevealMode !== 'letter'}
-              style={{
-                fontSize: '0.92rem',
-                padding: '10px 14px',
-                borderRadius: 8,
-                border: '1px solid rgba(255,255,255,0.25)',
-                background: 'rgba(0,0,0,0.35)',
-                color: '#fff',
-                minWidth: 160,
-                cursor: publicDisplayTitleRevealMode === 'letter' ? 'pointer' : 'not-allowed',
-                opacity: publicDisplayTitleRevealMode === 'letter' ? 1 : 0.45,
-              }}
-            >
-              {[5, 10, 15, 20, 30, 45, 60, 90, 120].map((sec) => (
-                <option key={sec} value={sec}>
-                  {sec} seconds
-                </option>
-              ))}
-            </select>
+            <details className="host-display-testing">
+              <summary>Testing: force call list layout</summary>
+              <p style={{ fontSize: '0.78rem', color: '#9a9a9a', margin: '10px 0', lineHeight: 1.4 }}>
+                Override Auto only while debugging. Five playlists → 5×15 columns; one playlist → 1×75 carousel.
+              </p>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                {(
+                  [
+                    { mode: 'auto' as const, label: 'Auto (show)', Icon: Sliders },
+                    { mode: '5x15' as const, label: '5×15 columns', Icon: Grid3x3 },
+                    { mode: 'grouped' as const, label: '1×75 carousel', Icon: List },
+                  ]
+                ).map(({ mode, label, Icon }) => {
+                  const active = publicDisplayCallListMode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => updatePublicDisplayCallListMode(mode)}
+                      style={{
+                        fontSize: '0.88rem',
+                        padding: '10px 14px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        border: active ? '1px solid rgba(0,255,136,0.65)' : undefined,
+                        background: active ? 'rgba(0,255,136,0.14)' : undefined,
+                        color: active ? '#00ff88' : undefined,
+                      }}
+                    >
+                      <Icon className="w-4 h-4" aria-hidden />
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </details>
             {showYoutubeMusicInConnectionModal ? (
               <>
                 <div className="host-manager-display__divider" style={{ marginTop: 14 }} />
@@ -8540,150 +8626,13 @@ const HostView: React.FC = () => {
                       </p>
                     )}
 
-                    <div style={{
-                      maxHeight: '400px',
-                      overflowY: 'auto',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: '8px',
-                      background: 'rgba(0,0,0,0.2)'
-                    }}>
-                      {finalizedPoolSongs.map((song: any, index: number) => {
-                        const ytf = youtubeTrackDisplayFields(song);
-                        const displayTitle = getDisplaySongTitle(song.id, ytf.title);
-                        const validation = validateSongTitleSync(displayTitle, ytf.title);
-                        const validationColor = getValidationColor(validation);
-                        const validationMessage = getValidationMessage(validation);
-                        
-                        return (
-                          <div 
-                            key={song.id} 
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '12px',
-                              padding: '12px',
-                              borderBottom: index < finalizedPoolSongs.length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none',
-                              fontSize: '0.9rem',
-                              // Highlight problematic titles
-                              background: validation.confidence < 0.7 ? 'rgba(255,68,68,0.1)' : 'transparent',
-                              borderLeft: validation.confidence < 0.7 ? `3px solid ${validationColor}` : '3px solid transparent',
-                              borderRadius: '4px',
-                              margin: '2px 0',
-                              cursor: 'help'
-                            }}
-                            title={`Song Title Comparison:
-                            
-Original: "${song.name}"
-Cleaned: "${displayTitle}"
-${customSongTitles[song.id] ? 'Custom: "' + customSongTitles[song.id] + '"' : ''}
-
-${validationMessage}
-${validation.warnings.length > 0 ? '\nWarnings: ' + validation.warnings.join('; ') : ''}
-${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions.slice(0, 3).join('; ') : ''}
-
-Hover over the validation icon for detailed validation info.`}
-                          >
-                            <span style={{ 
-                              color: '#00ff88', 
-                              fontWeight: 'bold', 
-                              minWidth: '30px',
-                              fontSize: '0.8rem'
-                            }}>
-                              #{index + 1}
-                            </span>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ 
-                                fontWeight: 'bold', 
-                                color: '#fff',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px'
-                              }}>
-                                {displayTitle}
-                                {song.explicit === true && (
-                                  <SpotifyExplicitBadge size="md" title="Marked explicit on Spotify" />
-                                )}
-                                {customSongTitles[song.id] && (
-                                  <span style={{ 
-                                    fontSize: '0.8rem', 
-                                    color: '#00ffa3', 
-                                    fontStyle: 'italic'
-                                  }}>
-                                    (edited)
-                                  </span>
-                                )}
-                                {!customSongTitles[song.id] && displayTitle !== song.name && (
-                                  <span style={{ 
-                                    fontSize: '0.7rem', 
-                                    color: '#ffaa00', 
-                                    fontStyle: 'italic',
-                                    marginLeft: '4px'
-                                  }}>
-                                    (cleaned)
-                                  </span>
-                                )}
-                                {/* Validation indicator */}
-                                <span 
-                                  style={{ 
-                                    fontSize: '0.7rem',
-                                    color: validationColor,
-                                    fontWeight: 'normal',
-                                    cursor: 'help'
-                                  }}
-                                  title={`${validationMessage}. ${validation.warnings.join('; ')}
-                                  
-Original: "${song.name}"
-Cleaned: "${displayTitle}"
-${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions.slice(0, 2).join('; ') : ''}`}
-                                >
-                                  {validation.confidence < 0.7 ? (
-                                    <AlertTriangle size={14} aria-hidden />
-                                  ) : validation.confidence < 0.8 ? (
-                                    <AlertCircle size={14} aria-hidden />
-                                  ) : (
-                                    <CheckCircle2 size={14} aria-hidden />
-                                  )}
-                                </span>
-                              </div>
-                              <div style={{ color: '#b3b3b3', fontSize: '0.8rem' }}>
-                                by {ytf.artist}
-                                {validation.warnings.length > 0 && (
-                                  <span style={{ 
-                                    color: validationColor, 
-                                    fontSize: '0.7rem',
-                                    marginLeft: '8px',
-                                    fontStyle: 'italic'
-                                  }}>
-                                    {validation.warnings[0]}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button
-                                onClick={() => handleEditSongTitle({id: song.id, title: song.name, artist: song.artist})}
-                                style={{
-                                  background: 'rgba(0,255,163,0.1)',
-                                  border: '1px solid rgba(0,255,163,0.3)',
-                                  borderRadius: '6px',
-                                  color: '#00ffa3',
-                                  padding: '6px 10px',
-                                  fontSize: '0.8rem',
-                                  cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '4px'
-                                }}
-                                title="Edit song title for Game of Tones"
-                              >
-                                <Pencil className="w-3.5 h-3.5" aria-hidden />
-                                Edit
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    <BingoPoolList
+                      songs={finalizedPoolSongs}
+                      currentSongId={currentSong?.id}
+                      getDisplaySongTitle={getDisplaySongTitle}
+                      customSongTitles={customSongTitles}
+                      onEditSongTitle={handleEditSongTitle}
+                    />
                   </motion.div>
                 )}
 
