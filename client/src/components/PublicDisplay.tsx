@@ -32,6 +32,7 @@ import {
   maxHeightEm,
   PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX,
   PUBLIC_DISPLAY_CALL_TITLE_BASE_PX,
+  unrevealedLetterBoxStyle,
 } from '../utils/publicDisplayCallCardText';
 import type { PatternCompositeSpec, PatternCompositeClause } from '../patternDefinitions';
 import {
@@ -49,20 +50,6 @@ import {
 } from '../patternDefinitions';
 
 const FULL_CARD_PULSE_DURATION_SEC = 1.28;
-
-/** Unrevealed letter tiles (letter-reveal mode) — slightly smaller than cap height so layout matches revealed glyphs. */
-const UNREVEALED_LETTER_BOX_STYLE: React.CSSProperties = {
-  display: 'inline-block',
-  width: '0.56em',
-  height: '0.74em',
-  border: '0.06em solid rgba(255, 255, 255, 0.75)',
-  borderRadius: '0.09em',
-  verticalAlign: '0.02em',
-  margin: '0 0.035em',
-  boxSizing: 'border-box',
-  background: 'rgba(255, 255, 255, 0.05)',
-  borderColor: 'rgba(255, 255, 255, 0.42)',
-};
 
 /** Non-row-major spread so full-card pulses don't read as a single sweep. */
 function fullCardPulseDelaySec(row: number, col: number): number {
@@ -2692,8 +2679,14 @@ const PublicDisplay: React.FC = () => {
   };
 
   // Shared helper: render masked text with per-song reveal baseline and optional highlight
-  const renderMaskedText = (text: string, set: Set<string>, highlightChar: string | null) => {
+  const renderMaskedText = (
+    text: string,
+    set: Set<string>,
+    highlightChar: string | null,
+    letterBoxScale = 1,
+  ) => {
     if (!text) return null;
+    const boxStyle = unrevealedLetterBoxStyle(letterBoxScale);
     const tokens = text.split(/(\s+)/); // keep whitespace tokens
     return (
       <span>
@@ -2716,7 +2709,7 @@ const PublicDisplay: React.FC = () => {
                       <span key={`c-${ti}-${ci}`} style={isHighlight ? { color: '#f5d061', textShadow: '0 0 6px rgba(245,208,97,0.6)' } : undefined}>{ch}</span>
                     );
                   }
-                  return <span key={`c-${ti}-${ci}`} style={UNREVEALED_LETTER_BOX_STYLE} />;
+                  return <span key={`c-${ti}-${ci}`} style={boxStyle} />;
                 }
                 return <span key={`c-${ti}-${ci}`}>{ch}</span>;
               })}
@@ -2783,7 +2776,6 @@ const PublicDisplay: React.FC = () => {
     const basePx =
       kind === 'title' ? PUBLIC_DISPLAY_CALL_TITLE_BASE_PX : PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX;
     const lh = kind === 'title' ? 1.2 : 1.15;
-    const lines = kind === 'title' ? typo.titleMaxLines : typo.artistMaxLines;
     const fontSize = Math.round(basePx * displayFontScale * typo.textScale);
     const common: React.CSSProperties = {
       fontWeight: kind === 'title' ? 900 : 800,
@@ -2796,20 +2788,37 @@ const PublicDisplay: React.FC = () => {
       wordBreak: 'break-word',
       overflowWrap: 'anywhere',
       display: 'block',
+      overflow: fullCard ? 'visible' : 'hidden',
+      textOverflow: 'clip',
+      marginTop: kind === 'artist' ? (fullCard ? 6 : 4) : 0,
+    };
+    return common;
+  };
+
+  const callSongInfoStyles = (
+    typo: ReturnType<typeof computeCallCardTypography>,
+    fullCard: boolean,
+    hasArtist: boolean,
+  ): React.CSSProperties => {
+    const base: React.CSSProperties = {
+      flex: 1,
+      minWidth: 0,
+      maxWidth: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'flex-start',
     };
     if (fullCard) {
-      return {
-        ...common,
-        overflow: 'visible',
-        marginTop: kind === 'artist' ? 6 : 0,
-      };
+      return { ...base, overflow: 'visible' };
     }
+    const titlePx = Math.round(PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * displayFontScale * typo.textScale);
+    const artistPx = Math.round(PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX * displayFontScale * typo.textScale);
+    const titleBlock = typo.titleMaxLines * 1.2 * titlePx;
+    const artistBlock = hasArtist ? typo.artistMaxLines * 1.15 * artistPx + 4 : 0;
     return {
-      ...common,
+      ...base,
       overflow: 'hidden',
-      textOverflow: 'clip',
-      maxHeight: maxHeightEm(lh, lines),
-      marginTop: kind === 'artist' ? 4 : 0,
+      maxHeight: `${Math.round(titleBlock + artistBlock)}px`,
     };
   };
 
@@ -3223,35 +3232,6 @@ const PublicDisplay: React.FC = () => {
     /** Full-card (blackout) mode: show full song titles without line-clamp truncation. */
     const isFullCardPattern = pattern === 'full_card' || pattern === 'blackout';
 
-    // Helper: Wheel-of-Fortune style masking using per-song baseline
-    const renderMaskedText = (text: string, set: Set<string>, highlightChar: string | null) => {
-      if (!text) return null;
-      const tokens = text.split(/(\s+)/);
-      return (
-        <span>
-          {tokens.map((token, ti) => {
-            if (/^\s+$/.test(token)) return <span key={`wsp-${ti}`}>{token}</span>;
-            const chars = Array.from(token);
-            return (
-              <span key={`word-${ti}`} style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'baseline' }}>
-                {chars.map((ch, ci) => {
-                  const u = ch.toUpperCase();
-                  if (/^[A-Z0-9]$/.test(u)) {
-                    const revealed = set.has(u);
-                    if (revealed) {
-                      const isHighlight = !!highlightChar && u === highlightChar;
-                      return <span key={`c-${ti}-${ci}`} style={isHighlight ? { color: '#f5d061', textShadow: '0 0 6px rgba(245,208,97,0.6)' } : undefined}>{ch}</span>;
-                    }
-                    return <span key={`c-${ti}-${ci}`} style={UNREVEALED_LETTER_BOX_STYLE} />;
-                  }
-                  return <span key={`c-${ti}-${ci}`}>{ch}</span>;
-                })}
-              </span>
-            );
-          })}
-        </span>
-      );
-    };
     return (
       <div className="call-list-content">
         <div className="call-columns-header" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, alignItems: 'center', marginBottom: 6 }}>
@@ -3358,10 +3338,14 @@ const PublicDisplay: React.FC = () => {
                   const poolIdx = Array.isArray(oneBy75Ids) ? oneBy75Ids.indexOf(id) : -1;
                   const meta = idMetaRef.current[id] || { name: '', artist: '' };
                   const isCurrent = gameState.currentSong?.id === id;
+                  const masked = getCallSongRevealUi(id).kind === 'masked';
                   const typo = computeCallCardTypography(meta.name, meta.artist, {
                     fullCard: isFullCardPattern,
+                    masked,
                   });
-                  const { title, artist } = renderCallSongLines(id, meta, renderMaskedText);
+                  const { title, artist } = renderCallSongLines(id, meta, (t, s, h) =>
+                    renderMaskedText(t, s, h, typo.letterBoxScale),
+                  );
                   return (
                     <motion.div
                       key={id + '-' + ri}
@@ -3412,7 +3396,7 @@ const PublicDisplay: React.FC = () => {
                         </div>
                         <div
                           className={`call-song-info${typo.dense ? ' call-song-info--dense' : ''}`}
-                          style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}
+                          style={callSongInfoStyles(typo, isFullCardPattern, !!meta.artist?.trim())}
                         >
                           <AnimatePresence mode="popLayout" initial={false}>
                           <motion.div
@@ -3475,10 +3459,14 @@ const PublicDisplay: React.FC = () => {
       const callNum = playIdx >= 0 ? playIdx + 1 : idsToUse.indexOf(id) + 1;
       const meta = idMetaRef.current[id] || { name: '', artist: '' };
       const isCurrent = gameState.currentSong?.id === id;
+      const masked = getCallSongRevealUi(id).kind === 'masked';
       const typo = computeCallCardTypography(meta.name, meta.artist, {
         fullCard: isFullCardPattern,
+        masked,
       });
-      const { title, artist } = renderCallSongLines(id, meta, renderMaskedText);
+      const { title, artist } = renderCallSongLines(id, meta, (t, s, h) =>
+        renderMaskedText(t, s, h, typo.letterBoxScale),
+      );
       return (
         <div
           key={id}
@@ -3516,15 +3504,7 @@ const PublicDisplay: React.FC = () => {
           </div>
           <div
             className={`call-song-info${typo.dense ? ' call-song-info--dense' : ''}`}
-            style={{
-              flex: 1,
-              minWidth: 0,
-              maxWidth: '100%',
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'flex-start',
-            }}
+            style={callSongInfoStyles(typo, isFullCardPattern, !!meta.artist?.trim())}
           >
             <div className="call-song-name" style={callCardLineStyles(typo, 'title', isFullCardPattern)}>
               {title}

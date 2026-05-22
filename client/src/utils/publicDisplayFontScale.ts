@@ -14,7 +14,9 @@ export function computeOptimalPublicDisplayFontMultiplier(
   const h = Math.max(480, height);
   const callRegionH = h * 0.52;
   const rowH = callRegionH / 5;
-  const targetTitlePx = Math.min(42, Math.max(20, rowH * 0.36));
+  /** Letter-reveal tiles are taller than plain lines; 100% host slider should fit one card. */
+  const LETTER_REVEAL_LINE_FACTOR = 1.12;
+  const targetTitlePx = Math.min(42, Math.max(18, (rowH * 0.36) / LETTER_REVEAL_LINE_FACTOR));
   const fromHeight = targetTitlePx / 32;
   const fromWidth = Math.min(1.35, Math.max(0.8, w / REF_WIDTH));
   const refBlend = Math.min(1.2, Math.max(0.85, (w / REF_WIDTH + h / REF_HEIGHT) / 2));
