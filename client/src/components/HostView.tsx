@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -26,6 +26,7 @@ import {
   Volume2,
   VolumeX,
   Users,
+  Globe,
   AlertTriangle,
   AlertCircle,
   CheckCircle2,
@@ -414,13 +415,49 @@ function isBingoFreeSpaceSquare(square: { isFreeSpace?: boolean; songId?: string
 }
 
 /** Stable fingerprint for host player-card payloads so we detect mark changes, not only played-song count. */
-function hostPlayerCardSnapshot(cardData: { card?: { squares?: Array<{ position?: string; marked?: boolean }> }; playedSongs?: string[] }) {
+function hostPlayerCardSnapshot(cardData: {
+  card?: { squares?: Array<{ position?: string; marked?: boolean }> };
+  playedSongs?: string[];
+  inPerson?: boolean;
+}) {
   const played = [...(cardData.playedSongs || [])].sort().join(',');
   const marks = (cardData.card?.squares || [])
     .map((s) => `${s.position ?? ''}:${s.marked ? 1 : 0}`)
     .sort()
     .join('|');
-  return `${played}#${marks}`;
+  return `${cardData.inPerson === false ? '0' : '1'}#${played}#${marks}`;
+}
+
+/** Remote/online join (?remote=1) — shown on host player cards and bingo verification. */
+function mixRowsNeedHostSpotify(rows: Playlist[] | null): boolean {
+  if (!rows || rows.length === 0) return false;
+  return rows.some((p) => p.youtubeMusic !== true && p.catalog !== true);
+}
+
+function OnlinePlayerBadge({ compact }: { compact?: boolean }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        marginLeft: 8,
+        padding: compact ? '2px 7px' : '3px 9px',
+        borderRadius: 999,
+        fontSize: compact ? '0.68rem' : '0.75rem',
+        fontWeight: 700,
+        letterSpacing: '0.02em',
+        color: '#7ec8ff',
+        background: 'rgba(66, 153, 225, 0.18)',
+        border: '1px solid rgba(126, 200, 255, 0.45)',
+        verticalAlign: 'middle',
+      }}
+      title="Joined online (remote link)"
+    >
+      <Globe className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} aria-hidden />
+      Online
+    </span>
+  );
 }
 
 /** Spotify may return HTML in playlist descriptions; strip tags for display. */
@@ -597,20 +634,6 @@ const HostView: React.FC = () => {
   const [isSpotifyConnecting, setIsSpotifyConnecting] = useState(false);
   /** True while pushing a saved-round snapshot through finalize-mix (display + online cards). Blocks Start Game briefly. */
   const [savedRoundRoomSyncBusy, setSavedRoundRoomSyncBusy] = useState(false);
-  /** Finalize / Start Game require Spotify only when the mix includes non-catalog Spotify playlists. */
-  const mixGameActionsBlocked = useMemo(
-    () =>
-      mixPlaylistSelection.length === 0 ||
-      (mixNeedsHostSpotify && (!isSpotifyConnected || isSpotifyConnecting)) ||
-      savedRoundRoomSyncBusy,
-    [
-      mixPlaylistSelection.length,
-      mixNeedsHostSpotify,
-      isSpotifyConnected,
-      isSpotifyConnecting,
-      savedRoundRoomSyncBusy,
-    ]
-  );
   /** Mirrors isSpotifyConnected for callbacks declared above sync effects (catalog schedule, socket reconnect). */
   const isSpotifyConnectedRef = useRef(false);
   const [pendingVerification, setPendingVerification] = useState<any>(null);
@@ -644,7 +667,39 @@ const HostView: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+  const pendingRoomDeviceIdRef = useRef<string | null>(null);
+  const connectionModalOpenedByUserRef = useRef(false);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
+
+  const playbackDeviceNotInList = useMemo(() => {
+    if (!mixNeedsHostSpotify || !isSpotifyConnected || isLoadingDevices) return false;
+    if (!selectedDevice?.id) return true;
+    if (devices.length === 0) return false;
+    return !devices.some((d) => d.id === selectedDevice.id);
+  }, [
+    mixNeedsHostSpotify,
+    isSpotifyConnected,
+    isLoadingDevices,
+    selectedDevice,
+    devices,
+  ]);
+
+  const mixGameActionsBlocked = useMemo(
+    () =>
+      mixPlaylistSelection.length === 0 ||
+      (mixNeedsHostSpotify && (!isSpotifyConnected || isSpotifyConnecting)) ||
+      (mixNeedsHostSpotify && playbackDeviceNotInList) ||
+      savedRoundRoomSyncBusy,
+    [
+      mixPlaylistSelection.length,
+      mixNeedsHostSpotify,
+      isSpotifyConnected,
+      isSpotifyConnecting,
+      playbackDeviceNotInList,
+      savedRoundRoomSyncBusy,
+    ]
+  );
+
   const [randomStarts, setRandomStarts] = useState<'none' | 'early' | 'random'>(() => {
     const saved = localStorage.getItem('game-random-starts');
     return (saved as 'none' | 'early' | 'random') || 'none';
@@ -751,6 +806,9 @@ const HostView: React.FC = () => {
   const [showRooms, setShowRooms] = useState<boolean>(false);
   const [rooms, setRooms] = useState<Array<any>>([]);
   const [playerCards, setPlayerCards] = useState<Map<string, any>>(new Map());
+  const [joinedPlayersRoster, setJoinedPlayersRoster] = useState<
+    Map<string, { playerName: string; inPerson: boolean }>
+  >(new Map());
   const [playerCardsVersion, setPlayerCardsVersion] = useState<number>(0); // Force re-render trigger
   const [playerCardsFullscreen, setPlayerCardsFullscreen] = useState<boolean>(false);
   /** When overlay is open: false = centered modal, true = viewport-filling panel */
@@ -1728,17 +1786,22 @@ const HostView: React.FC = () => {
   }, [spotifyInitialCheckDone, isSpotifyConnected, showYoutubeMusicInConnectionModal]);
 
 
-  /** Spotify disconnected ? reopen modal; reconnected ? close. */
+  /** Spotify lost mid-show: reopen Connection; only auto-close after reconnect if host did not open it manually. */
   useEffect(() => {
     const prev = prevSpotifyConnectedRef.current;
-    if (prev === true && isSpotifyConnected === false) {
+    if (spotifyInitialCheckDone && prev === true && isSpotifyConnected === false) {
+      connectionModalOpenedByUserRef.current = false;
       setShowConnectionModal(true);
     }
-    if (prev === false && isSpotifyConnected === true) {
+    if (
+      prev === false &&
+      isSpotifyConnected === true &&
+      !connectionModalOpenedByUserRef.current
+    ) {
       setShowConnectionModal(false);
     }
     prevSpotifyConnectedRef.current = isSpotifyConnected;
-  }, [isSpotifyConnected]);
+  }, [isSpotifyConnected, spotifyInitialCheckDone]);
 
   useEffect(() => {
     if (!showConnectionModal) return;
@@ -1793,6 +1856,24 @@ const HostView: React.FC = () => {
     }
   }, []);
 
+  const syncSelectedPlaybackDeviceToRoom = useCallback(
+    (device: Device | null) => {
+      if (!socket || !roomId) return;
+      try {
+        socket.emit('set-selected-playback-device', {
+          roomId,
+          deviceId: device?.id ?? null,
+          device: device
+            ? { id: device.id, name: device.name, type: device.type || 'Computer' }
+            : null,
+        });
+      } catch {
+        /* ignore */
+      }
+    },
+    [socket, roomId],
+  );
+
   const loadDevices = useCallback(async () => {
     if (!readHostSpotifyWebEnabled()) return;
     try {
@@ -1816,25 +1897,26 @@ const HostView: React.FC = () => {
         if (data.currentDevice) {
           console.log('Current playback device:', data.currentDevice.name, data.currentDevice.id);
         }
-        
-        // Auto-select the saved device if available, otherwise first device
-        if (data.savedDevice) {
-          const savedDevice = data.devices.find((d: Device) => d.id === data.savedDevice.id);
-          if (savedDevice) {
-            setSelectedDevice(savedDevice);
-            console.log('Auto-selected saved device:', savedDevice.name);
-          }
-        } else if (data.currentDevice) {
-          // Prefer the device currently in playback
-          const current = data.devices.find((d: Device) => d.id === data.currentDevice.id);
-          if (current) {
-            setSelectedDevice(current);
-            console.log('Auto-selected current playback device:', current.name);
-          } else if (data.devices.length > 0 && !selectedDevice) {
-            setSelectedDevice(data.devices[0]);
-          }
-        } else if (data.devices.length > 0 && !selectedDevice) {
-          setSelectedDevice(data.devices[0]);
+
+        let picked: Device | null = null;
+        const pendingId = pendingRoomDeviceIdRef.current;
+        if (pendingId) {
+          picked = data.devices.find((d: Device) => d.id === pendingId) ?? null;
+          if (picked) pendingRoomDeviceIdRef.current = null;
+        }
+        if (!picked && data.savedDevice) {
+          picked = data.devices.find((d: Device) => d.id === data.savedDevice.id) ?? null;
+        }
+        if (!picked && data.currentDevice) {
+          picked = data.devices.find((d: Device) => d.id === data.currentDevice.id) ?? null;
+        }
+        if (!picked && data.devices.length > 0) {
+          picked = data.devices[0];
+        }
+        if (picked) {
+          setSelectedDevice(picked);
+          syncSelectedPlaybackDeviceToRoom(picked);
+          console.log('Playback device selected:', picked.name);
         }
       } else {
         console.error('Failed to load devices:', data.error);
@@ -1844,7 +1926,7 @@ const HostView: React.FC = () => {
     } finally {
       setIsLoadingDevices(false);
     }
-  }, []);
+  }, [syncSelectedPlaybackDeviceToRoom]);
 
   /** After YouTube Music OAuth redirect (?youtube_music=connected), strip param and refetch merged library playlists. */
   useEffect(() => {
@@ -2049,6 +2131,7 @@ const HostView: React.FC = () => {
       const data = await response.json();
       if (data.success) {
         console.log('Device saved successfully:', data.message);
+        syncSelectedPlaybackDeviceToRoom(selectedDevice);
         alert(`Device saved: ${selectedDevice.name}`);
       } else {
         console.error('Failed to save device:', data.error);
@@ -2058,7 +2141,7 @@ const HostView: React.FC = () => {
       console.error('Error saving device:', error);
       alert('Error saving device');
     }
-  }, [selectedDevice]);
+  }, [selectedDevice, syncSelectedPlaybackDeviceToRoom]);
 
   useEffect(() => {
     if (!hostAuthBootstrapDone) return;
@@ -2116,8 +2199,41 @@ const HostView: React.FC = () => {
     };
 
     // Socket event listeners
+    const applyPlayersRoster = (
+      players: Array<{ playerId?: string; playerName?: string; inPerson?: boolean }>,
+    ) => {
+      if (!Array.isArray(players)) return;
+      setJoinedPlayersRoster(
+        new Map(
+          players
+            .filter((p) => p?.playerId)
+            .map((p) => [
+              String(p.playerId),
+              {
+                playerName: p.playerName || 'Unknown',
+                inPerson: p.inPerson !== false,
+              },
+            ]),
+        ),
+      );
+    };
+
+    newSocket.on('room-players-roster', (data: any) => {
+      applyPlayersRoster(data?.players);
+    });
+
     newSocket.on('player-joined', (data: any) => {
       console.log('Player joined:', data);
+      if (!data?.isHost && data?.playerId) {
+        setJoinedPlayersRoster((prev) => {
+          const next = new Map(prev);
+          next.set(String(data.playerId), {
+            playerName: data.playerName || 'Unknown',
+            inPerson: data.inPerson !== false,
+          });
+          return next;
+        });
+      }
       schedulePlayerCardsRefresh(450);
     });
     newSocket.on('prequeue-updated', (data: any) => {
@@ -2339,7 +2455,6 @@ const HostView: React.FC = () => {
       setIsPlaying(false);
       setGameState('ended');
       setYoutubeHostPlayback(null);
-      void disconnectSpotify();
     });
 
     newSocket.on('game-restarted', (data: any) => {
@@ -2452,6 +2567,13 @@ const HostView: React.FC = () => {
 
     newSocket.on('player-left', (data: any) => {
       console.log('Player left:', data);
+      if (data?.playerId) {
+        setJoinedPlayersRoster((prev) => {
+          const next = new Map(prev);
+          next.delete(String(data.playerId));
+          return next;
+        });
+      }
     });
 
     newSocket.on('hybrid-mode-updated', (data: any) => {
@@ -2511,6 +2633,9 @@ const HostView: React.FC = () => {
     });
 
     newSocket.on('room-state', (payload: any) => {
+      if (typeof payload?.selectedDeviceId === 'string' && payload.selectedDeviceId.trim() !== '') {
+        pendingRoomDeviceIdRef.current = payload.selectedDeviceId.trim();
+      }
       if (
         payload?.publicDisplayCallListMode === 'grouped' ||
         payload?.publicDisplayCallListMode === '5x15' ||
@@ -2555,7 +2680,8 @@ const HostView: React.FC = () => {
               newPlayerCards.set(playerId, {
                 playerName: cardData.playerName || 'Unknown',
                 card: cardData.card,
-                playedSongs: cardData.playedSongs || [] // Ensure playedSongs is included
+                playedSongs: cardData.playedSongs || [],
+                inPerson: cardData.inPerson !== false,
               });
             }
           });
@@ -2650,18 +2776,32 @@ const HostView: React.FC = () => {
           }, 500);
         }
       }
-      (async () => {
-        if (!isSpotifyConnectedRef.current) return;
-        const now = Date.now();
-        if (now - lastLoadPlaylistsOnSocketReconnectAtRef.current > 90_000) {
-          lastLoadPlaylistsOnSocketReconnectAtRef.current = now;
-          await loadPlaylists();
+      void (async () => {
+        try {
+          const response = await hostFetch(`${API_BASE || ''}/api/spotify/status?_=${Date.now()}`);
+          const data = (await response.json()) as { connected?: boolean; webApiQuarantine?: unknown };
+          writeHostSpotifyWebEnabled(data.connected === true);
+          if (data.webApiQuarantine != null) {
+            setWebApiQuarantine(normalizeWebApiQuarantine(data.webApiQuarantine));
+          }
+          if (data.connected === true) {
+            setIsSpotifyConnected(true);
+            setIsSpotifyConnecting(false);
+            const now = Date.now();
+            if (now - lastLoadPlaylistsOnSocketReconnectAtRef.current > 90_000) {
+              lastLoadPlaylistsOnSocketReconnectAtRef.current = now;
+              await loadPlaylists();
+            }
+            await new Promise((r) => setTimeout(r, 800));
+            await loadDevices();
+            await new Promise((r) => setTimeout(r, 800));
+            await fetchPlaybackState();
+          } else {
+            setIsSpotifyConnected(false);
+          }
+        } catch (e) {
+          console.warn('Reconnect Spotify status refresh failed:', e);
         }
-        await new Promise((r) => setTimeout(r, 800));
-        await loadDevices();
-        await new Promise((r) => setTimeout(r, 800));
-        await fetchPlaybackState();
-        // Re-request player cards after reconnection to restore UI state
         setTimeout(() => {
           schedulePlayerCardsRefresh(300);
         }, 1000);
@@ -3525,10 +3665,25 @@ const HostView: React.FC = () => {
     }
 
     if (mixNeedsHostSpotify && !selectedDevice) {
+      connectionModalOpenedByUserRef.current = false;
+      setShowConnectionModal(true);
       alert(
         'Please select a Spotify playback device first.\n\nOpen Connection (header button), pick a device in Playback device, or open Spotify on your target device and tap Refresh devices.'
       );
       return;
+    }
+
+    if (mixNeedsHostSpotify && playbackDeviceNotInList) {
+      connectionModalOpenedByUserRef.current = false;
+      setShowConnectionModal(true);
+      alert(
+        'Your selected Spotify device is not available right now. Open Spotify on that device, tap Refresh devices in Connection, and pick it again.'
+      );
+      return;
+    }
+
+    if (mixNeedsHostSpotify && selectedDevice) {
+      syncSelectedPlaybackDeviceToRoom(selectedDevice);
     }
 
     const resolveSongListForStart = () =>
@@ -3882,10 +4037,19 @@ const HostView: React.FC = () => {
                 marginBottom: '8px',
                 color: '#00ff88',
                 fontSize: compact ? '1rem' : '1.15rem',
-                textAlign: 'center'
+                textAlign: 'center',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexWrap: 'wrap',
+                gap: 4,
               }}
             >
-              {playerData.playerName}
+              <span>{playerData.playerName}</span>
+              {(playerData.inPerson === false ||
+                joinedPlayersRoster.get(playerId)?.inPerson === false) && (
+                <OnlinePlayerBadge compact={compact} />
+              )}
             </div>
 
             {(() => {
@@ -5968,6 +6132,27 @@ const HostView: React.FC = () => {
       return;
     }
 
+    const mixRowsForRound = resolveMixPlaylistRowsForRound(round);
+    if (mixRowsNeedHostSpotify(mixRowsForRound)) {
+      if (!isSpotifyConnected) {
+        connectionModalOpenedByUserRef.current = false;
+        setShowConnectionModal(true);
+        showToast('Connect Spotify in Connection before starting this round.', 'warn');
+        addLog(`${round.name}: blocked — Spotify not connected`, 'warn');
+        return;
+      }
+      if (webApiQuarantine.active) {
+        showHostAckNotification({
+          id: 'round-start-quarantine',
+          title: 'Spotify API cooldown',
+          variant: 'warning',
+          message:
+            'Spotify is in a short cooldown after rate limits. Wait for the timer, then refresh Connection before Start round.',
+        });
+        return;
+      }
+    }
+
     // Mark current round as completed if it exists
     if (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length) {
       const updatedRounds = [...eventRounds];
@@ -6055,6 +6240,11 @@ const HostView: React.FC = () => {
     finalizeMix,
     mixFinalized,
     finalizedMixPlaylistKey,
+    isSpotifyConnected,
+    webApiQuarantine.active,
+    showToast,
+    showHostAckNotification,
+    resolveMixPlaylistRowsForRound,
   ]);
 
   // Advanced round management functions
@@ -6532,8 +6722,9 @@ const HostView: React.FC = () => {
           value={selectedDevice?.id ?? ''}
           onChange={(e) => {
             const id = e.target.value;
-            const d = devices.find((x) => x.id === id);
-            setSelectedDevice(d ?? null);
+            const d = devices.find((x) => x.id === id) ?? null;
+            setSelectedDevice(d);
+            syncSelectedPlaybackDeviceToRoom(d);
           }}
           style={{
             flex: '1 1 220px',
@@ -6577,6 +6768,12 @@ const HostView: React.FC = () => {
           No devices found. Open Spotify on phone or desktop (or the Spotify Web Player in a browser), start
           playback once so the app is active, then tap Refresh devices. Spotify Premium is required for
           playback control on some setups.
+        </p>
+      )}
+      {playbackDeviceNotInList && selectedDevice && (
+        <p style={{ marginTop: 10, fontSize: '0.8rem', color: '#ff8a8a', fontWeight: 600 }}>
+          Selected device “{selectedDevice.name}” is not online. Refresh devices, open Spotify on that device,
+          then select it again before Start Game.
         </p>
       )}
     </>
@@ -8377,7 +8574,21 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
                           Player cards
                         </div>
                         <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
-                          {playerCards.size} player{playerCards.size !== 1 ? 's' : ''} · Pattern:{' '}
+                          {playerCards.size} player{playerCards.size !== 1 ? 's' : ''}
+                          {(() => {
+                            const onlineN = Array.from(playerCards.entries()).filter(
+                              ([id, d]) =>
+                                d.inPerson === false || joinedPlayersRoster.get(id)?.inPerson === false,
+                            ).length;
+                            return onlineN > 0 ? (
+                              <>
+                                {' '}
+                                · <strong style={{ color: '#7ec8ff' }}>{onlineN} online</strong>
+                              </>
+                            ) : null;
+                          })()}
+                          {' '}
+                          · Pattern:{' '}
                           <strong style={{ color: '#c5d4e0' }}>{getPatternDisplayName(pattern)}</strong>
                         </div>
                       </div>
@@ -8676,9 +8887,30 @@ ${validation.suggestions.length > 0 ? '\nSuggestions: ' + validation.suggestions
             </h2>
             
             <div style={{ marginBottom: '20px', textAlign: 'center' }}>
-              <p style={{ fontSize: '1.2rem', color: '#fff', marginBottom: '8px' }}>
-                <strong>{pendingVerification.playerName}</strong> called BINGO!
+              <p
+                style={{
+                  fontSize: '1.2rem',
+                  color: '#fff',
+                  marginBottom: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexWrap: 'wrap',
+                  gap: 6,
+                }}
+              >
+                <strong>{pendingVerification.playerName}</strong>
+                {pendingVerification.inPerson === false ? <OnlinePlayerBadge /> : null}
+                <span>called BINGO!</span>
               </p>
+              {pendingVerification.inPerson === false ? (
+                <p style={{ color: '#7ec8ff', fontSize: '0.85rem', marginBottom: 8 }}>
+                  Joined online (remote link).
+                  {hybridInPersonPlusOnline
+                    ? ' Hybrid mode: round/prize still needs an in-person winner unless you approve this as the official win.'
+                    : null}
+                </p>
+              ) : null}
               <p style={{ color: '#ccc', fontSize: '0.9rem' }}>
                 Pattern: <strong>{pendingVerification.winningPatternType || pendingVerification.requiredPattern}</strong>
               </p>

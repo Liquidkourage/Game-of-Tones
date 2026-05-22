@@ -42,6 +42,19 @@ import {
 
 const FULL_CARD_PULSE_DURATION_SEC = 1.28;
 
+/** Unrevealed letter tiles (letter-reveal mode) — slightly smaller than cap height so layout matches revealed glyphs. */
+const UNREVEALED_LETTER_BOX_STYLE: React.CSSProperties = {
+  display: 'inline-block',
+  width: '0.56em',
+  height: '0.74em',
+  border: '0.06em solid rgba(255, 255, 255, 0.75)',
+  borderRadius: '0.09em',
+  verticalAlign: '0.02em',
+  margin: '0 0.035em',
+  boxSizing: 'border-box',
+  background: 'rgba(255, 255, 255, 0.1)',
+};
+
 /** Non-row-major spread so full-card pulses don't read as a single sweep. */
 function fullCardPulseDelaySec(row: number, col: number): number {
   const idx = row * 5 + col;
@@ -2617,22 +2630,7 @@ const PublicDisplay: React.FC = () => {
                       <span key={`c-${ti}-${ci}`} style={isHighlight ? { color: '#f5d061', textShadow: '0 0 6px rgba(245,208,97,0.6)' } : undefined}>{ch}</span>
                     );
                   }
-                  return (
-                    <span
-                      key={`c-${ti}-${ci}`}
-                      style={{
-                        display: 'inline-block',
-                        width: '0.75em',
-                        height: '1.0em',
-                        border: '0.1em solid rgba(255,255,255,0.8)',
-                        borderRadius: '0.14em',
-                        verticalAlign: '-0.12em',
-                        margin: '0 0.08em',
-                        boxSizing: 'border-box',
-                        background: 'rgba(255,255,255,0.12)'
-                      }}
-                    />
-                  );
+                  return <span key={`c-${ti}-${ci}`} style={UNREVEALED_LETTER_BOX_STYLE} />;
                 }
                 return <span key={`c-${ti}-${ci}`}>{ch}</span>;
               })}
@@ -3120,7 +3118,7 @@ const PublicDisplay: React.FC = () => {
                       const isHighlight = !!highlightChar && u === highlightChar;
                       return <span key={`c-${ti}-${ci}`} style={isHighlight ? { color: '#f5d061', textShadow: '0 0 6px rgba(245,208,97,0.6)' } : undefined}>{ch}</span>;
                     }
-                    return <span key={`c-${ti}-${ci}`} style={{ display: 'inline-block', width: '0.52em', height: '0.70em', border: '0.072em solid rgba(255,255,255,0.8)', borderRadius: '0.11em', verticalAlign: '-0.06em', margin: '0 0.05em', boxSizing: 'border-box', background: 'rgba(255,255,255,0.12)' }} />;
+                    return <span key={`c-${ti}-${ci}`} style={UNREVEALED_LETTER_BOX_STYLE} />;
                   }
                   return <span key={`c-${ti}-${ci}`}>{ch}</span>;
                 })}

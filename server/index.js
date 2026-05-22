@@ -377,6 +377,53 @@ function getNonHostPlayerCount(room) {
   return count;
 }
 
+function isDisplayConnectionPlayer(player) {
+  return typeof player?.name === 'string' && /display/i.test(player.name);
+}
+
+/** Non-host roster for host UI (in-person vs online/remote join). */
+function buildRoomPlayersRoster(room) {
+  if (!room?.players) return [];
+  const roster = [];
+  for (const [playerId, p] of room.players) {
+    if (!p || p.isHost || isDisplayConnectionPlayer(p)) continue;
+    roster.push({
+      playerId,
+      playerName: p.name,
+      inPerson: p.inPerson !== false,
+    });
+  }
+  return roster;
+}
+
+function emitRoomPlayersRosterToHosts(roomId, room) {
+  const players = buildRoomPlayersRoster(room);
+  const payload = { players };
+  let sent = 0;
+  for (const [pid, p] of room.players) {
+    if (!p?.isHost) continue;
+    const hostSocket = io.sockets.sockets.get(pid);
+    if (hostSocket) {
+      hostSocket.emit('room-players-roster', payload);
+      sent++;
+    }
+  }
+  if (sent === 0 && room.host) {
+    const fallback = io.sockets.sockets.get(room.host);
+    if (fallback) fallback.emit('room-players-roster', payload);
+  }
+}
+
+function hostPlayerCardEmitPayload(room, playerId, card, playedSongs) {
+  const player = room.players.get(playerId);
+  return {
+    playerName: player?.name || 'Unknown',
+    card,
+    playedSongs,
+    inPerson: player?.inPerson !== false,
+  };
+}
+
 // Token storage file path
 const TOKEN_FILE = path.join(__dirname, 'spotify_tokens.json');
 // Device storage file path
@@ -2468,6 +2515,7 @@ io.on('connection', (socket) => {
       playerCount: getNonHostPlayerCount(room),
       inPerson
     });
+    emitRoomPlayersRosterToHosts(roomId, room);
 
     // Emit successful room join confirmation to the joining socket
     socket.emit('room-joined', {
@@ -2540,6 +2588,7 @@ io.on('connection', (socket) => {
           
           // Immediately send player cards to reconnecting host
           sendPlayerCardUpdates(roomId, true); // Immediate update for reconnecting host
+          emitRoomPlayersRosterToHosts(roomId, room);
 
           if (Array.isArray(room.bingoVerificationQueue) && room.bingoVerificationQueue.length > 0) {
             const head = room.bingoVerificationQueue[0]?.verificationData;
@@ -2876,6 +2925,37 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('set-selected-playback-device', (data = {}) => {
+    const { roomId, deviceId, device } = data;
+    const room = rooms.get(roomId);
+    if (!room) return;
+    const isCurrentHost =
+      room.host === socket.id ||
+      (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+    if (!isCurrentHost) return;
+    const id =
+      deviceId != null && String(deviceId).trim() !== ''
+        ? String(deviceId).trim()
+        : device && device.id != null
+          ? String(device.id).trim()
+          : '';
+    room.selectedDeviceId = id || null;
+    if (id && device && typeof device.name === 'string') {
+      const uid = room.ownerUserId;
+      if (uid != null && Number.isFinite(Number(uid))) {
+        saveDeviceForUser(Number(uid), {
+          id,
+          name: device.name,
+          type: device.type || 'Computer',
+        });
+      }
+    }
+    socket.emit('playback-device-updated', { deviceId: room.selectedDeviceId });
+    routineServerLog(
+      `🔊 Room ${roomId} selected playback device: ${room.selectedDeviceId || '(none)'}`,
+    );
+  });
+
   // Hybrid in-person + online: only in-person verified bingos end the round / prize
   socket.on('set-hybrid-mode', (data = {}) => {
     try {
@@ -3181,6 +3261,7 @@ io.on('connection', (socket) => {
       const verificationData = {
         playerId: socket.id,
         playerName: player.name,
+        inPerson: player.inPerson !== false,
         playerCard: cardToSend, // Use the synchronized card with explicit marked properties
         markedSquares: markedSquares,
         requiredPattern: room.pattern,
@@ -3273,6 +3354,7 @@ io.on('connection', (socket) => {
       const verificationData = {
         playerId: socket.id,
         playerName: player.name,
+        inPerson: player.inPerson !== false,
         playerCard: cardToSend,
         markedSquares: markedSquares,
         requiredPattern: room.pattern,
@@ -4073,17 +4155,21 @@ io.on('connection', (socket) => {
           if (player && card) {
             // Only include actual players (not hosts or public display)
             if (!player.isHost && player.name !== 'Display') {
-              playerCardsData[playerId] = {
-                playerName: player.name,
-                card: card,
-                playedSongs: playedSongs // Include current song if playing
-              };
+              playerCardsData[playerId] = hostPlayerCardEmitPayload(
+                room,
+                playerId,
+                card,
+                playedSongs,
+              );
             }
           }
         });
       }
       
       socket.emit('player-cards-update', playerCardsData);
+      if (room.players.get(socket.id)?.isHost) {
+        emitRoomPlayersRosterToHosts(roomId, room);
+      }
       routineServerLog(`📋 Sent ${Object.keys(playerCardsData).length} player cards to host in room ${roomId}`);
       routineServerLog(`📋 CalledSongIds being sent:`, room.calledSongIds);
       routineServerLog(`📋 CalledSongIds length:`, room.calledSongIds?.length || 0);
@@ -5090,7 +5176,8 @@ io.on('connection', (socket) => {
           playerName: player.name,
           playerCount: getNonHostPlayerCount(room)
         });
-        
+        emitRoomPlayersRosterToHosts(roomId, room);
+
         break; // Player can only be in one room
       }
     }
@@ -6787,7 +6874,23 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         const deviceInList = devices.find((d) => d.id === targetDeviceId);
         if (!deviceInList) {
           routineServerLog('⚠️ Locked device not in list; attempting activation...');
-          await spotifyFor(roomId).activateDevice(targetDeviceId);
+          try {
+            await spotifyFor(roomId).activateDevice(targetDeviceId);
+          } catch (activateErr) {
+            routineServerLog(
+              '⚠️ activateDevice failed:',
+              activateErr?.body?.error?.message || activateErr?.message || activateErr,
+            );
+          }
+          const devicesAfterActivate = await spotifyFor(roomId).getUserDevices();
+          if (!devicesAfterActivate.find((d) => d.id === targetDeviceId)) {
+            io.to(roomId).emit('playback-error', {
+              message:
+                'Spotify playback device is offline or missing. Open Spotify on that device (or pick another device in Connection → Refresh devices), then Start Game again.',
+              type: 'device_offline',
+            });
+            return;
+          }
         }
         await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
       }
@@ -7265,11 +7368,12 @@ function sendPlayerCardUpdatesNow(roomId) {
       if (player && card) {
         // Only include actual players (not hosts or public display)
         if (!player.isHost && player.name !== 'Display') {
-          playerCardsData[playerId] = {
-            playerName: player.name,
-            card: card,
-            playedSongs: playedSongs // Include current song if playing
-          };
+          playerCardsData[playerId] = hostPlayerCardEmitPayload(
+            room,
+            playerId,
+            card,
+            playedSongs,
+          );
         }
       }
     });
