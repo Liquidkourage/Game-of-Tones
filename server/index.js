@@ -4145,6 +4145,8 @@ io.on('connection', (socket) => {
         // Initialize call history and round
         room.calledSongIds = [];
         room.bingoVerificationQueue = [];
+        room.currentSongIndex = 0;
+        room.currentSong = null;
         room.round = (room.round || 0) + 1;
         // Apply pattern from host if provided; default to 'line' if still unset
         try {
@@ -4259,29 +4261,17 @@ io.on('connection', (socket) => {
           await generateBingoCards(roomId, playlistsToUse, songOrderForCards);
 
           if (useSavedRoundPlayback) {
-            room.finalizedSongOrder = savedRoundSongs.map((s) => ({ ...s }));
-            room.oneBySeventyFivePool = null;
-            // Do not wipe 5×15 column caches after generate — Public Display needs fiveby15-pool.
-            // (Older bug: always nulling here forced oneby75-style layouts during saved playback.)
+            syncRoomPlaybackOrderAfterStartGame(room, roomId, savedRoundSongs);
+            // Stale 1×75 pool breaks 5×15 projector columns; only clear when this round is 5×15.
+            if (Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5) {
+              room.oneBySeventyFivePool = null;
+            }
             if (!(Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5)) {
               room.fiveByFifteenColumnsIds = null;
               room.fiveByFifteenColumns = null;
               room.fiveByFifteenPlaylistNames = null;
               room.fiveByFifteenMeta = null;
             }
-            try {
-              io.to(roomId).emit('finalized-order', {
-                order: savedRoundSongs.map((s) => ({
-                  id: s.id,
-                  name: s.name || '',
-                  artist: s.artist || '',
-                  explicit: s.explicit === true,
-                  youtubeMusic: s.youtubeMusic === true,
-                  sourcePlaylistId: s.sourcePlaylistId,
-                  sourcePlaylistName: s.sourcePlaylistName,
-                })),
-              });
-            } catch (_) {}
           }
 
           // CRITICAL: Auto-set pattern to 'full_card' for 1x75 mode if pattern wasn't explicitly set
@@ -4295,20 +4285,7 @@ io.on('connection', (socket) => {
             '🛑 Skipping card regeneration (mix finalized, cards already exist — same playlists/free-center as prep)',
           );
           if (useSavedRoundPlayback && savedRoundSongs.length > 0) {
-            room.finalizedSongOrder = savedRoundSongs.map((s) => ({ ...s }));
-            try {
-              io.to(roomId).emit('finalized-order', {
-                order: savedRoundSongs.map((s) => ({
-                  id: s.id,
-                  name: s.name || '',
-                  artist: s.artist || '',
-                  explicit: s.explicit === true,
-                  youtubeMusic: s.youtubeMusic === true,
-                  sourcePlaylistId: s.sourcePlaylistId,
-                  sourcePlaylistName: s.sourcePlaylistName,
-                })),
-              });
-            } catch (_) {}
+            syncRoomPlaybackOrderAfterStartGame(room, roomId, savedRoundSongs);
           }
 
           // BUT check for any players who don't have cards (joined after finalization)
@@ -5201,6 +5178,72 @@ function snapshotSupportsFiveByFifteenStartGame(playlists, savedRoundSongs) {
   const rows = playlistsWithSongsFromHostSongOrder(playlists, savedRoundSongs);
   if (!rows) return false;
   return rows.every((r) => Array.isArray(r.songs) && r.songs.length >= 15);
+}
+
+function ingestSongsIntoIdMap(idToSong, list) {
+  if (!Array.isArray(list)) return;
+  for (const item of list) {
+    if (!item) continue;
+    if (typeof item === 'string') {
+      const id = item.trim();
+      if (id && !idToSong.has(id)) idToSong.set(id, { id });
+      continue;
+    }
+    if (typeof item === 'object' && item.id) {
+      idToSong.set(String(item.id).trim(), item);
+    }
+  }
+}
+
+/** Playback order that matches 1×75 bingo cards (oneBySeventyFivePool is authoritative). */
+function playbackSongsFromOneBySeventyFivePool(room, metadataSources = []) {
+  const pool = room?.oneBySeventyFivePool;
+  if (!Array.isArray(pool) || pool.length === 0) return null;
+  const idToSong = new Map();
+  ingestSongsIntoIdMap(idToSong, room.finalizedSongOrder);
+  ingestSongsIntoIdMap(idToSong, room.finalizedSongs);
+  ingestSongsIntoIdMap(idToSong, room.playlistSongs);
+  for (const src of metadataSources) ingestSongsIntoIdMap(idToSong, src);
+  const ordered = [];
+  for (const row of pool) {
+    const id = row && row.id != null ? String(row.id).trim() : '';
+    if (!id) continue;
+    const song = idToSong.get(id);
+    if (song) ordered.push(song);
+  }
+  return ordered.length > 0 ? ordered : null;
+}
+
+/**
+ * After Start Game: keep playback aligned with cards from prep finalize.
+ * Do not replace prep shuffle with raw snapshot order when oneBySeventyFivePool or 5×15 caches exist.
+ */
+function syncRoomPlaybackOrderAfterStartGame(room, roomId, savedRoundSongs) {
+  const poolPlayback = playbackSongsFromOneBySeventyFivePool(room, [savedRoundSongs]);
+  if (poolPlayback) {
+    room.finalizedSongOrder = poolPlayback.map((s) => ({ ...s }));
+    routineServerLog(
+      `📋 Start-game: playback order aligned to 1×75 pool (${poolPlayback.length} tracks)`,
+    );
+    emitFinalizedOrderFromRoomState(roomId, room);
+    return;
+  }
+  const hasFiveByFifteen =
+    Array.isArray(room.fiveByFifteenColumnsIds) &&
+    room.fiveByFifteenColumnsIds.length === 5 &&
+    Array.isArray(room.finalizedSongOrder) &&
+    room.finalizedSongOrder.length > 0;
+  if (hasFiveByFifteen) {
+    routineServerLog(
+      '📋 Start-game: keeping prep 5×15 playback shuffle (finalizedSongOrder + column pool)',
+    );
+    emitFinalizedOrderFromRoomState(roomId, room);
+    return;
+  }
+  if (Array.isArray(savedRoundSongs) && savedRoundSongs.length > 0) {
+    room.finalizedSongOrder = savedRoundSongs.map((s) => ({ ...s }));
+    emitFinalizedOrderFromRoomState(roomId, room);
+  }
 }
 
 /**
@@ -6407,31 +6450,26 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     const perListFetched = [];
     
     if (songList && songList.length > 0) {
-      // If we have a finalized song order, use it exactly (it's the source of truth)
-      if (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) {
-        // finalizedSongOrder can be either IDs or full song objects
+      const poolPlayback = playbackSongsFromOneBySeventyFivePool(room, [songList]);
+      if (poolPlayback) {
+        routineServerLog(
+          `📋 1×75: using oneBySeventyFivePool order (${poolPlayback.length} songs) for playback`,
+        );
+        allSongs = poolPlayback;
+      } else if (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) {
         const isIdArray = typeof room.finalizedSongOrder[0] === 'string';
         if (isIdArray) {
-          // If it's IDs, map them to full song objects from songList
           routineServerLog('📋 Using finalizedSongOrder (IDs) to reorder songList');
-          const idToSong = new Map(songList.map(s => [s.id, s]));
-          const mapped = room.finalizedSongOrder.map(id => idToSong.get(id)).filter(Boolean);
+          const idToSong = new Map(songList.map((s) => [s.id, s]));
+          const mapped = room.finalizedSongOrder.map((id) => idToSong.get(id)).filter(Boolean);
           allSongs = mapped.length > 0 ? mapped : songList;
         } else {
-          // If it's full objects, use them directly (they're already in the correct order)
           routineServerLog('📋 Using finalizedSongOrder (full objects) directly');
           allSongs = room.finalizedSongOrder;
         }
-      } else if (Array.isArray(room.oneBySeventyFivePool) && room.oneBySeventyFivePool.length > 0) {
-        // CRITICAL FIX: For 1x75 mode, use the EXACT same 75-song pool as bingo cards
-        routineServerLog('📋 1x75 detected: using server-side 75-song pool to match bingo cards EXACTLY');
-        const idToSong = new Map(songList.map(s => [s.id, s]));
-        const mapped = room.oneBySeventyFivePool.map(poolItem => idToSong.get(poolItem.id)).filter(Boolean);
-        allSongs = mapped.length > 0 ? mapped : songList;
       } else {
-      // Use the song list provided by the client (already shuffled)
-      routineServerLog(`📋 Using client-provided song list with ${songList.length} songs`);
-      allSongs = songList;
+        routineServerLog(`📋 Using client-provided song list with ${songList.length} songs`);
+        allSongs = songList;
       }
     } else {
       // Fallback: fetch songs from playlists (for backward compatibility)
@@ -6588,8 +6626,18 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     }
 
     // CRITICAL: If finalizedSongOrder exists, ensure allSongs matches that exact order
-    // This ensures the Spotify playlist order matches what the host interface shows
-    if (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) {
+    // Skip when 1×75 pool already set allSongs — pool order must match bingo cards, not a stale snapshot.
+    const poolAlreadyAligned =
+      Array.isArray(room.oneBySeventyFivePool) &&
+      room.oneBySeventyFivePool.length > 0 &&
+      allSongs.length > 0 &&
+      allSongs.length === room.oneBySeventyFivePool.length &&
+      allSongs[0]?.id === room.oneBySeventyFivePool[0]?.id;
+    if (
+      !poolAlreadyAligned &&
+      Array.isArray(room.finalizedSongOrder) &&
+      room.finalizedSongOrder.length > 0
+    ) {
       const idToSong = new Map(allSongs.map(s => [s.id, s]));
       // Deduplicate finalizedSongOrder IDs to prevent duplicate songs in output playlist
       const seenIds = new Set();
