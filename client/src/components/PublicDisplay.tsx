@@ -1000,11 +1000,11 @@ const PublicDisplay: React.FC = () => {
   }, [isVerificationPending]);
   // Flag to prevent auto-reveal during reset operations
   const isResettingRef = useRef<boolean>(false);
-  // Visible carousel columns (default 3; can be overridden via ?cols=5)
+  // Visible carousel columns (default 5; optional override via ?cols=3 etc.)
   const visibleCols = (() => {
     const p = Number.parseInt(searchParams.get('cols') || '', 10);
     if (Number.isFinite(p) && p >= 1 && p <= 5) return p;
-    return 3;
+    return 5;
   })();
   // 1x75 call list state
   const [oneBy75Ids, setOneBy75Ids] = useState<string[] | null>(null);
@@ -3575,7 +3575,7 @@ const PublicDisplay: React.FC = () => {
       );
     });
 
-  // 1×75: play-order columns (5 rows ↓, then next column →); default 3 visible slots.
+  // 1×75: play-order columns (5 rows ↓, then next column →); default 5 visible columns.
   const renderOneBy75GroupedColumns = () => {
     // Use state if available, otherwise fallback to ref (for fallback mode)
     const idsToUse = oneBy75Ids || oneBy75IdsRef.current;
@@ -5287,7 +5287,7 @@ const PublicDisplay: React.FC = () => {
             {/* Tall Call List */}
             <motion.div 
               className="call-list-display"
-              data-call-cols={columnCallListLayout ? 5 : visibleCols}
+              data-call-cols={5}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}

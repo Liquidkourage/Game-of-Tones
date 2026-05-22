@@ -304,7 +304,7 @@ body {
 .App .call-col, .App .left-col { height: 100%; min-height: 0; }
 
 .App .call-list-display { position: relative; height: 100%; width: 100%; min-width: 0; }
-/* Column guide lines — must match visible call columns (1×75 carousel default = 3, not 5). */
+/* Column guide lines — five equal columns (matches 1×75 carousel and 5×15 layout). */
 .App .call-list-display[data-call-cols="3"]::after {
   content: "";
   position: absolute;
@@ -351,7 +351,7 @@ body {
   min-width: 0;
 }
 
-/* ≤3 play columns on screen: equal-width grid (no flex % bugs). */
+/* Up to five play-order columns on screen: equal-width grid (no flex % bugs). */
 .App .call-carousel-viewport--static-grid {
   display: grid;
   width: 100%;
