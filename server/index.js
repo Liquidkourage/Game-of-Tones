@@ -4373,10 +4373,10 @@ io.on('connection', (socket) => {
               : Array.isArray(room.finalizedSongs) && room.finalizedSongs.length > 0
                 ? room.finalizedSongs
                 : [];
-        const deckForShow = properShuffle(deckSource);
-        if (deckForShow.length > 0) {
+        const showDeck = buildShowPoolDeck(room, deckSource, useSavedRoundPlayback);
+        if (showDeck.length > 0) {
           routineServerLog(
-            `🎲 Start-game playback shuffle (${deckForShow.length} tracks)${useSavedRoundPlayback ? ' [saved round]' : ''}, first id: ${deckForShow[0]?.id || '?'}`,
+            `🎲 Show pool (${showDeck.length} tracks) — play in order 1→${showDeck.length}${useSavedRoundPlayback ? ' [saved round: new shuffle]' : ' [from Finalize Mix]'}`,
           );
         }
 
@@ -4402,25 +4402,31 @@ io.on('connection', (socket) => {
           let playlistsToUse;
           let songOrderForCards;
           if (useSavedRoundPlayback) {
-            routineServerLog(`📋 Saved-round playback: generating cards from ${savedRoundSongs.length} snapshot tracks`);
+            routineServerLog(`📋 Saved-round playback: generating cards from ${showDeck.length} pool tracks`);
             room.oneBySeventyFivePool = null;
-            const useFiveByFifteenSnap = snapshotSupportsFiveByFifteenStartGame(playlists, savedRoundSongs);
+            const useFiveByFifteenSnap = snapshotSupportsFiveByFifteenStartGame(playlists, showDeck);
             if (useFiveByFifteenSnap) {
               routineServerLog(
-                '📋 Saved-round 5×15: partitioning snapshot by sourcePlaylistId into host five playlists (display columns)',
+                '📋 Saved-round 5×15: partitioning shuffled pool by sourcePlaylistId into host five playlists (display columns)',
               );
               playlistsToUse = playlists;
-              songOrderForCards = savedRoundSongs;
+              songOrderForCards = showDeck;
             } else {
               routineServerLog('📋 Saved-round playback: synthetic single pool (1×75 / merged fallback)');
               room.fiveByFifteenColumnsIds = null;
               room.fiveByFifteenColumns = null;
               room.fiveByFifteenPlaylistNames = null;
               room.fiveByFifteenMeta = null;
-              const tagged = savedRoundSongs.map((s) => ({
+              const tagged = showDeck.map((s) => ({
                 ...s,
-                sourcePlaylistId: SNAP,
-                sourcePlaylistName: 'Saved round',
+                sourcePlaylistId:
+                  s.sourcePlaylistId != null && String(s.sourcePlaylistId).trim() !== ''
+                    ? String(s.sourcePlaylistId)
+                    : SNAP,
+                sourcePlaylistName:
+                  typeof s.sourcePlaylistName === 'string' && s.sourcePlaylistName.trim() !== ''
+                    ? s.sourcePlaylistName
+                    : 'Saved round',
               }));
               playlistsToUse = [{ id: SNAP, name: 'Saved round snapshot', songs: tagged }];
               songOrderForCards = tagged;
@@ -4445,7 +4451,6 @@ io.on('connection', (socket) => {
           await generateBingoCards(roomId, playlistsToUse, songOrderForCards);
 
           if (useSavedRoundPlayback) {
-            syncRoomPlaybackOrderAfterStartGame(room, roomId, deckForShow);
             // Stale 1×75 pool breaks 5×15 projector columns; only clear when this round is 5×15.
             if (Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5) {
               room.oneBySeventyFivePool = null;
@@ -4468,11 +4473,6 @@ io.on('connection', (socket) => {
           routineServerLog(
             '🛑 Skipping card regeneration (mix finalized, cards already exist — same playlists/free-center as prep)',
           );
-          if (deckForShow.length > 0) {
-            syncRoomPlaybackOrderAfterStartGame(room, roomId, deckForShow);
-            routineServerLog('📻 Updated playback call order for host (cards unchanged)');
-          }
-
           // BUT check for any players who don't have cards (joined after finalization)
           const playersWithoutCards = [];
           room.players.forEach((player, playerId) => {
@@ -4519,10 +4519,14 @@ io.on('connection', (socket) => {
           room.fiveByFifteenPlaylistNames = null;
           room.fiveByFifteenMeta = null;
         }
+        if (showDeck.length > 0) {
+          applyShowPoolOrderToRoom(room, roomId, showDeck);
+        }
+
         emitPublicDisplayPoolLayout(roomId, room);
-      
-        routineServerLog('🎵 Starting automatic playback...');
-        await startAutomaticPlayback(roomId, playlists, deviceId, deckForShow);
+
+        routineServerLog('🎵 Starting automatic playback (sequential 1→N through pool)...');
+        await startAutomaticPlayback(roomId, playlists, deviceId, showDeck);
         
         routineServerLog('✅ Game state set and playback attempt triggered');
       } catch (error) {
@@ -5395,12 +5399,57 @@ function playbackSongsFromOneBySeventyFivePool(room, metadataSources = []) {
   return ordered.length > 0 ? ordered : null;
 }
 
-/** Push this show's shuffled call order to hosts (not 1×75 band-layout pool order). */
-function syncRoomPlaybackOrderAfterStartGame(room, roomId, playbackOrderSongs) {
-  if (!Array.isArray(playbackOrderSongs) || playbackOrderSongs.length === 0) return;
-  room.finalizedSongOrder = playbackOrderSongs.map((s) => ({ ...s }));
+function showDeckFromFinalizedOrder(room, deckSource) {
+  const fos = room?.finalizedSongOrder;
+  const base = Array.isArray(deckSource) ? deckSource : [];
+  const idToSong = new Map();
+  for (const s of base) {
+    if (s?.id) idToSong.set(String(s.id).trim(), s);
+  }
+  ingestSongsIntoIdMap(idToSong, room?.finalizedSongs);
+  if (!Array.isArray(fos) || fos.length === 0) return [];
+  if (typeof fos[0] === 'object') {
+    return fos.map((s) => ({ ...s }));
+  }
+  return fos
+    .map((id) => idToSong.get(typeof id === 'string' ? id.trim() : String(id)))
+    .filter(Boolean);
+}
+
+/**
+ * Bingo pool #1…N for host + 1×75 display; playback runs this list in order (not re-shuffled per song).
+ */
+function applyShowPoolOrderToRoom(room, roomId, showDeck) {
+  if (!room || !Array.isArray(showDeck) || showDeck.length === 0) return;
+  room.finalizedSongOrder = showDeck.map((s) => ({ ...s }));
+  room.finalizedSongs = showDeck.map((s) => ({ ...s }));
+  const n = showDeck.length;
+  const hasFiveBy15 =
+    Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5;
+  if (n >= 25 && n <= 75 && !hasFiveBy15) {
+    room.oneBySeventyFivePool = showDeck.map((s) => ({ id: s.id }));
+    const ids = room.oneBySeventyFivePool.map((r) => r.id).filter(Boolean);
+    if (ids.length > 0) {
+      io.to(roomId).emit('oneby75-pool', { ids });
+      routineServerLog(`📊 oneby75-pool synced to pool positions 1–${ids.length}`);
+    }
+  }
   emitFinalizedOrderFromRoomState(roomId, room);
-  routineServerLog(`📋 Start-game: host playback call order (${playbackOrderSongs.length} tracks)`);
+}
+
+/** Saved round: shuffle pool once at start. Otherwise use the pool from Finalize Mix. */
+function buildShowPoolDeck(room, deckSource, useSavedRoundPlayback) {
+  if (!Array.isArray(deckSource) || deckSource.length === 0) return [];
+  if (useSavedRoundPlayback) {
+    return properShuffle(deckSource);
+  }
+  const fromFinal = showDeckFromFinalizedOrder(room, deckSource);
+  if (fromFinal.length > 0) return fromFinal;
+  return properShuffle(deckSource);
+}
+
+function syncRoomPlaybackOrderAfterStartGame(room, roomId, playbackOrderSongs) {
+  applyShowPoolOrderToRoom(room, roomId, playbackOrderSongs);
 }
 
 /**

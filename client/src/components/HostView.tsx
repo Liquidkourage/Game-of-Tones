@@ -97,7 +97,6 @@ import {
 import { getYoutubeHostPlaybackChannelName } from '../utils/youtubeHostPlaybackChannel';
 import { sortRoundPlaylistsByBingoColumns } from '../utils/roundPlaylistOrder';
 import { validateSongTitle, validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
-import { shuffleSongs } from '../utils/shuffleSongs';
 import './HostView.css';
 import './HostFormControls.css';
 
@@ -3439,8 +3438,8 @@ const HostView: React.FC = () => {
           finalizedOrderRef.current.length > 0 &&
           finalizedOrderPlaylistKeyRef.current === targetKey
         ) {
-          addLog('Reshuffling finalized mix for a new show order…', 'info');
-          listToSend = shuffleSongs(finalizedOrderRef.current);
+          addLog('Reshuffling finalized mix for a new pool order…', 'info');
+          listToSend = finalizedOrderRef.current.map((s) => ({ ...s }));
         } else {
           addLog('Loading tracks from playlists before finalizing…', 'info');
           listToSend = await generateSongList({
@@ -3455,7 +3454,6 @@ const HostView: React.FC = () => {
             );
             return false;
           }
-          listToSend = shuffleSongs(listToSend);
         }
 
         if (listToSend.length === 0) {
@@ -3785,16 +3783,6 @@ const HostView: React.FC = () => {
         ? snapPool.map(cloneSongForSnapshot)
         : resolveSongListForStart();
 
-      if (songListForStart.length > 0) {
-        songListForStart = shuffleSongs(songListForStart);
-        addLog(
-          useSavedRoundPlayback
-            ? 'Shuffled saved-round playback order for this show (cards unchanged)'
-            : 'Shuffled playback order for this show',
-          'info',
-        );
-      }
-
       if (songListForStart.length === 0) {
         alert('No song pool is available. Refresh the page or load playlists again.');
         return;
@@ -3858,7 +3846,7 @@ const HostView: React.FC = () => {
       }
 
       if (useSavedRoundPlayback) {
-        addLog('Starting game from saved round snapshot (playback order = snapshot)', 'info');
+        addLog('Starting game from saved round — server shuffles pool once, then plays 1→N', 'info');
       }
 
       socket.emit('start-game', {
@@ -6593,14 +6581,11 @@ const HostView: React.FC = () => {
       (activeRound.savedMixSnapshot?.songs?.length ?? 0) > 0;
     const snapshotSongs = snapshotMatchesPrep ? activeRound!.savedMixSnapshot!.songs : null;
 
-    if ((gameState === 'playing' || currentSong) && finalizedOrder && finalizedOrder.length > 0) {
-      return finalizedOrder;
-    }
-    if (snapshotSongs?.length) {
-      return snapshotSongs;
-    }
     if (finalizedOrder && finalizedOrder.length > 0) {
       return finalizedOrder;
+    }
+    if (snapshotSongs?.length && !mixFinalized) {
+      return snapshotSongs;
     }
     if (mixFinalized) {
       return songList;

@@ -765,20 +765,29 @@ function PublicDisplayVenueBrandingHero({
   );
 }
 
-/**
- * How many of the 15 fixed 5-song bands in the 1×75 pool have at least one played song.
- * Must stay in sync with renderOneBy75GroupedColumns (carousel auto-advance used to read a stale pool from closure).
- */
-function countOccupiedBandsInPool(ids: string[] | null | undefined, playedIds: ReadonlySet<string>): number {
-  if (!ids?.length) return 0;
-  let n = 0;
-  for (let g = 0; g < 15; g++) {
-    const slice = ids.slice(g * 5, g * 5 + 5);
-    if (slice.some((id) => !id.startsWith('__placeholder_') && playedIds.has(id))) {
-      n++;
-    }
+function poolsOrderEqual(a: string[] | null | undefined, b: string[] | null | undefined): boolean {
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
   }
-  return n;
+  return true;
+}
+
+/** 1×75 call list: fill top→bottom (5 per column), then next column left→right. */
+function buildCallColumnsTopDownThenAcross(playedOrder: readonly string[]): string[][] {
+  const ids = playedOrder.filter((id) => id && !id.startsWith('__placeholder_'));
+  const cols: string[][] = [];
+  for (let i = 0; i < ids.length; i += 5) {
+    cols.push(ids.slice(i, i + 5));
+  }
+  return cols;
+}
+
+function countPopulatedCallColumns(playedOrder: readonly string[]): number {
+  const ids = playedOrder.filter((id) => id && !id.startsWith('__placeholder_'));
+  if (ids.length === 0) return 0;
+  return Math.ceil(ids.length / 5);
 }
 
 /** Base pause between 1×75 carousel column steps (~5s hold + ~1s slide). */
@@ -993,15 +1002,16 @@ const PublicDisplay: React.FC = () => {
   }, [isVerificationPending]);
   // Flag to prevent auto-reveal during reset operations
   const isResettingRef = useRef<boolean>(false);
-  // Visible carousel columns (default 3; can be overridden via ?cols=5)
+  // 1×75 carousel: how many call columns fit on screen (default 3 → 15 calls = 3×5 grid)
   const visibleCols = (() => {
     const p = Number.parseInt(searchParams.get('cols') || '', 10);
     if (Number.isFinite(p) && p >= 1 && p <= 5) return p;
-    return 5;
+    return 3;
   })();
   // 1x75 call list state
   const [oneBy75Ids, setOneBy75Ids] = useState<string[] | null>(null);
   const oneBy75IdsRef = useRef<string[] | null>(null);
+  const poolOrderFingerprintRef = useRef<string | null>(null);
   const [fiveBy15Columns, setFiveBy15Columns] = useState<string[][] | null>(null);
   /** Host override: 5×15 BINGO columns, 1×75 carousel, or follow mix/URL. */
   const [callListMode, setCallListMode] = useState<'auto' | 'grouped' | '5x15'>('auto');
@@ -1266,6 +1276,20 @@ const PublicDisplay: React.FC = () => {
       playedSeqRef.current = {} as Record<string, number>;
       playedSeqCounterRef.current = 0;
       currentIndexRef.current = -1;
+    };
+
+    const clearCallListSessionState = () => {
+      resetPlayedTrackingRefs();
+      revealSequenceRef.current = [];
+      songBaselineRef.current = {};
+      try {
+        localStorage.removeItem(`display_revealed_letters_${roomId}`);
+        localStorage.removeItem(`display_baselines_${roomId}`);
+      } catch {}
+      setTotalPlayedCount(0);
+      setCarouselIndex(0);
+      carouselIndexRef.current = 0;
+      setRevealLayoutNonce((n) => n + 1);
     };
 
     // Connection event handlers
@@ -1602,42 +1626,34 @@ const PublicDisplay: React.FC = () => {
     newSocket.on('oneby75-pool', (data: any) => {
       const n = Array.isArray(data?.ids) ? data.ids.length : 0;
       if (n >= 25 && n <= 75) {
-        setOneBy75Ids(data.ids);
-        oneBy75IdsRef.current = data.ids;
-        // Do not clear playedOrder; preserve any songs already recorded
-        // BUG #3 FIX: Check if we're reconnecting (has stored letters) vs new game
-        // Restore revealed letters from localStorage if available (persists across refresh)
+        const nextIds = data.ids as string[];
+        const poolChanged = !poolsOrderEqual(oneBy75IdsRef.current, nextIds);
+        setOneBy75Ids(nextIds);
+        oneBy75IdsRef.current = nextIds;
+        poolOrderFingerprintRef.current = nextIds.join('\0');
+
         const storedLetters = getStoredRevealedLetters();
         const storedBaselines = getStoredBaselines();
         const hasStoredState = storedLetters.length > 0 || Object.keys(storedBaselines).length > 0;
-        
-        // Only treat as mid-game reconnect when we have persisted letter state from this room.
-        // Stale playedOrderRef from a previous game must not block clearing (hasPlayedSongs alone is not reconnect).
-        if (hasStoredState) {
-          // Reconnecting - restore revealed letters and baselines from localStorage
+
+        if (poolChanged) {
+          console.log(`🔄 oneby75-pool order changed (${n} ids) — clearing call list / reveal state`);
+          clearCallListSessionState();
+        } else if (hasStoredState) {
           if (storedLetters.length > 0) {
             console.log(`🔄 Reconnecting: Restoring ${storedLetters.length} revealed letters from storage`);
             revealSequenceRef.current = storedLetters;
-          } else {
-            revealSequenceRef.current = [];
           }
           if (Object.keys(storedBaselines).length > 0) {
             console.log(`🔄 Reconnecting: Restoring baselines for ${Object.keys(storedBaselines).length} songs`);
             songBaselineRef.current = storedBaselines;
           }
-        } else {
-          // New pool / new game - clear played tracking and letter persistence
-          resetPlayedTrackingRefs();
-          revealSequenceRef.current = [];
-          songBaselineRef.current = {};
-          try {
-            localStorage.removeItem(`display_revealed_letters_${roomId}`);
-            localStorage.removeItem(`display_baselines_${roomId}`);
-          } catch {}
+          setRevealLayoutNonce((x) => x + 1);
         }
+
         setCarouselIndex(0);
+        carouselIndexRef.current = 0;
         setFiveBy15Columns(null);
-        // Do not auto-seed played list by pool order; rely on actual song-playing events
       }
     });
 
@@ -1966,18 +1982,8 @@ const PublicDisplay: React.FC = () => {
           // Emit pattern to header
           window.dispatchEvent(new CustomEvent('display-pattern', { detail: { pattern: data.pattern } }));
         }
-      // New round/game start: reset played/reveal sequencing so old entries don't leak
-      playedOrderRef.current = [];
-      revealSequenceRef.current = [];
-      songBaselineRef.current = {};
-      playedSeqRef.current = {} as any;
-      playedSeqCounterRef.current = 0;
       snippetCountdownSongIdRef.current = null;
-      // Clear persisted state for new game
-      try {
-        localStorage.removeItem(`display_revealed_letters_${roomId}`);
-        localStorage.removeItem(`display_baselines_${roomId}`);
-      } catch {}
+      clearCallListSessionState();
       ensureGrid();
       // Always request sync to ensure we have columns and latest state
       // Use longer delay to ensure server has finished generating cards and emitting columns
@@ -2478,10 +2484,7 @@ const PublicDisplay: React.FC = () => {
 
   const snapCarouselAfterForwardLoop = useCallback(() => {
     if (columnCallListLayout || !animating) return;
-    const ids = oneBy75IdsRef.current;
-    if (!ids?.length) return;
-    const played = new Set(playedOrderRef.current);
-    const total = countOccupiedBandsInPool(ids, played);
+    const total = countPopulatedCallColumns(playedOrderRef.current);
     if (total <= visibleCols) return;
     const idx = carouselIndexRef.current;
     if (idx < total) return;
@@ -2499,14 +2502,12 @@ const PublicDisplay: React.FC = () => {
 
     const scheduleTick = () => {
       if (cancelled) return;
-      const ids = oneBy75IdsRef.current;
-      if (!ids?.length) {
+      const total = countPopulatedCallColumns(playedOrderRef.current);
+      if (total === 0) {
         carouselTickTimerRef.current = setTimeout(scheduleTick, CAROUSEL_BASE_DWELL_MS);
         return;
       }
 
-      const played = new Set(playedOrderRef.current);
-      const total = countOccupiedBandsInPool(ids, played);
       if (total <= visibleCols) {
         carouselTickTimerRef.current = setTimeout(scheduleTick, CAROUSEL_BASE_DWELL_MS);
         return;
@@ -3436,7 +3437,7 @@ const PublicDisplay: React.FC = () => {
     );
   };
 
-  // New: 15 groups of 5, auto-scrolling horizontally with 3 columns visible
+  // 1×75: play-order columns (5 rows top→bottom, then next column); carousel shows `visibleCols` at a time (default 3).
   const renderOneBy75GroupedColumns = () => {
     // Use state if available, otherwise fallback to ref (for fallback mode)
     const idsToUse = oneBy75Ids || oneBy75IdsRef.current;
@@ -3446,8 +3447,6 @@ const PublicDisplay: React.FC = () => {
     // This ensures all played songs are shown, not just up to currentIndex
     // CRITICAL FIX: Use playedOrderRef directly instead of slicing idsToUse
     // Songs may be played in different order than pool order, so slicing would exclude songs beyond position 45
-    const played = new Set(playedOrderRef.current);
-    
     // Debug logging for tracking
     const playedCountFromOrder = playedOrderRef.current.length;
     const playedCountFromIndex = Math.max(0, (currentIndexRef.current ?? -1) + 1);
@@ -3460,37 +3459,27 @@ const PublicDisplay: React.FC = () => {
       console.warn(`⚠️ 1x75 display: Pool has only ${idsToUse.length} songs (expected 75). This may cause songs beyond position ${idsToUse.length} to not display.`);
     }
     
-    // Build 15 groups from the full pool, then filter to only played IDs within each group
-    // CRITICAL FIX: Sort within each group by play order so songs appear sequentially
-    const groups: string[][] = Array.from({ length: 15 }, (_, g) => {
-      const start = g * 5;
-      const slice = idsToUse.slice(start, start + 5);
-      const playedInGroup = slice.filter((id) => !id.startsWith('__placeholder_') && played.has(id));
-      // Sort by play sequence to ensure songs appear in order played
-      return playedInGroup.sort((a, b) => {
-        const sa = playedSeqRef.current[a] ?? Number.MAX_SAFE_INTEGER;
-        const sb = playedSeqRef.current[b] ?? Number.MAX_SAFE_INTEGER;
-        if (sa !== sb) return sa - sb;
-        // Fallback to original group order
-        return slice.indexOf(a) - slice.indexOf(b);
-      });
-    });
-    const visibleGroups = groups.filter(g => g.length > 0);
+    const visibleGroups = buildCallColumnsTopDownThenAcross(playedOrderRef.current);
     const total = visibleGroups.length;
     const shouldScroll = total > visibleCols;
+    const colsOnScreen = total > 0 ? Math.min(visibleCols, total) : visibleCols;
     // Duplicate first N for smooth wrap
     const extendedGroups: string[][] = shouldScroll ? [...visibleGroups, ...visibleGroups.slice(0, visibleCols)] : visibleGroups;
 
-    // Each column is 1/3 of the viewport width; compute translate as percentage
     const maxSlideIndex = shouldScroll ? total + visibleCols - 1 : 0;
     const effectiveIndex = shouldScroll ? Math.min(carouselIndex, maxSlideIndex) : 0;
-    const colWidth = viewportWidth > 0 ? viewportWidth / visibleCols : 0;
+    const slideDenom = shouldScroll ? visibleCols : colsOnScreen;
+    const colWidth = viewportWidth > 0 && slideDenom > 0 ? viewportWidth / slideDenom : 0;
     const xPx = -(effectiveIndex * colWidth);
-    const xPercent = -(effectiveIndex * (100 / visibleCols));
+    const xPercent = slideDenom > 0 ? -(effectiveIndex * (100 / slideDenom)) : 0;
 
     return (
       <div className="call-list-content">
-        <div ref={carouselViewportRef} className="call-carousel-viewport" style={{ ['--carousel-visible-cols' as any]: String(visibleCols) }}>
+        <div
+          ref={carouselViewportRef}
+          className="call-carousel-viewport"
+          style={{ ['--carousel-visible-cols' as any]: String(colsOnScreen) }}
+        >
           <motion.div
             className="call-carousel-track"
             animate={{ x: shouldScroll ? (colWidth > 0 ? xPx : xPercent + '%') : 0 }}
@@ -3502,9 +3491,22 @@ const PublicDisplay: React.FC = () => {
             {extendedGroups.map((group, gi) => (
               <div key={gi} className="call-carousel-col">
                 <div className="call-carousel-col-inner">
-                  {group.map((id) => {
-                    const poolIdx = idsToUse.indexOf(id);
+                  {Array.from({ length: 5 }, (_, rowIdx) => {
+                    const id = group[rowIdx];
+                    if (!id) {
+                      return (
+                        <div
+                          key={`empty-${gi}-${rowIdx}`}
+                          className="call-item call-item-slot"
+                          aria-hidden
+                          style={{ visibility: 'hidden', pointerEvents: 'none' }}
+                        />
+                      );
+                    }
                     const playedIdx = playedOrderRef.current.indexOf(id);
+                    const poolIdx = idsToUse.indexOf(id);
+                    const callNum =
+                      playedIdx >= 0 ? playedIdx + 1 : poolIdx >= 0 ? poolIdx + 1 : 0;
                     const meta = idMetaRef.current[id] || { name: '', artist: '' };
                     const isCurrent = gameState.currentSong?.id === id;
                     const { title, artist } = renderCallSongLines(id, meta, renderMaskedText);
@@ -3531,7 +3533,7 @@ const PublicDisplay: React.FC = () => {
                           background: 'rgba(255,255,255,0.08)'
                         }}
                       >
-                        <div className="call-number" style={{ fontSize: '1.6rem', minWidth: 38, fontWeight: 900, lineHeight: 1, flexShrink: 0 }}>{poolIdx + 1}</div>
+                        <div className="call-number" style={{ fontSize: '1.6rem', minWidth: 38, fontWeight: 900, lineHeight: 1, flexShrink: 0 }}>{callNum > 0 ? callNum : ''}</div>
                         <div className="call-song-info" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: isFullCardPattern ? 'flex-start' : 'center' }}>
                           <AnimatePresence mode="popLayout" initial={false}>
                             <motion.div
