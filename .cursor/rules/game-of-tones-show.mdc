@@ -1,0 +1,60 @@
+---
+description: Show order, projector layout, cards vs playback — source of truth for Game of Tones live runs
+alwaysApply: true
+---
+
+# Game of Tones — live show rules (Jay)
+
+## North star
+
+**One shuffled play order (#1–75) is chosen at Start Game and never changes for that round.** Host pool, projector call numbers, and playback all use that sequence. Player cards use the same 75 generated for that round; changing play order later updates lists only, not cards.
+
+**Auto display mode** picks layout from playlist count: **5×15** when five playlists are loaded, **1×75 carousel** when one. Modes `5×15` and `1×75 carousel` in host UI are for testing only — production behavior is **Auto**.
+
+## Shuffle and order
+
+- **Randomize play order once** when the round starts (Start Game), while player cards are pushed out.
+- **Do not** shuffle at finalize/refinalize for display or host pool truth (finalize builds the 75-track pool only).
+- **Host bingo pool list** must show **shuffled play order only** — never finalize/build order, never stale `songList` fallback. If play order is not known yet, do not show a misleading numbered list.
+- **#1 everywhere** = first song played (host list, projector badge, playback).
+
+## Projector (public display)
+
+- **Always five visible columns** on the 1×75 carousel. Never reduce column count (e.g. to 3) to fix card width — fix CSS/grid inside five equal columns.
+- **Remove** projector `?cols=` URL override (no hidden 3-column mode).
+- **1×75 call grid** (five columns × five rows per window): top row = calls **1, 6, 11, 16, 21** (then 26, 31, …); bottom row = **5, 10, 15, 20, 25** (then 30, 35, …). Fill **down each column**, advance **left to right** (column 1 = 1–5, column 2 = 6–10, …). Call number = **play order index**, not pool band index.
+- **5×15 mode**: five playlist columns (B–O); still use **play order** for call badges when shown.
+
+## Cards vs playback
+
+- Player cards **must only** use the **75-song set generated for that round** at start — aligned with that round’s pool, not a separate random pool.
+- If play order is corrected after cards exist: update **host list + projector + server list state** only; **do not** regenerate cards unless Jay explicitly asks.
+
+## Code touch map (avoid partial fixes)
+
+| Concern | Primary files |
+|--------|----------------|
+| Shuffle at start, `playbackOrder` | `server/index.js` — `start-game`, `buildShowPoolDeck`, `applyShowPoolOrderToRoom` |
+| Host pool list | `client/src/components/HostView.tsx` — `finalizedOrder`, `game-started`, `mix-finalized` |
+| Projector layout / call # | `client/src/components/PublicDisplay.tsx`, `client/src/App.css` |
+| Card pool / 5×15 vs 1×75 | `server/index.js` — `generateBingoCards` |
+| Auto display mode | `PublicDisplay.tsx` `columnCallListLayout`, host `publicDisplayCallListMode` |
+
+## Agent mistakes to avoid
+
+1. **Symptom fix**: gutter/column mismatch → do not change column **count**; align gutters and `grid-template-columns` to **5**.
+2. **Wrong order source**: host list from `songList` while playback uses `playlistSongs` / `showDeck`.
+3. **Extra shuffle**: `properShuffle` at finalize on 5×15 path while Start Game also shuffles.
+4. **Ship without check**: typecheck alone does not validate projector layout or #1 alignment.
+
+## Verification (default before calling order/display work done)
+
+See `AGENTS.md` § Show verification. Minimum: `npm run client:typecheck` + confirm **#1** matches on host pool and projector after Start Game (hard refresh both tabs after deploy).
+
+## Git
+
+**Commit and push to `origin` when the task is done** unless Jay says otherwise (e.g. “don’t commit”, “WIP only”, “no push”).
+
+## Out of scope unless asked
+
+YouTube Music host paths on `feat/youtube-music-host` — Spotify-first for show-order work unless Jay redirects.

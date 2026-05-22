@@ -29,6 +29,28 @@
 - **API + sockets:** `server/`
 - **Root scripts:** `package.json` (`dev`, `build`, …)
 
+## Live show (order, display, cards) — Jay’s source of truth
+
+Detailed rules: `.cursor/rules/game-of-tones-show.mdc` (always applied).
+
+**North star:** One shuffled play order at **Start Game** (#1–75). Host pool + projector + playback match it. Cards use that round’s 75 only. **Auto** display: 5×15 if five playlists, 1×75 carousel if one.
+
+**Projector:** Always **five** columns; top row calls 1,6,11,16,21…; bottom row 5,10,15,20,25…. No `?cols=` override. Never fix width by switching to three columns.
+
+**Host pool:** Shuffled play order only (not finalize build order).
+
+## Show verification (pick per change; say which you did in the reply)
+
+| Level | What | When to use |
+|-------|------|-------------|
+| **Minimum** | `npm run client:typecheck` | Every TS/UI change |
+| **Order** | After deploy: hard-refresh **host** + **projector**; Start Game; **#1** same title on host pool, first played song, projector call badge | Any change to shuffle, `game-started`, `finalized-order`, host pool, or call numbers |
+| **Layout** | Projector screenshot or browser tools: **5** equal columns; call cards one column wide; spot-check top row 1,6,11,16,21 after ~5 calls | `PublicDisplay.tsx`, `App.css` carousel/grid |
+| **Geometry** | Test **Auto** with **1** playlist → 1×75 carousel; **5** playlists → 5×15 column headers | Display mode / `generateBingoCards` |
+| **Cards** | Join a test player; confirm card songs ⊆ round 75; no regen after list-only order fix | Card generation / `bingoCards` |
+
+Do not claim display/order work is done after typecheck alone if the change touches the projector or play order.
+
 ## PR hygiene (optional)
 
 - Large files (`HostView.tsx`): prefer small targeted edits over full-file churn.
