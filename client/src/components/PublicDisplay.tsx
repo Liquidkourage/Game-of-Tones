@@ -3771,22 +3771,38 @@ const PublicDisplay: React.FC = () => {
     const idsToUse = oneBy75Ids || oneBy75IdsRef.current || playedOrderForDisplay;
     const isFullCardPattern = pattern === 'full_card' || pattern === 'blackout';
     const groups = playOrderColumnSlices(playedOrderForDisplay);
-    const colCount = Math.min(visibleCols, Math.max(1, groups.length));
     const showFiveBy15Headers =
       opts?.withPlaylistHeaders === true &&
       columnCallListLayout &&
       playlistNames.filter((n) => String(n || '').trim()).length > 0;
+    // Align card columns with B–O headers (always 5 for 5×15); avoid 1fr rows inside height:auto parents (0px collapse).
+    const colCount = showFiveBy15Headers
+      ? visibleCols
+      : Math.min(visibleCols, Math.max(1, groups.length));
+    const columnSlots = Array.from({ length: colCount }, (_, i) => groups[i] || []);
     return (
       <div className="call-list-content call-list-content--played-fallback">
         {showFiveBy15Headers ? renderPlaylistNamesHeaderRow('5x15') : null}
         <div
           ref={carouselViewportRef}
-          className="call-carousel-viewport call-carousel-viewport--static-grid"
-          style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}
+          className="call-carousel-viewport call-carousel-viewport--static-grid call-carousel-viewport--played-order"
+          style={{
+            gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))`,
+            height: 'auto',
+            minHeight: 'min(36vh, 440px)',
+            alignContent: 'start',
+          }}
         >
-          {groups.slice(0, colCount).map((group, gi) => (
+          {columnSlots.map((group, gi) => (
             <div key={`played-fb-${gi}`} className="call-carousel-col-static">
-              <div className="call-carousel-col-inner">
+              <div
+                className="call-carousel-col-inner call-carousel-col-inner--played-order"
+                style={{
+                  height: 'auto',
+                  gridTemplateRows: 'repeat(5, minmax(clamp(36px, 5.5vmin, 56px), auto))',
+                  alignContent: 'start',
+                }}
+              >
                 {renderCarouselCallRows(group, gi, idsToUse, isFullCardPattern)}
               </div>
             </div>

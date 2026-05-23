@@ -174,13 +174,18 @@
   opacity: 0.7;
 }
 
-.App .public-display--glass .call-list-display > div {
+.App .public-display--glass .call-list-display > .call-list-display__body {
   position: relative;
   z-index: 2;
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.App .public-display--glass .call-list-display > .public-display-venue-watermark {
+  z-index: 0;
+  flex: none;
 }
 
 .App .public-display--glass .call-list-display__body {
@@ -231,10 +236,24 @@
 }
 
 .App .public-display--glass .call-list-content--played-fallback .call-carousel-viewport,
-.App .public-display--glass .call-list-content--played-fallback .call-carousel-viewport--static-grid {
+.App .public-display--glass .call-list-content--played-fallback .call-carousel-viewport--static-grid,
+.App .public-display--glass .call-carousel-viewport--played-order {
   flex: 1 1 auto;
   min-height: min(36vh, 440px);
+  height: auto !important;
+  align-content: start;
+}
+
+.App .public-display--glass .call-list-content--played-fallback .call-carousel-col-static,
+.App .public-display--glass .call-carousel-viewport--played-order .call-carousel-col-static {
   height: auto;
+  align-self: start;
+}
+
+.App .public-display--glass .call-list-content--played-fallback .call-carousel-col-inner,
+.App .public-display--glass .call-carousel-col-inner--played-order {
+  height: auto !important;
+  grid-template-rows: repeat(5, minmax(clamp(36px, 5.5vmin, 56px), auto));
   align-content: start;
 }
 
