@@ -185,22 +185,30 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
     return () => ctrl.abort();
   }, [currentSong?.id, currentSong?.youtubeMusic]);
 
+  const tourGoLive = gameState === 'waiting' && !currentSong;
+  const tourLiveDock = gameState === 'playing';
+
   return (
-    <div className="host-r4-grid" data-host-tour="go-live">
+    <div className="host-r4-grid">
       {/* Now playing / Ready */}
       <section
-        className="host-r4-card host-glass-panel host-r4-now-playing"
+        className={
+          tourLiveDock
+            ? 'host-r4-card host-glass-panel host-r4-now-playing host-r4-now-playing--live'
+            : 'host-r4-card host-glass-panel host-r4-now-playing'
+        }
+        data-host-tour={tourLiveDock ? 'live-dock' : tourGoLive ? 'go-live' : undefined}
         aria-label={gameState === 'playing' ? 'Now playing' : 'Ready to play'}
       >
         {gamePaused && (
-          <div className="host-r4-paused">
-            <p className="host-r4-paused__title">Game paused</p>
-            <p className="host-r4-paused__sub">
+          <div className="host-r4-paused host-paused-banner">
+            <p className="host-r4-paused__title host-paused-banner__title">Game paused — resume here</p>
+            <p className="host-r4-paused__sub host-paused-banner__sub">
               {pendingVerification
                 ? `Bingo verification: ${pendingVerification.playerName}`
-                : 'Resume when ready.'}
+                : 'Playback paused (verification or Spotify). Use Resume when ready.'}
             </p>
-            <button type="button" className="btn-primary host-r4-btn-primary" onClick={onResumeGame}>
+            <button type="button" className="btn-primary host-r4-btn-primary host-resume-game-btn" onClick={onResumeGame}>
               Resume game
             </button>
           </div>
@@ -216,7 +224,16 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
           <div className="host-r4-now-playing__main">
             {gameState === 'playing' ? (
               <>
-                <p className="host-r4-card__eyebrow">Now playing</p>
+                <div className="host-r4-now-playing__head">
+                  <p className="host-r4-card__eyebrow">Now playing</p>
+                  {(playbackTrackNumber != null || playbackTrackTotal != null) && (
+                    <span className="host-live-dock__song-index" aria-label="Song position in round">
+                      {playbackTrackNumber ?? '—'}
+                      <span className="host-live-dock__song-index-sep">/</span>
+                      {playbackTrackTotal ?? totalTracks}
+                    </span>
+                  )}
+                </div>
                 {currentSong ? (
                   <>
                     <h2 className="host-r4-track-title">
@@ -244,6 +261,9 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
                   <button type="button" className="host-r4-play" onClick={onPause} aria-label={isPlaying ? 'Pause' : 'Resume'}>
                     {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
                   </button>
+                  <button type="button" className="btn-secondary" onClick={onPause}>
+                    {!isPlaying ? 'Resume' : 'Pause'}
+                  </button>
                   <button type="button" className="btn-secondary" onClick={onSkip}>
                     <SkipForward className="w-4 h-4" aria-hidden />
                     Skip
@@ -252,6 +272,7 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
                     <button type="button" className="btn-secondary btn-host-icon" onClick={onMuteToggle}>
                       {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                     </button>
+                    <span className="host-live-dock__volume-label">{isMuted ? 0 : playbackState.volume}%</span>
                     <input
                       type="range"
                       min={0}
@@ -279,9 +300,11 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
                     : 'Add playlists from Library, then start the show.'}
                 </p>
                 {prepRoundReadyForGoLive ? (
-                  <p className="host-r4-ready-badge">
+                  <p className="host-r4-ready-badge mix-finalized-status">
                     <CheckCircle2 className="w-4 h-4" aria-hidden />
-                    Ready to start — cards and playback are set
+                    {gameTabRoundBuilderReady
+                      ? 'Ready to start game — cards and playback are set for this round'
+                      : 'Ready to start — cards and playback are set'}
                   </p>
                 ) : null}
                 <div className="host-r4-go-live-actions">
@@ -311,8 +334,9 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
                   </button>
                 </div>
                 {!gameTabRoundBuilderReady ? (
-                  <p className="host-r4-hint">
-                    Start game finalizes the mix automatically if needed.
+                  <p className="host-r4-hint host-go-live__hint">
+                    Start game will <strong>finalize the mix automatically</strong> if needed. Use Show playlists to
+                    preview playlist names on the display.
                   </p>
                 ) : null}
               </>

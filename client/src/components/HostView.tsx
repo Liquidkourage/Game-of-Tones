@@ -8501,6 +8501,110 @@ const HostView: React.FC = () => {
                   getDisplaySongArtist={getDisplaySongArtist}
                 />
 
+                {gameState === 'playing' ? (
+                  <section className="host-show-actions host-glass-panel" aria-label="Show controls">
+                    <button type="button" className="btn-secondary" onClick={endGame}>
+                      End game
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={confirmAndNewRound}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                    >
+                      <RotateCcw className="w-4 h-4" aria-hidden />
+                      New round setup
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-accent"
+                      onClick={() => openPlaylistLibrary()}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                    >
+                      <ListPlus className="w-4 h-4" aria-hidden />
+                      Playlist library
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary btn-host-warn"
+                      onClick={resetDisplayLetters}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                    >
+                      <RotateCcw className="w-4 h-4" aria-hidden />
+                      Reset display letters
+                    </button>
+                    {hasFinalizedSongPool ? (
+                      <button
+                        type="button"
+                        className="btn-secondary btn-host-emphasis"
+                        onClick={() => setShowBingoPoolModal(true)}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                      >
+                        <ListChecks className="w-4 h-4" aria-hidden />
+                        View bingo pool
+                      </button>
+                    ) : null}
+                    {playerCards.size > 0 && !playerCardsFullscreen ? (
+                      <button
+                        type="button"
+                        className="btn-secondary btn-host-emphasis"
+                        onClick={openPlayerCardsModal}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                      >
+                        <Users className="w-4 h-4" aria-hidden />
+                        View player cards
+                      </button>
+                    ) : null}
+                  </section>
+                ) : null}
+
+                {hasFinalizedSongPool &&
+                  (!gameTabRoundBuilderReady || mixFinalized || gameState === 'playing') && (
+                    <motion.div
+                      className="host-bingo-pool-strip host-glass-panel"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.35 }}
+                    >
+                      <div className="host-bingo-pool-strip__head">
+                        <div className="host-bingo-pool-strip__title">
+                          <ListChecks className="w-5 h-5" aria-hidden />
+                          {bingoPoolSectionTitle}
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-secondary btn-host-emphasis"
+                          onClick={() => setShowBingoPoolModal(true)}
+                          title="Open bingo pool (Escape to close)"
+                        >
+                          View pool
+                        </button>
+                      </div>
+                      <p className="host-bingo-pool-strip__hint">
+                        {gameState === 'playing' && currentSong ? (
+                          <>
+                            Now playing:{' '}
+                            <strong style={{ color: '#e8fff4' }}>
+                              {getDisplaySongTitle(currentSong.id, currentSong.name || '')}
+                            </strong>
+                            {currentSong.artist ? (
+                              <>
+                                {' '}
+                                <span style={{ color: 'rgba(255,255,255,0.65)' }}>
+                                  — {getDisplaySongArtist(currentSong.id, currentSong.artist)}
+                                </span>
+                              </>
+                            ) : null}
+                          </>
+                        ) : mixFinalized ? (
+                          'Tap View pool to review playback order, edit display titles, and check validation flags.'
+                        ) : (
+                          'Preview of tracks that match your bingo layout. Tap View pool for the full list.'
+                        )}
+                      </p>
+                    </motion.div>
+                  )}
+
                 {gameState === 'waiting' && !currentSong && !hasFinalizedSongPool && !gameTabRoundBuilderReady && (
                   <div className="host-r4-alert host-glass-panel">
                     <p className="host-r4-alert__title">No song mix yet</p>
@@ -8538,6 +8642,18 @@ const HostView: React.FC = () => {
                         </div>
                         <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
                           {playerCards.size} player{playerCards.size !== 1 ? 's' : ''}
+                          {(() => {
+                            const onlineN = Array.from(playerCards.entries()).filter(
+                              ([id, d]) =>
+                                d.inPerson === false || joinedPlayersRoster.get(id)?.inPerson === false,
+                            ).length;
+                            return onlineN > 0 ? (
+                              <>
+                                {' '}
+                                · <strong style={{ color: '#7ec8ff' }}>{onlineN} online</strong>
+                              </>
+                            ) : null;
+                          })()}
                           {' · Pattern: '}
                           <strong style={{ color: '#c5d4e0' }}>{getPatternDisplayName(pattern)}</strong>
                         </div>
