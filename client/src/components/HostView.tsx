@@ -5411,13 +5411,18 @@ const HostView: React.FC = () => {
         toFetch = rows.filter((p) => !fullyLoadedPlaylistIdsRef.current.has(p.id));
       }
 
+      /** Multi-playlist mixes (5×15): same track may appear once per column playlist — do not collapse by id only. */
+      const allowSameTrackAcrossPlaylists = rows.length > 1;
+
       const dedupeAndShuffle = (songs: Song[]) => {
         const seen = new Set<string>();
         const uniqueSongs = songs.filter((song) => {
-          if (seen.has(song.id)) {
-            return false;
-          }
-          seen.add(song.id);
+          if (!song?.id) return false;
+          const pid = canonicalPlaylistIdForMatch(String(song.sourcePlaylistId || ''));
+          const key =
+            allowSameTrackAcrossPlaylists && pid ? `${pid}::${song.id}` : song.id;
+          if (seen.has(key)) return false;
+          seen.add(key);
           return true;
         });
         const shuffledSongs = [...uniqueSongs];
@@ -5482,9 +5487,20 @@ const HostView: React.FC = () => {
             return [];
           }
           if (data.success && data.tracks) {
-            const rows = yt
-              ? data.tracks.map((t) => ({ ...t, youtubeMusic: true as const }))
-              : data.tracks;
+            const plCanon = canonicalPlaylistIdForMatch(playlist.id);
+            const rows = (yt ? data.tracks.map((t) => ({ ...t, youtubeMusic: true as const })) : data.tracks).map(
+              (t) => ({
+                ...t,
+                sourcePlaylistId:
+                  t.sourcePlaylistId != null && String(t.sourcePlaylistId).trim() !== ''
+                    ? t.sourcePlaylistId
+                    : plCanon,
+                sourcePlaylistName:
+                  typeof t.sourcePlaylistName === 'string' && t.sourcePlaylistName.trim() !== ''
+                    ? t.sourcePlaylistName
+                    : playlist.name,
+              }),
+            );
             allSongs.push(...rows);
             fullyLoadedPlaylistIdsRef.current.add(playlist.id);
             if (!catalog && !yt) {
