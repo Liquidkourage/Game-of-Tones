@@ -31,10 +31,4 @@ export const pdGlass = {
   glowMint: `0 0 36px rgba(${mintRgb}, 0.4)`,
   shadowGlass: `0 12px 40px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(${mintRgb}, 0.12)`,
   titleGradient: `linear-gradient(90deg, ${pdPalette.mint} 0%, ${pdPalette.violet} 42%, ${pdPalette.snow} 50%, ${pdPalette.violet} 58%, ${pdPalette.mint} 100%)`,
-  thumbViolet: `linear-gradient(135deg, rgba(${violetRgb}, 0.95) 0%, rgba(${violetRgb}, 0.35) 55%, rgba(${mintRgb}, 0.15) 100%)`,
-  thumbMint: `linear-gradient(135deg, rgba(${mintRgb}, 0.55) 0%, rgba(${violetRgb}, 0.75) 100%)`,
 } as const;
-
-export function callThumbBackground(seed: number): string {
-  return seed % 2 === 0 ? pdGlass.thumbViolet : pdGlass.thumbMint;
-}

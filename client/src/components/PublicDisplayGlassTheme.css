@@ -334,15 +334,35 @@
   height: 100%;
 }
 
-.App .public-display--glass .call-item__thumb {
+.App .public-display--glass .call-number {
   width: clamp(32px, 4vmin, 48px);
   height: clamp(32px, 4vmin, 48px);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 10px;
-  border: 1px solid rgba(var(--pd-mint-rgb), 0.5);
+  border: 1px solid rgba(var(--pd-mint-rgb), 0.45);
+  background: linear-gradient(
+    145deg,
+    rgba(var(--pd-violet-rgb), 0.32) 0%,
+    rgba(10, 10, 20, 0.88) 100%
+  );
+  color: var(--pd-mint);
+  font-weight: 900;
+  font-size: clamp(0.8rem, 1.45vmin, 1.05rem);
+  line-height: 1;
+  text-shadow: 0 0 12px rgba(var(--pd-mint-rgb), 0.55);
   box-shadow:
-    0 0 18px rgba(var(--pd-violet-rgb), 0.55),
-    0 0 10px rgba(var(--pd-mint-rgb), 0.25);
+    0 0 14px rgba(var(--pd-violet-rgb), 0.35),
+    inset 0 0 0 1px rgba(var(--pd-mint-rgb), 0.1);
+}
+
+.App .public-display--glass .call-item--current .call-number {
+  border-color: rgba(var(--pd-mint-rgb), 0.85);
+  box-shadow:
+    0 0 18px rgba(var(--pd-mint-rgb), 0.45),
+    inset 0 0 0 1px rgba(var(--pd-mint-rgb), 0.2);
 }
 
 /* Socket / playlist diagnostic HUD (?diag=1 on display URL) */
@@ -400,12 +420,6 @@
   font-size: 0.88em;
   margin-bottom: 4px;
   word-break: break-word;
-}
-
-.App .public-display--glass .call-number {
-  color: var(--pd-violet);
-  text-shadow: 0 0 14px rgba(var(--pd-violet-rgb), 0.8);
-  font-weight: 900;
 }
 
 .App .public-display--glass .call-song-name {

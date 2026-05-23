@@ -26,7 +26,7 @@ import {
   type PublicDisplayTitleRevealMode,
 } from '../utils/publicDisplayTitleReveal';
 import { effectivePublicDisplayFontScale } from '../utils/publicDisplayFontScale';
-import { pdGlass, callThumbBackground } from '../publicDisplayGlassTheme';
+import { pdGlass } from '../publicDisplayGlassTheme';
 import './PublicDisplayGlassTheme.css';
 import {
   computeBingoCellTextScale,
@@ -3742,12 +3742,7 @@ const PublicDisplay: React.FC = () => {
             borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)',
           }}
         >
-          <div
-            className="call-item__thumb"
-            aria-hidden
-            style={{ background: callThumbBackground(callNum) }}
-          />
-          <div className="call-number">
+          <div className="call-number" aria-label={callNum > 0 ? `Call ${callNum}` : undefined}>
             {callNum > 0 ? callNum : ''}
           </div>
           <div
