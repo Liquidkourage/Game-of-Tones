@@ -95,7 +95,7 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   onStartRound: (roundIndex: number) => void;
   onSelectRoundForPrep?: (roundIndex: number) => void;
   /** Playlist-only sync for the current prep round (avoids resetting pattern/playback). */
-  onSyncMixFromRound?: (roundIndex: number) => void;
+  onSyncMixFromRound?: (roundIndex: number, roundOverride?: TRound) => void;
   onOpenConnection?: () => void;
   gameState: 'waiting' | 'playing' | 'ended';
   hostDefaultFreeSpace: boolean;
@@ -206,12 +206,12 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   );
 
   const syncMixIfPrepRound = useCallback(
-    (roundIndex: number) => {
+    (roundIndex: number, roundOverride?: TRound) => {
       if (gameState === 'playing') return;
-      const round = rounds[roundIndex];
+      const round = roundOverride ?? rounds[roundIndex];
       if (!round || !(round.playlistIds || []).length) return;
       if (onSyncMixFromRoundRef.current) {
-        onSyncMixFromRoundRef.current(roundIndex);
+        onSyncMixFromRoundRef.current(roundIndex, roundOverride);
         return;
       }
       loadPrepForRound(roundIndex);
@@ -320,11 +320,12 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   };
 
   const addPlaylistToRound = (roundIndex: number, playlistId: string) => {
-    const playlist = playlists.find((p) => p.id === playlistId);
+    const pid = canonicalPlaylistIdForMatch(playlistId);
+    const playlist = playlists.find((p) => canonicalPlaylistIdForMatch(p.id) === pid);
     if (!playlist) return;
     const newRounds = [...rounds];
     const round = newRounds[roundIndex];
-    if (round.playlistIds.includes(playlistId)) return;
+    if (round.playlistIds.some((id) => canonicalPlaylistIdForMatch(id) === pid)) return;
     let updated = {
       ...round,
       playlistIds: [...round.playlistIds, playlist.id],
@@ -335,7 +336,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
     updated = sortRoundPlaylistsByBingoColumns(updated, playlists);
     newRounds[roundIndex] = updated;
     onUpdateRounds(newRounds);
-    syncMixIfPrepRound(roundIndex);
+    syncMixIfPrepRound(roundIndex, updated);
   };
 
   const removePlaylistFromRound = (roundIndex: number, playlistId: string) => {
@@ -353,7 +354,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
       status: round.playlistIds.length === 1 ? 'unplanned' : round.status,
     };
     onUpdateRounds(newRounds);
-    syncMixIfPrepRound(roundIndex);
+    syncMixIfPrepRound(roundIndex, newRounds[roundIndex]);
   };
 
   const handleBucketDragEnter = (e: React.DragEvent) => {

@@ -257,6 +257,8 @@ interface SavedRoundMixSnapshot {
   mixGeometry: SavedMixGeometry;
   snippetLength: number;
   randomStarts: 'none' | 'early' | 'random';
+  /** Playlist ids at save time — live pool UI ignores snapshot when this differs from the bucket. */
+  playlistIdsAtSave?: string[];
 }
 
 function cloneSongForSnapshot(s: Song): Song {
@@ -413,7 +415,19 @@ function prepRoundPlaylistOrderMatchesMix(
 }
 
 function roundPlaylistIdsKey(ids: string[] | undefined): string {
-  return (ids || []).map((id) => String(id).trim()).filter(Boolean).join('\n');
+  return (ids || [])
+    .map((id) => canonicalPlaylistIdForMatch(String(id)))
+    .filter(Boolean)
+    .sort()
+    .join(',');
+}
+
+function roundSnapshotMatchesCurrentPlaylists(round: EventRound): boolean {
+  const snap = round.savedMixSnapshot;
+  if (!snap?.songs?.length) return false;
+  const atSave = snap.playlistIdsAtSave ?? [];
+  if (atSave.length === 0) return false;
+  return roundPlaylistIdsKey(atSave) === roundPlaylistIdsKey(round.playlistIds);
 }
 
 /** Saved mix is tied to a specific playlist set — clear when buckets change after Save. */
@@ -6221,47 +6235,58 @@ const HostView: React.FC = () => {
     [resolveMixPlaylistRowsForRound],
   );
 
-  /** Sync only mix playlists for the focused round (no pattern/playback reset). */
+  /** Sync mix + fetch tracks for this round. Pass roundOverride right after add/remove — ref lags one commit. */
   const syncMixFromRound = useCallback(
-    (roundIndex: number) => {
-      const round = eventRoundsRef.current[roundIndex];
+    (roundIndex: number, roundOverride?: EventRound) => {
+      const round = roundOverride ?? eventRoundsRef.current[roundIndex];
       if (!round || !(round.playlistIds || []).length) return;
       applyRoundPlaylistsToMixSelection(round);
+      const merged = resolveMixPlaylistRowsForRound(round);
+      if (merged?.length) {
+        void generateSongListRef.current({ reason: 'selection', playlists: merged });
+      }
     },
-    [applyRoundPlaylistsToMixSelection],
+    [applyRoundPlaylistsToMixSelection, resolveMixPlaylistRowsForRound],
   );
 
   /** Same behavior as dragging a library row into a round bucket (RoundPlanner drop). */
   const addPlaylistToRoundBucket = useCallback(
     (roundIndex: number, playlistId: string) => {
-      const playlist = playlistsForRoundPlanner.find((p) => String(p.id) === String(playlistId));
+      const playlist = playlistsForRoundPlanner.find(
+        (p) => canonicalPlaylistIdForMatch(String(p.id)) === canonicalPlaylistIdForMatch(String(playlistId)),
+      );
       if (!playlist) return;
-      setEventRounds((prev) => {
-        if (roundIndex < 0 || roundIndex >= prev.length) return prev;
-        const round = prev[roundIndex];
-        if (round.playlistIds.some((id) => String(id) === String(playlistId))) return prev;
-        const newRounds = [...prev];
-        const tracks = Math.max(0, Number(playlist.tracks) || 0);
-        let updated: EventRound = {
-          ...round,
-          playlistIds: [...round.playlistIds, playlist.id],
-          playlistNames: [...round.playlistNames, playlist.name],
-          songCount: round.songCount + tracks,
-          status: round.status === 'unplanned' ? 'planned' : round.status,
-        };
-        updated = sortRoundPlaylistsByBingoColumns(updated, playlistsForRoundPlanner);
-        updated = clearSnapshotIfPlaylistsChanged(updated, round);
+      const prev = eventRoundsRef.current;
+      if (roundIndex < 0 || roundIndex >= prev.length) return;
+      const round = prev[roundIndex];
+      const newPid = canonicalPlaylistIdForMatch(playlist.id);
+      if (round.playlistIds.some((id) => canonicalPlaylistIdForMatch(id) === newPid)) return;
+
+      const tracks = Math.max(0, Number(playlist.tracks) || 0);
+      let updated: EventRound = {
+        ...round,
+        playlistIds: [...round.playlistIds, playlist.id],
+        playlistNames: [...round.playlistNames, playlist.name],
+        songCount: round.songCount + tracks,
+        status: round.status === 'unplanned' ? 'planned' : round.status,
+      };
+      updated = sortRoundPlaylistsByBingoColumns(updated, playlistsForRoundPlanner);
+      updated = clearSnapshotIfPlaylistsChanged(updated, round);
+
+      setEventRounds((cur) => {
+        if (roundIndex < 0 || roundIndex >= cur.length) return cur;
+        const newRounds = [...cur];
         newRounds[roundIndex] = updated;
         try {
           localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(newRounds));
         } catch (error) {
           console.warn('Failed to save rounds to localStorage:', error);
         }
-        applyRoundPlaylistsToMixSelection(updated);
         return newRounds;
       });
+      syncMixFromRound(roundIndex, updated);
     },
-    [applyRoundPlaylistsToMixSelection, playlistsForRoundPlanner, roomId],
+    [playlistsForRoundPlanner, roomId, syncMixFromRound],
   );
 
   /** Pick a round for advance prep: sync mix + pattern/snippet UI without marking rounds active/completed or leaving Manager. */
@@ -6422,6 +6447,7 @@ const HostView: React.FC = () => {
         mixGeometry: deriveMixGeometryForSnapshot(mixRows, pool.length),
         snippetLength,
         randomStarts,
+        playlistIdsAtSave: [...(r.playlistIds || [])],
       };
 
       setEventRounds((prev) => {
@@ -6890,6 +6916,7 @@ const HostView: React.FC = () => {
       mixPlaylistSelection.length > 0 &&
       prepRoundPlaylistOrderMatchesMix(activeRound.playlistIds, mixPlaylistSelection) &&
       eventRoundSnapshotMeetsSaveThreshold(activeRound, freeSpaceEnabled) &&
+      roundSnapshotMatchesCurrentPlaylists(activeRound) &&
       (activeRound.savedMixSnapshot?.songs?.length ?? 0) > 0;
     const snapshotSongs = snapshotMatchesPrep ? activeRound!.savedMixSnapshot!.songs : null;
 
@@ -6949,7 +6976,8 @@ const HostView: React.FC = () => {
   const savedRoundSnapshotMakesFinalizeRedundant =
     currentPrepRoundForFinalizeUi != null &&
     eventRoundSnapshotMeetsSaveThreshold(currentPrepRoundForFinalizeUi, freeSpaceEnabled) &&
-    prepRoundPlaylistsMatchMix;
+    prepRoundPlaylistsMatchMix &&
+    roundSnapshotMatchesCurrentPlaylists(currentPrepRoundForFinalizeUi);
 
   const hostActiveRoundSummary = useMemo(() => {
     const round =
@@ -7031,16 +7059,6 @@ const HostView: React.FC = () => {
       const mixRows = resolveMixPlaylistRowsForRound(round);
       if (!mixRows?.length) return 0;
 
-      const mixMatchesRound = prepRoundPlaylistOrderMatchesMix(round.playlistIds, mixPlaylistSelection);
-      const snapshotMatchesRound =
-        mixMatchesRound &&
-        round.savedMixSnapshot?.songs?.length &&
-        eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled);
-
-      if (snapshotMatchesRound) {
-        return round.savedMixSnapshot!.songs.length;
-      }
-
       const songsForRound =
         songList.length > 0
           ? songList.filter((s) =>
@@ -7057,13 +7075,7 @@ const HostView: React.FC = () => {
       }
       return 0;
     },
-    [
-      eventRounds,
-      freeSpaceEnabled,
-      mixPlaylistSelection,
-      resolveMixPlaylistRowsForRound,
-      songList,
-    ],
+    [eventRounds, resolveMixPlaylistRowsForRound, songList],
   );
 
   const webApiQuarantineBannerText = useMemo(() => {
