@@ -15,7 +15,6 @@ import {
   Pause,
   Sparkles,
   List,
-  Grid3X3,
   QrCode
 } from 'lucide-react';
 import { API_BASE } from '../config';
@@ -5255,7 +5254,6 @@ const PublicDisplay: React.FC = () => {
               transition={{ duration: 0.6, delay: 0.2 }}
             >
               <div className="bingo-card-header center" style={{ justifyContent: 'center' }}>
-                <Grid3X3 className="bingo-card-icon" />
                 <h2 className="pattern-title-text">{getPatternName()}</h2>
                 {pattern === 'composite' && patternComposite && patternComposite.clauses.length > 0 && (
                   <div className="composite-pattern-header-block">
