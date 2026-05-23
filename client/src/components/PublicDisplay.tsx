@@ -259,12 +259,25 @@ function displayTitleFromSyncedSong(song: {
   return cleanSongTitle(String(song.name || ''));
 }
 
+function displayArtistFromSyncedSong(song: {
+  artist?: string;
+  customArtistName?: string | null;
+} | null | undefined): string {
+  if (!song) return '';
+  const custom = song.customArtistName;
+  if (custom != null && String(custom).trim() !== '') return String(custom);
+  return typeof song.artist === 'string' ? song.artist : '';
+}
+
 function normalizeSyncedSongForDisplay(song: any): Song | null {
   if (!song || typeof song !== 'object') return null;
   const id = typeof song.id === 'string' ? song.id : null;
   if (!id) return null;
-  const artist = typeof song.artist === 'string' ? song.artist : '';
-  return { id, name: displayTitleFromSyncedSong(song), artist };
+  return {
+    id,
+    name: displayTitleFromSyncedSong(song),
+    artist: displayArtistFromSyncedSong(song),
+  };
 }
 
 interface GameState {
@@ -1178,6 +1191,7 @@ const PublicDisplay: React.FC = () => {
       songId: string;
       songName?: string;
       customSongName?: string;
+      customArtistName?: string;
       artistName?: string;
       youtubeMusic?: boolean;
       youtubeRawTitle?: string;
@@ -1775,6 +1789,7 @@ const PublicDisplay: React.FC = () => {
       const squares = (card.squares || []).map((s: any) => {
         const vis = youtubeBingoSquareDisplay({
           customSongName: s.customSongName,
+          customArtistName: s.customArtistName,
           songName: s.songName,
           artistName: s.artistName,
           youtubeMusic: s.youtubeMusic === true,
@@ -1829,7 +1844,34 @@ const PublicDisplay: React.FC = () => {
       } catch {}
     });
 
+    newSocket.on('song-alias-updated', (data: { songId: string; title: string; artist: string }) => {
+      if (!data?.songId) return;
+      idMetaRef.current[data.songId] = { name: data.title, artist: data.artist };
+      setGameState((prev) => {
+        const squares = prev.bingoCard?.squares;
+        if (!squares?.length) return prev;
+        return {
+          ...prev,
+          bingoCard: {
+            ...prev.bingoCard,
+            squares: squares.map((sq) =>
+              sq.song?.id === data.songId
+                ? { ...sq, song: { id: data.songId, name: data.title, artist: data.artist } }
+                : sq,
+            ),
+          },
+        };
+      });
+    });
+
+    newSocket.on('song-alias-cleared', (data: { songId: string }) => {
+      if (!data?.songId) return;
+      delete idMetaRef.current[data.songId];
+    });
+
     newSocket.on('song-playing', (data: any) => {
+      const aliased =
+        typeof data.customArtistName === 'string' && data.customArtistName.trim() !== '';
       const ytf = youtubeTrackDisplayFields({
         name: data.songName,
         artist: data.artistName,
@@ -1838,7 +1880,7 @@ const PublicDisplay: React.FC = () => {
       const song = {
         id: data.songId,
         name: data.customSongName || cleanSongTitle(ytf.title),
-        artist: ytf.artist,
+        artist: aliased ? String(data.customArtistName).trim() : ytf.artist,
       };
       // cache metadata for reveal lookups
       idMetaRef.current[song.id] = { name: song.name, artist: song.artist };
@@ -3875,6 +3917,7 @@ const PublicDisplay: React.FC = () => {
                   const vis = sq
                     ? youtubeBingoSquareDisplay({
                         customSongName: sq.customSongName,
+                        customArtistName: sq.customArtistName,
                         songName: sq.songName,
                         artistName: sq.artistName,
                         youtubeMusic: sq.youtubeMusic === true,

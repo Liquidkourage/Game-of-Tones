@@ -3,6 +3,7 @@ import { AlertCircle, AlertTriangle, Check, CheckCircle2, Pencil, Play } from 'l
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { youtubeTrackDisplayFields } from '../utils/youtubeTrackDisplay';
 import { validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
+import { hasSongAlias, type SongAliases } from '../utils/songAliasDisplay';
 
 export type BingoPoolSong = {
   id: string;
@@ -18,8 +19,9 @@ type BingoPoolListProps = {
   /** Song ids that have already finished playing (not including current). */
   playedSongIds?: ReadonlySet<string>;
   getDisplaySongTitle: (id: string, cleaned: string) => string;
-  customSongTitles: Record<string, string>;
-  onEditSongTitle: (song: { id: string; title: string; artist: string }) => void;
+  getDisplaySongArtist: (id: string, fallback: string) => string;
+  songAliases: SongAliases;
+  onEditSongAlias: (song: { id: string; title: string; artist: string }) => void;
 };
 
 /** Rows to keep visible above the fold before we scroll the list. */
@@ -37,8 +39,9 @@ const BingoPoolList: React.FC<BingoPoolListProps> = ({
   currentSongId,
   playedSongIds,
   getDisplaySongTitle,
-  customSongTitles,
-  onEditSongTitle,
+  getDisplaySongArtist,
+  songAliases,
+  onEditSongAlias,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -89,6 +92,8 @@ const BingoPoolList: React.FC<BingoPoolListProps> = ({
       {songs.map((song, index) => {
         const ytf = youtubeTrackDisplayFields(song);
         const displayTitle = getDisplaySongTitle(song.id, ytf.title);
+        const displayArtist = getDisplaySongArtist(song.id, ytf.artist);
+        const isAliased = hasSongAlias(songAliases, song.id);
         const validation = validateSongTitleSync(displayTitle, ytf.title);
         const validationColor = getValidationColor(validation);
         const validationMessage = getValidationMessage(validation);
@@ -110,7 +115,7 @@ const BingoPoolList: React.FC<BingoPoolListProps> = ({
 
 Original: "${song.name}"
 Cleaned: "${displayTitle}"
-${customSongTitles[song.id] ? `Custom: "${customSongTitles[song.id]}"` : ''}
+${isAliased ? `Alias: "${displayTitle}" — ${displayArtist}` : ''}
 
 ${validationMessage}`}
           >
@@ -130,10 +135,10 @@ ${validationMessage}`}
                 {song.explicit === true ? (
                   <SpotifyExplicitBadge size="md" title="Marked explicit on Spotify" />
                 ) : null}
-                {customSongTitles[song.id] ? (
-                  <span className="bingo-pool-list__edited">(edited)</span>
+                {isAliased ? (
+                  <span className="bingo-pool-list__edited">(aliased)</span>
                 ) : null}
-                {!customSongTitles[song.id] && displayTitle !== song.name ? (
+                {!isAliased && displayTitle !== song.name ? (
                   <span className="bingo-pool-list__cleaned">(cleaned)</span>
                 ) : null}
                 <span className="bingo-pool-list__validation" style={{ color: validationColor }}>
@@ -146,17 +151,17 @@ ${validationMessage}`}
                   )}
                 </span>
               </div>
-              <div className="bingo-pool-list__artist">by {ytf.artist}</div>
+              <div className="bingo-pool-list__artist">by {displayArtist}</div>
             </div>
             <button
               type="button"
               className="bingo-pool-list__edit btn-secondary"
               onClick={() =>
-                onEditSongTitle({ id: song.id, title: song.name || '', artist: song.artist || '' })
+                onEditSongAlias({ id: song.id, title: song.name || '', artist: song.artist || '' })
               }
             >
               <Pencil className="w-3.5 h-3.5" aria-hidden />
-              Edit
+              Alias
             </button>
           </div>
         );

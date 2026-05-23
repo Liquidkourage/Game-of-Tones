@@ -7,6 +7,7 @@ import {
 export type PrintableSquare = {
   position: string;
   customSongName?: string;
+  customArtistName?: string;
   songName?: string;
   artistName?: string;
   isFreeSpace?: boolean;
@@ -35,7 +36,7 @@ function cellLabel(sq: PrintableSquare | null | undefined): { title: string; sub
   if (!sq) return { title: '', subtitle: '' };
   if (sq.isFreeSpace) return { title: 'FREE', subtitle: '' };
   const title = (sq.customSongName || sq.songName || '').trim() || '—';
-  const subtitle = (sq.artistName || '').trim();
+  const subtitle = (sq.customArtistName || sq.artistName || '').trim();
   return { title, subtitle };
 }
 

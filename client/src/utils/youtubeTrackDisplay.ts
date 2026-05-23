@@ -416,9 +416,10 @@ export function youtubeTrackDisplayFields(song: {
   return { title: parsed.title || rawName, artist: '' };
 }
 
-/** Bingo card cells: custom title overrides; YT rows use split/heuristic artist. */
+/** Bingo card cells: alias overrides title/artist; YT rows use split/heuristic unless aliased. */
 export function youtubeBingoSquareDisplay(sq: {
   customSongName?: string;
+  customArtistName?: string;
   songName?: string;
   artistName?: string;
   youtubeMusic?: boolean;
@@ -427,10 +428,12 @@ export function youtubeBingoSquareDisplay(sq: {
   isFreeSpace?: boolean;
 }): { title: string; artist: string } {
   if (sq.isFreeSpace) return { title: 'FREE', artist: '' };
-  if (!sq.youtubeMusic) {
+  const aliased =
+    typeof sq.customArtistName === 'string' && sq.customArtistName.trim() !== '';
+  if (!sq.youtubeMusic || aliased) {
     return {
       title: sq.customSongName || cleanSongTitle(sq.songName || ''),
-      artist: sq.artistName || '',
+      artist: aliased ? sq.customArtistName!.trim() : sq.artistName || '',
     };
   }
   const ytf = youtubeTrackDisplayFields({

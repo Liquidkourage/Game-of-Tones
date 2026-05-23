@@ -5,6 +5,7 @@ import io from 'socket.io-client';
 import { SOCKET_URL } from '../config';
 import { Music, Users } from 'lucide-react';
 import { youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
+import { patchSquaresWithAlias, patchSquaresClearAlias } from '../utils/songAliasDisplay';
 import {
   STANDARD_BINGO_POSITIONS,
   validateBingoCardGrid,
@@ -26,6 +27,7 @@ interface BingoSquare {
   songId: string;
   songName: string;
   customSongName?: string;
+  customArtistName?: string;
   artistName: string;
   marked: boolean;
   /** YouTube Music row — channel is not shown as artist; title split from video title. */
@@ -516,14 +518,44 @@ const PlayerView: React.FC = () => {
       } catch {}
     });
 
+    newSocket.on('song-alias-updated', (data: { songId: string; title: string; artist: string }) => {
+      if (!data?.songId) return;
+      setBingoCard((prev) => {
+        if (!prev?.squares) return prev;
+        return {
+          ...prev,
+          squares: patchSquaresWithAlias(prev.squares, data.songId, data.title, data.artist),
+        };
+      });
+    });
+
+    newSocket.on('song-alias-cleared', (data: { songId: string }) => {
+      if (!data?.songId) return;
+      setBingoCard((prev) => {
+        if (!prev?.squares) return prev;
+        return {
+          ...prev,
+          squares: patchSquaresClearAlias(prev.squares, data.songId),
+        };
+      });
+    });
+
     newSocket.on('song-playing', (data: any) => {
       console.log('Song playing:', data);
+      const displayArtist =
+        typeof data.customArtistName === 'string' && data.customArtistName.trim() !== ''
+          ? data.customArtistName.trim()
+          : data.artistName;
+      const displayName =
+        typeof data.customSongName === 'string' && data.customSongName.trim() !== ''
+          ? data.customSongName.trim()
+          : data.songName;
       setGameState(prev => ({
         ...prev,
         currentSong: {
           id: data.songId,
-          name: data.songName,
-          artist: data.artistName
+          name: displayName,
+          artist: displayArtist
         }
       }));
       // Increment songs played counter

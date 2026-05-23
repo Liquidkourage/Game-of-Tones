@@ -362,8 +362,77 @@ venueLogoCache.registerVenueLogoRoutes(app);
 const games = new Map();
 const rooms = new Map();
 
-// Store custom song titles (songId -> customTitle)
-const customSongTitles = new Map();
+/** songId -> { title, artist } — display-only aliases (playback still uses songId). */
+const songAliases = new Map();
+
+function getSongAlias(songId) {
+  if (!songId) return null;
+  const a = songAliases.get(songId);
+  if (!a || typeof a !== 'object') return null;
+  const title = a.title != null ? String(a.title).trim() : '';
+  const artist = a.artist != null ? String(a.artist).trim() : '';
+  if (!title || !artist) return null;
+  return { title, artist };
+}
+
+function songAliasDisplayFields(songId, fallbackName, fallbackArtist) {
+  const alias = getSongAlias(songId);
+  if (alias) {
+    return { customSongName: alias.title, customArtistName: alias.artist };
+  }
+  return {
+    customSongName: cleanSongTitle(fallbackName || ''),
+    customArtistName: undefined,
+  };
+}
+
+function patchSongAliasOnAllCards(songId, title, artist) {
+  const touchSquare = (sq) => {
+    if (sq && sq.songId === songId) {
+      sq.customSongName = title;
+      sq.customArtistName = artist;
+    }
+  };
+  for (const room of rooms.values()) {
+    if (room.bingoCards) {
+      for (const card of room.bingoCards.values()) {
+        if (!card?.squares) continue;
+        for (const sq of card.squares) touchSquare(sq);
+      }
+    }
+    if (room.players) {
+      for (const player of room.players.values()) {
+        if (player?.bingoCard?.squares) {
+          for (const sq of player.bingoCard.squares) touchSquare(sq);
+        }
+      }
+    }
+  }
+}
+
+function clearSongAliasOnAllCards(songId) {
+  const touchSquare = (sq) => {
+    if (sq && sq.songId === songId) {
+      sq.customSongName = cleanSongTitle(sq.songName || '');
+      delete sq.customArtistName;
+    }
+  };
+  for (const room of rooms.values()) {
+    if (room.bingoCards) {
+      for (const card of room.bingoCards.values()) {
+        if (!card?.squares) continue;
+        for (const sq of card.squares) touchSquare(sq);
+      }
+    }
+    if (room.players) {
+      for (const player of room.players.values()) {
+        if (player?.bingoCard?.squares) {
+          for (const sq of player.bingoCard.squares) touchSquare(sq);
+        }
+      }
+    }
+  }
+}
 const PREQUEUE_WINDOW_DEFAULT = 10;
 // Utility: count non-host players in a room
 function getNonHostPlayerCount(room) {
@@ -694,7 +763,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     io.to(roomId).emit('song-playing', {
       songId: song.id,
       songName: song.name,
-      customSongName: customSongTitles.get(song.id) || cleanSongTitle(song.name),
+      ...songAliasDisplayFields(song.id, song.name, song.artist),
       artistName: song.artist,
       explicit: song.explicit === true,
       snippetLength: room.snippetLength,
@@ -1441,7 +1510,7 @@ function buildSongPlayingPayload(room, song, currentIndex) {
   const payload = {
     songId: song.id,
     songName: song.name,
-    customSongName: customSongTitles.get(song.id) || cleanSongTitle(song.name),
+    ...songAliasDisplayFields(song.id, song.name, song.artist),
     artistName: song.artist,
     explicit: song.explicit === true,
     snippetLength: room.snippetLength,
@@ -1466,7 +1535,7 @@ function clientSongMetaFromPlaylistSong(foundSong) {
     id: foundSong.id,
     name: foundSong.name,
     artist: foundSong.artist,
-    customSongName: customSongTitles.get(foundSong.id) || cleanSongTitle(foundSong.name),
+    ...songAliasDisplayFields(foundSong.id, foundSong.name, foundSong.artist),
   };
 }
 
@@ -1474,8 +1543,7 @@ function currentSongPayloadForRoomState(currentSong) {
   if (!currentSong || !currentSong.id) return currentSong || null;
   return {
     ...currentSong,
-    customSongName:
-      customSongTitles.get(currentSong.id) || cleanSongTitle(currentSong.name || ''),
+    ...songAliasDisplayFields(currentSong.id, currentSong.name, currentSong.artist),
   };
 }
 
@@ -1835,7 +1903,7 @@ async function playNextSongSimple(roomId, deviceId) {
     io.to(roomId).emit('song-playing', {
       songId: nextSong.id,
       songName: nextSong.name,
-      customSongName: customSongTitles.get(nextSong.id) || cleanSongTitle(nextSong.name),
+      ...songAliasDisplayFields(nextSong.id, nextSong.name, nextSong.artist),
       artistName: nextSong.artist,
       explicit: nextSong.explicit === true,
       snippetLength: room.snippetLength,
@@ -2640,12 +2708,17 @@ io.on('connection', (socket) => {
             socket.emit('song-playing', {
               songId: room.currentSong.id,
               songName: room.currentSong.name,
+              ...songAliasDisplayFields(
+                room.currentSong.id,
+                room.currentSong.name,
+                room.currentSong.artist,
+              ),
               artistName: room.currentSong.artist,
               explicit,
               snippetLength: room.snippetLength,
               currentIndex: idx,
               totalSongs: room.playlistSongs?.length || 0,
-              previewUrl: poolSong?.previewUrl || null
+              previewUrl: poolSong?.previewUrl || null,
             });
           }
           
@@ -2674,12 +2747,17 @@ io.on('connection', (socket) => {
             socket.emit('song-playing', {
               songId: room.currentSong.id,
               songName: room.currentSong.name,
+              ...songAliasDisplayFields(
+                room.currentSong.id,
+                room.currentSong.name,
+                room.currentSong.artist,
+              ),
               artistName: room.currentSong.artist,
               explicit,
               snippetLength: room.snippetLength,
               currentIndex: idx,
               totalSongs: room.playlistSongs?.length || 0,
-              previewUrl: poolSong?.previewUrl || null
+              previewUrl: poolSong?.previewUrl || null,
             });
           }
         }
@@ -5150,7 +5228,7 @@ io.on('connection', (socket) => {
       io.to(roomId).emit('song-playing', {
         songId,
         songName,
-        customSongName: customSongTitles.get(songId) || cleanSongTitle(songName),
+        ...songAliasDisplayFields(songId, songName, artistName),
         artistName,
         explicit: fromPool?.explicit === true,
         snippetLength: room.snippetLength
@@ -5282,28 +5360,30 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('display-reset-letters');
   });
 
-  // Custom song title management
-  socket.on('set-custom-song-title', (data) => {
-    const { songId, customTitle } = data;
-    if (songId && customTitle) {
-      customSongTitles.set(songId, customTitle);
-      routineServerLog(`✏️ Custom title set for song ${songId}: "${customTitle}"`);
-      // Broadcast to all clients in all rooms
-      io.emit('custom-song-title-updated', { songId, customTitle });
-    }
+  // Song display aliases (title + artist); patches live bingo cards.
+  socket.on('set-song-alias', (data) => {
+    const { songId, title, artist } = data || {};
+    const t = title != null ? String(title).trim() : '';
+    const a = artist != null ? String(artist).trim() : '';
+    if (!songId || !t || !a) return;
+    songAliases.set(songId, { title: t, artist: a });
+    patchSongAliasOnAllCards(songId, t, a);
+    routineServerLog(`✏️ Song alias set for ${songId}: "${t}" — ${a}`);
+    io.emit('song-alias-updated', { songId, title: t, artist: a });
   });
 
-  socket.on('get-custom-song-title', (data) => {
-    const { songId } = data;
-    if (songId) {
-      const customTitle = customSongTitles.get(songId);
-      socket.emit('custom-song-title-response', { songId, customTitle });
-    }
+  socket.on('clear-song-alias', (data) => {
+    const { songId } = data || {};
+    if (!songId) return;
+    songAliases.delete(songId);
+    clearSongAliasOnAllCards(songId);
+    routineServerLog(`✏️ Song alias cleared for ${songId}`);
+    io.emit('song-alias-cleared', { songId });
   });
 
-  socket.on('get-all-custom-titles', () => {
-    const allTitles = Object.fromEntries(customSongTitles);
-    socket.emit('all-custom-titles-response', allTitles);
+  socket.on('get-all-song-aliases', () => {
+    const all = Object.fromEntries(songAliases);
+    socket.emit('all-song-aliases-response', all);
   });
 
 
@@ -6282,7 +6362,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           position: `${row}-${col}`,
           songId: s.id,
           songName: s.name,
-          customSongName: customSongTitles.get(s.id) || cleanSongTitle(s.name),
+          ...songAliasDisplayFields(s.id, s.name, s.artist),
           artistName: s.artist,
           youtubeMusic: s.youtubeMusic === true,
           ...(s.youtubeMusic === true &&
@@ -6565,7 +6645,7 @@ function buildPrintableCardFromChosen(chosen25, useFreeSpace, index) {
         position: `${row}-${col}`,
         songId: s.id,
         songName: s.name,
-        customSongName: customSongTitles.get(s.id) || cleanSongTitle(s.name),
+        ...songAliasDisplayFields(s.id, s.name, s.artist),
         artistName: s.artist || '',
         youtubeMusic: s.youtubeMusic === true,
         ...(s.youtubeMusic === true &&
@@ -6901,7 +6981,7 @@ async function generateBingoCardForPlayer(roomId, playerId) {
           position: `${row}-${col}`,
           songId: s.id,
           songName: s.name,
-          customSongName: customSongTitles.get(s.id) || cleanSongTitle(s.name),
+          ...songAliasDisplayFields(s.id, s.name, s.artist),
           artistName: s.artist,
           youtubeMusic: s.youtubeMusic === true,
           ...(s.youtubeMusic === true &&
@@ -7646,7 +7726,7 @@ async function playNextSong(roomId, deviceId) {
     io.to(roomId).emit('song-playing', {
       songId: nextSong.id,
       songName: nextSong.name,
-      customSongName: customSongTitles.get(nextSong.id) || cleanSongTitle(nextSong.name),
+      ...songAliasDisplayFields(nextSong.id, nextSong.name, nextSong.artist),
       artistName: nextSong.artist,
       explicit: nextSong.explicit === true,
       snippetLength: room.snippetLength,

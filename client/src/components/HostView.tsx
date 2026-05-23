@@ -72,7 +72,14 @@ import {
 } from '../patternDefinitions';
 import CustomPatternModal, { type CustomPatternSavePayload } from './CustomPatternModal';
 import CombinedPatternModal from './CombinedPatternModal';
-import SongTitleEditModal from './SongTitleEditModal';
+import SongAliasModal from './SongAliasModal';
+import {
+  displayTitleForSong,
+  displayArtistForSong,
+  patchSquaresWithAlias,
+  patchSquaresClearAlias,
+  type SongAliases,
+} from '../utils/songAliasDisplay';
 import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModal';
 import HostScreenTour from './HostScreenTour';
 import { buildHostScreenTourSteps } from '../hostScreenTourSteps';
@@ -827,7 +834,7 @@ const HostView: React.FC = () => {
     warnings: string[];
   } | null>(null);
   const [editingSong, setEditingSong] = useState<{id: string, title: string, artist: string} | null>(null);
-  const [customSongTitles, setCustomSongTitles] = useState<Record<string, string>>({});
+  const [songAliases, setSongAliases] = useState<SongAliases>({});
   const [showSetup, setShowSetup] = useState<boolean>(false);
   const [preQueueEnabled, setPreQueueEnabled] = useState<boolean>(false);
   const [preQueueWindow, setPreQueueWindow] = useState<number>(5);
@@ -2273,9 +2280,9 @@ const HostView: React.FC = () => {
     setSavedCustomPatterns(getSavedCustomPatterns());
     setSavedCompositePatterns(getSavedCompositePatterns());
     
-    // Request all custom song titles
+    // Request saved song display aliases
     if (socket) {
-      socket.emit('get-all-custom-titles');
+      socket.emit('get-all-song-aliases');
     }
 
     // Initialize socket connection
@@ -2586,16 +2593,77 @@ const HostView: React.FC = () => {
       }, 500);
     });
 
-    // Custom song title events
-    newSocket.on('custom-song-title-updated', (data: any) => {
-      setCustomSongTitles(prev => ({
+    const patchHostPlayerCardsForAlias = (songId: string, title: string, artist: string) => {
+      setPlayerCards((prev) => {
+        const next = new Map(prev);
+        Array.from(next.entries()).forEach(([pid, card]) => {
+          if (!card?.squares) return;
+          next.set(pid, {
+            ...card,
+            squares: patchSquaresWithAlias(card.squares, songId, title, artist),
+          });
+        });
+        return next;
+      });
+      setPlayerCardsVersion((v) => v + 1);
+      setPendingVerification((pv: any) => {
+        if (!pv?.playerCard?.squares) return pv;
+        return {
+          ...pv,
+          playerCard: {
+            ...pv.playerCard,
+            squares: patchSquaresWithAlias(pv.playerCard.squares, songId, title, artist),
+          },
+        };
+      });
+    };
+
+    const patchHostPlayerCardsClearAlias = (songId: string) => {
+      setPlayerCards((prev) => {
+        const next = new Map(prev);
+        Array.from(next.entries()).forEach(([pid, card]) => {
+          if (!card?.squares) return;
+          next.set(pid, {
+            ...card,
+            squares: patchSquaresClearAlias(card.squares, songId),
+          });
+        });
+        return next;
+      });
+      setPlayerCardsVersion((v) => v + 1);
+      setPendingVerification((pv: any) => {
+        if (!pv?.playerCard?.squares) return pv;
+        return {
+          ...pv,
+          playerCard: {
+            ...pv.playerCard,
+            squares: patchSquaresClearAlias(pv.playerCard.squares, songId),
+          },
+        };
+      });
+    };
+
+    newSocket.on('song-alias-updated', (data: { songId: string; title: string; artist: string }) => {
+      if (!data?.songId) return;
+      setSongAliases((prev) => ({
         ...prev,
-        [data.songId]: data.customTitle
+        [data.songId]: { title: data.title, artist: data.artist },
       }));
+      patchHostPlayerCardsForAlias(data.songId, data.title, data.artist);
     });
 
-    newSocket.on('all-custom-titles-response', (data: any) => {
-      setCustomSongTitles(data);
+    newSocket.on('song-alias-cleared', (data: { songId: string }) => {
+      if (!data?.songId) return;
+      setSongAliases((prev) => {
+        const next = { ...prev };
+        delete next[data.songId];
+        return next;
+      });
+      patchHostPlayerCardsClearAlias(data.songId);
+    });
+
+    newSocket.on('all-song-aliases-response', (data: SongAliases) => {
+      setSongAliases(data || {});
     });
 
     newSocket.on('game-ended', () => {
@@ -4602,6 +4670,7 @@ const HostView: React.FC = () => {
 
                 const cellVis = youtubeBingoSquareDisplay({
                   customSongName: square.customSongName,
+                  customArtistName: square.customArtistName,
                   songName: square.songName,
                   artistName: square.artistName,
                   youtubeMusic: square.youtubeMusic === true,
@@ -5112,22 +5181,28 @@ const HostView: React.FC = () => {
     setShowCustomPatternModal(false);
   };
 
-  // Song title editing functions
-  const handleEditSongTitle = (song: {id: string, title: string, artist: string}) => {
+  const handleEditSongAlias = (song: { id: string; title: string; artist: string }) => {
     setEditingSong(song);
     setShowSongTitleModal(true);
   };
 
-  const handleSaveSongTitle = (songId: string, customTitle: string) => {
+  const handleSaveSongAlias = (songId: string, title: string, artist: string) => {
     if (socket) {
-      socket.emit('set-custom-song-title', { songId, customTitle });
+      socket.emit('set-song-alias', { songId, title, artist });
     }
   };
 
-  const getDisplaySongTitle = (songId: string, originalTitle: string) => {
-    // If there's a custom title, use it; otherwise use auto-cleaned original title
-    return customSongTitles[songId] || cleanSongTitle(originalTitle);
+  const handleClearSongAlias = (songId: string) => {
+    if (socket) {
+      socket.emit('clear-song-alias', { songId });
+    }
   };
+
+  const getDisplaySongTitle = (songId: string, originalTitle: string) =>
+    displayTitleForSong(songId, originalTitle, songAliases);
+
+  const getDisplaySongArtist = (songId: string, originalArtist: string) =>
+    displayArtistForSong(songId, originalArtist, songAliases);
 
   const playSong = async (song: Song) => {
     if (!socket) {
@@ -8987,8 +9062,9 @@ const HostView: React.FC = () => {
                       currentSongId={currentSong?.id}
                       playedSongIds={bingoPoolPlayedSongIds}
                       getDisplaySongTitle={getDisplaySongTitle}
-                      customSongTitles={customSongTitles}
-                      onEditSongTitle={handleEditSongTitle}
+                      songAliases={songAliases}
+                      getDisplaySongArtist={getDisplaySongArtist}
+                      onEditSongAlias={handleEditSongAlias}
                     />
                   </motion.div>
                 )}
@@ -9448,6 +9524,7 @@ const HostView: React.FC = () => {
 
                     const verCellVis = youtubeBingoSquareDisplay({
                       customSongName: square.customSongName,
+                      customArtistName: square.customArtistName,
                       songName: square.songName,
                       artistName: square.artistName,
                       youtubeMusic: square.youtubeMusic === true,
@@ -9557,6 +9634,7 @@ const HostView: React.FC = () => {
 
                   const listVis = youtubeBingoSquareDisplay({
                     customSongName: square.customSongName,
+                    customArtistName: square.customArtistName,
                     songName: square.songName,
                     artistName: square.artistName,
                     youtubeMusic: square.youtubeMusic === true,
@@ -9905,17 +9983,19 @@ const HostView: React.FC = () => {
 
       {/* Song Title Edit Modal */}
       {editingSong && (
-        <SongTitleEditModal
+        <SongAliasModal
           isOpen={showSongTitleModal}
           onClose={() => {
             setShowSongTitleModal(false);
             setEditingSong(null);
           }}
-          onSave={handleSaveSongTitle}
+          onSave={handleSaveSongAlias}
+          onClear={handleClearSongAlias}
           songId={editingSong.id}
           originalTitle={editingSong.title}
-          customTitle={customSongTitles[editingSong.id]}
-          artistName={editingSong.artist}
+          originalArtist={editingSong.artist}
+          aliasTitle={songAliases[editingSong.id]?.title}
+          aliasArtist={songAliases[editingSong.id]?.artist}
         />
       )}
 
