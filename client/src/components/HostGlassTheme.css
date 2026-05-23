@@ -67,9 +67,9 @@
 }
 
 .host-glass-theme .host-sidebar {
-  width: 76px;
+  width: 108px;
   flex-shrink: 0;
-  padding: 10px 8px;
+  padding: 12px 10px;
   border-radius: var(--host-glass-radius);
   display: flex;
   flex-direction: column;
@@ -372,8 +372,572 @@
 /* Primary mint button glow */
 .host-glass-theme .btn-primary,
 .host-glass-theme .host-go-live__start,
+.host-glass-theme .host-r4-btn-primary,
 .host-glass-theme .control-button.finalize-mix {
   box-shadow: 0 4px 20px rgba(0, 255, 136, 0.2);
+}
+
+/* —— R4 dashboard grid —— */
+.host-glass-theme .host-glass-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+.host-glass-theme .host-r4-alert {
+  padding: 14px 16px;
+  border-left: 4px solid var(--host-glass-mint);
+}
+
+.host-glass-theme .host-r4-alert--warn {
+  border-left-color: #ffb090;
+  background: rgba(255, 120, 80, 0.08);
+  border-color: rgba(255, 140, 100, 0.35);
+}
+
+.host-glass-theme .host-r4-alert__title {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #e8fff4;
+}
+
+.host-glass-theme .host-r4-alert--warn .host-r4-alert__title {
+  color: #ffb090;
+}
+
+.host-glass-theme .host-r4-alert__body {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.45;
+  max-width: 520px;
+}
+
+.host-glass-theme .player-cards-section {
+  margin-top: 0;
+}
+
+.host-glass-theme .host-glass-view {
+  min-height: 0;
+}
+
+.host-glass-theme .host-glass-view--rounds .host-manager-grid {
+  grid-template-columns: 1fr;
+}
+
+.host-glass-theme .host-glass-view--display .host-event-settings {
+  border: none;
+}
+
+.host-glass-theme .host-glass-view--display .host-event-settings__summary {
+  display: none;
+}
+
+.host-glass-theme .host-glass-view--display .host-event-settings__body {
+  padding-top: 0;
+}
+
+.host-glass-theme .host-header--r4 .host-header__brand {
+  flex: 1;
+  min-width: 0;
+}
+
+.host-glass-theme .host-header--r4 .host-header__title {
+  font-size: 1.15rem;
+}
+
+.host-glass-theme .host-header__room-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.host-glass-theme .host-header__room-pill strong {
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #fff;
+}
+
+.host-glass-theme .host-header__live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--host-glass-mint);
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.8);
+}
+
+.host-glass-theme .host-r4-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+  grid-template-rows: auto auto;
+  gap: 14px;
+}
+
+.host-glass-theme .host-r4-card {
+  padding: 18px 20px;
+  min-height: 0;
+}
+
+.host-glass-theme .host-r4-now-playing {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  min-height: 280px;
+}
+
+.host-glass-theme .host-r4-round {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.host-glass-theme .host-r4-queue {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+}
+
+.host-glass-theme .host-r4-actions {
+  grid-column: 1 / -1;
+  grid-row: 3;
+}
+
+.host-glass-theme .host-r4-card__eyebrow {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.host-glass-theme .host-r4-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.host-glass-theme .host-r4-link-btn {
+  border: none;
+  background: none;
+  color: var(--host-glass-mint);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.host-glass-theme .host-r4-now-playing__layout {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  height: 100%;
+}
+
+.host-glass-theme .host-r4-art {
+  width: 120px;
+  height: 120px;
+  flex-shrink: 0;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(120, 70, 220, 0.55) 0%, rgba(0, 255, 136, 0.25) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 40px rgba(80, 40, 160, 0.35);
+}
+
+.host-glass-theme .host-r4-art__icon {
+  width: 3rem;
+  height: 3rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.host-glass-theme .host-r4-now-playing__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.host-glass-theme .host-r4-track-title {
+  margin: 0;
+  font-size: clamp(1.35rem, 2.5vw, 1.75rem);
+  font-weight: 800;
+  line-height: 1.2;
+  color: #fff;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.host-glass-theme .host-r4-track-artist {
+  margin: 0;
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.host-glass-theme .host-r4-track-meta {
+  margin: 0;
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.host-glass-theme .host-r4-track-meta strong {
+  color: var(--host-glass-mint);
+}
+
+.host-glass-theme .host-r4-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.host-glass-theme .host-r4-progress__bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--host-glass-mint), rgba(0, 200, 255, 0.85));
+  transition: width 0.3s ease;
+}
+
+.host-glass-theme .host-r4-transport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.host-glass-theme .host-r4-play {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  background: var(--host-glass-mint);
+  color: #0a1210;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 0 24px rgba(0, 255, 136, 0.35);
+}
+
+.host-glass-theme .host-r4-volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 120px;
+}
+
+.host-glass-theme .host-r4-volume .host-range--volume {
+  flex: 1;
+}
+
+.host-glass-theme .host-r4-go-live-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.host-glass-theme .host-r4-btn-primary {
+  background: linear-gradient(180deg, #00ffaa 0%, #00cc6a 100%) !important;
+  border: 1px solid rgba(0, 255, 180, 0.5) !important;
+  color: #061410 !important;
+  font-weight: 800 !important;
+}
+
+.host-glass-theme .host-r4-btn-primary--wide {
+  flex: 1 1 200px;
+  min-height: 48px;
+  font-size: 1rem;
+}
+
+.host-glass-theme .host-r4-btn-secondary {
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.host-glass-theme .host-r4-ready-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(0, 255, 136, 0.12);
+  border: 1px solid rgba(0, 255, 136, 0.28);
+  color: #b8f5d8;
+  font-size: 0.85rem;
+}
+
+.host-glass-theme .host-r4-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.4;
+}
+
+.host-glass-theme .host-r4-paused {
+  margin-bottom: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 200, 80, 0.1);
+  border: 1px solid rgba(255, 200, 80, 0.35);
+}
+
+.host-glass-theme .host-r4-paused__title {
+  margin: 0 0 4px;
+  font-weight: 800;
+  color: #ffd080;
+}
+
+.host-glass-theme .host-r4-paused__sub {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.host-glass-theme .host-r4-round__name {
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.host-glass-theme .host-r4-ring {
+  position: relative;
+  width: 128px;
+  height: 128px;
+  margin: 4px auto 14px;
+}
+
+.host-glass-theme .host-r4-ring__track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 8;
+}
+
+.host-glass-theme .host-r4-ring__progress {
+  fill: none;
+  stroke: var(--host-glass-mint);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.35s ease;
+}
+
+.host-glass-theme .host-r4-ring__label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.host-glass-theme .host-r4-ring__nums {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.host-glass-theme .host-r4-ring__caption {
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.host-glass-theme .host-r4-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+  margin: 0 0 12px;
+}
+
+.host-glass-theme .host-r4-stats dt {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.host-glass-theme .host-r4-stats dd {
+  margin: 2px 0 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.host-glass-theme .host-r4-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.host-glass-theme .host-r4-pill {
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.82);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.host-glass-theme .host-r4-queue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.host-glass-theme .host-r4-queue-item {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.host-glass-theme .host-r4-queue-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: rgba(0, 255, 136, 0.12);
+  color: var(--host-glass-mint);
+  font-size: 0.75rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.host-glass-theme .host-r4-queue-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.host-glass-theme .host-r4-queue-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.host-glass-theme .host-r4-queue-artist {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.5);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.host-glass-theme .host-r4-empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.45;
+}
+
+.host-glass-theme .host-r4-action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.host-glass-theme .host-r4-action-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 72px;
+  padding: 12px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.host-glass-theme .host-r4-action-tile:hover:not(:disabled) {
+  background: rgba(0, 255, 136, 0.1);
+  border-color: rgba(0, 255, 136, 0.35);
+  color: #fff;
+}
+
+.host-glass-theme .host-r4-action-tile--danger:hover:not(:disabled) {
+  background: rgba(255, 80, 80, 0.12);
+  border-color: rgba(255, 120, 120, 0.4);
+}
+
+.host-glass-theme .host-r4-action-tile:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.host-glass-theme .host-r4-actions__start {
+  margin-top: 14px;
+}
+
+@media (max-width: 1100px) {
+  .host-glass-theme .host-r4-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+
+  .host-glass-theme .host-r4-now-playing,
+  .host-glass-theme .host-r4-round,
+  .host-glass-theme .host-r4-queue,
+  .host-glass-theme .host-r4-actions {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .host-glass-theme .host-r4-now-playing {
+    min-height: 0;
+  }
 }
 
 @media (max-width: 960px) {

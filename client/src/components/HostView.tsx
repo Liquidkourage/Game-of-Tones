@@ -115,6 +115,7 @@ import { sortRoundPlaylistsByBingoColumns } from '../utils/roundPlaylistOrder';
 import { validateSongTitle, validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
 import './HostView.css';
 import './HostGlassTheme.css';
+import HostGameDashboard from './HostGameDashboard';
 import './HostFormControls.css';
 
 const MAX_CUSTOM_PATTERN_NAME_EMIT = 80;
@@ -883,7 +884,6 @@ const HostView: React.FC = () => {
   const [showBingoPoolModal, setShowBingoPoolModal] = useState(false);
   type HostGlassNavId = 'game' | 'rounds' | 'library' | 'connection' | 'display';
   const [hostGlassNav, setHostGlassNav] = useState<HostGlassNavId>('game');
-  const hostDashboardTopRef = useRef<HTMLDivElement>(null);
   const roundsPanelRef = useRef<HTMLElement>(null);
   const displaySettingsRef = useRef<HTMLDetailsElement>(null);
   /** 5�15 mode: playlist title per column (from `fiveby15-pool`, else five selected playlists). */
@@ -902,30 +902,8 @@ const HostView: React.FC = () => {
   const onHostGlassNav = useCallback(
     (id: HostGlassNavId) => {
       setHostGlassNav(id);
-      switch (id) {
-        case 'game':
-          hostDashboardTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          break;
-        case 'rounds':
-          roundsPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          break;
-        case 'library':
-          openPlaylistLibrary();
-          break;
-        case 'connection':
-          setShowConnectionModal(true);
-          break;
-        case 'display': {
-          const el = displaySettingsRef.current;
-          if (el) {
-            el.open = true;
-            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-          break;
-        }
-        default:
-          break;
-      }
+      if (id === 'library') openPlaylistLibrary();
+      if (id === 'connection') setShowConnectionModal(true);
     },
     [openPlaylistLibrary],
   );
@@ -8384,7 +8362,7 @@ const HostView: React.FC = () => {
           </nav>
           <div className="host-shell__main">
         {/* Header */}
-        <div className="host-header">
+        <div className="host-header host-header--r4">
           <div className="host-header__brand" data-host-tour="header-brand">
             <h1 className="host-header__title">
               <Gamepad2 className="host-header__icon" aria-hidden />
@@ -8393,15 +8371,18 @@ const HostView: React.FC = () => {
                 <span className="host-header__role">Host</span>
               </span>
             </h1>
-            <p className="host-header__sub">
-              Room <strong>{roomId}</strong>
+            <p className="host-header__room-pill">
               {gameState === 'playing' ? (
-                <span className="host-header__state host-header__state--live"> · Live</span>
-              ) : gameState === 'ended' ? (
-                <span className="host-header__state"> · Ended</span>
-              ) : (
-                <span className="host-header__state"> · Setup</span>
-              )}
+                <span className="host-header__live-dot" aria-hidden />
+              ) : null}
+              Room <strong>{roomId}</strong>
+              <span className="host-header__state">
+                {gameState === 'playing'
+                  ? ' · Live'
+                  : gameState === 'ended'
+                    ? ' · Ended'
+                    : ' · Setup'}
+              </span>
             </p>
           </div>
           <div className="room-info host-header__toolbar">
@@ -8472,243 +8453,120 @@ const HostView: React.FC = () => {
 
         {/* Main Content */}
         <div className="host-content host-content--dashboard" style={{ paddingBottom: '20px' }}>
-          <div className="tab-content host-unified host-dashboard">
-            <div className="host-dashboard__top" ref={hostDashboardTopRef}>
-              <div className="host-dashboard__hero">
-            {gameState === 'playing' && (
-              <section className="host-live-dock host-live-dock--pinned" data-host-tour="live-dock" aria-label="Live show">
-                {gamePaused && (
-                  <div className="host-paused-banner host-live-dock__paused">
-                    <p className="host-paused-banner__title">GAME PAUSED — RESUME HERE</p>
-                    <p className="host-paused-banner__sub">
-                      {pendingVerification
-                        ? `Bingo verification: ${pendingVerification.playerName}`
-                        : 'Playback paused (verification or Spotify). Use Resume when ready.'}
+          <div className="tab-content host-unified host-glass-workspace">
+            {hostGlassNav === 'game' && (
+              <>
+                <HostGameDashboard
+                  gameState={gameState}
+                  currentSong={currentSong}
+                  gamePaused={gamePaused}
+                  pendingVerification={pendingVerification}
+                  isPlaying={isPlaying}
+                  isMuted={isMuted}
+                  playbackState={playbackState}
+                  playbackTrackNumber={playbackTrackNumber}
+                  playbackTrackTotal={playbackTrackTotal}
+                  snippetLength={snippetLength}
+                  roundName={hostActiveRoundSummary.roundName}
+                  patternLabel={hostActiveRoundSummary.patternLabel}
+                  poolCount={hostActiveRoundSummary.poolCount}
+                  playedCount={hostActiveRoundSummary.playedCount}
+                  playlistNames={hostActiveRoundSummary.playlistNames}
+                  poolSongs={finalizedPoolSongs}
+                  prepRoundReadyForGoLive={prepRoundReadyForGoLive}
+                  showPrimaryFinalizeMixButton={showPrimaryFinalizeMixButton}
+                  mixGameActionsBlocked={mixGameActionsBlocked}
+                  savedRoundRoomSyncBusy={savedRoundRoomSyncBusy}
+                  isSpotifyConnecting={isSpotifyConnecting}
+                  mixNeedsHostSpotify={mixNeedsHostSpotify}
+                  gameTabRoundBuilderReady={gameTabRoundBuilderReady}
+                  hasFinalizedSongPool={hasFinalizedSongPool}
+                  playerCardsCount={playerCards.size}
+                  onPause={pauseSong}
+                  onSkip={skipSong}
+                  onMuteToggle={handleMuteToggle}
+                  onVolumeChange={handleVolumeChange}
+                  setIsMuted={setIsMuted}
+                  setPlaybackVolume={(v) => setPlaybackState((prev) => ({ ...prev, volume: v }))}
+                  onStartGame={startGame}
+                  onFinalizeMix={() => void finalizeMix()}
+                  onEndGame={endGame}
+                  onNewRoundSetup={confirmAndNewRound}
+                  onOpenLibrary={openPlaylistLibrary}
+                  onOpenPool={() => setShowBingoPoolModal(true)}
+                  onOpenPlayerCards={openPlayerCardsModal}
+                  onResetDisplayLetters={resetDisplayLetters}
+                  onResumeGame={handleManualResumeGame}
+                  getDisplaySongTitle={getDisplaySongTitle}
+                  getDisplaySongArtist={getDisplaySongArtist}
+                />
+
+                {gameState === 'waiting' && !currentSong && !hasFinalizedSongPool && !gameTabRoundBuilderReady && (
+                  <div className="host-r4-alert host-glass-panel">
+                    <p className="host-r4-alert__title">No song mix yet</p>
+                    <p className="host-r4-alert__body">
+                      {mixPlaylistSelection.length === 0
+                        ? 'Open Rounds to add playlists, or Library to browse. Connect Spotify / YouTube under Connect if needed.'
+                        : 'Use Show playlists or Start game to build the bingo pool.'}
                     </p>
-                    <button type="button" className="host-resume-game-btn" onClick={handleManualResumeGame}>
-                      Resume Game
-                    </button>
                   </div>
                 )}
-                <div className="host-live-dock__now-playing now-playing-section">
-                  <div className="host-live-dock__now-playing-row">
-                    <h2 className="host-live-dock__heading">
-                      <Music className="w-5 h-5" aria-hidden />
-                      Now playing
-                    </h2>
-                    {(playbackTrackNumber != null || playbackTrackTotal != null) && (
-                      <span className="host-live-dock__song-index" aria-label="Song position in round">
-                        {playbackTrackNumber ?? '—'}
-                        <span className="host-live-dock__song-index-sep">/</span>
-                        {playbackTrackTotal ?? 75}
-                      </span>
-                    )}
+
+                {showFinalizedButEmptyPool && (
+                  <div className="host-r4-alert host-r4-alert--warn host-glass-panel" role="alert">
+                    <p className="host-r4-alert__title">Mix finalized, but no track list in this view</p>
+                    <p className="host-r4-alert__body">
+                      Spotify may have rate limited playlist fetches. Try Refresh in Library, wait a few minutes, or
+                      reload this page.
+                    </p>
                   </div>
-                  <div className="host-live-dock__now-playing-body">
-                    <div className="host-live-dock__track">
-                      {currentSong ? (
-                        <>
-                          <div className="host-live-dock__track-title">
-                            <span>{currentSong.name}</span>
-                            {currentSong.explicit === true ? (
-                              <SpotifyExplicitBadge size="md" title="Marked explicit on Spotify" />
-                            ) : null}
-                          </div>
-                          <div className="host-live-dock__track-artist">by {currentSong.artist}</div>
-                        </>
-                      ) : (
-                        <div className="host-live-dock__track-wait">Starting next track…</div>
-                      )}
-                    </div>
-                    <div className="host-live-dock__transport">
-                      <button type="button" className="btn-secondary" onClick={pauseSong}>
-                        {!isPlaying ? 'Resume' : 'Pause'}
-                      </button>
-                      <button type="button" className="btn-secondary" onClick={skipSong}>
-                        Skip
-                      </button>
-                    </div>
-                    <div className="host-live-dock__volume">
-                      <button type="button" className="btn-secondary btn-host-icon" onClick={handleMuteToggle}>
-                        {isMuted ? <VolumeX className="w-5 h-5" aria-hidden /> : <Volume2 className="w-5 h-5" aria-hidden />}
-                      </button>
-                      <span className="host-live-dock__volume-label">{isMuted ? 0 : playbackState.volume}%</span>
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        value={isMuted ? 0 : playbackState.volume}
-                        onChange={(e) => {
-                          const newVolume = parseInt(e.target.value, 10);
-                          if (isMuted && newVolume > 0) setIsMuted(false);
-                          setPlaybackState((prev) => ({ ...prev, volume: newVolume }));
-                          handleVolumeChange(newVolume);
-                        }}
-                        className="volume-slider host-range host-range--volume"
-                        aria-label="Playback volume"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </section>
-            )}
-            {gameState === 'playing' ? (
-              <section className="host-show-actions" aria-label="Show controls">
-                <button type="button" className="btn-secondary" onClick={endGame}>
-                  End Game
-                </button>
-                <button type="button" className="btn-secondary" onClick={confirmAndNewRound} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <RotateCcw className="w-4 h-4" aria-hidden />
-                  New round setup
-                </button>
-                <button type="button" className="btn-accent" onClick={() => openPlaylistLibrary()} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <ListPlus className="w-4 h-4" aria-hidden />
-                  Playlist library
-                </button>
-                <button type="button" className="btn-secondary btn-host-warn" onClick={resetDisplayLetters} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <RotateCcw className="w-4 h-4" aria-hidden />
-                  Reset display letters
-                </button>
-                {hasFinalizedSongPool && (
-                  <button
-                    type="button"
-                    className="btn-secondary btn-host-emphasis"
-                    onClick={() => setShowBingoPoolModal(true)}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-                  >
-                    <ListChecks className="w-4 h-4" aria-hidden />
-                    View bingo pool
-                  </button>
                 )}
-                {playerCards.size > 0 && !playerCardsFullscreen ? (
-                  <button type="button" className="btn-secondary btn-host-emphasis" onClick={openPlayerCardsModal} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                    <Users className="w-4 h-4" aria-hidden />
-                    View player cards
-                  </button>
-                ) : null}
-              </section>
-            ) : null}
 
-            {gameState === 'waiting' && !currentSong && (
-              <section className="host-go-live host-go-live--banner" data-host-tour="go-live" aria-label="Start show">
-                <div className="host-go-live__summary">
-                  <p className="host-go-live__summary-label">Ready to play</p>
-                  <p className="host-go-live__summary-round">
-                    {hostActiveRoundSummary.roundName ?? 'Select a round'}
-                  </p>
-                  <p className="host-go-live__summary-meta">
-                    {hostActiveRoundSummary.poolCount > 0
-                      ? `${hostActiveRoundSummary.poolCount} tracks · ${hostActiveRoundSummary.patternLabel}`
-                      : 'Add playlists from the library below'}
-                  </p>
-                </div>
-                <div className="host-go-live__actions control-buttons">
-                  {showPrimaryFinalizeMixButton ? (
-                    <button
-                      type="button"
-                      className="control-button finalize-mix"
-                      onClick={() => void finalizeMix()}
-                      disabled={mixGameActionsBlocked}
-                    >
-                      <ListChecks className="w-4 h-4" aria-hidden />
-                      Show Playlists
-                    </button>
-                  ) : null}
-                  {prepRoundReadyForGoLive ? (
-                    <div className="mix-finalized-status">
-                      <p className="status-text" style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
-                        <CheckCircle2 className="w-4 h-4" style={{ color: '#00ff88' }} aria-hidden />
-                        Ready to Start Game — cards and playback are set for this round
-                      </p>
-                    </div>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="host-go-live__start"
-                    onClick={startGame}
-                    disabled={mixGameActionsBlocked}
+                {playerCards.size > 0 && !playerCardsFullscreen && (
+                  <motion.div
+                    key={`player-cards-${playerCardsVersion}`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="player-cards-section host-glass-panel"
+                    style={{ padding: '12px 16px' }}
                   >
-                    <Play className="btn-icon" aria-hidden />
-                    {savedRoundRoomSyncBusy
-                      ? 'Syncing room…'
-                      : isSpotifyConnecting && mixNeedsHostSpotify
-                        ? 'Connecting Spotify...'
-                        : 'Start Game'}
-                  </button>
-                </div>
-                {!gameTabRoundBuilderReady ? (
-                  <p className="host-go-live__hint">
-                    Start Game will <strong>finalize the mix automatically</strong> if needed. Use Show Playlists to
-                    preview playlist names on the display.
-                  </p>
-                ) : null}
-              </section>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ color: '#00ffa3', fontSize: '1rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Users className="w-5 h-5" aria-hidden />
+                          Player cards
+                        </div>
+                        <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
+                          {playerCards.size} player{playerCards.size !== 1 ? 's' : ''}
+                          {' · Pattern: '}
+                          <strong style={{ color: '#c5d4e0' }}>{getPatternDisplayName(pattern)}</strong>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        <button type="button" className="btn-secondary btn-host-emphasis" onClick={openPlayerCardsModal}>
+                          View cards
+                        </button>
+                        <button type="button" className="btn-secondary" onClick={openPlayerCardsFullscreen}>
+                          <Maximize2 className="w-4 h-4" aria-hidden />
+                          Full screen
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </>
             )}
-              </div>
-              <aside className="host-round-glass host-glass-panel" aria-label="Current round">
-                <p className="host-round-glass__title">Current round</p>
-                <h2 className="host-round-glass__name">
-                  {hostActiveRoundSummary.roundName ?? 'No round selected'}
-                </h2>
-                <p className="host-round-glass__meta">
-                  Pattern: <strong>{hostActiveRoundSummary.patternLabel}</strong>
-                  <br />
-                  {hostActiveRoundSummary.poolCount > 0 ? (
-                    <>
-                      Pool: <strong>{hostActiveRoundSummary.poolCount}</strong> tracks
-                      {gameState === 'playing' && hostActiveRoundSummary.playedCount > 0 ? (
-                        <>
-                          {' '}
-                          · Played: <strong>{hostActiveRoundSummary.playedCount}</strong>
-                        </>
-                      ) : null}
-                    </>
-                  ) : (
-                    <>Add playlists from Library</>
-                  )}
-                </p>
-                {hostActiveRoundSummary.playlistNames.length > 0 ? (
-                  <div className="host-round-glass__playlists">
-                    {hostActiveRoundSummary.playlistNames.slice(0, 5).map((name, i) => (
-                      <span key={`${name}-${i}`} className="host-round-glass__pill" title={name}>
-                        {name}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-                {gameState === 'playing' ? (
-                  <div className="host-round-glass__actions">
-                    {hasFinalizedSongPool ? (
-                      <button
-                        type="button"
-                        className="btn-secondary btn-host-emphasis"
-                        onClick={() => setShowBingoPoolModal(true)}
-                      >
-                        <ListChecks className="w-4 h-4" aria-hidden />
-                        View pool
-                      </button>
-                    ) : null}
-                    {playerCards.size > 0 && !playerCardsFullscreen ? (
-                      <button
-                        type="button"
-                        className="btn-secondary btn-host-emphasis"
-                        onClick={openPlayerCardsModal}
-                      >
-                        <Users className="w-4 h-4" aria-hidden />
-                        View cards
-                      </button>
-                    ) : null}
-                  </div>
-                ) : prepRoundReadyForGoLive ? (
-                  <p className="host-round-glass__meta" style={{ marginTop: 'auto' }}>
-                    <strong style={{ color: '#00ff88' }}>Ready</strong> — start the show from the hero panel.
-                  </p>
-                ) : null}
-              </aside>
-            </div>
 
-            <div className="host-manager host-manager-setup-flow">
+            {(hostGlassNav === 'rounds' || hostGlassNav === 'display') && (
+            <div
+              className={
+                hostGlassNav === 'display'
+                  ? 'host-manager host-manager-setup-flow host-glass-view host-glass-view--display'
+                  : 'host-manager host-manager-setup-flow host-glass-view host-glass-view--rounds'
+              }
+            >
                 <div className="host-manager-grid host-manager-grid--split host-manager-grid--balanced">
+                  {hostGlassNav === 'rounds' ? (
                   <div className="host-manager-col">
                 <section
                   ref={roundsPanelRef}
@@ -8750,7 +8608,9 @@ const HostView: React.FC = () => {
                   </div>
                 </section>
                   </div>
+                  ) : null}
 
+                  {hostGlassNav === 'display' ? (
                   <div className="host-manager-col host-manager-col--wide">
           <details ref={displaySettingsRef} className="host-event-settings" data-host-tour="projector-settings" open>
             <summary className="host-event-settings__summary">
@@ -9093,174 +8953,11 @@ const HostView: React.FC = () => {
             </div>
           </details>
                   </div>
+                  ) : null}
                 </div>
             </div>
+            )}
 
-                {gameState === 'waiting' && !currentSong && !hasFinalizedSongPool && !gameTabRoundBuilderReady && (
-                  <div
-                    style={{
-                      marginTop: 16,
-                      padding: '14px 16px',
-                      borderRadius: 10,
-                      background: 'rgba(0, 255, 136, 0.06)',
-                      border: '1px solid rgba(0, 255, 136, 0.22)',
-                      borderLeft: '4px solid #00ff88',
-                    }}
-                  >
-                    <p style={{ margin: 0, fontSize: '0.92rem', color: '#e8fff4', fontWeight: 600 }}>
-                      No song mix yet
-                    </p>
-                    <p style={{
-                      margin: '8px 0 0',
-                      fontSize: '0.82rem',
-                      color: 'rgba(255,255,255,0.72)',
-                      lineHeight: 1.45,
-                      maxWidth: 520,
-                    }}>
-                      {mixPlaylistSelection.length === 0
-                        ? 'Open Round builder to add playlists to a round. Connect Spotify and/or YouTube Music in Connection if needed.'
-                        : 'Tap Show Playlists or Start Game to build the bingo song pool from your selected playlists.'}
-                    </p>
-                  </div>
-                )}
-
-                {showFinalizedButEmptyPool && (
-                  <div
-                    className="finalized-playlist-section finalized-playlist-section--error"
-                    style={{
-                      marginTop: 20,
-                      padding: '16px 18px',
-                      borderRadius: 12,
-                      background: 'rgba(255, 120, 80, 0.08)',
-                      border: '1px solid rgba(255, 140, 100, 0.45)',
-                      color: 'rgba(255, 240, 230, 0.95)',
-                      fontSize: '0.9rem',
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    <strong style={{ color: '#ffb090', display: 'block', marginBottom: 8 }}>
-                      Mix finalized, but no track list in this view
-                    </strong>
-                    Spotify may have rate limited playlist fetches (429) while the server still built cards. Try Refresh on the music library, wait a few minutes, or reload this page. The rate limit is from Spotify’s Web API, not a multi-hour wait imposed by TEMPO.
-                  </div>
-                )}
-
-                {/* Bingo pool — compact strip; full list in modal */}
-                {hasFinalizedSongPool && (!gameTabRoundBuilderReady || mixFinalized || gameState === 'playing') && (
-                  <motion.div
-                    className="host-bingo-pool-strip"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.6 }}
-                  >
-                    <div className="host-bingo-pool-strip__head">
-                      <div className="host-bingo-pool-strip__title">
-                        <ListChecks className="w-5 h-5" aria-hidden />
-                        {bingoPoolSectionTitle}
-                      </div>
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={() => setShowBingoPoolModal(true)}
-                        style={{ fontWeight: 800, borderColor: '#00ffa3', color: '#00ffa3' }}
-                        title="Open bingo pool (Escape to close)"
-                      >
-                        View pool
-                      </button>
-                    </div>
-                    <p className="host-bingo-pool-strip__hint">
-                      {gameState === 'playing' && currentSong ? (
-                        <>
-                          Now playing:{' '}
-                          <strong style={{ color: '#e8fff4' }}>
-                            {getDisplaySongTitle(
-                              currentSong.id,
-                              currentSong.name || '',
-                            )}
-                          </strong>
-                          {currentSong.artist ? (
-                            <>
-                              {' '}
-                              <span style={{ color: 'rgba(255,255,255,0.65)' }}>
-                                — {getDisplaySongArtist(currentSong.id, currentSong.artist)}
-                              </span>
-                            </>
-                          ) : null}
-                        </>
-                      ) : mixFinalized ? (
-                        'Tap View pool to review playback order, edit display titles, and check validation flags.'
-                      ) : (
-                        'Preview of tracks that match your bingo layout. Tap View pool for the full list.'
-                      )}
-                    </p>
-                  </motion.div>
-                )}
-
-                {/* Player cards: compact strip � open modal or full screen to inspect grids */}
-                {playerCards.size > 0 && !playerCardsFullscreen && (
-             <motion.div 
-               key={`player-cards-${playerCardsVersion}`}
-               initial={{ opacity: 0 }}
-               animate={{ opacity: 1 }}
-               transition={{ delay: 0.4 }}
-                    className="player-cards-section"
-                    style={{ 
-                      background: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: '12px',
-                      padding: '12px 16px',
-                      marginTop: '16px'
-                    }}
-             >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ color: '#00ffa3', fontSize: '1rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Users className="w-5 h-5" aria-hidden />
-                          Player cards
-                        </div>
-                        <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
-                          {playerCards.size} player{playerCards.size !== 1 ? 's' : ''}
-                          {(() => {
-                            const onlineN = Array.from(playerCards.entries()).filter(
-                              ([id, d]) =>
-                                d.inPerson === false || joinedPlayersRoster.get(id)?.inPerson === false,
-                            ).length;
-                            return onlineN > 0 ? (
-                              <>
-                                {' '}
-                                · <strong style={{ color: '#7ec8ff' }}>{onlineN} online</strong>
-                              </>
-                            ) : null;
-                          })()}
-                          {' '}
-                          · Pattern:{' '}
-                          <strong style={{ color: '#c5d4e0' }}>{getPatternDisplayName(pattern)}</strong>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={openPlayerCardsModal}
-                        style={{ fontWeight: 800, borderColor: '#00ffa3', color: '#00ffa3' }}
-                        title="Open player cards in a window (Escape to close)"
-                      >
-                        View cards
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={openPlayerCardsFullscreen}
-                        style={{ fontWeight: 700 }}
-                        title="Use the full screen for player cards"
-                      >
-                        <Maximize2 className="w-4 h-4" aria-hidden />
-                        Full screen
-                      </button>
-                      </div>
-               </div>
-             </motion.div>
-           )}
           </div>
         </div>
           </div>
