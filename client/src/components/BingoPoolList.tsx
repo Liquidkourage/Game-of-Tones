@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef } from 'react';
-import { AlertCircle, AlertTriangle, Check, CheckCircle2, Pencil, Play } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Check, CheckCircle2, Pencil, Play, Tag } from 'lucide-react';
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { youtubeTrackDisplayFields } from '../utils/youtubeTrackDisplay';
 import { validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
@@ -136,7 +136,12 @@ ${validationMessage}`}
                   <SpotifyExplicitBadge size="md" title="Marked explicit on Spotify" />
                 ) : null}
                 {isAliased ? (
-                  <span className="bingo-pool-list__edited">(aliased)</span>
+                  <Tag
+                    className="bingo-pool-list__alias-icon"
+                    size={13}
+                    aria-label="Display alias"
+                    title="Display alias"
+                  />
                 ) : null}
                 {!isAliased && displayTitle !== song.name ? (
                   <span className="bingo-pool-list__cleaned">(cleaned)</span>

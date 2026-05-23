@@ -3425,6 +3425,12 @@
   color: #fff;
 }
 
+.host-view .bingo-pool-list__alias-icon {
+  flex-shrink: 0;
+  color: #00ffa3;
+  opacity: 0.85;
+}
+
 .host-view .bingo-pool-list__artist {
   color: #b3b3b3;
   font-size: 0.82rem;
