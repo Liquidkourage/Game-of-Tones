@@ -3466,22 +3466,7 @@ const PublicDisplay: React.FC = () => {
                     >
                       {/* Numeric badge: play order index */}
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%' }}>
-                        <div
-                          className="call-number"
-                          style={{
-                            minWidth: 34,
-                            height: 34,
-                            borderRadius: 8,
-                            background: 'rgba(255,255,255,0.08)',
-                            border: '1px solid rgba(255,255,255,0.2)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontWeight: 900,
-                            color: '#e6e6e6',
-                            flexShrink: 0
-                          }}
-                        >
+                        <div className="call-number">
                           {(() => {
                             const idx = playedOrderRef.current.indexOf(id);
                             return idx >= 0 ? (idx + 1) : '';
@@ -3582,17 +3567,7 @@ const PublicDisplay: React.FC = () => {
             borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)',
           }}
         >
-          <div
-            className="call-number"
-            style={{
-              fontSize: '1.25rem',
-              minWidth: 32,
-              width: 32,
-              fontWeight: 900,
-              lineHeight: 1,
-              flexShrink: 0,
-            }}
-          >
+          <div className="call-number">
             {callNum > 0 ? callNum : ''}
           </div>
           <div
