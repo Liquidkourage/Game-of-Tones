@@ -2710,7 +2710,7 @@ const PublicDisplay: React.FC = () => {
       window.removeEventListener('resize', compute);
       if (ro) ro.disconnect();
     };
-  }, [vertViewportRef.current]);
+  }, [columnCallListLayout, layoutFiveColumns, playedOrderRevision, oneBy75Ids]);
 
   // Global smooth phase driver (keeps columns aligned)
   useEffect(() => {
@@ -3425,6 +3425,10 @@ const PublicDisplay: React.FC = () => {
         return col.indexOf(a) - col.indexOf(b);
       })
     );
+    const visibleInCols = cols.reduce((n, c) => n + c.length, 0);
+    if (playedOrderForDisplay.length > 0 && visibleInCols === 0) {
+      return renderSimplePlayedCallList();
+    }
     if (debugMode) {
       try {
         console.log('[Display] columns snapshot', {
@@ -5348,28 +5352,29 @@ const PublicDisplay: React.FC = () => {
                 // Check both state and ref to ensure rendering works even when columns are still loading
                 const poolIds = oneBy75Ids ?? oneBy75IdsRef.current;
                 const hasPool = poolHasTracks(poolIds);
-                if (playedOrderForDisplay.length > 0 && (!hasPool || !layoutFiveColumns) && columnCallListLayout) {
+                const played = playedOrderForDisplay;
+                const poolSet =
+                  layoutFiveColumns && layoutFiveColumns.length > 0
+                    ? new Set(layoutFiveColumns.flat())
+                    : null;
+                const anyPlayedInFiveBy15Pool =
+                  poolSet != null && played.some((id) => poolSet.has(id));
+
+                // 5×15: if played ids are not in the column pool (stale flat 1×75, YT+Spotify merge, etc.), use play-order cards.
+                if (
+                  played.length > 0 &&
+                  columnCallListLayout &&
+                  (!hasPool || !layoutFiveColumns || !anyPlayedInFiveBy15Pool)
+                ) {
                   return renderSimplePlayedCallList();
                 }
                 if (hasPool) {
                   if (usePlayOrderCallLayout) {
                     return renderOneBy75GroupedColumns();
                   }
-                  const primary = columnCallListLayout
+                  return columnCallListLayout
                     ? renderOneBy75Columns()
                     : renderOneBy75GroupedColumns();
-                  if (
-                    playedOrderForDisplay.length > 0 &&
-                    columnCallListLayout &&
-                    layoutFiveColumns
-                  ) {
-                    const poolSet = new Set(layoutFiveColumns.flat());
-                    const visibleInCols = playedOrderForDisplay.filter((id) => poolSet.has(id)).length;
-                    if (visibleInCols === 0) {
-                      return renderSimplePlayedCallList();
-                    }
-                  }
-                  return primary;
                 }
 
                 if (playedOrderForDisplay.length > 0) {
