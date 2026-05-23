@@ -4052,8 +4052,8 @@ const PublicDisplay: React.FC = () => {
               maxWidth: isBigWinCelebration ? 'min(96vw, 1500px)' : 'min(92vw, 720px)',
               zIndex: 10020,
               background: isBigWinCelebration
-                ? 'linear-gradient(165deg, rgba(0,255,180,0.38) 0%, rgba(109,40,217,0.22) 45%, rgba(18,20,36,0.55) 100%)'
-                : 'linear-gradient(165deg, rgba(72,52,120,0.55) 0%, rgba(0,255,136,0.12) 100%)',
+                ? `linear-gradient(165deg, rgba(0,255,136,0.35) 0%, rgba(139,92,246,0.28) 50%, ${pdGlass.void} 100%)`
+                : `linear-gradient(165deg, rgba(139,92,246,0.35) 0%, rgba(0,255,136,0.1) 100%)`,
               border: isBigWinCelebration
                 ? `2px solid ${pdGlass.borderMintStrong}`
                 : `1px solid ${pdGlass.borderViolet}`,
@@ -4353,7 +4353,7 @@ const PublicDisplay: React.FC = () => {
                   style={{
                     width: 'clamp(26px, 4.5vmin, 52px)',
                     height: 'clamp(26px, 4.5vmin, 52px)',
-                    color: '#7bffd9',
+                    color: pdGlass.violet,
                     filter: 'drop-shadow(0 0 16px rgba(0,255,200,0.65))',
                   }}
                   strokeWidth={2.2}
@@ -4377,7 +4377,7 @@ const PublicDisplay: React.FC = () => {
                   style={{
                     width: 'clamp(26px, 4.5vmin, 52px)',
                     height: 'clamp(26px, 4.5vmin, 52px)',
-                    color: '#7bffd9',
+                    color: pdGlass.violet,
                     filter: 'drop-shadow(0 0 16px rgba(0,255,200,0.65))',
                   }}
                   strokeWidth={2.2}
@@ -4468,8 +4468,7 @@ const PublicDisplay: React.FC = () => {
                   overflow: 'hidden',
                   padding: 'clamp(6px, 0.95vmin, 14px) clamp(8px, 1.2vmin, 16px)',
                   borderRadius: 'clamp(18px, 2.5vmin, 26px)',
-                background:
-                  'linear-gradient(165deg, rgba(109,40,217,0.18) 0%, rgba(72,52,120,0.42) 45%, rgba(0,255,136,0.1) 100%)',
+                background: `linear-gradient(165deg, rgba(139,92,246,0.22) 0%, rgba(139,92,246,0.12) 45%, rgba(0,255,136,0.12) 100%)`,
                   border: 'max(2px, 0.25vmin) solid rgba(100, 210, 200, 0.42)',
                   boxShadow:
                     '0 0 0 1px rgba(255,255,255,0.08) inset, 0 24px 56px rgba(0,0,0,0.42), 0 0 40px rgba(0,255,200,0.08), 0 0 36px rgba(130,100,255,0.1)',
@@ -4623,8 +4622,8 @@ const PublicDisplay: React.FC = () => {
                       style={{
                         fontSize: 'clamp(2.6rem, min(11vmin, 9.25vh), 6.85rem)',
                         fontWeight: 1000,
-                        color: pdGlass.mintBright,
-                        textShadow: '0 8px 28px rgba(0,255,170,0.55), 0 0 24px rgba(139,92,246,0.25)',
+                        color: pdGlass.mint,
+                        textShadow: '0 0 32px rgba(0,255,136,0.65), 0 0 40px rgba(139,92,246,0.4)',
                         lineHeight: 1,
                       }}
                     >
@@ -4786,7 +4785,7 @@ const PublicDisplay: React.FC = () => {
                           style={{
                             width: 'clamp(24px, 4.2vmin, 52px)',
                             height: 'clamp(24px, 4.2vmin, 52px)',
-                            color: '#7bffd9',
+                            color: pdGlass.violet,
                             filter: 'drop-shadow(0 0 14px rgba(0,255,200,0.6))',
                           }}
                           strokeWidth={2.2}
@@ -4811,7 +4810,7 @@ const PublicDisplay: React.FC = () => {
                           style={{
                             width: 'clamp(24px, 4.2vmin, 52px)',
                             height: 'clamp(24px, 4.2vmin, 52px)',
-                            color: '#7bffd9',
+                            color: pdGlass.violet,
                             filter: 'drop-shadow(0 0 14px rgba(0,255,200,0.6))',
                           }}
                           strokeWidth={2.2}
@@ -4879,7 +4878,7 @@ const PublicDisplay: React.FC = () => {
                     fontWeight: 1000,
                     letterSpacing: '0.03em',
                     backgroundImage:
-                      'linear-gradient(95deg, #00ffa3 0%, #7bffd9 28%, #ffffff 50%, #7bffd9 72%, #00ffa3 100%)',
+                      pdGlass.titleGradient,
                     WebkitBackgroundClip: 'text',
                     backgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
@@ -4895,20 +4894,20 @@ const PublicDisplay: React.FC = () => {
                 {[
                   {
                     n: 1,
-                    accent: 'linear-gradient(135deg, rgba(0,255,180,0.35) 0%, rgba(0,120,90,0.15) 100%)',
-                    borderGlow: 'rgba(0,255,200,0.55)',
+                    accent: 'linear-gradient(135deg, rgba(0,255,136,0.32) 0%, rgba(10,10,20,0.5) 100%)',
+                    borderGlow: 'rgba(0,255,136,0.6)',
                     title: 'Join & get your card',
                     body: (
                       <>
-                        Join this room on your phone. Your <strong style={{ color: '#e8fff8' }}>5×5</strong> card uses
-                        tonight&apos;s <strong style={{ color: '#e8fff8' }}>75 songs</strong> — same pool for everyone.
+                        Join this room on your phone. Your <strong style={{ color: pdGlass.mint }}>5×5</strong> card uses
+                        tonight&apos;s <strong style={{ color: pdGlass.mint }}>75 songs</strong> — same pool for everyone.
                       </>
                     ),
                   },
                   {
                     n: 2,
-                    accent: 'linear-gradient(135deg, rgba(130,110,255,0.35) 0%, rgba(40,30,90,0.2) 100%)',
-                    borderGlow: 'rgba(160,140,255,0.55)',
+                    accent: 'linear-gradient(135deg, rgba(139,92,246,0.35) 0%, rgba(10,10,20,0.5) 100%)',
+                    borderGlow: 'rgba(139,92,246,0.6)',
                     title: 'Listen & mark',
                     body: (
                       <>
@@ -4920,8 +4919,8 @@ const PublicDisplay: React.FC = () => {
                   },
                   {
                     n: 3,
-                    accent: 'linear-gradient(135deg, rgba(255,200,120,0.28) 0%, rgba(120,70,20,0.18) 100%)',
-                    borderGlow: 'rgba(255,200,100,0.45)',
+                    accent: 'linear-gradient(135deg, rgba(0,255,136,0.22) 0%, rgba(139,92,246,0.28) 100%)',
+                    borderGlow: 'rgba(0,255,136,0.5)',
                     title: 'Pattern & BINGO',
                     body: (
                       <>
@@ -5002,7 +5001,7 @@ const PublicDisplay: React.FC = () => {
                   width: 6,
                   height: 10,
                   borderRadius: 2,
-                  background: ['#00ff88', '#7bffd9', '#fff', '#ffd166', '#ff6b6b'][i % 5],
+                  background: [pdGlass.mint, pdGlass.violet, pdGlass.snow, pdGlass.mint, pdGlass.violet][i % 5],
                   transform: `translateX(${Math.random() * 100}px)`
                 }}
               />

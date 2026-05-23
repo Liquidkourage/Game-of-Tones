@@ -771,7 +771,6 @@ const HostView: React.FC = () => {
     return (saved as 'none' | 'early' | 'random') || 'none';
   });
   const [isStartingGame, setIsStartingGame] = useState(false);
-  const [playedSoFar, setPlayedSoFar] = useState<Array<{ id: string; name: string; artist: string }>>([]);
   const [playbackTrackNumber, setPlaybackTrackNumber] = useState<number | null>(null);
   const [playbackTrackTotal, setPlaybackTrackTotal] = useState<number | null>(null);
   const [revealMode, setRevealMode] = useState<'off' | 'artist' | 'title' | 'full'>('off');
@@ -2756,7 +2755,6 @@ const HostView: React.FC = () => {
       setSnippetLength(30);
       setRandomStarts('none');
       setRevealMode('off');
-      setPlayedSoFar([]);
       setSongList([]);
       setFinalizedOrder([]);
       finalizedOrderPlaylistKeyRef.current = null;
@@ -5075,7 +5073,6 @@ const HostView: React.FC = () => {
     invalidateSetlistBuildCache();
     setGameState('waiting');
     setCurrentSong(null);
-    setPlayedSoFar([]);
     setWinners([]);
     setRoundComplete(null);
     setRoundWinners([]);
@@ -6789,7 +6786,6 @@ const HostView: React.FC = () => {
       showToast('Not connected — cannot restart round', 'error');
       return;
     }
-    setPlayedSoFar([]);
     setRoundComplete(null);
     setRoundWinners([]);
     addLog('Restart round requested', 'info');
@@ -7150,7 +7146,7 @@ const HostView: React.FC = () => {
       playlistNames,
       patternLabel: getPatternDisplayName(pattern),
       poolCount,
-      playedCount: playedSoFar.length,
+      playedCount: playedInOrder.length,
       mixFinalized,
       savedRound: Boolean(round?.savedMixSnapshot?.songs?.length),
     };
@@ -7160,7 +7156,7 @@ const HostView: React.FC = () => {
     mixPlaylistSelection,
     pattern,
     finalizedPoolSongs.length,
-    playedSoFar.length,
+    playedInOrder.length,
     mixFinalized,
   ]);
 

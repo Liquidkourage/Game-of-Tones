@@ -956,11 +956,17 @@
 
 .host-glass-theme .host-r4-ring__progress {
   fill: none;
-  stroke: var(--host-glass-violet-bright);
+  stroke: url(#host-r4-ring-gradient);
   stroke-width: 8;
   stroke-linecap: round;
-  filter: drop-shadow(0 0 8px var(--host-glass-violet-glow));
+  filter: drop-shadow(0 0 10px var(--host-glass-violet-glow));
   transition: stroke-dashoffset 0.35s ease;
+}
+
+.host-glass-theme .host-r4-ring__defs {
+  position: absolute;
+  width: 0;
+  height: 0;
 }
 
 .host-glass-theme .host-r4-ring__nums {

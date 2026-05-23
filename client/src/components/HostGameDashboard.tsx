@@ -76,6 +76,13 @@ function ProgressRing({ played, total }: { played: number; total: number }) {
   return (
     <div className="host-r4-ring" aria-label={`${played} of ${total} songs played`}>
       <svg width="128" height="128" viewBox="0 0 128 128" className="host-r4-ring__svg">
+        <defs>
+          <linearGradient id="host-r4-ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#8b5cf6" />
+            <stop offset="55%" stopColor="#c4b5fd" />
+            <stop offset="100%" stopColor="#00ff88" />
+          </linearGradient>
+        </defs>
         <circle cx="64" cy="64" r={r} className="host-r4-ring__track" />
         <circle
           cx="64"
@@ -144,8 +151,11 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
   } = props;
 
   const totalTracks = poolCount > 0 ? poolCount : playbackTrackTotal ?? 75;
-  const played = gameState === 'playing' ? playedCount : 0;
-  const displayNum = playbackTrackNumber ?? (played > 0 ? played : null);
+  const ringPlayed =
+    gameState === 'playing' || gameState === 'ended'
+      ? Math.max(playedCount, playbackTrackNumber ?? 0)
+      : 0;
+  const displayNum = playbackTrackNumber ?? (ringPlayed > 0 ? ringPlayed : null);
 
   const upNext = useMemo(() => {
     if (!poolSongs.length) return [];
@@ -349,7 +359,7 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
       <section className="host-r4-card host-glass-panel host-r4-round" aria-label="Round summary">
         <p className="host-r4-card__eyebrow">Round summary</p>
         <h2 className="host-r4-round__name">{roundName ?? '—'}</h2>
-        <ProgressRing played={played} total={totalTracks} />
+        <ProgressRing played={ringPlayed} total={totalTracks} />
         <dl className="host-r4-stats">
           <div>
             <dt>Pattern</dt>
