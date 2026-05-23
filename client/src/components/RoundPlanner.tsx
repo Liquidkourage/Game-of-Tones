@@ -184,6 +184,8 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   const [dragOverBucket, setDragOverBucket] = useState(false);
   const [dragChipIndex, setDragChipIndex] = useState<number | null>(null);
   const [dropChipIndex, setDropChipIndex] = useState<number | null>(null);
+  const bucketDragDepthRef = React.useRef(0);
+  const bucketDomId = React.useId().replace(/:/g, '');
   const onSelectRoundForPrepRef = React.useRef(onSelectRoundForPrep);
   onSelectRoundForPrepRef.current = onSelectRoundForPrep;
   const onSyncMixFromRoundRef = React.useRef(onSyncMixFromRound);
@@ -351,18 +353,33 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
     if (roundIndex === focusedIndex) syncMixIfPrepRound(roundIndex);
   };
 
-  const handleBucketDragOver = (e: React.DragEvent) => {
+  const handleBucketDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
+    bucketDragDepthRef.current += 1;
     setDragOverBucket(true);
   };
 
-  const handleBucketDragLeave = (e: React.DragEvent) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const { clientX: x, clientY: y } = e;
-    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+  const handleBucketDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = dragChipIndex !== null ? 'move' : 'copy';
+  };
+
+  const handleBucketDragLeave = () => {
+    bucketDragDepthRef.current -= 1;
+    if (bucketDragDepthRef.current <= 0) {
+      bucketDragDepthRef.current = 0;
       setDragOverBucket(false);
     }
+  };
+
+  const handleLibraryPlaylistDrop = (playlistId: string) => {
+    if (playlistId && focusedIndex >= 0 && focusedIndex < rounds.length) {
+      addPlaylistToRound(focusedIndex, playlistId);
+    }
+    bucketDragDepthRef.current = 0;
+    setDragOverBucket(false);
+    setDragChipIndex(null);
+    setDropChipIndex(null);
   };
 
   const handleBucketDrop = (e: React.DragEvent) => {
@@ -375,11 +392,10 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
         reorderPlaylistInRound(focusedIndex, from, to);
       }
     } else {
-      const playlistId = e.dataTransfer.getData('text/plain');
-      if (playlistId && focusedIndex >= 0 && focusedIndex < rounds.length) {
-        addPlaylistToRound(focusedIndex, playlistId);
-      }
+      handleLibraryPlaylistDrop(e.dataTransfer.getData('text/plain'));
+      return;
     }
+    bucketDragDepthRef.current = 0;
     setDragOverBucket(false);
     setDragChipIndex(null);
     setDropChipIndex(null);
@@ -628,10 +644,11 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
       </div>
 
       <div
-        id="round-planner-buckets"
+        id={`round-planner-buckets-${bucketDomId}`}
         className={`round-planner-bucket round-planner-bucket--focused${
           isLive ? ' is-active' : ''
         }${dragOverBucket ? ' is-drag-over' : ''}${isInsufficient ? ' is-warn' : ''}`}
+        onDragEnter={handleBucketDragEnter}
         onDragOver={handleBucketDragOver}
         onDragLeave={handleBucketDragLeave}
         onDrop={handleBucketDrop}
@@ -704,23 +721,34 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
                       setDropChipIndex(null);
                     }}
                     onDragOver={(e) => {
-                      if (!canEditChips || dragChipIndex === null) return;
                       e.preventDefault();
-                      e.dataTransfer.dropEffect = 'move';
-                      setDropChipIndex(chipIndex);
+                      if (canEditChips && dragChipIndex !== null) {
+                        e.dataTransfer.dropEffect = 'move';
+                        setDropChipIndex(chipIndex);
+                      } else {
+                        e.dataTransfer.dropEffect = 'copy';
+                        setDragOverBucket(true);
+                      }
                     }}
                     onDragLeave={() => {
                       setDropChipIndex((cur) => (cur === chipIndex ? null : cur));
                     }}
                     onDrop={(e) => {
                       if (!canEditChips) return;
+                      const fromRaw = e.dataTransfer.getData(CHIP_REORDER_MIME);
+                      if (fromRaw === '') {
+                        e.preventDefault();
+                        handleLibraryPlaylistDrop(e.dataTransfer.getData('text/plain'));
+                        return;
+                      }
                       e.preventDefault();
                       e.stopPropagation();
-                      const fromRaw = e.dataTransfer.getData(CHIP_REORDER_MIME);
                       const from = Number(fromRaw);
                       if (Number.isFinite(from)) {
                         reorderPlaylistInRound(index, from, chipIndex);
                       }
+                      bucketDragDepthRef.current = 0;
+                      setDragOverBucket(false);
                       setDragChipIndex(null);
                       setDropChipIndex(null);
                     }}

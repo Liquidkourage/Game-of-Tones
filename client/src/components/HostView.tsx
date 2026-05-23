@@ -852,6 +852,8 @@ const HostView: React.FC = () => {
   const [roundBuilderFocusIndex, setRoundBuilderFocusIndex] = useState(0);
   const compositeEditRoundIndexRef = useRef(0);
   const [playlistRoundModalPane, setPlaylistRoundModalPane] = useState<'library' | 'rounds'>('library');
+  /** Keeps library + rounds panes visible during a library drag (avoids mid-drag pane swap). */
+  const [libraryPlaylistDragActive, setLibraryPlaylistDragActive] = useState(false);
   const openPlaylistLibrary = useCallback(() => {
     setPlaylistRoundModalPane('library');
     setShowPlaylistRoundModal(true);
@@ -7316,7 +7318,11 @@ const HostView: React.FC = () => {
 
   const playlistRoundBuilderBody = (
               <div
-                className="host-playlist-round-modal-root"
+                className={
+                  libraryPlaylistDragActive
+                    ? 'host-playlist-round-modal-root host-playlist-round-modal-root--library-drag'
+                    : 'host-playlist-round-modal-root'
+                }
                 data-mobile-pane={playlistRoundModalPane}
               >
               {!isSpotifyConnected && showYoutubeMusicInConnectionModal ? (
@@ -7668,8 +7674,9 @@ const HostView: React.FC = () => {
                               onDragStart={(e) => {
                                 e.dataTransfer.setData('text/plain', p.id);
                                 e.dataTransfer.effectAllowed = 'copy';
-                                setPlaylistRoundModalPane('rounds');
+                                setLibraryPlaylistDragActive(true);
                               }}
+                              onDragEnd={() => setLibraryPlaylistDragActive(false)}
                               onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
                               onMouseUp={(e) => e.currentTarget.style.cursor = 'grab'}
                             >
@@ -8395,7 +8402,14 @@ const HostView: React.FC = () => {
                     </button>
                   </div>
                   <div className="host-rounds-panel__planner" data-host-tour="round-setlist">
-                    {hostRoundPlanner}
+                    {showPlaylistRoundModal ? (
+                      <p className="host-rounds-panel__modal-open-hint">
+                        Round buckets are in the open <strong>Playlist library</strong> window — drag there or use{' '}
+                        <strong>Add to round…</strong>.
+                      </p>
+                    ) : (
+                      hostRoundPlanner
+                    )}
                   </div>
                 </section>
                   </div>

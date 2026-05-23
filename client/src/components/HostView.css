@@ -1417,6 +1417,24 @@
     display: none;
   }
 
+  /* During library drag, show both panes so the drag is not cancelled by display:none */
+  .host-playlist-round-modal-root--library-drag .host-music-two-pane__rounds,
+  .host-playlist-round-modal-root--library-drag .host-music-two-pane__library {
+    display: flex !important;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .host-playlist-round-modal-root--library-drag .host-music-two-pane__library {
+    flex: 1 1 58%;
+  }
+
+  .host-playlist-round-modal-root--library-drag .host-music-two-pane__rounds {
+    flex: 0 0 42%;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
   .host-playlist-round-modal-root[data-mobile-pane='rounds'] .host-music-two-pane__rounds {
     flex: 1 1 0;
     min-height: 0;
@@ -3061,6 +3079,14 @@
 
 .host-view .host-rounds-panel__planner .round-planner {
   min-height: 100%;
+}
+
+.host-rounds-panel__modal-open-hint {
+  margin: 0;
+  padding: 14px 16px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .host-playlist-round-modal__library-hint {

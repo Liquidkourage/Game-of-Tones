@@ -76,7 +76,7 @@
   flex-shrink: 0;
 }
 
-#round-planner-buckets {
+.round-planner-bucket.round-planner-bucket--focused {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
