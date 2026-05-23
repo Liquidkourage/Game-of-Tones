@@ -93,7 +93,7 @@ import {
   type PrintablePdfSection,
 } from '../utils/printableBingoPdf';
 import { roundPatternLabelForPrint, roundPrintablePdfSubtitle } from '../utils/roundPrintLabels';
-import { buildRoundCallSheetPdfBlob } from '../utils/printRoundCallSheetPdf';
+import { buildMultiRoundCallSheetPdfBlob, buildRoundCallSheetPdfBlob } from '../utils/printRoundCallSheetPdf';
 import {
   normalizePublicDisplayTitleRevealMode,
   type PublicDisplayTitleRevealMode,
@@ -3967,6 +3967,41 @@ const HostView: React.FC = () => {
     [roomId, freeSpaceEnabled],
   );
 
+  const handlePrintAllSavedCallSheetsPdf = useCallback(() => {
+    const saved = eventRounds.filter((r) =>
+      eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled),
+    );
+    if (saved.length === 0) {
+      window.alert('No saved rounds yet. Use Save round on each bucket you want in the export.');
+      return;
+    }
+    setPrintablePdfLoading(true);
+    try {
+      const sections = saved.map((round) => {
+        const songs = round.savedMixSnapshot!.songs;
+        return {
+          roundName: round.name,
+          roomLabel: `Room ${roomId}`,
+          tracks: songs.map((s) => ({ name: s.name, artist: s.artist })),
+        };
+      });
+      const blob = buildMultiRoundCallSheetPdfBlob(sections);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tempo-call-sheets-all-rounds-${roomId}-${Date.now()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      window.alert(e instanceof Error ? e.message : 'Could not build combined call sheet PDF.');
+    } finally {
+      setPrintablePdfLoading(false);
+    }
+  }, [eventRounds, freeSpaceEnabled, roomId]);
+
   const startGame = async () => {
     if (!socket) {
       console.error('Socket not connected');
@@ -7333,6 +7368,7 @@ const HostView: React.FC = () => {
       snapshotMeetsSave={(r) => eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled)}
       onPrintPdf={(idx) => handleDownloadRoundPrintablePdf(eventRounds[idx])}
       onPrintAllSaved={handlePrintAllSavedRoundsPdf}
+      onPrintAllCallSheets={handlePrintAllSavedCallSheetsPdf}
       savedRoundCount={eventRounds.filter((r) =>
         eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled),
       ).length}

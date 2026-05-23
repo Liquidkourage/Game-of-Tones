@@ -19,6 +19,7 @@ import {
   SkipForward,
   Trash2,
   Music,
+  ListMusic,
 } from 'lucide-react';
 import {
   bingoColumnLetterForPlaylistName,
@@ -107,6 +108,8 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   onPrintPdf?: (roundIndex: number) => void;
   /** Merged PDF for every round that has a saved snapshot. */
   onPrintAllSaved?: () => void;
+  /** Merged host call-sheet PDF (one list per saved round). */
+  onPrintAllCallSheets?: () => void;
   savedRoundCount?: number;
   onCallSheet?: (roundIndex: number) => void;
   onOpenComposite?: (roundIndex: number) => void;
@@ -161,6 +164,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   snapshotMeetsSave,
   onPrintPdf,
   onPrintAllSaved,
+  onPrintAllCallSheets,
   savedRoundCount = 0,
   onCallSheet,
   onOpenComposite,
@@ -654,12 +658,28 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
             title={
               savedRoundCount < 1
                 ? 'Save at least one round to export'
-                : 'One PDF with printable cards for each saved round'
+                : 'One PDF with printable bingo cards for each saved round'
             }
             onClick={onPrintAllSaved}
           >
             <Printer className="w-3 h-3" aria-hidden />
             {printablePdfLoading ? 'Printing…' : `Print all saved (${savedRoundCount})`}
+          </button>
+        ) : null}
+        {onPrintAllCallSheets ? (
+          <button
+            type="button"
+            className="round-planner-btn round-planner-btn--secondary"
+            disabled={printablePdfLoading || savedRoundCount < 1}
+            title={
+              savedRoundCount < 1
+                ? 'Save at least one round to export'
+                : 'One PDF with a host call list for each saved round'
+            }
+            onClick={onPrintAllCallSheets}
+          >
+            <ListMusic className="w-3 h-3" aria-hidden />
+            {printablePdfLoading ? 'Printing…' : `Call sheets all saved (${savedRoundCount})`}
           </button>
         ) : null}
       </div>
