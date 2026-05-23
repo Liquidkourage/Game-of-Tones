@@ -86,7 +86,13 @@ import RoundPlanner from './RoundPlanner';
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
 import { youtubeTrackDisplayFields, youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
-import { buildPrintableBingoPdfBlob } from '../utils/printableBingoPdf';
+import {
+  buildMultiRoundPrintablePdfBlob,
+  buildPrintableBingoPdfBlob,
+  type PrintableCard,
+  type PrintablePdfSection,
+} from '../utils/printableBingoPdf';
+import { roundPatternLabelForPrint, roundPrintablePdfSubtitle } from '../utils/roundPrintLabels';
 import { buildRoundCallSheetPdfBlob } from '../utils/printRoundCallSheetPdf';
 import {
   normalizePublicDisplayTitleRevealMode,
@@ -3654,104 +3660,249 @@ const HostView: React.FC = () => {
     return p;
   };
 
-  const requestPrintablePdfDownload = useCallback(
-    (opts: {
-      pdfSubtitle: string;
-      fileSlug: string;
-      freeSpace?: boolean;
-    }) => {
-      if (!socket || !roomId) return;
-
-      void (async () => {
-        let finalizedOk = mixFinalized;
-        if (!finalizedOk) {
-          finalizedOk = await finalizeMix();
-        }
-        if (!finalizedOk) return;
-
-        const count = Math.min(200, Math.max(1, Math.floor(Number(printableCardCount)) || 30));
-        setPrintablePdfLoading(true);
-
+  const fetchPrintableCardsFromServer = useCallback(
+    (
+      count: number,
+      emitBody: Record<string, unknown>,
+    ): Promise<{ cards: PrintableCard[]; freeSpace: boolean; logoUrl?: string }> => {
+      if (!socket || !roomId) {
+        return Promise.reject(new Error('Connect to the room first.'));
+      }
+      return new Promise((resolve, reject) => {
         let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
         const cleanup = () => {
           socket.off('printable-cards-result', onOk);
           socket.off('printable-cards-error', onErr);
           if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
         };
-
         const onOk = (payload: any) => {
-          void (async () => {
-            cleanup();
-            try {
-              const cards = Array.isArray(payload?.cards) ? payload.cards : [];
-              if (cards.length === 0) {
-                window.alert('No cards returned from server.');
-                return;
-              }
-              const logoUrl =
-                payload?.venueBranding && typeof payload.venueBranding.logoUrl === 'string'
-                  ? payload.venueBranding.logoUrl
-                  : undefined;
-              const blob = await buildPrintableBingoPdfBlob(cards, {
-                freeSpace: !!payload?.freeSpace,
-                subtitle: opts.pdfSubtitle,
-                logoUrl,
-              });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              const slug = opts.fileSlug.replace(/[^\w\-]+/g, '_').slice(0, 72);
-              a.download = `tempo-bingo-${slug}-${roomId}-${Date.now()}.pdf`;
-              document.body.appendChild(a);
-              a.click();
-              a.remove();
-              URL.revokeObjectURL(url);
-            } catch (e) {
-              console.error(e);
-              window.alert('Could not build PDF. Try fewer cards or reload and finalize again.');
-            } finally {
-              setPrintablePdfLoading(false);
-            }
-          })();
+          cleanup();
+          const cards = Array.isArray(payload?.cards) ? payload.cards : [];
+          if (cards.length === 0) {
+            reject(new Error('No cards returned from server.'));
+            return;
+          }
+          const logoUrl =
+            payload?.venueBranding && typeof payload.venueBranding.logoUrl === 'string'
+              ? payload.venueBranding.logoUrl
+              : undefined;
+          resolve({
+            cards,
+            freeSpace: !!payload?.freeSpace,
+            logoUrl,
+          });
         };
-
         const onErr = (payload: any) => {
           cleanup();
-          window.alert(typeof payload?.message === 'string' ? payload.message : 'Could not generate printable cards.');
-          setPrintablePdfLoading(false);
+          reject(
+            new Error(
+              typeof payload?.message === 'string'
+                ? payload.message
+                : 'Could not generate printable cards.',
+            ),
+          );
         };
-
         timeoutId = globalThis.setTimeout(() => {
           cleanup();
-          setPrintablePdfLoading(false);
-          window.alert('Timed out waiting for printable cards. Try again.');
+          reject(new Error('Timed out waiting for printable cards. Try again.'));
         }, 90000);
-
         socket.on('printable-cards-result', onOk);
         socket.on('printable-cards-error', onErr);
-        socket.emit('request-printable-cards', {
-          roomId,
-          count,
-          ...(opts.freeSpace !== undefined ? { freeSpace: opts.freeSpace } : {}),
-        });
-      })();
+        socket.emit('request-printable-cards', { roomId, count, ...emitBody });
+      });
     },
-    [socket, roomId, mixFinalized, printableCardCount, freeSpaceEnabled, finalizeMix],
+    [socket, roomId],
   );
 
-  /** Same server path + RNG rules as Round builder “Print PDF” — subtitle/filename only differ for organizers. */
+  const requestPrintablePdfDownload = useCallback(
+    (opts: {
+      pdfSubtitle: string;
+      fileSlug: string;
+      freeSpace?: boolean;
+      roundName?: string;
+      patternLabel?: string;
+      roomLabel?: string;
+      roundExport?: {
+        songs: Song[];
+        mixGeometry: SavedMixGeometry;
+        playlistIds: string[];
+        freeSpace?: boolean;
+      };
+    }) => {
+      if (!socket || !roomId) return;
+
+      void (async () => {
+        const useSnapshot = !!(opts.roundExport?.songs?.length);
+        if (!useSnapshot) {
+          let finalizedOk = mixFinalized;
+          if (!finalizedOk) finalizedOk = await finalizeMix();
+          if (!finalizedOk) return;
+        }
+
+        const count = Math.min(200, Math.max(1, Math.floor(Number(printableCardCount)) || 30));
+        setPrintablePdfLoading(true);
+        try {
+          const { cards, freeSpace, logoUrl } = await fetchPrintableCardsFromServer(count, {
+            ...(opts.freeSpace !== undefined ? { freeSpace: opts.freeSpace } : {}),
+            ...(useSnapshot && opts.roundExport
+              ? {
+                  roundExport: {
+                    songs: opts.roundExport.songs.map(cloneSongForSnapshot),
+                    mixGeometry: opts.roundExport.mixGeometry,
+                    playlistIds: opts.roundExport.playlistIds,
+                    freeSpace: opts.freeSpace,
+                  },
+                }
+              : {}),
+          });
+          const blob = await buildPrintableBingoPdfBlob(cards, {
+            freeSpace,
+            subtitle: opts.pdfSubtitle,
+            roundName: opts.roundName,
+            patternLabel: opts.patternLabel,
+            roomLabel: opts.roomLabel ?? `Room ${roomId}`,
+            logoUrl,
+          });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          const slug = opts.fileSlug.replace(/[^\w\-]+/g, '_').slice(0, 72);
+          a.download = `tempo-bingo-${slug}-${roomId}-${Date.now()}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          console.error(e);
+          window.alert(e instanceof Error ? e.message : 'Could not build printable PDF.');
+        } finally {
+          setPrintablePdfLoading(false);
+        }
+      })();
+    },
+    [
+      socket,
+      roomId,
+      mixFinalized,
+      printableCardCount,
+      finalizeMix,
+      fetchPrintableCardsFromServer,
+    ],
+  );
+
+  const roundPrintMetaFor = useCallback(
+    (round: EventRound) => ({
+      roundName: round.name,
+      roomLabel: `Room ${roomId}`,
+      pattern: round.bingoPattern ?? 'line',
+      linesRequired: round.linesRequired,
+      patternComposite: round.patternComposite,
+    }),
+    [roomId],
+  );
+
+  /** Printable PDF from saved round snapshot (pre-show) — not the live room pool. */
   const handleDownloadRoundPrintablePdf = useCallback(
     (round: EventRound) => {
       const ids = round.playlistIds || [];
       if (ids.length === 0) return;
+      if (!eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled)) {
+        window.alert(
+          'Save this round first. Print PDF uses the frozen snapshot from Save round (same pool as the call sheet), not the current live mix.',
+        );
+        return;
+      }
+      const snap = round.savedMixSnapshot!;
+      const fs = round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : freeSpaceEnabled;
+      const meta = roundPrintMetaFor(round);
       const safeSlug = (round.name || 'round').replace(/[^\w\-]+/g, '_').slice(0, 48);
       requestPrintablePdfDownload({
-        pdfSubtitle: `Room ${roomId} · ${round.name}`,
+        pdfSubtitle: roundPrintablePdfSubtitle(meta),
         fileSlug: safeSlug,
+        freeSpace: fs,
+        roundName: round.name,
+        patternLabel: roundPatternLabelForPrint(meta),
+        roomLabel: meta.roomLabel,
+        roundExport: {
+          songs: snap.songs,
+          mixGeometry: snap.mixGeometry,
+          playlistIds: ids,
+          freeSpace: fs,
+        },
       });
     },
-    [requestPrintablePdfDownload, roomId],
+    [requestPrintablePdfDownload, freeSpaceEnabled, roundPrintMetaFor],
   );
+
+  const handlePrintAllSavedRoundsPdf = useCallback(() => {
+    if (!socket || !roomId) {
+      window.alert('Connect to the room first.');
+      return;
+    }
+    const saved = eventRounds.filter((r) =>
+      eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled),
+    );
+    if (saved.length === 0) {
+      window.alert('No saved rounds yet. Use Save round on each bucket you want in the export.');
+      return;
+    }
+
+    void (async () => {
+      const count = Math.min(200, Math.max(1, Math.floor(Number(printableCardCount)) || 30));
+      setPrintablePdfLoading(true);
+      try {
+        const sections: PrintablePdfSection[] = [];
+        for (const round of saved) {
+          const snap = round.savedMixSnapshot!;
+          const fs =
+            round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : freeSpaceEnabled;
+          const meta = roundPrintMetaFor(round);
+          const { cards, freeSpace, logoUrl } = await fetchPrintableCardsFromServer(count, {
+            freeSpace: fs,
+            roundExport: {
+              songs: snap.songs.map(cloneSongForSnapshot),
+              mixGeometry: snap.mixGeometry,
+              playlistIds: round.playlistIds || [],
+              freeSpace: fs,
+            },
+          });
+          sections.push({
+            cards,
+            opts: {
+              freeSpace,
+              subtitle: roundPrintablePdfSubtitle(meta),
+              roundName: round.name,
+              patternLabel: roundPatternLabelForPrint(meta),
+              roomLabel: meta.roomLabel,
+              logoUrl,
+            },
+          });
+        }
+        const blob = await buildMultiRoundPrintablePdfBlob(sections);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tempo-bingo-all-rounds-${roomId}-${Date.now()}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error(e);
+        window.alert(e instanceof Error ? e.message : 'Could not build combined printable PDF.');
+      } finally {
+        setPrintablePdfLoading(false);
+      }
+    })();
+  }, [
+    socket,
+    roomId,
+    eventRounds,
+    freeSpaceEnabled,
+    printableCardCount,
+    fetchPrintableCardsFromServer,
+    roundPrintMetaFor,
+  ]);
 
   const handleDownloadRoundCallSheetPdf = useCallback(
     (round: EventRound) => {
@@ -7127,6 +7278,10 @@ const HostView: React.FC = () => {
       saveRoundBusy={saveRoundBusy}
       snapshotMeetsSave={(r) => eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled)}
       onPrintPdf={(idx) => handleDownloadRoundPrintablePdf(eventRounds[idx])}
+      onPrintAllSaved={handlePrintAllSavedRoundsPdf}
+      savedRoundCount={eventRounds.filter((r) =>
+        eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled),
+      ).length}
       onCallSheet={(idx) => handleDownloadRoundCallSheetPdf(eventRounds[idx])}
       onOpenComposite={openCompositeForRound}
       onNewCustomPattern={handleNewCustomPattern}

@@ -49,9 +49,18 @@ const GRID_LOGO_OPACITY = 0.1;
 
 export type PrintablePdfOpts = {
   freeSpace?: boolean;
+  /** Legacy single-line subtitle; also shown when roundName omitted. */
   subtitle?: string;
+  roundName?: string;
+  patternLabel?: string;
+  roomLabel?: string;
   /** Venue logo URL (absolute or path) — centered on the 5×5 grid at ~10% opacity, fit inside grid bounds. */
   logoUrl?: string | null;
+};
+
+export type PrintablePdfSection = {
+  cards: PrintableCard[];
+  opts: PrintablePdfOpts;
 };
 
 type FitResult = {
@@ -139,7 +148,6 @@ function drawSongCell(
   const fit = fitSongTextToCell(doc, title, subtitle, textW, maxH);
   const blockTop = y + (cell - fit.totalH) / 2;
 
-  /** Approximate first-line baseline from block top (Helvetica cap height). */
   let cursorY = blockTop + fit.titlePt * 0.72;
 
   doc.setTextColor(INK.r, INK.g, INK.b);
@@ -162,9 +170,6 @@ function drawSongCell(
   }
 }
 
-/**
- * Load image and rasterize at fixed opacity; size fits maxW×maxH (contain). Returns PNG data URL or null.
- */
 async function loadLogoPngDataUrlForGrid(
   url: string,
   maxW: number,
@@ -221,100 +226,191 @@ async function loadLogoPngDataUrlForGrid(
 
 const BINGO_LETTERS = ['B', 'I', 'N', 'G', 'O'] as const;
 
+type PageLayout = {
+  pageW: number;
+  pageH: number;
+  margin: number;
+  marginBottom: number;
+  gridTop: number;
+  cell: number;
+  gridW: number;
+  gridX: number;
+  bingoBaseline: number;
+};
+
+function computePageLayout(doc: jsPDF, headerLineCount: number): PageLayout {
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 40;
+  const marginBottom = 40;
+  const titleFontPt = 17;
+  const metaFontPt = 10;
+  const titleBaseline = margin + 20;
+  const metaBlockH = Math.max(0, headerLineCount - 1) * (metaFontPt * 1.35);
+  const bingoFontPt = 13;
+  const bingoBaseline = titleBaseline + metaBlockH + 28;
+  const gridTop = bingoBaseline + 16;
+  const availW = pageW - margin * 2;
+  const availH = pageH - gridTop - marginBottom;
+  const cell = Math.min(availW / 5, availH / 5);
+  const gridW = cell * 5;
+  const gridX = margin + (availW - gridW) / 2;
+  return { pageW, pageH, margin, marginBottom, gridTop, cell, gridW, gridX, bingoBaseline };
+}
+
+function headerMetaLines(opts: PrintablePdfOpts): string[] {
+  const lines: string[] = [];
+  if (opts.roundName?.trim()) lines.push(opts.roundName.trim());
+  else if (opts.subtitle?.trim()) lines.push(opts.subtitle.trim());
+  if (opts.patternLabel?.trim()) lines.push(`Pattern: ${opts.patternLabel.trim()}`);
+  if (opts.roomLabel?.trim() && !opts.subtitle?.includes(opts.roomLabel.trim())) {
+    lines.push(opts.roomLabel.trim());
+  }
+  return lines;
+}
+
+function drawPageHeader(doc: jsPDF, layout: PageLayout, opts: PrintablePdfOpts): void {
+  const { pageW, bingoBaseline } = layout;
+  const margin = layout.margin;
+  const titleFontPt = 17;
+  const metaFontPt = 10;
+  const titleBaseline = margin + 20;
+
+  doc.setTextColor(INK.r, INK.g, INK.b);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(titleFontPt);
+  doc.text('TEMPO — Music Bingo', pageW / 2, titleBaseline, { align: 'center' });
+
+  const meta = headerMetaLines(opts);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(metaFontPt);
+  doc.setTextColor(INK_MUTED.r, INK_MUTED.g, INK_MUTED.b);
+  let y = titleBaseline + 18;
+  for (const line of meta) {
+    doc.text(line, pageW / 2, y, { align: 'center', maxWidth: pageW - margin * 2 });
+    y += metaFontPt * 1.35;
+  }
+
+  doc.setTextColor(INK.r, INK.g, INK.b);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  const { gridX, cell } = layout;
+  for (let c = 0; c < 5; c++) {
+    const cx = gridX + c * cell + cell / 2;
+    doc.text(BINGO_LETTERS[c], cx, bingoBaseline, { align: 'center' });
+  }
+}
+
+function drawBingoCardPage(
+  doc: jsPDF,
+  card: PrintableCard,
+  layout: PageLayout,
+  logoForGrid: { dataUrl: string; drawW: number; drawH: number } | null,
+  opts: PrintablePdfOpts,
+): void {
+  const { pageW, pageH, gridTop, cell, gridW, gridX } = layout;
+  const grid = gridFromSquares(card.squares || []);
+  const drawLogoUnderCells = logoForGrid != null;
+
+  doc.setFillColor(PAGE.r, PAGE.g, PAGE.b);
+  doc.rect(0, 0, pageW, pageH, 'F');
+  drawPageHeader(doc, layout, opts);
+
+  if (drawLogoUnderCells && logoForGrid) {
+    const ix = gridX + (gridW - logoForGrid.drawW) / 2;
+    const iy = gridTop + (gridW - logoForGrid.drawH) / 2;
+    try {
+      doc.addImage(logoForGrid.dataUrl, 'PNG', ix, iy, logoForGrid.drawW, logoForGrid.drawH);
+    } catch {
+      /* ignore broken image */
+    }
+  }
+
+  doc.setDrawColor(BORDER.r, BORDER.g, BORDER.b);
+  doc.setLineWidth(0.4);
+
+  for (let r = 0; r < 5; r++) {
+    for (let c = 0; c < 5; c++) {
+      const x = gridX + c * cell;
+      const y = gridTop + r * cell;
+      const sq = grid[r][c];
+      const { title, subtitle } = cellLabel(sq);
+
+      if (sq?.isFreeSpace) {
+        if (!drawLogoUnderCells) {
+          doc.setFillColor(PAGE.r, PAGE.g, PAGE.b);
+          doc.rect(x, y, cell, cell, 'FD');
+        }
+        doc.setTextColor(INK.r, INK.g, INK.b);
+        doc.setFont('helvetica', 'bold');
+        const freePt = Math.min(16, cell * 0.15);
+        doc.setFontSize(freePt);
+        doc.text('FREE', x + cell / 2, y + cell / 2 + freePt * 0.28, { align: 'center' });
+      } else {
+        if (!drawLogoUnderCells) {
+          doc.setFillColor(PAGE.r, PAGE.g, PAGE.b);
+          doc.rect(x, y, cell, cell, 'FD');
+        }
+        drawSongCell(doc, x, y, cell, title, subtitle);
+      }
+
+      doc.setDrawColor(BORDER.r, BORDER.g, BORDER.b);
+      doc.rect(x, y, cell, cell, 'S');
+    }
+  }
+}
+
+async function prepareLogoForGrid(
+  opts: PrintablePdfOpts,
+  gridW: number,
+): Promise<{ dataUrl: string; drawW: number; drawH: number } | null> {
+  const logoUrl = opts.logoUrl != null && String(opts.logoUrl).trim() ? String(opts.logoUrl).trim() : null;
+  if (!logoUrl) return null;
+  return loadLogoPngDataUrlForGrid(logoUrl, gridW, gridW);
+}
+
 /**
  * Multi-page US Letter PDF — one music bingo card per page, print-ready (light / ink-conscious).
- * Outside the grid: centered title only; column headers B–I–N–G–O above the board.
  */
 export async function buildPrintableBingoPdfBlob(
   cards: PrintableCard[],
   opts: PrintablePdfOpts = {},
 ): Promise<Blob> {
   const doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
-  const pageW = doc.internal.pageSize.getWidth();
-  const pageH = doc.internal.pageSize.getHeight();
-  const margin = 40;
-  const marginBottom = 40;
-
-  const titleFontPt = 17;
-  const titleBaseline = margin + 22;
-  const bingoFontPt = 13;
-  const bingoBaseline = titleBaseline + 28;
-  const gridTop = bingoBaseline + 16;
-
-  const availW = pageW - margin * 2;
-  const availH = pageH - gridTop - marginBottom;
-  const cell = Math.min(availW / 5, availH / 5);
-  const gridW = cell * 5;
-  const gridX = margin + (availW - gridW) / 2;
-
-  const logoUrl = opts.logoUrl != null && String(opts.logoUrl).trim() ? String(opts.logoUrl).trim() : null;
-  let logoForGrid: { dataUrl: string; drawW: number; drawH: number } | null = null;
-  if (logoUrl && cards.length > 0) {
-    logoForGrid = await loadLogoPngDataUrlForGrid(logoUrl, gridW, gridW);
-  }
-  const drawLogoUnderCells = logoForGrid != null;
+  const headerLines = 1 + headerMetaLines(opts).length;
+  const layout = computePageLayout(doc, headerLines);
+  const logoForGrid = await prepareLogoForGrid(opts, layout.gridW);
 
   for (let i = 0; i < cards.length; i++) {
     if (i > 0) doc.addPage();
-    const card = cards[i];
-    const grid = gridFromSquares(card.squares || []);
+    drawBingoCardPage(doc, cards[i], layout, logoForGrid, opts);
+  }
 
-    doc.setFillColor(PAGE.r, PAGE.g, PAGE.b);
-    doc.rect(0, 0, pageW, pageH, 'F');
+  return doc.output('blob');
+}
 
-    doc.setTextColor(INK.r, INK.g, INK.b);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(titleFontPt);
-    doc.text('TEMPO — Music Bingo', pageW / 2, titleBaseline, { align: 'center' });
+/** Pre-show export: one PDF with all saved rounds (round header on each card page). */
+export async function buildMultiRoundPrintablePdfBlob(
+  sections: PrintablePdfSection[],
+): Promise<Blob> {
+  const doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
+  let pageStarted = false;
 
-    doc.setFontSize(bingoFontPt);
-    for (let c = 0; c < 5; c++) {
-      const cx = gridX + c * cell + cell / 2;
-      doc.text(BINGO_LETTERS[c], cx, bingoBaseline, { align: 'center' });
+  for (const section of sections) {
+    if (!section.cards.length) continue;
+    const headerLines = 1 + headerMetaLines(section.opts).length;
+    const layout = computePageLayout(doc, headerLines);
+    const logoForGrid = await prepareLogoForGrid(section.opts, layout.gridW);
+
+    for (const card of section.cards) {
+      if (pageStarted) doc.addPage();
+      pageStarted = true;
+      drawBingoCardPage(doc, card, layout, logoForGrid, section.opts);
     }
+  }
 
-    if (drawLogoUnderCells && logoForGrid) {
-      const ix = gridX + (gridW - logoForGrid.drawW) / 2;
-      const iy = gridTop + (gridW - logoForGrid.drawH) / 2;
-      try {
-        doc.addImage(logoForGrid.dataUrl, 'PNG', ix, iy, logoForGrid.drawW, logoForGrid.drawH);
-      } catch {
-        /* ignore broken image */
-      }
-    }
-
-    doc.setDrawColor(BORDER.r, BORDER.g, BORDER.b);
-    doc.setLineWidth(0.4);
-
-    for (let r = 0; r < 5; r++) {
-      for (let c = 0; c < 5; c++) {
-        const x = gridX + c * cell;
-        const y = gridTop + r * cell;
-        const sq = grid[r][c];
-        const { title, subtitle } = cellLabel(sq);
-
-        if (sq?.isFreeSpace) {
-          if (!drawLogoUnderCells) {
-            doc.setFillColor(PAGE.r, PAGE.g, PAGE.b);
-            doc.rect(x, y, cell, cell, 'FD');
-          }
-          doc.setTextColor(INK.r, INK.g, INK.b);
-          doc.setFont('helvetica', 'bold');
-          const freePt = Math.min(16, cell * 0.15);
-          doc.setFontSize(freePt);
-          doc.text('FREE', x + cell / 2, y + cell / 2 + freePt * 0.28, { align: 'center' });
-        } else {
-          if (!drawLogoUnderCells) {
-            doc.setFillColor(PAGE.r, PAGE.g, PAGE.b);
-            doc.rect(x, y, cell, cell, 'FD');
-          }
-          drawSongCell(doc, x, y, cell, title, subtitle);
-        }
-
-        doc.setDrawColor(BORDER.r, BORDER.g, BORDER.b);
-        doc.rect(x, y, cell, cell, 'S');
-      }
-    }
+  if (!pageStarted) {
+    throw new Error('No printable cards to export.');
   }
 
   return doc.output('blob');

@@ -307,7 +307,8 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
             <button
               type="button"
               className="round-bucket-settings__action"
-              disabled={printablePdfLoading}
+              disabled={printablePdfLoading || !callSheetReady}
+              title={!callSheetReady ? 'Save round first' : undefined}
               onClick={onPrintPdf}
             >
               <Printer className="w-3 h-3" aria-hidden />

@@ -14,6 +14,7 @@ import {
   GripVertical,
   Play,
   Plus,
+  Printer,
   RotateCcw,
   SkipForward,
   Trash2,
@@ -104,6 +105,9 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   saveRoundBusy?: boolean;
   snapshotMeetsSave: (round: TRound) => boolean;
   onPrintPdf?: (roundIndex: number) => void;
+  /** Merged PDF for every round that has a saved snapshot. */
+  onPrintAllSaved?: () => void;
+  savedRoundCount?: number;
   onCallSheet?: (roundIndex: number) => void;
   onOpenComposite?: (roundIndex: number) => void;
   onNewCustomPattern?: (roundIndex: number) => void;
@@ -152,6 +156,8 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   saveRoundBusy,
   snapshotMeetsSave,
   onPrintPdf,
+  onPrintAllSaved,
+  savedRoundCount = 0,
   onCallSheet,
   onOpenComposite,
   onNewCustomPattern,
@@ -591,17 +597,35 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
       ) : null}
 
       <div className="round-planner__main">
-      <label className="round-planner__cards-pdf">
-        Cards per PDF
-        <input
-          type="number"
-          min={1}
-          max={200}
-          value={printableCardCount}
-          disabled={printablePdfLoading}
-          onChange={(e) => onPrintableCardCountChange(Number(e.target.value))}
-        />
-      </label>
+      <div className="round-planner__cards-pdf-row">
+        <label className="round-planner__cards-pdf">
+          Cards per PDF
+          <input
+            type="number"
+            min={1}
+            max={200}
+            value={printableCardCount}
+            disabled={printablePdfLoading}
+            onChange={(e) => onPrintableCardCountChange(Number(e.target.value))}
+          />
+        </label>
+        {onPrintAllSaved ? (
+          <button
+            type="button"
+            className="round-planner-btn round-planner-btn--secondary"
+            disabled={printablePdfLoading || savedRoundCount < 1}
+            title={
+              savedRoundCount < 1
+                ? 'Save at least one round to export'
+                : 'One PDF with printable cards for each saved round'
+            }
+            onClick={onPrintAllSaved}
+          >
+            <Printer className="w-3 h-3" aria-hidden />
+            {printablePdfLoading ? 'Printing…' : `Print all saved (${savedRoundCount})`}
+          </button>
+        ) : null}
+      </div>
 
       <div
         id="round-planner-buckets"
