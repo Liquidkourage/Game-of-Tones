@@ -1806,7 +1806,8 @@ const PublicDisplay: React.FC = () => {
               console.log(`🔄 Reconnecting: Restoring baselines for ${Object.keys(storedBaselines).length} songs`);
               songBaselineRef.current = storedBaselines;
             }
-          } else {
+          } else if (playedOrderRef.current.length === 0) {
+            // New game / first pool only — never wipe play order that room-state or song-playing already applied.
             resetPlayedTrackingRefs();
             revealSequenceRef.current = [];
             songBaselineRef.current = {};
@@ -1814,8 +1815,13 @@ const PublicDisplay: React.FC = () => {
               localStorage.removeItem(`display_revealed_letters_${roomId}`);
               localStorage.removeItem(`display_baselines_${roomId}`);
             } catch {}
+          } else {
+            console.log(
+              `🔄 fiveby15-pool: keeping ${playedOrderRef.current.length} played song(s) in call-list order`,
+            );
           }
           setCarouselIndex(0);
+          setPlayedOrderRevision((n) => n + 1);
           // Do not seed by flattened pool; rely solely on actual play events
           // Reconcile any pending placements now that columns are known
           try {
@@ -2712,6 +2718,19 @@ const PublicDisplay: React.FC = () => {
     };
   }, [columnCallListLayout, layoutFiveColumns, playedOrderRevision, oneBy75Ids]);
 
+  // Recover play order if stats show songs but call-list refs were cleared (e.g. late fiveby15-pool).
+  useEffect(() => {
+    if (!socket || !roomId) return;
+    if (totalPlayedCount < 1 || playedOrderForDisplay.length > 0) return;
+    const t = window.setTimeout(() => {
+      if (playedOrderRef.current.length === 0) {
+        console.log('🔄 Display: songs played but call list empty — requesting sync-state');
+        socket.emit('sync-state', { roomId });
+      }
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [socket, roomId, totalPlayedCount, playedOrderForDisplay.length, playedOrderRevision]);
+
   // Global smooth phase driver (keeps columns aligned)
   useEffect(() => {
     const secondsPerRow = 6; // 1 row every 6s
@@ -3427,7 +3446,7 @@ const PublicDisplay: React.FC = () => {
     );
     const visibleInCols = cols.reduce((n, c) => n + c.length, 0);
     if (playedOrderForDisplay.length > 0 && visibleInCols === 0) {
-      return renderSimplePlayedCallList();
+      return renderSimplePlayedCallList({ withPlaylistHeaders: columnCallListLayout });
     }
     if (debugMode) {
       try {
@@ -3672,13 +3691,18 @@ const PublicDisplay: React.FC = () => {
     });
 
   /** Guaranteed-visible play-order columns when pool layout cannot show played ids. */
-  const renderSimplePlayedCallList = () => {
+  const renderSimplePlayedCallList = (opts?: { withPlaylistHeaders?: boolean }) => {
     const idsToUse = oneBy75Ids || oneBy75IdsRef.current || playedOrderForDisplay;
     const isFullCardPattern = pattern === 'full_card' || pattern === 'blackout';
     const groups = playOrderColumnSlices(playedOrderForDisplay);
     const colCount = Math.min(visibleCols, Math.max(1, groups.length));
+    const showFiveBy15Headers =
+      opts?.withPlaylistHeaders === true &&
+      columnCallListLayout &&
+      playlistNames.filter((n) => String(n || '').trim()).length > 0;
     return (
       <div className="call-list-content call-list-content--played-fallback">
+        {showFiveBy15Headers ? renderPlaylistNamesHeaderRow('5x15') : null}
         <div
           ref={carouselViewportRef}
           className="call-carousel-viewport call-carousel-viewport--static-grid"
@@ -3701,7 +3725,9 @@ const PublicDisplay: React.FC = () => {
     // Use state if available, otherwise fallback to ref (for fallback mode)
     const idsToUse = oneBy75Ids || oneBy75IdsRef.current;
     if (!poolHasTracks(idsToUse)) {
-      if (playedOrderForDisplay.length > 0) return renderSimplePlayedCallList();
+      if (playedOrderForDisplay.length > 0) {
+        return renderSimplePlayedCallList({ withPlaylistHeaders: columnCallListLayout });
+      }
       return null;
     }
     const isFullCardPattern = pattern === 'full_card' || pattern === 'blackout';
@@ -5360,13 +5386,13 @@ const PublicDisplay: React.FC = () => {
                 const anyPlayedInFiveBy15Pool =
                   poolSet != null && played.some((id) => poolSet.has(id));
 
-                // 5×15: if played ids are not in the column pool (stale flat 1×75, YT+Spotify merge, etc.), use play-order cards.
-                if (
-                  played.length > 0 &&
-                  columnCallListLayout &&
-                  (!hasPool || !layoutFiveColumns || !anyPlayedInFiveBy15Pool)
-                ) {
-                  return renderSimplePlayedCallList();
+                // 5×15 with songs played: prefer reliable play-order cards + B–O headers (column pool often mismatches).
+                if (played.length > 0 && columnCallListLayout) {
+                  if (hasPool && layoutFiveColumns && anyPlayedInFiveBy15Pool) {
+                    const columnView = renderOneBy75Columns();
+                    if (columnView != null) return columnView;
+                  }
+                  return renderSimplePlayedCallList({ withPlaylistHeaders: true });
                 }
                 if (hasPool) {
                   if (usePlayOrderCallLayout) {
@@ -5379,6 +5405,20 @@ const PublicDisplay: React.FC = () => {
 
                 if (playedOrderForDisplay.length > 0) {
                   return renderSimplePlayedCallList();
+                }
+
+                // Pool ready, no songs yet — still show playlist headers for Show playlists / pre-game.
+                if (columnCallListLayout && hasPool && layoutFiveColumns) {
+                  return (
+                    <div className="call-list-content">
+                      {renderPlaylistNamesHeaderRow('5x15')}
+                      <div className="call-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, flex: 1, minHeight: 0 }}>
+                        {[0, 1, 2, 3, 4].map((ci) => (
+                          <div key={ci} className="call-col" style={{ minHeight: 0 }} aria-hidden />
+                        ))}
+                      </div>
+                    </div>
+                  );
                 }
                 
                 // FALLBACK: Construct 1x75 schema from played songs
