@@ -1,0 +1,413 @@
+/* Host glass theme — R4 refined: violet–mint glass + sidebar shell */
+
+.host-glass-theme.host-view {
+  background: transparent;
+}
+
+.host-glass-theme {
+  --host-glass-mint: #00ff88;
+  --host-glass-mint-soft: rgba(0, 255, 136, 0.22);
+  --host-glass-surface: rgba(255, 255, 255, 0.09);
+  --host-glass-surface-strong: rgba(255, 255, 255, 0.12);
+  --host-glass-border: rgba(255, 255, 255, 0.14);
+  --host-glass-border-mint: rgba(0, 255, 163, 0.35);
+  --host-glass-blur: blur(22px);
+  --host-glass-radius: 20px;
+  --host-glass-radius-sm: 14px;
+  position: relative;
+  isolation: isolate;
+  min-height: 100%;
+}
+
+.host-glass-theme .host-view__bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 85% 55% at 12% 8%, rgba(100, 60, 200, 0.42), transparent 55%),
+    radial-gradient(ellipse 70% 45% at 92% 88%, rgba(45, 130, 200, 0.22), transparent 50%),
+    linear-gradient(155deg, #1c1238 0%, #141a2e 42%, #0a0e16 100%);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .host-glass-theme .host-glass-panel,
+  .host-glass-theme .host-header,
+  .host-glass-theme .host-sidebar {
+    background: rgba(22, 26, 40, 0.94);
+  }
+}
+
+.host-glass-theme .host-container {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  padding-top: 0.5rem;
+}
+
+.host-glass-theme .host-glass-panel {
+  background: var(--host-glass-surface);
+  backdrop-filter: var(--host-glass-blur);
+  -webkit-backdrop-filter: var(--host-glass-blur);
+  border: 1px solid var(--host-glass-border);
+  border-radius: var(--host-glass-radius);
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* Shell + sidebar */
+.host-glass-theme .host-shell {
+  display: flex;
+  gap: 14px;
+  min-height: 0;
+  flex: 1;
+  padding: 0 clamp(0.75rem, 2vw, 1.25rem) 1rem;
+  align-items: flex-start;
+}
+
+.host-glass-theme .host-sidebar {
+  width: 76px;
+  flex-shrink: 0;
+  padding: 10px 8px;
+  border-radius: var(--host-glass-radius);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: sticky;
+  top: 0.5rem;
+  align-self: flex-start;
+  z-index: 50;
+}
+
+.host-glass-theme .host-sidebar__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 58px;
+  padding: 8px 4px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.62rem;
+  font-weight: 600;
+  font-family: inherit;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.host-glass-theme .host-sidebar__btn svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+}
+
+.host-glass-theme .host-sidebar__btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.host-glass-theme .host-sidebar__btn--active {
+  background: rgba(0, 255, 136, 0.14);
+  border-color: var(--host-glass-border-mint);
+  color: var(--host-glass-mint);
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.12);
+}
+
+.host-glass-theme .host-shell__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Header */
+.host-glass-theme .host-header {
+  margin-bottom: 0;
+  padding: 14px 18px;
+  background: var(--host-glass-surface-strong);
+  backdrop-filter: var(--host-glass-blur);
+  -webkit-backdrop-filter: var(--host-glass-blur);
+  border: 1px solid var(--host-glass-border);
+  border-radius: var(--host-glass-radius);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+}
+
+.host-glass-theme .host-content {
+  padding: 0;
+}
+
+/* Dashboard grid (hero + round card) */
+.host-glass-theme .host-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.host-glass-theme .host-dashboard__top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.host-glass-theme .host-dashboard__hero {
+  min-width: 0;
+}
+
+.host-glass-theme .host-round-glass {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.host-glass-theme .host-round-glass__title {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.host-glass-theme .host-round-glass__name {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.25;
+}
+
+.host-glass-theme .host-round-glass__meta {
+  margin: 0;
+  font-size: 0.84rem;
+  color: rgba(255, 255, 255, 0.68);
+  line-height: 1.45;
+}
+
+.host-glass-theme .host-round-glass__meta strong {
+  color: var(--host-glass-mint);
+  font-weight: 700;
+}
+
+.host-glass-theme .host-round-glass__playlists {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.host-glass-theme .host-round-glass__pill {
+  font-size: 0.72rem;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.82);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.host-glass-theme .host-round-glass__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.host-glass-theme .host-round-glass__actions .btn-secondary {
+  width: 100%;
+  justify-content: center;
+}
+
+/* Live dock hero */
+.host-glass-theme .host-live-dock {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  margin: 0;
+  padding: 18px 20px 20px;
+  border-radius: var(--host-glass-radius);
+  border: 1px solid var(--host-glass-border-mint);
+  background: var(--host-glass-surface-strong);
+  backdrop-filter: var(--host-glass-blur);
+  -webkit-backdrop-filter: var(--host-glass-blur);
+  box-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.38),
+    0 0 48px rgba(0, 255, 136, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.host-glass-theme .host-live-dock::before {
+  content: '';
+  position: absolute;
+  top: -40%;
+  left: -10%;
+  width: 55%;
+  height: 120%;
+  background: radial-gradient(circle, rgba(120, 80, 220, 0.35) 0%, transparent 68%);
+  pointer-events: none;
+}
+
+.host-glass-theme .host-live-dock::after {
+  content: '';
+  position: absolute;
+  bottom: -30%;
+  right: -5%;
+  width: 45%;
+  height: 90%;
+  background: radial-gradient(circle, rgba(40, 160, 200, 0.2) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.host-glass-theme .host-live-dock > * {
+  position: relative;
+  z-index: 1;
+}
+
+.host-glass-theme .host-live-dock--pinned {
+  border-width: 1px;
+  border-color: var(--host-glass-border-mint);
+  background: var(--host-glass-surface-strong);
+}
+
+.host-glass-theme .host-live-dock__now-playing {
+  padding: 14px 16px;
+  border-radius: var(--host-glass-radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.host-glass-theme .host-live-dock__track-title {
+  font-size: 1.35rem;
+}
+
+/* Go live */
+.host-glass-theme .host-go-live--banner {
+  margin: 0;
+  padding: 20px 22px;
+  border-radius: var(--host-glass-radius);
+  border: 1px solid var(--host-glass-border-mint);
+  background: var(--host-glass-surface-strong);
+  backdrop-filter: var(--host-glass-blur);
+  -webkit-backdrop-filter: var(--host-glass-blur);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.host-glass-theme .host-go-live__start {
+  box-shadow: 0 0 28px rgba(0, 255, 136, 0.25);
+}
+
+/* Show actions — horizontal glass bar under hero on wide screens */
+.host-glass-theme .host-show-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--host-glass-radius-sm);
+  border: 1px solid var(--host-glass-border);
+  background: var(--host-glass-surface);
+  backdrop-filter: var(--host-glass-blur);
+  -webkit-backdrop-filter: var(--host-glass-blur);
+}
+
+/* Manager sections */
+.host-glass-theme .host-manager-section,
+.host-glass-theme .host-rounds-panel,
+.host-glass-theme .host-event-settings,
+.host-glass-theme .host-bingo-pool-strip,
+.host-glass-theme .host-game-settings-panel,
+.host-glass-theme .player-cards-section,
+.host-glass-theme .host-spotify-quarantine-banner {
+  background: var(--host-glass-surface) !important;
+  backdrop-filter: var(--host-glass-blur);
+  -webkit-backdrop-filter: var(--host-glass-blur);
+  border: 1px solid var(--host-glass-border) !important;
+  border-radius: var(--host-glass-radius-sm) !important;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22);
+}
+
+.host-glass-theme .host-event-settings__summary {
+  border-radius: var(--host-glass-radius-sm) var(--host-glass-radius-sm) 0 0;
+}
+
+.host-glass-theme .host-manager-grid--balanced.host-manager-grid--split {
+  gap: 14px;
+}
+
+/* Modals */
+.host-glass-theme .host-connection-modal-backdrop {
+  background: rgba(8, 10, 18, 0.78);
+  backdrop-filter: blur(8px);
+}
+
+.host-glass-theme .host-connection-modal {
+  background: linear-gradient(165deg, rgba(32, 28, 52, 0.92) 0%, rgba(14, 16, 26, 0.96) 100%);
+  backdrop-filter: var(--host-glass-blur);
+  -webkit-backdrop-filter: var(--host-glass-blur);
+  border: 1px solid var(--host-glass-border-mint);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+}
+
+.host-glass-theme .host-connection-modal__header {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Primary mint button glow */
+.host-glass-theme .btn-primary,
+.host-glass-theme .host-go-live__start,
+.host-glass-theme .control-button.finalize-mix {
+  box-shadow: 0 4px 20px rgba(0, 255, 136, 0.2);
+}
+
+@media (max-width: 960px) {
+  .host-glass-theme .host-shell {
+    flex-direction: column;
+    padding-inline: 0.75rem;
+  }
+
+  .host-glass-theme .host-sidebar {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    position: static;
+    padding: 8px;
+  }
+
+  .host-glass-theme .host-sidebar__btn {
+    flex: 1 1 64px;
+    max-width: 88px;
+    min-height: 52px;
+  }
+
+  .host-glass-theme .host-dashboard__top {
+    grid-template-columns: 1fr;
+  }
+
+  .host-glass-theme .host-round-glass__actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .host-glass-theme .host-round-glass__actions .btn-secondary {
+    width: auto;
+    flex: 1 1 auto;
+  }
+}

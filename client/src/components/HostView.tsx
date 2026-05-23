@@ -114,6 +114,7 @@ import { getYoutubeHostPlaybackChannelName } from '../utils/youtubeHostPlaybackC
 import { sortRoundPlaylistsByBingoColumns } from '../utils/roundPlaylistOrder';
 import { validateSongTitle, validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
 import './HostView.css';
+import './HostGlassTheme.css';
 import './HostFormControls.css';
 
 const MAX_CUSTOM_PATTERN_NAME_EMIT = 80;
@@ -880,6 +881,11 @@ const HostView: React.FC = () => {
   /** When overlay is open: false = centered modal, true = viewport-filling panel */
   const [playerCardsMaximized, setPlayerCardsMaximized] = useState<boolean>(false);
   const [showBingoPoolModal, setShowBingoPoolModal] = useState(false);
+  type HostGlassNavId = 'game' | 'rounds' | 'library' | 'connection' | 'display';
+  const [hostGlassNav, setHostGlassNav] = useState<HostGlassNavId>('game');
+  const hostDashboardTopRef = useRef<HTMLDivElement>(null);
+  const roundsPanelRef = useRef<HTMLElement>(null);
+  const displaySettingsRef = useRef<HTMLDetailsElement>(null);
   /** 5�15 mode: playlist title per column (from `fiveby15-pool`, else five selected playlists). */
   const [bingoColumnPlaylistNames, setBingoColumnPlaylistNames] = useState<string[]>([]);
   const [showPlaylistRoundModal, setShowPlaylistRoundModal] = useState(false);
@@ -892,6 +898,37 @@ const HostView: React.FC = () => {
     setPlaylistRoundModalPane('library');
     setShowPlaylistRoundModal(true);
   }, []);
+
+  const onHostGlassNav = useCallback(
+    (id: HostGlassNavId) => {
+      setHostGlassNav(id);
+      switch (id) {
+        case 'game':
+          hostDashboardTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          break;
+        case 'rounds':
+          roundsPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          break;
+        case 'library':
+          openPlaylistLibrary();
+          break;
+        case 'connection':
+          setShowConnectionModal(true);
+          break;
+        case 'display': {
+          const el = displaySettingsRef.current;
+          if (el) {
+            el.open = true;
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    },
+    [openPlaylistLibrary],
+  );
 
   const openRoundBuilder = useCallback((focusIndex?: number) => {
     const idx =
@@ -8271,8 +8308,21 @@ const HostView: React.FC = () => {
             </div>
   );
 
+  const hostGlassNavItems: Array<{
+    id: HostGlassNavId;
+    label: string;
+    icon: React.ReactNode;
+  }> = [
+    { id: 'game', label: 'Game', icon: <Gamepad2 aria-hidden /> },
+    { id: 'rounds', label: 'Rounds', icon: <ListMusic aria-hidden /> },
+    { id: 'library', label: 'Library', icon: <ListPlus aria-hidden /> },
+    { id: 'connection', label: 'Connect', icon: <Link2 aria-hidden /> },
+    { id: 'display', label: 'Display', icon: <Monitor aria-hidden /> },
+  ];
+
   return (
-    <div className="host-view">
+    <div className="host-view host-glass-theme">
+      <div className="host-view__bg" aria-hidden />
       {!hideYoutubeCornerPlayer ? (
         <HostYoutubeIframePlayer
           videoId={youtubeHostPlayback?.videoId ?? null}
@@ -8313,6 +8363,26 @@ const HostView: React.FC = () => {
         transition={{ duration: 0.5 }}
         style={{ minHeight: 0 }}
       >
+        <div className="host-shell">
+          <nav className="host-sidebar host-glass-panel" aria-label="Host navigation">
+            {hostGlassNavItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={
+                  hostGlassNav === item.id
+                    ? 'host-sidebar__btn host-sidebar__btn--active'
+                    : 'host-sidebar__btn'
+                }
+                aria-current={hostGlassNav === item.id ? 'page' : undefined}
+                onClick={() => onHostGlassNav(item.id)}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </nav>
+          <div className="host-shell__main">
         {/* Header */}
         <div className="host-header">
           <div className="host-header__brand" data-host-tour="header-brand">
@@ -8402,7 +8472,9 @@ const HostView: React.FC = () => {
 
         {/* Main Content */}
         <div className="host-content host-content--dashboard" style={{ paddingBottom: '20px' }}>
-          <div className="tab-content host-unified">
+          <div className="tab-content host-unified host-dashboard">
+            <div className="host-dashboard__top" ref={hostDashboardTopRef}>
+              <div className="host-dashboard__hero">
             {gameState === 'playing' && (
               <section className="host-live-dock host-live-dock--pinned" data-host-tour="live-dock" aria-label="Live show">
                 {gamePaused && (
@@ -8572,11 +8644,74 @@ const HostView: React.FC = () => {
                 ) : null}
               </section>
             )}
+              </div>
+              <aside className="host-round-glass host-glass-panel" aria-label="Current round">
+                <p className="host-round-glass__title">Current round</p>
+                <h2 className="host-round-glass__name">
+                  {hostActiveRoundSummary.roundName ?? 'No round selected'}
+                </h2>
+                <p className="host-round-glass__meta">
+                  Pattern: <strong>{hostActiveRoundSummary.patternLabel}</strong>
+                  <br />
+                  {hostActiveRoundSummary.poolCount > 0 ? (
+                    <>
+                      Pool: <strong>{hostActiveRoundSummary.poolCount}</strong> tracks
+                      {gameState === 'playing' && hostActiveRoundSummary.playedCount > 0 ? (
+                        <>
+                          {' '}
+                          · Played: <strong>{hostActiveRoundSummary.playedCount}</strong>
+                        </>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>Add playlists from Library</>
+                  )}
+                </p>
+                {hostActiveRoundSummary.playlistNames.length > 0 ? (
+                  <div className="host-round-glass__playlists">
+                    {hostActiveRoundSummary.playlistNames.slice(0, 5).map((name, i) => (
+                      <span key={`${name}-${i}`} className="host-round-glass__pill" title={name}>
+                        {name}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                {gameState === 'playing' ? (
+                  <div className="host-round-glass__actions">
+                    {hasFinalizedSongPool ? (
+                      <button
+                        type="button"
+                        className="btn-secondary btn-host-emphasis"
+                        onClick={() => setShowBingoPoolModal(true)}
+                      >
+                        <ListChecks className="w-4 h-4" aria-hidden />
+                        View pool
+                      </button>
+                    ) : null}
+                    {playerCards.size > 0 && !playerCardsFullscreen ? (
+                      <button
+                        type="button"
+                        className="btn-secondary btn-host-emphasis"
+                        onClick={openPlayerCardsModal}
+                      >
+                        <Users className="w-4 h-4" aria-hidden />
+                        View cards
+                      </button>
+                    ) : null}
+                  </div>
+                ) : prepRoundReadyForGoLive ? (
+                  <p className="host-round-glass__meta" style={{ marginTop: 'auto' }}>
+                    <strong style={{ color: '#00ff88' }}>Ready</strong> — start the show from the hero panel.
+                  </p>
+                ) : null}
+              </aside>
+            </div>
 
             <div className="host-manager host-manager-setup-flow">
                 <div className="host-manager-grid host-manager-grid--split host-manager-grid--balanced">
                   <div className="host-manager-col">
                 <section
+                  ref={roundsPanelRef}
                   className="host-rounds-panel host-manager-section"
                   data-host-tour="rounds-panel"
                   aria-labelledby="host-rounds-panel-title"
@@ -8617,7 +8752,7 @@ const HostView: React.FC = () => {
                   </div>
 
                   <div className="host-manager-col host-manager-col--wide">
-          <details className="host-event-settings" data-host-tour="projector-settings" open>
+          <details ref={displaySettingsRef} className="host-event-settings" data-host-tour="projector-settings" open>
             <summary className="host-event-settings__summary">
               <Monitor className="w-5 h-5" aria-hidden />
               Projector &amp; event rules
@@ -9126,6 +9261,8 @@ const HostView: React.FC = () => {
                </div>
              </motion.div>
            )}
+          </div>
+        </div>
           </div>
         </div>
 
