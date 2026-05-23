@@ -1029,6 +1029,8 @@ const PublicDisplay: React.FC = () => {
   const oneBy75IdsRef = useRef<string[] | null>(null);
   const poolOrderFingerprintRef = useRef<string | null>(null);
   const [fiveBy15Columns, setFiveBy15Columns] = useState<string[][] | null>(null);
+  /** Keeps 5×15 columns when a late oneby75-pool arrives (must not clear fiveBy15Columns state). */
+  const fiveBy15ColumnsRef = useRef<string[][] | null>(null);
   /** Host override: 5×15 BINGO columns, 1×75 carousel, or follow mix/URL. */
   const [callListMode, setCallListMode] = useState<'auto' | 'grouped' | '5x15'>('auto');
   /** Seconds between random letter picks on the projector (server default 15; clamped 5–120). */
@@ -1049,21 +1051,6 @@ const PublicDisplay: React.FC = () => {
     }
   }, [gameState.isPlaying]);
 
-  const columnCallListLayout = useMemo((): boolean => {
-    if (callListMode === 'grouped') return false;
-    if (callListMode === '5x15') return true;
-    if (searchParams.get('mode') === '5x15') return true;
-    // Auto: require five real playlist columns — stale partial state must not disable the 1×75 carousel
-    return !!(fiveBy15Columns && fiveBy15Columns.length === 5);
-  }, [callListMode, fiveBy15Columns, searchParams]);
-  /** Columns to render for 5×15 layout: server map or 5×15-chunks of flat 1×75 pool. */
-  const layoutFiveColumns = useMemo((): string[][] | null => {
-    if (fiveBy15Columns) return fiveBy15Columns;
-    if (!columnCallListLayout) return null;
-    const ids = oneBy75Ids;
-    if (!ids || ids.length < 1) return null;
-    return [0, 1, 2, 3, 4].map((c) => ids.slice(c * 15, c * 15 + 15));
-  }, [columnCallListLayout, fiveBy15Columns, oneBy75Ids]);
   const idToColumnRef = useRef<Record<string, number>>({});
   const pendingPlacementRef = useRef<Set<string>>(new Set());
   const playedOrderRef = useRef<string[]>([]);
@@ -1115,6 +1102,26 @@ const PublicDisplay: React.FC = () => {
   const carouselViewportRef = useRef<HTMLDivElement | null>(null);
   const [viewportWidth, setViewportWidth] = useState<number>(0);
   const [playlistNames, setPlaylistNames] = useState<string[]>([]);
+
+  const columnCallListLayout = useMemo((): boolean => {
+    if (callListMode === 'grouped') return false;
+    if (callListMode === '5x15') return true;
+    if (searchParams.get('mode') === '5x15') return true;
+    if (fiveBy15Columns && fiveBy15Columns.length === 5) return true;
+    if (fiveBy15ColumnsRef.current && fiveBy15ColumnsRef.current.length === 5) return true;
+    // Five playlist columns (B–O headers): never use 1×75 play-order carousel for this mix.
+    if (playlistNames.filter((n) => String(n || '').trim()).length === 5) return true;
+    return false;
+  }, [callListMode, fiveBy15Columns, searchParams, playlistNames]);
+  /** Columns to render for 5×15 layout: server map or 5×15-chunks of flat 1×75 pool. */
+  const layoutFiveColumns = useMemo((): string[][] | null => {
+    if (fiveBy15Columns) return fiveBy15Columns;
+    if (!columnCallListLayout) return null;
+    const ids = oneBy75Ids;
+    if (!ids || ids.length < 1) return null;
+    return [0, 1, 2, 3, 4].map((c) => ids.slice(c * 15, c * 15 + 15));
+  }, [columnCallListLayout, fiveBy15Columns, oneBy75Ids]);
+
   // 5x15 vertical scroll state
   const [vertIndex, setVertIndex] = useState<number>(0);
   const [vertIndices, setVertIndices] = useState<number[]>([0,0,0,0,0]);
@@ -1671,7 +1678,13 @@ const PublicDisplay: React.FC = () => {
 
         setCarouselIndex(0);
         carouselIndexRef.current = 0;
-        setFiveBy15Columns(null);
+        const keepFiveBy15 =
+          (fiveBy15ColumnsRef.current && fiveBy15ColumnsRef.current.length === 5) ||
+          (Array.isArray(data?.names) && data.names.filter((n: string) => String(n || '').trim()).length === 5);
+        if (!keepFiveBy15) {
+          setFiveBy15Columns(null);
+          fiveBy15ColumnsRef.current = null;
+        }
       }
     });
 
@@ -1680,6 +1693,7 @@ const PublicDisplay: React.FC = () => {
       if (Array.isArray(data?.columns) && data.columns.length === 5 && data.columns.every((c: any) => Array.isArray(c))) {
         try {
           const cols = data.columns.map((col: any) => col.slice(0, 15));
+          fiveBy15ColumnsRef.current = cols;
           setFiveBy15Columns(cols);
           if (Array.isArray(data?.names)) setPlaylistNames(data.names);
           // Preload metadata for revealed titles to avoid 'Unknown'
@@ -3600,7 +3614,9 @@ const PublicDisplay: React.FC = () => {
     if (!shouldScroll) {
       return (
         <div className="call-list-content">
-          {renderPlaylistNamesHeaderRow('1x75')}
+          {playlistNames.filter((n) => String(n || '').trim()).length <= 1
+            ? renderPlaylistNamesHeaderRow('1x75')
+            : null}
           <div
             ref={carouselViewportRef}
             className="call-carousel-viewport call-carousel-viewport--static-grid"
@@ -3622,7 +3638,9 @@ const PublicDisplay: React.FC = () => {
 
     return (
       <div className="call-list-content">
-        {renderPlaylistNamesHeaderRow('1x75')}
+        {playlistNames.filter((n) => String(n || '').trim()).length <= 1
+          ? renderPlaylistNamesHeaderRow('1x75')
+          : null}
         <div
           ref={carouselViewportRef}
           className="call-carousel-viewport"
@@ -4091,12 +4109,12 @@ const PublicDisplay: React.FC = () => {
               boxSizing: 'border-box',
               background: 'rgba(0,0,0,0.88)',
               color: '#00ff88',
-              padding: 'clamp(14px, 2.2vmin, 24px) clamp(18px, 3vmin, 40px)',
-              borderRadius: 'clamp(12px, 1.5vmin, 18px)',
-              fontWeight: 900,
-              letterSpacing: '0.05em',
-              fontSize: 'clamp(1.75rem, min(5.5vmin, 4.5vh), 3.75rem)',
-              lineHeight: 1.2,
+              padding: 'clamp(8px, 1.2vmin, 14px) clamp(12px, 2vmin, 22px)',
+              borderRadius: 'clamp(8px, 1vmin, 12px)',
+              fontWeight: 800,
+              letterSpacing: '0.04em',
+              fontSize: 'clamp(1rem, 2.2vmin, 1.5rem)',
+              lineHeight: 1.15,
               textAlign: 'center',
               wordBreak: 'break-word',
               boxShadow: '0 12px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,255,136,0.25) inset',
