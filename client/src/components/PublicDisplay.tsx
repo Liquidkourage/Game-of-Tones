@@ -1069,6 +1069,8 @@ const PublicDisplay: React.FC = () => {
   const idToColumnRef = useRef<Record<string, number>>({});
   const pendingPlacementRef = useRef<Set<string>>(new Set());
   const playedOrderRef = useRef<string[]>([]);
+  /** Bumped whenever playedOrderRef changes so call-list render stays in sync (refs alone do not re-render). */
+  const [playedOrderRevision, setPlayedOrderRevision] = useState(0);
   const idMetaRef = useRef<Record<string, { name: string; artist: string }>>({});
   const currentIndexRef = useRef<number>(-1);
   // Initialize revealed letters from localStorage if available (persist across refresh)
@@ -1130,12 +1132,14 @@ const PublicDisplay: React.FC = () => {
   }, [callListMode, fiveBy15Columns, searchParams, playlistNames]);
   /** Columns to render for 5×15 layout: server map or 5×15-chunks of flat 1×75 pool. */
   const layoutFiveColumns = useMemo((): string[][] | null => {
-    if (fiveBy15Columns) return fiveBy15Columns;
+    if (fiveBy15Columns && fiveBy15Columns.length === 5) return fiveBy15Columns;
+    const colsRef = fiveBy15ColumnsRef.current;
+    if (colsRef && colsRef.length === 5) return colsRef;
     if (!columnCallListLayout) return null;
-    const ids = oneBy75Ids;
+    const ids = oneBy75Ids || oneBy75IdsRef.current;
     if (!ids || ids.length < 1) return null;
     return [0, 1, 2, 3, 4].map((c) => ids.slice(c * 15, c * 15 + 15));
-  }, [columnCallListLayout, fiveBy15Columns, oneBy75Ids]);
+  }, [columnCallListLayout, fiveBy15Columns, oneBy75Ids, playedOrderRevision]);
 
   // 5x15 vertical scroll state
   const [vertIndex, setVertIndex] = useState<number>(0);
@@ -1315,6 +1319,17 @@ const PublicDisplay: React.FC = () => {
       playedSeqRef.current = {} as Record<string, number>;
       playedSeqCounterRef.current = 0;
       currentIndexRef.current = -1;
+      setPlayedOrderRevision((n) => n + 1);
+    };
+
+    const applyPlayedOrderFromServer = (playedIds: string[]) => {
+      playedOrderRef.current = playedIds;
+      playedSeqCounterRef.current = 0;
+      playedIds.forEach((id: string) => {
+        playedSeqCounterRef.current += 1;
+        playedSeqRef.current[id] = playedSeqCounterRef.current;
+      });
+      setPlayedOrderRevision((n) => n + 1);
     };
 
     const clearCallListSessionState = () => {
@@ -1517,10 +1532,20 @@ const PublicDisplay: React.FC = () => {
           
           // CRITICAL: Sync played songs to internal tracking from server (single source of truth)
           // This is the ONLY place where playedOrderRef should be updated
-          if (Array.isArray(payload.playedSongs)) {
-            const playedIds = payload.playedSongs
-              .map((song: any) => (typeof song === 'string' ? song : song?.id))
-              .filter(Boolean);
+          if (Array.isArray(payload.playedSongs) || Array.isArray(payload.playedSongIds)) {
+            let playedIds = Array.isArray(payload.playedSongs)
+              ? payload.playedSongs
+                  .map((song: any) => (typeof song === 'string' ? song : song?.id))
+                  .filter(Boolean)
+              : [];
+            if (
+              playedIds.length === 0 &&
+              Array.isArray(payload.playedSongIds) &&
+              payload.playedSongIds.length > 0
+            ) {
+              playedIds = payload.playedSongIds.filter(Boolean);
+              console.log(`🔄 Display sync: using playedSongIds (${playedIds.length}) — metadata not in playedSongs`);
+            }
             // Validate sync: compare local vs server state
             const serverCount = playedIds.length;
             const localCount = playedOrderRef.current.length;
@@ -1534,28 +1559,21 @@ const PublicDisplay: React.FC = () => {
             }
             
             // Always use server state as source of truth (ensures correct order)
-            // Server order is authoritative - it corrects any ordering issues from immediate updates
-            playedOrderRef.current = playedIds;
-            
-            // Ensure playedSeqRef matches playedOrderRef order for consistent sorting
-            // Rebuild playedSeqRef based on server order to ensure consistency
-            playedSeqCounterRef.current = 0;
-            playedIds.forEach((id: string) => {
-              playedSeqCounterRef.current = playedSeqCounterRef.current + 1;
-              playedSeqRef.current[id] = playedSeqCounterRef.current;
-            });
+            applyPlayedOrderFromServer(playedIds);
             console.log(`🔄 Synced playedSeqRef to match server order (${playedIds.length} songs)`);
             
             // Update metadata cache
-            payload.playedSongs.forEach((song: any) => {
-              const sid = typeof song === 'string' ? song : song?.id;
-              if (sid && typeof song === 'object' && song.name != null) {
-                idMetaRef.current[sid] = {
-                  name: displayTitleFromSyncedSong(song),
-                  artist: song.artist || ''
-                };
-              }
-            });
+            if (Array.isArray(payload.playedSongs)) {
+              payload.playedSongs.forEach((song: any) => {
+                const sid = typeof song === 'string' ? song : song?.id;
+                if (sid && typeof song === 'object' && song.name != null) {
+                  idMetaRef.current[sid] = {
+                    name: displayTitleFromSyncedSong(song),
+                    artist: song.artist || '',
+                  };
+                }
+              });
+            }
             
             // BUG #3 FIX: If reconnecting during active game, ensure baselines are set correctly
             // Revealed letters should already be restored by pool handlers, but ensure baselines match
@@ -1957,10 +1975,12 @@ const PublicDisplay: React.FC = () => {
             // Insert at position matching currentIndex
             newOrder.splice(data.currentIndex, 0, song.id);
             playedOrderRef.current = newOrder;
+            setPlayedOrderRevision((n) => n + 1);
             console.log(`🔄 Updated playedOrderRef immediately: song ${song.id} at index ${data.currentIndex}, total: ${newOrder.length}`);
           } else {
             // Fallback: append if no index available
             playedOrderRef.current = [...playedOrderRef.current, song.id];
+            setPlayedOrderRevision((n) => n + 1);
             console.log(`🔄 Updated playedOrderRef (append): song ${song.id}, total: ${playedOrderRef.current.length}`);
           }
         }
@@ -2611,7 +2631,7 @@ const PublicDisplay: React.FC = () => {
         carouselTickTimerRef.current = null;
       }
     };
-  }, [oneBy75Ids, visibleCols, columnCallListLayout, totalPlayedCount]);
+  }, [oneBy75Ids, visibleCols, columnCallListLayout, totalPlayedCount, playedOrderRevision]);
 
   // Measure viewport width for pixel-perfect slides (one column per step)
   useEffect(() => {
@@ -2627,7 +2647,7 @@ const PublicDisplay: React.FC = () => {
       window.removeEventListener('resize', update);
       if (ro) ro.disconnect();
     };
-  }, [visibleCols]);
+  }, [visibleCols, oneBy75Ids, columnCallListLayout, totalPlayedCount, playedOrderRevision]);
 
   // Measure per-column viewport height to derive row height (5 visible rows)
   useEffect(() => {

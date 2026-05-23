@@ -171,10 +171,12 @@
 
 .App .public-display--glass .call-list-display > div {
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .App .public-display--glass .call-list-display[data-call-cols='5']::after {
+  z-index: 0;
+  pointer-events: none;
   background:
     linear-gradient(to right, rgba(var(--pd-violet-rgb), 0.45), rgba(var(--pd-violet-rgb), 0.45)) 20% 0 /
       1px 100% no-repeat,
@@ -208,6 +210,11 @@
   box-shadow:
     0 0 24px rgba(var(--pd-mint-rgb), 0.35),
     inset 0 0 20px rgba(var(--pd-mint-rgb), 0.08) !important;
+}
+
+.App .public-display--glass .call-carousel-col-inner > .call-item,
+.App .public-display--glass .call-carousel-col-inner > .call-item-slot {
+  min-height: clamp(36px, 5.5vmin, 56px);
 }
 
 .App .public-display--glass .call-item__thumb {
