@@ -191,7 +191,23 @@
 .App .public-display--glass .call-list-content > .call-list {
   flex: 1 1 auto;
   min-height: 0;
-  height: 100% !important;
+}
+
+.App .public-display--glass .call-played-fallback-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  max-height: 100%;
+}
+
+.App .public-display--glass .call-list-content--played-fallback {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .App .public-display--glass .call-list-display[data-call-cols='5']::after {

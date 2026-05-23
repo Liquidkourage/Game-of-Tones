@@ -799,6 +799,10 @@ function countPlayOrderColumns(playedOrder: readonly string[]): number {
   return playOrderColumnSlices(playedOrder).length;
 }
 
+function poolHasTracks(ids: string[] | null | undefined): ids is string[] {
+  return Array.isArray(ids) && ids.length > 0;
+}
+
 /** Base pause between 1×75 carousel column steps (~5s hold + ~1s slide). */
 const CAROUSEL_BASE_DWELL_MS = 6000;
 
@@ -1152,6 +1156,14 @@ const PublicDisplay: React.FC = () => {
     const cur = gameState.currentSong?.id;
     return cur ? [cur] : [];
   }, [playedOrderRevision, gameState.playedSongs, gameState.currentSong]);
+
+  /** 5×15 layout hides songs whose ids are not in the pool columns — fall back to play-order carousel. */
+  const usePlayOrderCallLayout = useMemo(() => {
+    if (!columnCallListLayout) return false;
+    if (!layoutFiveColumns || playedOrderForDisplay.length === 0) return false;
+    const poolSet = new Set(layoutFiveColumns.flat());
+    return !playedOrderForDisplay.some((id) => poolSet.has(id));
+  }, [columnCallListLayout, layoutFiveColumns, playedOrderForDisplay]);
 
   // 5x15 vertical scroll state
   const [vertIndex, setVertIndex] = useState<number>(0);
@@ -1572,7 +1584,25 @@ const PublicDisplay: React.FC = () => {
             
             // Always use server state as source of truth (ensures correct order)
             applyPlayedOrderFromServer(playedIds);
+            setTotalPlayedCount(playedIds.length);
             console.log(`🔄 Synced playedSeqRef to match server order (${playedIds.length} songs)`);
+
+            if (
+              playedIds.length > 0 &&
+              (!Array.isArray(payload.playedSongs) || payload.playedSongs.length === 0)
+            ) {
+              setGameState((prev) => ({
+                ...prev,
+                playedSongs: playedIds.map((id: string) => {
+                  const meta = idMetaRef.current[id];
+                  return {
+                    id,
+                    name: meta?.name || 'Unknown',
+                    artist: meta?.artist || '',
+                  };
+                }),
+              }));
+            }
             
             // Update metadata cache
             if (Array.isArray(payload.playedSongs)) {
@@ -3367,7 +3397,7 @@ const PublicDisplay: React.FC = () => {
     }
     // CRITICAL FIX: Use ref as fallback if state isn't set yet (fixes first song not displaying)
     const idsToUse = oneBy75Ids || oneBy75IdsRef.current;
-    if (!idsToUse) return null;
+    if (!poolHasTracks(idsToUse)) return null;
     const played = new Set(playedOrderForDisplay);
     // If we have explicit 5x15 columns, respect those per-column lists; otherwise derive from flat pool
     // Build base columns from authoritative map if available, else fallback
@@ -3438,6 +3468,7 @@ const PublicDisplay: React.FC = () => {
             >
               {(() => {
                 const shouldScroll = !isFullCardPattern && col.length > 5 && rowHeightPx > 0;
+                const useAbsoluteTrack = shouldScroll;
                 // Build display items duplicated for seamless wrap
                 const displayItems = shouldScroll ? [...col, ...col] : col;
                 // Determine how many rows we need to offset to ensure no gap
@@ -3455,12 +3486,12 @@ const PublicDisplay: React.FC = () => {
                   <div
                     className="call-vert-track"
                     style={{
-                      position: isFullCardPattern ? 'relative' : 'absolute',
+                      position: isFullCardPattern || !useAbsoluteTrack ? 'relative' : 'absolute',
                       left: 0,
                       right: 0,
                       top: 0,
-                      willChange: isFullCardPattern ? undefined : 'transform',
-                      transform: isFullCardPattern ? undefined : `translateY(${-yPx}px)`
+                      willChange: useAbsoluteTrack ? 'transform' : undefined,
+                      transform: useAbsoluteTrack ? `translateY(${-yPx}px)` : undefined,
                     }}
                   >
                 {displayItems.map((id, ri) => {
@@ -3493,8 +3524,18 @@ const PublicDisplay: React.FC = () => {
                         padding: '10px 12px',
                         border: '1px solid rgba(255,255,255,0.15)',
                         borderRadius: 12,
-                        height: isFullCardPattern ? 'auto' : (rowHeightPx ? `${rowHeightPx}px` : undefined),
-                        minHeight: isFullCardPattern && rowHeightPx ? rowHeightPx : undefined,
+                        height: isFullCardPattern
+                          ? 'auto'
+                          : rowHeightPx > 0
+                            ? `${rowHeightPx}px`
+                            : undefined,
+                        minHeight: isFullCardPattern
+                          ? rowHeightPx > 0
+                            ? rowHeightPx
+                            : undefined
+                          : rowHeightPx > 0
+                            ? rowHeightPx
+                            : 44,
                         overflow: isFullCardPattern ? 'visible' : 'hidden',
                         background: 'rgba(255,255,255,0.08)',
                         boxSizing: 'border-box'
@@ -3626,11 +3667,39 @@ const PublicDisplay: React.FC = () => {
       );
     });
 
+  /** Guaranteed-visible play-order columns when pool layout cannot show played ids. */
+  const renderSimplePlayedCallList = () => {
+    const idsToUse = oneBy75Ids || oneBy75IdsRef.current || playedOrderForDisplay;
+    const isFullCardPattern = pattern === 'full_card' || pattern === 'blackout';
+    const groups = playOrderColumnSlices(playedOrderForDisplay);
+    const colCount = Math.min(visibleCols, Math.max(1, groups.length));
+    return (
+      <div className="call-list-content call-list-content--played-fallback">
+        <div
+          ref={carouselViewportRef}
+          className="call-carousel-viewport call-carousel-viewport--static-grid"
+          style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}
+        >
+          {groups.slice(0, colCount).map((group, gi) => (
+            <div key={`played-fb-${gi}`} className="call-carousel-col-static">
+              <div className="call-carousel-col-inner">
+                {renderCarouselCallRows(group, gi, idsToUse, isFullCardPattern)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   // 1×75: play-order columns (5 rows ↓, then next column →); default 5 visible columns.
   const renderOneBy75GroupedColumns = () => {
     // Use state if available, otherwise fallback to ref (for fallback mode)
     const idsToUse = oneBy75Ids || oneBy75IdsRef.current;
-    if (!idsToUse) return null;
+    if (!poolHasTracks(idsToUse)) {
+      if (playedOrderForDisplay.length > 0) return renderSimplePlayedCallList();
+      return null;
+    }
     const isFullCardPattern = pattern === 'full_card' || pattern === 'blackout';
     // CRITICAL: Use playedOrderRef as source of truth for played songs (not currentIndexRef)
     // This ensures all played songs are shown, not just up to currentIndex
@@ -5277,11 +5346,34 @@ const PublicDisplay: React.FC = () => {
                 void playedOrderRevision;
                 // CRITICAL FIX: Use ref as fallback if state isn't set yet (fixes first song not displaying)
                 // Check both state and ref to ensure rendering works even when columns are still loading
-                const hasIds = oneBy75Ids || oneBy75IdsRef.current;
-                if (hasIds) {
-                  return columnCallListLayout
-                    ? renderOneBy75Columns() 
+                const poolIds = oneBy75Ids ?? oneBy75IdsRef.current;
+                const hasPool = poolHasTracks(poolIds);
+                if (playedOrderForDisplay.length > 0 && (!hasPool || !layoutFiveColumns) && columnCallListLayout) {
+                  return renderSimplePlayedCallList();
+                }
+                if (hasPool) {
+                  if (usePlayOrderCallLayout) {
+                    return renderOneBy75GroupedColumns();
+                  }
+                  const primary = columnCallListLayout
+                    ? renderOneBy75Columns()
                     : renderOneBy75GroupedColumns();
+                  if (
+                    playedOrderForDisplay.length > 0 &&
+                    columnCallListLayout &&
+                    layoutFiveColumns
+                  ) {
+                    const poolSet = new Set(layoutFiveColumns.flat());
+                    const visibleInCols = playedOrderForDisplay.filter((id) => poolSet.has(id)).length;
+                    if (visibleInCols === 0) {
+                      return renderSimplePlayedCallList();
+                    }
+                  }
+                  return primary;
+                }
+
+                if (playedOrderForDisplay.length > 0) {
+                  return renderSimplePlayedCallList();
                 }
                 
                 // FALLBACK: Construct 1x75 schema from played songs
@@ -5293,22 +5385,13 @@ const PublicDisplay: React.FC = () => {
                   // Use the full pool from ref (preferred - has all 75 songs)
                   fallbackIds = [...oneBy75IdsRef.current];
                   console.log(`🔄 Using oneBy75IdsRef.current for fallback (${fallbackIds.length} songs)`);
-                } else if (playedOrderRef.current && playedOrderRef.current.length > 0) {
-                  // Fallback: build from played songs (only if pool isn't available)
-                  playedOrderRef.current.forEach(songId => {
+                } else if (playedOrderForDisplay.length > 0) {
+                  playedOrderForDisplay.forEach((songId) => {
                     if (songId && !fallbackIds.includes(songId)) {
                       fallbackIds.push(songId);
                     }
                   });
-                  console.log(`⚠️ Fallback: Built from playedOrderRef (${fallbackIds.length} songs) - pool may be incomplete`);
-                }
-                // Fallback to gameState.playedSongs if playedOrderRef is empty
-                else if (gameState.playedSongs && gameState.playedSongs.length > 0) {
-                  gameState.playedSongs.forEach(song => {
-                    if (song.id && !fallbackIds.includes(song.id)) {
-                      fallbackIds.push(song.id);
-                    }
-                  });
+                  console.log(`⚠️ Fallback: Built from played order (${fallbackIds.length} songs) — pool may be incomplete`);
                 }
                 
                 // Pad to 75 if we have fewer songs (for proper grouping)
@@ -5319,8 +5402,8 @@ const PublicDisplay: React.FC = () => {
                 
                 // Ensure metadata is set for played songs
                 // Use playedOrderRef to get all songs, then look up metadata from idMetaRef or gameState
-                if (playedOrderRef.current && playedOrderRef.current.length > 0) {
-                  playedOrderRef.current.forEach((songId, idx) => {
+                if (playedOrderForDisplay.length > 0) {
+                  playedOrderForDisplay.forEach((songId, idx) => {
                     // Metadata should already be in idMetaRef from room-state or song-playing events
                     if (!idMetaRef.current[songId]) {
                       // Fallback: try to get from gameState.playedSongs

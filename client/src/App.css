@@ -372,15 +372,16 @@ body {
 .App .call-list-content > .call-list {
   flex: 1 1 auto;
   min-height: 0;
-  height: auto !important;
 }
 
-.App .call-list { height: 100%; }
+.App .call-list { height: 100%; min-height: 0; }
 
-/* 15Ã—5 grouped columns carousel (display only) */
+/* 15×5 grouped columns carousel (display only) */
 .App .call-carousel-viewport {
   position: relative;
   overflow: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
   height: 100%;
   width: 100%;
   min-width: 0;
@@ -391,16 +392,22 @@ body {
   display: grid;
   width: 100%;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
   box-sizing: border-box;
+  align-content: stretch;
 }
 
 .App .call-carousel-col-static {
   min-width: 0;
   max-width: 100%;
+  min-height: 0;
   height: 100%;
   padding: 0 4px;
   box-sizing: border-box;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .App .call-carousel-track {
@@ -421,13 +428,14 @@ body {
 
 .App .call-carousel-col-inner {
   display: grid;
-  grid-template-rows: repeat(5, minmax(0, auto));
+  grid-template-rows: repeat(5, minmax(0, 1fr));
   gap: 6px;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  align-content: start;
+  align-content: stretch;
 }
 
 .App .call-carousel-col-inner > .call-item,
@@ -435,12 +443,13 @@ body {
   width: 100%;
   max-width: 100%;
   min-width: 0;
+  min-height: 0;
   height: auto;
-  max-height: calc((100% - 24px) / 5);
+  max-height: none;
   margin-bottom: 0;
   box-sizing: border-box;
   overflow: hidden;
-  align-self: start;
+  align-self: stretch;
 }
 
 .App .call-carousel-col-inner .call-song-info {
