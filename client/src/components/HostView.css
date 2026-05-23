@@ -3445,6 +3445,86 @@
   gap: 4px;
 }
 
+/* Bingo pool — compact strip on Game tab + modal */
+.host-view .host-bingo-pool-strip {
+  margin-top: 20px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.host-view .host-bingo-pool-strip__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.host-view .host-bingo-pool-strip__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #00ffa3;
+  font-size: 1rem;
+  font-weight: 700;
+  min-width: 0;
+}
+
+.host-view .host-bingo-pool-strip__hint {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.68);
+  line-height: 1.45;
+  max-width: 52rem;
+}
+
+.host-connection-modal.host-connection-modal--bingo-pool {
+  width: min(100%, 760px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: min(92vh, 880px);
+}
+
+.host-connection-modal__body--bingo-pool {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.host-bingo-pool-modal__intro {
+  margin: 0;
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.45;
+}
+
+.host-bingo-pool-modal__explicit-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.host-bingo-pool-modal__subset-warn {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255, 200, 120, 0.95);
+  line-height: 1.4;
+}
+
+.host-bingo-pool-modal .bingo-pool-list {
+  max-height: min(58vh, 560px);
+  flex: 1;
+  min-height: 200px;
+}
+
 .host-view .host-host-prefs__grid {
   display: grid;
   grid-template-columns: 1fr;

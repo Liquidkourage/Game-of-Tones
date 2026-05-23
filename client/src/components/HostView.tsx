@@ -879,6 +879,7 @@ const HostView: React.FC = () => {
   const [playerCardsFullscreen, setPlayerCardsFullscreen] = useState<boolean>(false);
   /** When overlay is open: false = centered modal, true = viewport-filling panel */
   const [playerCardsMaximized, setPlayerCardsMaximized] = useState<boolean>(false);
+  const [showBingoPoolModal, setShowBingoPoolModal] = useState(false);
   /** 5�15 mode: playlist title per column (from `fiveby15-pool`, else five selected playlists). */
   const [bingoColumnPlaylistNames, setBingoColumnPlaylistNames] = useState<string[]>([]);
   const [showPlaylistRoundModal, setShowPlaylistRoundModal] = useState(false);
@@ -4742,6 +4743,20 @@ const HostView: React.FC = () => {
     };
   }, [playerCardsFullscreen]);
 
+  useEffect(() => {
+    if (!showBingoPoolModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowBingoPoolModal(false);
+    };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [showBingoPoolModal]);
+
   const openPlayerCardsModal = () => {
     setPlayerCardsMaximized(false);
     setPlayerCardsFullscreen(true);
@@ -7084,6 +7099,12 @@ const HostView: React.FC = () => {
   /** Server said mix is finalized but this UI has no tracks (e.g. client fetches got 429; rare timing). */
   const showFinalizedButEmptyPool = mixFinalized && finalizedPoolSongs.length === 0;
 
+  const bingoPoolSectionTitle = mixFinalized
+    ? gameState === 'playing'
+      ? `Playback order (${finalizedPoolSongs.length} songs)`
+      : `Bingo pool (${finalizedPoolSongs.length} songs)`
+    : `Bingo pool (${finalizedPoolSongs.length} songs)`;
+
   const currentPrepRoundForFinalizeUi =
     currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length
       ? eventRounds[currentRoundIndex]
@@ -8476,6 +8497,17 @@ const HostView: React.FC = () => {
                   <RotateCcw className="w-4 h-4" aria-hidden />
                   Reset display letters
                 </button>
+                {hasFinalizedSongPool && (
+                  <button
+                    type="button"
+                    className="btn-secondary btn-host-emphasis"
+                    onClick={() => setShowBingoPoolModal(true)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                  >
+                    <ListChecks className="w-4 h-4" aria-hidden />
+                    View bingo pool
+                  </button>
+                )}
                 {playerCards.size > 0 && !playerCardsFullscreen ? (
                   <button type="button" className="btn-secondary btn-host-emphasis" onClick={openPlayerCardsModal} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                     <Users className="w-4 h-4" aria-hidden />
@@ -8978,101 +9010,54 @@ const HostView: React.FC = () => {
                   </div>
                 )}
 
-                {/* Bingo pool — title edits; hidden when round is saved in Round builder until live or legacy prep */}
+                {/* Bingo pool — compact strip; full list in modal */}
                 {hasFinalizedSongPool && (!gameTabRoundBuilderReady || mixFinalized || gameState === 'playing') && (
                   <motion.div
-                    className="finalized-playlist-section"
+                    className="host-bingo-pool-strip"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.6 }}
-                    style={{
-                      background: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: '12px',
-                      padding: '20px',
-                      marginTop: '20px'
-                    }}
                   >
-                    <h3 style={{
-                      color: '#00ffa3',
-                      fontSize: '1.2rem',
-                      fontWeight: '600',
-                      marginBottom: '16px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px'
-                    }}>
-                      <ListChecks className="w-5 h-5" aria-hidden />
-                      {mixFinalized
-                        ? gameState === 'playing'
-                          ? `Playback order (${finalizedPoolSongs.length} songs)`
-                          : `Bingo pool (${finalizedPoolSongs.length} songs)`
-                        : `Bingo pool (${finalizedPoolSongs.length} songs)`}
-                    </h3>
-                    <p style={{
-                      color: 'rgba(255,255,255,0.7)',
-                      fontSize: '0.9rem',
-                      marginBottom: '16px',
-                      lineHeight: '1.4'
-                    }}>
-                      {mixFinalized ? (
-                        gameState === 'playing' ? (
-                          <>
-                            Numbered #1–#{finalizedPoolSongs.length || 75} is the exact playback sequence and
-                            matches call numbers on the projector.
-                          </>
-                        ) : (
-                          <>
-                            Build pool for cards. Order shuffles once when you Start Game; #1 is the first song
-                            played.
-                          </>
-                        )
-                      ) : (
+                    <div className="host-bingo-pool-strip__head">
+                      <div className="host-bingo-pool-strip__title">
+                        <ListChecks className="w-5 h-5" aria-hidden />
+                        {bingoPoolSectionTitle}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => setShowBingoPoolModal(true)}
+                        style={{ fontWeight: 800, borderColor: '#00ffa3', color: '#00ffa3' }}
+                        title="Open bingo pool (Escape to close)"
+                      >
+                        View pool
+                      </button>
+                    </div>
+                    <p className="host-bingo-pool-strip__hint">
+                      {gameState === 'playing' && currentSong ? (
                         <>
-                          Preview of the tracks that match your bingo layout (same trimming and dedupe rules as
-                          the server). Finalize to build the pool; playback order is set when you Start Game.
+                          Now playing:{' '}
+                          <strong style={{ color: '#e8fff4' }}>
+                            {getDisplaySongTitle(
+                              currentSong.id,
+                              currentSong.name || '',
+                            )}
+                          </strong>
+                          {currentSong.artist ? (
+                            <>
+                              {' '}
+                              <span style={{ color: 'rgba(255,255,255,0.65)' }}>
+                                — {getDisplaySongArtist(currentSong.id, currentSong.artist)}
+                              </span>
+                            </>
+                          ) : null}
                         </>
-                      )}{' '}
-                      You can edit titles to make them more recognizable for players.
-                      {' '}
-                      <span
-                        style={{
-                          color: 'rgba(255,255,255,0.88)',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        Tracks with the Spotify explicit label
-                        <SpotifyExplicitBadge size="lg" title="Spotify explicit content label" />
-                        are flagged explicit in Spotify.
-                      </span>
+                      ) : mixFinalized ? (
+                        'Tap View pool to review playback order, edit display titles, and check validation flags.'
+                      ) : (
+                        'Preview of tracks that match your bingo layout. Tap View pool for the full list.'
+                      )}
                     </p>
-                    {bingoPoolUiShowsPreFinalizeSubset && (
-                      <p
-                        style={{
-                          color: 'rgba(255,200,120,0.95)',
-                          fontSize: '0.85rem',
-                          marginBottom: '16px',
-                          lineHeight: '1.4',
-                        }}
-                      >
-                        {songList.length - finalizedPoolSongs.length} more song
-                        {songList.length - finalizedPoolSongs.length === 1 ? '' : 's'} loaded from
-                        playlists won&apos;t appear on cards with this layout—they&apos;re hidden here so the list matches what bingo uses.
-                      </p>
-                    )}
-
-                    <BingoPoolList
-                      songs={finalizedPoolSongs}
-                      currentSongId={currentSong?.id}
-                      playedSongIds={bingoPoolPlayedSongIds}
-                      getDisplaySongTitle={getDisplaySongTitle}
-                      songAliases={songAliases}
-                      getDisplaySongArtist={getDisplaySongArtist}
-                      onEditSongAlias={handleEditSongAlias}
-                    />
                   </motion.div>
                 )}
 
@@ -9174,6 +9159,82 @@ const HostView: React.FC = () => {
               </button>
             </div>
             <div className="host-connection-modal__body">{hostConnectionPanel}</div>
+          </div>
+        </div>
+      )}
+      {showBingoPoolModal && hasFinalizedSongPool && (
+        <div
+          className="host-connection-modal-backdrop"
+          onClick={() => setShowBingoPoolModal(false)}
+          role="presentation"
+        >
+          <div
+            className="host-connection-modal host-connection-modal--bingo-pool host-bingo-pool-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="host-bingo-pool-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="host-connection-modal__header">
+              <h2 id="host-bingo-pool-modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <ListChecks className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
+                {bingoPoolSectionTitle}
+              </h2>
+              <button
+                type="button"
+                className="host-connection-modal__close"
+                aria-label="Close"
+                onClick={() => setShowBingoPoolModal(false)}
+              >
+                <X className="w-5 h-5" aria-hidden />
+              </button>
+            </div>
+            <div className="host-connection-modal__body host-connection-modal__body--bingo-pool">
+              <p className="host-bingo-pool-modal__intro">
+                {mixFinalized ? (
+                  gameState === 'playing' ? (
+                    <>
+                      Numbered #1–#{finalizedPoolSongs.length || 75} is the exact playback sequence and
+                      matches call numbers on the projector.
+                    </>
+                  ) : (
+                    <>
+                      Build pool for cards. Order shuffles once when you Start Game; #1 is the first song
+                      played.
+                    </>
+                  )
+                ) : (
+                  <>
+                    Preview of the tracks that match your bingo layout (same trimming and dedupe rules as
+                    the server). Finalize to build the pool; playback order is set when you Start Game.
+                  </>
+                )}{' '}
+                You can edit titles to make them more recognizable for players.
+                {' '}
+                <span className="host-bingo-pool-modal__explicit-note">
+                  Tracks with the Spotify explicit label
+                  <SpotifyExplicitBadge size="lg" title="Spotify explicit content label" />
+                  are flagged explicit in Spotify.
+                </span>
+              </p>
+              {bingoPoolUiShowsPreFinalizeSubset && (
+                <p className="host-bingo-pool-modal__subset-warn">
+                  {songList.length - finalizedPoolSongs.length} more song
+                  {songList.length - finalizedPoolSongs.length === 1 ? '' : 's'} loaded from
+                  playlists won&apos;t appear on cards with this layout—they&apos;re hidden here so the list
+                  matches what bingo uses.
+                </p>
+              )}
+              <BingoPoolList
+                songs={finalizedPoolSongs}
+                currentSongId={currentSong?.id}
+                playedSongIds={bingoPoolPlayedSongIds}
+                getDisplaySongTitle={getDisplaySongTitle}
+                songAliases={songAliases}
+                getDisplaySongArtist={getDisplaySongArtist}
+                onEditSongAlias={handleEditSongAlias}
+              />
+            </div>
           </div>
         </div>
       )}
