@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Play,
   Pause,
@@ -18,7 +18,13 @@ import type { BingoPoolSong } from './BingoPoolList';
 
 export type HostGameDashboardProps = {
   gameState: 'waiting' | 'playing' | 'ended';
-  currentSong: { id: string; name?: string; artist?: string; explicit?: boolean } | null;
+  currentSong: {
+    id: string;
+    name?: string;
+    artist?: string;
+    explicit?: boolean;
+    youtubeMusic?: boolean;
+  } | null;
   gamePaused: boolean;
   pendingVerification: { playerName: string } | null;
   isPlaying: boolean;
@@ -155,6 +161,30 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
         ? 40
         : 0;
 
+  const [albumArtUrl, setAlbumArtUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!currentSong?.id) {
+      setAlbumArtUrl(null);
+      return;
+    }
+    if (currentSong.youtubeMusic) {
+      setAlbumArtUrl(`https://i.ytimg.com/vi/${encodeURIComponent(currentSong.id)}/hqdefault.jpg`);
+      return;
+    }
+    const ctrl = new AbortController();
+    const spotifyUrl = `https://open.spotify.com/track/${encodeURIComponent(currentSong.id)}`;
+    fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(spotifyUrl)}`, {
+      signal: ctrl.signal,
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { thumbnail_url?: string } | null) => {
+        setAlbumArtUrl(data?.thumbnail_url ?? null);
+      })
+      .catch(() => setAlbumArtUrl(null));
+    return () => ctrl.abort();
+  }, [currentSong?.id, currentSong?.youtubeMusic]);
+
   return (
     <div className="host-r4-grid" data-host-tour="go-live">
       {/* Now playing / Ready */}
@@ -177,7 +207,11 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
         )}
         <div className="host-r4-now-playing__layout">
           <div className="host-r4-art" aria-hidden>
-            <Music className="host-r4-art__icon" />
+            {albumArtUrl ? (
+              <img className="host-r4-art__img" src={albumArtUrl} alt="" />
+            ) : (
+              <Music className="host-r4-art__icon" />
+            )}
           </div>
           <div className="host-r4-now-playing__main">
             {gameState === 'playing' ? (
@@ -331,7 +365,9 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
           <ul className="host-r4-queue-list">
             {upNext.map((song, i) => (
               <li key={song.id} className="host-r4-queue-item">
-                <span className="host-r4-queue-num">{displayNum != null ? displayNum + i + 1 : i + 1}</span>
+                <span className="host-r4-queue-thumb" aria-hidden>
+                  <Music />
+                </span>
                 <div className="host-r4-queue-text">
                   <span className="host-r4-queue-title">
                     {getDisplaySongTitle(song.id, song.name || '')}
