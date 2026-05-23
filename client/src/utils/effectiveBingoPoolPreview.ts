@@ -48,54 +48,59 @@ function buildPerListUnique(
   });
 }
 
+const FIVE_BY_FIFTEEN_COLUMN_SLOTS = 15;
+
 /**
- * Same cross-playlist pass as server `generateBingoCards` for five playlists.
- * Returns per-column globally unique lists and human-readable shortage lines (server-shaped).
+ * Same cross-playlist pass as server `assignGloballyUniqueFiveByFifteenColumns`.
+ * Smallest playlists claim shared tracks first; backfill from full host song list.
  */
-function crossDedupFivePlaylistColumns(perListUnique: PerListColumn[]): {
+function crossDedupFivePlaylistColumns(
+  perListUnique: PerListColumn[],
+  songOrderExtra: PoolSongLike[] = [],
+): {
   globallyUnique: PerListColumn[];
   insufficientWarnings: string[];
 } {
+  const n = perListUnique.length;
+  const columnPools: PoolSongLike[][] = Array.from({ length: n }, () => []);
+  const claimOrder = perListUnique
+    .map((pl, index) => ({ index, size: pl.songs.length }))
+    .sort((a, b) => a.size - b.size || a.index - b.index);
+
   const globalSeen = new Set<string>();
+  for (const { index } of claimOrder) {
+    for (const song of perListUnique[index].songs) {
+      if (!song?.id || globalSeen.has(song.id)) continue;
+      globalSeen.add(song.id);
+      columnPools[index].push(song);
+    }
+  }
+
+  const extra = dedupePreserve(songOrderExtra);
+  for (let index = 0; index < n; index++) {
+    if (columnPools[index].length >= FIVE_BY_FIFTEEN_COLUMN_SLOTS) continue;
+    const canon = canonicalPlaylistIdForMatch(String(perListUnique[index].id));
+    const inCol = new Set(columnPools[index].map((s) => s.id));
+    for (const song of extra) {
+      if (columnPools[index].length >= FIVE_BY_FIFTEEN_COLUMN_SLOTS) break;
+      if (!song?.id || globalSeen.has(song.id) || inCol.has(song.id)) continue;
+      if (canonicalPlaylistIdForMatch(String(song.sourcePlaylistId || '')) !== canon) continue;
+      globalSeen.add(song.id);
+      inCol.add(song.id);
+      columnPools[index].push(song);
+    }
+  }
+
   const insufficientWarnings: string[] = [];
-
-  const globallyUnique = perListUnique.map((pl) => {
-    const uniqueSongs: PoolSongLike[] = [];
-    const duplicatesFound: PoolSongLike[] = [];
-
-    for (const song of pl.songs) {
-      if (!globalSeen.has(song.id)) {
-        globalSeen.add(song.id);
-        uniqueSongs.push(song);
-      } else {
-        duplicatesFound.push(song);
-      }
-    }
-
-    if (duplicatesFound.length > 0 && uniqueSongs.length < 15) {
-      const needed = 15 - uniqueSongs.length;
-      let replacementsAdded = 0;
-      const inUnique = new Set(uniqueSongs.map((s) => s.id));
-      for (const song of pl.songs) {
-        if (replacementsAdded >= needed) break;
-        const isDup = duplicatesFound.some((d) => d.id === song.id);
-        if (!inUnique.has(song.id) && !isDup && !globalSeen.has(song.id)) {
-          globalSeen.add(song.id);
-          uniqueSongs.push(song);
-          inUnique.add(song.id);
-          replacementsAdded++;
-        }
-      }
-    }
-
-    if (uniqueSongs.length < 15) {
-      const shortage = 15 - uniqueSongs.length;
+  const globallyUnique = perListUnique.map((pl, index) => {
+    const songs = columnPools[index];
+    if (songs.length < FIVE_BY_FIFTEEN_COLUMN_SLOTS) {
+      const shortage = FIVE_BY_FIFTEEN_COLUMN_SLOTS - songs.length;
       insufficientWarnings.push(
-        `Playlist "${pl.name || pl.id}" only has ${uniqueSongs.length} unique songs after deduplication and replacement (needs 15, short by ${shortage})`,
+        `Playlist "${pl.name || pl.id}" only has ${songs.length} unique songs after deduplication and replacement (needs 15, short by ${shortage})`,
       );
     }
-
-    return { ...pl, songs: uniqueSongs };
+    return { ...pl, songs };
   });
 
   return { globallyUnique, insufficientWarnings };
@@ -108,7 +113,7 @@ export function compute5x15InsufficientWarnings(
 ): string[] {
   if (!Array.isArray(playlists) || playlists.length !== 5 || !Array.isArray(allSongs)) return [];
   const perListUnique = buildPerListUnique(playlists, allSongs);
-  return crossDedupFivePlaylistColumns(perListUnique).insufficientWarnings;
+  return crossDedupFivePlaylistColumns(perListUnique, allSongs).insufficientWarnings;
 }
 
 export function computeEffectiveBingoPoolPreview(
@@ -124,8 +129,15 @@ export function computeEffectiveBingoPoolPreview(
   let perListGloballyUnique = perListUnique;
 
   if (perListUnique.length === 5) {
-    const { globallyUnique, insufficientWarnings } = crossDedupFivePlaylistColumns(perListUnique);
-    perListGloballyUnique = insufficientWarnings.length > 0 ? perListUnique : globallyUnique;
+    const { globallyUnique, insufficientWarnings } = crossDedupFivePlaylistColumns(perListUnique, allSongs);
+    perListGloballyUnique = globallyUnique;
+    if (insufficientWarnings.length > 0) {
+      const map = new Map<string, PoolSongLike>();
+      for (const s of allSongs) {
+        if (s?.id && !map.has(s.id)) map.set(s.id, s);
+      }
+      return { pool: Array.from(map.values()), mode: 'fallback' };
+    }
   }
 
   if (perListGloballyUnique.length === 1 && perListGloballyUnique[0].songs.length >= 75) {

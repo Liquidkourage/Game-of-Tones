@@ -5418,7 +5418,7 @@ function playlistsWithSongsFromHostSongOrder(playlists, songOrder) {
   const byPid = new Map();
   for (const s of songOrder) {
     if (!s || typeof s !== 'object' || !s.id) return null;
-    const pid = s.sourcePlaylistId != null ? String(s.sourcePlaylistId).trim() : '';
+    const pid = canonicalPlaylistIdForMatch(s.sourcePlaylistId);
     if (!pid) return null;
     if (!byPid.has(pid)) byPid.set(pid, []);
     byPid.get(pid).push(s);
@@ -5426,12 +5426,68 @@ function playlistsWithSongsFromHostSongOrder(playlists, songOrder) {
   const rows = [];
   for (let i = 0; i < playlists.length; i++) {
     const pl = playlists[i];
-    const pid = String(pl.id).trim();
+    const pid = canonicalPlaylistIdForMatch(pl.id);
     const songs = dedupeSongsByIdPreserveOrder(byPid.get(pid) || []);
     rows.push({ ...pl, songs, originalIndex: i });
   }
   if (!rows.every((r) => r.songs.length > 0)) return null;
   return rows;
+}
+
+const FIVE_BY_FIFTEEN_COLUMN_SLOTS = 15;
+
+/**
+ * Assign 15 globally unique tracks per column (B–O). Smallest playlists claim shared tracks first;
+ * backfill from the full host songList when a column is still short.
+ */
+function assignGloballyUniqueFiveByFifteenColumns(perListUnique, songOrderExtra = []) {
+  const n = perListUnique.length;
+  const columnPools = Array.from({ length: n }, () => []);
+  const claimOrder = perListUnique
+    .map((pl, index) => ({ index, size: pl.songs.length, name: pl.name }))
+    .sort((a, b) => a.size - b.size || a.index - b.index);
+
+  const globalSeen = new Set();
+  for (const { index } of claimOrder) {
+    for (const song of perListUnique[index].songs) {
+      if (!song?.id || globalSeen.has(song.id)) continue;
+      globalSeen.add(song.id);
+      columnPools[index].push(song);
+    }
+  }
+
+  const extra = Array.isArray(songOrderExtra) ? dedupeSongsByIdPreserveOrder(songOrderExtra) : [];
+  for (let index = 0; index < n; index++) {
+    if (columnPools[index].length >= FIVE_BY_FIFTEEN_COLUMN_SLOTS) continue;
+    const canon = canonicalPlaylistIdForMatch(perListUnique[index].id);
+    const inCol = new Set(columnPools[index].map((s) => s.id));
+    for (const song of extra) {
+      if (columnPools[index].length >= FIVE_BY_FIFTEEN_COLUMN_SLOTS) break;
+      if (!song?.id || globalSeen.has(song.id) || inCol.has(song.id)) continue;
+      if (canonicalPlaylistIdForMatch(song.sourcePlaylistId) !== canon) continue;
+      globalSeen.add(song.id);
+      inCol.add(song.id);
+      columnPools[index].push(song);
+    }
+  }
+
+  const warnings = [];
+  const perListGloballyUnique = perListUnique.map((pl, index) => {
+    const songs = columnPools[index];
+    if (songs.length < FIVE_BY_FIFTEEN_COLUMN_SLOTS) {
+      const shortage = FIVE_BY_FIFTEEN_COLUMN_SLOTS - songs.length;
+      warnings.push(
+        `Playlist "${pl.name}" only has ${songs.length} unique songs after deduplication and replacement (needs 15, short by ${shortage})`,
+      );
+    }
+    return {
+      ...pl,
+      songs,
+      originalCount: pl.songs.length,
+    };
+  });
+
+  return { perListGloballyUnique, warnings };
 }
 
 /** Saved-round Start Game: use real 5 playlists + snapshot only when each playlist has ≥15 snapshot tracks (real sourcePlaylistIds). */
@@ -5904,113 +5960,37 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       songs: dedup(Array.isArray(pl.songs) ? pl.songs : [])
     }));
 
-    // For 5x15 mode, we need to remove duplicates ACROSS playlists
+    // For 5x15 mode, remove duplicates ACROSS playlists (smallest playlists claim shared tracks first).
     let perListGloballyUnique = perListUnique;
     if (perListUnique.length === 5) {
-      routineServerLog('🔍 Checking for cross-playlist duplicates in 5x15 mode...');
-      const globalSeen = new Set();
-      const warnings = [];
-      
-      perListGloballyUnique = perListUnique.map((pl, index) => {
-        const uniqueSongs = [];
-        const duplicatesFound = [];
-        const replacementsFound = [];
-        
-        // First pass: collect unique songs and identify duplicates
-        for (const song of pl.songs) {
-          if (!globalSeen.has(song.id)) {
-            globalSeen.add(song.id);
-            uniqueSongs.push(song);
-          } else {
-            duplicatesFound.push(song);
-          }
-        }
-        
-        // Second pass: replace duplicates with alternative songs from the same playlist
-        if (duplicatesFound.length > 0 && uniqueSongs.length < 15) {
-          const needed = 15 - uniqueSongs.length;
-          let replacementsAdded = 0;
-          
-          // Look for replacement songs from the same playlist
-          for (const song of pl.songs) {
-            if (replacementsAdded >= needed) break;
-            
-            // Skip if already in uniqueSongs or if it's a duplicate we're replacing
-            const isAlreadyIncluded = uniqueSongs.some(s => s.id === song.id);
-            const isDuplicate = duplicatesFound.some(d => d.id === song.id);
-            
-            if (!isAlreadyIncluded && !isDuplicate && !globalSeen.has(song.id)) {
-              globalSeen.add(song.id);
-              uniqueSongs.push(song);
-              replacementsFound.push(song);
-              replacementsAdded++;
-              routineServerLog(`✅ Replacement found for playlist "${pl.name}": "${song.name}" by ${song.artist}`);
-            }
-          }
-          
-          if (duplicatesFound.length > 0) {
-            routineServerLog(`⚠️ Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
-            duplicatesFound.forEach(dup => {
-              routineServerLog(`   - Duplicate: "${dup.name}" by ${dup.artist}`);
-            });
-          }
-          
-          if (replacementsFound.length > 0) {
-            routineServerLog(`✅ Playlist "${pl.name}" had ${replacementsFound.length} replacement songs added`);
-            replacementsFound.forEach(rep => {
-              routineServerLog(`   + Replacement: "${rep.name}" by ${rep.artist}`);
-            });
-          }
-        } else if (duplicatesFound.length > 0) {
-          // Log duplicates even if we don't need replacements
-          routineServerLog(`⚠️ Playlist "${pl.name}" had ${duplicatesFound.length} duplicate songs removed`);
-          duplicatesFound.forEach(dup => {
-            routineServerLog(`   - Duplicate: "${dup.name}" by ${dup.artist}`);
-          });
-        }
-        
-        if (uniqueSongs.length < 15) {
-          const shortage = 15 - uniqueSongs.length;
-          warnings.push(`Playlist "${pl.name}" only has ${uniqueSongs.length} unique songs after deduplication and replacement (needs 15, short by ${shortage})`);
-        }
-        
-        return {
-          ...pl,
-          songs: uniqueSongs,
-          originalCount: pl.songs.length,
-          duplicatesRemoved: duplicatesFound.length,
-          replacementsAdded: replacementsFound.length
-        };
-      });
-      
-      // If any playlist doesn't have enough songs after deduplication, warn and fall back
+      routineServerLog('🔍 Assigning 5×15 columns with cross-playlist deduplication...');
+      const assignResult = assignGloballyUniqueFiveByFifteenColumns(
+        perListUnique,
+        Array.isArray(songOrder) ? songOrder : [],
+      );
+      perListGloballyUnique = assignResult.perListGloballyUnique;
+      const warnings = assignResult.warnings;
       if (warnings.length > 0) {
         console.warn('⚠️ Cannot use 5x15 mode due to insufficient unique songs after cross-playlist deduplication:');
-        warnings.forEach(warning => console.warn(`   ${warning}`));
-        io.to(roomId).emit('mode-warning', { 
+        warnings.forEach((warning) => console.warn(`   ${warning}`));
+        io.to(roomId).emit('mode-warning', {
           type: 'insufficient-unique-songs-5x15',
-          message: 'Cannot use 5x15 mode: Some playlists have fewer than 15 unique songs after removing cross-playlist duplicates.',
-          details: warnings
+          message:
+            'Cannot use 5x15 mode: Some playlists have fewer than 15 unique songs after removing cross-playlist duplicates.',
+          details: warnings,
         });
-        // Fall back to using original perListUnique for other modes
-        perListGloballyUnique = perListUnique;
+        // Keep deduped column pools — do not revert to perListUnique (that hid shortages and allowed duplicate IDs across columns).
       } else {
-        const totalDuplicates = perListGloballyUnique.reduce((sum, pl) => sum + (pl.duplicatesRemoved || 0), 0);
-        const totalReplacements = perListGloballyUnique.reduce((sum, pl) => sum + (pl.replacementsAdded || 0), 0);
-        if (totalDuplicates > 0 || totalReplacements > 0) {
-          routineServerLog(`✅ Successfully processed duplicates: ${totalDuplicates} removed, ${totalReplacements} replaced. All playlists still have ≥15 unique songs.`);
-          io.to(roomId).emit('deduplication-success', {
-            totalDuplicatesRemoved: totalDuplicates,
-            totalReplacementsAdded: totalReplacements,
-            playlistDetails: perListGloballyUnique.map(pl => ({
-              name: pl.name,
-              originalCount: pl.originalCount,
-              finalCount: pl.songs.length,
-              duplicatesRemoved: pl.duplicatesRemoved || 0,
-              replacementsAdded: pl.replacementsAdded || 0
-            }))
-          });
-        }
+        routineServerLog('✅ 5×15 columns: each playlist has ≥15 globally unique tracks.');
+        io.to(roomId).emit('deduplication-success', {
+          totalDuplicatesRemoved: 0,
+          totalReplacementsAdded: 0,
+          playlistDetails: perListGloballyUnique.map((pl) => ({
+            name: pl.name,
+            originalCount: pl.originalCount,
+            finalCount: pl.songs.length,
+          })),
+        });
       }
     }
 
