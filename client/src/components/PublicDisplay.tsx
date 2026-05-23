@@ -26,6 +26,8 @@ import {
   type PublicDisplayTitleRevealMode,
 } from '../utils/publicDisplayTitleReveal';
 import { effectivePublicDisplayFontScale } from '../utils/publicDisplayFontScale';
+import { pdGlass, callThumbBackground } from '../publicDisplayGlassTheme';
+import './PublicDisplayGlassTheme.css';
 import {
   computeBingoCellTextScale,
   computeCallCardTypography,
@@ -3567,6 +3569,11 @@ const PublicDisplay: React.FC = () => {
             borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)',
           }}
         >
+          <div
+            className="call-item__thumb"
+            aria-hidden
+            style={{ background: callThumbBackground(callNum) }}
+          />
           <div className="call-number">
             {callNum > 0 ? callNum : ''}
           </div>
@@ -3688,8 +3695,30 @@ const PublicDisplay: React.FC = () => {
   // If no room code is present, render a landing form to connect
   if (!roomId) {
     return (
-      <div style={{ position: 'fixed', inset: 0, background: 'linear-gradient(135deg, #1d1b3a 0%, #10283a 60%, #0b1e2d 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-        <div style={{ width: 'min(92vw, 680px)', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 16, padding: 24, textAlign: 'center' }}>
+      <div
+        className="public-display-connect"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: pdGlass.pageBgConnect,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+        }}
+      >
+        <div
+          style={{
+            width: 'min(92vw, 680px)',
+            background: pdGlass.glassPanel,
+            border: `1px solid ${pdGlass.borderViolet}`,
+            borderRadius: 20,
+            padding: 24,
+            textAlign: 'center',
+            boxShadow: pdGlass.shadowGlass,
+            backdropFilter: 'blur(22px)',
+          }}
+        >
           <div style={{ fontWeight: 1000, fontSize: 'clamp(2.2rem, 6vw, 3.2rem)', marginBottom: 8, letterSpacing: '0.04em' }}>TEMPO – Public Display</div>
           <div style={{ opacity: 0.9, marginBottom: 18 }}>Enter a room code to connect the display</div>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -3732,7 +3761,7 @@ const PublicDisplay: React.FC = () => {
   return (
     <div
       ref={displayRef}
-      className={`public-display${venueBranding ? ' public-display--venue' : ''}`}
+      className={`public-display public-display--glass${venueBranding ? ' public-display--venue' : ''}`}
       style={
         {
           ...(venueBranding?.primaryColor ? { '--venue-primary': venueBranding.primaryColor } : {}),
@@ -3780,10 +3809,10 @@ const PublicDisplay: React.FC = () => {
                 alignItems: 'stretch',
                 justifyContent: 'center',
                 gap: 'clamp(8px, 1.5vmin, 20px)',
-                background: 'linear-gradient(165deg, rgba(0,40,32,0.97) 0%, rgba(10,20,28,0.99) 100%)',
-                border: 'max(3px, 0.35vmin) solid rgba(0,255,200,0.55)',
+                background: pdGlass.glassPanelStrong,
+                border: `max(3px, 0.35vmin) solid ${pdGlass.borderMintStrong}`,
                 borderRadius: 'clamp(16px, 2vmin, 28px)',
-                boxShadow: '0 0 100px rgba(0,255,170,0.28), 0 32px 80px rgba(0,0,0,0.65)',
+                boxShadow: `${pdGlass.glowMint}, 0 32px 80px rgba(0,0,0,0.65)`,
                 padding: 'clamp(10px, 1.8vmin, 20px) clamp(10px, 1.5vmin, 18px)',
                 boxSizing: 'border-box',
               }}
@@ -4023,13 +4052,15 @@ const PublicDisplay: React.FC = () => {
               maxWidth: isBigWinCelebration ? 'min(96vw, 1500px)' : 'min(92vw, 720px)',
               zIndex: 10020,
               background: isBigWinCelebration
-                ? 'linear-gradient(165deg, rgba(0,255,180,0.42) 0%, rgba(0,200,120,0.18) 45%, rgba(0,80,60,0.22) 100%)'
-                : 'linear-gradient(180deg, rgba(0,255,136,0.25), rgba(0,255,136,0.1))',
-              border: isBigWinCelebration ? '2px solid rgba(0,255,200,0.7)' : '1px solid rgba(0,255,136,0.5)',
+                ? 'linear-gradient(165deg, rgba(0,255,180,0.38) 0%, rgba(109,40,217,0.22) 45%, rgba(18,20,36,0.55) 100%)'
+                : 'linear-gradient(165deg, rgba(72,52,120,0.55) 0%, rgba(0,255,136,0.12) 100%)',
+              border: isBigWinCelebration
+                ? `2px solid ${pdGlass.borderMintStrong}`
+                : `1px solid ${pdGlass.borderViolet}`,
+              backdropFilter: 'blur(14px)',
               boxShadow: isBigWinCelebration
                 ? '0 0 0 1px rgba(255,255,255,0.1) inset, 0 0 80px rgba(0,255,170,0.45), 0 16px 48px rgba(0,0,0,0.5)'
                 : undefined,
-              backdropFilter: isBigWinCelebration ? 'blur(8px)' : undefined,
               color: '#f6fffc',
               padding: isBigWinCelebration
                 ? 'clamp(22px, 3.8vw, 48px) clamp(28px, 5.5vw, 72px)'
@@ -4180,8 +4211,7 @@ const PublicDisplay: React.FC = () => {
                 textShadow: '0 4px 28px rgba(0,0,0,0.65), 0 0 48px rgba(0,255,190,0.35)',
                 padding: 'clamp(28px, 5vmin, 52px) clamp(24px, 5vmin, 56px)',
                 borderRadius: 'clamp(18px, 2.5vmin, 28px)',
-                background:
-                  'linear-gradient(165deg, rgba(0,48,40,0.94) 0%, rgba(8,22,38,0.92) 55%, rgba(12,18,32,0.94) 100%)',
+                background: pdGlass.glassPanelStrong,
                 border: 'max(2px, 0.22vmin) solid rgba(0,255,200,0.42)',
                 boxShadow:
                   '0 24px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.08) inset, 0 0 72px rgba(0,255,170,0.22)',
@@ -4207,8 +4237,7 @@ const PublicDisplay: React.FC = () => {
               position: 'fixed',
               inset: 0,
               zIndex: 2000,
-              background:
-                'linear-gradient(155deg, #0f0c24 0%, #152a3d 38%, #0a1628 72%, #06121c 100%)',
+              background: pdGlass.pageBg,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'stretch',
@@ -4295,7 +4324,7 @@ const PublicDisplay: React.FC = () => {
                   fontSize: 'clamp(5rem, 11vw, 9rem)',
                   fontWeight: 1000,
                   letterSpacing: '0.05em',
-                  backgroundImage: 'linear-gradient(90deg,#00ffa3 0%, #7bffd9 35%, #ffffff 50%, #7bffd9 65%, #00ffa3 100%)',
+                  backgroundImage: pdGlass.titleGradient,
                   WebkitBackgroundClip: 'text',
                   backgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
@@ -4335,7 +4364,7 @@ const PublicDisplay: React.FC = () => {
                     fontSize: 'clamp(2.5rem, min(12vmin, 10vh), 9.5rem)',
                     fontWeight: 1000,
                     letterSpacing: '0.02em',
-                    backgroundImage: 'linear-gradient(90deg,#7bffd9 0%, #ffffff 50%, #7bffd9 100%)',
+                    backgroundImage: pdGlass.titleGradient,
                     WebkitBackgroundClip: 'text',
                     backgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
@@ -4439,8 +4468,8 @@ const PublicDisplay: React.FC = () => {
                   overflow: 'hidden',
                   padding: 'clamp(6px, 0.95vmin, 14px) clamp(8px, 1.2vmin, 16px)',
                   borderRadius: 'clamp(18px, 2.5vmin, 26px)',
-                  background:
-                    'linear-gradient(165deg, rgba(0,255,180,0.11) 0%, rgba(20,38,55,0.52) 45%, rgba(130,100,255,0.14) 100%)',
+                background:
+                  'linear-gradient(165deg, rgba(109,40,217,0.18) 0%, rgba(72,52,120,0.42) 45%, rgba(0,255,136,0.1) 100%)',
                   border: 'max(2px, 0.25vmin) solid rgba(100, 210, 200, 0.42)',
                   boxShadow:
                     '0 0 0 1px rgba(255,255,255,0.08) inset, 0 24px 56px rgba(0,0,0,0.42), 0 0 40px rgba(0,255,200,0.08), 0 0 36px rgba(130,100,255,0.1)',
@@ -4594,8 +4623,8 @@ const PublicDisplay: React.FC = () => {
                       style={{
                         fontSize: 'clamp(2.6rem, min(11vmin, 9.25vh), 6.85rem)',
                         fontWeight: 1000,
-                        color: '#00ffb0',
-                        textShadow: '0 8px 28px rgba(0,255,170,0.55)',
+                        color: pdGlass.mintBright,
+                        textShadow: '0 8px 28px rgba(0,255,170,0.55), 0 0 24px rgba(139,92,246,0.25)',
                         lineHeight: 1,
                       }}
                     >
@@ -4636,8 +4665,7 @@ const PublicDisplay: React.FC = () => {
               position: 'fixed',
               inset: 0,
               zIndex: 2000,
-              background:
-                'linear-gradient(155deg, #0f0c24 0%, #152a3d 38%, #0a1628 72%, #06121c 100%)',
+              background: pdGlass.pageBg,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'stretch',
@@ -4769,7 +4797,7 @@ const PublicDisplay: React.FC = () => {
                             fontSize: 'clamp(1.75rem, min(6.8vmin, 5.8vh), 4.25rem)',
                             fontWeight: 1000,
                             letterSpacing: '0.02em',
-                            backgroundImage: 'linear-gradient(90deg,#7bffd9 0%, #ffffff 50%, #7bffd9 100%)',
+                            backgroundImage: pdGlass.titleGradient,
                             WebkitBackgroundClip: 'text',
                             backgroundClip: 'text',
                             WebkitTextFillColor: 'transparent',
@@ -5152,9 +5180,9 @@ const PublicDisplay: React.FC = () => {
                   <div style={{ 
                     flex: 1,
                     textAlign: 'center', 
-                    background: 'rgba(255,255,255,0.06)', 
-                    border: '1px solid rgba(255,255,255,0.12)', 
-                    borderRadius: 12, 
+                    background: pdGlass.glassPanel, 
+                    border: `1px solid ${pdGlass.borderViolet}`, 
+                    borderRadius: 14, 
                     padding: 8, 
                     display: 'flex', 
                     flexDirection: 'column', 

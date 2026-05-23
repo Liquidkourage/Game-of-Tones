@@ -1,0 +1,226 @@
+/* Public display — violet–mint glass (matches host HostGlassTheme; R6 cyan-rim cues) */
+
+.App .public-display--glass {
+  --pd-mint: #00ff88;
+  --pd-mint-bright: #00ffb0;
+  --pd-violet: #a78bfa;
+  --pd-violet-bright: #c4b5fd;
+  --pd-border: rgba(167, 139, 250, 0.22);
+  --pd-border-mint: rgba(0, 255, 163, 0.38);
+  --pd-surface: rgba(56, 44, 96, 0.32);
+  background: linear-gradient(155deg, #0f0c24 0%, #141a32 40%, #0a0e16 100%) !important;
+  color: #f4f2ff;
+  position: relative;
+  isolation: isolate;
+}
+
+.App .public-display--glass::before,
+.App .public-display--glass::after {
+  content: '';
+  position: fixed;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: 50%;
+  filter: blur(52px);
+}
+
+.App .public-display--glass::before {
+  top: -8%;
+  left: -6%;
+  width: min(75vmin, 90vw);
+  height: min(75vmin, 90vw);
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.42) 0%, transparent 68%);
+}
+
+.App .public-display--glass::after {
+  bottom: -10%;
+  right: -5%;
+  width: min(55vmin, 70vw);
+  height: min(55vmin, 70vw);
+  background: radial-gradient(circle, rgba(45, 130, 200, 0.26) 0%, transparent 65%);
+}
+
+.App .public-display--glass .display-content,
+.App .public-display--glass .bottom-row,
+.App .public-display--glass .left-col,
+.App .public-display--glass .call-col {
+  position: relative;
+  z-index: 1;
+}
+
+/* Pattern + info panels */
+.App .public-display--glass .bingo-card-display.public-pattern-panel {
+  background: linear-gradient(
+    145deg,
+    rgba(72, 52, 120, 0.44) 0%,
+    rgba(32, 28, 56, 0.58) 55%,
+    rgba(18, 20, 36, 0.65) 100%
+  ) !important;
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  border: 1px solid var(--pd-border-mint) !important;
+  box-shadow:
+    0 10px 36px rgba(0, 0, 0, 0.32),
+    0 0 40px rgba(109, 40, 217, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.App .public-display--glass .bingo-card-display .bingo-card-header {
+  border-bottom-color: rgba(167, 139, 250, 0.22);
+}
+
+.App .public-display--glass .bingo-card-display .pattern-title-text {
+  color: var(--pd-violet-bright);
+  text-shadow: 0 0 24px rgba(139, 92, 246, 0.35);
+}
+
+.App .public-display--glass .quick-stats.public-info-panel {
+  background: linear-gradient(
+    145deg,
+    rgba(72, 52, 120, 0.4) 0%,
+    rgba(28, 26, 48, 0.62) 100%
+  ) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--pd-border) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+}
+
+.App .public-display--glass .public-info-panel__value--room {
+  color: var(--pd-mint-bright) !important;
+  text-shadow: 0 0 20px rgba(0, 255, 136, 0.35);
+}
+
+.App .public-display--glass .stat-icon {
+  color: var(--pd-violet-bright);
+}
+
+/* Call list stage */
+.App .public-display--glass .call-list-display {
+  background: linear-gradient(
+    160deg,
+    rgba(48, 36, 88, 0.28) 0%,
+    rgba(16, 18, 32, 0.55) 100%
+  );
+  border: 1px solid var(--pd-border);
+  border-radius: 16px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 48px rgba(109, 40, 217, 0.08);
+}
+
+.App .public-display--glass .call-list-display[data-call-cols='5']::after {
+  background:
+    linear-gradient(to right, rgba(167, 139, 250, 0.28), rgba(167, 139, 250, 0.28)) 20% 0 / 1px 100%
+      no-repeat,
+    linear-gradient(to right, rgba(167, 139, 250, 0.22), rgba(167, 139, 250, 0.22)) 40% 0 / 1px 100%
+      no-repeat,
+    linear-gradient(to right, rgba(167, 139, 250, 0.22), rgba(167, 139, 250, 0.22)) 60% 0 / 1px 100%
+      no-repeat,
+    linear-gradient(to right, rgba(167, 139, 250, 0.22), rgba(167, 139, 250, 0.22)) 80% 0 / 1px 100%
+      no-repeat !important;
+}
+
+/* Call cards — cyan/violet rim glass + art thumb */
+.App .public-display--glass .call-item {
+  background: linear-gradient(
+    145deg,
+    rgba(64, 48, 110, 0.35) 0%,
+    rgba(24, 22, 40, 0.55) 100%
+  ) !important;
+  border: 1px solid rgba(167, 139, 250, 0.22) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.App .public-display--glass .call-item.call-item--current,
+.App .public-display--glass .call-item[style*='rgba(0,255,136'] {
+  background: linear-gradient(
+    145deg,
+    rgba(0, 255, 136, 0.14) 0%,
+    rgba(72, 48, 120, 0.38) 100%
+  ) !important;
+  border-color: var(--pd-border-mint) !important;
+  box-shadow:
+    0 0 20px rgba(0, 255, 136, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+.App .public-display--glass .call-item__thumb {
+  width: clamp(30px, 3.8vmin, 46px);
+  height: clamp(30px, 3.8vmin, 46px);
+  flex-shrink: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  box-shadow:
+    0 4px 16px rgba(109, 40, 217, 0.25),
+    inset 0 0 0 1px rgba(0, 255, 200, 0.12);
+}
+
+.App .public-display--glass .call-number {
+  color: var(--pd-violet-bright);
+  text-shadow: 0 0 12px rgba(139, 92, 246, 0.35);
+}
+
+.App .public-display--glass .call-playlist-name span[style*='#00ff88'] {
+  color: var(--pd-mint) !important;
+}
+
+.App .public-display--glass .call-col-title[style*='rgba(0,255,136'] {
+  border-color: var(--pd-border-mint) !important;
+}
+
+/* Splash / rules join cards — cyan rim */
+.App .public-display--glass .public-display-splash-join-card__scan,
+.App .public-display--glass .public-display-splash-join-card__manual,
+.App .public-display--glass .public-display-splash-join-card__logo-tile {
+  background: linear-gradient(
+    145deg,
+    rgba(56, 44, 96, 0.45) 0%,
+    rgba(18, 20, 36, 0.65) 100%
+  ) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 255, 200, 0.22),
+    0 10px 32px rgba(109, 40, 217, 0.15) !important;
+  border-radius: clamp(14px, 2vmin, 20px);
+}
+
+.App .public-display--glass .public-display-splash-join-card__room-code {
+  color: var(--pd-mint-bright) !important;
+  text-shadow: 0 8px 28px rgba(0, 255, 170, 0.45), 0 0 32px rgba(139, 92, 246, 0.2);
+}
+
+.App .public-display--glass .public-display-splash-join-card__eyebrow {
+  color: rgba(196, 181, 253, 0.72) !important;
+}
+
+.App .public-display--glass .public-display-rules-overlay__panel {
+  background: linear-gradient(
+    165deg,
+    rgba(72, 52, 120, 0.5) 0%,
+    rgba(20, 22, 38, 0.92) 100%
+  ) !important;
+  border: 1px solid var(--pd-border-mint) !important;
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.45),
+    0 0 56px rgba(109, 40, 217, 0.12) !important;
+}
+
+.App .public-display--glass .public-display-rules-step {
+  background: rgba(72, 48, 120, 0.22) !important;
+  border: 1px solid rgba(167, 139, 250, 0.24) !important;
+}
+
+.App .public-display--glass .public-display-rules-step__badge {
+  background: linear-gradient(145deg, rgba(0, 255, 136, 0.35), rgba(0, 180, 110, 0.2)) !important;
+  color: #061410 !important;
+  border: 1px solid rgba(0, 255, 180, 0.45);
+}
+
+/* Venue watermark — softer under glass */
+.App .public-display--glass .public-display-venue-watermark img {
+  opacity: 0.07;
+  filter: saturate(1.2) hue-rotate(-8deg);
+}
