@@ -1,7 +1,7 @@
 /**
  * Estimates the bingo-track pool the server will use for 1×75 / 5×15 mixes so the host UI
  * does not list songs that those geometries exclude — without requiring finalize first.
- * Mirrors server/index.js generateBingoCards grouping/dedup rules closely (no shuffle — stable picks).
+ * Mirrors server/fiveByFifteenAssign.js.
  */
 
 export type PoolSongLike = {
@@ -50,10 +50,6 @@ function buildPerListUnique(
 
 const FIVE_BY_FIFTEEN_COLUMN_SLOTS = 15;
 
-/**
- * Same cross-playlist pass as server `assignGloballyUniqueFiveByFifteenColumns`.
- * Smallest playlists claim shared tracks first; backfill from full host song list.
- */
 function crossDedupFivePlaylistColumns(
   perListUnique: PerListColumn[],
   songOrderExtra: PoolSongLike[] = [],
@@ -63,42 +59,89 @@ function crossDedupFivePlaylistColumns(
 } {
   const n = perListUnique.length;
   const columnPools: PoolSongLike[][] = Array.from({ length: n }, () => []);
-  const claimOrder = perListUnique
-    .map((pl, index) => ({ index, size: pl.songs.length }))
-    .sort((a, b) => a.size - b.size || a.index - b.index);
-
   const globalSeen = new Set<string>();
-  for (const { index } of claimOrder) {
-    for (const song of perListUnique[index].songs) {
-      if (!song?.id || globalSeen.has(song.id)) continue;
-      globalSeen.add(song.id);
-      columnPools[index].push(song);
+
+  const trackOwners = new Map<string, Set<number>>();
+  for (let i = 0; i < n; i++) {
+    for (const song of perListUnique[i].songs) {
+      if (!song?.id) continue;
+      if (!trackOwners.has(song.id)) trackOwners.set(song.id, new Set());
+      trackOwners.get(song.id)!.add(i);
     }
   }
 
-  const extra = dedupePreserve(songOrderExtra);
-  for (let index = 0; index < n; index++) {
-    if (columnPools[index].length >= FIVE_BY_FIFTEEN_COLUMN_SLOTS) continue;
+  const tryAdd = (index: number, song: PoolSongLike) => {
+    if (!song?.id || globalSeen.has(song.id)) return false;
+    if (columnPools[index].length >= FIVE_BY_FIFTEEN_COLUMN_SLOTS) return false;
+    globalSeen.add(song.id);
+    columnPools[index].push(song);
+    return true;
+  };
+
+  const sourcesForColumn = (index: number) => {
     const canon = canonicalPlaylistIdForMatch(String(perListUnique[index].id));
-    const inCol = new Set(columnPools[index].map((s) => s.id));
-    for (const song of extra) {
+    const fromPl = dedupePreserve(perListUnique[index].songs);
+    const extra = dedupePreserve(songOrderExtra);
+    const merged = [...fromPl];
+    for (const s of extra) {
+      if (!s?.id) continue;
+      if (canonicalPlaylistIdForMatch(String(s.sourcePlaylistId || '')) !== canon) continue;
+      if (!merged.some((m) => m.id === s.id)) merged.push(s);
+    }
+    return merged;
+  };
+
+  for (let i = 0; i < n; i++) {
+    for (const song of perListUnique[i].songs) {
+      const owners = trackOwners.get(song.id);
+      if (owners && owners.size === 1) tryAdd(i, song);
+    }
+  }
+
+  let progressed = true;
+  while (progressed) {
+    progressed = false;
+    const needy = Array.from({ length: n }, (_, i) => i)
+      .filter((i) => columnPools[i].length < FIVE_BY_FIFTEEN_COLUMN_SLOTS)
+      .sort((a, b) => columnPools[a].length - columnPools[b].length);
+    for (const index of needy) {
+      for (const song of sourcesForColumn(index)) {
+        if (tryAdd(index, song)) {
+          progressed = true;
+          if (columnPools[index].length >= FIVE_BY_FIFTEEN_COLUMN_SLOTS) break;
+        }
+      }
+    }
+  }
+
+  const stillNeedy = () =>
+    Array.from({ length: n }, (_, i) => i).filter((i) => columnPools[i].length < FIVE_BY_FIFTEEN_COLUMN_SLOTS);
+
+  const remainingOptions = (index: number) =>
+    sourcesForColumn(index).filter((s) => s?.id && !globalSeen.has(s.id)).length;
+
+  for (const index of stillNeedy().sort((a, b) => remainingOptions(a) - remainingOptions(b))) {
+    for (const song of sourcesForColumn(index)) {
       if (columnPools[index].length >= FIVE_BY_FIFTEEN_COLUMN_SLOTS) break;
-      if (!song?.id || globalSeen.has(song.id) || inCol.has(song.id)) continue;
-      if (canonicalPlaylistIdForMatch(String(song.sourcePlaylistId || '')) !== canon) continue;
-      globalSeen.add(song.id);
-      inCol.add(song.id);
-      columnPools[index].push(song);
+      tryAdd(index, song);
     }
   }
 
   const insufficientWarnings: string[] = [];
   const globallyUnique = perListUnique.map((pl, index) => {
     const songs = columnPools[index];
+    const inPlaylist = pl.songs.length;
     if (songs.length < FIVE_BY_FIFTEEN_COLUMN_SLOTS) {
       const shortage = FIVE_BY_FIFTEEN_COLUMN_SLOTS - songs.length;
-      insufficientWarnings.push(
-        `Playlist "${pl.name || pl.id}" only has ${songs.length} unique songs after deduplication and replacement (needs 15, short by ${shortage})`,
-      );
+      if (inPlaylist < FIVE_BY_FIFTEEN_COLUMN_SLOTS) {
+        insufficientWarnings.push(
+          `Playlist "${pl.name || pl.id}" has only ${inPlaylist} track(s) in the mix (needs 15, short by ${FIVE_BY_FIFTEEN_COLUMN_SLOTS - inPlaylist}). Add more songs to this playlist or refetch.`,
+        );
+      } else {
+        insufficientWarnings.push(
+          `Playlist "${pl.name || pl.id}" could only get ${songs.length} of 15 globally unique column slots (${inPlaylist} in mix; ${shortage} short). Another column may be using overlapping tracks — add a few more unique songs to this playlist on Spotify.`,
+        );
+      }
     }
     return { ...pl, songs };
   });

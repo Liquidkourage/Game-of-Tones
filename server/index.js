@@ -15,6 +15,7 @@ const usersStore = require('./users');
 const organizationsStore = require('./organizations');
 const hostRoomPrepStore = require('./hostRoomPrep');
 const songAliasesStore = require('./songAliases');
+const fiveByFifteenAssign = require('./fiveByFifteenAssign');
 const venueLogoCache = require('./venueLogoCache');
 const credentialCrypto = require('./credentialCrypto');
 const spotifyPipelineLog = require('./spotifyPipelineLog');
@@ -3019,6 +3020,18 @@ io.on('connection', (socket) => {
         );
         poolForCards = poolForCards.slice(0, SHOW_DECK_MAX_TRACKS);
       }
+      if (Array.isArray(playlists) && playlists.length === 5) {
+        let perList = buildPerListUniqueFromSongOrder(playlists, poolForCards);
+        perList = await supplementPerListPlaylistsFromSpotify(roomId, perList, playlists);
+        const assignResult = assignGloballyUniqueFiveByFifteenColumns(perList, poolForCards);
+        if (
+          assignResult.warnings.length === 0 &&
+          assignResult.perListGloballyUnique.every((pl) => pl.songs.length >= FIVE_BY_FIFTEEN_COLUMN_SLOTS)
+        ) {
+          poolForCards = flattenFiveByFifteenColumns(assignResult.perListGloballyUnique);
+          routineServerLog(`📝 5×15 finalized pool: ${poolForCards.length} tracks (15 per playlist column)`);
+        }
+      }
       room.finalizedSongOrder = poolForCards;
       room.finalizedSongs = poolForCards;
       routineServerLog(`📝 Stored ${poolForCards.length} finalized songs (build pool) for room ${roomId}`);
@@ -5645,60 +5658,40 @@ function playlistsWithSongsFromHostSongOrder(playlists, songOrder) {
   return rows;
 }
 
-const FIVE_BY_FIFTEEN_COLUMN_SLOTS = 15;
+const {
+  assignGloballyUniqueFiveByFifteenColumns,
+  flattenFiveByFifteenColumns,
+  buildPerListUnique: buildPerListUniqueFromSongOrder,
+  FIVE_BY_FIFTEEN_COLUMN_SLOTS,
+} = fiveByFifteenAssign;
 
-/**
- * Assign 15 globally unique tracks per column (B–O). Smallest playlists claim shared tracks first;
- * backfill from the full host songList when a column is still short.
- */
-function assignGloballyUniqueFiveByFifteenColumns(perListUnique, songOrderExtra = []) {
-  const n = perListUnique.length;
-  const columnPools = Array.from({ length: n }, () => []);
-  const claimOrder = perListUnique
-    .map((pl, index) => ({ index, size: pl.songs.length, name: pl.name }))
-    .sort((a, b) => a.size - b.size || a.index - b.index);
+/** Top up per-playlist song lists from Spotify when the host mix has fewer than 15 tagged tracks. */
+async function supplementPerListPlaylistsFromSpotify(roomId, perListUnique, playlistsMeta) {
+  const room = rooms.get(roomId);
+  if (!room || !Array.isArray(perListUnique) || perListUnique.length !== 5) return perListUnique;
+  const ytOnly =
+    Array.isArray(playlistsMeta) && playlistsMeta.length > 0 && playlistsMeta.every((p) => p?.youtubeMusic === true);
+  if (ytOnly) return perListUnique;
+  const org = spotifyOrgForRoom(room);
+  if (!(await multiTenantSpotify.ensureOrgTokensLoaded(org))) return perListUnique;
 
-  const globalSeen = new Set();
-  for (const { index } of claimOrder) {
-    for (const song of perListUnique[index].songs) {
-      if (!song?.id || globalSeen.has(song.id)) continue;
-      globalSeen.add(song.id);
-      columnPools[index].push(song);
+  for (let i = 0; i < perListUnique.length; i++) {
+    if (perListUnique[i].songs.length >= FIVE_BY_FIFTEEN_COLUMN_SLOTS) continue;
+    const pl = playlistsMeta[i] || { id: perListUnique[i].id, name: perListUnique[i].name };
+    try {
+      const fetched = await spotifyFor(roomId).getPlaylistTracks(pl.id, pl);
+      const merged = dedupeSongsByIdPreserveOrder([...perListUnique[i].songs, ...(fetched || [])]);
+      if (merged.length > perListUnique[i].songs.length) {
+        routineServerLog(
+          `📋 Supplemented "${pl.name}" from Spotify: ${perListUnique[i].songs.length} → ${merged.length} tracks for 5×15`,
+        );
+        perListUnique[i] = { ...perListUnique[i], songs: merged };
+      }
+    } catch (e) {
+      console.warn(`supplementPerListPlaylistsFromSpotify("${pl.name}"):`, e?.message || e);
     }
   }
-
-  const extra = Array.isArray(songOrderExtra) ? dedupeSongsByIdPreserveOrder(songOrderExtra) : [];
-  for (let index = 0; index < n; index++) {
-    if (columnPools[index].length >= FIVE_BY_FIFTEEN_COLUMN_SLOTS) continue;
-    const canon = canonicalPlaylistIdForMatch(perListUnique[index].id);
-    const inCol = new Set(columnPools[index].map((s) => s.id));
-    for (const song of extra) {
-      if (columnPools[index].length >= FIVE_BY_FIFTEEN_COLUMN_SLOTS) break;
-      if (!song?.id || globalSeen.has(song.id) || inCol.has(song.id)) continue;
-      if (canonicalPlaylistIdForMatch(song.sourcePlaylistId) !== canon) continue;
-      globalSeen.add(song.id);
-      inCol.add(song.id);
-      columnPools[index].push(song);
-    }
-  }
-
-  const warnings = [];
-  const perListGloballyUnique = perListUnique.map((pl, index) => {
-    const songs = columnPools[index];
-    if (songs.length < FIVE_BY_FIFTEEN_COLUMN_SLOTS) {
-      const shortage = FIVE_BY_FIFTEEN_COLUMN_SLOTS - songs.length;
-      warnings.push(
-        `Playlist "${pl.name}" only has ${songs.length} unique songs after deduplication and replacement (needs 15, short by ${shortage})`,
-      );
-    }
-    return {
-      ...pl,
-      songs,
-      originalCount: pl.songs.length,
-    };
-  });
-
-  return { perListGloballyUnique, warnings };
+  return perListUnique;
 }
 
 /** Saved-round Start Game: use real 5 playlists + snapshot only when each playlist has ≥15 snapshot tracks (real sourcePlaylistIds). */
@@ -6172,13 +6165,20 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
     };
 
     // Prepare per-playlist unique arrays (dedup within each playlist first)
-    const perListUnique = playlistsWithSongs.map(pl => ({
+    let perListUnique = playlistsWithSongs.map((pl) => ({
       id: pl.id,
       name: pl.name,
-      songs: dedup(Array.isArray(pl.songs) ? pl.songs : [])
+      songs: dedup(Array.isArray(pl.songs) ? pl.songs : []),
     }));
 
-    // For 5x15 mode, remove duplicates ACROSS playlists (smallest playlists claim shared tracks first).
+    if (perListUnique.length === 5) {
+      perListUnique = await supplementPerListPlaylistsFromSpotify(roomId, perListUnique, playlistsWithSongs);
+      for (let i = 0; i < 5; i++) {
+        if (playlistsWithSongs[i]) playlistsWithSongs[i].songs = perListUnique[i].songs;
+      }
+    }
+
+    // For 5x15 mode, assign 15 globally unique tracks per column (exclusive tracks first, then backfill).
     let perListGloballyUnique = perListUnique;
     if (perListUnique.length === 5) {
       routineServerLog('🔍 Assigning 5×15 columns with cross-playlist deduplication...');

@@ -107,7 +107,6 @@ import {
 } from '../utils/publicDisplayTitleReveal';
 import {
   canonicalPlaylistIdForMatch,
-  compute5x15InsufficientWarnings,
   computeEffectiveBingoPoolPreview,
   effectiveBingoPoolSongsForMix,
 } from '../utils/effectiveBingoPoolPreview';
@@ -3649,14 +3648,22 @@ const HostView: React.FC = () => {
         }
 
         if (playlists.length === 5) {
-          const insufficient = compute5x15InsufficientWarnings(playlists, listToSend);
-          if (insufficient.length > 0) {
-            addLog(
-              'Finalize blocked: 5×15 needs 15 unique tracks per playlist after removing duplicates across all five columns.',
-              'error',
+          const perListCounts = playlists.map((pl) => {
+            const canon = canonicalPlaylistIdForMatch(String(pl.id));
+            const n = listToSend.filter(
+              (s) => canonicalPlaylistIdForMatch(String(s.sourcePlaylistId || '')) === canon,
+            ).length;
+            return { name: pl.name, count: n };
+          });
+          const trueShort = perListCounts.filter((p) => p.count < 15);
+          if (trueShort.length > 0) {
+            const warnings = trueShort.map(
+              (p) =>
+                `Playlist "${p.name}" has only ${p.count} track(s) in the mix (needs 15). Reload playlists or check tags.`,
             );
-            insufficient.forEach((line) => addLog(`  ${line}`, 'warn'));
-            setFiveByFifteenInsufficientModal({ variant: 'blocked', warnings: insufficient });
+            addLog('Finalize blocked: each of five playlists needs at least 15 tracks in the mix.', 'error');
+            warnings.forEach((line) => addLog(`  ${line}`, 'warn'));
+            setFiveByFifteenInsufficientModal({ variant: 'blocked', warnings });
             return false;
           }
         }
