@@ -165,8 +165,8 @@ function normalizeSearchOffset(n) {
 function readWebApiPacingMinMs() {
   const raw = process.env.SPOTIFY_WEB_API_MIN_INTERVAL_MS;
   if (raw === '0') return 0;
-  const n = parseInt(raw != null && raw !== '' ? raw : '550', 10);
-  if (!Number.isFinite(n) || n < 0) return 550;
+  const n = parseInt(raw != null && raw !== '' ? raw : '700', 10);
+  if (!Number.isFinite(n) || n < 0) return 700;
   return Math.min(10_000, n);
 }
 
@@ -268,6 +268,8 @@ class SpotifyService {
     this._quarantineCapped = false;
     /** Full track lists keyed by playlist id — avoids re-paginating /items when host loads then finalizes. */
     this._playlistTracksCache = new Map();
+    /** Coalesce concurrent getPlaylistTracks for the same playlist (host reconnect / duplicate effects). */
+    this._playlistTracksInflight = new Map();
     /** Global pacing for this token (see readWebApiPacingMinMs). */
     this._pacingMinIntervalMs = readWebApiPacingMinMs();
     this._paceQueueTail = Promise.resolve();
@@ -1073,8 +1075,42 @@ class SpotifyService {
     }
   }
 
+  /** Hydrate in-memory cache from DB (host reconnect) before snapshot/items calls. */
+  seedPlaylistTracksCache(playlistId, { tracks, snapshotId }) {
+    const cacheKey = String(playlistId);
+    if (!Array.isArray(tracks) || tracks.length === 0) return;
+    this._playlistTracksCache.set(cacheKey, {
+      at: Date.now(),
+      tracks,
+      snapshotId: snapshotId != null && String(snapshotId).trim() !== '' ? String(snapshotId) : null,
+    });
+  }
+
+  peekPlaylistTracksCache(playlistId) {
+    const e = this._playlistTracksCache.get(String(playlistId));
+    return e ? { at: e.at, tracks: e.tracks, snapshotId: e.snapshotId } : null;
+  }
+
   // Get playlist tracks (paginated via GET /playlists/{id}/items)
   async getPlaylistTracks(playlistId, playlistInfo = null, options = {}) {
+    const cacheKey = String(playlistId);
+    const force = options && options.forceRefresh === true;
+    if (!force && this._playlistTracksInflight.has(cacheKey)) {
+      return this._playlistTracksInflight.get(cacheKey);
+    }
+    const work = this._getPlaylistTracksImpl(playlistId, playlistInfo, options);
+    if (!force) {
+      this._playlistTracksInflight.set(cacheKey, work);
+      work.finally(() => {
+        if (this._playlistTracksInflight.get(cacheKey) === work) {
+          this._playlistTracksInflight.delete(cacheKey);
+        }
+      });
+    }
+    return work;
+  }
+
+  async _getPlaylistTracksImpl(playlistId, playlistInfo = null, options = {}) {
     await this._ensureCanCallWebApi('getPlaylistTracks');
 
     const cacheKey = String(playlistId);

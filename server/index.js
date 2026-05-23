@@ -1166,6 +1166,15 @@ async function initializeDatabase() {
       )
     `);
     await db.query(`
+      CREATE TABLE IF NOT EXISTS host_spotify_playlist_tracks_cache (
+        organization_id VARCHAR(50) NOT NULL,
+        playlist_id VARCHAR(64) NOT NULL,
+        data JSONB NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (organization_id, playlist_id)
+      )
+    `);
+    await db.query(`
       CREATE TABLE IF NOT EXISTS catalog_pack_summaries_cache (
         cache_key VARCHAR(128) PRIMARY KEY,
         data JSONB NOT NULL,
@@ -1303,6 +1312,149 @@ async function loadHostPlaylistListCache(organizationId) {
   }
 }
 
+async function saveHostPlaylistTracksCache(organizationId, playlistId, { tracks, snapshotId }) {
+  if (!db) return false;
+  const pid = String(playlistId || '').trim();
+  if (!pid || !Array.isArray(tracks) || tracks.length === 0) return false;
+  try {
+    const payload = {
+      tracks,
+      snapshotId: snapshotId != null && String(snapshotId).trim() !== '' ? String(snapshotId) : null,
+    };
+    await db.query(
+      `
+      INSERT INTO host_spotify_playlist_tracks_cache (organization_id, playlist_id, data, updated_at)
+      VALUES ($1, $2, $3::jsonb, CURRENT_TIMESTAMP)
+      ON CONFLICT (organization_id, playlist_id) DO UPDATE SET data = $3::jsonb, updated_at = CURRENT_TIMESTAMP
+    `,
+      [organizationId, pid, JSON.stringify(payload)]
+    );
+    return true;
+  } catch (e) {
+    console.error('saveHostPlaylistTracksCache:', e?.message || e);
+    return false;
+  }
+}
+
+async function loadHostPlaylistTracksCache(organizationId, playlistId) {
+  if (!db) return null;
+  const pid = String(playlistId || '').trim();
+  if (!pid) return null;
+  try {
+    const r = await db.query(
+      'SELECT data, updated_at FROM host_spotify_playlist_tracks_cache WHERE organization_id = $1 AND playlist_id = $2',
+      [organizationId, pid]
+    );
+    if (r.rows.length === 0) return null;
+    const row = r.rows[0];
+    const d = row.data;
+    if (!d || typeof d !== 'object') return null;
+    const tracks = Array.isArray(d.tracks) ? d.tracks : [];
+    const snapshotId =
+      d.snapshotId != null && String(d.snapshotId).trim() !== '' ? String(d.snapshotId) : null;
+    return { tracks, snapshotId, updatedAt: row.updated_at };
+  } catch (e) {
+    console.error('loadHostPlaylistTracksCache:', e?.message || e);
+    return null;
+  }
+}
+
+async function deleteHostPlaylistTracksCacheForOrg(organizationId) {
+  if (!db) return;
+  try {
+    await db.query('DELETE FROM host_spotify_playlist_tracks_cache WHERE organization_id = $1', [
+      organizationId,
+    ]);
+  } catch (e) {
+    console.error('deleteHostPlaylistTracksCacheForOrg:', e?.message || e);
+  }
+}
+
+/**
+ * Host playlist-tracks route: DB seed + quarantine fallback + persist after live fetch.
+ * @returns {{ tracks: object[], fromTracksCache?: boolean, stale?: boolean, cacheUpdatedAt?: Date }}
+ */
+async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { forceRefresh }) {
+  const uid = hostAuth.getHostUserIdFromRequest(req);
+  const orgId = uid != null ? `user_${uid}` : null;
+  const svc = spotifyForRequest(req);
+  if (!svc) {
+    const err = new Error('Spotify not connected');
+    err.statusCode = 401;
+    throw err;
+  }
+
+  const force = forceRefresh === true;
+  let dbRow = null;
+  if (orgId && !force) {
+    dbRow = await loadHostPlaylistTracksCache(orgId, playlistId);
+    if (dbRow && Array.isArray(dbRow.tracks) && dbRow.tracks.length > 0) {
+      svc.seedPlaylistTracksCache(playlistId, {
+        tracks: dbRow.tracks,
+        snapshotId: dbRow.snapshotId,
+      });
+    }
+  }
+
+  const mapTracks = (rows) =>
+    (Array.isArray(rows) ? rows : []).map((t) => ({
+      ...t,
+      sourcePlaylistId: playlistId,
+      sourcePlaylistName: playlistInfo?.name || t.sourcePlaylistName || 'Unknown Playlist',
+    }));
+
+  if (svc.isQuarantined()) {
+    if (dbRow && Array.isArray(dbRow.tracks) && dbRow.tracks.length > 0) {
+      if (spotifyPipelineLog.isEnabled()) {
+        spotifyPipelineLog.log('playlist_tracks_serving_from_db_cache', {
+          org_key: orgId,
+          playlist_id: String(playlistId),
+          reason: 'in_process_quarantine',
+        });
+      }
+      return {
+        tracks: mapTracks(dbRow.tracks),
+        fromTracksCache: true,
+        stale: true,
+        cacheUpdatedAt: dbRow.updatedAt,
+      };
+    }
+    const err = new Error('Spotify API quarantined (getPlaylistTracks)');
+    err.statusCode = 429;
+    err.headers = { 'retry-after': String(Math.max(1, svc.getQuarantineRemainingSec())) };
+    throw err;
+  }
+
+  try {
+    const tracks = await svc.getPlaylistTracks(playlistId, playlistInfo, { forceRefresh: force });
+    if (orgId && Array.isArray(tracks) && tracks.length > 0) {
+      const peek = svc.peekPlaylistTracksCache(playlistId);
+      void saveHostPlaylistTracksCache(orgId, playlistId, {
+        tracks: peek?.tracks?.length ? peek.tracks : tracks,
+        snapshotId: peek?.snapshotId ?? null,
+      });
+    }
+    return { tracks, fromTracksCache: false };
+  } catch (error) {
+    if (svc.isRateLimitError(error) && dbRow && Array.isArray(dbRow.tracks) && dbRow.tracks.length > 0) {
+      if (spotifyPipelineLog.isEnabled()) {
+        spotifyPipelineLog.log('playlist_tracks_serving_from_db_cache', {
+          org_key: orgId,
+          playlist_id: String(playlistId),
+          reason: 'spotify_429',
+        });
+      }
+      return {
+        tracks: mapTracks(dbRow.tracks),
+        fromTracksCache: true,
+        stale: true,
+        cacheUpdatedAt: dbRow.updatedAt,
+      };
+    }
+    throw error;
+  }
+}
+
 /** TTL for Postgres snapshot of official catalog packs (`TEMPO_CATALOG_PACKS_SERVER_CACHE_MS`). Default 7d; 0 = always fetch live (still use stale row on hard errors). */
 function readCatalogPacksServerCacheTtlMs() {
   const raw = process.env.TEMPO_CATALOG_PACKS_SERVER_CACHE_MS;
@@ -1416,6 +1568,7 @@ spotifyWebApiMeter.setFailsafeHandler(async (info) => {
       if (db && orgId.startsWith('user_')) {
         try {
           await db.query('DELETE FROM host_spotify_playlist_list_cache WHERE organization_id = $1', [orgId]);
+          await deleteHostPlaylistTracksCacheForOrg(orgId);
         } catch (e) {
           console.error('TEMPO_SPOTIFY_FAILSAFE playlist list cache delete:', e?.message || e);
         }
@@ -10164,6 +10317,7 @@ app.post('/api/spotify/clear', async (req, res) => {
           await db.query('DELETE FROM host_spotify_playlist_list_cache WHERE organization_id = $1', [
             `user_${uid}`,
           ]);
+          await deleteHostPlaylistTracksCacheForOrg(`user_${uid}`);
         }
       } catch (e) {
         console.error('clear playlist list cache:', e?.message || e);
@@ -11266,31 +11420,34 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
     let playlistInfo = null;
     if (nameFromClient) {
       playlistInfo = { id: playlistId, name: nameFromClient };
-    } else {
-    try {
+    } else if (!svc.isQuarantined()) {
+      try {
         const playlistResponse = await svc.spotifyApi.getPlaylist(playlistId);
-      playlistInfo = {
-        id: playlistResponse.body.id,
-        name: playlistResponse.body.name
-      };
-    } catch (error) {
-      console.warn('⚠️ Could not fetch playlist info for', playlistId, ':', error.message);
-      // Continue without playlist info
+        playlistInfo = {
+          id: playlistResponse.body.id,
+          name: playlistResponse.body.name,
+        };
+      } catch (error) {
+        console.warn('⚠️ Could not fetch playlist info for', playlistId, ':', error.message);
       }
     }
-    
+
     const forceRefresh =
       req.query.refresh === '1' ||
       req.query.refresh === 'true' ||
       req.query.forceRefresh === '1';
-    const tracks = await svc.getPlaylistTracks(playlistId, playlistInfo, { forceRefresh });
+    const result = await fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { forceRefresh });
 
     // Dynamic per-host Spotify data — discourage proxy/browser caching of playlist payloads (was showing as 304 + tiny transfer in DevTools).
     res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
-    
+
     res.json({
       success: true,
-      tracks: tracks
+      tracks: result.tracks,
+      ...(result.fromTracksCache ? { fromTracksCache: true } : {}),
+      ...(result.stale ? { stale: true } : {}),
+      ...(result.cacheUpdatedAt ? { cacheUpdatedAt: result.cacheUpdatedAt } : {}),
+      webApiQuarantine: svc.getWebApiQuarantineInfo(),
     });
   } catch (error) {
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;

@@ -292,6 +292,14 @@ function selectionPlaylistKey(playlists: Array<{ id: string }>): string {
     .join('|');
 }
 
+/** Stagger host playlist-tracks calls — multi-playlist mixes were bursting Spotify after OAuth reconnect. */
+function delayMsBetweenPlaylistTrackFetches(index: number, total: number): number {
+  if (index <= 0) return 0;
+  const base = total >= 4 ? 950 : total >= 2 ? 750 : 550;
+  const step = total >= 4 ? 320 : 220;
+  return Math.min(4000, base + index * step);
+}
+
 /** Tracks assigned to this round's playlists, order preserved from the finalized playback pool. */
 function songsForRoundFromFinalizedPool(round: EventRound, pool: Song[]): Song[] {
   const wantRaw = (round.playlistIds || []).map((id) => String(id).trim()).filter(Boolean);
@@ -2091,8 +2099,9 @@ const HostView: React.FC = () => {
           }
           setIsSpotifyConnected(true);
           setIsSpotifyConnecting(false);
-          await loadPlaylists({ forceRefresh: true });
-          await new Promise((r) => setTimeout(r, 800));
+          setlistDebounceExtraAfterSpotifyConnectMsRef.current = 2400;
+          await loadPlaylists();
+          await new Promise((r) => setTimeout(r, 1200));
           await loadDevices();
           // Devices often appear a few seconds after Spotify app / Web Player activates.
           deviceRetryTimer = window.setTimeout(() => {
@@ -2146,6 +2155,10 @@ const HostView: React.FC = () => {
   const songListRef = useRef<Song[]>([]);
   /** Playlist ids we have already fully loaded track lists for. */
   const fullyLoadedPlaylistIdsRef = useRef<Set<string>>(new Set());
+  /** Extra debounce once after Spotify OAuth / reconnect before setlist import (ms). */
+  const setlistDebounceExtraAfterSpotifyConnectMsRef = useRef(0);
+  const webApiQuarantineRef = useRef(webApiQuarantine);
+  webApiQuarantineRef.current = webApiQuarantine;
   /** Bumped to cancel in-flight generateSongList from selection/debounce — does not invalidate Finalize Mix (see finalizeSetlistGenerationRef). */
   const setlistBuildGenerationRef = useRef(0);
   /** Finalize Mix builds use this alone so the 750ms debounced `generateSongList` cannot bump generation mid-fetch and yield an empty list + false rate-limit alert. */
@@ -5564,8 +5577,26 @@ const HostView: React.FC = () => {
       try {
         let allSongs: Song[] = [...kept];
 
-        const needsHostSpotifyApi = toFetch.some((p) => !p.youtubeMusic);
+        const needsHostSpotifyApi = toFetch.some((p) => !p.youtubeMusic && p.catalog !== true);
         if (needsHostSpotifyApi && !readHostSpotifyWebEnabled()) {
+          setSongList([]);
+          return [];
+        }
+        if (needsHostSpotifyApi && webApiQuarantineRef.current.active === true) {
+          if (kept.length > 0) {
+            const shuffledSongs = dedupeAndShuffle(kept);
+            if (genRef.current !== myBuild) return [];
+            setSongList(shuffledSongs);
+            applyLoadedTrackCountsFromSongs(shuffledSongs);
+            return shuffledSongs;
+          }
+          showHostAckNotification({
+            id: 'setlist-skipped-quarantine',
+            title: 'Spotify rate limit',
+            variant: 'warning',
+            message:
+              'TEMPO is pausing Spotify track imports after a recent rate limit. Wait for cooldown, then change your mix selection or tap Refresh on a playlist.',
+          });
           setSongList([]);
           return [];
         }
@@ -5574,8 +5605,9 @@ const HostView: React.FC = () => {
           if (genRef.current !== myBuild) {
             return [];
           }
-          if (i > 0) {
-            await new Promise((r) => setTimeout(r, 450));
+          const gapMs = delayMsBetweenPlaylistTrackFetches(i, toFetch.length);
+          if (gapMs > 0) {
+            await new Promise((r) => setTimeout(r, gapMs));
           }
           const playlist = toFetch[i];
           const qs = new URLSearchParams();
@@ -5590,10 +5622,27 @@ const HostView: React.FC = () => {
             ? `${API_BASE || ''}/api/spotify/catalog/playlist/${playlist.id}${q ? `?${q}` : ''}`
             : `${API_BASE || ''}/api/spotify/playlist-tracks/${playlist.id}${q ? `?${q}` : ''}`;
           const response = await hostFetch(url, { cache: 'no-store' });
-          const data = (await response.json()) as { success?: boolean; tracks?: Song[] };
+          const data = (await response.json()) as {
+            success?: boolean;
+            tracks?: Song[];
+            webApiQuarantine?: unknown;
+          };
 
           if (genRef.current !== myBuild) {
             return [];
+          }
+          if (data.webApiQuarantine != null) {
+            setWebApiQuarantine(normalizeWebApiQuarantine(data.webApiQuarantine));
+          }
+          if (response.status === 429) {
+            showHostAckNotification({
+              id: 'setlist-playlist-tracks-429',
+              title: 'Spotify rate limit',
+              variant: 'warning',
+              message:
+                'Stopped importing playlist tracks — Spotify is rate-limiting. Loaded tracks are kept; wait and retry.',
+            });
+            break;
           }
           if (data.success && data.tracks) {
             const plCanon = canonicalPlaylistIdForMatch(playlist.id);
@@ -6115,10 +6164,13 @@ const HostView: React.FC = () => {
   // Build master setlist when selection changes. Debounced: ticking several playlists in a row = one import wave.
   // Depends on playlistSelectionKey + Spotify connectivity gates + mixNeedsHostSpotify — NOT generateSongList — so callback identity churn does not reschedule this effect (was causing 3× identical playlist-tracks bursts).
   useEffect(() => {
+    const extra = setlistDebounceExtraAfterSpotifyConnectMsRef.current;
+    setlistDebounceExtraAfterSpotifyConnectMsRef.current = 0;
+    const debounceMs = 750 + (extra > 0 ? extra : 0);
     const t = window.setTimeout(() => {
       if (finalizeMixInFlightRef.current) return;
       void generateSongListRef.current({ reason: 'selection' });
-    }, 750);
+    }, debounceMs);
     return () => window.clearTimeout(t);
   }, [playlistSelectionKey, isSpotifyConnected, mixNeedsHostSpotify]);
 
