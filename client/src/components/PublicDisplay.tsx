@@ -821,6 +821,10 @@ function carouselDwellMsForLeftColumn(leftColumnIndex: number, totalPopulatedBan
   return Math.round(CAROUSEL_BASE_DWELL_MS / speed);
 }
 
+function stripGotPlaylistDisplayName(raw: string): string {
+  return String(raw || '').replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
+}
+
 const PublicDisplay: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [fontSizeMultiplier, setFontSizeMultiplier] = useState<number>(1.0);
@@ -1647,6 +1651,8 @@ const PublicDisplay: React.FC = () => {
         const storedLetters = getStoredRevealedLetters();
         const storedBaselines = getStoredBaselines();
         const hasStoredState = storedLetters.length > 0 || Object.keys(storedBaselines).length > 0;
+
+        if (Array.isArray(data?.names)) setPlaylistNames(data.names);
 
         if (poolChanged) {
           console.log(`🔄 oneby75-pool order changed (${n} ids) — clearing call list / reveal state`);
@@ -3170,6 +3176,93 @@ const PublicDisplay: React.FC = () => {
     return grid;
   };
 
+  const renderPlaylistNamesHeaderRow = (
+    layoutMode: '5x15' | '1x75',
+    activeColumnIndex: number | null = null,
+  ): React.ReactNode => {
+    const cleaned = playlistNames.map((raw) => stripGotPlaylistDisplayName(String(raw || '')));
+    const nonEmpty = cleaned.filter(Boolean);
+    if (nonEmpty.length === 0) return null;
+
+    const letters = ['B', 'I', 'N', 'G', 'O'] as const;
+    const slotCount =
+      layoutMode === '5x15' ? 5 : Math.min(5, Math.max(1, nonEmpty.length));
+    const singleOneBy75 = layoutMode === '1x75' && slotCount === 1;
+    const labels =
+      layoutMode === '5x15' ? cleaned : singleOneBy75 ? [nonEmpty[0]] : nonEmpty.slice(0, slotCount);
+
+    return (
+      <div
+        className="call-columns-header"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: singleOneBy75 ? '1fr' : `repeat(${slotCount}, minmax(0, 1fr))`,
+          gap: 4,
+          alignItems: 'center',
+        }}
+      >
+        {Array.from({ length: slotCount }, (_, i) => {
+          const name = labels[i] || '';
+          const bingoLetter = letters[i];
+          const isActiveColumn = layoutMode === '5x15' && activeColumnIndex === i;
+
+          return (
+            <motion.div
+              key={i}
+              className="call-col-title"
+              style={{ textAlign: 'center', borderRadius: 10 }}
+              initial={false}
+              animate={
+                isActiveColumn
+                  ? {
+                      backgroundColor: 'rgba(0,255,136,0.16)',
+                      border: '2px solid rgba(0,255,136,0.9)',
+                      boxShadow: [
+                        '0 0 14px rgba(0,255,136,0.35)',
+                        '0 0 26px rgba(0,255,136,0.55)',
+                        '0 0 14px rgba(0,255,136,0.35)',
+                      ],
+                    }
+                  : {
+                      backgroundColor: 'rgba(0,0,0,0)',
+                      border: '2px solid transparent',
+                      boxShadow: '0 0 0 rgba(0,0,0,0)',
+                    }
+              }
+              transition={
+                isActiveColumn
+                  ? {
+                      border: { duration: 0.25 },
+                      backgroundColor: { duration: 0.25 },
+                      boxShadow: { duration: 2.2, repeat: Infinity, ease: 'easeInOut' },
+                    }
+                  : { duration: 0.25 }
+              }
+            >
+              {name ? (
+                <div className="call-playlist-name">
+                  {singleOneBy75 ? (
+                    <span style={{ color: '#ffffff' }}>{name}</span>
+                  ) : (
+                    <>
+                      <span style={{ color: '#00ff88', marginRight: '0.3em' }}>{bingoLetter}</span>
+                      <span style={{ color: '#ffffff', margin: '0 0.2em' }}>-</span>
+                      <span style={{ color: '#ffffff' }}>{name}</span>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="call-playlist-name" style={{ color: '#00ff88' }}>
+                  {bingoLetter}
+                </div>
+              )}
+            </motion.div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const renderOneBy75Columns = () => {
     if (columnCallListLayout && !layoutFiveColumns) {
       return (
@@ -3237,66 +3330,7 @@ const PublicDisplay: React.FC = () => {
 
     return (
       <div className="call-list-content">
-        <div className="call-columns-header" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, alignItems: 'center', marginBottom: 6 }}>
-          {[0,1,2,3,4].map((i) => {
-            const raw = playlistNames[i] || '';
-            const name = raw.replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
-            const bingoLetter = ['B', 'I', 'N', 'G', 'O'][i];
-            const isActiveColumn = activeColumnIndex === i;
-
-            return (
-              <motion.div
-                key={i}
-                className="call-col-title"
-                style={{ textAlign: 'center', borderRadius: 12, padding: '8px 6px' }}
-                initial={false}
-                animate={
-                  isActiveColumn
-                    ? {
-                        backgroundColor: 'rgba(0,255,136,0.16)',
-                        border: '2px solid rgba(0,255,136,0.9)',
-                        boxShadow: [
-                          '0 0 14px rgba(0,255,136,0.35)',
-                          '0 0 26px rgba(0,255,136,0.55)',
-                          '0 0 14px rgba(0,255,136,0.35)',
-                        ],
-                      }
-                    : {
-                        backgroundColor: 'rgba(0,0,0,0)',
-                        border: '2px solid transparent',
-                        boxShadow: '0 0 0 rgba(0,0,0,0)',
-                      }
-                }
-                transition={
-                  isActiveColumn
-                    ? { border: { duration: 0.25 }, backgroundColor: { duration: 0.25 }, boxShadow: { duration: 2.2, repeat: Infinity, ease: 'easeInOut' } }
-                    : { duration: 0.25 }
-                }
-              >
-                {name ? (
-                  <div style={{ 
-                    fontSize: '2.4rem', // Match single line display size
-                    fontWeight: 900, 
-                    opacity: 0.95, 
-                    whiteSpace: 'normal', // Allow wrapping instead of truncating
-                    wordBreak: 'break-word', // Break long words if needed
-                    textShadow: '0 2px 4px rgba(0,0,0,0.8)',
-                    maxWidth: '100%',
-                    lineHeight: 1.2 // Slightly tighter line height for multi-line
-                  }}>
-                    <span style={{ color: '#00ff88', marginRight: '0.3em' }}>{bingoLetter}</span>
-                    <span style={{ color: '#ffffff', margin: '0 0.2em' }}>-</span>
-                    <span style={{ color: '#ffffff' }}>{name}</span>
-                  </div>
-                ) : (
-                  <div style={{ fontSize: '2.4rem', fontWeight: 900, opacity: 0.95, color: '#00ff88', textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>
-                    {bingoLetter}
-                  </div>
-                )}
-              </motion.div>
-            );
-          })}
-        </div>
+        {renderPlaylistNamesHeaderRow('5x15', activeColumnIndex)}
         <div className="call-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, height: '100%' }}>
           {cols.map((col, ci) => (
             <div
@@ -3477,15 +3511,15 @@ const PublicDisplay: React.FC = () => {
           style={{
             display: 'flex',
             alignItems: 'flex-start',
-            gap: 8,
-            padding: '8px 10px',
+            gap: 6,
+            padding: '6px 8px',
             border: '1px solid rgba(255,255,255,0.15)',
-            borderRadius: 12,
+            borderRadius: 10,
             width: '100%',
             maxWidth: '100%',
             minWidth: 0,
             boxSizing: 'border-box',
-            height: isFullCardPattern ? 'auto' : '100%',
+            height: 'auto',
             overflow: 'hidden',
             background: isCurrent ? 'rgba(0,255,136,0.12)' : 'rgba(255,255,255,0.08)',
             boxShadow: isCurrent ? '0 0 16px rgba(0,255,136,0.35)' : 'none',
@@ -3566,6 +3600,7 @@ const PublicDisplay: React.FC = () => {
     if (!shouldScroll) {
       return (
         <div className="call-list-content">
+          {renderPlaylistNamesHeaderRow('1x75')}
           <div
             ref={carouselViewportRef}
             className="call-carousel-viewport call-carousel-viewport--static-grid"
@@ -3587,6 +3622,7 @@ const PublicDisplay: React.FC = () => {
 
     return (
       <div className="call-list-content">
+        {renderPlaylistNamesHeaderRow('1x75')}
         <div
           ref={carouselViewportRef}
           className="call-carousel-viewport"

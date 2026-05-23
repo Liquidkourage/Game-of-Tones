@@ -4227,7 +4227,11 @@ io.on('connection', (socket) => {
         room.oneBySeventyFivePool.length > 0
       ) {
         const oneBy75Ids = room.oneBySeventyFivePool.map(s => s.id).filter(Boolean);
-        socket.emit('oneby75-pool', { ids: oneBy75Ids });
+        const oneBy75Names = playlistNamesForOneBy75Emit(room);
+        socket.emit('oneby75-pool', {
+          ids: oneBy75Ids,
+          ...(oneBy75Names.length > 0 ? { names: oneBy75Names } : {}),
+        });
       }
       
       io.to(socket.id).emit('room-state', payload);
@@ -5451,6 +5455,28 @@ function showDeckFromFinalizedOrder(room, deckSource) {
     .filter(Boolean);
 }
 
+function playlistNamesForOneBy75Emit(room) {
+  if (!room) return [];
+  const pl =
+    Array.isArray(room.finalizedPlaylists) && room.finalizedPlaylists.length > 0
+      ? room.finalizedPlaylists
+      : Array.isArray(room.playlists)
+        ? room.playlists
+        : [];
+  return pl.map((p) => String(p?.name || ''));
+}
+
+function emitOneBy75Pool(roomId, room) {
+  const pool = room?.oneBySeventyFivePool;
+  if (!Array.isArray(pool) || pool.length === 0) return;
+  const ids = pool.map((s) => s.id).filter(Boolean);
+  if (ids.length === 0) return;
+  const names = playlistNamesForOneBy75Emit(room);
+  const payload = { ids };
+  if (names.length > 0) payload.names = names;
+  io.to(roomId).emit('oneby75-pool', payload);
+}
+
 /**
  * Bingo pool #1…N for host + 1×75 display; playback runs this list in order (not re-shuffled per song).
  */
@@ -5466,7 +5492,7 @@ function applyShowPoolOrderToRoom(room, roomId, showDeck) {
     room.oneBySeventyFivePool = showDeck.map((s) => ({ id: s.id }));
     const ids = room.oneBySeventyFivePool.map((r) => r.id).filter(Boolean);
     if (ids.length > 0) {
-      io.to(roomId).emit('oneby75-pool', { ids });
+      emitOneBy75Pool(roomId, room);
       routineServerLog(`📊 oneby75-pool synced to pool positions 1–${ids.length}`);
     }
   }
@@ -5662,7 +5688,7 @@ function emitPublicDisplayPoolLayout(roomId, room) {
     const oneBy75Ids = room.oneBySeventyFivePool.map((s) => s.id).filter(Boolean);
     if (oneBy75Ids.length > 0) {
       routineServerLog(`📊 Emitting oneby75-pool (${oneBy75Ids.length} ids)`);
-      io.to(roomId).emit('oneby75-pool', { ids: oneBy75Ids });
+      emitOneBy75Pool(roomId, room);
     }
   }
 }
@@ -6042,7 +6068,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       if (roomRef) {
         roomRef.oneBySeventyFivePool = base.map(s => ({ id: s.id }));
         routineServerLog(`✅ 1x75: Stored ${base.length} songs in oneBySeventyFivePool for card/playback alignment`);
-        io.to(roomId).emit('oneby75-pool', { ids: base.map(s => s.id) });
+        emitOneBy75Pool(roomId, roomRef);
         try {
           if (base.length > 0) {
             const solePl = Array.isArray(playlists) && playlists.length > 0 ? playlists[0] : null;

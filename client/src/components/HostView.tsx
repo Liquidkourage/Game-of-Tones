@@ -4037,7 +4037,7 @@ const HostView: React.FC = () => {
       alert(
         mixNeedsHostSpotify
           ? 'No songs loaded from playlists. Ensure Spotify is connected and playlists have tracks, then try again.'
-          : 'No songs loaded. Open Connection and connect YouTube Music if needed, load playlists, then try Finalize Mix or Start Game again.'
+          : 'No songs loaded. Open Connection and connect YouTube Music if needed, load playlists, then try Show Playlists or Start Game again.'
       );
       return;
     }
@@ -4048,7 +4048,7 @@ const HostView: React.FC = () => {
         const ok = await finalizeMix();
         if (!ok) {
           alert(
-            'Could not finalize the mix in time. Try the Finalize Mix button, wait for the confirmation, then Start Game.'
+            'Could not finalize the mix in time. Try Show Playlists, wait for the confirmation, then Start Game.'
           );
           return;
         }
@@ -8398,7 +8398,7 @@ const HostView: React.FC = () => {
                       disabled={mixGameActionsBlocked}
                     >
                       <ListChecks className="w-4 h-4" aria-hidden />
-                      Finalize Mix
+                      Show Playlists
                     </button>
                   ) : null}
                   {prepRoundReadyForGoLive ? (
@@ -8425,8 +8425,8 @@ const HostView: React.FC = () => {
                 </div>
                 {!gameTabRoundBuilderReady ? (
                   <p className="host-go-live__hint">
-                    Start Game will <strong>finalize the mix automatically</strong> if needed. Use Finalize Mix first only
-                    for an early card preview on the display.
+                    Start Game will <strong>finalize the mix automatically</strong> if needed. Use Show Playlists to
+                    preview playlist names on the display.
                   </p>
                 ) : null}
               </section>
@@ -8843,7 +8843,7 @@ const HostView: React.FC = () => {
                     }}>
                       {mixPlaylistSelection.length === 0
                         ? 'Open Round builder to add playlists to a round. Connect Spotify and/or YouTube Music in Connection if needed.'
-                        : 'Tap Finalize Mix or Start Game to build the bingo song pool from your selected playlists.'}
+                        : 'Tap Show Playlists or Start Game to build the bingo song pool from your selected playlists.'}
                     </p>
                   </div>
                 )}

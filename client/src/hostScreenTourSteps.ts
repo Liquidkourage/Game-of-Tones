@@ -55,7 +55,7 @@ export function buildHostScreenTourSteps(ctx: HostTourContext): HostTourStep[] {
     {
       id: 'round-setlist',
       title: 'Round builder details',
-      body: 'Inside the planner: pick the pattern, toggle free space, finalize the mix when prompted, and use Event actions for save/print/reset. Playback snippet length and start position live under Saved host preferences.',
+      body: 'Inside the planner: pick the pattern, toggle free space, use Show Playlists when you want playlist names on the projector before Start Game, and use Event actions for save/print/reset. Playback snippet length and start position live under Saved host preferences.',
       placement: 'right',
       visible: true,
     },
