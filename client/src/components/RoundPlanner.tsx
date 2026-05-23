@@ -125,6 +125,8 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
     deviceSelected: boolean;
   };
   initialFocusedIndex?: number;
+  /** Keeps host roundBuilderFocusIndex in sync when the user picks a bucket in the planner. */
+  onFocusedRoundChange?: (roundIndex: number) => void;
   statusSummary?: { completed: number; active: number; planned: number; unplanned: number };
   onResetEvent?: () => void;
   onClearPrepCache?: () => void;
@@ -172,6 +174,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   onRandomStartsChange,
   prepHints,
   initialFocusedIndex = 0,
+  onFocusedRoundChange,
   statusSummary,
   onResetEvent,
   onClearPrepCache,
@@ -193,6 +196,8 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   onSelectRoundForPrepRef.current = onSelectRoundForPrep;
   const onSyncMixFromRoundRef = React.useRef(onSyncMixFromRound);
   onSyncMixFromRoundRef.current = onSyncMixFromRound;
+  const onFocusedRoundChangeRef = React.useRef(onFocusedRoundChange);
+  onFocusedRoundChangeRef.current = onFocusedRoundChange;
   const lastModalFocusRef = React.useRef<number | null>(null);
 
   const loadPrepForRound = useCallback(
@@ -223,19 +228,23 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
     (roundIndex: number) => {
       const clamped = Math.min(Math.max(0, roundIndex), Math.max(0, rounds.length - 1));
       setFocusedIndex(clamped);
+      onFocusedRoundChangeRef.current?.(clamped);
       loadPrepForRound(clamped);
     },
     [loadPrepForRound, rounds.length],
   );
 
+  const loadPrepForRoundRef = React.useRef(loadPrepForRound);
+  loadPrepForRoundRef.current = loadPrepForRound;
+
+  /** Only follow parent initialFocusedIndex when that prop changes — not on every rounds[] update. */
   useEffect(() => {
+    if (lastModalFocusRef.current === initialFocusedIndex) return;
+    lastModalFocusRef.current = initialFocusedIndex;
     const next = Math.min(Math.max(0, initialFocusedIndex), Math.max(0, rounds.length - 1));
     setFocusedIndex(next);
-    if (lastModalFocusRef.current !== initialFocusedIndex) {
-      lastModalFocusRef.current = initialFocusedIndex;
-      loadPrepForRound(next);
-    }
-  }, [initialFocusedIndex, loadPrepForRound, rounds.length]);
+    loadPrepForRoundRef.current(next);
+  }, [initialFocusedIndex, rounds.length]);
 
   useEffect(() => {
     setFocusedIndex((i) => Math.min(i, Math.max(0, rounds.length - 1)));
@@ -336,6 +345,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
     updated = sortRoundPlaylistsByBingoColumns(updated, playlists);
     newRounds[roundIndex] = updated;
     onUpdateRounds(newRounds);
+    onFocusedRoundChangeRef.current?.(roundIndex);
     syncMixIfPrepRound(roundIndex, updated);
   };
 

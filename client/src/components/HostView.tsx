@@ -6240,6 +6240,7 @@ const HostView: React.FC = () => {
     (roundIndex: number, roundOverride?: EventRound) => {
       const round = roundOverride ?? eventRoundsRef.current[roundIndex];
       if (!round || !(round.playlistIds || []).length) return;
+      setRoundBuilderFocusIndex(roundIndex);
       applyRoundPlaylistsToMixSelection(round);
       const merged = resolveMixPlaylistRowsForRound(round);
       if (merged?.length) {
@@ -7346,6 +7347,7 @@ const HostView: React.FC = () => {
       randomStarts={randomStarts}
       onRandomStartsChange={setRandomStarts}
       initialFocusedIndex={roundBuilderFocusIndex}
+      onFocusedRoundChange={setRoundBuilderFocusIndex}
       prepHints={{
         spotifyNeeded: mixNeedsHostSpotify,
         spotifyConnected: isSpotifyConnected,
