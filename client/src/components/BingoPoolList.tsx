@@ -136,12 +136,9 @@ ${validationMessage}`}
                   <SpotifyExplicitBadge size="md" title="Marked explicit on Spotify" />
                 ) : null}
                 {isAliased ? (
-                  <Tag
-                    className="bingo-pool-list__alias-icon"
-                    size={13}
-                    aria-label="Display alias"
-                    title="Display alias"
-                  />
+                  <span className="bingo-pool-list__alias-icon" title="Display alias" aria-label="Display alias">
+                    <Tag size={13} aria-hidden />
+                  </span>
                 ) : null}
                 {!isAliased && displayTitle !== song.name ? (
                   <span className="bingo-pool-list__cleaned">(cleaned)</span>

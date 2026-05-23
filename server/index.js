@@ -14,6 +14,7 @@ const hostAuth = require('./hostAuth');
 const usersStore = require('./users');
 const organizationsStore = require('./organizations');
 const hostRoomPrepStore = require('./hostRoomPrep');
+const songAliasesStore = require('./songAliases');
 const venueLogoCache = require('./venueLogoCache');
 const credentialCrypto = require('./credentialCrypto');
 const spotifyPipelineLog = require('./spotifyPipelineLog');
@@ -362,12 +363,42 @@ venueLogoCache.registerVenueLogoRoutes(app);
 const games = new Map();
 const rooms = new Map();
 
-/** songId -> { title, artist } — display-only aliases (playback still uses songId). */
-const songAliases = new Map();
+/** organization_id -> Map(songId -> { title, artist }) — loaded from song_display_aliases. */
+const songAliasCacheByOrg = new Map();
+const songAliasOrgLoaded = new Set();
 
-function getSongAlias(songId) {
-  if (!songId) return null;
-  const a = songAliases.get(songId);
+async function ensureRoomDbOrganizationId(room, socket) {
+  if (!room) return null;
+  if (room.dbOrganizationId != null) return room.dbOrganizationId;
+  const uid = room.ownerUserId ?? socket?.hostUserId ?? null;
+  if (uid == null || !db) return null;
+  const orgId = await songAliasesStore.getOrganizationIdForUserId(db, Number(uid));
+  if (orgId != null) room.dbOrganizationId = orgId;
+  return room.dbOrganizationId ?? null;
+}
+
+async function ensureSongAliasCacheForOrg(orgId) {
+  if (orgId == null) return;
+  if (songAliasOrgLoaded.has(orgId)) return;
+  const map = new Map();
+  if (db) {
+    try {
+      const rows = await songAliasesStore.listAliasesForOrganization(db, orgId);
+      for (const row of rows) {
+        map.set(row.songId, { title: row.title, artist: row.artist });
+      }
+    } catch (e) {
+      console.error('ensureSongAliasCacheForOrg:', e?.message || e);
+    }
+  }
+  songAliasCacheByOrg.set(orgId, map);
+  songAliasOrgLoaded.add(orgId);
+}
+
+function getSongAliasForOrg(orgId, songId) {
+  if (orgId == null || !songId) return null;
+  const map = songAliasCacheByOrg.get(orgId);
+  const a = map?.get(songId);
   if (!a || typeof a !== 'object') return null;
   const title = a.title != null ? String(a.title).trim() : '';
   const artist = a.artist != null ? String(a.artist).trim() : '';
@@ -375,8 +406,19 @@ function getSongAlias(songId) {
   return { title, artist };
 }
 
-function songAliasDisplayFields(songId, fallbackName, fallbackArtist) {
-  const alias = getSongAlias(songId);
+function setSongAliasInOrgCache(orgId, songId, title, artist) {
+  if (orgId == null) return;
+  if (!songAliasCacheByOrg.has(orgId)) songAliasCacheByOrg.set(orgId, new Map());
+  songAliasCacheByOrg.get(orgId).set(songId, { title, artist });
+  songAliasOrgLoaded.add(orgId);
+}
+
+function deleteSongAliasFromOrgCache(orgId, songId) {
+  songAliasCacheByOrg.get(orgId)?.delete(songId);
+}
+
+function songAliasDisplayFields(songId, fallbackName, fallbackArtist, orgId) {
+  const alias = getSongAliasForOrg(orgId, songId);
   if (alias) {
     return { customSongName: alias.title, customArtistName: alias.artist };
   }
@@ -386,7 +428,7 @@ function songAliasDisplayFields(songId, fallbackName, fallbackArtist) {
   };
 }
 
-function patchSongAliasOnAllCards(songId, title, artist) {
+function patchSongAliasOnAllCards(orgId, songId, title, artist) {
   const touchSquare = (sq) => {
     if (sq && sq.songId === songId) {
       sq.customSongName = title;
@@ -394,6 +436,7 @@ function patchSongAliasOnAllCards(songId, title, artist) {
     }
   };
   for (const room of rooms.values()) {
+    if (room.dbOrganizationId !== orgId) continue;
     if (room.bingoCards) {
       for (const card of room.bingoCards.values()) {
         if (!card?.squares) continue;
@@ -410,7 +453,7 @@ function patchSongAliasOnAllCards(songId, title, artist) {
   }
 }
 
-function clearSongAliasOnAllCards(songId) {
+function clearSongAliasOnAllCards(orgId, songId) {
   const touchSquare = (sq) => {
     if (sq && sq.songId === songId) {
       sq.customSongName = cleanSongTitle(sq.songName || '');
@@ -418,6 +461,7 @@ function clearSongAliasOnAllCards(songId) {
     }
   };
   for (const room of rooms.values()) {
+    if (room.dbOrganizationId !== orgId) continue;
     if (room.bingoCards) {
       for (const card of room.bingoCards.values()) {
         if (!card?.squares) continue;
@@ -432,6 +476,41 @@ function clearSongAliasOnAllCards(songId) {
       }
     }
   }
+}
+
+function emitSongAliasEventToOrg(orgId, eventName, payload) {
+  for (const [roomId, room] of rooms.entries()) {
+    if (room.dbOrganizationId !== orgId) continue;
+    io.to(roomId).emit(eventName, payload);
+  }
+}
+
+function findRoomForHostSocket(socket, roomIdHint) {
+  if (roomIdHint && rooms.has(roomIdHint)) {
+    const room = rooms.get(roomIdHint);
+    if (room && room.host === socket.id) return { roomId: roomIdHint, room };
+  }
+  for (const [roomId, room] of rooms.entries()) {
+    if (room.host === socket.id) return { roomId, room };
+  }
+  return null;
+}
+
+async function pushSongAliasesToHostSocket(socket, room) {
+  const orgId = await ensureRoomDbOrganizationId(room, socket);
+  if (orgId == null) {
+    socket.emit('all-song-aliases-response', {});
+    return;
+  }
+  await ensureSongAliasCacheForOrg(orgId);
+  const map = songAliasCacheByOrg.get(orgId);
+  const record = {};
+  if (map) {
+    for (const [songId, alias] of map.entries()) {
+      record[songId] = alias;
+    }
+  }
+  socket.emit('all-song-aliases-response', record);
 }
 const PREQUEUE_WINDOW_DEFAULT = 10;
 // Utility: count non-host players in a room
@@ -763,7 +842,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
     io.to(roomId).emit('song-playing', {
       songId: song.id,
       songName: song.name,
-      ...songAliasDisplayFields(song.id, song.name, song.artist),
+      ...songAliasDisplayFields(song.id, song.name, song.artist, room.dbOrganizationId ?? null),
       artistName: song.artist,
       explicit: song.explicit === true,
       snippetLength: room.snippetLength,
@@ -1076,6 +1155,7 @@ async function initializeDatabase() {
     await usersStore.ensureUsersTable(db);
     await usersStore.ensureHostAllowlistTable(db);
     await organizationsStore.ensureOrganizationsTable(db);
+    await songAliasesStore.ensureSongAliasesTable(db);
     await hostRoomPrepStore.ensureHostRoomPrepTable(db);
     await db.query(`
       CREATE TABLE IF NOT EXISTS host_spotify_playlist_list_cache (
@@ -1510,7 +1590,7 @@ function buildSongPlayingPayload(room, song, currentIndex) {
   const payload = {
     songId: song.id,
     songName: song.name,
-    ...songAliasDisplayFields(song.id, song.name, song.artist),
+    ...songAliasDisplayFields(song.id, song.name, song.artist, room.dbOrganizationId ?? null),
     artistName: song.artist,
     explicit: song.explicit === true,
     snippetLength: room.snippetLength,
@@ -1529,21 +1609,21 @@ function buildSongPlayingPayload(room, song, currentIndex) {
 }
 
 /** Display titles for room-state: matches song-playing (host overrides + cleaned Spotify titles). */
-function clientSongMetaFromPlaylistSong(foundSong) {
+function clientSongMetaFromPlaylistSong(foundSong, orgId) {
   if (!foundSong) return null;
   return {
     id: foundSong.id,
     name: foundSong.name,
     artist: foundSong.artist,
-    ...songAliasDisplayFields(foundSong.id, foundSong.name, foundSong.artist),
+    ...songAliasDisplayFields(foundSong.id, foundSong.name, foundSong.artist, orgId),
   };
 }
 
-function currentSongPayloadForRoomState(currentSong) {
+function currentSongPayloadForRoomState(currentSong, orgId) {
   if (!currentSong || !currentSong.id) return currentSong || null;
   return {
     ...currentSong,
-    ...songAliasDisplayFields(currentSong.id, currentSong.name, currentSong.artist),
+    ...songAliasDisplayFields(currentSong.id, currentSong.name, currentSong.artist, orgId),
   };
 }
 
@@ -1558,7 +1638,7 @@ function syncRoomStateAfterSongStart(roomId, room) {
     customMask: Array.from(room.customPattern || []),
     patternComposite: patternCompositeForClient(room),
     ...patternExtrasForClient(room),
-    currentSong: currentSongPayloadForRoomState(room.currentSong),
+    currentSong: currentSongPayloadForRoomState(room.currentSong, room.dbOrganizationId ?? null),
     snippetLength: room.snippetLength || 30,
     playerCount: getNonHostPlayerCount(room),
     gameState: room.gameState,
@@ -1572,7 +1652,7 @@ function syncRoomStateAfterSongStart(roomId, room) {
     playedSongs: playedSongIds
       .map((songId) => {
         const foundSong = room.playlistSongs?.find((s) => s.id === songId);
-        return clientSongMetaFromPlaylistSong(foundSong);
+        return clientSongMetaFromPlaylistSong(foundSong, room.dbOrganizationId ?? null);
       })
       .filter(Boolean),
     playedSongIds,
@@ -1903,7 +1983,7 @@ async function playNextSongSimple(roomId, deviceId) {
     io.to(roomId).emit('song-playing', {
       songId: nextSong.id,
       songName: nextSong.name,
-      ...songAliasDisplayFields(nextSong.id, nextSong.name, nextSong.artist),
+      ...songAliasDisplayFields(nextSong.id, nextSong.name, nextSong.artist, room.dbOrganizationId ?? null),
       artistName: nextSong.artist,
       explicit: nextSong.explicit === true,
       snippetLength: room.snippetLength,
@@ -1925,7 +2005,7 @@ async function playNextSongSimple(roomId, deviceId) {
       customMask: Array.from(room.customPattern || []),
       patternComposite: patternCompositeForClient(room),
       ...patternExtrasForClient(room),
-      currentSong: currentSongPayloadForRoomState(room.currentSong),
+      currentSong: currentSongPayloadForRoomState(room.currentSong, room.dbOrganizationId ?? null),
       snippetLength: room.snippetLength || 30,
       playerCount: getNonHostPlayerCount(room),
       gameState: room.gameState,
@@ -1938,7 +2018,7 @@ async function playNextSongSimple(roomId, deviceId) {
       venueBranding: venueBrandingForRoom(room),
       playedSongs: playedSongIds.map(songId => {
         const foundSong = room.playlistSongs?.find(s => s.id === songId);
-        return clientSongMetaFromPlaylistSong(foundSong);
+        return clientSongMetaFromPlaylistSong(foundSong, room.dbOrganizationId ?? null);
       }).filter(Boolean),
       playedSongIds: playedSongIds,
       totalPlayedCount: playedSongIds.length,
@@ -2633,6 +2713,12 @@ io.on('connection', (socket) => {
           p.isHost = false;
         }
       }
+      try {
+        await ensureRoomDbOrganizationId(room, socket);
+        await pushSongAliasesToHostSocket(socket, room);
+      } catch (e) {
+        console.error('join-room song aliases:', e?.message || e);
+      }
     }
     
     routineServerLog(`Player ${playerName} joined room ${roomId}. Total players: ${room.players.size}`);
@@ -2712,6 +2798,7 @@ io.on('connection', (socket) => {
                 room.currentSong.id,
                 room.currentSong.name,
                 room.currentSong.artist,
+                room.dbOrganizationId ?? null,
               ),
               artistName: room.currentSong.artist,
               explicit,
@@ -2751,6 +2838,7 @@ io.on('connection', (socket) => {
                 room.currentSong.id,
                 room.currentSong.name,
                 room.currentSong.artist,
+                room.dbOrganizationId ?? null,
               ),
               artistName: room.currentSong.artist,
               explicit,
@@ -3058,7 +3146,7 @@ io.on('connection', (socket) => {
             });
             return;
           }
-          const card = buildPrintableCardFromChosen(chosen25, useFreeSpace, i);
+          const card = buildPrintableCardFromChosen(chosen25, useFreeSpace, i, room.dbOrganizationId ?? null);
           if (!card) {
             socket.emit('printable-cards-error', { message: 'Card build failed.' });
             return;
@@ -4281,7 +4369,7 @@ io.on('connection', (socket) => {
         customMask: Array.from(room.customPattern || []),
         patternComposite: patternCompositeForClient(room),
         ...patternExtrasForClient(room),
-        currentSong: currentSongPayloadForRoomState(room.currentSong),
+        currentSong: currentSongPayloadForRoomState(room.currentSong, room.dbOrganizationId ?? null),
         snippetLength: room.snippetLength || 30,
         playerCount: getNonHostPlayerCount(room),
         gameState: room.gameState,
@@ -4295,7 +4383,7 @@ io.on('connection', (socket) => {
         // Include played songs for PublicDisplay sync (includes current song)
         playedSongs: playedSongIds.map(songId => {
           const foundSong = room.playlistSongs?.find(s => s.id === songId);
-          return clientSongMetaFromPlaylistSong(foundSong);
+          return clientSongMetaFromPlaylistSong(foundSong, room.dbOrganizationId ?? null);
         }).filter(Boolean),
         // Also send song IDs array for client state sync
         playedSongIds: playedSongIds,
@@ -5228,7 +5316,7 @@ io.on('connection', (socket) => {
       io.to(roomId).emit('song-playing', {
         songId,
         songName,
-        ...songAliasDisplayFields(songId, songName, artistName),
+        ...songAliasDisplayFields(songId, songName, artistName, room.dbOrganizationId ?? null),
         artistName,
         explicit: fromPool?.explicit === true,
         snippetLength: room.snippetLength
@@ -5360,30 +5448,73 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('display-reset-letters');
   });
 
-  // Song display aliases (title + artist); patches live bingo cards.
-  socket.on('set-song-alias', (data) => {
-    const { songId, title, artist } = data || {};
-    const t = title != null ? String(title).trim() : '';
-    const a = artist != null ? String(artist).trim() : '';
-    if (!songId || !t || !a) return;
-    songAliases.set(songId, { title: t, artist: a });
-    patchSongAliasOnAllCards(songId, t, a);
-    routineServerLog(`✏️ Song alias set for ${songId}: "${t}" — ${a}`);
-    io.emit('song-alias-updated', { songId, title: t, artist: a });
+  // Song display aliases (per organization, persisted in song_display_aliases).
+  socket.on('set-song-alias', async (data) => {
+    try {
+      const { roomId: roomIdHint, songId, title, artist } = data || {};
+      const t = title != null ? String(title).trim() : '';
+      const a = artist != null ? String(artist).trim() : '';
+      if (!songId || !t || !a) return;
+      const located = findRoomForHostSocket(socket, roomIdHint);
+      if (!located) return;
+      const { room } = located;
+      const orgId = await ensureRoomDbOrganizationId(room, socket);
+      if (orgId == null || !db) {
+        socket.emit('song-alias-error', {
+          message:
+            'Assign this host to an organization in Admin (and set DATABASE_URL) to save track aliases.',
+        });
+        return;
+      }
+      await songAliasesStore.upsertAlias(db, orgId, songId, t, a);
+      setSongAliasInOrgCache(orgId, songId, t, a);
+      patchSongAliasOnAllCards(orgId, songId, t, a);
+      routineServerLog(`✏️ Song alias (org ${orgId}) for ${songId}: "${t}" — ${a}`);
+      emitSongAliasEventToOrg(orgId, 'song-alias-updated', { songId, title: t, artist: a });
+    } catch (e) {
+      console.error('set-song-alias:', e?.message || e);
+      socket.emit('song-alias-error', { message: e?.message || 'Failed to save alias' });
+    }
   });
 
-  socket.on('clear-song-alias', (data) => {
-    const { songId } = data || {};
-    if (!songId) return;
-    songAliases.delete(songId);
-    clearSongAliasOnAllCards(songId);
-    routineServerLog(`✏️ Song alias cleared for ${songId}`);
-    io.emit('song-alias-cleared', { songId });
+  socket.on('clear-song-alias', async (data) => {
+    try {
+      const { roomId: roomIdHint, songId } = data || {};
+      if (!songId) return;
+      const located = findRoomForHostSocket(socket, roomIdHint);
+      if (!located) return;
+      const { room } = located;
+      const orgId = await ensureRoomDbOrganizationId(room, socket);
+      if (orgId == null || !db) {
+        socket.emit('song-alias-error', {
+          message: 'Assign this host to an organization in Admin to manage track aliases.',
+        });
+        return;
+      }
+      await songAliasesStore.deleteAlias(db, orgId, songId);
+      deleteSongAliasFromOrgCache(orgId, songId);
+      clearSongAliasOnAllCards(orgId, songId);
+      routineServerLog(`✏️ Song alias cleared (org ${orgId}) for ${songId}`);
+      emitSongAliasEventToOrg(orgId, 'song-alias-cleared', { songId });
+    } catch (e) {
+      console.error('clear-song-alias:', e?.message || e);
+      socket.emit('song-alias-error', { message: e?.message || 'Failed to clear alias' });
+    }
   });
 
-  socket.on('get-all-song-aliases', () => {
-    const all = Object.fromEntries(songAliases);
-    socket.emit('all-song-aliases-response', all);
+  socket.on('get-all-song-aliases', async (data) => {
+    try {
+      const roomIdHint = data && typeof data === 'object' ? data.roomId : undefined;
+      const located = findRoomForHostSocket(socket, roomIdHint);
+      if (!located) {
+        socket.emit('all-song-aliases-response', {});
+        return;
+      }
+      await pushSongAliasesToHostSocket(socket, located.room);
+    } catch (e) {
+      console.error('get-all-song-aliases:', e?.message || e);
+      socket.emit('all-song-aliases-response', {});
+    }
   });
 
 
@@ -5955,6 +6086,13 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       routineServerLog(`📌 Room ${roomId}: ownerUserId=${room.ownerUserId} (from host socket — Spotify org key)`);
     }
   }
+  if (room.dbOrganizationId == null && room.ownerUserId != null && db) {
+    const orgId = await songAliasesStore.getOrganizationIdForUserId(db, Number(room.ownerUserId));
+    if (orgId != null) {
+      room.dbOrganizationId = orgId;
+      await ensureSongAliasCacheForOrg(orgId);
+    }
+  }
 
   try {
     routineServerLog(`📋 Playlist order received: ${playlists.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
@@ -6362,7 +6500,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
           position: `${row}-${col}`,
           songId: s.id,
           songName: s.name,
-          ...songAliasDisplayFields(s.id, s.name, s.artist),
+          ...songAliasDisplayFields(s.id, s.name, s.artist, room.dbOrganizationId ?? null),
           artistName: s.artist,
           youtubeMusic: s.youtubeMusic === true,
           ...(s.youtubeMusic === true &&
@@ -6618,7 +6756,7 @@ function pickChosen25ForRoundExport(exportSpec, useFreeSpaceOpt) {
   return properShuffle(songs).slice(0, songsNeededPerCard);
 }
 
-function buildPrintableCardFromChosen(chosen25, useFreeSpace, index) {
+function buildPrintableCardFromChosen(chosen25, useFreeSpace, index, orgId) {
   const card = {
     id: `print-${index}-${Date.now()}`,
     printableIndex: index + 1,
@@ -6645,7 +6783,7 @@ function buildPrintableCardFromChosen(chosen25, useFreeSpace, index) {
         position: `${row}-${col}`,
         songId: s.id,
         songName: s.name,
-        ...songAliasDisplayFields(s.id, s.name, s.artist),
+        ...songAliasDisplayFields(s.id, s.name, s.artist, orgId ?? null),
         artistName: s.artist || '',
         youtubeMusic: s.youtubeMusic === true,
         ...(s.youtubeMusic === true &&
@@ -6981,7 +7119,7 @@ async function generateBingoCardForPlayer(roomId, playerId) {
           position: `${row}-${col}`,
           songId: s.id,
           songName: s.name,
-          ...songAliasDisplayFields(s.id, s.name, s.artist),
+          ...songAliasDisplayFields(s.id, s.name, s.artist, room.dbOrganizationId ?? null),
           artistName: s.artist,
           youtubeMusic: s.youtubeMusic === true,
           ...(s.youtubeMusic === true &&
@@ -7726,7 +7864,7 @@ async function playNextSong(roomId, deviceId) {
     io.to(roomId).emit('song-playing', {
       songId: nextSong.id,
       songName: nextSong.name,
-      ...songAliasDisplayFields(nextSong.id, nextSong.name, nextSong.artist),
+      ...songAliasDisplayFields(nextSong.id, nextSong.name, nextSong.artist, room.dbOrganizationId ?? null),
       artistName: nextSong.artist,
       explicit: nextSong.explicit === true,
       snippetLength: room.snippetLength,
@@ -9539,6 +9677,7 @@ async function resolveRoomVenueBranding(room) {
     return;
   }
   const { branding, orgId } = await organizationsStore.getVenueBrandingContextForHostUserId(db, uid);
+  if (orgId != null) room.dbOrganizationId = Number(orgId);
   let b = branding;
   if (b && b.logoUrl && orgId != null) {
     try {

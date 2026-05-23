@@ -2280,11 +2280,6 @@ const HostView: React.FC = () => {
     setSavedCustomPatterns(getSavedCustomPatterns());
     setSavedCompositePatterns(getSavedCompositePatterns());
     
-    // Request saved song display aliases
-    if (socket) {
-      socket.emit('get-all-song-aliases');
-    }
-
     // Initialize socket connection
     const hostJwt = getHostJwt();
     const newSocket = io(SOCKET_URL || undefined, {
@@ -2664,6 +2659,11 @@ const HostView: React.FC = () => {
 
     newSocket.on('all-song-aliases-response', (data: SongAliases) => {
       setSongAliases(data || {});
+    });
+
+    newSocket.on('song-alias-error', (data: { message?: string }) => {
+      const msg = data?.message?.trim();
+      if (msg) window.alert(msg);
     });
 
     newSocket.on('game-ended', () => {
@@ -5187,14 +5187,14 @@ const HostView: React.FC = () => {
   };
 
   const handleSaveSongAlias = (songId: string, title: string, artist: string) => {
-    if (socket) {
-      socket.emit('set-song-alias', { songId, title, artist });
+    if (socket && roomId) {
+      socket.emit('set-song-alias', { roomId, songId, title, artist });
     }
   };
 
   const handleClearSongAlias = (songId: string) => {
-    if (socket) {
-      socket.emit('clear-song-alias', { songId });
+    if (socket && roomId) {
+      socket.emit('clear-song-alias', { roomId, songId });
     }
   };
 
