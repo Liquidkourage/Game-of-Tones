@@ -863,8 +863,9 @@ const HostView: React.FC = () => {
         ? focusIndex
         : Math.max(0, currentRoundIndexRef.current >= 0 ? currentRoundIndexRef.current : 0);
     setRoundBuilderFocusIndex(idx);
-    openPlaylistLibrary();
-  }, [openPlaylistLibrary]);
+    setPlaylistRoundModalPane('rounds');
+    setShowPlaylistRoundModal(true);
+  }, []);
   const showPlaylistRoundModalScrollRef = useRef(showPlaylistRoundModal);
   showPlaylistRoundModalScrollRef.current = showPlaylistRoundModal;
   /** In-person + online: only in-person verified bingos end the round / prize */
@@ -7315,19 +7316,51 @@ const HostView: React.FC = () => {
 
   const playlistRoundBuilderBody = (
               <div
-                className="host-playlist-round-modal-root host-playlist-round-modal-root--library-only"
-                data-mobile-pane="library"
+                className="host-playlist-round-modal-root"
+                data-mobile-pane={playlistRoundModalPane}
               >
               {!isSpotifyConnected && showYoutubeMusicInConnectionModal ? (
                 <p className="host-playlist-round-modal__banner" role="status">
                   YouTube playlists work without Spotify — use <strong>Connection</strong> for the full Spotify grid.
                 </p>
               ) : null}
+              <div
+                className="host-playlist-round-modal__pane-switch"
+                role="tablist"
+                aria-label="Playlist library panels"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={playlistRoundModalPane === 'library'}
+                  className={
+                    playlistRoundModalPane === 'library'
+                      ? 'host-playlist-round-modal__pane-tab host-playlist-round-modal__pane-tab--active'
+                      : 'host-playlist-round-modal__pane-tab'
+                  }
+                  onClick={() => setPlaylistRoundModalPane('library')}
+                >
+                  Library
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={playlistRoundModalPane === 'rounds'}
+                  className={
+                    playlistRoundModalPane === 'rounds'
+                      ? 'host-playlist-round-modal__pane-tab host-playlist-round-modal__pane-tab--active'
+                      : 'host-playlist-round-modal__pane-tab'
+                  }
+                  onClick={() => setPlaylistRoundModalPane('rounds')}
+                >
+                  Rounds
+                </button>
+              </div>
               <p className="host-playlist-round-modal__library-hint">
-                Drag playlists into a round on the host screen. Round buckets, patterns, and Save live under{' '}
-                <strong>Rounds &amp; playlists</strong>.
+                <strong>Drag</strong> playlists into round buckets, or use <strong>Add to round…</strong> on each row.
+                On smaller screens, switch to <strong>Rounds</strong> to drop. Patterns and Save are on each bucket.
               </p>
-            <div className="host-music-two-pane host-music-two-pane--library-only">
+            <div className="host-music-two-pane">
               <div className="host-music-two-pane__library">
           <motion.div
                     className="playlists-section host-playlist-library-panel"
@@ -7635,6 +7668,7 @@ const HostView: React.FC = () => {
                               onDragStart={(e) => {
                                 e.dataTransfer.setData('text/plain', p.id);
                                 e.dataTransfer.effectAllowed = 'copy';
+                                setPlaylistRoundModalPane('rounds');
                               }}
                               onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
                               onMouseUp={(e) => e.currentTarget.style.cursor = 'grab'}
@@ -8034,6 +8068,7 @@ const HostView: React.FC = () => {
 
                   </motion.div>
               </div>
+              <div className="host-music-two-pane__rounds">{hostRoundPlanner}</div>
             </div>
             </div>
   );
@@ -8344,8 +8379,9 @@ const HostView: React.FC = () => {
                         Rounds &amp; playlists
                       </h2>
                       <p className="host-rounds-panel__lead">
-                        Rounds, patterns, playlists, and Save live here. Use <strong>Playlist library</strong> to drag
-                        playlists in. <strong>Start Game</strong> is above when ready.
+                        Rounds, patterns, playlists, and Save live here. Open <strong>Playlist library</strong> to browse
+                        and drag into buckets (or <strong>Add to round…</strong>). <strong>Start Game</strong> is above
+                        when ready.
                       </p>
                     </div>
                     <button
@@ -8979,7 +9015,7 @@ const HostView: React.FC = () => {
                   type="button"
                   className="host-playlist-round-modal__help"
                   aria-label="How the playlist library works"
-                  title="Drag playlists into a round on the host screen (Rounds & playlists). Patterns, Save round, and event actions are on the main page — not in this modal."
+                  title="Drag playlists into round buckets in this modal (Library + Rounds), or use Add to round…. Patterns and Save are on each bucket. Event-wide actions stay on the main host page."
                 >
                   <HelpCircle className="w-4 h-4" aria-hidden />
                 </button>

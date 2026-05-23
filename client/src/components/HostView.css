@@ -3063,8 +3063,9 @@
   min-height: 100%;
 }
 
-.host-playlist-round-modal-root--library-only .host-playlist-round-modal__library-hint {
-  margin: 0 0 12px;
+.host-playlist-round-modal__library-hint {
+  flex-shrink: 0;
+  margin: 0 0 8px;
   padding: 10px 14px;
   border-radius: 10px;
   border: 1px solid rgba(0, 255, 163, 0.22);
@@ -3072,15 +3073,6 @@
   font-size: 0.84rem;
   line-height: 1.45;
   color: rgba(255, 255, 255, 0.78);
-}
-
-.host-playlist-round-modal-root--library-only .host-music-two-pane--library-only {
-  display: block;
-}
-
-.host-playlist-round-modal-root--library-only .host-music-two-pane__library {
-  width: 100%;
-  max-width: none;
 }
 
 /* Header brand (replaces legacy "Game Host 1" placeholder) */
