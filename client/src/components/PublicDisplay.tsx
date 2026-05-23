@@ -1141,6 +1141,18 @@ const PublicDisplay: React.FC = () => {
     return [0, 1, 2, 3, 4].map((c) => ids.slice(c * 15, c * 15 + 15));
   }, [columnCallListLayout, fiveBy15Columns, oneBy75Ids, playedOrderRevision]);
 
+  /** Play order for call-list render — ref, then React state, then current clip. */
+  const playedOrderForDisplay = useMemo((): string[] => {
+    const fromRef = playedOrderRef.current.filter(
+      (id) => id && !id.startsWith('__placeholder_'),
+    );
+    if (fromRef.length > 0) return fromRef;
+    const fromState = gameState.playedSongs.map((s) => s.id).filter(Boolean);
+    if (fromState.length > 0) return fromState;
+    const cur = gameState.currentSong?.id;
+    return cur ? [cur] : [];
+  }, [playedOrderRevision, gameState.playedSongs, gameState.currentSong]);
+
   // 5x15 vertical scroll state
   const [vertIndex, setVertIndex] = useState<number>(0);
   const [vertIndices, setVertIndices] = useState<number[]>([0,0,0,0,0]);
@@ -1682,9 +1694,11 @@ const PublicDisplay: React.FC = () => {
     // Receive 1x75 pool ordering (ids only)
     newSocket.on('oneby75-pool', (data: any) => {
       const n = Array.isArray(data?.ids) ? data.ids.length : 0;
-      if (n >= 25 && n <= 75) {
+      if (n >= 1 && n <= 75) {
         const nextIds = data.ids as string[];
-        const poolChanged = !poolsOrderEqual(oneBy75IdsRef.current, nextIds);
+        const prevPool = oneBy75IdsRef.current;
+        // First pool delivery is not a "reorder" — do not wipe played songs synced from room-state.
+        const poolChanged = prevPool != null && !poolsOrderEqual(prevPool, nextIds);
         setOneBy75Ids(nextIds);
         oneBy75IdsRef.current = nextIds;
         poolOrderFingerprintRef.current = nextIds.join('\0');
@@ -2580,7 +2594,7 @@ const PublicDisplay: React.FC = () => {
 
   const snapCarouselAfterForwardLoop = useCallback(() => {
     if (columnCallListLayout || !animating) return;
-    const total = countPlayOrderColumns(playedOrderRef.current);
+    const total = countPlayOrderColumns(playedOrderForDisplay);
     if (total <= visibleCols) return;
     const idx = carouselIndexRef.current;
     if (idx < total) return;
@@ -2588,7 +2602,7 @@ const PublicDisplay: React.FC = () => {
     setCarouselIndex(idx - total);
     carouselIndexRef.current = idx - total;
     requestAnimationFrame(() => setAnimating(true));
-  }, [columnCallListLayout, animating, visibleCols]);
+  }, [columnCallListLayout, animating, visibleCols, playedOrderForDisplay]);
 
   // Auto-advance the 1×75 carousel; dwell grows for later leftmost bands (see carouselDwellMsForLeftColumn).
   useEffect(() => {
@@ -2598,7 +2612,7 @@ const PublicDisplay: React.FC = () => {
 
     const scheduleTick = () => {
       if (cancelled) return;
-      const total = countPlayOrderColumns(playedOrderRef.current);
+      const total = countPlayOrderColumns(playedOrderForDisplay);
       if (total === 0) {
         carouselTickTimerRef.current = setTimeout(scheduleTick, CAROUSEL_BASE_DWELL_MS);
         return;
@@ -2631,7 +2645,7 @@ const PublicDisplay: React.FC = () => {
         carouselTickTimerRef.current = null;
       }
     };
-  }, [oneBy75Ids, visibleCols, columnCallListLayout, totalPlayedCount, playedOrderRevision]);
+  }, [oneBy75Ids, visibleCols, columnCallListLayout, totalPlayedCount, playedOrderRevision, playedOrderForDisplay]);
 
   // Measure viewport width for pixel-perfect slides (one column per step)
   useEffect(() => {
@@ -2694,7 +2708,7 @@ const PublicDisplay: React.FC = () => {
     if (!columnCallListLayout) { setVertIndex(0); setVertIndices([0,0,0,0,0]); return; }
     if (!layoutFiveColumns) { setVertIndex(0); setVertIndices([0,0,0,0,0]); return; }
     // Use ONLY explicitly tracked played order to avoid phantom pool-seeded entries
-    const played = new Set<string>(playedOrderRef.current);
+    const played = new Set<string>(playedOrderForDisplay);
     // Compute per-column max index
     const perColLengths = layoutFiveColumns.map((col) => col.filter((id) => played.has(id)).length);
     const perColMax = perColLengths.map(len => Math.max(0, len - 5));
@@ -2716,7 +2730,7 @@ const PublicDisplay: React.FC = () => {
       });
     }, 6000);
     return () => clearInterval(interval);
-  }, [oneBy75Ids, totalPlayedCount, layoutFiveColumns, columnCallListLayout]);
+  }, [oneBy75Ids, totalPlayedCount, layoutFiveColumns, columnCallListLayout, playedOrderForDisplay]);
 
   // Fetch initial room info for display card
   useEffect(() => {
@@ -2819,7 +2833,7 @@ const PublicDisplay: React.FC = () => {
       };
     }
 
-    const order = playedOrderRef.current;
+    const order = playedOrderForDisplay;
     const songIdx = order.indexOf(songId);
 
     let curIdx = -1;
@@ -3354,7 +3368,7 @@ const PublicDisplay: React.FC = () => {
     // CRITICAL FIX: Use ref as fallback if state isn't set yet (fixes first song not displaying)
     const idsToUse = oneBy75Ids || oneBy75IdsRef.current;
     if (!idsToUse) return null;
-    const played = new Set(playedOrderRef.current);
+    const played = new Set(playedOrderForDisplay);
     // If we have explicit 5x15 columns, respect those per-column lists; otherwise derive from flat pool
     // Build base columns from authoritative map if available, else fallback
     let baseCols: string[][];
@@ -3384,7 +3398,7 @@ const PublicDisplay: React.FC = () => {
     if (debugMode) {
       try {
         console.log('[Display] columns snapshot', {
-          playedCount: playedOrderRef.current.length,
+          playedCount: playedOrderForDisplay.length,
           perColCounts: cols.map(c => c.length)
         });
       } catch {}
@@ -3490,7 +3504,7 @@ const PublicDisplay: React.FC = () => {
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%' }}>
                         <div className="call-number">
                           {(() => {
-                            const idx = playedOrderRef.current.indexOf(id);
+                            const idx = playedOrderForDisplay.indexOf(id);
                             return idx >= 0 ? (idx + 1) : '';
                           })()}
                         </div>
@@ -3555,7 +3569,7 @@ const PublicDisplay: React.FC = () => {
           />
         );
       }
-      const playIdx = playedOrderRef.current.indexOf(id);
+      const playIdx = playedOrderForDisplay.indexOf(id);
       const callNum = playIdx >= 0 ? playIdx + 1 : idsToUse.indexOf(id) + 1;
       const meta = idMetaRef.current[id] || { name: '', artist: '' };
       const isCurrent = gameState.currentSong?.id === id;
@@ -3623,10 +3637,10 @@ const PublicDisplay: React.FC = () => {
     // CRITICAL FIX: Use playedOrderRef directly instead of slicing idsToUse
     // Songs may be played in different order than pool order, so slicing would exclude songs beyond position 45
     // Debug logging for tracking
-    const playedCountFromOrder = playedOrderRef.current.length;
+    const playedCountFromOrder = playedOrderForDisplay.length;
     const playedCountFromIndex = Math.max(0, (currentIndexRef.current ?? -1) + 1);
     if (playedCountFromOrder !== playedCountFromIndex && playedCountFromOrder > 0) {
-      console.log(`🔄 1x75 display: playedOrderRef.length=${playedCountFromOrder}, currentIndexRef=${currentIndexRef.current}`);
+      console.log(`🔄 1x75 display: playedOrder.length=${playedCountFromOrder}, currentIndexRef=${currentIndexRef.current}`);
     }
     // CRITICAL FIX: Ensure we have the full 75-song pool
     // If idsToUse has fewer than 75 songs, log a warning but continue
@@ -3634,7 +3648,7 @@ const PublicDisplay: React.FC = () => {
       console.warn(`⚠️ 1x75 display: Pool has only ${idsToUse.length} songs (expected 75). This may cause songs beyond position ${idsToUse.length} to not display.`);
     }
     
-    const allPlayCols = playOrderColumnSlices(playedOrderRef.current);
+    const allPlayCols = playOrderColumnSlices(playedOrderForDisplay);
     const total = allPlayCols.length;
     const shouldScroll = total > visibleCols;
 
@@ -5255,11 +5269,12 @@ const PublicDisplay: React.FC = () => {
                   flex: 1,
                   minHeight: 0,
                   position: 'relative',
-                  zIndex: 1,
+                  zIndex: 2,
                 }}
               >
               {/* Removed call count header and redundant BINGO row; playlist titles shown above columns */}
               {(() => {
+                void playedOrderRevision;
                 // CRITICAL FIX: Use ref as fallback if state isn't set yet (fixes first song not displaying)
                 // Check both state and ref to ensure rendering works even when columns are still loading
                 const hasIds = oneBy75Ids || oneBy75IdsRef.current;

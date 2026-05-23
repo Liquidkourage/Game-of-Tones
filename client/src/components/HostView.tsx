@@ -7140,15 +7140,61 @@ const HostView: React.FC = () => {
         ? round.playlistNames
         : mixPlaylistSelection.map((p) => p.name);
     const poolCount = finalizedPoolSongs.length;
+    const playedCount = playedInOrder.length;
+    const remainingCount = Math.max(0, poolCount - playedCount);
+    const percentComplete =
+      poolCount > 0 ? Math.min(100, Math.round((playedCount / poolCount) * 100)) : 0;
+    const roundStatus = round?.status ?? null;
+    const roundStatusLabel = (() => {
+      switch (roundStatus) {
+        case 'active':
+          return 'Live';
+        case 'completed':
+          return 'Completed';
+        case 'planned':
+          return 'Planned';
+        case 'unplanned':
+          return 'Draft';
+        default:
+          return gameState === 'playing' ? 'Live' : gameState === 'ended' ? 'Ended' : '—';
+      }
+    })();
+    const titleRevealLabel =
+      publicDisplayTitleRevealMode === 'letter'
+        ? `By letter (${letterRevealIntervalSec}s)`
+        : publicDisplayTitleRevealMode === 'track_start'
+          ? 'Title at clip start'
+          : 'Title at clip end';
+    const randomStartsLabel =
+      randomStarts === 'random'
+        ? 'Random start'
+        : randomStarts === 'early'
+          ? 'Early random'
+          : 'Fixed start';
+    const playersOnlineCount = Array.from(playerCards.entries()).filter(
+      ([id, d]) => d.inPerson === false || joinedPlayersRoster.get(id)?.inPerson === false,
+    ).length;
+    const lastPlayed =
+      playedInOrder.length > 0 ? playedInOrder[playedInOrder.length - 1] : null;
     return {
       roundName: round?.name ?? null,
-      roundStatus: round?.status ?? null,
+      roundStatus,
+      roundStatusLabel,
       playlistNames,
       patternLabel: getPatternDisplayName(pattern),
       poolCount,
-      playedCount: playedInOrder.length,
+      playedCount,
+      remainingCount,
+      percentComplete,
+      titleRevealLabel,
+      randomStartsLabel,
       mixFinalized,
       savedRound: Boolean(round?.savedMixSnapshot?.songs?.length),
+      playersOnlineCount,
+      winnersCount: winners.length,
+      lastPlayed: lastPlayed
+        ? { name: getDisplaySongTitle(lastPlayed.id, lastPlayed.name), artist: lastPlayed.artist }
+        : null,
     };
   }, [
     currentRoundIndex,
@@ -7156,8 +7202,16 @@ const HostView: React.FC = () => {
     mixPlaylistSelection,
     pattern,
     finalizedPoolSongs.length,
-    playedInOrder.length,
+    playedInOrder,
     mixFinalized,
+    gameState,
+    publicDisplayTitleRevealMode,
+    letterRevealIntervalSec,
+    randomStarts,
+    playerCards,
+    joinedPlayersRoster,
+    winners.length,
+    getDisplaySongTitle,
   ]);
 
   const hostTourSteps = useMemo(
@@ -8467,6 +8521,17 @@ const HostView: React.FC = () => {
                   patternLabel={hostActiveRoundSummary.patternLabel}
                   poolCount={hostActiveRoundSummary.poolCount}
                   playedCount={hostActiveRoundSummary.playedCount}
+                  remainingCount={hostActiveRoundSummary.remainingCount}
+                  percentComplete={hostActiveRoundSummary.percentComplete}
+                  roundStatus={hostActiveRoundSummary.roundStatus}
+                  roundStatusLabel={hostActiveRoundSummary.roundStatusLabel}
+                  titleRevealLabel={hostActiveRoundSummary.titleRevealLabel}
+                  randomStartsLabel={hostActiveRoundSummary.randomStartsLabel}
+                  mixFinalized={hostActiveRoundSummary.mixFinalized}
+                  savedRound={hostActiveRoundSummary.savedRound}
+                  playersOnlineCount={hostActiveRoundSummary.playersOnlineCount}
+                  winnersCount={hostActiveRoundSummary.winnersCount}
+                  lastPlayed={hostActiveRoundSummary.lastPlayed}
                   playlistNames={hostActiveRoundSummary.playlistNames}
                   poolSongs={finalizedPoolSongs}
                   prepRoundReadyForGoLive={prepRoundReadyForGoLive}

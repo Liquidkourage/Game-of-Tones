@@ -37,6 +37,17 @@ export type HostGameDashboardProps = {
   patternLabel: string;
   poolCount: number;
   playedCount: number;
+  remainingCount: number;
+  percentComplete: number;
+  roundStatus: 'completed' | 'active' | 'planned' | 'unplanned' | null;
+  roundStatusLabel: string;
+  titleRevealLabel: string;
+  randomStartsLabel: string;
+  mixFinalized: boolean;
+  savedRound: boolean;
+  playersOnlineCount: number;
+  winnersCount: number;
+  lastPlayed: { name: string; artist: string } | null;
   playlistNames: string[];
   poolSongs: BingoPoolSong[];
   prepRoundReadyForGoLive: boolean;
@@ -67,15 +78,29 @@ export type HostGameDashboardProps = {
   getDisplaySongArtist: (id: string, fallback: string) => string;
 };
 
-function ProgressRing({ played, total }: { played: number; total: number }) {
+function ProgressRing({
+  played,
+  total,
+  size = 'md',
+}: {
+  played: number;
+  total: number;
+  size?: 'sm' | 'md';
+}) {
   const safeTotal = Math.max(1, total);
   const pct = Math.min(100, (played / safeTotal) * 100);
-  const r = 52;
+  const sm = size === 'sm';
+  const r = sm ? 38 : 52;
+  const dim = sm ? 96 : 128;
   const c = 2 * Math.PI * r;
   const offset = c - (pct / 100) * c;
+  const cx = dim / 2;
   return (
-    <div className="host-r4-ring" aria-label={`${played} of ${total} songs played`}>
-      <svg width="128" height="128" viewBox="0 0 128 128" className="host-r4-ring__svg">
+    <div
+      className={`host-r4-ring${sm ? ' host-r4-ring--sm' : ''}`}
+      aria-label={`${played} of ${total} songs played`}
+    >
+      <svg width={dim} height={dim} viewBox={`0 0 ${dim} ${dim}`} className="host-r4-ring__svg">
         <defs>
           <linearGradient id="host-r4-ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#8b5cf6" />
@@ -83,15 +108,15 @@ function ProgressRing({ played, total }: { played: number; total: number }) {
             <stop offset="100%" stopColor="#00ff88" />
           </linearGradient>
         </defs>
-        <circle cx="64" cy="64" r={r} className="host-r4-ring__track" />
+        <circle cx={cx} cy={cx} r={r} className="host-r4-ring__track" />
         <circle
-          cx="64"
-          cy="64"
+          cx={cx}
+          cy={cx}
           r={r}
           className="host-r4-ring__progress"
           strokeDasharray={c}
           strokeDashoffset={offset}
-          transform="rotate(-90 64 64)"
+          transform={`rotate(-90 ${cx} ${cx})`}
         />
       </svg>
       <div className="host-r4-ring__label">
@@ -120,6 +145,17 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
     patternLabel,
     poolCount,
     playedCount,
+    remainingCount,
+    percentComplete,
+    roundStatus,
+    roundStatusLabel,
+    titleRevealLabel,
+    randomStartsLabel,
+    mixFinalized,
+    savedRound,
+    playersOnlineCount,
+    winnersCount,
+    lastPlayed,
     playlistNames,
     poolSongs,
     prepRoundReadyForGoLive,
@@ -357,30 +393,116 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
 
       {/* Round summary */}
       <section className="host-r4-card host-glass-panel host-r4-round" aria-label="Round summary">
-        <p className="host-r4-card__eyebrow">Round summary</p>
-        <h2 className="host-r4-round__name">{roundName ?? '—'}</h2>
-        <ProgressRing played={ringPlayed} total={totalTracks} />
-        <dl className="host-r4-stats">
+        <div className="host-r4-round__head">
           <div>
-            <dt>Pattern</dt>
-            <dd>{patternLabel}</dd>
+            <p className="host-r4-card__eyebrow">Round summary</p>
+            <h2 className="host-r4-round__name">{roundName ?? '—'}</h2>
           </div>
-          <div>
-            <dt>Pool</dt>
-            <dd>{poolCount > 0 ? `${poolCount} tracks` : '—'}</dd>
-          </div>
-          <div>
-            <dt>Playlists</dt>
-            <dd>{playlistNames.length || '—'}</dd>
-          </div>
-        </dl>
+          <span
+            className={`host-r4-round__status${
+              roundStatus ? ` host-r4-round__status--${roundStatus}` : ''
+            }`}
+          >
+            {roundStatusLabel}
+          </span>
+        </div>
+
+        <div className="host-r4-round__progress-bar" aria-hidden>
+          <div className="host-r4-round__progress-fill" style={{ width: `${percentComplete}%` }} />
+        </div>
+        <p className="host-r4-round__progress-caption">
+          {gameState === 'playing' || gameState === 'ended' ? (
+            <>
+              <strong>{ringPlayed}</strong> played · <strong>{remainingCount}</strong> left ·{' '}
+              <strong>{percentComplete}%</strong> of pool
+            </>
+          ) : poolCount > 0 ? (
+            <>
+              <strong>{poolCount}</strong> tracks in pool · not started
+            </>
+          ) : (
+            'Finalize mix or add playlists to build the pool'
+          )}
+        </p>
+
+        <div className="host-r4-round__body">
+          <ProgressRing played={ringPlayed} total={totalTracks} size="sm" />
+          <dl className="host-r4-stats host-r4-stats--round">
+            <div>
+              <dt>Pattern</dt>
+              <dd>{patternLabel}</dd>
+            </div>
+            <div>
+              <dt>Pool</dt>
+              <dd>{poolCount > 0 ? `${poolCount} tracks` : '—'}</dd>
+            </div>
+            <div>
+              <dt>Clip</dt>
+              <dd>
+                {snippetLength}s · {randomStartsLabel}
+              </dd>
+            </div>
+            <div>
+              <dt>Projector</dt>
+              <dd>{titleRevealLabel}</dd>
+            </div>
+            <div>
+              <dt>Players</dt>
+              <dd>
+                {playerCardsCount > 0 ? (
+                  <>
+                    {playerCardsCount} card{playerCardsCount !== 1 ? 's' : ''}
+                    {playersOnlineCount > 0 ? ` · ${playersOnlineCount} online` : ''}
+                  </>
+                ) : (
+                  '—'
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Mix</dt>
+              <dd>
+                {mixFinalized ? 'Finalized' : poolCount > 0 ? 'Pool ready' : 'Not built'}
+                {savedRound ? ' · saved round' : ''}
+              </dd>
+            </div>
+            {winnersCount > 0 ? (
+              <div>
+                <dt>Winners</dt>
+                <dd>
+                  {winnersCount} this event
+                </dd>
+              </div>
+            ) : null}
+            {playlistNames.length > 0 ? (
+              <div className="host-r4-stats__playlists">
+                <dt>Playlists</dt>
+                <dd>{playlistNames.length}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </div>
+
+        {lastPlayed && (gameState === 'playing' || gameState === 'ended') ? (
+          <p className="host-r4-round__last">
+            <span className="host-r4-round__last-label">Last call</span>
+            <span className="host-r4-round__last-title">{lastPlayed.name}</span>
+            {lastPlayed.artist ? (
+              <span className="host-r4-round__last-artist"> — {lastPlayed.artist}</span>
+            ) : null}
+          </p>
+        ) : null}
+
         {playlistNames.length > 0 ? (
           <div className="host-r4-pills">
-            {playlistNames.slice(0, 4).map((name, i) => (
+            {playlistNames.slice(0, 5).map((name, i) => (
               <span key={`${name}-${i}`} className="host-r4-pill" title={name}>
                 {name}
               </span>
             ))}
+            {playlistNames.length > 5 ? (
+              <span className="host-r4-pill host-r4-pill--more">+{playlistNames.length - 5}</span>
+            ) : null}
           </div>
         ) : null}
       </section>
