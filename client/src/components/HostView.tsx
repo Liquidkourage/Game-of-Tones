@@ -102,6 +102,7 @@ import {
   canonicalPlaylistIdForMatch,
   compute5x15InsufficientWarnings,
   computeEffectiveBingoPoolPreview,
+  effectiveBingoPoolSongsForMix,
 } from '../utils/effectiveBingoPoolPreview';
 import { getYoutubeHostPlaybackChannelName } from '../utils/youtubeHostPlaybackChannel';
 import { sortRoundPlaylistsByBingoColumns } from '../utils/roundPlaylistOrder';
@@ -6437,24 +6438,34 @@ const HostView: React.FC = () => {
       const r = eventRoundsRef.current[roundIndex];
       if (!r) return;
 
-      const filtered = songsForRoundFromFinalizedPool(r, pool).map(cloneSongForSnapshot);
+      const roundScoped = songsForRoundFromFinalizedPool(r, pool).map(cloneSongForSnapshot);
+      const { songs: filtered, mode: poolMode } = effectiveBingoPoolSongsForMix(
+        mixRows,
+        roundScoped.length > 0 ? roundScoped : pool,
+      );
+      const filteredSongs = filtered.map((s) => {
+        const full =
+          roundScoped.find((x) => x.id === s.id) || pool.find((x) => x.id === s.id);
+        return cloneSongForSnapshot(full || (s as Song));
+      });
       const fs = r.freeSpaceEnabled !== undefined ? r.freeSpaceEnabled : freeSpaceEnabled;
       const need = fs ? 24 : 25;
-      if (filtered.length < need) {
+      if (filteredSongs.length < need) {
         const stalePoolHint =
-          pool.length > 0 && filtered.length === 0
-            ? ' The finalized playback pool still looked like a different mix — tap Finalize mix once on the host screen, then Save round again.'
+          pool.length > 0 && filteredSongs.length === 0
+            ? ' The finalized playback pool still looked like a different mix — tap Show Playlists once on the host screen, then Save round again.'
             : '';
         window.alert(
-          `This round only has ${filtered.length} unique tracks from its playlists in the finalized mix (need ${need}).${stalePoolHint} Include those playlists in the mix, finalize, then save again.`,
+          `This round only has ${filteredSongs.length} unique tracks from its playlists in the finalized mix (need ${need}).${stalePoolHint} Include those playlists in the mix, finalize, then save again.`,
         );
         return;
       }
 
       const snap: SavedRoundMixSnapshot = {
         savedAt: Date.now(),
-        songs: filtered,
-        mixGeometry: deriveMixGeometryForSnapshot(mixRows, pool.length),
+        songs: filteredSongs,
+        mixGeometry:
+          poolMode === '5x15' ? '5x15' : poolMode === '1x75' ? '1x75' : deriveMixGeometryForSnapshot(mixRows, filteredSongs.length),
         snippetLength,
         randomStarts,
         playlistIdsAtSave: [...(r.playlistIds || [])],
@@ -6466,7 +6477,7 @@ const HostView: React.FC = () => {
         next[roundIndex] = {
           ...next[roundIndex],
           savedMixSnapshot: snap,
-          songCount: filtered.length,
+          songCount: filteredSongs.length,
           status: next[roundIndex].status === 'active' ? 'active' : 'planned',
         };
         try {
@@ -6477,8 +6488,8 @@ const HostView: React.FC = () => {
         return next;
       });
       setCurrentRoundIndex(roundIndex);
-      showToast(`Saved ${r.name} — ${filtered.length} tracks (${snap.mixGeometry})`, 'success');
-      addLog(`Round snapshot saved: ${r.name}, ${filtered.length} tracks`, 'info');
+      showToast(`Saved ${r.name} — ${filteredSongs.length} tracks (${snap.mixGeometry})`, 'success');
+      addLog(`Round snapshot saved: ${r.name}, ${filteredSongs.length} tracks`, 'info');
     } finally {
       setSaveRoundBusy(false);
     }

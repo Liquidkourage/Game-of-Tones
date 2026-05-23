@@ -2130,6 +2130,10 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
 }
 
 /** Ordered playlist ids from finalize payload — column order matters for 5×15. */
+/** Max tracks per bingo round (1×75 / 5×15). */
+const SHOW_DECK_MAX_TRACKS = 75;
+const SHOW_DECK_MIN_TRACKS = 25;
+
 function finalizeMixPlaylistFingerprint(playlists) {
   if (!Array.isArray(playlists) || playlists.length === 0) return '';
   return playlists.map((p) => (p && p.id != null ? String(p.id).trim() : '')).join('|');
@@ -2761,10 +2765,11 @@ io.on('connection', (socket) => {
               ? room.finalizedSongs
               : [];
         if (rebuilt.length > 0) {
-          room.finalizedSongOrder = rebuilt;
-          room.finalizedSongs = rebuilt;
-          routineServerLog(`📝 Refinalize rebuild (${rebuilt.length} tracks) — same playlists, build pool (shuffle at Start Game)`);
-          const bingoOk = await generateBingoCards(roomId, playlists, rebuilt);
+          const rebuiltCapped = capShowDeckLength(rebuilt);
+          room.finalizedSongOrder = rebuiltCapped;
+          room.finalizedSongs = rebuiltCapped;
+          routineServerLog(`📝 Refinalize rebuild (${rebuiltCapped.length} tracks) — same playlists, build pool (shuffle at Start Game)`);
+          const bingoOk = await generateBingoCards(roomId, playlists, rebuiltCapped);
           if (!bingoOk) {
             socket.emit('finalize-mix-failed', {
               code: 'bingo_generation_failed',
@@ -2773,7 +2778,7 @@ io.on('connection', (socket) => {
             return;
           }
           emitFinalizedOrderFromRoomState(roomId, room);
-          io.to(roomId).emit('mix-finalized', { playlists: room.finalizedPlaylists, songList: rebuilt });
+          io.to(roomId).emit('mix-finalized', { playlists: room.finalizedPlaylists, songList: rebuiltCapped });
           return;
         }
         routineServerLog('⚠️ Mix already finalized for room (unchanged):', roomId);
@@ -2797,6 +2802,14 @@ io.on('connection', (socket) => {
     }
 
     try {
+      if (!room.mixFinalized) {
+        room.oneBySeventyFivePool = null;
+        room.fiveByFifteenColumnsIds = null;
+        room.fiveByFifteenColumns = null;
+        room.fiveByFifteenPlaylistNames = null;
+        room.fiveByFifteenMeta = null;
+      }
+
       if (!Array.isArray(songList) || songList.length === 0) {
         console.warn('⚠️ finalize-mix rejected: empty songList');
         socket.emit('finalize-mix-failed', {
@@ -2833,12 +2846,28 @@ io.on('connection', (socket) => {
       }
 
       // Build the 75-track pool in host send order; playback shuffle happens at Start Game only.
-      const poolForCards = songListVerified;
+      let poolForCards = dedupeSongsByIdPreserveOrder(songListVerified);
+      if (Array.isArray(playlists) && playlists.length === 1 && poolForCards.length > SHOW_DECK_MAX_TRACKS) {
+        routineServerLog(
+          `⚠️ Finalize: prep list has ${poolForCards.length} tracks — using first ${SHOW_DECK_MAX_TRACKS} for the bingo pool`,
+        );
+        poolForCards = poolForCards.slice(0, SHOW_DECK_MAX_TRACKS);
+      }
       room.finalizedSongOrder = poolForCards;
       room.finalizedSongs = poolForCards;
       routineServerLog(`📝 Stored ${poolForCards.length} finalized songs (build pool) for room ${roomId}`);
 
       const bingoOk = await generateBingoCards(roomId, playlists, poolForCards);
+      if (
+        Array.isArray(playlists) &&
+        playlists.length === 1 &&
+        Array.isArray(room.oneBySeventyFivePool) &&
+        room.oneBySeventyFivePool.length > 0
+      ) {
+        poolForCards = normalizeShowDeckForRoom(room, poolForCards, { alignToPool: true });
+        room.finalizedSongOrder = poolForCards.map((s) => ({ ...s }));
+        room.finalizedSongs = poolForCards;
+      }
       if (!bingoOk) {
         room.finalizedPlaylists = null;
         room.finalizedSongOrder = null;
@@ -4400,12 +4429,7 @@ io.on('connection', (socket) => {
               : Array.isArray(room.finalizedSongs) && room.finalizedSongs.length > 0
                 ? room.finalizedSongs
                 : [];
-        const showDeck = buildShowPoolDeck(room, deckSource, useSavedRoundPlayback);
-        if (showDeck.length > 0) {
-          routineServerLog(
-            `🎲 Start-game playback order (${showDeck.length} tracks, shuffled) — play 1→${showDeck.length}${useSavedRoundPlayback ? ' [saved round]' : ''}`,
-          );
-        }
+        let showDeck = buildShowPoolDeck(room, deckSource, useSavedRoundPlayback);
 
         routineServerLog('🎵 Generating bingo cards...');
         const forceRegenerateCards = shouldRegenerateBingoCardsOnStartGame(
@@ -4525,6 +4549,8 @@ io.on('connection', (socket) => {
           }
         }
 
+        showDeck = normalizeShowDeckForRoom(room, showDeck, { alignToPool: true });
+
         // Sync projector + host pool to shuffled playback order before game-started (host may request-finalized-order immediately).
         const hasFiveBy15Start =
           Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5;
@@ -4536,6 +4562,18 @@ io.on('connection', (socket) => {
           room.fiveByFifteenPlaylistNames = null;
           room.fiveByFifteenMeta = null;
         }
+        if (showDeck.length === 0) {
+          socket.emit('error', {
+            message:
+              'Could not build a valid playback pool (need at least 25 tracks after deduplication). Check playlists and try Show Playlists / Save round again.',
+          });
+          return;
+        }
+
+        routineServerLog(
+          `🎲 Start-game playback order (${showDeck.length} tracks, shuffled) — play 1→${showDeck.length}${useSavedRoundPlayback ? ' [saved round]' : ''}`,
+        );
+
         if (showDeck.length > 0) {
           applyShowPoolOrderToRoom(room, roomId, showDeck);
         }
@@ -5478,18 +5516,77 @@ function emitOneBy75Pool(roomId, room) {
 }
 
 /**
+ * Dedupe and cap prep/playback lists to the bingo round size (does not align to a prior pool).
+ */
+function capShowDeckLength(showDeck) {
+  if (!Array.isArray(showDeck) || showDeck.length === 0) return [];
+  let deck = dedupeSongsByIdPreserveOrder(showDeck);
+  if (deck.length > SHOW_DECK_MAX_TRACKS) {
+    routineServerLog(
+      `⚠️ Capping playback deck from ${deck.length} to ${SHOW_DECK_MAX_TRACKS} tracks (bingo round limit)`,
+    );
+    deck = deck.slice(0, SHOW_DECK_MAX_TRACKS);
+  }
+  return deck;
+}
+
+/**
+ * Playback / host pool must match the 75-track bingo pool (cards + projector), not the longer prep list.
+ * Only align to oneBySeventyFivePool when alignToPool is true (after generateBingoCards).
+ */
+function normalizeShowDeckForRoom(room, showDeck, opts = {}) {
+  if (!Array.isArray(showDeck) || showDeck.length === 0) return [];
+  let deck = dedupeSongsByIdPreserveOrder(showDeck);
+  const alignToPool = opts.alignToPool === true;
+  const hasFiveBy15 =
+    Array.isArray(room?.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5;
+  const poolRows = room?.oneBySeventyFivePool;
+  const poolIds =
+    alignToPool &&
+    !hasFiveBy15 &&
+    Array.isArray(poolRows) &&
+    poolRows.length >= SHOW_DECK_MIN_TRACKS &&
+    poolRows.length <= SHOW_DECK_MAX_TRACKS
+      ? poolRows.map((r) => (r && r.id != null ? String(r.id).trim() : '')).filter(Boolean)
+      : null;
+
+  if (poolIds && poolIds.length > 0) {
+    const byId = new Map(deck.filter((s) => s && s.id).map((s) => [s.id, s]));
+    const aligned = poolIds.map((id) => byId.get(id)).filter(Boolean);
+    if (aligned.length === poolIds.length) {
+      deck = aligned;
+    } else if (aligned.length > 0) {
+      routineServerLog(
+        `⚠️ Skipping pool align (${aligned.length}/${poolIds.length} tracks matched prep deck) — using capped prep order`,
+      );
+    }
+  }
+
+  if (deck.length > SHOW_DECK_MAX_TRACKS) {
+    routineServerLog(
+      `⚠️ Capping playback deck from ${deck.length} to ${SHOW_DECK_MAX_TRACKS} tracks (bingo round limit)`,
+    );
+    deck = deck.slice(0, SHOW_DECK_MAX_TRACKS);
+  }
+
+  return deck;
+}
+
+/**
  * Bingo pool #1…N for host + 1×75 display; playback runs this list in order (not re-shuffled per song).
  */
 function applyShowPoolOrderToRoom(room, roomId, showDeck) {
   if (!room || !Array.isArray(showDeck) || showDeck.length === 0) return;
-  room.finalizedSongOrder = showDeck.map((s) => ({ ...s }));
-  room.finalizedSongs = showDeck.map((s) => ({ ...s }));
-  room.playlistSongs = showDeck.map((s) => ({ ...s }));
-  const n = showDeck.length;
+  const normalized = normalizeShowDeckForRoom(room, showDeck, { alignToPool: true });
+  if (normalized.length === 0) return;
+  room.finalizedSongOrder = normalized.map((s) => ({ ...s }));
+  room.finalizedSongs = normalized.map((s) => ({ ...s }));
+  room.playlistSongs = normalized.map((s) => ({ ...s }));
+  const n = normalized.length;
   const hasFiveBy15 =
     Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5;
-  if (n >= 25 && n <= 75 && !hasFiveBy15) {
-    room.oneBySeventyFivePool = showDeck.map((s) => ({ id: s.id }));
+  if (n >= SHOW_DECK_MIN_TRACKS && n <= SHOW_DECK_MAX_TRACKS && !hasFiveBy15) {
+    room.oneBySeventyFivePool = normalized.map((s) => ({ id: s.id }));
     const ids = room.oneBySeventyFivePool.map((r) => r.id).filter(Boolean);
     if (ids.length > 0) {
       emitOneBy75Pool(roomId, room);
@@ -5502,7 +5599,7 @@ function applyShowPoolOrderToRoom(room, roomId, showDeck) {
 /** Start Game: shuffle into playback order (finalize only builds the pool). */
 function buildShowPoolDeck(_room, deckSource, _useSavedRoundPlayback) {
   if (!Array.isArray(deckSource) || deckSource.length === 0) return [];
-  return properShuffle(deckSource);
+  return capShowDeckLength(properShuffle(deckSource));
 }
 
 function syncRoomPlaybackOrderAfterStartGame(room, roomId, playbackOrderSongs) {
@@ -7072,6 +7169,11 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     }
 
     allSongs = applyYoutubePlaybackHints(playlists, allSongs);
+    allSongs = normalizeShowDeckForRoom(room, allSongs, { alignToPool: true });
+    if (allSongs.length === 0) {
+      console.error('❌ No songs available for playback after bingo pool normalization');
+      return;
+    }
 
     const needsSpotifyTransport = allSongs.some((s) => !songUsesYoutubePlayback(s));
     const playlistHasYoutube = allSongs.some((s) => songUsesYoutubePlayback(s));

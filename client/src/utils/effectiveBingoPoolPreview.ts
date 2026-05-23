@@ -150,3 +150,12 @@ export function computeEffectiveBingoPoolPreview(
   }
   return { pool: Array.from(map.values()), mode: 'fallback' };
 }
+
+/** Songs that belong on cards / saved round / playback for this mix geometry (≤75 for 1×75 / 5×15). */
+export function effectiveBingoPoolSongsForMix(
+  playlists: Array<{ id: string; name?: string }>,
+  songs: PoolSongLike[],
+): { songs: PoolSongLike[]; mode: '1x75' | '5x15' | 'fallback' } {
+  const { pool, mode } = computeEffectiveBingoPoolPreview(playlists, songs);
+  return { songs: pool, mode };
+}
