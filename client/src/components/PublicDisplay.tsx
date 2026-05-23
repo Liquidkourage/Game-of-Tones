@@ -3736,7 +3736,6 @@ const PublicDisplay: React.FC = () => {
             maxWidth: '100%',
             minWidth: 0,
             boxSizing: 'border-box',
-            height: 'auto',
             overflow: 'hidden',
             background: isCurrent ? 'rgba(0,255,136,0.12)' : 'rgba(255,255,255,0.08)',
             boxShadow: isCurrent ? '0 0 16px rgba(0,255,136,0.35)' : 'none',
@@ -3786,23 +3785,11 @@ const PublicDisplay: React.FC = () => {
         <div
           ref={carouselViewportRef}
           className="call-carousel-viewport call-carousel-viewport--static-grid call-carousel-viewport--played-order"
-          style={{
-            gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))`,
-            height: 'auto',
-            minHeight: 'min(36vh, 440px)',
-            alignContent: 'start',
-          }}
+          style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}
         >
           {columnSlots.map((group, gi) => (
             <div key={`played-fb-${gi}`} className="call-carousel-col-static">
-              <div
-                className="call-carousel-col-inner call-carousel-col-inner--played-order"
-                style={{
-                  height: 'auto',
-                  gridTemplateRows: 'repeat(5, minmax(clamp(36px, 5.5vmin, 56px), auto))',
-                  alignContent: 'start',
-                }}
-              >
+              <div className="call-carousel-col-inner call-carousel-col-inner--played-order">
                 {renderCarouselCallRows(group, gi, idsToUse, isFullCardPattern)}
               </div>
             </div>
