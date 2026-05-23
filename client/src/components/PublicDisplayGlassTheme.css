@@ -222,6 +222,7 @@
   max-height: 100%;
 }
 
+.App .public-display--glass .call-list-content--5x15,
 .App .public-display--glass .call-list-content--played-fallback {
   flex: 1 1 auto;
   min-height: 0;
@@ -229,6 +230,19 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+
+.App .public-display--glass .call-list-content--5x15 > .call-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+.App .public-display--glass .call-list-content--5x15 .call-list-column {
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .App .public-display--glass .call-list-content--played-fallback .call-columns-header {

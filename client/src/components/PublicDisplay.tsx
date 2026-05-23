@@ -31,10 +31,12 @@ import './PublicDisplayGlassTheme.css';
 import {
   computeBingoCellTextScale,
   computeCallCardTypography,
+  unifyCallListTypography,
   maxHeightEm,
   PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX,
   PUBLIC_DISPLAY_CALL_TITLE_BASE_PX,
   unrevealedLetterBoxStyle,
+  type CallCardTypography,
 } from '../utils/publicDisplayCallCardText';
 import type { PatternCompositeSpec, PatternCompositeClause } from '../patternDefinitions';
 import {
@@ -2990,6 +2992,37 @@ const PublicDisplay: React.FC = () => {
     };
   };
 
+  /** Same title/artist scale on every call card (5×15 board); avoids per-song size jumps. */
+  const unifiedCallListTypography = useMemo((): CallCardTypography | null => {
+    if (!columnCallListLayout) return null;
+    const fullCard = pattern === 'full_card' || pattern === 'blackout';
+    if (fullCard || playedOrderForDisplay.length === 0) return null;
+    const typographies = playedOrderForDisplay.map((id) => {
+      const meta = idMetaRef.current[id] || { name: '', artist: '' };
+      const masked = getCallSongRevealUi(id).kind === 'masked';
+      return computeCallCardTypography(meta.name, meta.artist, { fullCard, masked });
+    });
+    return unifyCallListTypography(typographies);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- playedOrderRevision bumps letter reveals
+  }, [
+    columnCallListLayout,
+    playedOrderForDisplay,
+    pattern,
+    titleRevealMode,
+    gameState.currentSong?.id,
+    playedOrderRevision,
+  ]);
+
+  const typographyForCallCard = (
+    songId: string,
+    meta: { name: string; artist: string },
+    fullCard: boolean,
+  ): CallCardTypography => {
+    if (unifiedCallListTypography) return unifiedCallListTypography;
+    const masked = getCallSongRevealUi(songId).kind === 'masked';
+    return computeCallCardTypography(meta.name, meta.artist, { fullCard, masked });
+  };
+
   const callCardLineStyles = (
     typo: ReturnType<typeof computeCallCardTypography>,
     kind: 'title' | 'artist',
@@ -3549,9 +3582,9 @@ const PublicDisplay: React.FC = () => {
     const isFullCardPattern = pattern === 'full_card' || pattern === 'blackout';
 
     return (
-      <div className="call-list-content">
+      <div className="call-list-content call-list-content--5x15">
         {renderPlaylistNamesHeaderRow('5x15', activeColumnIndex)}
-        <div className="call-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, height: '100%' }}>
+        <div className="call-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, height: '100%', minHeight: 0 }}>
           {cols.map((col, ci) => (
             <div
               key={ci}
@@ -3597,11 +3630,7 @@ const PublicDisplay: React.FC = () => {
                   const poolIdx = Array.isArray(oneBy75Ids) ? oneBy75Ids.indexOf(id) : -1;
                   const meta = idMetaRef.current[id] || { name: '', artist: '' };
                   const isCurrent = gameState.currentSong?.id === id;
-                  const masked = getCallSongRevealUi(id).kind === 'masked';
-                  const typo = computeCallCardTypography(meta.name, meta.artist, {
-                    fullCard: isFullCardPattern,
-                    masked,
-                  });
+                  const typo = typographyForCallCard(id, meta, isFullCardPattern);
                   const { title, artist } = renderCallSongLines(id, meta, (t, s, h) =>
                     renderMaskedText(t, s, h, typo.letterBoxScale),
                   );
@@ -3713,11 +3742,7 @@ const PublicDisplay: React.FC = () => {
       const callNum = playIdx >= 0 ? playIdx + 1 : idsToUse.indexOf(id) + 1;
       const meta = idMetaRef.current[id] || { name: '', artist: '' };
       const isCurrent = gameState.currentSong?.id === id;
-      const masked = getCallSongRevealUi(id).kind === 'masked';
-      const typo = computeCallCardTypography(meta.name, meta.artist, {
-        fullCard: isFullCardPattern,
-        masked,
-      });
+      const typo = typographyForCallCard(id, meta, isFullCardPattern);
       const { title, artist } = renderCallSongLines(id, meta, (t, s, h) =>
         renderMaskedText(t, s, h, typo.letterBoxScale),
       );
@@ -5454,17 +5479,19 @@ const PublicDisplay: React.FC = () => {
                 const poolIds = oneBy75Ids ?? oneBy75IdsRef.current;
                 const hasPool = poolHasTracks(poolIds);
                 const played = playedOrderForDisplay;
-                // 5×15 with songs played: play-order cards + headers (diag proved pool/names arrive; column grid had 0-height collapse).
-                if (played.length > 0 && columnCallListLayout) {
-                  return renderSimplePlayedCallList({ withPlaylistHeaders: true });
-                }
                 if (hasPool) {
                   if (usePlayOrderCallLayout) {
                     return renderOneBy75GroupedColumns();
                   }
-                  return columnCallListLayout
-                    ? renderOneBy75Columns()
-                    : renderOneBy75GroupedColumns();
+                  if (columnCallListLayout) {
+                    const columnView = renderOneBy75Columns();
+                    if (columnView != null) return columnView;
+                  }
+                  return renderOneBy75GroupedColumns();
+                }
+
+                if (played.length > 0 && columnCallListLayout) {
+                  return renderSimplePlayedCallList({ withPlaylistHeaders: true });
                 }
 
                 if (playedOrderForDisplay.length > 0) {

@@ -122,10 +122,33 @@ export function computeCallCardTypography(
   }
 
   const dense = textScale < 0.97 || (opts.masked === true && titleMaxLines + artistMaxLines >= 4);
-  const letterBoxScale = opts.masked === true ? Math.min(1, textScale * (dense ? 0.96 : 1)) : 1;
+  /** Tiles use em on the title line — keep at 1 so boxes match revealed letter size. */
+  const letterBoxScale = 1;
   const clampContentHeight = opts.masked === true;
 
   return { textScale, dense, titleMaxLines, artistMaxLines, letterBoxScale, clampContentHeight };
+}
+
+/** One typography profile for the whole call board so card-to-card type does not jump. */
+export function unifyCallListTypography(typographies: CallCardTypography[]): CallCardTypography {
+  if (typographies.length === 0) {
+    return {
+      textScale: 1,
+      dense: false,
+      titleMaxLines: 3,
+      artistMaxLines: 2,
+      letterBoxScale: 1,
+      clampContentHeight: true,
+    };
+  }
+  return {
+    textScale: Math.min(...typographies.map((t) => t.textScale)),
+    dense: typographies.some((t) => t.dense),
+    titleMaxLines: Math.max(...typographies.map((t) => t.titleMaxLines)),
+    artistMaxLines: Math.max(...typographies.map((t) => t.artistMaxLines)),
+    letterBoxScale: 1,
+    clampContentHeight: typographies.some((t) => t.clampContentHeight),
+  };
 }
 
 /** Bingo pattern / winner grid cells (vmin-based sizes get a scale multiplier). */
