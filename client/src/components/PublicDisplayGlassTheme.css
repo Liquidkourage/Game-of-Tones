@@ -276,6 +276,63 @@
     0 0 10px rgba(var(--pd-mint-rgb), 0.25);
 }
 
+/* Socket / playlist diagnostic HUD (?diag=1 on display URL) */
+.App .public-display-diag-hud {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 6000;
+  max-width: min(520px, 92vw);
+  max-height: min(42vh, 360px);
+  overflow: auto;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 2px solid rgba(var(--pd-mint-rgb), 0.85);
+  background: rgba(8, 8, 16, 0.94);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+  font-size: clamp(13px, 1.6vmin, 17px);
+  line-height: 1.35;
+  color: #e8f4f8;
+  pointer-events: none;
+}
+
+.App .public-display-diag-hud__title {
+  font-weight: 800;
+  color: var(--pd-mint);
+  margin-bottom: 6px;
+}
+
+.App .public-display-diag-hud__meta {
+  margin-bottom: 8px;
+  opacity: 0.95;
+}
+
+.App .public-display-diag-hud__snapshot {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(var(--pd-violet-rgb), 0.22);
+  border: 1px solid rgba(var(--pd-violet-rgb), 0.45);
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.App .public-display-diag-hud__label {
+  color: var(--pd-mint);
+}
+
+.App .public-display-diag-hud__feed {
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  padding-top: 8px;
+}
+
+.App .public-display-diag-hud__line {
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.88em;
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+
 .App .public-display--glass .call-number {
   color: var(--pd-violet);
   text-shadow: 0 0 14px rgba(var(--pd-violet-rgb), 0.8);

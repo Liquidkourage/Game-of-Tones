@@ -844,6 +844,17 @@ function stripGotPlaylistDisplayName(raw: string): string {
   return String(raw || '').replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
 }
 
+type DisplayDiagLine = { id: number; at: string; text: string };
+
+function formatDisplayDiagTime(d = new Date()): string {
+  return d.toLocaleTimeString(undefined, {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
 const PublicDisplay: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [fontSizeMultiplier, setFontSizeMultiplier] = useState<number>(1.0);
@@ -856,7 +867,38 @@ const PublicDisplay: React.FC = () => {
   const [searchParams] = useSearchParams();
   const showNowPlaying = (searchParams.get('np') === '1') || (searchParams.get('nowPlaying') === '1');
   const debugMode = (searchParams.get('debug') === '1') || (searchParams.get('dbg') === '1');
+  /** On-screen socket/sync probe — add ?diag=1 to the display URL (or ?debug=1). */
+  const showDiagOverlay =
+    searchParams.get('diag') === '1' ||
+    searchParams.get('diagnostic') === '1' ||
+    debugMode;
   const displayRef = useRef<HTMLDivElement | null>(null);
+  const diagSeqRef = useRef(0);
+  const [diagLines, setDiagLines] = useState<DisplayDiagLine[]>([]);
+  const pushDiag = useCallback(
+    (text: string) => {
+      if (!showDiagOverlay) return;
+      diagSeqRef.current += 1;
+      const line: DisplayDiagLine = {
+        id: diagSeqRef.current,
+        at: formatDisplayDiagTime(),
+        text,
+      };
+      setDiagLines((prev) => [line, ...prev].slice(0, 16));
+    },
+    [showDiagOverlay],
+  );
+  const pushDiagRef = useRef(pushDiag);
+  pushDiagRef.current = pushDiag;
+  useEffect(() => {
+    if (!showDiagOverlay) return;
+    try {
+      sessionStorage.setItem('display_diag_hint', '1');
+    } catch {
+      /* ignore */
+    }
+    pushDiag('Diag HUD on — watching playlist + song events');
+  }, [showDiagOverlay, pushDiag]);
   /** Pixel `top` for portaled toasts: measured from `.app-header` so placement survives Framer/header animation. */
   const [headerToastTopPx, setHeaderToastTopPx] = useState<number>(78);
 
@@ -1371,8 +1413,11 @@ const PublicDisplay: React.FC = () => {
     };
 
     // Connection event handlers
+    const diag = (msg: string) => pushDiagRef.current(msg);
+
     newSocket.on('connect', () => {
       console.log('🖥️ PublicDisplay: Connected to server');
+      diag('RX socket · connect');
       setConnectionStatus('connected');
       setReconnectAttempts(0);
       
@@ -1439,6 +1484,16 @@ const PublicDisplay: React.FC = () => {
       console.log('🖥️ PublicDisplay: Received room state sync:', payload);
       try {
           if (payload) {
+            const psIds = Array.isArray(payload.playedSongIds) ? payload.playedSongIds.length : -1;
+            const psRows = Array.isArray(payload.playedSongs) ? payload.playedSongs.length : -1;
+            const tpc =
+              typeof payload.totalPlayedCount === 'number' ? payload.totalPlayedCount : '?';
+            const cur = payload.currentSong?.id
+              ? String(payload.currentSong.id).slice(0, 10)
+              : '—';
+            diag(
+              `RX room-state · statSongs=${tpc} playedIds=${psIds} playedRows=${psRows} current=${cur}`,
+            );
             if (payload.venueBranding !== undefined) {
               setVenueBranding(payload.venueBranding ?? null);
             }
@@ -1724,6 +1779,10 @@ const PublicDisplay: React.FC = () => {
     // Receive 1x75 pool ordering (ids only)
     newSocket.on('oneby75-pool', (data: any) => {
       const n = Array.isArray(data?.ids) ? data.ids.length : 0;
+      const nameN = Array.isArray(data?.names)
+        ? data.names.filter((x: string) => String(x || '').trim()).length
+        : 0;
+      diag(`RX oneby75-pool · ids=${n} names=${nameN}`);
       if (n >= 1 && n <= 75) {
         const nextIds = data.ids as string[];
         const prevPool = oneBy75IdsRef.current;
@@ -1769,6 +1828,11 @@ const PublicDisplay: React.FC = () => {
     // Receive 5x15 pool as 5 columns of 15 ids
     newSocket.on('fiveby15-pool', (data: any) => {
       if (Array.isArray(data?.columns) && data.columns.length === 5 && data.columns.every((c: any) => Array.isArray(c))) {
+        const nameN = Array.isArray(data?.names)
+          ? data.names.filter((x: string) => String(x || '').trim()).length
+          : 0;
+        const idN = data.columns.reduce((n: number, c: string[]) => n + (Array.isArray(c) ? c.length : 0), 0);
+        diag(`RX fiveby15-pool · names=${nameN} trackIds=${idN}`);
         try {
           const cols = data.columns.map((col: any) => col.slice(0, 15));
           fiveBy15ColumnsRef.current = cols;
@@ -1837,11 +1901,14 @@ const PublicDisplay: React.FC = () => {
             }
           } catch {}
         } catch {}
+      } else {
+        diag('RX fiveby15-pool · ignored (bad columns shape)');
       }
     });
 
     // Receive explicit id->column map (authoritative placement)
     newSocket.on('fiveby15-map', (data: any) => {
+      diag('RX fiveby15-map');
       if (data && data.idToColumn && typeof data.idToColumn === 'object') {
         idToColumnRef.current = data.idToColumn;
         // Reconcile pending after receiving authoritative map
@@ -1940,6 +2007,10 @@ const PublicDisplay: React.FC = () => {
     });
 
     newSocket.on('song-playing', (data: any) => {
+      const sid = data?.songId != null ? String(data.songId).slice(0, 12) : '?';
+      const sname = data?.songName != null ? String(data.songName).slice(0, 28) : '?';
+      const idx = typeof data?.currentIndex === 'number' ? data.currentIndex : '?';
+      diag(`RX song-playing · #${idx} id=${sid} "${sname}"`);
       const aliased =
         typeof data.customArtistName === 'string' && data.customArtistName.trim() !== '';
       const ytf = youtubeTrackDisplayFields({
@@ -2088,6 +2159,7 @@ const PublicDisplay: React.FC = () => {
     });
 
     newSocket.on('game-started', (data: any) => {
+      diag('RX game-started · call-list session cleared on display');
       setWinnerCardModal(null);
       setGameState(prev => ({ 
         ...prev, 
@@ -2273,6 +2345,9 @@ const PublicDisplay: React.FC = () => {
       setWinnerCardModal(null);
       try {
         const names = Array.isArray(payload?.playlists) ? payload.playlists.map((p: any) => String(p?.name || '')) : [];
+        const nameN = names.filter((x: string) => String(x || '').trim()).length;
+        const listN = Array.isArray(payload?.songList) ? payload.songList.length : 0;
+        diag(`RX mix-finalized · playlistNames=${nameN} songList=${listN}`);
         setPlaylistNames(names);
         
         // Switch to game mode: hide splash and rules, show bingo card
@@ -5516,6 +5591,56 @@ const PublicDisplay: React.FC = () => {
           </div>
         </div>
       </div>
+      {showDiagOverlay ? (
+        <div
+          className="public-display-diag-hud"
+          role="status"
+          aria-live="polite"
+          aria-label="Display sync diagnostic"
+        >
+          <div className="public-display-diag-hud__title">Sync probe — remove ?diag=1 from URL when done</div>
+          <div className="public-display-diag-hud__meta">
+            Socket: <strong>{connectionStatus}</strong>
+            {' · '}
+            Room: <strong>{roomId || '—'}</strong>
+          </div>
+          <div className="public-display-diag-hud__snapshot">
+            <div>
+              <span className="public-display-diag-hud__label">Left “Songs” stat</span>={totalPlayedCount}
+            </div>
+            <div>
+              <span className="public-display-diag-hud__label">Play order (cards)</span>=
+              {playedOrderForDisplay.length}
+            </div>
+            <div>
+              <span className="public-display-diag-hud__label">Playlist names</span>=
+              {playlistNames.filter((n) => String(n || '').trim()).length}
+            </div>
+            <div>
+              <span className="public-display-diag-hud__label">Pool ids</span>=
+              {(oneBy75Ids ?? oneBy75IdsRef.current)?.length ?? 0}
+              {' · '}
+              <span className="public-display-diag-hud__label">5×15 cols</span>=
+              {fiveBy15Columns?.length ?? fiveBy15ColumnsRef.current?.length ?? 0}
+            </div>
+            <div>
+              <span className="public-display-diag-hud__label">Now playing</span>="
+              {gameState.currentSong?.name || '—'}"
+            </div>
+          </div>
+          <div className="public-display-diag-hud__feed">
+            {diagLines.length === 0 ? (
+              <div className="public-display-diag-hud__line">Waiting for events…</div>
+            ) : (
+              diagLines.map((line) => (
+                <div key={line.id} className="public-display-diag-hud__line">
+                  [{line.at}] {line.text}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
