@@ -133,7 +133,9 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   onResetCurrentRound?: () => void;
   onStartNextPlanned?: () => void;
   hasNextPlanned?: boolean;
-  /** Tracks in bingo pool for focused round (after dedupe / geometry), when songs are loaded. */
+  /** Live bingo pool size for a round index (deduped / geometry). */
+  poolTrackCountForRound?: (roundIndex: number) => number;
+  /** @deprecated Use poolTrackCountForRound */
   focusedPoolTrackCount?: number;
 }
 
@@ -178,6 +180,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   onResetCurrentRound,
   onStartNextPlanned,
   hasNextPlanned,
+  poolTrackCountForRound,
   focusedPoolTrackCount = 0,
 }: RoundPlannerProps<TRound>) {
   const [focusedIndex, setFocusedIndex] = useState(0);
@@ -207,13 +210,13 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
       if (gameState === 'playing') return;
       const round = rounds[roundIndex];
       if (!round || !(round.playlistIds || []).length) return;
-      if (roundIndex === currentRound && onSyncMixFromRoundRef.current) {
+      if (onSyncMixFromRoundRef.current) {
         onSyncMixFromRoundRef.current(roundIndex);
         return;
       }
       loadPrepForRound(roundIndex);
     },
-    [gameState, currentRound, loadPrepForRound, rounds],
+    [gameState, loadPrepForRound, rounds],
   );
 
   const selectRound = useCallback(
@@ -332,7 +335,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
     updated = sortRoundPlaylistsByBingoColumns(updated, playlists);
     newRounds[roundIndex] = updated;
     onUpdateRounds(newRounds);
-    if (roundIndex === focusedIndex) syncMixIfPrepRound(roundIndex);
+    syncMixIfPrepRound(roundIndex);
   };
 
   const removePlaylistFromRound = (roundIndex: number, playlistId: string) => {
@@ -350,7 +353,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
       status: round.playlistIds.length === 1 ? 'unplanned' : round.status,
     };
     onUpdateRounds(newRounds);
-    if (roundIndex === focusedIndex) syncMixIfPrepRound(roundIndex);
+    syncMixIfPrepRound(roundIndex);
   };
 
   const handleBucketDragEnter = (e: React.DragEvent) => {
@@ -424,7 +427,14 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   const isMixTarget = index === currentRound && gameState !== 'playing';
   const playlistIds = focused.playlistIds || [];
   const listedOnSpotify = Math.max(0, focused.songCount);
-  const poolCount = focusedPoolTrackCount > 0 ? focusedPoolTrackCount : 0;
+  const poolCount = Math.max(
+    0,
+    poolTrackCountForRound?.(focusedIndex) ?? (focusedPoolTrackCount > 0 ? focusedPoolTrackCount : 0),
+  );
+  const snapshotStaleAfterEdit =
+    Boolean(focused.savedMixSnapshot?.songs?.length) &&
+    poolCount > 0 &&
+    poolCount !== focused.savedMixSnapshot!.songs.length;
   const minRequired = minBingoPoolTracksForRound(
     focused,
     hostDefaultFreeSpace,
@@ -790,18 +800,21 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
         {focused.songCount > 0 || focusedPoolTrackCount > 0 ? (
           <div className="round-planner-bucket__meta">
             {playlistIds.length} playlist{playlistIds.length !== 1 ? 's' : ''}
-            {focusedPoolTrackCount > 0 ? (
+            {poolCount > 0 ? (
               <>
                 {' '}
-                · <strong>{focusedPoolTrackCount}</strong> in bingo pool
+                · <strong>{poolCount}</strong> in bingo pool
               </>
             ) : null}
-            {focused.songCount > 0 && focusedPoolTrackCount !== focused.songCount ? (
+            {snapshotStaleAfterEdit ? (
+              <span className="round-planner-bucket__meta-warn"> · playlists changed — Save round to lock</span>
+            ) : null}
+            {focused.songCount > 0 && poolCount !== focused.songCount ? (
               <span className="round-planner-bucket__meta-muted">
                 {' '}
                 · {focused.songCount} listed on Spotify (load playlists to refresh)
               </span>
-            ) : focused.songCount > 0 && focusedPoolTrackCount === 0 ? (
+            ) : focused.songCount > 0 && poolCount === 0 ? (
               <span> · {focused.songCount} listed on Spotify</span>
             ) : null}
             {poolCount > 0 && isInsufficient ? (
@@ -831,9 +844,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
                 (removed or unavailable); {poolCount} usable for this pattern
               </span>
             ) : null}
-            {focusedPoolTrackCount > 0 &&
-            focusedPoolTrackCount < focused.songCount &&
-            playlistIds.length === 5 ? (
+            {poolCount > 0 && poolCount < focused.songCount && playlistIds.length === 5 ? (
               <span className="round-planner-bucket__meta-muted">
                 {' '}
                 · 5×15 uses 75 unique tracks across columns (duplicates across playlists are dropped)
