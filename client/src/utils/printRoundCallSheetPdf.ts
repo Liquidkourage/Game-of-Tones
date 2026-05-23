@@ -117,6 +117,45 @@ function drawRoundHeading(state: CallSheetDocState, roundName: string, roomLabel
   state.y += 6;
 }
 
+/** Tracks whether a jsPDF doc already has content (for merging call sheets + cards). */
+export type PdfPageCursor = { pageStarted: boolean };
+
+/** Append host call lists into an existing PDF (or start a new doc). */
+export function appendMultiRoundCallSheetsToDoc(
+  doc: jsPDF,
+  sections: RoundCallSheetPdfOpts[],
+  cursor: PdfPageCursor,
+): void {
+  if (!sections.length) return;
+
+  if (cursor.pageStarted) {
+    doc.addPage();
+  }
+  const state = createCallSheetDocState(doc);
+  const roomLabel = sections[0].roomLabel;
+  drawDocumentTitle(
+    state,
+    'TEMPO — Host call sheets',
+    `${sections.length} saved round${sections.length !== 1 ? 's' : ''} · ${roomLabel}`,
+  );
+  drawPlaybackHint(state);
+  cursor.pageStarted = true;
+
+  sections.forEach((opts, i) => {
+    if (i > 0) {
+      doc.addPage();
+      state.y = MARGIN;
+    } else {
+      state.y += 4;
+    }
+    drawRoundHeading(state, opts.roundName, opts.roomLabel);
+    drawTrackList(state, opts.tracks);
+    if (i < sections.length - 1) {
+      state.y += 8;
+    }
+  });
+}
+
 /**
  * Simple letter-sized host call sheet — numbered playback order from a saved round snapshot.
  */
@@ -135,28 +174,7 @@ export function buildMultiRoundCallSheetPdfBlob(sections: RoundCallSheetPdfOpts[
     throw new Error('No call sheets to export.');
   }
   const doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
-  const state = createCallSheetDocState(doc);
-  const roomLabel = sections[0].roomLabel;
-  drawDocumentTitle(
-    state,
-    'TEMPO — Host call sheets',
-    `${sections.length} saved round${sections.length !== 1 ? 's' : ''} · ${roomLabel}`,
-  );
-  drawPlaybackHint(state);
-
-  sections.forEach((opts, i) => {
-    if (i > 0) {
-      doc.addPage();
-      state.y = MARGIN;
-    } else {
-      state.y += 4;
-    }
-    drawRoundHeading(state, opts.roundName, opts.roomLabel);
-    drawTrackList(state, opts.tracks);
-    if (i < sections.length - 1) {
-      state.y += 8;
-    }
-  });
-
+  const cursor: PdfPageCursor = { pageStarted: false };
+  appendMultiRoundCallSheetsToDoc(doc, sections, cursor);
   return doc.output('blob');
 }

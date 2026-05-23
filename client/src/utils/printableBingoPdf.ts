@@ -1,4 +1,8 @@
 import { jsPDF } from 'jspdf';
+import {
+  appendMultiRoundCallSheetsToDoc,
+  type RoundCallSheetPdfOpts,
+} from './printRoundCallSheetPdf';
 
 export type PrintableSquare = {
   position: string;
@@ -389,13 +393,14 @@ export async function buildPrintableBingoPdfBlob(
   return doc.output('blob');
 }
 
-/** Pre-show export: one PDF with all saved rounds (round header on each card page). */
-export async function buildMultiRoundPrintablePdfBlob(
-  sections: PrintablePdfSection[],
-): Promise<Blob> {
-  const doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
-  let pageStarted = false;
+export type PdfPageCursor = { pageStarted: boolean };
 
+/** Append printable bingo cards into an existing PDF (or start a new doc). */
+export async function appendMultiRoundPrintableCardsToDoc(
+  doc: jsPDF,
+  sections: PrintablePdfSection[],
+  cursor: PdfPageCursor,
+): Promise<void> {
   for (const section of sections) {
     if (!section.cards.length) continue;
     const headerLines = 1 + headerMetaLines(section.opts).length;
@@ -403,15 +408,37 @@ export async function buildMultiRoundPrintablePdfBlob(
     const logoForGrid = await prepareLogoForGrid(section.opts, layout.gridW);
 
     for (const card of section.cards) {
-      if (pageStarted) doc.addPage();
-      pageStarted = true;
+      if (cursor.pageStarted) doc.addPage();
+      cursor.pageStarted = true;
       drawBingoCardPage(doc, card, layout, logoForGrid, section.opts);
     }
   }
+}
 
-  if (!pageStarted) {
+/** Pre-show export: one PDF with all saved rounds (round header on each card page). */
+export async function buildMultiRoundPrintablePdfBlob(
+  sections: PrintablePdfSection[],
+): Promise<Blob> {
+  const doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
+  const cursor: PdfPageCursor = { pageStarted: false };
+  await appendMultiRoundPrintableCardsToDoc(doc, sections, cursor);
+  if (!cursor.pageStarted) {
     throw new Error('No printable cards to export.');
   }
+  return doc.output('blob');
+}
 
+/** Call sheets first, then printable cards — one download for pre-show prep. */
+export async function buildCombinedPreShowPdfBlob(
+  callSections: RoundCallSheetPdfOpts[],
+  cardSections: PrintablePdfSection[],
+): Promise<Blob> {
+  const doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
+  const cursor: PdfPageCursor = { pageStarted: false };
+  appendMultiRoundCallSheetsToDoc(doc, callSections, cursor);
+  await appendMultiRoundPrintableCardsToDoc(doc, cardSections, cursor);
+  if (!cursor.pageStarted) {
+    throw new Error('Nothing to export — save at least one round first.');
+  }
   return doc.output('blob');
 }

@@ -87,13 +87,13 @@ import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
 import { youtubeTrackDisplayFields, youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
 import {
-  buildMultiRoundPrintablePdfBlob,
+  buildCombinedPreShowPdfBlob,
   buildPrintableBingoPdfBlob,
   type PrintableCard,
   type PrintablePdfSection,
 } from '../utils/printableBingoPdf';
 import { roundPatternLabelForPrint, roundPrintablePdfSubtitle } from '../utils/roundPrintLabels';
-import { buildMultiRoundCallSheetPdfBlob, buildRoundCallSheetPdfBlob } from '../utils/printRoundCallSheetPdf';
+import { buildRoundCallSheetPdfBlob } from '../utils/printRoundCallSheetPdf';
 import {
   normalizePublicDisplayTitleRevealMode,
   type PublicDisplayTitleRevealMode,
@@ -3863,7 +3863,8 @@ const HostView: React.FC = () => {
     [requestPrintablePdfDownload, freeSpaceEnabled, roundPrintMetaFor],
   );
 
-  const handlePrintAllSavedRoundsPdf = useCallback(() => {
+  /** One PDF: host call lists for all saved rounds, then printable bingo cards. */
+  const handlePrintAllPreShowPdf = useCallback(() => {
     if (!socket || !roomId) {
       window.alert('Connect to the room first.');
       return;
@@ -3880,7 +3881,15 @@ const HostView: React.FC = () => {
       const count = Math.min(200, Math.max(1, Math.floor(Number(printableCardCount)) || 30));
       setPrintablePdfLoading(true);
       try {
-        const sections: PrintablePdfSection[] = [];
+        const callSections = saved.map((round) => ({
+          roundName: round.name,
+          roomLabel: `Room ${roomId}`,
+          tracks: round.savedMixSnapshot!.songs.map((s) => ({
+            name: s.name,
+            artist: s.artist,
+          })),
+        }));
+        const cardSections: PrintablePdfSection[] = [];
         for (const round of saved) {
           const snap = round.savedMixSnapshot!;
           const fs =
@@ -3895,7 +3904,7 @@ const HostView: React.FC = () => {
               freeSpace: fs,
             },
           });
-          sections.push({
+          cardSections.push({
             cards,
             opts: {
               freeSpace,
@@ -3907,18 +3916,18 @@ const HostView: React.FC = () => {
             },
           });
         }
-        const blob = await buildMultiRoundPrintablePdfBlob(sections);
+        const blob = await buildCombinedPreShowPdfBlob(callSections, cardSections);
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `tempo-bingo-all-rounds-${roomId}-${Date.now()}.pdf`;
+        a.download = `tempo-pre-show-all-rounds-${roomId}-${Date.now()}.pdf`;
         document.body.appendChild(a);
         a.click();
         a.remove();
         URL.revokeObjectURL(url);
       } catch (e) {
         console.error(e);
-        window.alert(e instanceof Error ? e.message : 'Could not build combined printable PDF.');
+        window.alert(e instanceof Error ? e.message : 'Could not build pre-show PDF.');
       } finally {
         setPrintablePdfLoading(false);
       }
@@ -3966,41 +3975,6 @@ const HostView: React.FC = () => {
     },
     [roomId, freeSpaceEnabled],
   );
-
-  const handlePrintAllSavedCallSheetsPdf = useCallback(() => {
-    const saved = eventRounds.filter((r) =>
-      eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled),
-    );
-    if (saved.length === 0) {
-      window.alert('No saved rounds yet. Use Save round on each bucket you want in the export.');
-      return;
-    }
-    setPrintablePdfLoading(true);
-    try {
-      const sections = saved.map((round) => {
-        const songs = round.savedMixSnapshot!.songs;
-        return {
-          roundName: round.name,
-          roomLabel: `Room ${roomId}`,
-          tracks: songs.map((s) => ({ name: s.name, artist: s.artist })),
-        };
-      });
-      const blob = buildMultiRoundCallSheetPdfBlob(sections);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `tempo-call-sheets-all-rounds-${roomId}-${Date.now()}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error(e);
-      window.alert(e instanceof Error ? e.message : 'Could not build combined call sheet PDF.');
-    } finally {
-      setPrintablePdfLoading(false);
-    }
-  }, [eventRounds, freeSpaceEnabled, roomId]);
 
   const startGame = async () => {
     if (!socket) {
@@ -7367,8 +7341,7 @@ const HostView: React.FC = () => {
       saveRoundBusy={saveRoundBusy}
       snapshotMeetsSave={(r) => eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled)}
       onPrintPdf={(idx) => handleDownloadRoundPrintablePdf(eventRounds[idx])}
-      onPrintAllSaved={handlePrintAllSavedRoundsPdf}
-      onPrintAllCallSheets={handlePrintAllSavedCallSheetsPdf}
+      onPrintAllPreShow={handlePrintAllPreShowPdf}
       savedRoundCount={eventRounds.filter((r) =>
         eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled),
       ).length}

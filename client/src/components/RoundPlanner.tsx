@@ -19,7 +19,6 @@ import {
   SkipForward,
   Trash2,
   Music,
-  ListMusic,
 } from 'lucide-react';
 import {
   bingoColumnLetterForPlaylistName,
@@ -106,10 +105,8 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   saveRoundBusy?: boolean;
   snapshotMeetsSave: (round: TRound) => boolean;
   onPrintPdf?: (roundIndex: number) => void;
-  /** Merged PDF for every round that has a saved snapshot. */
-  onPrintAllSaved?: () => void;
-  /** Merged host call-sheet PDF (one list per saved round). */
-  onPrintAllCallSheets?: () => void;
+  /** One PDF: call lists + printable cards for every saved round. */
+  onPrintAllPreShow?: () => void;
   savedRoundCount?: number;
   onCallSheet?: (roundIndex: number) => void;
   onOpenComposite?: (roundIndex: number) => void;
@@ -163,8 +160,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   saveRoundBusy,
   snapshotMeetsSave,
   onPrintPdf,
-  onPrintAllSaved,
-  onPrintAllCallSheets,
+  onPrintAllPreShow,
   savedRoundCount = 0,
   onCallSheet,
   onOpenComposite,
@@ -650,7 +646,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
             onChange={(e) => onPrintableCardCountChange(Number(e.target.value))}
           />
         </label>
-        {onPrintAllSaved ? (
+        {onPrintAllPreShow ? (
           <button
             type="button"
             className="round-planner-btn round-planner-btn--secondary"
@@ -658,28 +654,12 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
             title={
               savedRoundCount < 1
                 ? 'Save at least one round to export'
-                : 'One PDF with printable bingo cards for each saved round'
+                : 'One PDF: host call lists for each saved round, then printable bingo cards'
             }
-            onClick={onPrintAllSaved}
+            onClick={onPrintAllPreShow}
           >
             <Printer className="w-3 h-3" aria-hidden />
-            {printablePdfLoading ? 'Printing…' : `Print all saved (${savedRoundCount})`}
-          </button>
-        ) : null}
-        {onPrintAllCallSheets ? (
-          <button
-            type="button"
-            className="round-planner-btn round-planner-btn--secondary"
-            disabled={printablePdfLoading || savedRoundCount < 1}
-            title={
-              savedRoundCount < 1
-                ? 'Save at least one round to export'
-                : 'One PDF with a host call list for each saved round'
-            }
-            onClick={onPrintAllCallSheets}
-          >
-            <ListMusic className="w-3 h-3" aria-hidden />
-            {printablePdfLoading ? 'Printing…' : `Call sheets all saved (${savedRoundCount})`}
+            {printablePdfLoading ? 'Printing…' : `Print all pre-show (${savedRoundCount})`}
           </button>
         ) : null}
       </div>
