@@ -183,9 +183,20 @@
   flex-direction: column;
 }
 
+.App .public-display--glass .call-list-display__body {
+  flex: 1 1 auto;
+  min-height: min(48vh, 560px);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .App .public-display--glass .call-list-content {
   flex: 1 1 auto;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .App .public-display--glass .call-list-content > .call-carousel-viewport,
@@ -210,6 +221,21 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.App .public-display--glass .call-list-content--played-fallback .call-columns-header {
+  flex: 0 0 auto;
+}
+
+.App .public-display--glass .call-list-content--played-fallback .call-carousel-viewport,
+.App .public-display--glass .call-list-content--played-fallback .call-carousel-viewport--static-grid {
+  flex: 1 1 auto;
+  min-height: min(36vh, 440px);
+  height: auto;
+  align-content: start;
 }
 
 .App .public-display--glass .call-list-display[data-call-cols='5']::after {
@@ -256,9 +282,18 @@
   min-height: clamp(36px, 5.5vmin, 56px);
 }
 
-.App .public-display--glass .call-list .call-col {
+.App .public-display--glass .call-list-column {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.App .public-display--glass .call-columns-header {
+  flex: 0 0 auto;
+  z-index: 2;
 }
 
 .App .public-display--glass .call-carousel-col-inner {

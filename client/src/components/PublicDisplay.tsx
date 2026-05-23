@@ -3555,11 +3555,12 @@ const PublicDisplay: React.FC = () => {
           {cols.map((col, ci) => (
             <div
               key={ci}
-              className="call-col"
+              className="call-list-column"
               style={{
                 position: 'relative',
                 overflow: isFullCardPattern ? 'auto' : 'hidden',
                 height: '100%',
+                minHeight: 0,
                 WebkitOverflowScrolling: 'touch'
               }}
               {...(ci === 0 ? { ref: vertViewportRef as any } : {})}
@@ -5436,6 +5437,7 @@ const PublicDisplay: React.FC = () => {
                 </div>
               ) : null}
               <div
+                className="call-list-display__body"
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
@@ -5454,19 +5456,8 @@ const PublicDisplay: React.FC = () => {
                 const poolIds = oneBy75Ids ?? oneBy75IdsRef.current;
                 const hasPool = poolHasTracks(poolIds);
                 const played = playedOrderForDisplay;
-                const poolSet =
-                  layoutFiveColumns && layoutFiveColumns.length > 0
-                    ? new Set(layoutFiveColumns.flat())
-                    : null;
-                const anyPlayedInFiveBy15Pool =
-                  poolSet != null && played.some((id) => poolSet.has(id));
-
-                // 5×15 with songs played: prefer reliable play-order cards + B–O headers (column pool often mismatches).
+                // 5×15 with songs played: play-order cards + headers (diag proved pool/names arrive; column grid had 0-height collapse).
                 if (played.length > 0 && columnCallListLayout) {
-                  if (hasPool && layoutFiveColumns && anyPlayedInFiveBy15Pool) {
-                    const columnView = renderOneBy75Columns();
-                    if (columnView != null) return columnView;
-                  }
                   return renderSimplePlayedCallList({ withPlaylistHeaders: true });
                 }
                 if (hasPool) {
@@ -5489,7 +5480,7 @@ const PublicDisplay: React.FC = () => {
                       {renderPlaylistNamesHeaderRow('5x15')}
                       <div className="call-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, flex: 1, minHeight: 0 }}>
                         {[0, 1, 2, 3, 4].map((ci) => (
-                          <div key={ci} className="call-col" style={{ minHeight: 0 }} aria-hidden />
+                          <div key={ci} className="call-list-column" style={{ minHeight: 0 }} aria-hidden />
                         ))}
                       </div>
                     </div>
