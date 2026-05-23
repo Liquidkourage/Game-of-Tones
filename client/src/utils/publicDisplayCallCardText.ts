@@ -6,12 +6,12 @@ import type { CSSProperties } from 'react';
  */
 
 /** Title size on call cards; artist is intentionally smaller for hierarchy. */
-export const PUBLIC_DISPLAY_CALL_TITLE_BASE_PX = 32;
-export const PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX = 22;
+export const PUBLIC_DISPLAY_CALL_TITLE_BASE_PX = 36;
+export const PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX = 25;
 
 /** ~how many letter-box characters fit per row in a call column at auto-fit. */
-const MASKED_CHARS_PER_LINE_TITLE = 11;
-const MASKED_CHARS_PER_LINE_ARTIST = 13;
+const MASKED_CHARS_PER_LINE_TITLE = 12;
+const MASKED_CHARS_PER_LINE_ARTIST = 14;
 /** Plain revealed text wraps wider in the same column. */
 const PLAIN_CHARS_PER_LINE_TITLE = 17;
 const PLAIN_CHARS_PER_LINE_ARTIST = 22;
@@ -82,12 +82,12 @@ export function computeCallCardTypography(
   const hasArtist = !!(artist || '').trim();
 
   let textScale = 1;
-  if (total > 58) textScale = 0.84;
-  else if (total > 44) textScale = 0.9;
-  else if (total > 30) textScale = 0.94;
+  if (total > 64) textScale = 0.88;
+  else if (total > 50) textScale = 0.93;
+  else if (total > 36) textScale = 0.97;
 
-  if (tLen > 48) textScale = Math.min(textScale, 0.82);
-  if (aLen > 36) textScale = Math.min(textScale, 0.86);
+  if (tLen > 52) textScale = Math.min(textScale, 0.86);
+  if (aLen > 40) textScale = Math.min(textScale, 0.9);
 
   let titleMaxLines = 3;
   let artistMaxLines = hasArtist ? 2 : 0;
@@ -97,14 +97,14 @@ export function computeCallCardTypography(
     const aLines = hasArtist ? estimateMaskedWrapLines(artist, MASKED_CHARS_PER_LINE_ARTIST) : 0;
     const totalLines = tLines + aLines;
 
-    if (totalLines >= 6) textScale = Math.min(textScale, 0.76);
-    else if (totalLines >= 5) textScale = Math.min(textScale, 0.82);
-    else if (totalLines >= 4) textScale = Math.min(textScale, 0.88);
-    else if (totalLines >= 3) textScale = Math.min(textScale, 0.93);
+    if (totalLines >= 6) textScale = Math.min(textScale, 0.84);
+    else if (totalLines >= 5) textScale = Math.min(textScale, 0.9);
+    else if (totalLines >= 4) textScale = Math.min(textScale, 0.94);
+    else if (totalLines >= 3) textScale = Math.min(textScale, 0.97);
 
     if (totalLines > CALL_CARD_TOTAL_LINE_BUDGET) {
       const fit = CALL_CARD_TOTAL_LINE_BUDGET / totalLines;
-      textScale = Math.min(textScale, Math.max(0.7, fit));
+      textScale = Math.min(textScale, Math.max(0.8, fit));
     }
 
     titleMaxLines = Math.min(Math.max(tLines, 1), 3);
