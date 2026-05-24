@@ -863,8 +863,24 @@
   min-width: 120px;
 }
 
-.host-glass-theme .host-r4-volume .host-range--volume {
-  flex: 1;
+.host-glass-theme .host-r4-volume--full {
+  width: 100%;
+  flex: 1 1 100%;
+  min-width: 0;
+  max-width: none;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  box-sizing: border-box;
+}
+
+.host-glass-theme .host-r4-volume .host-range--volume,
+.host-glass-theme .host-r4-volume--full .host-range--volume {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
 }
 
 .host-glass-theme .host-r4-go-live-actions {

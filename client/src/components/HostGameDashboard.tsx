@@ -314,26 +314,26 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
                     <SkipForward className="w-4 h-4" aria-hidden />
                     Skip
                   </button>
-                  <div className="host-r4-volume">
-                    <button type="button" className="btn-secondary btn-host-icon" onClick={onMuteToggle}>
-                      {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                    </button>
-                    <span className="host-live-dock__volume-label">{isMuted ? 0 : playbackState.volume}%</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={isMuted ? 0 : playbackState.volume}
-                      onChange={(e) => {
-                        const v = parseInt(e.target.value, 10);
-                        if (isMuted && v > 0) setIsMuted(false);
-                        setPlaybackVolume(v);
-                        onVolumeChange(v);
-                      }}
-                      className="host-range host-range--volume"
-                      aria-label="Volume"
-                    />
-                  </div>
+                </div>
+                <div className="host-r4-volume host-r4-volume--full">
+                  <button type="button" className="btn-secondary btn-host-icon" onClick={onMuteToggle}>
+                    {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                  </button>
+                  <span className="host-live-dock__volume-label">{isMuted ? 0 : playbackState.volume}%</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={isMuted ? 0 : playbackState.volume}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      if (isMuted && v > 0) setIsMuted(false);
+                      setPlaybackVolume(v);
+                      onVolumeChange(v);
+                    }}
+                    className="host-range host-range--volume"
+                    aria-label="Volume"
+                  />
                 </div>
               </>
             ) : (
