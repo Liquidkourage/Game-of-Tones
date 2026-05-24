@@ -25,6 +25,8 @@ import PublicDisplay from './components/PublicDisplay';
 import SpotifyCallback from './components/SpotifyCallback';
 import CallbackGoogle from './components/CallbackGoogle';
 import AdminPage from './components/AdminPage';
+import OrgPortalPage from './components/OrgPortalPage';
+import './components/OrgPortalPage.css';
 import DisplayHeaderInfo from './components/DisplayHeaderInfo';
 import ErrorBoundary from './components/ErrorBoundary';
 import HostYoutubePlaybackWindow from './components/HostYoutubePlaybackWindow';
@@ -184,6 +186,7 @@ function App() {
               <Route path="/callback" element={<SpotifyCallback />} />
               <Route path="/callback-google" element={<CallbackGoogle />} />
               <Route path="/admin" element={<AdminPage />} />
+              <Route path="/org" element={<OrgPortalPage />} />
             </Routes>
           </ErrorBoundary>
         </main>

@@ -1,0 +1,425 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Building2, Crown, Heart, Loader2, Mail, Users, ArrowLeft, AlertCircle } from 'lucide-react';
+import { API_BASE } from '../config';
+import { browserGoogleLoginUrl, hostFetch } from '../utils/hostFetch';
+
+type OrgMember = { id: number; email: string | null; displayName: string | null; createdAt?: string };
+type OrgInvite = { email: string; created_at?: string };
+type OrgPayment = {
+  id: number;
+  amount_cents: number;
+  currency: string;
+  status: string;
+  created_at?: string;
+  completed_at?: string | null;
+};
+
+type OrgMe = {
+  role: 'owner' | 'host' | null;
+  organization: {
+    id: number;
+    name: string;
+    billing_status?: string;
+    lifetime_paid_cents?: number;
+    last_payment_at?: string | null;
+  } | null;
+  members: OrgMember[];
+  invites: OrgInvite[];
+  payments: OrgPayment[];
+  billing: {
+    gateEnabled: boolean;
+    stripeConfigured: boolean;
+    active: boolean;
+    status: string;
+    lifetimePaidCents: number;
+    lastPaymentAt: string | null;
+  };
+};
+
+const SUGGESTED_AMOUNTS_USD = [10, 25, 50, 100];
+
+const OrgPortalPage: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [data, setData] = useState<OrgMe | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [needsLogin, setNeedsLogin] = useState(false);
+  const [orgName, setOrgName] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [customAmount, setCustomAmount] = useState('25');
+  const [busy, setBusy] = useState(false);
+  const [banner, setBanner] = useState<string | null>(null);
+
+  const billingNotice = searchParams.get('billing');
+
+  const refresh = useCallback(async () => {
+    setLoadError(null);
+    setLoading(true);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/org/me`);
+      if (res.status === 401) {
+        setNeedsLogin(true);
+        setData(null);
+        return;
+      }
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setLoadError((j && j.message) || `HTTP ${res.status}`);
+        setData(null);
+        return;
+      }
+      setNeedsLogin(false);
+      setData((await res.json()) as OrgMe);
+    } catch (e) {
+      setLoadError(String(e));
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (billingNotice === 'success') {
+      setBanner('Thank you! Payment received — your organization is marked as a supporter.');
+      const next = new URLSearchParams(searchParams);
+      next.delete('billing');
+      setSearchParams(next, { replace: true });
+      refresh();
+    } else if (billingNotice === 'cancelled') {
+      setBanner('Checkout cancelled — you can try again anytime.');
+      const next = new URLSearchParams(searchParams);
+      next.delete('billing');
+      setSearchParams(next, { replace: true });
+    }
+  }, [billingNotice, refresh, searchParams, setSearchParams]);
+
+  const lifetimeUsd = useMemo(() => {
+    const c = data?.billing?.lifetimePaidCents ?? 0;
+    return (c / 100).toFixed(2);
+  }, [data?.billing?.lifetimePaidCents]);
+
+  const createOrg = async () => {
+    setBusy(true);
+    setBanner(null);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/org`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: orgName.trim() }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert((j && j.message) || `Could not create organization (${res.status})`);
+        return;
+      }
+      setOrgName('');
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sendInvite = async () => {
+    const email = inviteEmail.trim();
+    if (!email) return;
+    setBusy(true);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/org/invites`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert((j && j.message) || `Invite failed (${res.status})`);
+        return;
+      }
+      setInviteEmail('');
+      setBanner(`Invited ${email}. They can sign in with Google using that address.`);
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startCheckout = async (usd: number) => {
+    const cents = Math.round(usd * 100);
+    setBusy(true);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/org/billing/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amountCents: cents }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert((j && j.message) || `Checkout failed (${res.status})`);
+        return;
+      }
+      if (j.url) {
+        window.location.href = j.url;
+        return;
+      }
+      alert('No checkout URL returned.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const payCustom = () => {
+    const usd = parseFloat(customAmount);
+    if (!Number.isFinite(usd) || usd < 1) {
+      alert('Enter at least $1.00');
+      return;
+    }
+    if (usd > 5000) {
+      alert('Maximum custom amount is $5,000');
+      return;
+    }
+    startCheckout(usd);
+  };
+
+  if (loading) {
+    return (
+      <div className="org-portal">
+        <p className="org-portal__loading">
+          <Loader2 className="org-portal__spin" aria-hidden />
+          Loading organization…
+        </p>
+      </div>
+    );
+  }
+
+  if (needsLogin) {
+    return (
+      <div className="org-portal">
+        <Link to="/?mode=host" className="org-portal__back">
+          <ArrowLeft aria-hidden /> Back
+        </Link>
+        <h1 className="org-portal__title">
+          <Building2 aria-hidden /> Organization
+        </h1>
+        <p className="org-portal__lead">Sign in with Google to create or manage your venue organization.</p>
+        <button
+          type="button"
+          className="btn-primary org-portal__cta"
+          onClick={() => {
+            try {
+              sessionStorage.setItem('tempo_post_auth_return', '/org');
+            } catch {
+              /* ignore */
+            }
+            window.location.href = browserGoogleLoginUrl();
+          }}
+        >
+          Sign in with Google
+        </button>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="org-portal">
+        <p className="org-portal__error" role="alert">
+          <AlertCircle aria-hidden /> {loadError}
+        </p>
+        <button type="button" className="btn-secondary" onClick={refresh}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  const org = data?.organization;
+  const isOwner = data?.role === 'owner';
+
+  return (
+    <div className="org-portal">
+      <Link to="/?mode=host" className="org-portal__back">
+        <ArrowLeft aria-hidden /> Back to host
+      </Link>
+
+      <header className="org-portal__header">
+        <h1 className="org-portal__title">
+          <Building2 aria-hidden /> Organization
+        </h1>
+        <p className="org-portal__lead">
+          One organization covers every host you invite. Pay as you like — suggested amounts or your own.
+        </p>
+      </header>
+
+      {banner ? (
+        <div className="org-portal__banner" role="status">
+          {banner}
+        </div>
+      ) : null}
+
+      {data?.billing?.gateEnabled ? (
+        <div className="org-portal__notice org-portal__notice--warn" role="note">
+          Hosting will require organization support soon.{' '}
+          {data.billing.active ? 'Your org is covered.' : 'Complete a payment below when you are ready.'}
+        </div>
+      ) : (
+        <div className="org-portal__notice" role="note">
+          Hosting is open for everyone right now. Support is optional and helps keep TEMPO running.
+        </div>
+      )}
+
+      {!org ? (
+        <section className="org-portal__card">
+          <h2>Create your organization</h2>
+          <p>Venue name, school, or team — you will be the owner and can invite other hosts.</p>
+          <div className="org-portal__row">
+            <input
+              type="text"
+              className="input"
+              placeholder="e.g. Acme Karaoke Nights"
+              value={orgName}
+              onChange={(e) => setOrgName(e.target.value)}
+              maxLength={80}
+            />
+            <button type="button" className="btn-primary" disabled={busy || orgName.trim().length < 2} onClick={createOrg}>
+              {busy ? <Loader2 className="org-portal__spin" aria-hidden /> : 'Create'}
+            </button>
+          </div>
+        </section>
+      ) : (
+        <>
+          <section className="org-portal__card org-portal__card--highlight">
+            <div className="org-portal__org-head">
+              <h2>{org.name}</h2>
+              {isOwner ? (
+                <span className="org-portal__badge">
+                  <Crown size={14} aria-hidden /> Owner
+                </span>
+              ) : (
+                <span className="org-portal__badge org-portal__badge--host">Host</span>
+              )}
+            </div>
+            <p className="org-portal__meta">
+              Status: <strong>{data?.billing?.status || 'none'}</strong>
+              {Number(data?.billing?.lifetimePaidCents) > 0 ? (
+                <>
+                  {' '}
+                  · Lifetime support: <strong>${lifetimeUsd}</strong>
+                </>
+              ) : null}
+            </p>
+          </section>
+
+          {isOwner ? (
+            <>
+              <section className="org-portal__card">
+                <h2>
+                  <Heart aria-hidden /> Pay as you like
+                </h2>
+                <p>Covers all hosts in this organization. Stripe processes payment securely.</p>
+                {!data?.billing?.stripeConfigured ? (
+                  <p className="org-portal__muted">Payments are not configured on this server yet (STRIPE_SECRET_KEY).</p>
+                ) : (
+                  <>
+                    <div className="org-portal__amounts">
+                      {SUGGESTED_AMOUNTS_USD.map((usd) => (
+                        <button
+                          key={usd}
+                          type="button"
+                          className="btn-secondary org-portal__amount-btn"
+                          disabled={busy}
+                          onClick={() => startCheckout(usd)}
+                        >
+                          ${usd}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="org-portal__row org-portal__row--custom">
+                      <label className="org-portal__custom-label">
+                        Custom (USD)
+                        <input
+                          type="number"
+                          min={1}
+                          max={5000}
+                          step={1}
+                          className="input"
+                          value={customAmount}
+                          onChange={(e) => setCustomAmount(e.target.value)}
+                        />
+                      </label>
+                      <button type="button" className="btn-primary" disabled={busy} onClick={payCustom}>
+                        Pay custom amount
+                      </button>
+                    </div>
+                  </>
+                )}
+              </section>
+
+              <section className="org-portal__card">
+                <h2>
+                  <Mail aria-hidden /> Invite hosts
+                </h2>
+                <p>They sign in with Google using this exact email. Payment on this org covers them.</p>
+                <div className="org-portal__row">
+                  <input
+                    type="email"
+                    className="input"
+                    placeholder="host@example.com"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                  />
+                  <button type="button" className="btn-primary" disabled={busy || !inviteEmail.trim()} onClick={sendInvite}>
+                    Invite
+                  </button>
+                </div>
+                {data.invites.length > 0 ? (
+                  <ul className="org-portal__list">
+                    {data.invites.map((inv) => (
+                      <li key={inv.email}>{inv.email}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </section>
+            </>
+          ) : (
+            <section className="org-portal__card">
+              <p>Your organization owner manages billing and invites. Ask them if you need access changes.</p>
+            </section>
+          )}
+
+          <section className="org-portal__card">
+            <h2>
+              <Users aria-hidden /> Hosts in this org ({data?.members?.length ?? 0})
+            </h2>
+            <ul className="org-portal__list">
+              {(data?.members ?? []).map((m) => (
+                <li key={m.id}>
+                  {m.displayName || m.email || `User #${m.id}`}
+                  {m.email ? <span className="org-portal__muted"> — {m.email}</span> : null}
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {isOwner && data?.payments && data.payments.length > 0 ? (
+            <section className="org-portal__card">
+              <h2>Recent payments</h2>
+              <ul className="org-portal__list org-portal__payments">
+                {data.payments.map((p) => (
+                  <li key={p.id}>
+                    ${(p.amount_cents / 100).toFixed(2)} {p.currency?.toUpperCase()} — {p.status}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+};
+
+export default OrgPortalPage;

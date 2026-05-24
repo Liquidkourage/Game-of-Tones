@@ -13,6 +13,7 @@ const path = require('path');
 const hostAuth = require('./hostAuth');
 const usersStore = require('./users');
 const organizationsStore = require('./organizations');
+const billingStore = require('./billing');
 const hostRoomPrepStore = require('./hostRoomPrep');
 const songAliasesStore = require('./songAliases');
 const fiveByFifteenAssign = require('./fiveByFifteenAssign');
@@ -353,6 +354,19 @@ app.use(cors({
   },
   credentials: true
 }));
+app.post(
+  '/api/webhooks/stripe',
+  express.raw({ type: 'application/json' }),
+  async (req, res) => {
+    try {
+      await billingStore.handleStripeWebhook(db, req, res);
+    } catch (e) {
+      console.error('POST /api/webhooks/stripe:', e?.message || e);
+      if (!res.headersSent) res.status(500).send('Webhook handler failed');
+    }
+  }
+);
+
 app.use(express.json({ limit: '8mb' }));
 app.use(cookieParser());
 app.use(express.static('public'));
@@ -9439,6 +9453,11 @@ app.get('/api/auth/google/callback', async (req, res) => {
       email,
       displayName,
     });
+    try {
+      await organizationsStore.applyPendingInvitesForUser(db, row.id, normEmail || row.email || email);
+    } catch (inviteErr) {
+      console.error('applyPendingInvitesForUser:', inviteErr?.message || inviteErr);
+    }
     const signedEmail = usersStore.normalizeHostEmail(normEmail || row.email || '');
     const token = hostAuth.signHostJwt(row.id, signedEmail);
     hostAuth.setSessionCookie(res, row.id, signedEmail);
@@ -9464,8 +9483,30 @@ app.get('/api/auth/me', async (req, res) => {
       });
     }
     const row = await usersStore.getUserById(db, uid);
+    let organization = null;
+    let orgRole = null;
+    try {
+      const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+      organization = ctx.organization;
+      orgRole = ctx.role;
+    } catch (orgErr) {
+      console.error('GET /api/auth/me org context:', orgErr?.message || orgErr);
+    }
+    const billing =
+      organization != null
+        ? billingStore.billingSummaryFromOrg(organization)
+        : billingStore.billingSummaryFromOrg(null);
     return res.json({
       user: row ? { id: row.id, email: row.email, displayName: row.display_name } : { id: uid },
+      organization: organization
+        ? {
+            id: organization.id,
+            name: organization.name,
+            role: orgRole,
+            hasCustomSpotifyApp: !!(organization.spotify_client_id && String(organization.spotify_client_id).trim()),
+          }
+        : null,
+      billing,
       ...(rawJwt ? { hostToken: rawJwt } : {}),
     });
   } catch (e) {
@@ -9770,6 +9811,125 @@ app.get('/api/admin/spotify-tenant-setup', async (req, res) => {
   }
 });
 
+/** Self-serve organization portal (owner invites hosts; org-level pay-as-you-like billing). */
+app.get('/api/org/me', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    const billing = billingStore.billingSummaryFromOrg(ctx.organization);
+    const payments =
+      ctx.organization && ctx.role === 'owner'
+        ? await billingStore.listOrgPayments(db, ctx.organization.id, 15)
+        : [];
+    const invites =
+      ctx.organization && ctx.role === 'owner'
+        ? await organizationsStore.listOrganizationInvites(db, ctx.organization.id)
+        : [];
+    const members =
+      ctx.organization ? await organizationsStore.listOrganizationMembers(db, ctx.organization.id) : [];
+    return res.json({
+      role: ctx.role,
+      organization: ctx.organization,
+      members,
+      invites,
+      payments,
+      billing,
+    });
+  } catch (e) {
+    console.error('GET /api/org/me:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.post('/api/org', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const organization = await organizationsStore.createSelfServeOrganization(db, {
+      name: body.name,
+      ownerUserId: uid,
+    });
+    return res.json({ ok: true, organization });
+  } catch (e) {
+    console.error('POST /api/org:', e);
+    const msg = e?.message || 'Failed';
+    const code = msg.includes('already') ? 409 : 400;
+    res.status(code).json({ error: 'failed', message: msg });
+  }
+});
+
+app.post('/api/org/invites', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    if (!ctx.organization || ctx.role !== 'owner') {
+      return res.status(403).json({ error: 'forbidden', message: 'Only the organization owner can invite hosts.' });
+    }
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const invite = await organizationsStore.inviteHostToOrganization(db, {
+      organizationId: ctx.organization.id,
+      email: body.email,
+      invitedByUserId: uid,
+    });
+    return res.json({ ok: true, invite });
+  } catch (e) {
+    console.error('POST /api/org/invites:', e);
+    res.status(400).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.delete('/api/org/invites', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    if (!ctx.organization || ctx.role !== 'owner') {
+      return res.status(403).json({ error: 'forbidden', message: 'Only the organization owner can manage invites.' });
+    }
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const result = await organizationsStore.removeOrganizationInvite(db, {
+      organizationId: ctx.organization.id,
+      email: body.email,
+    });
+    return res.json({ ok: true, ...result });
+  } catch (e) {
+    console.error('DELETE /api/org/invites:', e);
+    res.status(400).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.post('/api/org/billing/checkout', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    if (!ctx.organization || ctx.role !== 'owner') {
+      return res.status(403).json({ error: 'forbidden', message: 'Only the organization owner can pay for the organization.' });
+    }
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const checkout = await billingStore.createPayAsYouLikeCheckout(db, {
+      organizationId: ctx.organization.id,
+      orgName: ctx.organization.name,
+      amountCents: body.amountCents,
+      hostUserId: uid,
+    });
+    return res.json({ ok: true, ...checkout });
+  } catch (e) {
+    console.error('POST /api/org/billing/checkout:', e);
+    const msg = e?.message || 'Failed';
+    const code = msg.includes('Stripe') || msg.includes('Amount') ? 400 : 500;
+    res.status(code).json({ error: 'failed', message: msg });
+  }
+});
+
 /**
  * When TEMPO_APPROVED_HOSTS_ONLY is on, require JWT + allowlisted email. Sends response and returns null if denied.
  */
@@ -9813,6 +9973,33 @@ async function requireApprovedHostUid(req, res) {
   return uid;
 }
 
+/** When TEMPO_REQUIRE_ORG_BILLING=1, host must belong to an org with at least one completed payment. */
+async function requireHostOrgBillingAccess(uid, res) {
+  if (!billingStore.isBillingGateEnabled()) return true;
+  if (!db) {
+    res.status(503).json({ error: 'database_required', message: 'DATABASE_URL required' });
+    return false;
+  }
+  const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+  if (!ctx.organization) {
+    res.status(402).json({
+      error: 'org_required',
+      message: 'Join or create an organization and complete payment before hosting.',
+      orgPortalUrl: '/org',
+    });
+    return false;
+  }
+  if (!billingStore.isOrgBillingActive(ctx.organization)) {
+    res.status(402).json({
+      error: 'org_billing_required',
+      message: 'Your organization needs to complete pay-as-you-like support before hosting.',
+      orgPortalUrl: '/org',
+    });
+    return false;
+  }
+  return true;
+}
+
 /**
  * Pick a room id for a host: reuse default MDY+userId if free; claim socket-created rooms with no owner;
  * idempotent if this host already owns that id; otherwise try random suffixes.
@@ -9853,6 +10040,7 @@ app.post('/api/host/rooms', async (req, res) => {
   try {
     const uid = await requireApprovedHostUid(req, res);
     if (!uid) return;
+    if (!(await requireHostOrgBillingAccess(uid, res))) return;
     if (!db) return res.status(503).json({ error: 'DATABASE_URL required' });
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     const forceNewRoom = body.forceNewRoom === true || body.forceNew === true;

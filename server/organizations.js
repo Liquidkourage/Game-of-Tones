@@ -84,6 +84,40 @@ async function ensureOrganizationsTable(db) {
   await db.query(`
     CREATE INDEX IF NOT EXISTS idx_users_organization_id ON users (organization_id)
   `);
+  await db.query(`
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id)
+  `);
+  await db.query(`
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT
+  `);
+  await db.query(`
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS billing_status TEXT NOT NULL DEFAULT 'none'
+  `);
+  await db.query(`
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS lifetime_paid_cents BIGINT NOT NULL DEFAULT 0
+  `);
+  await db.query(`
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS last_payment_at TIMESTAMP
+  `);
+  try {
+    await db.query(`ALTER TABLE organizations ALTER COLUMN spotify_client_id DROP NOT NULL`);
+  } catch {
+    /* already nullable */
+  }
+  try {
+    await db.query(`ALTER TABLE organizations ALTER COLUMN spotify_client_secret_encrypted DROP NOT NULL`);
+  } catch {
+    /* already nullable */
+  }
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS org_host_invites (
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      invited_by_user_id INTEGER REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (organization_id, email)
+    )
+  `);
   return true;
 }
 
@@ -101,7 +135,10 @@ async function getCredentialsForUserId(db, userId) {
   );
   if (r.rows.length === 0) return null;
   const row = r.rows[0];
+  const clientIdRaw = row.spotify_client_id;
+  if (clientIdRaw == null || String(clientIdRaw).trim() === '') return null;
   const raw = row.spotify_client_secret_encrypted;
+  if (raw == null || String(raw).trim() === '') return null;
   let secret;
   if (orgPlaintextSecretsMode()) {
     secret = String(raw == null ? '' : raw).trim();
@@ -279,22 +316,212 @@ async function getVenueSettingsRow(db, orgId) {
   return sanitizeVenueSettings(raw);
 }
 
-async function getOrganizationById(db, id) {
-  if (!db) return null;
-  await ensureOrganizationsTable(db);
-  const r = await db.query(
-    `SELECT id, name, spotify_client_id, created_at, venue_settings FROM organizations WHERE id = $1`,
-    [id]
-  );
-  if (r.rows.length === 0) return null;
-  const row = r.rows[0];
+function orgRowToSummary(row) {
+  if (!row) return null;
   return {
     id: row.id,
     name: row.name,
     spotify_client_id: row.spotify_client_id,
     created_at: row.created_at,
+    owner_user_id: row.owner_user_id ?? null,
+    billing_status: row.billing_status || 'none',
+    lifetime_paid_cents: Number(row.lifetime_paid_cents) || 0,
+    last_payment_at: row.last_payment_at || null,
     venueSettings: sanitizeVenueSettings(row.venue_settings),
   };
+}
+
+async function getOrganizationById(db, id) {
+  if (!db) return null;
+  await ensureOrganizationsTable(db);
+  const r = await db.query(
+    `SELECT id, name, spotify_client_id, created_at, venue_settings,
+            owner_user_id, billing_status, lifetime_paid_cents, last_payment_at
+     FROM organizations WHERE id = $1`,
+    [id]
+  );
+  if (r.rows.length === 0) return null;
+  return orgRowToSummary(r.rows[0]);
+}
+
+async function getUserOrganizationContext(db, userId) {
+  if (!db || userId == null) return { organization: null, role: null, membership: null };
+  await ensureOrganizationsTable(db);
+  const u = await db.query(
+    'SELECT id, email, display_name, organization_id FROM users WHERE id = $1',
+    [userId]
+  );
+  if (u.rows.length === 0) return { organization: null, role: null, membership: null };
+  const user = u.rows[0];
+  if (user.organization_id == null) {
+    const owned = await db.query(
+      `SELECT id, name, spotify_client_id, created_at, venue_settings,
+              owner_user_id, billing_status, lifetime_paid_cents, last_payment_at
+       FROM organizations WHERE owner_user_id = $1 ORDER BY id ASC LIMIT 1`,
+      [userId]
+    );
+    if (owned.rows.length > 0) {
+      return {
+        organization: orgRowToSummary(owned.rows[0]),
+        role: 'owner',
+        membership: { userId: user.id, email: user.email, organizationId: owned.rows[0].id },
+      };
+    }
+    return { organization: null, role: null, membership: null };
+  }
+  const org = await getOrganizationById(db, user.organization_id);
+  const role = org && org.owner_user_id === userId ? 'owner' : 'host';
+  return {
+    organization: org,
+    role,
+    membership: { userId: user.id, email: user.email, organizationId: user.organization_id },
+  };
+}
+
+async function createSelfServeOrganization(db, { name, ownerUserId }) {
+  if (!db) throw new Error('DATABASE_URL required');
+  await ensureOrganizationsTable(db);
+  const n = String(name || '').trim();
+  if (!n || n.length < 2) throw new Error('Organization name is required (at least 2 characters)');
+  const uid = Number(ownerUserId);
+  if (!Number.isFinite(uid)) throw new Error('ownerUserId is required');
+
+  const existing = await db.query('SELECT organization_id FROM users WHERE id = $1', [uid]);
+  if (existing.rows.length === 0) throw new Error('user not found');
+  if (existing.rows[0].organization_id != null) {
+    throw new Error('You are already part of an organization');
+  }
+  const owned = await db.query('SELECT id FROM organizations WHERE owner_user_id = $1 LIMIT 1', [uid]);
+  if (owned.rows.length > 0) {
+    throw new Error('You already own an organization');
+  }
+
+  const usersStore = require('./users');
+  const ownerRow = await usersStore.getUserById(db, uid);
+  const ownerEmail = usersStore.normalizeHostEmail(ownerRow?.email || '');
+
+  const r = await db.query(
+    `INSERT INTO organizations (name, spotify_client_id, spotify_client_secret_encrypted, owner_user_id)
+     VALUES ($1, NULL, NULL, $2)
+     RETURNING id, name, spotify_client_id, created_at, venue_settings,
+               owner_user_id, billing_status, lifetime_paid_cents, last_payment_at`,
+    [n, uid]
+  );
+  const org = orgRowToSummary(r.rows[0]);
+  await db.query('UPDATE users SET organization_id = $2 WHERE id = $1', [uid, org.id]);
+  if (ownerEmail) {
+    await usersStore.addHostAllowlistEmail(db, ownerEmail);
+  }
+  return org;
+}
+
+async function isOrganizationOwner(db, userId, organizationId) {
+  if (!db || userId == null || organizationId == null) return false;
+  await ensureOrganizationsTable(db);
+  const r = await db.query('SELECT 1 FROM organizations WHERE id = $1 AND owner_user_id = $2', [
+    organizationId,
+    userId,
+  ]);
+  return r.rows.length > 0;
+}
+
+async function listOrganizationMembers(db, organizationId) {
+  if (!db || organizationId == null) return [];
+  await ensureOrganizationsTable(db);
+  const r = await db.query(
+    `SELECT id, email, display_name, created_at
+     FROM users
+     WHERE organization_id = $1
+     ORDER BY id ASC`,
+    [organizationId]
+  );
+  return r.rows.map((row) => ({
+    id: row.id,
+    email: row.email,
+    displayName: row.display_name,
+    createdAt: row.created_at,
+  }));
+}
+
+async function listOrganizationInvites(db, organizationId) {
+  if (!db || organizationId == null) return [];
+  await ensureOrganizationsTable(db);
+  const r = await db.query(
+    `SELECT email, invited_by_user_id, created_at
+     FROM org_host_invites
+     WHERE organization_id = $1
+     ORDER BY created_at DESC`,
+    [organizationId]
+  );
+  return r.rows;
+}
+
+async function inviteHostToOrganization(db, { organizationId, email, invitedByUserId }) {
+  if (!db) throw new Error('DATABASE_URL required');
+  await ensureOrganizationsTable(db);
+  const usersStore = require('./users');
+  const norm = usersStore.normalizeHostEmail(email);
+  if (!norm || !norm.includes('@')) throw new Error('Valid email is required');
+  const orgId = Number(organizationId);
+  if (!Number.isFinite(orgId)) throw new Error('organizationId is required');
+
+  await db.query(
+    `INSERT INTO org_host_invites (organization_id, email, invited_by_user_id)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (organization_id, email) DO UPDATE SET invited_by_user_id = EXCLUDED.invited_by_user_id`,
+    [orgId, norm, invitedByUserId ?? null]
+  );
+  await usersStore.addHostAllowlistEmail(db, norm);
+
+  const existingUser = await db.query(
+    'SELECT id FROM users WHERE LOWER(TRIM(email)) = $1 LIMIT 1',
+    [norm]
+  );
+  if (existingUser.rows.length > 0) {
+    await db.query('UPDATE users SET organization_id = $2 WHERE id = $1', [
+      existingUser.rows[0].id,
+      orgId,
+    ]);
+  }
+  return { email: norm, organizationId: orgId };
+}
+
+async function removeOrganizationInvite(db, { organizationId, email }) {
+  if (!db) throw new Error('DATABASE_URL required');
+  const usersStore = require('./users');
+  const norm = usersStore.normalizeHostEmail(email);
+  await db.query('DELETE FROM org_host_invites WHERE organization_id = $1 AND email = $2', [
+    organizationId,
+    norm,
+  ]);
+  return { removed: true, email: norm };
+}
+
+/** After Google sign-in: attach user to org if they were invited. */
+async function applyPendingInvitesForUser(db, userId, email) {
+  if (!db || userId == null) return null;
+  await ensureOrganizationsTable(db);
+  const usersStore = require('./users');
+  const norm = usersStore.normalizeHostEmail(email || '');
+  if (!norm) return null;
+
+  const u = await db.query('SELECT organization_id FROM users WHERE id = $1', [userId]);
+  if (u.rows.length === 0) return null;
+  if (u.rows[0].organization_id != null) return u.rows[0].organization_id;
+
+  const candidates = usersStore.emailAllowlistCandidates(norm);
+  const inv = await db.query(
+    `SELECT organization_id FROM org_host_invites
+     WHERE email = ANY($1::text[])
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [candidates.length ? candidates : [norm]]
+  );
+  if (inv.rows.length === 0) return null;
+  const orgId = inv.rows[0].organization_id;
+  await db.query('UPDATE users SET organization_id = $2 WHERE id = $1', [userId, orgId]);
+  await usersStore.addHostAllowlistEmail(db, norm);
+  return orgId;
 }
 
 async function patchOrganizationVenueSettings(db, orgId, patch) {
@@ -359,8 +586,16 @@ module.exports = {
   primeTenantSpotifyCredentials,
   listOrganizations,
   createOrganization,
+  createSelfServeOrganization,
   setUserOrganizationId,
   getOrganizationById,
+  getUserOrganizationContext,
+  isOrganizationOwner,
+  listOrganizationMembers,
+  listOrganizationInvites,
+  inviteHostToOrganization,
+  removeOrganizationInvite,
+  applyPendingInvitesForUser,
   patchOrganizationVenueSettings,
   getVenueBrandingContextForHostUserId,
   getVenueBrandingForHostUserId,

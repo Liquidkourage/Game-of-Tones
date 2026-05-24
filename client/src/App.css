@@ -1217,6 +1217,16 @@ body {
   font-weight: 700;
 }
 
+.home-org-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-bottom: 12px;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
 .home-host-code-hint {
   font-size: 0.75rem;
   color: #7a8088;

@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Sparkles, Play, UserPlus, Crown, CheckCircle2, AlertTriangle, Link2, ListOrdered } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Sparkles, Play, UserPlus, Crown, CheckCircle2, AlertTriangle, Link2, ListOrdered, Building2 } from 'lucide-react';
 import { API_BASE } from '../config';
 import { hostFetch, setHostJwt, browserGoogleLoginUrl, clearHostJwt, postHostLogout } from '../utils/hostFetch';
 
@@ -233,6 +233,20 @@ const Home: React.FC = () => {
           /* ignore */
         }
         alert(msg);
+        return;
+      }
+      if (r.status === 402) {
+        const raw = await r.text().catch(() => '');
+        let msg = 'Organization billing is required before hosting.';
+        try {
+          const j = raw ? JSON.parse(raw) : {};
+          if (j && j.message) msg = String(j.message);
+        } catch {
+          /* ignore */
+        }
+        if (window.confirm(`${msg}\n\nOpen your organization page?`)) {
+          navigate('/org');
+        }
         return;
       }
       if (!r.ok) {
@@ -652,6 +666,13 @@ const Home: React.FC = () => {
                 </button>
               </div>
             )}
+
+            {hostSession ? (
+              <Link to="/org" className="home-org-link btn btn-secondary">
+                <Building2 className="btn-icon" aria-hidden />
+                Organization &amp; billing
+              </Link>
+            ) : null}
 
             <button 
               type="button"
