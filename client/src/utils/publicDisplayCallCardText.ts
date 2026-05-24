@@ -100,8 +100,10 @@ export function computeCallCardTypography(
 
   if (opts.masked) {
     const tLines = estimateMaskedWrapLines(title, MASKED_CHARS_PER_LINE_TITLE);
+    /** Letter tiles are wider than plain chars — budget extra lines for short titles like "Big Balls". */
+    const tileLines = tLen > 0 ? Math.ceil(tLen / 7) : 0;
     const aLines = hasArtist ? estimateMaskedWrapLines(artist, MASKED_CHARS_PER_LINE_ARTIST) : 0;
-    const totalLines = tLines + aLines;
+    const totalLines = Math.max(tLines, tileLines) + aLines;
 
     if (totalLines >= 6) textScale = Math.min(textScale, 0.84);
     else if (totalLines >= 5) textScale = Math.min(textScale, 0.9);
@@ -113,7 +115,10 @@ export function computeCallCardTypography(
       textScale = Math.min(textScale, Math.max(0.52, fit));
     }
 
-    titleMaxLines = Math.min(Math.max(tLines, 1), 5);
+    if (tLen > 0 && tLen <= 14) textScale = Math.min(textScale, 0.72);
+    else if (tLen > 0 && tLen <= 22) textScale = Math.min(textScale, 0.82);
+
+    titleMaxLines = Math.min(Math.max(tLines, tileLines, tLen > 0 && tLen <= 20 ? 2 : 1), 5);
     const titleBudget = Math.min(titleMaxLines, 2);
     artistMaxLines = hasArtist
       ? Math.min(Math.max(aLines, 1), Math.max(1, CALL_CARD_TOTAL_LINE_BUDGET - titleBudget))

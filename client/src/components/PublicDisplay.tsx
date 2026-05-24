@@ -3021,8 +3021,20 @@ const PublicDisplay: React.FC = () => {
       kind === 'title'
         ? PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT
         : PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT;
-    const fontSize = Math.round(basePx * displayFontScale * typo.textScale);
+    let fontSize = Math.round(basePx * displayFontScale * typo.textScale);
     const maskedLine = !fullCard && typo.clampContentHeight;
+    if (
+      columnCallListLayout &&
+      rowHeightPx > 0 &&
+      !fullCard &&
+      maskedLine
+    ) {
+      const maxPx =
+        kind === 'title'
+          ? Math.round(rowHeightPx * 0.34)
+          : Math.round(rowHeightPx * 0.22);
+      if (maxPx > 0) fontSize = Math.min(fontSize, maxPx);
+    }
     const common: React.CSSProperties = {
       fontWeight: kind === 'title' ? 900 : 800,
       lineHeight: lh,
