@@ -33,7 +33,10 @@ import {
   unifyCallListTypography,
   maxHeightEm,
   PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX,
+  PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT,
+  PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX,
   PUBLIC_DISPLAY_CALL_TITLE_BASE_PX,
+  PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT,
   unrevealedLetterBoxStyle,
   type CallCardTypography,
 } from '../utils/publicDisplayCallCardText';
@@ -2781,7 +2784,7 @@ const PublicDisplay: React.FC = () => {
     if (!el) return;
     const compute = () => {
       const h = el.clientHeight || 0;
-      if (h > 0) setRowHeightPx((h / 5) * 0.95); // 5% slimmer to ensure 5 fit
+      if (h > 0) setRowHeightPx(h / 5);
     };
     compute();
     window.addEventListener('resize', compute);
@@ -3029,8 +3032,12 @@ const PublicDisplay: React.FC = () => {
   ): React.CSSProperties => {
     const basePx =
       kind === 'title' ? PUBLIC_DISPLAY_CALL_TITLE_BASE_PX : PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX;
-    const lh = kind === 'title' ? 1.2 : 1.15;
+    const lh =
+      kind === 'title'
+        ? PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT
+        : PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT;
     const fontSize = Math.round(basePx * displayFontScale * typo.textScale);
+    const maskedLine = !fullCard && typo.clampContentHeight;
     const common: React.CSSProperties = {
       fontWeight: kind === 'title' ? 900 : 800,
       lineHeight: lh,
@@ -3042,10 +3049,10 @@ const PublicDisplay: React.FC = () => {
       wordBreak: 'break-word',
       overflowWrap: 'anywhere',
       display: 'block',
-      overflow: fullCard || !typo.clampContentHeight ? 'visible' : 'hidden',
+      overflow: 'visible',
       textOverflow: 'clip',
       marginTop: kind === 'artist' ? (fullCard ? 6 : 4) : 0,
-      paddingBottom: kind === 'artist' && !fullCard ? 2 : 0,
+      paddingBottom: maskedLine ? (kind === 'title' ? 3 : 4) : kind === 'artist' && !fullCard ? 2 : 0,
     };
     return common;
   };
@@ -3069,13 +3076,13 @@ const PublicDisplay: React.FC = () => {
     }
     const titlePx = Math.round(PUBLIC_DISPLAY_CALL_TITLE_BASE_PX * displayFontScale * typo.textScale);
     const artistPx = Math.round(PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX * displayFontScale * typo.textScale);
-    const titleLh = 1.28;
-    const artistLh = 1.22;
-    const titleBlock = typo.titleMaxLines * titleLh * titlePx;
-    const artistBlock = hasArtist ? typo.artistMaxLines * artistLh * artistPx + 4 : 0;
+    const titleBlock = typo.titleMaxLines * PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT * titlePx;
+    const artistBlock = hasArtist
+      ? typo.artistMaxLines * PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT * artistPx + 4
+      : 0;
     return {
       ...base,
-      maxHeight: `${Math.round((titleBlock + artistBlock) * 1.06)}px`,
+      maxHeight: `${Math.round(titleBlock + artistBlock + PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX)}px`,
     };
   };
 
@@ -3648,7 +3655,7 @@ const PublicDisplay: React.FC = () => {
                         display: 'flex',
                         alignItems: 'flex-start',
                         gap: 10,
-                        padding: '10px 12px',
+                        padding: '8px 10px',
                         border: '1px solid rgba(255,255,255,0.15)',
                         borderRadius: 12,
                         height: isFullCardPattern

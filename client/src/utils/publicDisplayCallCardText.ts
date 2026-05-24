@@ -8,6 +8,11 @@ import type { CSSProperties } from 'react';
 /** Title size on call cards; artist is intentionally smaller for hierarchy. */
 export const PUBLIC_DISPLAY_CALL_TITLE_BASE_PX = 36;
 export const PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX = 25;
+/** Line-height for title/artist (room for descenders + masked letter tiles). */
+export const PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT = 1.34;
+export const PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT = 1.28;
+/** Slack added to call-song-info max-height budget so glyphs are not clipped. */
+export const PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX = 10;
 
 /** ~how many letter-box characters fit per row in a call column at auto-fit. */
 const MASKED_CHARS_PER_LINE_TITLE = 12;
@@ -170,11 +175,11 @@ export function unrevealedLetterBoxStyle(scale = 1): CSSProperties {
   return {
     display: 'inline-block',
     width: `${0.56 * scale}em`,
-    height: `${0.74 * scale}em`,
+    height: `${0.8 * scale}em`,
     border: '0.06em solid rgba(255, 255, 255, 0.42)',
     borderRadius: '0.09em',
-    verticalAlign: '0.02em',
-    margin: '0 0.035em',
+    verticalAlign: '-0.08em',
+    margin: '0 0.04em',
     boxSizing: 'border-box',
     background: 'rgba(255, 255, 255, 0.05)',
   };

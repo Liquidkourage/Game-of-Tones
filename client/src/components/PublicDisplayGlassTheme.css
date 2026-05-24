@@ -286,6 +286,11 @@
   overflow: hidden;
 }
 
+.App .public-display--glass .call-song-info .call-song-name,
+.App .public-display--glass .call-song-info .call-song-artist {
+  overflow: visible;
+}
+
 .App .public-display--glass .call-list-display[data-call-cols='5']::after {
   z-index: 0;
   pointer-events: none;

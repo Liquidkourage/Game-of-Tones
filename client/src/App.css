@@ -470,9 +470,9 @@ body {
   word-break: break-word;
   overflow-wrap: anywhere;
   text-overflow: clip;
-  overflow: hidden;
+  overflow: visible;
   display: block;
-  line-height: 1.2;
+  line-height: 1.34;
 }
 
 .App .public-display .call-song-artist {
@@ -480,9 +480,9 @@ body {
   word-break: break-word;
   overflow-wrap: anywhere;
   text-overflow: clip;
-  overflow: hidden;
+  overflow: visible;
   display: block;
-  line-height: 1.15;
+  line-height: 1.28;
 }
 
 .App .public-display .call-song-info--dense .call-song-name,
