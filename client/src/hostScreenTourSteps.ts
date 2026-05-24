@@ -41,15 +41,29 @@ export function buildHostScreenTourSteps(ctx: HostTourContext): HostTourStep[] {
     {
       id: 'rounds-panel',
       title: 'Rounds & playlists',
-      body: 'Plan each round here: round tabs, winning pattern, playlist order (drag from the library), Save round, printable cards, and call sheet. Five playlists use 5×15 cards; one playlist uses a 1×75 full-card style pool.',
+      body: 'On the Rounds tab: round tabs, winning pattern, pre-show checklist, timeline, pool quality, and the playlist library inline below the planner. Drag playlists into the active round, save, print cards, and export the call sheet.',
       placement: 'right',
       visible: true,
     },
     {
       id: 'round-builder',
       title: 'Playlist library',
-      body: 'Opens your Spotify playlists (and YouTube when enabled). Drag rows into the active round bucket. Track counts update so you can see if you have enough unique songs before you finalize.',
+      body: 'The library workspace lives on Rounds (scroll down). Load Spotify playlists (and YouTube when enabled), then drag rows into the active round bucket. Track counts update so you can see if you have enough unique songs before you finalize.',
       placement: 'left',
+      visible: true,
+    },
+    {
+      id: 'players-panel',
+      title: 'Players',
+      body: 'Join link, QR code, display URL, live roster, and player cards — everything for getting phones and the venue screen on the same room code.',
+      placement: 'right',
+      visible: true,
+    },
+    {
+      id: 'settings-panel',
+      title: 'Settings',
+      body: 'Playback defaults, hybrid rules, connection details, activity log, and event recap export. Use the header Connection button anytime for Spotify device and YouTube Music.',
+      placement: 'right',
       visible: true,
     },
     {

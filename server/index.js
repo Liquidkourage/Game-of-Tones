@@ -5183,13 +5183,53 @@ io.on('connection', (socket) => {
     if (room && room.host === socket.id) {
       try {
         routineServerLog('⏭️ Skipping to next song in room:', roomId);
+        const prevIndex =
+          typeof room.currentSongIndex === 'number' ? room.currentSongIndex : -1;
+        const prevSong = room.currentSong ? { ...room.currentSong } : null;
         // Clear existing timer and immediately play next song under our control
         clearRoomTimer(roomId);
         await playNextSong(roomId, room.selectedDeviceId);
+        if (prevIndex >= 0 && prevSong?.id) {
+          room.lastSkipUndo = {
+            previousIndex: prevIndex,
+            previousSong: prevSong,
+            atMs: Date.now(),
+          };
+        }
       } catch (error) {
         console.error('❌ Error skipping song:', error);
         socket.emit('error', { message: 'Failed to skip song' });
       }
+    }
+  });
+
+  socket.on('undo-skip-song', async (data) => {
+    const { roomId } = data || {};
+    const room = rooms.get(roomId);
+    if (!room || room.host !== socket.id) return;
+    const undo = room.lastSkipUndo;
+    const UNDO_MS = 15000;
+    if (!undo || Date.now() - undo.atMs > UNDO_MS) {
+      socket.emit('undo-skip-result', { ok: false, error: 'expired' });
+      return;
+    }
+    if (room.gameState !== 'playing' || !room.playlistSongs?.length) {
+      socket.emit('undo-skip-result', { ok: false, error: 'not_playing' });
+      return;
+    }
+    try {
+      clearRoomTimer(roomId);
+      clearPlaybackWatcher(roomId);
+      room.currentSongIndex = undo.previousIndex;
+      room.currentSong = undo.previousSong;
+      const dev = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id || '';
+      await playSongAtIndex(roomId, dev, undo.previousIndex);
+      room.lastSkipUndo = null;
+      socket.emit('undo-skip-result', { ok: true, songIndex: undo.previousIndex });
+      routineServerLog(`↩️ Host undid skip in room ${roomId} → index ${undo.previousIndex}`);
+    } catch (e) {
+      console.error('❌ undo-skip-song:', e?.message || e);
+      socket.emit('undo-skip-result', { ok: false, error: 'failed' });
     }
   });
 

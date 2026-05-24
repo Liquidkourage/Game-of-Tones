@@ -42,6 +42,7 @@ import {
   Save,
   Eraser,
   HelpCircle,
+  Settings,
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL, ENABLE_YOUTUBE_MUSIC } from '../config';
@@ -116,6 +117,16 @@ import { validateSongTitle, validateSongTitleSync, getValidationMessage, getVali
 import './HostView.css';
 import './HostGlassTheme.css';
 import HostGameDashboard from './HostGameDashboard';
+import type { HostGlassNavId } from '../host/hostGlassNav';
+import { HOST_GLASS_NAV_ITEMS } from '../host/hostGlassNav';
+import { appendHostActivity, type HostActivityEntry } from '../host/hostActivityLog';
+import HostPlayersPanel from './host/HostPlayersPanel';
+import HostSettingsPanel from './host/HostSettingsPanel';
+import HostPreShowChecklist, { type PreShowCheckItem } from './host/HostPreShowChecklist';
+import HostRoundTimeline from './host/HostRoundTimeline';
+import HostPoolQualityReport from './host/HostPoolQualityReport';
+import HostGameLivePanel from './host/HostGameLivePanel';
+import HostDisplayExtrasPanel from './host/HostDisplayExtrasPanel';
 import './HostFormControls.css';
 
 const MAX_CUSTOM_PATTERN_NAME_EMIT = 80;
@@ -910,8 +921,11 @@ const HostView: React.FC = () => {
   /** When overlay is open: false = centered modal, true = viewport-filling panel */
   const [playerCardsMaximized, setPlayerCardsMaximized] = useState<boolean>(false);
   const [showBingoPoolModal, setShowBingoPoolModal] = useState(false);
-  type HostGlassNavId = 'game' | 'rounds' | 'library' | 'connection' | 'display';
   const [hostGlassNav, setHostGlassNav] = useState<HostGlassNavId>('game');
+  const [activityLog, setActivityLog] = useState<HostActivityEntry[]>([]);
+  const [youtubeMusicConnected, setYoutubeMusicConnected] = useState(false);
+  const [youtubeStatusReady, setYoutubeStatusReady] = useState(false);
+  const [canUndoSkip, setCanUndoSkip] = useState(false);
   const roundsPanelRef = useRef<HTMLElement>(null);
   const displaySettingsRef = useRef<HTMLDetailsElement>(null);
   /** 5�15 mode: playlist title per column (from `fiveby15-pool`, else five selected playlists). */
@@ -927,13 +941,24 @@ const HostView: React.FC = () => {
     setShowPlaylistRoundModal(true);
   }, []);
 
-  const onHostGlassNav = useCallback(
-    (id: HostGlassNavId) => {
-      setHostGlassNav(id);
-      if (id === 'library') openPlaylistLibrary();
-      if (id === 'connection') setShowConnectionModal(true);
-    },
-    [openPlaylistLibrary],
+  const onHostGlassNav = useCallback((id: HostGlassNavId) => {
+    setHostGlassNav(id);
+    if (id === 'rounds') {
+      setTimeout(() => {
+        document.getElementById('host-library-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
+    }
+  }, []);
+
+  const hostNavIcons: Record<HostGlassNavId, React.ReactNode> = useMemo(
+    () => ({
+      game: <Gamepad2 aria-hidden />,
+      rounds: <ListMusic aria-hidden />,
+      players: <Users aria-hidden />,
+      display: <Monitor aria-hidden />,
+      settings: <Settings aria-hidden />,
+    }),
+    [],
   );
 
   const openRoundBuilder = useCallback((focusIndex?: number) => {
@@ -950,15 +975,6 @@ const HostView: React.FC = () => {
   /** In-person + online: only in-person verified bingos end the round / prize */
   const [hybridInPersonPlusOnline, setHybridInPersonPlusOnline] = useState(false);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
-  const dismissConnectionModal = useCallback(() => {
-    if (
-      mixNeedsHostSpotify &&
-      (!isSpotifyConnected || !selectedDevice?.id || playbackDeviceNotInList)
-    ) {
-      connectionModalDismissedRef.current = true;
-    }
-    setShowConnectionModal(false);
-  }, [mixNeedsHostSpotify, isSpotifyConnected, selectedDevice, playbackDeviceNotInList]);
   const [hostTourOpen, setHostTourOpen] = useState(false);
   const [hostTourStep, setHostTourStep] = useState(0);
   const showConnectionModalScrollRef = useRef(showConnectionModal);
@@ -968,6 +984,29 @@ const HostView: React.FC = () => {
   /** Bump so HostYoutubeMusicPlaylistLibrary refetches after Google OAuth return (?youtube_music=connected). */
   const [ytMusicLibraryRefreshNonce, setYtMusicLibraryRefreshNonce] = useState(0);
   const showYoutubeMusicInConnectionModal = ENABLE_YOUTUBE_MUSIC || ytMusicServerConfigured;
+
+  const hostPlaybackSystemsReady = useMemo(() => {
+    if (isSpotifyConnected && (!mixNeedsHostSpotify || (!!selectedDevice?.id && !playbackDeviceNotInList))) {
+      return true;
+    }
+    if (showYoutubeMusicInConnectionModal && youtubeMusicConnected) return true;
+    return false;
+  }, [
+    isSpotifyConnected,
+    mixNeedsHostSpotify,
+    selectedDevice,
+    playbackDeviceNotInList,
+    showYoutubeMusicInConnectionModal,
+    youtubeMusicConnected,
+  ]);
+
+  const dismissConnectionModal = useCallback(() => {
+    if (!hostPlaybackSystemsReady) {
+      connectionModalDismissedRef.current = true;
+    }
+    setShowConnectionModal(false);
+  }, [hostPlaybackSystemsReady]);
+
   const [spotifyInitialCheckDone, setSpotifyInitialCheckDone] = useState(false);
   const initialConnectionPromptRef = useRef(false);
   const spotifyAutoConnectAttemptedRef = useRef(false);
@@ -1045,13 +1084,14 @@ const HostView: React.FC = () => {
   const [isJoiningRoom, setIsJoiningRoom] = useState<boolean>(false);
   const [isLicenseValidated, setIsLicenseValidated] = useState<boolean>(false);
 
-  /** Dev / audit trail - host log goes to browser console only */
-  const addLog = (message: string, level: 'info' | 'warn' | 'error' = 'info') => {
+  /** Dev / audit trail — console + in-app activity feed (Settings tab). */
+  const addLog = useCallback((message: string, level: 'info' | 'warn' | 'error' = 'info') => {
     const line = `[TEMPO host] ${message}`;
     if (level === 'error') console.error(line);
     else if (level === 'warn') console.warn(line);
     else console.log(line);
-  };
+    setActivityLog((prev) => appendHostActivity(prev, message, level));
+  }, []);
 
   // Show toast notification to host
   const showToast = (message: string, type: 'info' | 'success' | 'warn' | 'error' = 'info') => {
@@ -1900,32 +1940,50 @@ const HostView: React.FC = () => {
     }
   }, [assignedPlaylistIds, playlists, youtubeMusicPlaylists, showAllPlaylists]);
 
-  /** After first Spotify status check: prompt once if not connected. */
+  /** YouTube Music connection status (for auto-open connection when no system is linked). */
   useEffect(() => {
-    if (!spotifyInitialCheckDone || isSpotifyConnected) return;
-    if (showYoutubeMusicInConnectionModal) return;
-    if (!initialConnectionPromptRef.current) {
-      initialConnectionPromptRef.current = true;
-      setShowConnectionModal(true);
+    if (!showYoutubeMusicInConnectionModal) {
+      setYoutubeStatusReady(true);
+      setYoutubeMusicConnected(false);
+      return;
     }
-  }, [spotifyInitialCheckDone, isSpotifyConnected, showYoutubeMusicInConnectionModal]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await hostFetch(`${API_BASE || ''}/api/youtube/music/status?_=${Date.now()}`, {
+          cache: 'no-store',
+        });
+        const data = (await r.json().catch(() => ({}))) as { connected?: boolean };
+        if (!cancelled) setYoutubeMusicConnected(!!data.connected);
+      } catch {
+        if (!cancelled) setYoutubeMusicConnected(false);
+      } finally {
+        if (!cancelled) setYoutubeStatusReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showYoutubeMusicInConnectionModal, ytMusicLibraryRefreshNonce]);
 
-  /** Spotify mix needs connection or a valid playback device — prompt hosts (unless dismissed). */
+  /** Open connection modal until Spotify and/or YouTube is ready (unless host dismissed). */
   useEffect(() => {
-    if (!spotifyInitialCheckDone || !mixNeedsHostSpotify || isLoadingDevices) return;
-    if (isSpotifyConnected && selectedDevice?.id && !playbackDeviceNotInList) {
+    if (!spotifyInitialCheckDone) return;
+    if (showYoutubeMusicInConnectionModal && !youtubeStatusReady) return;
+    if (hostPlaybackSystemsReady) {
       connectionModalDismissedRef.current = false;
       return;
     }
     if (connectionModalDismissedRef.current) return;
+    if (!initialConnectionPromptRef.current) {
+      initialConnectionPromptRef.current = true;
+    }
     setShowConnectionModal(true);
   }, [
     spotifyInitialCheckDone,
-    mixNeedsHostSpotify,
-    isSpotifyConnected,
-    isLoadingDevices,
-    selectedDevice,
-    playbackDeviceNotInList,
+    youtubeStatusReady,
+    showYoutubeMusicInConnectionModal,
+    hostPlaybackSystemsReady,
   ]);
 
 
@@ -2441,6 +2499,16 @@ const HostView: React.FC = () => {
         showToast('Replayed clip', 'info');
       } else {
         showToast('Could not replay clip', 'error');
+      }
+    });
+
+    newSocket.on('undo-skip-result', (data: any) => {
+      if (data?.ok) {
+        setCanUndoSkip(false);
+        addLog('Undid last skip', 'info');
+        showToast('Undid last skip', 'info');
+      } else {
+        showToast('Cannot undo skip (window expired or playback busy)', 'warn');
       }
     });
 
@@ -5408,12 +5476,19 @@ const HostView: React.FC = () => {
     try {
       if (socket) {
         socket.emit('skip-song', { roomId });
+        setCanUndoSkip(true);
+        window.setTimeout(() => setCanUndoSkip(false), 15000);
         console.log('Skipped to next track via socket');
       }
     } catch (error) {
       console.error('Error skipping song:', error);
     }
   };
+
+  const undoLastSkip = useCallback(() => {
+    if (!socket || !roomId) return;
+    socket.emit('undo-skip-song', { roomId });
+  }, [socket, roomId]);
 
   const replayCurrentClip = useCallback(() => {
     if (!socket || !roomId) return;
@@ -7382,9 +7457,19 @@ const HostView: React.FC = () => {
   useEffect(() => {
     if (!hostTourOpen) return;
     const step = hostTourSteps[hostTourStep];
-    if (step?.id === 'projector-settings') {
+    if (!step) return;
+    if (step.id === 'rounds-panel' || step.id === 'round-builder' || step.id === 'round-setlist') {
+      setHostGlassNav('rounds');
+    } else if (step.id === 'players-panel') {
+      setHostGlassNav('players');
+    } else if (step.id === 'settings-panel') {
+      setHostGlassNav('settings');
+    } else if (step.id === 'projector-settings') {
+      setHostGlassNav('display');
       const el = document.querySelector<HTMLDetailsElement>('[data-host-tour="projector-settings"]');
       if (el) el.open = true;
+    } else if (step.id === 'go-live' || step.id === 'live-dock') {
+      setHostGlassNav('game');
     }
   }, [hostTourOpen, hostTourStep, hostTourSteps]);
 
@@ -8483,17 +8568,184 @@ const HostView: React.FC = () => {
             </div>
   );
 
-  const hostGlassNavItems: Array<{
-    id: HostGlassNavId;
-    label: string;
-    icon: React.ReactNode;
-  }> = [
-    { id: 'game', label: 'Game', icon: <Gamepad2 aria-hidden /> },
-    { id: 'rounds', label: 'Rounds', icon: <ListMusic aria-hidden /> },
-    { id: 'library', label: 'Library', icon: <ListPlus aria-hidden /> },
-    { id: 'connection', label: 'Connect', icon: <Link2 aria-hidden /> },
-    { id: 'display', label: 'Display', icon: <Monitor aria-hidden /> },
-  ];
+  const formatDisplaySyncAge = (lastSeenAt: number | null): string => {
+    if (lastSeenAt == null) return 'never';
+    const sec = Math.max(0, Math.floor((Date.now() - lastSeenAt) / 1000));
+    if (sec < 5) return 'just now';
+    if (sec < 60) return `${sec}s ago`;
+    return `${Math.floor(sec / 60)}m ago`;
+  };
+
+  const displaySyncLabel = formatDisplaySyncAge(displayPresence.lastSeenAt);
+
+  const hostPlayerRoster = useMemo(() => {
+    const rows: Array<{ playerId: string; playerName: string; inPerson: boolean }> = [];
+    const seen = new Set<string>();
+    for (const [playerId, d] of Array.from(joinedPlayersRoster.entries())) {
+      seen.add(playerId);
+      rows.push({ playerId, playerName: d.playerName, inPerson: d.inPerson });
+    }
+    for (const [playerId, card] of Array.from(playerCards.entries())) {
+      if (seen.has(playerId)) continue;
+      rows.push({
+        playerId,
+        playerName: String(card?.playerName || 'Player'),
+        inPerson: card?.inPerson !== false,
+      });
+    }
+    return rows;
+  }, [joinedPlayersRoster, playerCards]);
+
+  const preShowChecklistItems = useMemo((): PreShowCheckItem[] => {
+    const items: PreShowCheckItem[] = [
+      {
+        id: 'connection',
+        label: 'Playback connected (Spotify and/or YouTube)',
+        ok: hostPlaybackSystemsReady,
+        warn: !hostPlaybackSystemsReady,
+        detail: hostPlaybackSystemsReady ? undefined : 'Open Connection in the header',
+      },
+      {
+        id: 'display',
+        label: 'Projector display connected',
+        ok: displayPresence.connected && !displayPresence.stale,
+        warn: displayPresence.connected && displayPresence.stale,
+        detail: displayPresence.connected ? displaySyncLabel : 'Open /display/' + roomId,
+      },
+      {
+        id: 'mix',
+        label: 'Bingo pool built for this round',
+        ok: hasFinalizedSongPool || mixFinalized,
+        detail: hasFinalizedSongPool ? `${finalizedPoolSongs.length} tracks` : 'Use Show playlists on Game',
+      },
+      {
+        id: 'round',
+        label: 'Active round has playlists assigned',
+        ok:
+          currentRoundIndex >= 0 &&
+          (eventRounds[currentRoundIndex]?.playlistIds?.length ?? 0) > 0,
+      },
+    ];
+    return items;
+  }, [
+    hostPlaybackSystemsReady,
+    displayPresence,
+    displaySyncLabel,
+    hasFinalizedSongPool,
+    mixFinalized,
+    finalizedPoolSongs.length,
+    currentRoundIndex,
+    eventRounds,
+    roomId,
+  ]);
+
+  const roundTimelineRows = useMemo(
+    () =>
+      eventRounds.map((r, index) => ({
+        index,
+        name: r.name,
+        status: r.status,
+        playlistCount: r.playlistIds?.length ?? 0,
+        saved: Boolean(r.savedMixSnapshot?.songs?.length),
+        isCurrent: index === currentRoundIndex,
+      })),
+    [eventRounds, currentRoundIndex],
+  );
+
+  const callLogRows = useMemo(
+    () =>
+      playedInOrder.map((s, i) => ({
+        id: s.id,
+        name: s.name,
+        artist: s.artist,
+        index: i + 1,
+      })),
+    [playedInOrder],
+  );
+
+  const handleDuplicateRound = useCallback(
+    (index: number) => {
+      const src = eventRounds[index];
+      if (!src) return;
+      const copy: EventRound = {
+        ...src,
+        id: `round-${Date.now()}`,
+        name: `${src.name} (copy)`,
+        status: 'unplanned',
+        startedAt: undefined,
+        completedAt: undefined,
+        savedMixSnapshot: src.savedMixSnapshot
+          ? { ...src.savedMixSnapshot, savedAt: Date.now() }
+          : undefined,
+      };
+      handleUpdateRounds([...eventRounds, copy]);
+      addLog(`Duplicated round "${src.name}"`, 'info');
+    },
+    [eventRounds, handleUpdateRounds, addLog],
+  );
+
+  const handleExportEventRecap = useCallback(() => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      roomId,
+      gameState,
+      rounds: eventRounds,
+      winners,
+      roundWinners,
+      playedInOrder,
+      currentRoundIndex,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tempo-recap-${roomId}-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    addLog('Exported event recap JSON', 'info');
+  }, [roomId, gameState, eventRounds, winners, roundWinners, playedInOrder, currentRoundIndex, addLog]);
+
+  const handleCopyJoinLink = useCallback(() => {
+    const url = `${window.location.origin}/?room=${encodeURIComponent(roomId || '')}`;
+    void navigator.clipboard.writeText(url).then(
+      () => showToast('Join link copied', 'success'),
+      () => showToast('Could not copy link', 'error'),
+    );
+  }, [roomId]);
+
+  useEffect(() => {
+    if (hostGlassNav !== 'game' || gameState !== 'playing') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        void pauseSong();
+      } else if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        void skipSong();
+      } else if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        replayCurrentClip();
+      } else if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        markCurrentSongPlayed();
+      } else if (e.key === 'b' || e.key === 'B') {
+        e.preventDefault();
+        if (pendingVerification) openBingoVerification();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [
+    hostGlassNav,
+    gameState,
+    pauseSong,
+    skipSong,
+    replayCurrentClip,
+    markCurrentSongPlayed,
+    pendingVerification,
+    openBingoVerification,
+  ]);
 
   return (
     <div className="host-view host-glass-theme">
@@ -8540,7 +8792,7 @@ const HostView: React.FC = () => {
       >
         <div className="host-shell">
           <nav className="host-sidebar host-glass-panel" aria-label="Host navigation">
-            {hostGlassNavItems.map((item) => (
+            {HOST_GLASS_NAV_ITEMS.map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -8552,7 +8804,7 @@ const HostView: React.FC = () => {
                 aria-current={hostGlassNav === item.id ? 'page' : undefined}
                 onClick={() => onHostGlassNav(item.id)}
               >
-                {item.icon}
+                {hostNavIcons[item.id]}
                 <span>{item.label}</span>
               </button>
             ))}
@@ -8718,47 +8970,12 @@ const HostView: React.FC = () => {
                   getDisplaySongArtist={getDisplaySongArtist}
                 />
 
-                {gameState === 'playing' ? (
-                  <section className="host-show-actions host-glass-panel" aria-label="Show controls">
-                    <button type="button" className="btn-secondary" onClick={endGame}>
-                      End game
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={confirmAndNewRound}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-                    >
-                      <RotateCcw className="w-4 h-4" aria-hidden />
-                      New round setup
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-accent"
-                      onClick={() => openPlaylistLibrary()}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-                    >
-                      <ListPlus className="w-4 h-4" aria-hidden />
-                      Playlist library
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary btn-host-warn"
-                      onClick={resetDisplayLetters}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-                    >
-                      <RotateCcw className="w-4 h-4" aria-hidden />
-                      Reset display letters
-                    </button>
-                  </section>
-                ) : null}
-
                 {gameState === 'waiting' && !currentSong && !hasFinalizedSongPool && !gameTabRoundBuilderReady && (
                   <div className="host-r4-alert host-glass-panel">
                     <p className="host-r4-alert__title">No song mix yet</p>
                     <p className="host-r4-alert__body">
                       {mixPlaylistSelection.length === 0
-                        ? 'Open Rounds to add playlists, or Library to browse. Connect Spotify / YouTube under Connect if needed.'
+                        ? 'Open Rounds to add playlists and assign them to a round. Connect Spotify / YouTube via Connection in the header.'
                         : 'Use Show playlists or Start game to build the bingo pool.'}
                     </p>
                   </div>
@@ -8774,8 +8991,59 @@ const HostView: React.FC = () => {
                   </div>
                 )}
 
+                {gameState === 'playing' ? (
+                  <HostGameLivePanel
+                    bingoVerificationCount={bingoVerificationCount}
+                    pendingPlayerName={pendingVerification?.playerName ?? null}
+                    onOpenBingoVerification={openBingoVerification}
+                    callLog={callLogRows}
+                    canUndoSkip={canUndoSkip}
+                    onUndoSkip={undoLastSkip}
+                    displayUrl={
+                      roomId ? `${window.location.origin}/display/${encodeURIComponent(roomId)}` : ''
+                    }
+                    displayConnected={displayPresence.connected}
+                    displaySyncLabel={displaySyncLabel}
+                  />
+                ) : null}
               </>
             )}
+
+            {hostGlassNav === 'players' && roomId ? (
+              <div data-host-tour="players-panel">
+                <HostPlayersPanel
+                  roomId={roomId}
+                  playerCardsCount={playerCards.size}
+                  roster={hostPlayerRoster}
+                  onOpenPlayerCards={openPlayerCardsModal}
+                  onCopyJoinLink={handleCopyJoinLink}
+                />
+              </div>
+            ) : null}
+
+            {hostGlassNav === 'settings' ? (
+              <div data-host-tour="settings-panel">
+              <HostSettingsPanel
+                connectionPanel={hostConnectionPanel}
+                onOpenConnectionModal={() => setShowConnectionModal(true)}
+                activityEntries={activityLog}
+                onExportEventRecap={handleExportEventRecap}
+                hybridInPersonPlusOnline={hybridInPersonPlusOnline}
+                onHybridChange={(v) => {
+                  setHybridInPersonPlusOnline(v);
+                  try {
+                    socket?.emit('set-hybrid-mode', { roomId, hybridInPersonPlusOnline: v });
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+                snippetLength={snippetLength}
+                onSnippetLengthChange={setSnippetLength}
+                randomStarts={randomStarts}
+                onRandomStartsChange={setRandomStarts}
+              />
+              </div>
+            ) : null}
 
             {(hostGlassNav === 'rounds' || hostGlassNav === 'display') && (
             <div
@@ -8787,7 +9055,21 @@ const HostView: React.FC = () => {
             >
                 <div className="host-manager-grid host-manager-grid--split host-manager-grid--balanced">
                   {hostGlassNav === 'rounds' ? (
-                  <div className="host-manager-col">
+                  <div className="host-manager-col host-rounds-workspace-col">
+                <HostPreShowChecklist items={preShowChecklistItems} />
+                <HostRoundTimeline
+                  rounds={roundTimelineRows}
+                  onSelectRound={(idx) => {
+                    handleSelectRoundForPrep(idx);
+                    setHostGlassNav('rounds');
+                  }}
+                  onDuplicateRound={handleDuplicateRound}
+                />
+                <HostPoolQualityReport
+                  songs={finalizedPoolSongs.length > 0 ? finalizedPoolSongs : songList}
+                  playlistCount={mixPlaylistSelection.length}
+                  mixFinalized={mixFinalized}
+                />
                 <section
                   ref={roundsPanelRef}
                   className="host-rounds-panel host-manager-section"
@@ -8827,6 +9109,34 @@ const HostView: React.FC = () => {
                     )}
                   </div>
                 </section>
+                <section
+                  id="host-library-workspace"
+                  className="host-inline-library host-glass-panel"
+                  aria-label="Playlist library workspace"
+                >
+                  <h2 className="host-inline-library__title">
+                    <ListPlus className="w-5 h-5" aria-hidden />
+                    Playlist library
+                  </h2>
+                  <p className="host-inline-library__lead">
+                    Drag playlists into round buckets below, or use <strong>Add to round…</strong> on each row. You can
+                    also open the floating library window for a larger view.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn-secondary host-inline-library__popout"
+                    onClick={() => openPlaylistLibrary()}
+                  >
+                    Open in window
+                  </button>
+                  {showPlaylistRoundModal ? (
+                    <p className="host-rounds-panel__modal-open-hint">
+                      The library is open in the floating window — close it to use this workspace.
+                    </p>
+                  ) : (
+                    <div className="host-inline-library__body">{playlistRoundBuilderBody}</div>
+                  )}
+                </section>
                   </div>
                   ) : null}
 
@@ -8849,43 +9159,9 @@ const HostView: React.FC = () => {
               Saved host preferences
             </h2>
             <p className="host-manager-section__lead">
-              Stored on this device for your account. Playback snippet and start position apply to new rounds; projector
-              settings sync to the room.
+              Projector title reveal syncs to the room. Snippet length and hybrid rules are under Settings.
             </p>
             <div className="host-host-prefs__grid">
-              <label className="host-host-prefs__field">
-                <span className="host-host-prefs__label">Snippet length ({snippetLength}s)</span>
-                <input
-                  type="range"
-                  className="host-range host-range--snippet"
-                  min={5}
-                  max={60}
-                  value={snippetLength}
-                  onChange={(e) => setSnippetLength(Number(e.target.value))}
-                />
-              </label>
-              <fieldset className="host-host-prefs__field">
-                <legend className="host-host-prefs__label">Snippet start</legend>
-                <div className="host-host-prefs__radios">
-                  {(
-                    [
-                      ['none', 'From start'],
-                      ['early', 'Early random'],
-                      ['random', 'Random'],
-                    ] as const
-                  ).map(([val, label]) => (
-                    <label key={val} className="host-host-prefs__radio">
-                      <input
-                        type="radio"
-                        name="host-prefs-random-starts"
-                        checked={randomStarts === val}
-                        onChange={() => setRandomStarts(val)}
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
               <label className="host-host-prefs__field">
                 <span className="host-host-prefs__label">Reveal titles on projector</span>
                 <select
@@ -8926,33 +9202,26 @@ const HostView: React.FC = () => {
             <h2 className="host-manager-section__title host-event-settings__hidden-heading">
               Event rules
             </h2>
-            <label className="host-manager-hybrid">
-              <input
-                type="checkbox"
-                className="host-control-checkbox"
-                checked={hybridInPersonPlusOnline}
-                onChange={(e) => {
-                  const v = e.target.checked;
-                  setHybridInPersonPlusOnline(v);
-                  try {
-                    socket?.emit('set-hybrid-mode', { roomId, hybridInPersonPlusOnline: v });
-                  } catch {
-                    /* ignore */
-                  }
-                }}
-              />
-              <span>
-                <strong style={{ color: '#00ff88' }}>Hybrid in-person + online</strong> — remote players can play, but only
-                an in-person bingo ends the round and awards prizes.
-              </span>
-            </label>
             <p className="host-manager-section__lead" style={{ marginTop: 0, marginBottom: 0 }}>
-              Save, print, reset event, and clear prep cache: use <strong>Event actions</strong> inside Round builder.
-              {gameState === 'playing' ? (
-                <> While live, use the controls in the bar at the top of this page.</>
-              ) : null}
+              Save, print, reset event, and clear prep cache: use <strong>Event actions</strong> in the Rounds planner.
             </p>
           </motion.section>
+
+          <HostDisplayExtrasPanel
+            displayConnected={displayPresence.connected}
+            displayStale={displayPresence.stale}
+            displaySyncLabel={displaySyncLabel}
+            publicDisplayCallListMode={publicDisplayCallListMode}
+            publicDisplayFontSize={publicDisplayFontSize}
+            publicDisplayTitleRevealMode={publicDisplayTitleRevealMode}
+            letterRevealIntervalSec={letterRevealIntervalSec}
+            onApplyPreset={(p) => {
+              updatePublicDisplayFontSize(p.publicDisplayFontSize);
+              updatePublicDisplayTitleRevealMode(p.publicDisplayTitleRevealMode);
+              updatePublicDisplayLetterRevealInterval(p.letterRevealIntervalSec);
+              addLog(`Applied display preset "${p.name}"`, 'info');
+            }}
+          />
 
           <motion.section
             className="host-manager-section host-manager-section--display host-manager-display-pane font-size-section"
