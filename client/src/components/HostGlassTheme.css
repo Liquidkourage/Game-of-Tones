@@ -377,22 +377,99 @@
   gap: 14px;
 }
 
-/* Modals */
+/* Modals — match host-glass-panel surfaces */
 .host-glass-theme .host-connection-modal-backdrop {
   background: rgba(8, 10, 18, 0.78);
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
-.host-glass-theme .host-connection-modal {
-  background: linear-gradient(165deg, rgba(32, 28, 52, 0.92) 0%, rgba(14, 16, 26, 0.96) 100%);
+.host-glass-theme .host-connection-modal,
+.host-glass-theme .host-glass-modal {
+  background: linear-gradient(
+    145deg,
+    rgba(72, 52, 120, 0.58) 0%,
+    rgba(32, 28, 56, 0.78) 55%,
+    rgba(18, 20, 36, 0.92) 100%
+  );
   backdrop-filter: var(--host-glass-blur);
   -webkit-backdrop-filter: var(--host-glass-blur);
-  border: 1px solid var(--host-glass-border-mint);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--host-glass-border-violet);
+  border-radius: var(--host-glass-radius);
+  box-shadow:
+    0 28px 80px rgba(0, 0, 0, 0.55),
+    0 0 48px rgba(109, 40, 217, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .host-glass-theme .host-connection-modal__header {
-  border-bottom-color: rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 16px 18px;
+}
+
+.host-glass-theme .host-glass-modal__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: clamp(1.05rem, 2vw, 1.35rem);
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.host-glass-theme .host-glass-modal__title-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  color: var(--host-glass-mint);
+  filter: drop-shadow(0 0 10px rgba(0, 255, 136, 0.35));
+}
+
+.host-glass-theme .host-connection-modal__close {
+  border-radius: 10px;
+  border: 1px solid var(--host-glass-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.host-glass-theme .host-connection-modal__close:hover {
+  border-color: var(--host-glass-border-mint);
+  background: rgba(0, 255, 136, 0.12);
+  color: var(--host-glass-mint);
+}
+
+.host-glass-theme .host-connection-modal__body {
+  padding: 14px 18px 18px;
+}
+
+.host-glass-theme .host-bingo-pool-modal__intro {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.host-glass-theme .host-bingo-pool-modal .bingo-pool-list {
+  border-radius: var(--host-glass-radius-sm);
+  border: 1px solid var(--host-glass-border);
+  background: rgba(10, 12, 22, 0.45);
+}
+
+.host-glass-theme .host-player-cards-modal {
+  width: min(1200px, 100%);
+  max-height: min(88vh, 920px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.host-glass-theme .host-player-cards-modal__header {
+  flex-shrink: 0;
+}
+
+.host-glass-theme .host-player-cards-modal__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px 20px;
 }
 
 /* Primary mint button glow */

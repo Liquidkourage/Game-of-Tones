@@ -8646,17 +8646,6 @@ const HostView: React.FC = () => {
                       <RotateCcw className="w-4 h-4" aria-hidden />
                       Reset display letters
                     </button>
-                    {hasFinalizedSongPool ? (
-                      <button
-                        type="button"
-                        className="btn-secondary btn-host-emphasis"
-                        onClick={() => setShowBingoPoolModal(true)}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-                      >
-                        <ListChecks className="w-4 h-4" aria-hidden />
-                        View bingo pool
-                      </button>
-                    ) : null}
                     {playerCards.size > 0 && !playerCardsFullscreen ? (
                       <button
                         type="button"
@@ -8670,53 +8659,6 @@ const HostView: React.FC = () => {
                     ) : null}
                   </section>
                 ) : null}
-
-                {hasFinalizedSongPool &&
-                  (!gameTabRoundBuilderReady || mixFinalized || gameState === 'playing') && (
-                    <motion.div
-                      className="host-bingo-pool-strip host-glass-panel"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.35 }}
-                    >
-                      <div className="host-bingo-pool-strip__head">
-                        <div className="host-bingo-pool-strip__title">
-                          <ListChecks className="w-5 h-5" aria-hidden />
-                          {bingoPoolSectionTitle}
-                        </div>
-                        <button
-                          type="button"
-                          className="btn-secondary btn-host-emphasis"
-                          onClick={() => setShowBingoPoolModal(true)}
-                          title="Open bingo pool (Escape to close)"
-                        >
-                          View pool
-                        </button>
-                      </div>
-                      <p className="host-bingo-pool-strip__hint">
-                        {gameState === 'playing' && currentSong ? (
-                          <>
-                            Now playing:{' '}
-                            <strong style={{ color: '#e8fff4' }}>
-                              {getDisplaySongTitle(currentSong.id, currentSong.name || '')}
-                            </strong>
-                            {currentSong.artist ? (
-                              <>
-                                {' '}
-                                <span style={{ color: 'rgba(255,255,255,0.65)' }}>
-                                  — {getDisplaySongArtist(currentSong.id, currentSong.artist)}
-                                </span>
-                              </>
-                            ) : null}
-                          </>
-                        ) : mixFinalized ? (
-                          'Tap View pool to review playback order, edit display titles, and check validation flags.'
-                        ) : (
-                          'Preview of tracks that match your bingo layout. Tap View pool for the full list.'
-                        )}
-                      </p>
-                    </motion.div>
-                  )}
 
                 {gameState === 'waiting' && !currentSong && !hasFinalizedSongPool && !gameTabRoundBuilderReady && (
                   <div className="host-r4-alert host-glass-panel">
@@ -9202,14 +9144,14 @@ const HostView: React.FC = () => {
           role="presentation"
         >
           <div
-            className="host-connection-modal"
+            className="host-connection-modal host-glass-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="host-connection-modal-title"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="host-connection-modal__header">
-              <h2 id="host-connection-modal-title">
+              <h2 id="host-connection-modal-title" className="host-glass-modal__title">
                 {showYoutubeMusicInConnectionModal ? 'Playback & connections' : 'Spotify & device'}
               </h2>
               <button
@@ -9232,15 +9174,15 @@ const HostView: React.FC = () => {
           role="presentation"
         >
           <div
-            className="host-connection-modal host-connection-modal--bingo-pool host-bingo-pool-modal"
+            className="host-connection-modal host-glass-modal host-connection-modal--bingo-pool host-bingo-pool-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="host-bingo-pool-modal-title"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="host-connection-modal__header">
-              <h2 id="host-bingo-pool-modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <ListChecks className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
+              <h2 id="host-bingo-pool-modal-title" className="host-glass-modal__title">
+                <ListChecks className="host-glass-modal__title-icon" aria-hidden />
                 {bingoPoolSectionTitle}
               </h2>
               <button
@@ -9308,7 +9250,7 @@ const HostView: React.FC = () => {
           role="presentation"
         >
           <div
-            className="host-connection-modal host-connection-modal--round-hub"
+            className="host-connection-modal host-glass-modal host-connection-modal--round-hub"
             role="dialog"
             aria-modal="true"
             aria-labelledby="host-round-hub-modal-title"
@@ -9316,8 +9258,8 @@ const HostView: React.FC = () => {
           >
             <div className="host-connection-modal__header host-connection-modal__header--round-hub">
               <div className="host-playlist-round-modal__title-block">
-                <h2 id="host-round-hub-modal-title">
-                  <ListPlus className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
+                <h2 id="host-round-hub-modal-title" className="host-glass-modal__title">
+                  <ListPlus className="host-glass-modal__title-icon" aria-hidden />
                   Playlist library
                 </h2>
                 <button
@@ -9432,37 +9374,15 @@ const HostView: React.FC = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="host-player-cards-modal-title"
+            className="host-connection-modal host-glass-modal host-player-cards-modal"
             onClick={(e) => e.stopPropagation()}
-            style={{
-              width: 'min(1200px, 100%)',
-              maxHeight: 'min(88vh, 920px)',
-              display: 'flex',
-              flexDirection: 'column',
-              background: 'linear-gradient(180deg, #0d1117 0%, #0a0e14 100%)',
-              border: '1px solid rgba(0,255,163,0.35)',
-              borderRadius: 14,
-              overflow: 'hidden',
-              boxShadow: '0 24px 80px rgba(0,0,0,0.55)',
-            }}
           >
-          <div
-            style={{
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-              padding: '14px 18px',
-              borderBottom: '1px solid rgba(0,255,163,0.25)',
-              background: 'rgba(0,0,0,0.45)',
-              backdropFilter: 'blur(8px)'
-            }}
-          >
+          <div className="host-connection-modal__header host-player-cards-modal__header">
             <div style={{ minWidth: 0 }}>
-              <div id="host-player-cards-modal-title" style={{ color: '#00ffa3', fontWeight: 800, fontSize: 'clamp(1.05rem, 2vw, 1.35rem)', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Users className="w-6 h-6" aria-hidden />
+              <h2 id="host-player-cards-modal-title" className="host-glass-modal__title">
+                <Users className="host-glass-modal__title-icon" aria-hidden />
                 Player Cards &amp; Progress
-              </div>
+              </h2>
               <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
                 Pattern: <strong style={{ color: '#c5d4e0' }}>{getPatternDisplayName(pattern)}</strong>
                 {' · '}
@@ -9491,7 +9411,7 @@ const HostView: React.FC = () => {
             </button>
             </div>
           </div>
-          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '16px 18px 20px' }}>
+          <div className="host-player-cards-modal__body">
             {renderHostPlayerCardsGrid(false)}
           </div>
           </div>

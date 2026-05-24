@@ -416,12 +416,8 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
               <strong>{ringPlayed}</strong> played · <strong>{remainingCount}</strong> left ·{' '}
               <strong>{percentComplete}%</strong> of pool
             </>
-          ) : poolCount > 0 ? (
-            <>
-              <strong>{poolCount}</strong> tracks in pool · not started
-            </>
           ) : (
-            'Finalize mix or add playlists to build the pool'
+            <>Pattern: {patternLabel} · ready to start</>
           )}
         </p>
 
@@ -431,10 +427,6 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
             <div>
               <dt>Pattern</dt>
               <dd>{patternLabel}</dd>
-            </div>
-            <div>
-              <dt>Pool</dt>
-              <dd>{poolCount > 0 ? `${poolCount} tracks` : '—'}</dd>
             </div>
             <div>
               <dt>Clip</dt>
@@ -474,12 +466,6 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
                 </dd>
               </div>
             ) : null}
-            {playlistNames.length > 0 ? (
-              <div className="host-r4-stats__playlists">
-                <dt>Playlists</dt>
-                <dd>{playlistNames.length}</dd>
-              </div>
-            ) : null}
           </dl>
         </div>
 
@@ -513,7 +499,7 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
           <p className="host-r4-card__eyebrow">Up next</p>
           {hasFinalizedSongPool ? (
             <button type="button" className="host-r4-link-btn" onClick={onOpenPool}>
-              View full pool
+              View bingo pool
             </button>
           ) : null}
         </div>
@@ -554,12 +540,6 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
                 <ListPlus className="w-5 h-5" aria-hidden />
                 Library
               </button>
-              {hasFinalizedSongPool ? (
-                <button type="button" className="host-r4-action-tile" onClick={onOpenPool}>
-                  <ListChecks className="w-5 h-5" aria-hidden />
-                  Bingo pool
-                </button>
-              ) : null}
               {playerCardsCount > 0 ? (
                 <button type="button" className="host-r4-action-tile" onClick={onOpenPlayerCards}>
                   <Users className="w-5 h-5" aria-hidden />
@@ -585,12 +565,6 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
                 <ListPlus className="w-5 h-5" aria-hidden />
                 Playlist library
               </button>
-              {hasFinalizedSongPool ? (
-                <button type="button" className="host-r4-action-tile" onClick={onOpenPool}>
-                  <ListChecks className="w-5 h-5" aria-hidden />
-                  Bingo pool
-                </button>
-              ) : null}
               {playerCardsCount > 0 ? (
                 <button type="button" className="host-r4-action-tile" onClick={onOpenPlayerCards}>
                   <Users className="w-5 h-5" aria-hidden />
