@@ -3046,6 +3046,9 @@ const PublicDisplay: React.FC = () => {
           : Math.round(rowHeightPx * 0.22);
       if (maxPx > 0) fontSize = Math.min(fontSize, maxPx);
     }
+    /** Pull title cap-height up so it lines with the top edge of the call # badge (line-height half-leading). */
+    const titleTopNudgePx =
+      kind === 'title' ? Math.round(fontSize * (lh - 1) * 0.38) : 0;
     const common: React.CSSProperties = {
       fontWeight: kind === 'title' ? 900 : 800,
       lineHeight: lh,
@@ -3059,7 +3062,8 @@ const PublicDisplay: React.FC = () => {
       display: 'block',
       overflow: 'visible',
       textOverflow: 'clip',
-      marginTop: kind === 'artist' ? (fullCard ? 6 : 4) : 0,
+      marginTop:
+        kind === 'title' ? -titleTopNudgePx : kind === 'artist' ? (fullCard ? 6 : 4) : 0,
       paddingBottom: maskedLine ? (kind === 'title' ? 3 : 4) : kind === 'artist' && !fullCard ? 2 : 0,
     };
     return common;

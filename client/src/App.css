@@ -502,6 +502,10 @@ body {
   align-items: flex-start;
 }
 
+.App .public-display .call-item .call-number {
+  align-self: flex-start;
+}
+
 /* Song call cards: slight inset at bottom (avoid clipping text inside call-song-info) */
 .App .public-display .call-item,
 .App .public-display .call-carousel-col-inner > .call-item,

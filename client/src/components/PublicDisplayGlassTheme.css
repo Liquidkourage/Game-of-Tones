@@ -453,6 +453,10 @@
   word-break: break-word;
 }
 
+.App .public-display--glass .call-item .call-song-info {
+  align-self: flex-start;
+}
+
 .App .public-display--glass .call-song-name {
   color: var(--pd-snow) !important;
 }
