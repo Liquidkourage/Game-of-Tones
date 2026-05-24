@@ -3640,20 +3640,14 @@ const PublicDisplay: React.FC = () => {
                   return (
                     <motion.div
                       key={id + '-' + ri}
-                      className="call-item"
+                      className={`call-item${isCurrent ? ' call-item--current' : ''}`}
                       initial={false}
-                      animate={{
-                        backgroundColor: isCurrent ? 'rgba(0,255,136,0.12)' : 'rgba(255,255,255,0.05)',
-                        boxShadow: isCurrent ? '0 0 16px rgba(0,255,136,0.35)' : 'none',
-                        borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)'
-                      }}
-                      transition={{ duration: 0.25 }}
+                      aria-current={isCurrent ? 'true' : undefined}
                       style={{
                         display: 'flex',
                         alignItems: 'flex-start',
                         gap: 10,
                         padding: '8px 10px',
-                        border: '1px solid rgba(255,255,255,0.15)',
                         borderRadius: 12,
                         height: isFullCardPattern
                           ? 'auto'
@@ -3668,8 +3662,7 @@ const PublicDisplay: React.FC = () => {
                             ? rowHeightPx
                             : 44,
                         overflow: isFullCardPattern ? 'visible' : 'hidden',
-                        background: 'rgba(255,255,255,0.08)',
-                        boxSizing: 'border-box'
+                        boxSizing: 'border-box',
                       }}
                     >
                       {/* Numeric badge: play order index */}
@@ -3753,21 +3746,18 @@ const PublicDisplay: React.FC = () => {
         <div
           key={id}
           className={`call-item${isCurrent ? ' call-item--current' : ''}`}
+          aria-current={isCurrent ? 'true' : undefined}
           style={{
             display: 'flex',
             alignItems: 'flex-start',
             gap: 6,
             padding: '6px 8px',
-            border: '1px solid rgba(255,255,255,0.15)',
             borderRadius: 10,
             width: '100%',
             maxWidth: '100%',
             minWidth: 0,
             boxSizing: 'border-box',
             overflow: 'hidden',
-            background: isCurrent ? 'rgba(0,255,136,0.12)' : 'rgba(255,255,255,0.08)',
-            boxShadow: isCurrent ? '0 0 16px rgba(0,255,136,0.35)' : 'none',
-            borderColor: isCurrent ? 'rgba(0,255,136,0.35)' : 'rgba(255,255,255,0.1)',
           }}
         >
           <div className="call-number" aria-label={callNum > 0 ? `Call ${callNum}` : undefined}>
