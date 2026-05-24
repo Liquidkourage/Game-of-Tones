@@ -344,12 +344,49 @@ async function getOrganizationById(db, id) {
   return orgRowToSummary(r.rows[0]);
 }
 
+function sameUserId(a, b) {
+  if (a == null || b == null) return false;
+  return Number(a) === Number(b);
+}
+
+/**
+ * Orgs created in Admin (or before owner_user_id existed) may have owner_user_id NULL.
+ * Sole remaining member is treated as owner and persisted so billing/invites unlock.
+ */
+async function resolveOrganizationRole(db, organizationId, userId) {
+  const orgId = Number(organizationId);
+  const uid = Number(userId);
+  if (!Number.isFinite(orgId) || !Number.isFinite(uid)) return 'host';
+  const r = await db.query(
+    `SELECT owner_user_id FROM organizations WHERE id = $1`,
+    [orgId]
+  );
+  if (r.rows.length === 0) return 'host';
+  const ownerId = r.rows[0].owner_user_id;
+  if (ownerId != null && sameUserId(ownerId, uid)) return 'owner';
+  if (ownerId != null) return 'host';
+
+  const members = await db.query(
+    `SELECT id FROM users WHERE organization_id = $1 ORDER BY id ASC`,
+    [orgId]
+  );
+  if (members.rows.length === 1 && sameUserId(members.rows[0].id, uid)) {
+    await db.query(`UPDATE organizations SET owner_user_id = $2 WHERE id = $1 AND owner_user_id IS NULL`, [
+      orgId,
+      uid,
+    ]);
+    return 'owner';
+  }
+  return 'host';
+}
+
 async function getUserOrganizationContext(db, userId) {
   if (!db || userId == null) return { organization: null, role: null, membership: null };
   await ensureOrganizationsTable(db);
+  const uid = Number(userId);
   const u = await db.query(
     'SELECT id, email, display_name, organization_id FROM users WHERE id = $1',
-    [userId]
+    [uid]
   );
   if (u.rows.length === 0) return { organization: null, role: null, membership: null };
   const user = u.rows[0];
@@ -358,7 +395,7 @@ async function getUserOrganizationContext(db, userId) {
       `SELECT id, name, spotify_client_id, created_at, venue_settings,
               owner_user_id, billing_status, lifetime_paid_cents, last_payment_at
        FROM organizations WHERE owner_user_id = $1 ORDER BY id ASC LIMIT 1`,
-      [userId]
+      [uid]
     );
     if (owned.rows.length > 0) {
       return {
@@ -369,12 +406,16 @@ async function getUserOrganizationContext(db, userId) {
     }
     return { organization: null, role: null, membership: null };
   }
-  const org = await getOrganizationById(db, user.organization_id);
-  const role = org && org.owner_user_id === userId ? 'owner' : 'host';
+  const orgId = user.organization_id;
+  const role = await resolveOrganizationRole(db, orgId, uid);
+  const org = await getOrganizationById(db, orgId);
+  if (org && role === 'owner' && org.owner_user_id == null) {
+    org.owner_user_id = uid;
+  }
   return {
     organization: org,
     role,
-    membership: { userId: user.id, email: user.email, organizationId: user.organization_id },
+    membership: { userId: user.id, email: user.email, organizationId: orgId },
   };
 }
 
@@ -418,11 +459,39 @@ async function createSelfServeOrganization(db, { name, ownerUserId }) {
 async function isOrganizationOwner(db, userId, organizationId) {
   if (!db || userId == null || organizationId == null) return false;
   await ensureOrganizationsTable(db);
-  const r = await db.query('SELECT 1 FROM organizations WHERE id = $1 AND owner_user_id = $2', [
-    organizationId,
-    userId,
-  ]);
-  return r.rows.length > 0;
+  const role = await resolveOrganizationRole(db, organizationId, userId);
+  return role === 'owner';
+}
+
+/** Explicit claim when org has no owner yet (e.g. multiple members after Admin setup). */
+async function claimOrganizationOwnership(db, userId, organizationId) {
+  if (!db) throw new Error('DATABASE_URL required');
+  await ensureOrganizationsTable(db);
+  const uid = Number(userId);
+  const orgId = Number(organizationId);
+  if (!Number.isFinite(uid) || !Number.isFinite(orgId)) throw new Error('Invalid user or organization');
+
+  const u = await db.query('SELECT organization_id FROM users WHERE id = $1', [uid]);
+  if (u.rows.length === 0 || Number(u.rows[0].organization_id) !== orgId) {
+    throw new Error('You must belong to this organization to claim ownership');
+  }
+
+  const org = await db.query('SELECT owner_user_id FROM organizations WHERE id = $1', [orgId]);
+  if (org.rows.length === 0) throw new Error('organization not found');
+  if (org.rows[0].owner_user_id != null) {
+    if (sameUserId(org.rows[0].owner_user_id, uid)) return { ok: true, organizationId: orgId, role: 'owner' };
+    throw new Error('This organization already has an owner');
+  }
+
+  const members = await db.query('SELECT id FROM users WHERE organization_id = $1', [orgId]);
+  if (members.rows.length === 1 && sameUserId(members.rows[0].id, uid)) {
+    await db.query('UPDATE organizations SET owner_user_id = $2 WHERE id = $1', [orgId, uid]);
+    return { ok: true, organizationId: orgId, role: 'owner' };
+  }
+
+  throw new Error(
+    'Ownership is not set yet. If you are the venue lead, ask your platform admin to set owner_user_id, or be the only member to auto-claim.'
+  );
 }
 
 async function listOrganizationMembers(db, organizationId) {
@@ -591,6 +660,7 @@ module.exports = {
   getOrganizationById,
   getUserOrganizationContext,
   isOrganizationOwner,
+  claimOrganizationOwnership,
   listOrganizationMembers,
   listOrganizationInvites,
   inviteHostToOrganization,

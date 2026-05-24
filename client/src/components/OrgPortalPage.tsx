@@ -386,7 +386,40 @@ const OrgPortalPage: React.FC = () => {
             </>
           ) : (
             <section className="org-portal__card">
-              <p>Your organization owner manages billing and invites. Ask them if you need access changes.</p>
+              <p>
+                Billing and invites are managed by the organization owner. If you set up this venue and you&apos;re the
+                only host listed below, claim ownership to unlock those controls.
+              </p>
+              {(data?.members?.length ?? 0) <= 1 ? (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      const res = await hostFetch(`${API_BASE || ''}/api/org/claim-ownership`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: '{}',
+                      });
+                      const j = await res.json().catch(() => ({}));
+                      if (!res.ok) {
+                        alert((j && j.message) || `Claim failed (${res.status})`);
+                        return;
+                      }
+                      setBanner('You are now the organization owner.');
+                      await refresh();
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  <Crown size={16} aria-hidden /> Claim as owner
+                </button>
+              ) : (
+                <p className="org-portal__muted">Another host may already be the owner, or ownership was set in Admin.</p>
+              )}
             </section>
           )}
 

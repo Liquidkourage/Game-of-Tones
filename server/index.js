@@ -9905,6 +9905,27 @@ app.delete('/api/org/invites', async (req, res) => {
   }
 });
 
+app.post('/api/org/claim-ownership', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    if (!ctx.organization) {
+      return res.status(400).json({ error: 'no_org', message: 'Join or create an organization first.' });
+    }
+    if (ctx.role === 'owner') {
+      return res.json({ ok: true, role: 'owner', organization: ctx.organization });
+    }
+    const result = await organizationsStore.claimOrganizationOwnership(db, uid, ctx.organization.id);
+    const refreshed = await organizationsStore.getUserOrganizationContext(db, uid);
+    return res.json({ ok: true, ...result, organization: refreshed.organization, role: refreshed.role });
+  } catch (e) {
+    console.error('POST /api/org/claim-ownership:', e);
+    res.status(400).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
 app.post('/api/org/billing/checkout', async (req, res) => {
   try {
     const uid = await requireApprovedHostUid(req, res);
