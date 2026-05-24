@@ -30,6 +30,7 @@ import './PublicDisplayGlassTheme.css';
 import {
   computeBingoCellTextScale,
   computeCallCardTypography,
+  capCallCardTextScaleForRow,
   unifyCallListTypography,
   maxHeightEm,
   PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX,
@@ -3015,14 +3016,42 @@ const PublicDisplay: React.FC = () => {
     playedOrderRevision,
   ]);
 
+  const callListTypography = useMemo((): CallCardTypography | null => {
+    if (!unifiedCallListTypography) return null;
+    if (!columnCallListLayout || rowHeightPx <= 0) return unifiedCallListTypography;
+    const capped = capCallCardTextScaleForRow(
+      unifiedCallListTypography,
+      rowHeightPx,
+      displayFontScale,
+    );
+    if (capped >= unifiedCallListTypography.textScale) return unifiedCallListTypography;
+    return {
+      ...unifiedCallListTypography,
+      textScale: capped,
+      dense: true,
+    };
+  }, [
+    unifiedCallListTypography,
+    columnCallListLayout,
+    rowHeightPx,
+    displayFontScale,
+  ]);
+
   const typographyForCallCard = (
     songId: string,
     meta: { name: string; artist: string },
     fullCard: boolean,
   ): CallCardTypography => {
-    if (unifiedCallListTypography) return unifiedCallListTypography;
+    if (callListTypography) return callListTypography;
     const masked = getCallSongRevealUi(songId).kind === 'masked';
-    return computeCallCardTypography(meta.name, meta.artist, { fullCard, masked });
+    let typo = computeCallCardTypography(meta.name, meta.artist, { fullCard, masked });
+    if (columnCallListLayout && rowHeightPx > 0 && !fullCard) {
+      typo = {
+        ...typo,
+        textScale: capCallCardTextScaleForRow(typo, rowHeightPx, displayFontScale),
+      };
+    }
+    return typo;
   };
 
   const callCardLineStyles = (

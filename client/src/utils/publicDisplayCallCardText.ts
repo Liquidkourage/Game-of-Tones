@@ -14,9 +14,9 @@ export const PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT = 1.28;
 /** Slack added to call-song-info max-height budget so glyphs are not clipped. */
 export const PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX = 10;
 
-/** ~how many letter-box characters fit per row in a call column at auto-fit. */
-const MASKED_CHARS_PER_LINE_TITLE = 12;
-const MASKED_CHARS_PER_LINE_ARTIST = 14;
+/** ~how many letter-box characters fit per row in a narrow 5×15 call column. */
+const MASKED_CHARS_PER_LINE_TITLE = 9;
+const MASKED_CHARS_PER_LINE_ARTIST = 11;
 /** Plain revealed text wraps wider in the same column. */
 const PLAIN_CHARS_PER_LINE_TITLE = 17;
 const PLAIN_CHARS_PER_LINE_ARTIST = 22;
@@ -91,8 +91,9 @@ export function computeCallCardTypography(
   else if (total > 50) textScale = 0.93;
   else if (total > 36) textScale = 0.97;
 
-  if (tLen > 52) textScale = Math.min(textScale, 0.86);
-  if (aLen > 40) textScale = Math.min(textScale, 0.9);
+  if (tLen > 52) textScale = Math.min(textScale, 0.78);
+  else if (tLen > 42) textScale = Math.min(textScale, 0.84);
+  if (aLen > 40) textScale = Math.min(textScale, 0.88);
 
   let titleMaxLines = 3;
   let artistMaxLines = hasArtist ? 2 : 0;
@@ -109,10 +110,10 @@ export function computeCallCardTypography(
 
     if (totalLines > CALL_CARD_TOTAL_LINE_BUDGET) {
       const fit = CALL_CARD_TOTAL_LINE_BUDGET / totalLines;
-      textScale = Math.min(textScale, Math.max(0.8, fit));
+      textScale = Math.min(textScale, Math.max(0.52, fit));
     }
 
-    titleMaxLines = Math.min(Math.max(tLines, 1), 3);
+    titleMaxLines = Math.min(Math.max(tLines, 1), 5);
     const titleBudget = Math.min(titleMaxLines, 2);
     artistMaxLines = hasArtist
       ? Math.min(Math.max(aLines, 1), Math.max(1, CALL_CARD_TOTAL_LINE_BUDGET - titleBudget))
@@ -154,6 +155,25 @@ export function unifyCallListTypography(typographies: CallCardTypography[]): Cal
     letterBoxScale: 1,
     clampContentHeight: typographies.some((t) => t.clampContentHeight),
   };
+}
+
+/** Shrink textScale so title+artist fit inside one measured 5×15 card row. */
+export function capCallCardTextScaleForRow(
+  typo: CallCardTypography,
+  rowHeightPx: number,
+  displayFontScale: number,
+): number {
+  if (rowHeightPx <= 0 || displayFontScale <= 0) return typo.textScale;
+  const cardChromePx = 18;
+  const textHeightPx = Math.max(28, rowHeightPx - cardChromePx);
+  const atUnitScale =
+    typo.titleMaxLines * PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT * PUBLIC_DISPLAY_CALL_TITLE_BASE_PX +
+    typo.artistMaxLines * PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT * PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX;
+  if (atUnitScale <= 0) return typo.textScale;
+  const rowCap =
+    (textHeightPx - PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX) /
+    (atUnitScale * displayFontScale);
+  return Math.min(typo.textScale, Math.max(0.48, rowCap));
 }
 
 /** Bingo pattern / winner grid cells (vmin-based sizes get a scale multiplier). */
