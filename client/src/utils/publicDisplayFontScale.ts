@@ -5,6 +5,12 @@ const REF_WIDTH = 1920;
 const REF_HEIGHT = 1080;
 
 /**
+ * Scales auto-fit so host 100% matches venue-tuned size (was ~80% before calibration).
+ * Letter-reveal line-height adds visual bulk; keep in sync with call-card line metrics.
+ */
+const DISPLAY_AUTO_FIT_CALIBRATION = 0.8;
+
+/**
  * Baseline multiplier so call-list titles/artists fit ~5 rows in the call column.
  * Host slider 1.0 × this value = rendered scale on the projector.
  */
@@ -27,7 +33,8 @@ export function computeOptimalPublicDisplayFontMultiplier(
   const fromHeight = targetTitlePx / PUBLIC_DISPLAY_CALL_TITLE_BASE_PX;
   const fromWidth = Math.min(1.35, Math.max(0.8, w / REF_WIDTH));
   const refBlend = Math.min(1.25, Math.max(0.88, (w / REF_WIDTH + h / REF_HEIGHT) / 2));
-  return Math.max(0.6, Math.min(1.65, fromHeight * Math.pow(fromWidth, 0.12) * refBlend));
+  const raw = fromHeight * Math.pow(fromWidth, 0.12) * refBlend * DISPLAY_AUTO_FIT_CALIBRATION;
+  return Math.max(0.6, Math.min(1.65, raw));
 }
 
 /** Effective render multiplier: optimal fit × host percent (1.0 = 100% = best fit). */
