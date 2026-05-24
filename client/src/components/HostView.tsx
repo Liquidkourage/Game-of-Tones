@@ -707,6 +707,8 @@ const HostView: React.FC = () => {
   const [isSpotifyConnecting, setIsSpotifyConnecting] = useState(false);
   /** True while pushing a saved-round snapshot through finalize-mix (display + online cards). Blocks Start Game briefly. */
   const [savedRoundRoomSyncBusy, setSavedRoundRoomSyncBusy] = useState(false);
+  const [finalizeMixBusy, setFinalizeMixBusy] = useState(false);
+  const [finalizeMixElapsedSec, setFinalizeMixElapsedSec] = useState(0);
   /** Mirrors isSpotifyConnected for callbacks declared above sync effects (catalog schedule, socket reconnect). */
   const isSpotifyConnectedRef = useRef(false);
   const [pendingVerification, setPendingVerification] = useState<any>(null);
@@ -771,7 +773,8 @@ const HostView: React.FC = () => {
       mixPlaylistSelection.length === 0 ||
       (mixNeedsHostSpotify && (!isSpotifyConnected || isSpotifyConnecting)) ||
       (mixNeedsHostSpotify && playbackDeviceNotInList) ||
-      savedRoundRoomSyncBusy,
+      savedRoundRoomSyncBusy ||
+      finalizeMixBusy,
     [
       mixPlaylistSelection.length,
       mixNeedsHostSpotify,
@@ -779,8 +782,18 @@ const HostView: React.FC = () => {
       isSpotifyConnecting,
       playbackDeviceNotInList,
       savedRoundRoomSyncBusy,
+      finalizeMixBusy,
     ]
   );
+
+  useEffect(() => {
+    if (!finalizeMixBusy) {
+      setFinalizeMixElapsedSec(0);
+      return;
+    }
+    const id = window.setInterval(() => setFinalizeMixElapsedSec((s) => s + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [finalizeMixBusy]);
 
   const [randomStarts, setRandomStarts] = useState<'none' | 'early' | 'random'>(() => {
     const saved = localStorage.getItem('game-random-starts');
@@ -3686,10 +3699,12 @@ const HostView: React.FC = () => {
 
     const inFlight = finalizeMixPromiseRef.current;
     if (inFlight) {
+      setFinalizeMixBusy(true);
       addLog('Waiting for finalize already in progress…', 'info');
       return inFlight;
     }
 
+    setFinalizeMixBusy(true);
     finalizeMixInFlightRef.current = true;
 
     const run = async (): Promise<boolean> => {
@@ -3839,6 +3854,7 @@ const HostView: React.FC = () => {
       } finally {
         finalizeMixInFlightRef.current = false;
         finalizeMixPromiseRef.current = null;
+        setFinalizeMixBusy(false);
       }
     };
 
@@ -8675,6 +8691,8 @@ const HostView: React.FC = () => {
                   prepRoundReadyForGoLive={prepRoundReadyForGoLive}
                   showPrimaryFinalizeMixButton={showPrimaryFinalizeMixButton}
                   mixGameActionsBlocked={mixGameActionsBlocked}
+                  finalizeMixBusy={finalizeMixBusy}
+                  finalizeMixElapsedSec={finalizeMixElapsedSec}
                   savedRoundRoomSyncBusy={savedRoundRoomSyncBusy}
                   isSpotifyConnecting={isSpotifyConnecting}
                   mixNeedsHostSpotify={mixNeedsHostSpotify}

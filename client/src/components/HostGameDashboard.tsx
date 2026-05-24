@@ -16,6 +16,7 @@ import {
   Monitor,
   RotateCw,
   Check,
+  Loader2,
 } from 'lucide-react';
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import type { BingoPoolSong } from './BingoPoolList';
@@ -64,6 +65,8 @@ export type HostGameDashboardProps = {
   prepRoundReadyForGoLive: boolean;
   showPrimaryFinalizeMixButton: boolean;
   mixGameActionsBlocked: boolean;
+  finalizeMixBusy: boolean;
+  finalizeMixElapsedSec: number;
   savedRoundRoomSyncBusy: boolean;
   isSpotifyConnecting: boolean;
   mixNeedsHostSpotify: boolean;
@@ -188,6 +191,8 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
     prepRoundReadyForGoLive,
     showPrimaryFinalizeMixButton,
     mixGameActionsBlocked,
+    finalizeMixBusy,
+    finalizeMixElapsedSec,
     savedRoundRoomSyncBusy,
     isSpotifyConnecting,
     mixNeedsHostSpotify,
@@ -260,6 +265,11 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
 
   const tourGoLive = gameState === 'waiting' && !currentSong;
   const tourLiveDock = gameState === 'playing';
+  const showPlaylistsLabel = finalizeMixBusy
+    ? finalizeMixElapsedSec > 0
+      ? `Loading playlists… ${finalizeMixElapsedSec}s`
+      : 'Loading playlists…'
+    : 'Show playlists';
   const displaySyncLabel = formatDisplaySyncAge(displayPresence.lastSeenAt, displayStatusTick);
   const displayStatusClass = !displayPresence.connected
     ? 'host-r4-display-status--off'
@@ -433,12 +443,21 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
                   {showPrimaryFinalizeMixButton ? (
                     <button
                       type="button"
-                      className="btn-secondary host-r4-btn-secondary"
+                      className={
+                        finalizeMixBusy
+                          ? 'btn-secondary host-r4-btn-secondary host-r4-btn--loading'
+                          : 'btn-secondary host-r4-btn-secondary'
+                      }
                       onClick={onFinalizeMix}
                       disabled={mixGameActionsBlocked}
+                      aria-busy={finalizeMixBusy}
                     >
-                      <ListChecks className="w-4 h-4" aria-hidden />
-                      Show playlists
+                      {finalizeMixBusy ? (
+                        <Loader2 className="w-4 h-4 host-r4-spin" aria-hidden />
+                      ) : (
+                        <ListChecks className="w-4 h-4" aria-hidden />
+                      )}
+                      {showPlaylistsLabel}
                     </button>
                   ) : null}
                   <button
@@ -455,7 +474,17 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
                         : 'Start game'}
                   </button>
                 </div>
-                {!gameTabRoundBuilderReady ? (
+                {finalizeMixBusy ? (
+                  <p className="host-r4-finalize-progress" role="status" aria-live="polite">
+                    Fetching tracks and syncing playlist names to the projector — this can take up to 15 seconds.
+                    {finalizeMixElapsedSec >= 8 ? (
+                      <>
+                        {' '}
+                        <strong>Still working… {finalizeMixElapsedSec}s</strong>
+                      </>
+                    ) : null}
+                  </p>
+                ) : !gameTabRoundBuilderReady ? (
                   <p className="host-r4-hint host-go-live__hint">
                     Start game will <strong>finalize the mix automatically</strong> if needed. Use Show playlists to
                     preview playlist names on the display.
@@ -647,31 +676,9 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
                   Player cards ({playerCardsCount})
                 </button>
               ) : null}
-              {showPrimaryFinalizeMixButton ? (
-                <button
-                  type="button"
-                  className="host-r4-action-tile"
-                  onClick={onFinalizeMix}
-                  disabled={mixGameActionsBlocked}
-                >
-                  <ListChecks className="w-5 h-5" aria-hidden />
-                  Show playlists
-                </button>
-              ) : null}
             </>
           )}
         </div>
-        {gameState === 'waiting' && !currentSong ? (
-          <button
-            type="button"
-            className="btn-primary host-r4-btn-primary host-r4-btn-primary--wide host-r4-actions__start"
-            onClick={onStartGame}
-            disabled={mixGameActionsBlocked}
-          >
-            <Play className="w-5 h-5" aria-hidden />
-            Start game
-          </button>
-        ) : null}
       </section>
     </div>
   );

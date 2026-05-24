@@ -863,6 +863,32 @@
   flex-wrap: wrap;
 }
 
+.host-glass-theme .host-r4-spin {
+  animation: host-r4-spin 0.9s linear infinite;
+}
+
+@keyframes host-r4-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.host-glass-theme .host-r4-btn--loading {
+  pointer-events: none;
+  opacity: 0.92;
+}
+
+.host-glass-theme .host-r4-finalize-progress {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.host-glass-theme .host-r4-finalize-progress strong {
+  color: #f5d061;
+}
+
 .host-glass-theme .host-r4-actions {
   grid-column: 1;
   grid-row: 2;
