@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Play,
@@ -43,6 +43,7 @@ import {
   Eraser,
   HelpCircle,
   Settings,
+  Building2,
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL, ENABLE_YOUTUBE_MUSIC } from '../config';
@@ -8835,6 +8836,15 @@ const HostView: React.FC = () => {
             </p>
           </div>
           <div className="room-info host-header__toolbar">
+            <Link
+              to="/org"
+              className="btn-secondary host-org-toolbar-btn"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}
+              title="Organization, invites, and pay-as-you-like billing"
+            >
+              <Building2 className="w-4 h-4" aria-hidden />
+              Organization
+            </Link>
             <button
               type="button"
               className="btn-secondary host-connection-toolbar-btn"

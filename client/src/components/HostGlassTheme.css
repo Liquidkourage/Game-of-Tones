@@ -1853,3 +1853,110 @@
 .host-glass-theme .host-display-extras__diag dd.is-off {
   color: #ff9a9a;
 }
+
+.host-glass-theme .host-org-billing-card {
+  border-color: var(--host-glass-border-mint);
+  background: linear-gradient(
+    145deg,
+    rgba(0, 255, 136, 0.08) 0%,
+    rgba(56, 44, 96, 0.35) 100%
+  );
+}
+
+.host-glass-theme .host-org-billing-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.host-glass-theme .host-org-billing-card__head .host-settings-workspace__title {
+  margin: 0;
+}
+
+.host-glass-theme .host-org-billing-card__open {
+  flex-shrink: 0;
+  text-decoration: none;
+  font-size: 0.88rem;
+  padding: 8px 16px;
+}
+
+.host-glass-theme .host-org-billing-card__status {
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.78);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.host-glass-theme .host-org-billing-card__spin {
+  animation: host-org-billing-spin 0.9s linear infinite;
+}
+
+@keyframes host-org-billing-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.host-glass-theme .host-org-billing-card__summary {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.host-glass-theme .host-org-billing-card__org-name {
+  margin: 0 0 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 1rem;
+}
+
+.host-glass-theme .host-org-billing-card__role {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 200, 80, 0.15);
+  color: #ffd966;
+  border: 1px solid rgba(255, 200, 80, 0.35);
+}
+
+.host-glass-theme .host-org-billing-card__role--host {
+  background: rgba(0, 255, 136, 0.12);
+  color: var(--host-glass-mint);
+  border-color: rgba(0, 255, 136, 0.35);
+}
+
+.host-glass-theme .host-org-billing-card__meta {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.72);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.host-glass-theme .host-org-billing-card__warn {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+  color: #f5d061;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.host-glass-theme .host-org-billing-card a {
+  color: var(--host-glass-mint);
+}

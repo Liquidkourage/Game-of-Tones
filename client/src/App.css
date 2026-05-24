@@ -82,6 +82,7 @@ body {
   gap: 0.75rem;
 }
 
+.app-header__org-link,
 .app-header__admin-link {
   display: inline-flex;
   align-items: center;
@@ -96,6 +97,7 @@ body {
   transition: color 0.15s ease, background 0.15s ease;
 }
 
+.app-header__org-link:hover,
 .app-header__admin-link:hover {
   color: var(--accent-color);
   background: rgba(0, 255, 200, 0.08);
@@ -1225,6 +1227,15 @@ body {
   margin-bottom: 12px;
   text-decoration: none;
   box-sizing: border-box;
+}
+
+.home-org-link--primary {
+  font-weight: 700;
+}
+
+.home-host-guide a {
+  color: #7dffc8;
+  font-weight: 700;
 }
 
 .home-host-code-hint {

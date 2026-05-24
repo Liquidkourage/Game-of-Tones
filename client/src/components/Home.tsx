@@ -493,6 +493,12 @@ const Home: React.FC = () => {
                   <strong>Sign in with Google</strong> using the email your organizer allowlisted (often your work address).
                 </li>
                 <li>
+                  <strong>
+                    <Link to="/org">Organization &amp; billing</Link>
+                  </strong>{' '}
+                  — create your venue org, invite co-hosts, or pay as you like (optional for now).
+                </li>
+                <li>
                   Click <strong>Create room &amp; host</strong> — you&apos;ll open the host screen with a <strong>room code</strong> to share.
                 </li>
                 <li>
@@ -668,7 +674,7 @@ const Home: React.FC = () => {
             )}
 
             {hostSession ? (
-              <Link to="/org" className="home-org-link btn btn-secondary">
+              <Link to="/org" className="home-org-link home-org-link--primary btn btn-primary">
                 <Building2 className="btn-icon" aria-hidden />
                 Organization &amp; billing
               </Link>

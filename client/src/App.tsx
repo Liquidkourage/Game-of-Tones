@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, useLocation, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Sparkles, Shield } from 'lucide-react';
+import { Sparkles, Shield, Building2 } from 'lucide-react';
 import { API_BASE } from './config';
 import { hostFetch } from './utils/hostFetch';
 import './App.css';
@@ -34,6 +34,7 @@ import HostYoutubePlaybackWindow from './components/HostYoutubePlaybackWindow';
 function AppHeader() {
   const location = useLocation();
   const [showAdminLink, setShowAdminLink] = useState(false);
+  const [showOrgLink, setShowOrgLink] = useState(false);
   const [displayVenueBranding, setDisplayVenueBranding] = useState<DisplayVenueBranding>(null);
   const isDisplay = /^\/display(\/.+|$)/.test(location.pathname);
 
@@ -54,16 +55,28 @@ function AppHeader() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await hostFetch(`${API_BASE || ''}/api/admin/me`);
+        const [adminRes, authRes] = await Promise.all([
+          hostFetch(`${API_BASE || ''}/api/admin/me`),
+          hostFetch(`${API_BASE || ''}/api/auth/me`),
+        ]);
         if (cancelled) return;
-        if (!res.ok) {
+        if (adminRes.ok) {
+          const adminData = (await adminRes.json()) as { admin?: boolean };
+          setShowAdminLink(adminData.admin === true);
+        } else {
           setShowAdminLink(false);
-          return;
         }
-        const data = (await res.json()) as { admin?: boolean };
-        setShowAdminLink(data.admin === true);
+        if (authRes.ok) {
+          const authData = (await authRes.json()) as { user?: { id: number } | null };
+          setShowOrgLink(!!authData.user);
+        } else {
+          setShowOrgLink(false);
+        }
       } catch {
-        if (!cancelled) setShowAdminLink(false);
+        if (!cancelled) {
+          setShowAdminLink(false);
+          setShowOrgLink(false);
+        }
       }
     })();
     return () => {
@@ -133,6 +146,12 @@ function AppHeader() {
           className="app-header__trailing"
           style={{ position: 'absolute', right: '2rem', top: '50%', transform: 'translateY(-50%)', zIndex: 101 }}
         >
+          {showOrgLink && (
+            <Link to="/org" className="app-header__org-link" title="Organization and billing">
+              <Building2 size={16} aria-hidden className="app-header__org-icon" />
+              <span>Organization</span>
+            </Link>
+          )}
           {showAdminLink && (
             <Link to="/admin" className="app-header__admin-link" title="Admin">
               <Shield size={16} aria-hidden className="app-header__admin-icon" />
