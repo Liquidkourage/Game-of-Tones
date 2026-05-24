@@ -5,10 +5,9 @@ const REF_WIDTH = 1920;
 const REF_HEIGHT = 1080;
 
 /**
- * Scales auto-fit so host 100% matches venue-tuned size (was ~80% before calibration).
- * Letter-reveal line-height adds visual bulk; keep in sync with call-card line metrics.
+ * Host 100% target — venue tuned (80% baseline × 150% slider feel after row-fit pass).
  */
-const DISPLAY_AUTO_FIT_CALIBRATION = 0.8;
+const DISPLAY_AUTO_FIT_CALIBRATION = 1.2;
 
 /**
  * Baseline multiplier so call-list titles/artists fit ~5 rows in the call column.

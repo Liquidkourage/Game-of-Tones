@@ -148,7 +148,8 @@ export function unifyCallListTypography(typographies: CallCardTypography[]): Cal
     };
   }
   return {
-    textScale: Math.min(...typographies.map((t) => t.textScale)),
+    /** Row-height cap picks size; keep char-based shrink off the shared board scale. */
+    textScale: 1,
     dense: typographies.some((t) => t.dense),
     titleMaxLines: Math.max(...typographies.map((t) => t.titleMaxLines)),
     artistMaxLines: Math.max(...typographies.map((t) => t.artistMaxLines)),
@@ -157,23 +158,22 @@ export function unifyCallListTypography(typographies: CallCardTypography[]): Cal
   };
 }
 
-/** Shrink textScale so title+artist fit inside one measured 5×15 card row. */
+/** Shrink textScale so this card's title+artist fit inside one measured 5×15 row. */
 export function capCallCardTextScaleForRow(
   typo: CallCardTypography,
   rowHeightPx: number,
   displayFontScale: number,
 ): number {
   if (rowHeightPx <= 0 || displayFontScale <= 0) return typo.textScale;
-  const cardChromePx = 18;
-  const textHeightPx = Math.max(28, rowHeightPx - cardChromePx);
+  const textHeightPx = Math.max(32, rowHeightPx - 14);
   const atUnitScale =
     typo.titleMaxLines * PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT * PUBLIC_DISPLAY_CALL_TITLE_BASE_PX +
     typo.artistMaxLines * PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT * PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX;
   if (atUnitScale <= 0) return typo.textScale;
   const rowCap =
-    (textHeightPx - PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX) /
+    ((textHeightPx - PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX) * 0.96) /
     (atUnitScale * displayFontScale);
-  return Math.min(typo.textScale, Math.max(0.48, rowCap));
+  return Math.min(typo.textScale, Math.max(0.55, rowCap));
 }
 
 /** Bingo pattern / winner grid cells (vmin-based sizes get a scale multiplier). */
