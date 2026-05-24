@@ -1,6 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Building2, Crown, Heart, Loader2, Mail, Users, ArrowLeft, AlertCircle } from 'lucide-react';
+import {
+  Building2,
+  Crown,
+  Heart,
+  Loader2,
+  Mail,
+  Users,
+  ArrowLeft,
+  AlertCircle,
+  Copy,
+  Check,
+  ExternalLink,
+} from 'lucide-react';
 import { API_BASE } from '../config';
 import { browserGoogleLoginUrl, hostFetch } from '../utils/hostFetch';
 
@@ -39,6 +51,15 @@ type OrgMe = {
 
 const SUGGESTED_AMOUNTS_USD = [10, 25, 50, 100];
 
+type BillingSetup = {
+  stripeSecretConfigured: boolean;
+  stripeWebhookConfigured: boolean;
+  stripeKeyMode: string | null;
+  publicAppUrl: string;
+  webhookUrl: string;
+  ready: boolean;
+};
+
 const OrgPortalPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<OrgMe | null>(null);
@@ -50,8 +71,20 @@ const OrgPortalPage: React.FC = () => {
   const [customAmount, setCustomAmount] = useState('25');
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
+  const [billingSetup, setBillingSetup] = useState<BillingSetup | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const billingNotice = searchParams.get('billing');
+
+  const copyText = async (label: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(label);
+      window.setTimeout(() => setCopiedField(null), 2000);
+    } catch {
+      alert('Copy failed — select the text and copy manually.');
+    }
+  };
 
   const refresh = useCallback(async () => {
     setLoadError(null);
@@ -82,6 +115,26 @@ const OrgPortalPage: React.FC = () => {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!data?.billing?.stripeConfigured && data?.role === 'owner') {
+      let cancelled = false;
+      (async () => {
+        try {
+          const res = await hostFetch(`${API_BASE || ''}/api/org/billing/setup`);
+          if (!res.ok || cancelled) return;
+          const j = (await res.json()) as { setup?: BillingSetup };
+          if (!cancelled && j.setup) setBillingSetup(j.setup);
+        } catch {
+          /* ignore */
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+    setBillingSetup(null);
+  }, [data?.billing?.stripeConfigured, data?.role]);
 
   useEffect(() => {
     if (billingNotice === 'success') {
@@ -321,7 +374,70 @@ const OrgPortalPage: React.FC = () => {
                 </h2>
                 <p>Covers all hosts in this organization. Stripe processes payment securely.</p>
                 {!data?.billing?.stripeConfigured ? (
-                  <p className="org-portal__muted">Payments are not configured on this server yet (STRIPE_SECRET_KEY).</p>
+                  <div className="org-portal__stripe-setup">
+                    <p>
+                      <strong>Server setup required.</strong> Add Stripe env vars on Railway (or your host), then redeploy.
+                      Full guide:{' '}
+                      <a
+                        href="https://github.com/Liquidkourage/Game-of-Tones/blob/main/STRIPE_SETUP.md"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        STRIPE_SETUP.md <ExternalLink size={14} aria-hidden style={{ verticalAlign: 'middle' }} />
+                      </a>
+                    </p>
+                    <ol className="org-portal__setup-steps">
+                      <li>
+                        <a href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noreferrer">
+                          Stripe → API keys
+                        </a>{' '}
+                        — set <code>STRIPE_SECRET_KEY</code> (<code>sk_test_…</code> while testing)
+                      </li>
+                      <li>
+                        <a href="https://dashboard.stripe.com/test/webhooks" target="_blank" rel="noreferrer">
+                          Stripe → Webhooks
+                        </a>{' '}
+                        — endpoint below, event <code>checkout.session.completed</code> → set{' '}
+                        <code>STRIPE_WEBHOOK_SECRET</code>
+                      </li>
+                      <li>
+                        Set <code>PUBLIC_APP_URL</code> to your app URL (where users open TEMPO)
+                      </li>
+                    </ol>
+                    {billingSetup ? (
+                      <div className="org-portal__setup-vars">
+                        <div className="org-portal__setup-row">
+                          <span className="org-portal__setup-label">Webhook URL</span>
+                          <code className="org-portal__setup-value">{billingSetup.webhookUrl}</code>
+                          <button
+                            type="button"
+                            className="btn-secondary org-portal__copy-btn"
+                            onClick={() => void copyText('webhook', billingSetup.webhookUrl)}
+                          >
+                            {copiedField === 'webhook' ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
+                            Copy
+                          </button>
+                        </div>
+                        <div className="org-portal__setup-row">
+                          <span className="org-portal__setup-label">PUBLIC_APP_URL</span>
+                          <code className="org-portal__setup-value">{billingSetup.publicAppUrl}</code>
+                          <button
+                            type="button"
+                            className="btn-secondary org-portal__copy-btn"
+                            onClick={() => void copyText('app', billingSetup.publicAppUrl)}
+                          >
+                            {copiedField === 'app' ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
+                            Copy
+                          </button>
+                        </div>
+                        <p className="org-portal__muted org-portal__setup-status">
+                          Secret key: {billingSetup.stripeSecretConfigured ? 'set' : 'missing'} · Webhook secret:{' '}
+                          {billingSetup.stripeWebhookConfigured ? 'set' : 'missing'}
+                          {billingSetup.stripeKeyMode ? ` · Mode: ${billingSetup.stripeKeyMode}` : ''}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
                 ) : (
                   <>
                     <div className="org-portal__amounts">

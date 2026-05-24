@@ -16,6 +16,17 @@ function isStripeConfigured() {
   return !!(process.env.STRIPE_SECRET_KEY || '').trim();
 }
 
+function isWebhookSecretConfigured() {
+  return !!(process.env.STRIPE_WEBHOOK_SECRET || '').trim();
+}
+
+function stripeKeyMode() {
+  const key = (process.env.STRIPE_SECRET_KEY || '').trim();
+  if (key.startsWith('sk_live_')) return 'live';
+  if (key.startsWith('sk_test_')) return 'test';
+  return key ? 'unknown' : null;
+}
+
 function getStripe() {
   const key = (process.env.STRIPE_SECRET_KEY || '').trim();
   if (!key) throw new Error('STRIPE_SECRET_KEY is not configured');
@@ -23,9 +34,48 @@ function getStripe() {
 }
 
 function publicAppOrigin() {
-  const raw = (process.env.PUBLIC_APP_URL || process.env.CLIENT_URL || '').trim();
+  const raw = (
+    process.env.PUBLIC_APP_URL ||
+    process.env.CLIENT_APP_URL ||
+    process.env.CLIENT_URL ||
+    ''
+  ).trim();
   if (raw) return raw.replace(/\/$/, '');
   return 'http://localhost:3000';
+}
+
+/** Base URL for Stripe webhooks (API host). Defaults to PUBLIC_APP_URL on single-service deploys. */
+function webhookBaseOrigin() {
+  const raw = (process.env.STRIPE_WEBHOOK_BASE_URL || process.env.API_PUBLIC_URL || '').trim();
+  if (raw) return raw.replace(/\/$/, '');
+  return publicAppOrigin();
+}
+
+function stripeWebhookUrl() {
+  return `${webhookBaseOrigin()}/api/webhooks/stripe`;
+}
+
+function billingSetupStatus(req) {
+  return {
+    stripeSecretConfigured: isStripeConfigured(),
+    stripeWebhookConfigured: isWebhookSecretConfigured(),
+    stripeKeyMode: stripeKeyMode(),
+    publicAppUrl: publicAppOrigin(),
+    webhookUrl: req ? stripeWebhookUrlFromRequest(req) : stripeWebhookUrl(),
+    webhookUrlEnv: stripeWebhookUrl(),
+    gateEnabled: isBillingGateEnabled(),
+    ready: isStripeConfigured() && isWebhookSecretConfigured(),
+  };
+}
+
+function stripeWebhookUrlFromRequest(req) {
+  if (!req || !req.get) return stripeWebhookUrl();
+  const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https')
+    .split(',')[0]
+    .trim();
+  const host = String(req.headers['x-forwarded-host'] || req.get('host') || '').split(',')[0].trim();
+  if (!host) return stripeWebhookUrl();
+  return `${proto}://${host}/api/webhooks/stripe`;
 }
 
 async function ensureBillingTables(db) {
@@ -220,6 +270,7 @@ module.exports = {
   MAX_AMOUNT_CENTS,
   isBillingGateEnabled,
   isStripeConfigured,
+  isWebhookSecretConfigured,
   isOrgBillingActive,
   billingSummaryFromOrg,
   ensureBillingTables,
@@ -227,4 +278,6 @@ module.exports = {
   listOrgPayments,
   handleStripeWebhook,
   publicAppOrigin,
+  stripeWebhookUrl,
+  billingSetupStatus,
 };

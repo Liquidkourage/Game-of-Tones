@@ -14,6 +14,8 @@ Hosts belong to an **organization**. The **owner** creates the org, invites othe
 
 Invited hosts sign in with the **same Google email** they were invited with.
 
+**Step-by-step Stripe Dashboard + Railway setup:** see [`STRIPE_SETUP.md`](STRIPE_SETUP.md).
+
 ## Environment variables
 
 | Variable | Purpose |

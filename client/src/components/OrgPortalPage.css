@@ -206,3 +206,73 @@
 .org-portal__cta {
   margin-top: 12px;
 }
+
+.org-portal__stripe-setup {
+  margin-top: 8px;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 200, 80, 0.35);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.org-portal__stripe-setup a {
+  color: #7dffc8;
+}
+
+.org-portal__setup-steps {
+  margin: 12px 0;
+  padding-left: 1.25rem;
+}
+
+.org-portal__setup-steps code {
+  font-size: 0.85em;
+  color: #c8ffe8;
+}
+
+.org-portal__setup-vars {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.org-portal__setup-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.org-portal__setup-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.55);
+  min-width: 120px;
+}
+
+.org-portal__setup-value {
+  flex: 1;
+  min-width: 160px;
+  font-size: 0.78rem;
+  word-break: break-all;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.org-portal__copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  padding: 6px 10px;
+}
+
+.org-portal__setup-status {
+  margin: 4px 0 0 !important;
+}

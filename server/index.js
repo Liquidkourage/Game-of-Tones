@@ -9905,6 +9905,21 @@ app.delete('/api/org/invites', async (req, res) => {
   }
 });
 
+app.get('/api/org/billing/setup', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    if (!ctx.organization || ctx.role !== 'owner') {
+      return res.status(403).json({ error: 'forbidden', message: 'Only the organization owner can view billing setup.' });
+    }
+    return res.json({ ok: true, setup: billingStore.billingSetupStatus(req) });
+  } catch (e) {
+    console.error('GET /api/org/billing/setup:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
 app.post('/api/org/claim-ownership', async (req, res) => {
   try {
     const uid = await requireApprovedHostUid(req, res);

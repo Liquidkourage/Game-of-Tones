@@ -15,6 +15,15 @@ Optional (if splitting services):
 - REACT_APP_API_BASE: https://YOUR-API-DOMAIN
 - REACT_APP_SOCKET_URL: https://YOUR-API-DOMAIN
 
+Organization billing (Stripe pay-as-you-like, optional until you gate hosting):
+- STRIPE_SECRET_KEY: sk_test_… or sk_live_… from Stripe Dashboard → API keys
+- STRIPE_WEBHOOK_SECRET: whsec_… from Stripe → Webhooks → your endpoint signing secret
+- PUBLIC_APP_URL: https://YOUR-CLIENT-DOMAIN (checkout return URLs; same as app origin if single-service)
+- STRIPE_WEBHOOK_BASE_URL: only if API host differs from PUBLIC_APP_URL (webhook hits this origin)
+- TEMPO_REQUIRE_ORG_BILLING: 0 (default) or 1 to require payment before hosting
+
+See STRIPE_SETUP.md for webhook URL and test card details.
+
 3) Choose a deployment model
 
 Single service (recommended):
