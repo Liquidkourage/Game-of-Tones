@@ -712,6 +712,14 @@ const HostView: React.FC = () => {
   const [pendingVerification, setPendingVerification] = useState<any>(null);
   /** Additional bingo claims waiting after the current verification modal (FIFO). */
   const [bingoVerificationBehindCount, setBingoVerificationBehindCount] = useState(0);
+  const [displayPresence, setDisplayPresence] = useState<{
+    connected: boolean;
+    lastSeenAt: number | null;
+    stale: boolean;
+  }>({ connected: false, lastSeenAt: null, stale: false });
+  const [displayStatusTick, setDisplayStatusTick] = useState(0);
+  const [markPlayedBusy, setMarkPlayedBusy] = useState(false);
+  const bingoVerificationModalRef = useRef<HTMLDivElement | null>(null);
   const [gamePaused, setGamePaused] = useState(false);
   const [mixFinalized, setMixFinalized] = useState(false);
   /** Printable PDF export (physical daubers) — count capped server-side at 200. */
@@ -2404,6 +2412,53 @@ const HostView: React.FC = () => {
       const n = Math.max(0, Number(data?.waitingAhead) || 0);
       setBingoVerificationBehindCount(n);
       addLog(`${data?.playerName || 'Player'} bingo queued — ${n} waiting behind current verification`, 'warn');
+    });
+
+    newSocket.on('display-presence', (data: any) => {
+      setDisplayPresence({
+        connected: !!data?.connected,
+        lastSeenAt: typeof data?.lastSeenAt === 'number' ? data.lastSeenAt : null,
+        stale: !!data?.stale,
+      });
+    });
+
+    newSocket.on('replay-snippet-result', (data: any) => {
+      if (data?.ok) {
+        addLog('Replayed current snippet', 'info');
+        showToast('Replayed clip', 'info');
+      } else {
+        showToast('Could not replay clip', 'error');
+      }
+    });
+
+    newSocket.on('mark-song-played-result', (data: any) => {
+      setMarkPlayedBusy(false);
+      if (!data?.ok) {
+        showToast('Could not mark track as played', 'error');
+        return;
+      }
+      const songId = data.songId as string | undefined;
+      if (songId) {
+        const title = getDisplaySongTitle(songId, data.songName || '');
+        const artist = getDisplaySongArtist(songId, data.artistName || '');
+        setPlayedInOrder((prev) => {
+          if (prev.some((p) => p.id === songId)) return prev;
+          return [...prev, { id: songId, name: title, artist }];
+        });
+      }
+      addLog(data.added ? 'Marked current track as played' : 'Track was already marked played', 'info');
+      showToast(data.added ? 'Marked as played' : 'Already marked played', 'info');
+    });
+
+    newSocket.on('song-marked-played', (data: any) => {
+      const songId = data?.songId as string | undefined;
+      if (!songId) return;
+      const title = getDisplaySongTitle(songId, data.songName || '');
+      const artist = getDisplaySongArtist(songId, data.artistName || '');
+      setPlayedInOrder((prev) => {
+        if (prev.some((p) => p.id === songId)) return prev;
+        return [...prev, { id: songId, name: title, artist }];
+      });
     });
 
     newSocket.on('bingo-verified', (data: any) => {
@@ -5343,6 +5398,30 @@ const HostView: React.FC = () => {
       console.error('Error skipping song:', error);
     }
   };
+
+  const replayCurrentClip = useCallback(() => {
+    if (!socket || !roomId) return;
+    socket.emit('replay-current-snippet', { roomId });
+  }, [socket, roomId]);
+
+  const markCurrentSongPlayed = useCallback(() => {
+    if (!socket || !roomId || !currentSong?.id) return;
+    setMarkPlayedBusy(true);
+    socket.emit('mark-current-song-played', { roomId });
+  }, [socket, roomId, currentSong?.id]);
+
+  const openBingoVerification = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    bingoVerificationModalRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    playHostAlertSound();
+  }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => setDisplayStatusTick((t) => t + 1), 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  const bingoVerificationCount = pendingVerification ? 1 + bingoVerificationBehindCount : 0;
 
 
   // Host alert sound for bingo calls
@@ -8563,6 +8642,13 @@ const HostView: React.FC = () => {
                   currentSong={currentSong}
                   gamePaused={gamePaused}
                   pendingVerification={pendingVerification}
+                  bingoVerificationCount={bingoVerificationCount}
+                  onOpenBingoVerification={openBingoVerification}
+                  displayPresence={displayPresence}
+                  displayStatusTick={displayStatusTick}
+                  onReplayClip={replayCurrentClip}
+                  onMarkPlayed={markCurrentSongPlayed}
+                  markPlayedBusy={markPlayedBusy}
                   isPlaying={isPlaying}
                   isMuted={isMuted}
                   playbackState={playbackState}
@@ -8646,17 +8732,6 @@ const HostView: React.FC = () => {
                       <RotateCcw className="w-4 h-4" aria-hidden />
                       Reset display letters
                     </button>
-                    {playerCards.size > 0 && !playerCardsFullscreen ? (
-                      <button
-                        type="button"
-                        className="btn-secondary btn-host-emphasis"
-                        onClick={openPlayerCardsModal}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-                      >
-                        <Users className="w-4 h-4" aria-hidden />
-                        View player cards
-                      </button>
-                    ) : null}
                   </section>
                 ) : null}
 
@@ -8681,50 +8756,6 @@ const HostView: React.FC = () => {
                   </div>
                 )}
 
-                {playerCards.size > 0 && !playerCardsFullscreen && (
-                  <motion.div
-                    key={`player-cards-${playerCardsVersion}`}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="player-cards-section host-glass-panel"
-                    style={{ padding: '12px 16px' }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ color: '#00ffa3', fontSize: '1rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Users className="w-5 h-5" aria-hidden />
-                          Player cards
-                        </div>
-                        <div style={{ color: '#8a9ba8', fontSize: '0.8rem', marginTop: 4 }}>
-                          {playerCards.size} player{playerCards.size !== 1 ? 's' : ''}
-                          {(() => {
-                            const onlineN = Array.from(playerCards.entries()).filter(
-                              ([id, d]) =>
-                                d.inPerson === false || joinedPlayersRoster.get(id)?.inPerson === false,
-                            ).length;
-                            return onlineN > 0 ? (
-                              <>
-                                {' '}
-                                · <strong style={{ color: '#7ec8ff' }}>{onlineN} online</strong>
-                              </>
-                            ) : null;
-                          })()}
-                          {' · Pattern: '}
-                          <strong style={{ color: '#c5d4e0' }}>{getPatternDisplayName(pattern)}</strong>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        <button type="button" className="btn-secondary btn-host-emphasis" onClick={openPlayerCardsModal}>
-                          View cards
-                        </button>
-                        <button type="button" className="btn-secondary" onClick={openPlayerCardsFullscreen}>
-                          <Maximize2 className="w-4 h-4" aria-hidden />
-                          Full screen
-                        </button>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
               </>
             )}
 
@@ -9438,6 +9469,8 @@ const HostView: React.FC = () => {
           }}
         >
           <div
+            ref={bingoVerificationModalRef}
+            id="host-bingo-verification-modal"
             style={{
               background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
               border: '2px solid #00ff88',

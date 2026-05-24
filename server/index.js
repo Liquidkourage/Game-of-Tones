@@ -530,6 +530,87 @@ function isDisplayConnectionPlayer(player) {
   return typeof player?.name === 'string' && /display/i.test(player.name);
 }
 
+const DISPLAY_PRESENCE_STALE_MS = 25000;
+
+function buildDisplayPresencePayload(room) {
+  const p = room?.displayPresence;
+  const lastSeenAt = typeof p?.lastSeenAt === 'number' ? p.lastSeenAt : null;
+  const connected = !!(p?.connected && p?.socketId);
+  const ageMs = lastSeenAt != null ? Date.now() - lastSeenAt : null;
+  return {
+    connected,
+    lastSeenAt,
+    ageMs,
+    stale: connected && ageMs != null && ageMs > DISPLAY_PRESENCE_STALE_MS,
+  };
+}
+
+function touchDisplayPresence(room, socketId) {
+  if (!room.displayPresence) {
+    room.displayPresence = { socketId: null, connected: false, lastSeenAt: null };
+  }
+  room.displayPresence.socketId = socketId;
+  room.displayPresence.connected = true;
+  room.displayPresence.lastSeenAt = Date.now();
+}
+
+function clearDisplayPresenceIfSocket(room, socketId) {
+  if (!room?.displayPresence || room.displayPresence.socketId !== socketId) return;
+  room.displayPresence.connected = false;
+  room.displayPresence.socketId = null;
+}
+
+function emitDisplayPresence(roomId, room) {
+  io.to(roomId).emit('display-presence', buildDisplayPresencePayload(room));
+}
+
+/** Re-play the current pool index without advancing (new snippet start). */
+async function replayCurrentSnippet(roomId, deviceId) {
+  const room = rooms.get(roomId);
+  if (!room || room.gameState !== 'playing' || !Array.isArray(room.playlistSongs) || !room.playlistSongs.length) {
+    return { ok: false, error: 'not_playing' };
+  }
+  const idx = typeof room.currentSongIndex === 'number' ? room.currentSongIndex : -1;
+  if (idx < 0 || idx >= room.playlistSongs.length) {
+    return { ok: false, error: 'no_current' };
+  }
+  clearRoomTimer(roomId);
+  clearPlaybackWatcher(roomId);
+  const dev = deviceId || room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id || '';
+  await playSongAtIndex(roomId, dev, idx);
+  return { ok: true, songIndex: idx };
+}
+
+/** Mark current song as called (pool + display) without advancing playback. */
+function markCurrentSongPlayed(roomId) {
+  const room = rooms.get(roomId);
+  if (!room?.currentSong?.id) return { ok: false, error: 'no_current' };
+  room.calledSongIds = Array.isArray(room.calledSongIds) ? room.calledSongIds : [];
+  const songId = room.currentSong.id;
+  const added = !room.calledSongIds.includes(songId);
+  if (added) room.calledSongIds.push(songId);
+  syncRoomStateAfterSongStart(roomId, room);
+  sendPlayerCardUpdates(roomId, true);
+  const songMeta = clientSongMetaFromPlaylistSong(
+    room.playlistSongs?.find((s) => s.id === songId),
+    room.dbOrganizationId ?? null,
+  );
+  io.to(roomId).emit('song-marked-played', {
+    songId,
+    added,
+    calledCount: room.calledSongIds.length,
+    songName: songMeta?.name ?? room.currentSong.name,
+    artistName: songMeta?.artist ?? room.currentSong.artist,
+  });
+  return {
+    ok: true,
+    added,
+    songId,
+    songName: songMeta?.name ?? room.currentSong.name,
+    artistName: songMeta?.artist ?? room.currentSong.artist,
+  };
+}
+
 /** Non-host roster for host UI (in-person vs online/remote join). */
 function buildRoomPlayersRoster(room) {
   if (!room?.players) return [];
@@ -2845,6 +2926,11 @@ io.on('connection', (socket) => {
     
     room.players.set(socket.id, player);
 
+    if (isDisplayConnectionPlayer(player)) {
+      touchDisplayPresence(room, socket.id);
+      emitDisplayPresence(roomId, room);
+    }
+
     ensureRoomOwnerFromHostSocket(room);
     
     if (room.ownerUserId != null && db) {
@@ -2887,6 +2973,10 @@ io.on('connection', (socket) => {
       inPerson
     });
     emitRoomPlayersRosterToHosts(roomId, room);
+
+    if (effectiveIsHost) {
+      socket.emit('display-presence', buildDisplayPresencePayload(room));
+    }
 
     // Emit successful room join confirmation to the joining socket
     socket.emit('room-joined', {
@@ -5103,6 +5193,45 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('replay-current-snippet', async (data) => {
+    const { roomId } = data || {};
+    const room = rooms.get(roomId);
+    if (!room || room.host !== socket.id) return;
+    try {
+      const result = await replayCurrentSnippet(roomId, room.selectedDeviceId);
+      socket.emit('replay-snippet-result', result);
+      if (result.ok) {
+        routineServerLog(`🔁 Host replayed current snippet in room ${roomId} (index ${result.songIndex})`);
+      }
+    } catch (e) {
+      console.error('❌ replay-current-snippet:', e?.message || e);
+      socket.emit('replay-snippet-result', { ok: false, error: 'failed' });
+    }
+  });
+
+  socket.on('mark-current-song-played', (data) => {
+    const { roomId } = data || {};
+    const room = rooms.get(roomId);
+    if (!room || room.host !== socket.id) return;
+    const result = markCurrentSongPlayed(roomId);
+    socket.emit('mark-song-played-result', result);
+    if (result.ok) {
+      routineServerLog(
+        `✓ Host marked current song played in room ${roomId}: ${result.songId}${result.added ? '' : ' (already called)'}`,
+      );
+    }
+  });
+
+  socket.on('display-heartbeat', (data) => {
+    const { roomId } = data || {};
+    const room = rooms.get(roomId);
+    if (!room || !room.players.has(socket.id)) return;
+    const player = room.players.get(socket.id);
+    if (!isDisplayConnectionPlayer(player)) return;
+    touchDisplayPresence(room, socket.id);
+    emitDisplayPresence(roomId, room);
+  });
+
   socket.on('pause-song', async (data) => {
     const { roomId } = data;
     const room = rooms.get(roomId);
@@ -5695,6 +5824,11 @@ io.on('connection', (socket) => {
         room.players.delete(socket.id);
         
         routineServerLog(`Player ${player.name} left room ${roomId}`);
+
+        if (isDisplayConnectionPlayer(player)) {
+          clearDisplayPresenceIfSocket(room, socket.id);
+          if (rooms.has(roomId)) emitDisplayPresence(roomId, room);
+        }
         
         // If the host disconnected, promote another HOST-role socket only — never the TV Display client.
         if (room.host === socket.id) {

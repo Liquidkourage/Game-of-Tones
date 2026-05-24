@@ -2618,6 +2618,17 @@ const PublicDisplay: React.FC = () => {
     return () => clearInterval(syncInterval);
   }, [socket, gameState.isPlaying, roomId]);
 
+  // Host projector health: presence heartbeat while connected
+  useEffect(() => {
+    if (!socket?.connected || !roomId) return;
+    const ping = () => {
+      if (socket.connected) socket.emit('display-heartbeat', { roomId });
+    };
+    ping();
+    const id = setInterval(ping, 12000);
+    return () => clearInterval(id);
+  }, [socket, roomId]);
+
   // Time-based letter reveal at host-configurable interval (weighted by unrevealed frequency across played songs)
   useEffect(() => {
     console.log('🎡 Auto-reveal effect triggered:', {
