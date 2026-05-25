@@ -911,7 +911,7 @@ const PlayerView: React.FC = () => {
       const contentEl = squareEl.querySelector<HTMLElement>('.square-content');
       const titleEl = squareEl.querySelector<HTMLElement>('.player-square-title');
       const artistEl = squareEl.querySelector<HTMLElement>('.player-square-artist');
-      if (!contentEl) return;
+      if (!contentEl || !titleEl || !artistEl) return;
 
       const setScales = (titleScale: number, artistScale: number) => {
         squareEl.style.setProperty('--player-cell-title-scale', titleScale.toFixed(4));
@@ -922,119 +922,23 @@ const PlayerView: React.FC = () => {
         setScales(titleScale, artistScale);
         return (
           contentEl.scrollHeight <= contentEl.clientHeight + 1 &&
-          contentEl.scrollWidth <= contentEl.clientWidth + 1
+          titleEl.scrollWidth <= titleEl.clientWidth + 1 &&
+          artistEl.scrollWidth <= artistEl.clientWidth + 1
         );
       };
 
-      const deriveArtistScale = (titleScale: number) => Math.min(1.08, Math.max(0.5, titleScale * 0.7));
-      const getLineCount = (el: HTMLElement | null) => {
-        if (!el) return 1;
-        const computed = window.getComputedStyle(el);
-        const lineHeight = Number.parseFloat(computed.lineHeight || '0');
-        if (!Number.isFinite(lineHeight) || lineHeight <= 0) return 1;
-        return Math.max(1, Math.round(el.getBoundingClientRect().height / lineHeight));
-      };
-      const getRenderedLines = (el: HTMLElement | null) => {
-        if (!el) return [] as Array<{ text: string; startsMidWord: boolean; endsMidWord: boolean }>;
-        const text = el.textContent || '';
-        const textNode = Array.from(el.childNodes).find(
-          (node): node is Text => node.nodeType === Node.TEXT_NODE && (node.textContent || '').length > 0,
-        );
-        if (!textNode || text.length <= 1) {
-          const normalized = text.trim();
-          return normalized ? [{ text: normalized, startsMidWord: false, endsMidWord: false }] : [];
-        }
+      const deriveArtistScale = (titleScale: number) => Math.min(1.02, Math.max(0.34, titleScale * 0.68));
 
-        const range = document.createRange();
-        const lines: Array<{ top: number; text: string; firstIndex: number; lastIndex: number }> = [];
-        for (let i = 0; i < text.length; i += 1) {
-          range.setStart(textNode, i);
-          range.setEnd(textNode, i + 1);
-          const rect = range.getBoundingClientRect();
-          if (rect.width === 0 && rect.height === 0) continue;
-          const lastLine = lines[lines.length - 1];
-          if (lastLine && Math.abs(lastLine.top - rect.top) <= 1.5) {
-            lastLine.text += text[i];
-            lastLine.lastIndex = i;
-          } else {
-            lines.push({ top: rect.top, text: text[i], firstIndex: i, lastIndex: i });
-          }
-        }
-        range.detach?.();
-
-        return lines
-          .map((line) => {
-            const normalizedText = line.text.replace(/\s+/g, ' ').trim();
-            if (!normalizedText) return null;
-            const startsMidWord =
-              line.firstIndex > 0 && /\S/.test(text[line.firstIndex]) && /\S/.test(text[line.firstIndex - 1]);
-            const endsMidWord =
-              line.lastIndex < text.length - 1 &&
-              /\S/.test(text[line.lastIndex]) &&
-              /\S/.test(text[line.lastIndex + 1]);
-            return {
-              text: normalizedText,
-              startsMidWord,
-              endsMidWord,
-            };
-          })
-          .filter((line): line is { text: string; startsMidWord: boolean; endsMidWord: boolean } => !!line);
-      };
-      const getWrapPenalty = (el: HTMLElement | null) => {
-        const lines = getRenderedLines(el);
-        if (lines.length <= 1) return 0;
-        let penalty = 0;
-        lines.forEach((line, idx) => {
-          if (line.startsMidWord || line.endsMidWord) penalty += 6;
-          if (idx === lines.length - 1) {
-            const compact = line.text.replace(/\s+/g, '');
-            if (compact.length <= 1) penalty += 8;
-            else if (compact.length <= 3) penalty += 5;
-            else if (compact.length <= 5) penalty += 2;
-          }
-        });
-        return penalty;
-      };
-      const relaxWrapIfWorthIt = (titleScale: number, artistScale: number) => {
-        let bestTitle = titleScale;
-        let bestArtist = artistScale;
-        let titleLines = getLineCount(titleEl);
-        let artistLines = getLineCount(artistEl);
-        let wrapPenalty = getWrapPenalty(titleEl) * 1.4 + getWrapPenalty(artistEl) * 0.5;
-
-        for (let i = 0; i < 8; i += 1) {
-          const nextTitle = bestTitle * 0.95;
-          const nextArtist = Math.max(0.46, bestArtist * 0.965);
-          if (!fitsAtScales(nextTitle, nextArtist)) break;
-          const nextTitleLines = getLineCount(titleEl);
-          const nextArtistLines = getLineCount(artistEl);
-          const nextWrapPenalty = getWrapPenalty(titleEl) * 1.4 + getWrapPenalty(artistEl) * 0.5;
-          const reducedWrap =
-            nextWrapPenalty < wrapPenalty ||
-            nextTitleLines < titleLines ||
-            (nextTitleLines === titleLines && nextArtistLines < artistLines);
-          if (!reducedWrap) continue;
-          bestTitle = nextTitle;
-          bestArtist = nextArtist;
-          titleLines = nextTitleLines;
-          artistLines = nextArtistLines;
-          wrapPenalty = nextWrapPenalty;
-          if (wrapPenalty <= 0 && titleLines <= 2 && artistLines <= 2) break;
-        }
-
-        setScales(bestTitle, bestArtist);
-      };
-
-      let titleLow = 0.48;
+      let titleLow = 0.28;
       let titleHigh = 1.95;
 
       if (!fitsAtScales(titleLow, deriveArtistScale(titleLow))) {
-        setScales(titleLow, 0.48);
+        setScales(titleLow, 0.34);
         return;
       }
 
       fitsAtScales(titleHigh, deriveArtistScale(titleHigh));
-      for (let i = 0; i < 9; i += 1) {
+      for (let i = 0; i < 10; i += 1) {
         const mid = (titleLow + titleHigh) / 2;
         if (fitsAtScales(mid, deriveArtistScale(mid))) {
           titleLow = mid;
@@ -1048,13 +952,13 @@ const PlayerView: React.FC = () => {
       let artistHigh = Math.min(1.18, bestTitleScale * 0.84);
 
       if (!fitsAtScales(bestTitleScale, artistLow)) {
-        artistLow = Math.max(0.48, artistLow * 0.92);
+        artistLow = Math.max(0.34, artistLow * 0.9);
         setScales(bestTitleScale, artistLow);
         return;
       }
 
       fitsAtScales(bestTitleScale, artistHigh);
-      for (let i = 0; i < 7; i += 1) {
+      for (let i = 0; i < 8; i += 1) {
         const mid = (artistLow + artistHigh) / 2;
         if (fitsAtScales(bestTitleScale, mid)) {
           artistLow = mid;
@@ -1064,7 +968,6 @@ const PlayerView: React.FC = () => {
       }
 
       setScales(bestTitleScale, artistLow);
-      relaxWrapIfWorthIt(bestTitleScale, artistLow);
     };
 
     const processFitQueue = () => {
