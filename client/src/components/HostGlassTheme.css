@@ -761,11 +761,12 @@
 }
 
 .host-glass-theme .host-r4-track-feed {
+  --host-track-row-height: 54px;
   grid-column: 2;
   grid-row: 2;
   display: flex;
   flex-direction: column;
-  max-height: min(520px, calc(100vh - 280px));
+  max-height: min(680px, calc(100vh - 220px));
   min-height: 0;
 }
 
@@ -773,18 +774,90 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-}
-
-.host-glass-theme .host-r4-track-feed__section--log {
-  flex: 0 1 auto;
+  flex: 1 1 0;
 }
 
 .host-glass-theme .host-r4-track-feed__section--log .host-call-log__title {
   margin-bottom: 6px;
 }
 
-.host-glass-theme .host-r4-track-feed__section--queue {
-  flex: 1 1 auto;
+.host-glass-theme .host-r4-track-feed__section--queue .host-r4-card__head {
+  margin-bottom: 6px;
+}
+
+.host-glass-theme .host-r4-track-feed__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 0 0 auto;
+  max-height: calc(var(--host-track-row-height) * 5);
+  min-height: 0;
+}
+
+.host-glass-theme .host-r4-track-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: var(--host-track-row-height);
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  box-sizing: border-box;
+}
+
+.host-glass-theme .host-r4-track-row:last-child {
+  border-bottom: none;
+}
+
+.host-glass-theme .host-r4-track-row__badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(109, 40, 217, 0.5), rgba(0, 255, 136, 0.2));
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(109, 40, 217, 0.2);
+  font-size: 0.82rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
+}
+
+.host-glass-theme .host-r4-track-row__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.host-glass-theme .host-r4-track-row__title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.host-glass-theme .host-r4-track-row__artist {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.5);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.host-glass-theme .host-r4-track-feed__empty {
+  margin: 0 0 4px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.52);
 }
 
 .host-glass-theme .host-r4-track-feed__divider {
@@ -798,16 +871,6 @@
     rgba(0, 255, 136, 0.35) 80%,
     transparent 100%
   );
-}
-
-.host-glass-theme .host-r4-track-feed .host-call-log__list {
-  max-height: 168px;
-}
-
-.host-glass-theme .host-r4-track-feed .host-call-log__empty {
-  margin: 0 0 4px;
-  font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.52);
 }
 
 .host-glass-theme .host-r4-track-feed .host-call-log__undo {

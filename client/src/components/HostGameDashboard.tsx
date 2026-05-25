@@ -143,6 +143,28 @@ function ProgressRing({
   );
 }
 
+function TrackFeedRow({
+  callNumber,
+  title,
+  artist,
+}: {
+  callNumber: number;
+  title: string;
+  artist: string;
+}) {
+  return (
+    <li className="host-r4-track-row">
+      <span className="host-r4-track-row__badge" aria-label={`Call ${callNumber}`}>
+        {callNumber}
+      </span>
+      <div className="host-r4-track-row__text">
+        <span className="host-r4-track-row__title">{title}</span>
+        {artist ? <span className="host-r4-track-row__artist">{artist}</span> : null}
+      </div>
+    </li>
+  );
+}
+
 const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
   const {
     gameState,
@@ -219,7 +241,10 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
     if (!poolSongs.length) return [];
     const idx = currentSong ? poolSongs.findIndex((s) => s.id === currentSong.id) : -1;
     const start = idx >= 0 ? idx + 1 : 0;
-    return poolSongs.slice(start, start + 6);
+    return poolSongs.slice(start, start + 6).map((song, i) => ({
+      song,
+      callNumber: start + i + 1,
+    }));
   }, [poolSongs, currentSong]);
 
   const progressPct =
@@ -567,15 +592,16 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
             Call log
           </h2>
           {callLog.length === 0 ? (
-            <p className="host-call-log__empty">No songs called yet this round.</p>
+            <p className="host-r4-track-feed__empty">No songs called yet this round.</p>
           ) : (
-            <ol className="host-call-log__list" reversed>
+            <ol className="host-r4-track-feed__list" reversed>
               {callLog.map((row) => (
-                <li key={`${row.id}-${row.index}`} className="host-call-log__row">
-                  <span className="host-call-log__num">#{row.index}</span>
-                  <span className="host-call-log__title">{row.name}</span>
-                  {row.artist ? <span className="host-call-log__artist"> — {row.artist}</span> : null}
-                </li>
+                <TrackFeedRow
+                  key={`${row.id}-${row.index}`}
+                  callNumber={row.index}
+                  title={row.name}
+                  artist={row.artist}
+                />
               ))}
             </ol>
           )}
@@ -599,25 +625,18 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
             ) : null}
           </div>
           {upNext.length > 0 ? (
-            <ul className="host-r4-queue-list">
-              {upNext.map((song) => (
-                <li key={song.id} className="host-r4-queue-item">
-                  <span className="host-r4-queue-thumb" aria-hidden>
-                    <Music />
-                  </span>
-                  <div className="host-r4-queue-text">
-                    <span className="host-r4-queue-title">
-                      {getDisplaySongTitle(song.id, song.name || '')}
-                    </span>
-                    <span className="host-r4-queue-artist">
-                      {getDisplaySongArtist(song.id, song.artist || '')}
-                    </span>
-                  </div>
-                </li>
+            <ul className="host-r4-track-feed__list">
+              {upNext.map(({ song, callNumber }) => (
+                <TrackFeedRow
+                  key={song.id}
+                  callNumber={callNumber}
+                  title={getDisplaySongTitle(song.id, song.name || '')}
+                  artist={getDisplaySongArtist(song.id, song.artist || '')}
+                />
               ))}
             </ul>
           ) : (
-            <p className="host-r4-empty">Build the pool from your round playlists to see upcoming tracks.</p>
+            <p className="host-r4-track-feed__empty">Build the pool from your round playlists to see upcoming tracks.</p>
           )}
         </div>
       </section>
