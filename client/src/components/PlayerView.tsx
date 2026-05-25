@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useParams, useSearchParams } from 'react-router-dom';
 import io from 'socket.io-client';
@@ -885,6 +885,20 @@ const PlayerView: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [optionsOpen]);
 
+  const cardTextFitSignature = useMemo(() => {
+    if (!bingoCard) return '';
+    const eventTitle = venueBranding?.eventTitle?.trim() || 'Free space';
+    return bingoCard.squares
+      .map((square) => {
+        const free = square.isFreeSpace || square.songId === '__FREE_SPACE__';
+        const vis = youtubeBingoSquareDisplay(square);
+        const title = free ? 'FREE' : vis.title;
+        const artist = free ? eventTitle : vis.artist;
+        return `${square.position}:${title}|${artist}`;
+      })
+      .join('\n');
+  }, [bingoCard?.squares, venueBranding?.eventTitle]);
+
   useLayoutEffect(() => {
     if (!bingoCard || !cardGridRef.current) return undefined;
 
@@ -1000,9 +1014,6 @@ const PlayerView: React.FC = () => {
       queueFit();
     });
     resizeObserver.observe(gridEl);
-    Array.from(gridEl.querySelectorAll<HTMLElement>('.bingo-square')).forEach((squareEl) => {
-      resizeObserver.observe(squareEl);
-    });
 
     const fontsReady = (document as Document & { fonts?: FontFaceSet }).fonts?.ready;
     fontsReady?.then(() => queueFit()).catch(() => {});
@@ -1011,7 +1022,7 @@ const PlayerView: React.FC = () => {
       cancelAnimationFrame(frame);
       resizeObserver.disconnect();
     };
-  }, [bingoCard, cardFontPercent, visualViewportHeightPx]);
+  }, [cardTextFitSignature, cardFontPercent, visualViewportHeightPx]);
 
   const handleResync = () => {
     if (!socket) return;
