@@ -941,17 +941,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       }
     } catch {}
 
-    io.to(roomId).emit('song-playing', {
-      songId: song.id,
-      songName: song.name,
-      ...songAliasDisplayFields(song.id, song.name, song.artist, room.dbOrganizationId ?? null),
-      artistName: song.artist,
-      explicit: song.explicit === true,
-      snippetLength: room.snippetLength,
-      currentIndex: songIndex,
-      totalSongs: room.playlistSongs.length,
-      previewUrl: (room.playlistSongs[songIndex]?.previewUrl) || null
-    });
+    emitSongPlayingToRoom(roomId, room, song, songIndex);
 
     // Send real-time player card updates to host
     sendPlayerCardUpdates(roomId, true); // Immediate update on game start
@@ -1873,6 +1863,22 @@ function emitCurrentSongPlayingToSocket(socket, room) {
   socket.emit('song-playing', buildSongPlayingPayload(room, room.currentSong, idx));
 }
 
+function emitSongPlayingToRoom(roomId, room, song, currentIndex) {
+  if (!roomId || !room || !song?.id) return;
+  const fallbackIndex =
+    typeof room.currentSongIndex === 'number' && room.currentSongIndex >= 0 ? room.currentSongIndex : 0;
+  const idx =
+    typeof currentIndex === 'number' && currentIndex >= 0
+      ? currentIndex
+      : Array.isArray(room.playlistSongs)
+        ? Math.max(
+            0,
+            room.playlistSongs.findIndex((candidate) => candidate?.id === song.id),
+          )
+        : fallbackIndex;
+  io.to(roomId).emit('song-playing', buildSongPlayingPayload(room, song, idx));
+}
+
 function storeLastDisplayWinnerFromBingoCalled(room, payload) {
   if (!payload?.playerName || !payload?.winningCard || !Array.isArray(payload.winningCard.squares)) return;
   room.lastDisplayWinner = {
@@ -2337,17 +2343,7 @@ async function playNextSongSimple(roomId, deviceId) {
     routineServerLog(`✅ Playback started successfully for: ${nextSong.name}`);
 
     // Emit song update
-    io.to(roomId).emit('song-playing', {
-      songId: nextSong.id,
-      songName: nextSong.name,
-      ...songAliasDisplayFields(nextSong.id, nextSong.name, nextSong.artist, room.dbOrganizationId ?? null),
-      artistName: nextSong.artist,
-      explicit: nextSong.explicit === true,
-      snippetLength: room.snippetLength,
-      currentIndex: room.currentSongIndex,
-      totalSongs: room.playlistSongs.length,
-      previewUrl: nextSong.previewUrl || null
-    });
+    emitSongPlayingToRoom(roomId, room, nextSong, room.currentSongIndex);
 
     // CRITICAL: Sync room-state after every song starts to ensure clients stay in sync
     // This makes server the single source of truth for played songs
@@ -5763,21 +5759,27 @@ io.on('connection', (socket) => {
     
     if (room && room.host === socket.id) {
       const fromPool = room.playlistSongs?.find((s) => s.id === songId);
+      const poolIndex = Array.isArray(room.playlistSongs)
+        ? room.playlistSongs.findIndex((s) => s.id === songId)
+        : -1;
       room.currentSong = {
         id: songId,
         name: songName,
         artist: artistName,
         explicit: fromPool?.explicit === true
       };
-      
-      io.to(roomId).emit('song-playing', {
-        songId,
-        songName,
-        ...songAliasDisplayFields(songId, songName, artistName, room.dbOrganizationId ?? null),
-        artistName,
-        explicit: fromPool?.explicit === true,
-        snippetLength: room.snippetLength
-      });
+      if (poolIndex >= 0) {
+        room.currentSongIndex = poolIndex;
+      }
+      room.currentSongStartMs = 0;
+      room.songStartAtMs = Date.now();
+
+      emitSongPlayingToRoom(
+        roomId,
+        room,
+        fromPool || room.currentSong,
+        poolIndex >= 0 ? poolIndex : room.currentSongIndex,
+      );
       
       // Send real-time player card updates to host
       sendPlayerCardUpdates(roomId, true); // Immediate update on game start
@@ -8353,17 +8355,7 @@ async function playNextSong(roomId, deviceId) {
       explicit: nextSong.explicit === true
     };
 
-    io.to(roomId).emit('song-playing', {
-      songId: nextSong.id,
-      songName: nextSong.name,
-      ...songAliasDisplayFields(nextSong.id, nextSong.name, nextSong.artist, room.dbOrganizationId ?? null),
-      artistName: nextSong.artist,
-      explicit: nextSong.explicit === true,
-      snippetLength: room.snippetLength,
-      currentIndex: room.currentSongIndex,
-      totalSongs: room.playlistSongs.length,
-      previewUrl: (room.playlistSongs[room.currentSongIndex]?.previewUrl) || null
-    });
+    emitSongPlayingToRoom(roomId, room, nextSong, room.currentSongIndex);
 
     // Send real-time player card updates to host
     sendPlayerCardUpdates(roomId, true); // Immediate update on game start

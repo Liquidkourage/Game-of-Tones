@@ -6593,6 +6593,7 @@ const HostView: React.FC = () => {
   const audioUrlRef = React.useRef<string | null>(null);
   const lastReconnectAtRef = React.useRef<number>(0);
   const lastResumePingAtRef = React.useRef<number>(0);
+  const lastForegroundResyncAtRef = React.useRef<number>(0);
   const ignorePollingUntilRef = React.useRef<number>(0);
   const lastSongEventAtRef = React.useRef<number>(0);
 
@@ -6605,6 +6606,42 @@ const HostView: React.FC = () => {
       audioRef.current.volume = 1.0;
     }
   }, []);
+
+  useEffect(() => {
+    if (!socket || !roomId) return;
+
+    const resyncFromForeground = () => {
+      if (document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      if (now - lastForegroundResyncAtRef.current < 4000) return;
+      lastForegroundResyncAtRef.current = now;
+      ignorePollingUntilRef.current = now + 8000;
+
+      try {
+        socket.emit('sync-state', { roomId });
+        socket.emit('request-finalized-order', { roomId });
+        socket.emit('request-player-cards', { roomId });
+        if (gameState === 'playing' || currentSong) {
+          socket.emit('resume-song', { roomId });
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        resyncFromForeground();
+      }
+    };
+
+    window.addEventListener('focus', resyncFromForeground);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', resyncFromForeground);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [socket, roomId, gameState, currentSong]);
 
   // When a new song starts via socket, prefetch preview if available
   useEffect(() => {
