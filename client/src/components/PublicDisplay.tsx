@@ -1190,6 +1190,20 @@ const PublicDisplay: React.FC = () => {
   const revealSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const applyingServerRevealRef = useRef(false);
   const migratedLocalRevealRef = useRef(false);
+  /** False until first room-state / display-reveal-state — blocks empty client push from wiping server. */
+  const revealStateHydratedRef = useRef(false);
+
+  const persistRevealStateLocally = () => {
+    try {
+      localStorage.setItem(`display_revealed_letters_${roomId}`, JSON.stringify(revealSequenceRef.current));
+      localStorage.setItem(`display_baselines_${roomId}`, JSON.stringify(songBaselineRef.current));
+    } catch {}
+  };
+
+  useEffect(() => {
+    revealStateHydratedRef.current = false;
+    migratedLocalRevealRef.current = false;
+  }, [roomId]);
 
   /** One-time read: migrate pre-server localStorage into room state on reconnect. */
   const getStoredRevealedLetters = (): string[] => {
@@ -1217,17 +1231,21 @@ const PublicDisplay: React.FC = () => {
   const revealSequenceRef = useRef<string[]>([]);
   const songBaselineRef = useRef<Record<string, number>>({});
 
-  const syncRevealStateToServer = () => {
+  const syncRevealStateToServer = (opts?: { forceClear?: boolean }) => {
     if (!roomId || !socketRef.current || applyingServerRevealRef.current) return;
+    if (!revealStateHydratedRef.current && !opts?.forceClear) return;
     if (revealSyncTimerRef.current) clearTimeout(revealSyncTimerRef.current);
     revealSyncTimerRef.current = setTimeout(() => {
       revealSyncTimerRef.current = null;
       if (!socketRef.current || applyingServerRevealRef.current) return;
+      if (!revealStateHydratedRef.current && !opts?.forceClear) return;
+      persistRevealStateLocally();
       socketRef.current.emit('display-reveal-state-update', {
         roomId,
         revealSequence: revealSequenceRef.current,
         songBaselines: songBaselineRef.current,
         carouselIndex: carouselIndexRef.current,
+        forceClear: opts?.forceClear === true,
       });
     }, 200);
   };
@@ -1507,10 +1525,30 @@ const PublicDisplay: React.FC = () => {
           setCarouselIndex(idx);
           carouselIndexRef.current = idx;
         }
+        persistRevealStateLocally();
         setRevealLayoutNonce((n) => n + 1);
       } finally {
         applyingServerRevealRef.current = false;
       }
+    };
+
+    const hydrateRevealStateFromRoom = (payload: any, reconnecting: boolean) => {
+      const serverReveal = payload?.publicDisplayRevealState;
+      const serverLetterCount = Array.isArray(serverReveal?.revealSequence)
+        ? serverReveal.revealSequence.length
+        : 0;
+
+      if (serverReveal && serverLetterCount > 0) {
+        applyRevealStateFromServer(serverReveal);
+      } else if (serverReveal) {
+        applyRevealStateFromServer(serverReveal);
+      }
+
+      if (revealSequenceRef.current.length === 0 && reconnecting) {
+        maybeMigrateLocalRevealToServer();
+      }
+
+      revealStateHydratedRef.current = true;
     };
 
     const maybeMigrateLocalRevealToServer = () => {
@@ -1522,6 +1560,7 @@ const PublicDisplay: React.FC = () => {
       revealSequenceRef.current = localLetters;
       songBaselineRef.current = localBaselines;
       setRevealLayoutNonce((n) => n + 1);
+      persistRevealStateLocally();
       newSocket.emit('display-reveal-state-update', {
         roomId,
         revealSequence: localLetters,
@@ -1568,6 +1607,8 @@ const PublicDisplay: React.FC = () => {
       setPhasePx(0);
       setFreezeAll(false);
       setRevealLayoutNonce((n) => n + 1);
+      revealStateHydratedRef.current = true;
+      syncRevealStateToServer({ forceClear: true });
     };
 
     // Connection event handlers
@@ -1791,7 +1832,7 @@ const PublicDisplay: React.FC = () => {
             // Validate sync: compare local vs server state
             const serverCount = playedIds.length;
             const localCount = playedOrderRef.current.length;
-            const wasReconnecting = serverCount > 0 && localCount === 0;
+            wasReconnecting = serverCount > 0 && localCount === 0;
             const hadMismatch = serverCount !== localCount || JSON.stringify(playedIds) !== JSON.stringify(playedOrderRef.current);
             
             if (hadMismatch) {
@@ -1835,13 +1876,6 @@ const PublicDisplay: React.FC = () => {
               });
             }
             
-            // Server-authoritative letter reveal (cross-device refresh)
-            if (payload.publicDisplayRevealState) {
-              applyRevealStateFromServer(payload.publicDisplayRevealState);
-            } else if (wasReconnecting) {
-              maybeMigrateLocalRevealToServer();
-            }
-
             if (wasReconnecting || (hadMismatch && serverCount > 0)) {
               console.log('🔄 Reconnection detected - ensuring baselines are correct');
               const currentBaseline = revealSequenceRef.current.length;
@@ -1859,9 +1893,9 @@ const PublicDisplay: React.FC = () => {
             }
           } else if (shouldClearPlayedList) {
             resetPlayedTrackingRefs();
-          } else if (payload.publicDisplayRevealState) {
-            applyRevealStateFromServer(payload.publicDisplayRevealState);
           }
+
+          hydrateRevealStateFromRoom(payload, wasReconnecting);
 
           if (payload.bingoVerificationPending) {
             setIsVerificationPending(true);
@@ -1943,6 +1977,7 @@ const PublicDisplay: React.FC = () => {
     newSocket.on('display-reveal-state', (data: any) => {
       if (data && typeof data === 'object') {
         applyRevealStateFromServer(data);
+        revealStateHydratedRef.current = true;
       }
     });
 
@@ -1983,6 +2018,7 @@ const PublicDisplay: React.FC = () => {
             revealSequence: [],
             songBaselines: {},
             carouselIndex: 0,
+            forceClear: true,
           });
         }
 

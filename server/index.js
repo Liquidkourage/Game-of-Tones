@@ -4767,6 +4767,7 @@ io.on('connection', (socket) => {
       }
       
       emitCurrentSongPlayingToSocket(socket, room);
+      socket.emit('display-reveal-state', publicDisplayRevealStateForClient(room));
       io.to(socket.id).emit('room-state', payload);
       routineServerLog(`✅ SYNC-STATE: Sent comprehensive state (${payload.totalPlayedCount} played songs, ${payload.playerCount} players)`);
     } catch (e) {
@@ -5879,9 +5880,14 @@ io.on('connection', (socket) => {
 
       const state = ensurePublicDisplayRevealState(room);
       if (Array.isArray(revealSequence)) {
-        state.revealSequence = revealSequence
+        const filtered = revealSequence
           .filter((ch) => typeof ch === 'string' && /^[A-Z0-9]$/.test(ch))
           .slice(0, 8000);
+        const existingLen = state.revealSequence.length;
+        // Ignore stale empty push (display refresh before room-state hydrate).
+        if (filtered.length > 0 || existingLen === 0 || data.forceClear === true) {
+          state.revealSequence = filtered;
+        }
       }
       if (songBaselines && typeof songBaselines === 'object') {
         const nextBaselines = {};
