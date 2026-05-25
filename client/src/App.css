@@ -5240,7 +5240,10 @@ button.conn-chip.conn-chip-compact {
 
 .player-container--v2 .bingo-card .bingo-square.marked .player-square-title,
 .player-container--v2 .bingo-card .bingo-square.marked .player-square-artist {
-  color: rgba(247, 255, 251, 0.98);
+  color: rgba(255, 222, 122, 0.98);
+  text-shadow:
+    0 0 10px rgba(255, 196, 66, 0.22),
+    0 1px 0 rgba(74, 46, 0, 0.28);
 }
 
 .player-container--v2 .bingo-card .bingo-square.free-space {
