@@ -1648,10 +1648,36 @@ const PlayerView: React.FC = () => {
         : 'Disconnected right now. Resync will rejoin the room and refresh your card state.';
 
   const renderBingoCard = () => {
+    const headerCells = (['B', 'I', 'N', 'G', 'O'] as const).map((letter, colIdx) => {
+      const raw = bingoColumnPlaylistNames[colIdx] || '';
+      const playlistLabel = stripGotPlaylistPrefix(raw);
+      return (
+        <div
+          key={letter}
+          className={`bingo-column-headers__cell${playlistLabel ? ' bingo-column-headers__cell--named' : ''}`}
+        >
+          <span className="bingo-column-headers__letter">{letter}</span>
+          {playlistLabel ? (
+            <span className="bingo-column-headers__playlist" title={playlistLabel}>
+              {playlistLabel}
+            </span>
+          ) : null}
+        </div>
+      );
+    });
+
     if (!bingoCard) {
       return (
-        <div className="loading-card">
-          <p>Waiting for host to start the game...</p>
+        <div className="bingo-card bingo-card--empty bingo-card--fit-ready" aria-busy="true">
+          <div className="bingo-column-headers" aria-hidden="true">
+            {headerCells}
+          </div>
+          <div className="bingo-card-grid bingo-card-grid--placeholder" aria-hidden="true">
+            {Array.from({ length: 25 }, (_value, index) => (
+              <div key={`placeholder-${index}`} className="bingo-square bingo-square--placeholder" />
+            ))}
+          </div>
+          <div className="bingo-card-empty-note">Waiting for host to start the game...</div>
         </div>
       );
     }
@@ -1662,23 +1688,7 @@ const PlayerView: React.FC = () => {
         aria-busy={!cardTextFitReady}
       >
         <div className="bingo-column-headers" aria-hidden="true">
-          {(['B', 'I', 'N', 'G', 'O'] as const).map((letter, colIdx) => {
-            const raw = bingoColumnPlaylistNames[colIdx] || '';
-            const playlistLabel = stripGotPlaylistPrefix(raw);
-            return (
-              <div
-                key={letter}
-                className={`bingo-column-headers__cell${playlistLabel ? ' bingo-column-headers__cell--named' : ''}`}
-              >
-                <span className="bingo-column-headers__letter">{letter}</span>
-                {playlistLabel ? (
-                  <span className="bingo-column-headers__playlist" title={playlistLabel}>
-                    {playlistLabel}
-                  </span>
-                ) : null}
-              </div>
-            );
-          })}
+          {headerCells}
         </div>
         <div ref={cardGridRef} className="bingo-card-grid">
           {bingoCard.squares.map((square) => (

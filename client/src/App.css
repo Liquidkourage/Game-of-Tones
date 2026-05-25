@@ -5120,14 +5120,23 @@ button.conn-chip.conn-chip-compact {
 }
 
 .player-container--v2 .bingo-card--fit-pending {
+  opacity: 1;
+  transform: none;
+}
+
+.player-container--v2 .bingo-card--fit-pending .square-content,
+.player-container--v2 .bingo-card--fit-pending .bingo-column-headers__playlist {
   opacity: 0;
-  transform: translateY(4px);
-  pointer-events: none;
 }
 
 .player-container--v2 .bingo-card--fit-ready {
   opacity: 1;
   transform: none;
+}
+
+.player-container--v2 .bingo-card--empty {
+  display: flex;
+  flex-direction: column;
 }
 
 .player-container--v2 .bingo-column-headers {
@@ -5173,6 +5182,10 @@ button.conn-chip.conn-chip-compact {
   gap: clamp(4px, 0.9vmin, 6px) !important;
 }
 
+.player-container--v2 .bingo-card-grid--placeholder {
+  flex: 1 1 auto;
+}
+
 .player-container--v2 .bingo-card .bingo-square {
   --player-cell-title-scale: 1;
   --player-cell-artist-scale: 0.72;
@@ -5187,18 +5200,32 @@ button.conn-chip.conn-chip-compact {
   );
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   padding: clamp(6px, 1.2cqi, 10px) !important;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
 }
 
 .player-container--v2 .bingo-card .bingo-square.marked {
   background: linear-gradient(
     155deg,
-    rgba(0, 255, 136, 0.16) 0%,
-    rgba(139, 92, 246, 0.14) 100%
+    rgba(0, 255, 136, 0.3) 0%,
+    rgba(41, 214, 153, 0.26) 42%,
+    rgba(139, 92, 246, 0.22) 100%
   );
-  border-color: rgba(0, 255, 136, 0.42);
+  border-color: rgba(90, 255, 187, 0.88);
   box-shadow:
-    inset 0 0 0 1px rgba(0, 255, 136, 0.14),
-    0 0 14px rgba(0, 255, 136, 0.08);
+    inset 0 0 0 2px rgba(212, 255, 234, 0.16),
+    0 0 0 1px rgba(0, 255, 136, 0.3),
+    0 0 22px rgba(0, 255, 136, 0.24),
+    0 10px 22px rgba(0, 255, 136, 0.12);
+  transform: translateY(-1px) scale(1.02);
+}
+
+.player-container--v2 .bingo-card .bingo-square.marked .player-square-title,
+.player-container--v2 .bingo-card .bingo-square.marked .player-square-artist {
+  color: rgba(247, 255, 251, 0.98);
 }
 
 .player-container--v2 .bingo-card .bingo-square.free-space {
@@ -5215,6 +5242,28 @@ button.conn-chip.conn-chip-compact {
     inset 0 0 0 1px rgba(255, 193, 7, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 193, 7, 0.26);
+}
+
+.player-container--v2 .bingo-card .bingo-square--placeholder {
+  background: linear-gradient(
+    155deg,
+    rgba(255, 255, 255, 0.035) 0%,
+    rgba(139, 92, 246, 0.065) 100%
+  );
+  border-color: rgba(167, 139, 250, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.035),
+    0 0 0 1px rgba(255, 255, 255, 0.015);
+}
+
+.player-container--v2 .bingo-card-empty-note {
+  margin-top: clamp(10px, 1.6vmin, 14px);
+  text-align: center;
+  font-size: clamp(11px, min(2.8vw, 2.2vmin), 13px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: rgba(233, 230, 255, 0.66);
+  text-transform: uppercase;
 }
 
 .player-container--v2 .bingo-card .square-content {
