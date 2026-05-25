@@ -31,6 +31,7 @@ import {
   computeBingoCellTextScale,
   computeCallCardTypography,
   capCallCardTextScaleForRow,
+  unifyCallListTypography,
   maxHeightEm,
   PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX,
   PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT,
@@ -1289,6 +1290,42 @@ const PublicDisplay: React.FC = () => {
     () => (rowHeightPx > 0 ? rowHeightPx : 0),
     [rowHeightPx],
   );
+
+  const isFullTitleRevealMode =
+    titleRevealMode === 'track_start' || titleRevealMode === 'track_end';
+
+  /** One typography profile for clip-start/end so mid-game mode switches don't mix letter-scale cards. */
+  const unifiedFullTitleCallTypography = useMemo((): CallCardTypography | null => {
+    if (!isFullTitleRevealMode || playedOrderForDisplay.length === 0) return null;
+    const typographies = playedOrderForDisplay.map((id) => {
+      const meta = idMetaRef.current[id] || { name: '', artist: '' };
+      return computeCallCardTypography(meta.name, meta.artist, { fullCard: false, masked: false });
+    });
+    const unified = unifyCallListTypography(typographies);
+    let textScale = unified.textScale;
+    if (columnCallListLayout && fiveBy15CardRowPx > 0) {
+      textScale = capCallCardTextScaleForRow(unified, fiveBy15CardRowPx, displayFontScale);
+    }
+    return {
+      ...unified,
+      textScale,
+      plainFullTitle: true,
+      clampContentHeight: true,
+    };
+  }, [
+    isFullTitleRevealMode,
+    playedOrderForDisplay,
+    columnCallListLayout,
+    fiveBy15CardRowPx,
+    displayFontScale,
+    playedOrderRevision,
+    titleRevealMode,
+  ]);
+
+  useEffect(() => {
+    setRevealLayoutNonce((n) => n + 1);
+  }, [titleRevealMode]);
+
   // Toast for revealed letter
   const [revealToast, setRevealToast] = useState<string | null>(null);
   const [customMask, setCustomMask] = useState<Set<string>>(new Set());
@@ -3098,6 +3135,9 @@ const PublicDisplay: React.FC = () => {
     meta: { name: string; artist: string },
     fullCard: boolean,
   ): CallCardTypography => {
+    if (!fullCard && isFullTitleRevealMode && unifiedFullTitleCallTypography) {
+      return unifiedFullTitleCallTypography;
+    }
     const ui = getCallSongRevealUi(songId);
     const masked = ui.kind === 'masked';
     const plainFullTitle = ui.kind === 'plain';
