@@ -1584,6 +1584,7 @@ const PlayerView: React.FC = () => {
       : connectionStatus === 'reconnecting'
         ? `Trying to reconnect${reconnectAttempts > 1 ? ` (${reconnectAttempts})` : ''}. You can resync manually at any time.`
         : 'Disconnected right now. Resync will rejoin the room and refresh your card state.';
+  const allowsGrammarHyphenation = (text: string) => /\b[A-Za-z]{8,}\b/.test(text);
 
   const renderBingoCard = () => {
     if (!bingoCard) {
@@ -1648,11 +1649,21 @@ const PlayerView: React.FC = () => {
               {(() => {
                 const free = square.isFreeSpace || square.songId === '__FREE_SPACE__';
                 const vis = youtubeBingoSquareDisplay(square);
+                const titleText = free ? 'FREE' : vis.title;
+                const artistText = free ? (venueBranding?.eventTitle?.trim() || 'Free space') : vis.artist;
                 return (
                   <div className="square-content">
-                    <div className="player-square-title">{free ? 'FREE' : vis.title}</div>
-                    <div className="player-square-artist">
-                      {free ? (venueBranding?.eventTitle?.trim() || 'Free space') : vis.artist}
+                    <div
+                      className={`player-square-title${allowsGrammarHyphenation(titleText) ? ' player-square-title--hyphenate' : ''}`}
+                      lang="en"
+                    >
+                      {titleText}
+                    </div>
+                    <div
+                      className={`player-square-artist${allowsGrammarHyphenation(artistText) ? ' player-square-artist--hyphenate' : ''}`}
+                      lang="en"
+                    >
+                      {artistText}
                     </div>
                   </div>
                 );

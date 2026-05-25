@@ -5226,6 +5226,10 @@ button.conn-chip.conn-chip-compact {
   hyphens: none;
 }
 
+.player-container--v2 .player-square-title--hyphenate {
+  hyphens: auto;
+}
+
 .player-container--v2 .player-square-artist {
   width: 100%;
   font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.72) * clamp(7px, 2.8cqi, 15px));
@@ -5238,6 +5242,10 @@ button.conn-chip.conn-chip-compact {
   word-break: normal;
   overflow-wrap: normal;
   hyphens: none;
+}
+
+.player-container--v2 .player-square-artist--hyphenate {
+  hyphens: auto;
 }
 
 .player-container--v2 .bingo-card .bingo-square.free-space .square-content {
