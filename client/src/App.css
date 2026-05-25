@@ -519,6 +519,7 @@ body {
 .App .public-display .call-list-content--5x15 .call-item {
   margin-bottom: 0 !important;
   min-height: 0;
+  padding-bottom: clamp(2px, 0.3vmin, 5px) !important;
 }
 
 /* Pattern demo bingo: flush squares (no gutters) */

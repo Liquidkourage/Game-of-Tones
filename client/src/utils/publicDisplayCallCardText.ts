@@ -33,6 +33,8 @@ export type CallCardTypography = {
   letterBoxScale: number;
   /** When true, call-song-info uses a computed max-height (masked tiles only). */
   clampContentHeight: boolean;
+  /** Full title at clip start/end (plain text, not letter boxes). */
+  plainFullTitle?: boolean;
 };
 
 function combinedLength(title: string, artist: string): number {
@@ -126,10 +128,13 @@ export function computeCallCardTypography(
   } else {
     const tLines = estimateMaskedWrapLines(title, PLAIN_CHARS_PER_LINE_TITLE);
     const aLines = hasArtist ? estimateMaskedWrapLines(artist, PLAIN_CHARS_PER_LINE_ARTIST) : 0;
-    titleMaxLines = Math.min(Math.max(tLines, 1), 4);
-    artistMaxLines = hasArtist ? Math.min(Math.max(aLines, 1), 4) : 0;
-    if (tLines + aLines >= 5) textScale = Math.min(textScale, 0.88);
-    else if (tLines + aLines >= 4) textScale = Math.min(textScale, 0.93);
+    titleMaxLines = Math.min(Math.max(tLines, 1), 3);
+    artistMaxLines = hasArtist ? Math.min(Math.max(aLines, 1), 2) : 0;
+    if (tLines + aLines >= 5) textScale = Math.min(textScale, 0.82);
+    else if (tLines + aLines >= 4) textScale = Math.min(textScale, 0.88);
+    else if (tLines + aLines >= 3) textScale = Math.min(textScale, 0.92);
+    if (tLen > 0 && tLen <= 14) textScale = Math.min(textScale, 0.72);
+    else if (tLen > 0 && tLen <= 22) textScale = Math.min(textScale, 0.82);
   }
 
   const dense = textScale < 0.97 || (opts.masked === true && titleMaxLines + artistMaxLines >= 4);
@@ -178,7 +183,7 @@ export function capCallCardTextScaleForRow(
   const rowCap =
     ((textHeightPx - PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX) * 0.96) /
     (atUnitScale * displayFontScale);
-  return Math.min(typo.textScale, Math.max(0.55, rowCap));
+  return Math.min(typo.textScale, Math.max(0.55, Math.min(1, rowCap)));
 }
 
 /** Bingo pattern / winner grid cells (vmin-based sizes get a scale multiplier). */

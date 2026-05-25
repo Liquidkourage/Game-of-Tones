@@ -807,9 +807,6 @@ function poolHasTracks(ids: string[] | null | undefined): ids is string[] {
   return Array.isArray(ids) && ids.length > 0;
 }
 
-/** Trim each 5×15 call row so five cards fit inside the column viewport (avoids bottom clip). */
-const FIVE_BY15_CARD_ROW_TRIM_PX = 2;
-
 type HeaderLockupLayout = { top: number; height: number; left: number; right: number };
 
 /** Place letter-reveal toast beside the centered TEMPO lockup when space allows. */
@@ -1289,10 +1286,7 @@ const PublicDisplay: React.FC = () => {
   const vertViewportRef = useRef<HTMLDivElement | null>(null);
   const [rowHeightPx, setRowHeightPx] = useState<number>(0);
   const fiveBy15CardRowPx = useMemo(
-    () =>
-      rowHeightPx > 0
-        ? Math.max(1, Math.floor(rowHeightPx) - FIVE_BY15_CARD_ROW_TRIM_PX)
-        : 0,
+    () => (rowHeightPx > 0 ? rowHeightPx : 0),
     [rowHeightPx],
   );
   // Toast for revealed letter
@@ -3104,13 +3098,19 @@ const PublicDisplay: React.FC = () => {
     meta: { name: string; artist: string },
     fullCard: boolean,
   ): CallCardTypography => {
-    const masked = getCallSongRevealUi(songId).kind === 'masked';
+    const ui = getCallSongRevealUi(songId);
+    const masked = ui.kind === 'masked';
+    const plainFullTitle = ui.kind === 'plain';
     let typo = computeCallCardTypography(meta.name, meta.artist, { fullCard, masked });
     if (columnCallListLayout && fiveBy15CardRowPx > 0 && !fullCard) {
       typo = {
         ...typo,
+        plainFullTitle,
         textScale: capCallCardTextScaleForRow(typo, fiveBy15CardRowPx, displayFontScale),
+        clampContentHeight: true,
       };
+    } else if (plainFullTitle) {
+      typo = { ...typo, plainFullTitle: true };
     }
     return typo;
   };
@@ -3127,18 +3127,20 @@ const PublicDisplay: React.FC = () => {
         ? PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT
         : PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT;
     let fontSize = Math.round(basePx * displayFontScale * typo.textScale);
-    const maskedLine = !fullCard && typo.clampContentHeight;
-    if (
-      columnCallListLayout &&
-      fiveBy15CardRowPx > 0 &&
-      !fullCard &&
-      maskedLine
-    ) {
+    if (columnCallListLayout && fiveBy15CardRowPx > 0 && !fullCard) {
+      const titleFrac = typo.plainFullTitle ? 0.26 : 0.34;
+      const artistFrac = typo.plainFullTitle ? 0.17 : 0.22;
       const maxPx =
         kind === 'title'
-          ? Math.round(fiveBy15CardRowPx * 0.34)
-          : Math.round(fiveBy15CardRowPx * 0.22);
+          ? Math.round(fiveBy15CardRowPx * titleFrac)
+          : Math.round(fiveBy15CardRowPx * artistFrac);
       if (maxPx > 0) fontSize = Math.min(fontSize, maxPx);
+    } else if (!fullCard && typo.plainFullTitle) {
+      const maxPx =
+        kind === 'title'
+          ? Math.round(24 * displayFontScale)
+          : Math.round(17 * displayFontScale);
+      fontSize = Math.min(fontSize, maxPx);
     }
     /** Pull title cap-height up so it lines with the top edge of the call # badge (line-height half-leading). */
     const titleTopNudgePx =
@@ -3158,7 +3160,14 @@ const PublicDisplay: React.FC = () => {
       textOverflow: 'clip',
       marginTop:
         kind === 'title' ? -titleTopNudgePx : kind === 'artist' ? (fullCard ? 6 : 4) : 0,
-      paddingBottom: maskedLine ? (kind === 'title' ? 3 : 4) : kind === 'artist' && !fullCard ? 2 : 0,
+      paddingBottom:
+        !fullCard && typo.clampContentHeight
+          ? kind === 'title'
+            ? 3
+            : 4
+          : kind === 'artist' && !fullCard
+            ? 2
+            : 0,
     };
     return common;
   };
