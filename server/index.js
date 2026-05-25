@@ -1778,6 +1778,11 @@ function publicDisplayTitleRevealModeForRoom(room) {
   return DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE;
 }
 
+/** When false, projector still reveals letters but hides the “Revealed: …” banner toast. */
+function letterRevealToastEnabledForRoom(room) {
+  return room?.publicDisplayLetterRevealToast !== false;
+}
+
 const YOUTUBE_FALLBACK_DURATION_MS = 10 * 60 * 1000;
 
 function computeSnippetRandomStartMs(room, song) {
@@ -1897,6 +1902,7 @@ function syncRoomStateAfterSongStart(roomId, room) {
     publicDisplayCallListMode: room.publicDisplayCallListMode || 'auto',
     letterRevealIntervalSec: letterRevealIntervalSecForRoom(room),
     publicDisplayTitleRevealMode: publicDisplayTitleRevealModeForRoom(room),
+    publicDisplayLetterRevealToast: letterRevealToastEnabledForRoom(room),
     venueBranding: venueBrandingForRoom(room),
     playedSongs: playedSongIds
       .map((songId) => {
@@ -2264,6 +2270,7 @@ async function playNextSongSimple(roomId, deviceId) {
       publicDisplayCallListMode: room.publicDisplayCallListMode || 'auto',
       letterRevealIntervalSec: letterRevealIntervalSecForRoom(room),
       publicDisplayTitleRevealMode: publicDisplayTitleRevealModeForRoom(room),
+      publicDisplayLetterRevealToast: letterRevealToastEnabledForRoom(room),
       venueBranding: venueBrandingForRoom(room),
       playedSongs: playedSongIds.map(songId => {
         const foundSong = room.playlistSongs?.find(s => s.id === songId);
@@ -2834,6 +2841,7 @@ io.on('connection', (socket) => {
         patternComposite: undefined,
         letterRevealIntervalSec: DEFAULT_LETTER_REVEAL_INTERVAL_SEC,
         publicDisplayTitleRevealMode: DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE,
+        publicDisplayLetterRevealToast: true,
         createdAt: new Date().toISOString()
       };
       rooms.set(roomId, newRoom);
@@ -3040,6 +3048,7 @@ io.on('connection', (socket) => {
             publicDisplayCallListMode: room.publicDisplayCallListMode || 'auto',
             letterRevealIntervalSec: letterRevealIntervalSecForRoom(room),
             publicDisplayTitleRevealMode: publicDisplayTitleRevealModeForRoom(room),
+            publicDisplayLetterRevealToast: letterRevealToastEnabledForRoom(room),
             venueBranding: venueBrandingForRoom(room),
           });
           
@@ -3621,6 +3630,24 @@ io.on('connection', (socket) => {
       routineServerLog(`🖥️ Public display title reveal mode for room ${roomId}: ${next}`);
     } catch (e) {
       console.error('❌ Error setting title reveal mode:', e?.message || e);
+    }
+  });
+
+  // Host: show/hide the “Revealed: …” banner on the projector (letters still reveal when off)
+  socket.on('set-public-display-letter-reveal-toast', (data = {}) => {
+    try {
+      const { roomId, enabled } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost =
+        room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+      if (!isCurrentHost) return;
+      const next = enabled !== false;
+      room.publicDisplayLetterRevealToast = next;
+      io.to(roomId).emit('public-display-letter-reveal-toast-updated', { enabled: next });
+      routineServerLog(`🔤 Public display letter reveal toast for room ${roomId}: ${next ? 'on' : 'off'}`);
+    } catch (e) {
+      console.error('❌ Error setting letter reveal toast:', e?.message || e);
     }
   });
 
@@ -4649,6 +4676,7 @@ io.on('connection', (socket) => {
         publicDisplayCallListMode: room.publicDisplayCallListMode || 'auto',
         letterRevealIntervalSec: letterRevealIntervalSecForRoom(room),
         publicDisplayTitleRevealMode: publicDisplayTitleRevealModeForRoom(room),
+        publicDisplayLetterRevealToast: letterRevealToastEnabledForRoom(room),
         venueBranding: venueBrandingForRoom(room),
         // Include played songs for PublicDisplay sync (includes current song)
         playedSongs: playedSongIds.map(songId => {
@@ -5074,6 +5102,7 @@ io.on('connection', (socket) => {
           patternComposite: undefined,
           letterRevealIntervalSec: DEFAULT_LETTER_REVEAL_INTERVAL_SEC,
           publicDisplayTitleRevealMode: DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE,
+          publicDisplayLetterRevealToast: true,
         };
         rooms.set(roomId, newRoom);
         socket.join(roomId);

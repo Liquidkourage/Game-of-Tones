@@ -515,6 +515,12 @@ body {
   padding-bottom: clamp(4px, 0.45vmin, 8px) !important;
 }
 
+/* 5×15 columns: flush stack of exactly five rows — no inter-card margin */
+.App .public-display .call-list-content--5x15 .call-item {
+  margin-bottom: 0 !important;
+  min-height: 0;
+}
+
 /* Pattern demo bingo: flush squares (no gutters) */
 .App .public-display .bingo-grid {
   gap: 0 !important;

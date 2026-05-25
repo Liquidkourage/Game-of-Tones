@@ -807,6 +807,9 @@ function poolHasTracks(ids: string[] | null | undefined): ids is string[] {
   return Array.isArray(ids) && ids.length > 0;
 }
 
+/** Trim each 5×15 call row so five cards fit inside the column viewport (avoids bottom clip). */
+const FIVE_BY15_CARD_ROW_TRIM_PX = 2;
+
 /** Base pause between 1×75 carousel column steps (~5s hold + ~1s slide). */
 const CAROUSEL_BASE_DWELL_MS = 6000;
 
@@ -1100,6 +1103,8 @@ const PublicDisplay: React.FC = () => {
   const [callListMode, setCallListMode] = useState<'auto' | 'grouped' | '5x15'>('auto');
   /** Seconds between random letter picks on the projector (server default 15; clamped 5–120). */
   const [letterRevealIntervalSec, setLetterRevealIntervalSec] = useState<number>(15);
+  /** When false, letters still reveal on call cards but the “Revealed: …” banner is hidden. */
+  const [letterRevealToastEnabled, setLetterRevealToastEnabled] = useState<boolean>(true);
   /** How masked titles fill in: timed letters, full at track start, or full at track end. */
   const [titleRevealMode, setTitleRevealMode] = useState<PublicDisplayTitleRevealMode>('letter');
   const titleRevealModeRef = useRef<PublicDisplayTitleRevealMode>('letter');
@@ -1211,11 +1216,15 @@ const PublicDisplay: React.FC = () => {
     return !playedOrderForDisplay.some((id) => poolSet.has(id));
   }, [columnCallListLayout, layoutFiveColumns, playedOrderForDisplay]);
 
-  // 5x15 vertical scroll state
-  const [vertIndex, setVertIndex] = useState<number>(0);
-  const [vertIndices, setVertIndices] = useState<number[]>([0,0,0,0,0]);
   const vertViewportRef = useRef<HTMLDivElement | null>(null);
   const [rowHeightPx, setRowHeightPx] = useState<number>(0);
+  const fiveBy15CardRowPx = useMemo(
+    () =>
+      rowHeightPx > 0
+        ? Math.max(1, Math.floor(rowHeightPx) - FIVE_BY15_CARD_ROW_TRIM_PX)
+        : 0,
+    [rowHeightPx],
+  );
   // Toast for revealed letter
   const [revealToast, setRevealToast] = useState<string | null>(null);
   const [customMask, setCustomMask] = useState<Set<string>>(new Set());
@@ -1284,23 +1293,10 @@ const PublicDisplay: React.FC = () => {
   const [reconnectAttempts, setReconnectAttempts] = useState<number>(0);
   const [lastSyncTime, setLastSyncTime] = useState<number>(0);
   const [socket, setSocket] = useState<any>(null);
-  // Global scroll phase to keep columns aligned + freeze control
-  const [phasePx, setPhasePx] = useState<number>(0);
-  const rafRef = useRef<number | null>(null);
-  const [freezeAll, setFreezeAll] = useState<boolean>(false);
-  const [frozenCols, setFrozenCols] = useState<boolean[]>([false, false, false, false, false]);
-  const [freezeRows, setFreezeRows] = useState<number[]>([0, 0, 0, 0, 0]);
-
-  // Host/room can change call list layout mid-game; reset local scroll/phase so the swap is predictable
+  // Host/room can change call list layout mid-game; reset local carousel index so the swap is predictable
   // (does not clear played order, reveals, or pool data).
   useEffect(() => {
     setCarouselIndex(0);
-    setVertIndex(0);
-    setVertIndices([0, 0, 0, 0, 0]);
-    setPhasePx(0);
-    setFreezeAll(false);
-    setFrozenCols([false, false, false, false, false]);
-    setFreezeRows([0, 0, 0, 0, 0]);
   }, [callListMode]);
 
   // Per-ball animation seeds (stable for component lifetime)
@@ -1606,6 +1602,10 @@ const PublicDisplay: React.FC = () => {
           if (payload.publicDisplayTitleRevealMode !== undefined) {
             setTitleRevealMode(normalizePublicDisplayTitleRevealMode(payload.publicDisplayTitleRevealMode));
           }
+
+          if (payload.publicDisplayLetterRevealToast !== undefined) {
+            setLetterRevealToastEnabled(payload.publicDisplayLetterRevealToast !== false);
+          }
           
           // CRITICAL: Sync currentIndexRef from server state (needed for proper display on refresh)
           if (typeof payload.currentSongIndex === 'number') {
@@ -1764,6 +1764,12 @@ const PublicDisplay: React.FC = () => {
     newSocket.on('public-display-title-reveal-mode-updated', (data: any) => {
       if (data?.mode !== undefined) {
         setTitleRevealMode(normalizePublicDisplayTitleRevealMode(data.mode));
+      }
+    });
+
+    newSocket.on('public-display-letter-reveal-toast-updated', (data: any) => {
+      if (data?.enabled !== undefined) {
+        setLetterRevealToastEnabled(data.enabled !== false);
       }
     });
 
@@ -2113,24 +2119,6 @@ const PublicDisplay: React.FC = () => {
           const col = idToColumnRef.current[song.id];
           try { console.log('[Display] song-playing', { index: currentIndexRef.current, id: song.id, col, name: song.name }); } catch {}
         }
-        // Snap + freeze: if column now has >5 items, snap newest to bottom and freeze global scroll
-        try {
-          const colIdx = idToColumnRef.current[song.id];
-          if (typeof colIdx === 'number' && fiveBy15Columns && rowHeightPx > 0) {
-            const colList = fiveBy15Columns[colIdx] || [];
-            const playedInCol = colList.filter(id => playedOrderRef.current.includes(id));
-            if (playedInCol.length > 5) {
-              const targetRows = playedInCol.length - 5;
-              // Freeze only this column and snap its offset so the newest is at bottom
-              setFrozenCols([0,1,2,3,4].map((_, i) => i === colIdx));
-              setFreezeRows((prev) => prev.map((v, i) => (i === colIdx ? targetRows : v)));
-            } else {
-              // Unfreeze all if not yet over 5
-              setFrozenCols([false,false,false,false,false]);
-              setFreezeRows([0,0,0,0,0]);
-            }
-          }
-        } catch {}
         // Set baseline when song starts so letters revealed before it started stay hidden on that song
         // BUG #3 FIX: Always set baseline to current length, even if reset just happened
         // This ensures songs starting right after reset get correct baseline (0)
@@ -2821,56 +2809,6 @@ const PublicDisplay: React.FC = () => {
     return () => window.clearTimeout(t);
   }, [socket, roomId, totalPlayedCount, playedOrderForDisplay.length, playedOrderRevision]);
 
-  // Global smooth phase driver (keeps columns aligned)
-  useEffect(() => {
-    const secondsPerRow = 6; // 1 row every 6s
-    let last = performance.now();
-    let running = true;
-    const step = (now: number) => {
-      if (!running) return;
-      const dt = (now - last) / 1000;
-      last = now;
-      if (!freezeAll && rowHeightPx > 0) {
-        const delta = (rowHeightPx / secondsPerRow) * dt;
-        setPhasePx((p) => p + delta);
-      }
-      rafRef.current = requestAnimationFrame(step);
-    };
-    rafRef.current = requestAnimationFrame(step);
-    return () => { running = false; if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [rowHeightPx, freezeAll]);
-
-  // Auto-advance vertical index for 5x15 (per column; show 5 at a time, scroll by 1)
-  useEffect(() => {
-    const ids = oneBy75IdsRef.current;
-    if (!ids) return;
-    if (!columnCallListLayout) { setVertIndex(0); setVertIndices([0,0,0,0,0]); return; }
-    if (!layoutFiveColumns) { setVertIndex(0); setVertIndices([0,0,0,0,0]); return; }
-    // Use ONLY explicitly tracked played order to avoid phantom pool-seeded entries
-    const played = new Set<string>(playedOrderForDisplay);
-    // Compute per-column max index
-    const perColLengths = layoutFiveColumns.map((col) => col.filter((id) => played.has(id)).length);
-    const perColMax = perColLengths.map(len => Math.max(0, len - 5));
-    // Reset indices if no scrolling needed
-    if (perColMax.every(m => m === 0)) { setVertIndex(0); setVertIndices([0,0,0,0,0]); return; }
-    const interval = setInterval(() => {
-      setVertIndices((prev) => {
-        const next = [...prev];
-        for (let i = 0; i < 5; i++) {
-          const maxI = perColMax[i] || 0;
-          if (maxI > 0) {
-            const cur = (prev[i] || 0);
-            next[i] = cur >= maxI ? 0 : (cur + 1);
-          } else {
-            next[i] = 0;
-          }
-        }
-        return next;
-      });
-    }, 6000);
-    return () => clearInterval(interval);
-  }, [oneBy75Ids, totalPlayedCount, layoutFiveColumns, columnCallListLayout, playedOrderForDisplay]);
-
   // Fetch initial room info for display card
   useEffect(() => {
     const fetchRoom = async () => {
@@ -3012,10 +2950,10 @@ const PublicDisplay: React.FC = () => {
   ): CallCardTypography => {
     const masked = getCallSongRevealUi(songId).kind === 'masked';
     let typo = computeCallCardTypography(meta.name, meta.artist, { fullCard, masked });
-    if (columnCallListLayout && rowHeightPx > 0 && !fullCard) {
+    if (columnCallListLayout && fiveBy15CardRowPx > 0 && !fullCard) {
       typo = {
         ...typo,
-        textScale: capCallCardTextScaleForRow(typo, rowHeightPx, displayFontScale),
+        textScale: capCallCardTextScaleForRow(typo, fiveBy15CardRowPx, displayFontScale),
       };
     }
     return typo;
@@ -3036,14 +2974,14 @@ const PublicDisplay: React.FC = () => {
     const maskedLine = !fullCard && typo.clampContentHeight;
     if (
       columnCallListLayout &&
-      rowHeightPx > 0 &&
+      fiveBy15CardRowPx > 0 &&
       !fullCard &&
       maskedLine
     ) {
       const maxPx =
         kind === 'title'
-          ? Math.round(rowHeightPx * 0.34)
-          : Math.round(rowHeightPx * 0.22);
+          ? Math.round(fiveBy15CardRowPx * 0.34)
+          : Math.round(fiveBy15CardRowPx * 0.22);
       if (maxPx > 0) fontSize = Math.min(fontSize, maxPx);
     }
     /** Pull title cap-height up so it lines with the top edge of the call # badge (line-height half-leading). */
@@ -3617,21 +3555,12 @@ const PublicDisplay: React.FC = () => {
               {...(ci === 0 ? { ref: vertViewportRef as any } : {})}
             >
               {(() => {
-                const shouldScroll = !isFullCardPattern && col.length > 5 && rowHeightPx > 0;
+                const shouldScroll = !isFullCardPattern && col.length > 5 && fiveBy15CardRowPx > 0;
                 const useAbsoluteTrack = shouldScroll;
-                // Build display items duplicated for seamless wrap
-                const displayItems = shouldScroll ? [...col, ...col] : col;
-                // Determine how many rows we need to offset to ensure no gap
-                let yPx = 0;
-                if (shouldScroll) {
-                  if (Array.isArray(frozenCols) && frozenCols[ci]) {
-                    const rows = Math.max(0, (freezeRows?.[ci] || (col.length - 5)));
-                    yPx = rows * rowHeightPx;
-                  } else {
-                    const loopPx = Math.max(1, col.length * rowHeightPx);
-                    yPx = phasePx % loopPx;
-                  }
-                }
+                const displayItems = col;
+                // Pin newest played song to the bottom row; scroll up by however many rows overflow 5.
+                const scrollRows = shouldScroll ? Math.max(0, col.length - 5) : 0;
+                const yPx = scrollRows * fiveBy15CardRowPx;
                 return (
                   <div
                     className="call-vert-track"
@@ -3642,6 +3571,7 @@ const PublicDisplay: React.FC = () => {
                       top: 0,
                       willChange: useAbsoluteTrack ? 'transform' : undefined,
                       transform: useAbsoluteTrack ? `translateY(${-yPx}px)` : undefined,
+                      transition: useAbsoluteTrack ? 'transform 0.35s ease-out' : undefined,
                     }}
                   >
                 {displayItems.map((id, ri) => {
@@ -3662,19 +3592,20 @@ const PublicDisplay: React.FC = () => {
                         display: 'flex',
                         alignItems: 'flex-start',
                         gap: 10,
-                        padding: '8px 10px',
+                        padding: '7px 10px',
                         borderRadius: 12,
+                        marginBottom: 0,
                         height: isFullCardPattern
                           ? 'auto'
-                          : rowHeightPx > 0
-                            ? `${rowHeightPx}px`
+                          : fiveBy15CardRowPx > 0
+                            ? `${fiveBy15CardRowPx}px`
                             : undefined,
                         minHeight: isFullCardPattern
-                          ? rowHeightPx > 0
-                            ? rowHeightPx
+                          ? fiveBy15CardRowPx > 0
+                            ? fiveBy15CardRowPx
                             : undefined
-                          : rowHeightPx > 0
-                            ? rowHeightPx
+                          : fiveBy15CardRowPx > 0
+                            ? fiveBy15CardRowPx
                             : 44,
                         overflow: isFullCardPattern ? 'visible' : 'hidden',
                         boxSizing: 'border-box',
@@ -4376,7 +4307,7 @@ const PublicDisplay: React.FC = () => {
             {remoteHybridNotice}
           </motion.div>
         )}
-        {revealToast && (
+        {letterRevealToastEnabled && revealToast && (
           <motion.div
             key={`toast-${revealToast}-${totalPlayedCount}`}
             role="status"

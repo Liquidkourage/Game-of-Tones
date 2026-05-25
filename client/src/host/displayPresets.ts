@@ -4,6 +4,7 @@ export type HostDisplayPreset = {
   publicDisplayFontSize: number;
   publicDisplayTitleRevealMode: 'letter' | 'track_start' | 'track_end';
   letterRevealIntervalSec: number;
+  publicDisplayLetterRevealToast?: boolean;
 };
 
 const STORAGE_KEY = 'got-host-display-presets-v1';

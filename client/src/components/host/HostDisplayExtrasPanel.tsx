@@ -14,6 +14,7 @@ type HostDisplayExtrasPanelProps = {
   publicDisplayFontSize: number;
   publicDisplayTitleRevealMode: 'letter' | 'track_start' | 'track_end';
   letterRevealIntervalSec: number;
+  publicDisplayLetterRevealToast: boolean;
   onApplyPreset: (preset: HostDisplayPreset) => void;
 };
 
@@ -25,6 +26,7 @@ const HostDisplayExtrasPanel: React.FC<HostDisplayExtrasPanelProps> = ({
   publicDisplayFontSize,
   publicDisplayTitleRevealMode,
   letterRevealIntervalSec,
+  publicDisplayLetterRevealToast,
   onApplyPreset,
 }) => {
   const [presets, setPresets] = useState<HostDisplayPreset[]>(() => loadDisplayPresets());
@@ -38,6 +40,7 @@ const HostDisplayExtrasPanel: React.FC<HostDisplayExtrasPanelProps> = ({
       publicDisplayFontSize,
       publicDisplayTitleRevealMode,
       letterRevealIntervalSec,
+      publicDisplayLetterRevealToast,
     };
     const merged = [...presets, next];
     setPresets(merged);

@@ -10,6 +10,7 @@ export type HostPreferencesV1 = {
   publicDisplayFontSize: number;
   publicDisplayTitleRevealMode: PublicDisplayTitleRevealMode;
   letterRevealIntervalSec: number;
+  publicDisplayLetterRevealToast: boolean;
   freeSpaceEnabled: boolean;
 };
 
@@ -27,6 +28,7 @@ export function defaultHostPreferences(): HostPreferencesV1 {
     publicDisplayFontSize: 1,
     publicDisplayTitleRevealMode: 'letter',
     letterRevealIntervalSec: 15,
+    publicDisplayLetterRevealToast: true,
     freeSpaceEnabled: false,
   };
 }
@@ -61,6 +63,10 @@ export function loadHostPreferences(
       letterRevealIntervalSec:
         typeof parsed.letterRevealIntervalSec === 'number'
           ? Math.min(120, Math.max(5, Math.round(parsed.letterRevealIntervalSec)))
+          : undefined,
+      publicDisplayLetterRevealToast:
+        typeof parsed.publicDisplayLetterRevealToast === 'boolean'
+          ? parsed.publicDisplayLetterRevealToast
           : undefined,
       freeSpaceEnabled:
         typeof parsed.freeSpaceEnabled === 'boolean' ? parsed.freeSpaceEnabled : undefined,

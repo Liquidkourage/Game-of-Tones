@@ -834,6 +834,8 @@ const HostView: React.FC = () => {
   /** Projector: masked titles fill in by timed letters vs full at clip start/end. */
   const [publicDisplayTitleRevealMode, setPublicDisplayTitleRevealMode] =
     useState<PublicDisplayTitleRevealMode>('letter');
+  /** Projector banner when a letter is revealed (letters still reveal when off). */
+  const [publicDisplayLetterRevealToast, setPublicDisplayLetterRevealToast] = useState<boolean>(true);
 
   // Handler to update public display font size
   const updatePublicDisplayFontSize = (newSize: number) => {
@@ -860,6 +862,12 @@ const HostView: React.FC = () => {
     setPublicDisplayTitleRevealMode(mode);
     if (socket && roomId) {
       socket.emit('set-public-display-title-reveal-mode', { roomId, mode });
+    }
+  };
+  const updatePublicDisplayLetterRevealToast = (enabled: boolean) => {
+    setPublicDisplayLetterRevealToast(enabled);
+    if (socket && roomId) {
+      socket.emit('set-public-display-letter-reveal-toast', { roomId, enabled });
     }
   };
   const [selectedCustomPattern, setSelectedCustomPattern] = useState<SavedCustomPattern | null>(null);
@@ -3015,6 +3023,12 @@ const HostView: React.FC = () => {
       }
     });
 
+    newSocket.on('public-display-letter-reveal-toast-updated', (data: any) => {
+      if (data?.enabled !== undefined) {
+        setPublicDisplayLetterRevealToast(data.enabled !== false);
+      }
+    });
+
     newSocket.on('room-state', (payload: any) => {
       if (typeof payload?.selectedDeviceId === 'string' && payload.selectedDeviceId.trim() !== '') {
         pendingRoomDeviceIdRef.current = payload.selectedDeviceId.trim();
@@ -3038,6 +3052,9 @@ const HostView: React.FC = () => {
       }
       if (payload?.publicDisplayTitleRevealMode !== undefined) {
         setPublicDisplayTitleRevealMode(normalizePublicDisplayTitleRevealMode(payload.publicDisplayTitleRevealMode));
+      }
+      if (payload?.publicDisplayLetterRevealToast !== undefined) {
+        setPublicDisplayLetterRevealToast(payload.publicDisplayLetterRevealToast !== false);
       }
     });
 
@@ -7188,6 +7205,9 @@ const HostView: React.FC = () => {
       setPublicDisplayTitleRevealMode(p.publicDisplayTitleRevealMode);
     }
     if (p.letterRevealIntervalSec != null) setLetterRevealIntervalSec(p.letterRevealIntervalSec);
+    if (p.publicDisplayLetterRevealToast != null) {
+      setPublicDisplayLetterRevealToast(p.publicDisplayLetterRevealToast);
+    }
     if (p.freeSpaceEnabled != null) setFreeSpaceEnabled(p.freeSpaceEnabled);
     hostPrefsHydratedRef.current = true;
   }, [hostAccount?.id]);
@@ -7201,6 +7221,7 @@ const HostView: React.FC = () => {
       publicDisplayFontSize,
       publicDisplayTitleRevealMode,
       letterRevealIntervalSec,
+      publicDisplayLetterRevealToast,
       freeSpaceEnabled,
     });
     try {
@@ -7217,6 +7238,7 @@ const HostView: React.FC = () => {
     publicDisplayFontSize,
     publicDisplayTitleRevealMode,
     letterRevealIntervalSec,
+    publicDisplayLetterRevealToast,
     freeSpaceEnabled,
   ]);
 
@@ -7226,6 +7248,7 @@ const HostView: React.FC = () => {
     updatePublicDisplayFontSize(publicDisplayFontSize);
     updatePublicDisplayTitleRevealMode(publicDisplayTitleRevealMode);
     updatePublicDisplayLetterRevealInterval(letterRevealIntervalSec);
+    updatePublicDisplayLetterRevealToast(publicDisplayLetterRevealToast);
     updatePublicDisplayCallListMode('auto');
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot room sync after prefs hydrate
   }, [socket, roomId, hostAccount?.id]);
@@ -9201,6 +9224,18 @@ const HostView: React.FC = () => {
                   ))}
                 </select>
               </label>
+              <label className="host-host-prefs__field host-host-prefs__field--checkbox">
+                <span className="host-host-prefs__label">Letter reveal toast</span>
+                <span className="host-host-prefs__checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={publicDisplayLetterRevealToast}
+                    disabled={publicDisplayTitleRevealMode !== 'letter'}
+                    onChange={(e) => updatePublicDisplayLetterRevealToast(e.target.checked)}
+                  />
+                  Show &ldquo;Revealed:&hellip;&rdquo; banner on projector
+                </span>
+              </label>
             </div>
           </motion.section>
           <motion.section
@@ -9225,10 +9260,14 @@ const HostView: React.FC = () => {
             publicDisplayFontSize={publicDisplayFontSize}
             publicDisplayTitleRevealMode={publicDisplayTitleRevealMode}
             letterRevealIntervalSec={letterRevealIntervalSec}
+            publicDisplayLetterRevealToast={publicDisplayLetterRevealToast}
             onApplyPreset={(p) => {
               updatePublicDisplayFontSize(p.publicDisplayFontSize);
               updatePublicDisplayTitleRevealMode(p.publicDisplayTitleRevealMode);
               updatePublicDisplayLetterRevealInterval(p.letterRevealIntervalSec);
+              if (p.publicDisplayLetterRevealToast != null) {
+                updatePublicDisplayLetterRevealToast(p.publicDisplayLetterRevealToast);
+              }
               addLog(`Applied display preset "${p.name}"`, 'info');
             }}
           />
