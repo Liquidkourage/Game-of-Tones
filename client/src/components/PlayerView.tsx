@@ -111,6 +111,7 @@ const PlayerView: React.FC = () => {
   const [bingoCard, setBingoCard] = useState<BingoCard | null>(null);
   const [focusedSquare, setFocusedSquare] = useState<BingoSquare | null>(null);
   const longPressTimer = useRef<number | null>(null);
+  const cardGridRef = useRef<HTMLDivElement | null>(null);
   const [longPressTooltip, setLongPressTooltip] = useState<{
     title: string;
     artist: string;
@@ -884,6 +885,99 @@ const PlayerView: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [optionsOpen]);
 
+  useLayoutEffect(() => {
+    if (!bingoCard || !cardGridRef.current) return undefined;
+
+    const gridEl = cardGridRef.current;
+    let frame = 0;
+
+    const fitSquares = () => {
+      const squareEls = Array.from(gridEl.querySelectorAll<HTMLElement>('.bingo-square'));
+      squareEls.forEach((squareEl) => {
+        const contentEl = squareEl.querySelector<HTMLElement>('.square-content');
+        if (!contentEl) return;
+
+        const setScales = (titleScale: number, artistScale: number) => {
+          squareEl.style.setProperty('--player-cell-title-scale', titleScale.toFixed(4));
+          squareEl.style.setProperty('--player-cell-artist-scale', artistScale.toFixed(4));
+        };
+
+        const fitsAtScales = (titleScale: number, artistScale: number) => {
+          setScales(titleScale, artistScale);
+          return (
+            contentEl.scrollHeight <= contentEl.clientHeight + 1 &&
+            contentEl.scrollWidth <= contentEl.clientWidth + 1
+          );
+        };
+
+        const deriveArtistScale = (titleScale: number) => Math.min(1.12, Math.max(0.56, titleScale * 0.72));
+
+        let titleLow = 0.62;
+        let titleHigh = 1.95;
+
+        if (!fitsAtScales(titleLow, deriveArtistScale(titleLow))) {
+          setScales(titleLow, 0.56);
+          return;
+        }
+
+        fitsAtScales(titleHigh, deriveArtistScale(titleHigh));
+        for (let i = 0; i < 9; i += 1) {
+          const mid = (titleLow + titleHigh) / 2;
+          if (fitsAtScales(mid, deriveArtistScale(mid))) {
+            titleLow = mid;
+          } else {
+            titleHigh = mid;
+          }
+        }
+
+        const bestTitleScale = titleLow;
+        let artistLow = deriveArtistScale(bestTitleScale);
+        let artistHigh = Math.min(1.18, bestTitleScale * 0.84);
+
+        if (!fitsAtScales(bestTitleScale, artistLow)) {
+          artistLow = Math.max(0.52, artistLow * 0.92);
+          setScales(bestTitleScale, artistLow);
+          return;
+        }
+
+        fitsAtScales(bestTitleScale, artistHigh);
+        for (let i = 0; i < 7; i += 1) {
+          const mid = (artistLow + artistHigh) / 2;
+          if (fitsAtScales(bestTitleScale, mid)) {
+            artistLow = mid;
+          } else {
+            artistHigh = mid;
+          }
+        }
+
+        setScales(bestTitleScale, artistLow);
+      });
+    };
+
+    const queueFit = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(fitSquares);
+    };
+
+    queueFit();
+
+    const resizeObserver = new ResizeObserver(() => {
+      queueFit();
+    });
+    resizeObserver.observe(gridEl);
+    Array.from(gridEl.querySelectorAll<HTMLElement>('.bingo-square')).forEach((squareEl) => {
+      resizeObserver.observe(squareEl);
+    });
+
+    const fontsReady = (document as Document & { fonts?: FontFaceSet }).fonts?.ready;
+    fontsReady?.then(() => queueFit()).catch(() => {});
+
+    return () => {
+      cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+    };
+  }, [bingoCard, cardFontPercent, visualViewportHeightPx]);
+
   const handleResync = () => {
     if (!socket) return;
     try {
@@ -1453,7 +1547,7 @@ const PlayerView: React.FC = () => {
             );
           })}
         </div>
-        <div className="bingo-card-grid">
+        <div ref={cardGridRef} className="bingo-card-grid">
           {bingoCard.squares.map((square) => (
             <motion.div
               key={square.position}

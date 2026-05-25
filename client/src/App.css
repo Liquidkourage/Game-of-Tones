@@ -5161,6 +5161,8 @@ button.conn-chip.conn-chip-compact {
 }
 
 .player-container--v2 .bingo-card .bingo-square {
+  --player-cell-title-scale: 1;
+  --player-cell-artist-scale: 0.72;
   border-right-width: 1px !important;
   border-bottom-width: 1px !important;
   border-radius: clamp(12px, 2vmin, 16px);
@@ -5210,8 +5212,8 @@ button.conn-chip.conn-chip-compact {
 }
 
 .player-container--v2 .player-square-title {
-  font-size: calc(var(--player-card-font-scale, 1) * clamp(9px, 4.2cqi, 24px));
-  line-height: 1.06;
+  font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-title-scale, 1) * clamp(9px, 4.2cqi, 24px));
+  line-height: 1.03;
   font-weight: 800;
   color: rgba(248, 249, 255, 0.98);
   word-break: break-word;
@@ -5219,10 +5221,10 @@ button.conn-chip.conn-chip-compact {
 }
 
 .player-container--v2 .player-square-artist {
-  font-size: calc(var(--player-card-font-scale, 1) * clamp(7px, 2.8cqi, 15px));
-  line-height: 1.12;
-  font-weight: 700;
-  color: rgba(232, 230, 255, 0.62);
+  font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.72) * clamp(7px, 2.8cqi, 15px));
+  line-height: 1.02;
+  font-weight: 650;
+  color: rgba(232, 230, 255, 0.58);
   word-break: break-word;
   overflow-wrap: anywhere;
 }
@@ -5556,11 +5558,11 @@ button.conn-chip.conn-chip-compact {
   }
 
   .player-container--v2 .player-square-title {
-    font-size: calc(var(--player-card-font-scale, 1) * clamp(8px, 3cqi, 16px));
+    font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-title-scale, 1) * clamp(8px, 3cqi, 16px));
   }
 
   .player-container--v2 .player-square-artist {
-    font-size: calc(var(--player-card-font-scale, 1) * clamp(6px, 2cqi, 10px));
+    font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.72) * clamp(6px, 2cqi, 10px));
   }
 
   .player-container--v2 .player-v2-action-bar {
