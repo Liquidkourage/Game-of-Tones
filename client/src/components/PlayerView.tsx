@@ -265,8 +265,21 @@ const PlayerView: React.FC = () => {
     return {};
   };
 
+  const normalizeCardFreeSpaces = (card: BingoCard | null): BingoCard | null => {
+    if (!card) return card;
+    return {
+      ...card,
+      squares: card.squares.map((square) =>
+        square.isFreeSpace || square.songId === '__FREE_SPACE__'
+          ? { ...square, marked: true, isFreeSpace: true }
+          : square,
+      ),
+    };
+  };
+
   const persistMarks = (card: BingoCard | null) => {
-    if (!card) {
+    const normalizedCard = normalizeCardFreeSpaces(card);
+    if (!normalizedCard) {
       try {
         localStorage.removeItem(`player_marks_${roomId}`);
       } catch {}
@@ -274,7 +287,7 @@ const PlayerView: React.FC = () => {
     }
     try {
       const marks: Record<string, boolean> = {};
-      card.squares.forEach(square => {
+      normalizedCard.squares.forEach(square => {
         if (square.marked) {
           marks[square.position] = true;
         }
@@ -286,15 +299,20 @@ const PlayerView: React.FC = () => {
   };
 
   const applyStoredMarks = (card: BingoCard | null): BingoCard | null => {
-    if (!card) return card;
+    const normalizedCard = normalizeCardFreeSpaces(card);
+    if (!normalizedCard) return normalizedCard;
     const storedMarks = getStoredMarks();
-    if (Object.keys(storedMarks).length === 0) return card;
+    if (Object.keys(storedMarks).length === 0) return normalizedCard;
     
-    const updatedSquares = card.squares.map(square => ({
+    const updatedSquares = normalizedCard.squares.map(square => ({
       ...square,
-      marked: storedMarks[square.position] === true || square.marked
+      marked:
+        square.isFreeSpace ||
+        square.songId === '__FREE_SPACE__' ||
+        storedMarks[square.position] === true ||
+        square.marked
     }));
-    return { ...card, squares: updatedSquares };
+    return { ...normalizedCard, squares: updatedSquares };
   };
 
   const countUniqueSongs = (card: BingoCard): number => {
@@ -591,8 +609,9 @@ const PlayerView: React.FC = () => {
           // Remove isNewCard flag from card data before storing
           const cleanCard = { ...data };
           delete cleanCard.isNewCard;
-          persistMarks(cleanCard); // Persist blank marks
-          return cleanCard;
+          const normalizedCleanCard = normalizeCardFreeSpaces(cleanCard);
+          persistMarks(normalizedCleanCard); // Persist blank marks (+ free space)
+          return normalizedCleanCard;
         }
         
         // Same card structure - preserve marks from previous card, then apply stored marks
@@ -600,7 +619,11 @@ const PlayerView: React.FC = () => {
           const oldSquare = prev.squares.find((s: any) => s.position === newSquare.position);
           return {
             ...newSquare,
-            marked: oldSquare?.marked || false // Preserve mark state from previous card
+            marked:
+              newSquare.isFreeSpace ||
+              newSquare.songId === '__FREE_SPACE__' ||
+              oldSquare?.marked ||
+              false // Preserve mark state from previous card
           };
         });
         const mergedCard = { ...data, squares: mergedSquares };
