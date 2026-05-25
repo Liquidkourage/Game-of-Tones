@@ -2686,6 +2686,15 @@ const HostView: React.FC = () => {
     });
 
     newSocket.on('song-playing', (data: any) => {
+      const snippetLengthSec =
+        typeof data.snippetLength === 'number' && Number.isFinite(data.snippetLength)
+          ? data.snippetLength
+          : 30;
+      const snippetDurationMs = Math.max(0, snippetLengthSec * 1000);
+      const snippetElapsedMs =
+        typeof data.snippetElapsedMs === 'number' && Number.isFinite(data.snippetElapsedMs)
+          ? Math.min(snippetDurationMs, Math.max(0, data.snippetElapsedMs))
+          : 0;
       const yt =
         data.youtubeMusic === true &&
         typeof data.youtubeVideoId === 'string' &&
@@ -2694,7 +2703,7 @@ const HostView: React.FC = () => {
         setYoutubeHostPlayback({
           videoId: data.youtubeVideoId,
           startMs: typeof data.startMs === 'number' ? data.startMs : 0,
-          snippetSeconds: typeof data.snippetLength === 'number' ? data.snippetLength : 30,
+          snippetSeconds: snippetLengthSec,
         });
       } else {
         setYoutubeHostPlayback(null);
@@ -2723,8 +2732,8 @@ const HostView: React.FC = () => {
           artist: ytf.artist,
           explicit: data.explicit === true,
         },
-        duration: data.snippetLength * 1000, // Convert to milliseconds
-        currentTime: 0
+        duration: snippetDurationMs,
+        currentTime: snippetElapsedMs,
       }));
       setPlayedInOrder(prev => {
         if (prev.find(p => p.id === data.songId)) return prev; // prevent dupes
