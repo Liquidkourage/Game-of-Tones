@@ -912,7 +912,7 @@ const PlayerView: React.FC = () => {
           );
         };
 
-        const deriveArtistScale = (titleScale: number) => Math.min(1.12, Math.max(0.56, titleScale * 0.72));
+        const deriveArtistScale = (titleScale: number) => Math.min(1.08, Math.max(0.5, titleScale * 0.7));
         const getLineCount = (el: HTMLElement | null) => {
           if (!el) return 1;
           const computed = window.getComputedStyle(el);
@@ -928,7 +928,7 @@ const PlayerView: React.FC = () => {
 
           for (let i = 0; i < 5; i += 1) {
             const nextTitle = bestTitle * 0.965;
-            const nextArtist = Math.max(0.52, bestArtist * 0.97);
+            const nextArtist = Math.max(0.48, bestArtist * 0.97);
             if (!fitsAtScales(nextTitle, nextArtist)) break;
             const nextTitleLines = getLineCount(titleEl);
             const nextArtistLines = getLineCount(artistEl);
@@ -946,11 +946,11 @@ const PlayerView: React.FC = () => {
           setScales(bestTitle, bestArtist);
         };
 
-        let titleLow = 0.62;
+        let titleLow = 0.48;
         let titleHigh = 1.95;
 
         if (!fitsAtScales(titleLow, deriveArtistScale(titleLow))) {
-          setScales(titleLow, 0.56);
+          setScales(titleLow, 0.48);
           return;
         }
 
@@ -969,7 +969,7 @@ const PlayerView: React.FC = () => {
         let artistHigh = Math.min(1.18, bestTitleScale * 0.84);
 
         if (!fitsAtScales(bestTitleScale, artistLow)) {
-          artistLow = Math.max(0.52, artistLow * 0.92);
+          artistLow = Math.max(0.48, artistLow * 0.92);
           setScales(bestTitleScale, artistLow);
           return;
         }
