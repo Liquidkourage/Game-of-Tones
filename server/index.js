@@ -849,7 +849,7 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       };
       try {
         const r = rooms.get(roomId);
-        if (r) r.songStartAtMs = Date.now() - (startMs || 0);
+        if (r) r.songStartAtMs = Date.now();
       } catch {}
       io.to(roomId).emit('song-playing', buildSongPlayingPayload(room, song, songIndex));
       sendPlayerCardUpdates(roomId, true);
@@ -933,7 +933,13 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
       artist: song.artist,
       explicit: song.explicit === true
     };
-    try { const r = rooms.get(roomId); if (r) r.songStartAtMs = Date.now() - (startMs || 0); } catch {}
+    try {
+      const r = rooms.get(roomId);
+      if (r) {
+        r.currentSongStartMs = startMs;
+        r.songStartAtMs = Date.now();
+      }
+    } catch {}
 
     io.to(roomId).emit('song-playing', {
       songId: song.id,
@@ -1837,6 +1843,30 @@ function snippetElapsedMsForRoom(room) {
   return Math.min(snippetMs, Math.max(0, Date.now() - room.songStartAtMs));
 }
 
+function expectedPlaybackProgressMsForRoom(room) {
+  const clipElapsedMs = room?.songStartAtMs && typeof room.songStartAtMs === 'number'
+    ? Math.max(0, Date.now() - room.songStartAtMs)
+    : 0;
+  const startOffsetMs = room?.currentSongStartMs && typeof room.currentSongStartMs === 'number'
+    ? Math.max(0, room.currentSongStartMs)
+    : 0;
+  return startOffsetMs + clipElapsedMs;
+}
+
+function syncClipClockFromPlaybackProgress(room, playbackProgressMs) {
+  if (!room || typeof room !== 'object') return;
+  const progressMs =
+    typeof playbackProgressMs === 'number' && Number.isFinite(playbackProgressMs)
+      ? Math.max(0, playbackProgressMs)
+      : 0;
+  const startOffsetMs =
+    room.currentSongStartMs && typeof room.currentSongStartMs === 'number'
+      ? Math.max(0, room.currentSongStartMs)
+      : 0;
+  const clipElapsedMs = Math.max(0, progressMs - startOffsetMs);
+  room.songStartAtMs = Date.now() - clipElapsedMs;
+}
+
 function emitCurrentSongPlayingToSocket(socket, room) {
   if (!socket || !room?.currentSong?.id || !room.snippetLength) return;
   const idx = room.currentSongIndex || 0;
@@ -2262,7 +2292,7 @@ async function playNextSongSimple(roomId, deviceId) {
     };
     try {
       const r = rooms.get(roomId);
-      if (r) r.songStartAtMs = Date.now() - (startMsYt || 0);
+      if (r) r.songStartAtMs = Date.now();
     } catch {}
     io.to(roomId).emit('song-playing', buildSongPlayingPayload(room, nextSong, room.currentSongIndex));
     syncRoomStateAfterSongStart(roomId, room);
@@ -2454,7 +2484,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           let expectedProgress = 0;
           try {
             const r = rooms.get(roomId);
-            if (r?.songStartAtMs) expectedProgress = Math.max(0, Date.now() - r.songStartAtMs);
+            expectedProgress = expectedPlaybackProgressMsForRoom(r);
           } catch {}
           // Use playlist context for correction if available
           if (room.temporaryPlaylistId && room.currentSongIndex !== undefined) {
@@ -2482,7 +2512,10 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           // Enforce deterministic playback settings after correction
           try { await spotifyFor(roomId).setShuffleState(false, deviceId); } catch {}
           // Note: Do NOT set repeat to 'off' here - we want 'track' mode to prevent auto-advance
-          try { const r = rooms.get(roomId); if (r) { r.songStartAtMs = now - expectedProgress; } } catch {}
+          try {
+            const r = rooms.get(roomId);
+            if (r) syncClipClockFromPlaybackProgress(r, expectedProgress);
+          } catch {}
         } catch (e) {
           console.warn('⚠️ Correction attempt failed:', e?.message || e);
         }
@@ -2543,12 +2576,15 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
             // Calculate expected progress from when song started, or use 0 if unknown
             let expectedProgress = 0;
             try {
-              if (r?.songStartAtMs) expectedProgress = Math.max(0, Date.now() - r.songStartAtMs);
+              expectedProgress = expectedPlaybackProgressMsForRoom(r);
             } catch {}
             try { await spotifyFor(roomId).transferPlayback(deviceId, false); } catch {}
             try { await spotifyFor(roomId).pausePlayback(deviceId); } catch {}
             await spotifyFor(roomId).startPlayback(deviceId, [`spotify:track:${currentExpectedId}`], expectedProgress);
             try { await new Promise(res => setTimeout(res, 150)); await spotifyFor(roomId).seekToPosition(expectedProgress, deviceId); } catch {}
+            try {
+              if (r) syncClipClockFromPlaybackProgress(r, expectedProgress);
+            } catch {}
             attempts = 0; // reset attempts after restart
           } else {
             // Fallback if no track id known: advance
@@ -7927,7 +7963,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       };
       try {
         const r = rooms.get(roomId);
-        if (r) r.songStartAtMs = Date.now() - (startMsYt || 0);
+        if (r) r.songStartAtMs = Date.now();
       } catch {}
       io.to(roomId).emit('song-playing', buildSongPlayingPayload(room, firstSong, 0));
       syncRoomStateAfterSongStart(roomId, room);
@@ -7997,7 +8033,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       try { 
         const r = rooms.get(roomId); 
         if (r) {
-          r.songStartAtMs = Date.now() - (startMs || 0);
+          r.songStartAtMs = Date.now();
           r.currentSongStartMs = startMs; // Store for restart correction
         }
       } catch {}
@@ -8037,7 +8073,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
           try {
             const r = rooms.get(roomId);
             if (r) {
-              r.songStartAtMs = Date.now() - (startMs || 0);
+              r.songStartAtMs = Date.now();
               r.currentSongStartMs = startMs;
             }
           } catch {}
@@ -8195,7 +8231,7 @@ async function playNextSong(roomId, deviceId) {
       };
       try {
         const r = rooms.get(roomId);
-        if (r) r.songStartAtMs = Date.now() - (startMsYt || 0);
+        if (r) r.songStartAtMs = Date.now();
       } catch {}
       io.to(roomId).emit('song-playing', buildSongPlayingPayload(room, nextSong, room.currentSongIndex));
       syncRoomStateAfterSongStart(roomId, room);

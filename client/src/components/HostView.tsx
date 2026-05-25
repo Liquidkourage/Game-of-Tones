@@ -6519,7 +6519,6 @@ const HostView: React.FC = () => {
         const data = await resp.json();
           if (data.success && data.playbackState) {
           const spotifyIsPlaying = !!data.playbackState.is_playing;
-            const spotifyPosition = data.playbackState.progress_ms || 0;
           // Shuffle/repeat state removed - not used in UI
           // setShuffleEnabled(!!data.playbackState.shuffle_state);
           // const rep = (data.playbackState.repeat_state || 'off') as 'off' | 'track' | 'context';
@@ -6533,7 +6532,7 @@ const HostView: React.FC = () => {
             if (spotifyIsPlaying !== isPlaying) {
               console.log(`?? Spotify playback state changed: ${spotifyIsPlaying}, updating interface`);
               setIsPlaying(spotifyIsPlaying);
-            setPlaybackState(prev => ({ ...prev, isPlaying: spotifyIsPlaying, currentTime: spotifyPosition }));
+            setPlaybackState(prev => ({ ...prev, isPlaying: spotifyIsPlaying }));
               if (spotifyIsPlaying && isPausedByInterface) {
                 console.log('?? SpotifyResumed externally, clearing pause tracking');
                 setIsPausedByInterface(false);
