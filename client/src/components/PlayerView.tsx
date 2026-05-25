@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { useParams, useSearchParams } from 'react-router-dom';
 import io from 'socket.io-client';
 import { SOCKET_URL } from '../config';
-import { Music, Users } from 'lucide-react';
 import { youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
 import { patchSquaresWithAlias, patchSquaresClearAlias } from '../utils/songAliasDisplay';
 import {
@@ -112,7 +111,6 @@ const PlayerView: React.FC = () => {
   const [bingoCard, setBingoCard] = useState<BingoCard | null>(null);
   const [focusedSquare, setFocusedSquare] = useState<BingoSquare | null>(null);
   const longPressTimer = useRef<number | null>(null);
-  const [displayMode, setDisplayMode] = useState<'title' | 'artist'>(() => (localStorage.getItem('display_mode') as 'title' | 'artist') || 'title');
   const [longPressTooltip, setLongPressTooltip] = useState<{
     title: string;
     artist: string;
@@ -127,6 +125,7 @@ const PlayerView: React.FC = () => {
   const [hasValidBingo, setHasValidBingo] = useState<boolean>(false);
   const [playedSongIds, setPlayedSongIds] = useState<string[]>([]);
   const [connectionToast, setConnectionToast] = useState<string>('');
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [hybridPrizeInPersonOnly, setHybridPrizeInPersonOnly] = useState(false);
   const previousPlayedSongIdsRef = useRef<string[]>([]); // Track previous state for missed songs calculation
   const wasReconnectingRef = useRef<boolean>(false); // Track if we're in a reconnection state
@@ -874,6 +873,17 @@ const PlayerView: React.FC = () => {
     }
   }, [socket, playerName, roomId, clientId, inPersonJoin]);
 
+  useEffect(() => {
+    if (!optionsOpen) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOptionsOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [optionsOpen]);
+
   const handleResync = () => {
     if (!socket) return;
     try {
@@ -1047,12 +1057,6 @@ const PlayerView: React.FC = () => {
     } catch (error) {
       console.log('Audio not supported');
     }
-  };
-
-  const handleDisplayModeToggle = (checked: boolean) => {
-    const mode = checked ? 'artist' : 'title';
-    setDisplayMode(mode);
-    localStorage.setItem('display_mode', mode);
   };
 
   const startBingoHold = () => {
@@ -1387,6 +1391,38 @@ const PlayerView: React.FC = () => {
     return false;
   };
 
+  const roomCode = roomId?.toUpperCase() || '';
+  const playerSurfaceTitle =
+    venueBranding?.eventTitle?.trim() || 'Music Bingo';
+  const playerSurfaceSubtitle = [
+    venueBranding?.sponsorLine?.trim() || null,
+    roomCode ? `Room ${roomCode}` : null,
+    playerName?.trim() ? playerName.trim() : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const songsProgressLabel = `Song ${Math.max(songsPlayed, playedSongIds.length)} / 75`;
+  const connectionStatusLabel =
+    connectionStatus === 'connected'
+      ? 'Live sync'
+      : connectionStatus === 'reconnecting'
+        ? reconnectAttempts > 1
+          ? `Reconnecting ${reconnectAttempts}`
+          : 'Reconnecting'
+        : 'Offline';
+  const connectionStatusTone =
+    connectionStatus === 'connected'
+      ? 'connected'
+      : connectionStatus === 'reconnecting'
+        ? 'reconnecting'
+        : 'disconnected';
+  const resyncStatusDescription =
+    connectionStatus === 'connected'
+      ? 'Connected. Use resync if you think you missed a call.'
+      : connectionStatus === 'reconnecting'
+        ? `Trying to reconnect${reconnectAttempts > 1 ? ` (${reconnectAttempts})` : ''}. You can resync manually at any time.`
+        : 'Disconnected right now. Resync will rejoin the room and refresh your card state.';
+
   const renderBingoCard = () => {
     if (!bingoCard) {
       return (
@@ -1403,7 +1439,10 @@ const PlayerView: React.FC = () => {
             const raw = bingoColumnPlaylistNames[colIdx] || '';
             const playlistLabel = stripGotPlaylistPrefix(raw);
             return (
-              <div key={letter} className="bingo-column-headers__cell">
+              <div
+                key={letter}
+                className={`bingo-column-headers__cell${playlistLabel ? ' bingo-column-headers__cell--named' : ''}`}
+              >
                 <span className="bingo-column-headers__letter">{letter}</span>
                 {playlistLabel ? (
                   <span className="bingo-column-headers__playlist" title={playlistLabel}>
@@ -1444,27 +1483,18 @@ const PlayerView: React.FC = () => {
                 userSelect: 'none'
               }}
             >
-              <div className="square-content">
-                {/* Display song title or artist based on display mode */}
-                <div className="square-text">
-                  {square.isFreeSpace || square.songId === '__FREE_SPACE__'
-                    ? 'FREE'
-                    : (() => {
-                        const vis = youtubeBingoSquareDisplay(square);
-                        return displayMode === 'title' ? vis.title : vis.artist;
-                      })()}
-                </div>
-                {square.marked && (
-                  <motion.div 
-                    className="played-indicator"
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <Music className="played-icon" />
-                  </motion.div>
-                )}
-              </div>
+              {(() => {
+                const free = square.isFreeSpace || square.songId === '__FREE_SPACE__';
+                const vis = youtubeBingoSquareDisplay(square);
+                return (
+                  <div className="square-content">
+                    <div className="player-square-title">{free ? 'FREE' : vis.title}</div>
+                    <div className="player-square-artist">
+                      {free ? (venueBranding?.eventTitle?.trim() || 'Free space') : vis.artist}
+                    </div>
+                  </div>
+                );
+              })()}
             </motion.div>
           ))}
         </div>
@@ -1474,7 +1504,7 @@ const PlayerView: React.FC = () => {
 
   return (
     <div
-      className={`player-container ${bingoCard ? 'has-card' : ''}${venueBranding ? ' player-container--venue' : ''}`}
+      className={`player-container player-container--v2 ${bingoCard ? 'has-card' : ''}${venueBranding ? ' player-container--venue' : ''}`}
       style={{
         '--player-card-font-scale': cardFontPercent / 100,
         '--player-visual-bottom-gap': `${visualBottomGapPx}px`,
@@ -1526,24 +1556,29 @@ const PlayerView: React.FC = () => {
         </div>
       ) : null}
 
-      {/* 1) Card first: width-led square (CSS). 2) Chrome below — grouped in .player-main-column for vertical centering on tall viewports. */}
       <div className="player-main-column">
-        {venueBranding &&
-          (venueBranding.logoUrl || venueBranding.eventTitle || venueBranding.sponsorLine) && (
-            <div className="player-venue-strip">
-              {venueBranding.logoUrl ? (
-                <img src={venueBranding.logoUrl} alt="" className="player-venue-logo" />
-              ) : null}
-              <div className="player-venue-titles">
-                {venueBranding.eventTitle ? (
-                  <div className="player-venue-event">{venueBranding.eventTitle}</div>
-                ) : null}
-                {venueBranding.sponsorLine ? (
-                  <div className="player-venue-sponsor">{venueBranding.sponsorLine}</div>
-                ) : null}
-              </div>
+        <motion.div
+          className="player-v2-topbar player-v2-glass-panel"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+        >
+          <div className="player-v2-brand">
+            {venueBranding?.logoUrl ? (
+              <img src={venueBranding.logoUrl} alt="" className="player-v2-brand-logo" />
+            ) : null}
+            <div className="player-v2-brand-copy">
+              <div className="player-v2-brand-eyebrow">Tempo</div>
+              <div className="player-v2-brand-title">{playerSurfaceTitle}</div>
+              <div className="player-v2-brand-subtitle">{playerSurfaceSubtitle}</div>
             </div>
-          )}
+          </div>
+          <div className="player-v2-topbar-meta">
+            <span className="player-v2-pill player-v2-pill--progress">{songsProgressLabel}</span>
+            <span className={`player-v2-pill player-v2-pill--${connectionStatusTone}`}>{connectionStatusLabel}</span>
+          </div>
+        </motion.div>
+
         <motion.div
           className="bingo-section player-bingo-stage"
           initial={{ opacity: 0 }}
@@ -1554,47 +1589,18 @@ const PlayerView: React.FC = () => {
         </motion.div>
 
         <div className="player-rest">
-        <div className="player-chrome">
-          <motion.div
-            className="player-header"
-            initial={{ opacity: 0, y: -12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45 }}
-          >
-            <div className="player-header-bar">
-              <div className="player-header-identity">
-                <Users className="player-icon" aria-hidden />
-                <span className="player-line">{playerName}</span>
-              </div>
-              <button
-                type="button"
-                className={`conn-chip conn-chip-compact conn-status-${connectionStatus}`}
-                onClick={handleResync}
-                title={
-                  connectionStatus === 'connected'
-                    ? 'Connected — tap to resync if you missed a call'
-                    : connectionStatus === 'reconnecting'
-                      ? `Reconnecting (${reconnectAttempts}) — tap to resync`
-                      : 'Disconnected — tap to resync'
-                }
+          <div className="player-chrome player-chrome--v2">
+            {bingoCard ? (
+              <motion.div
+                className="player-v2-action-bar player-v2-glass-panel"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: 0.05 }}
               >
-                <span
-                  className="conn-dot"
-                  style={{
-                    background: connectionStatus === 'connected' ? '#1DB954'
-                      : connectionStatus === 'reconnecting' ? '#FFA500'
-                      : '#FF4D4F'
-                  }}
-                />
-                <span className="conn-chip-label">Resync</span>
-              </button>
-            </div>
-            <div className="player-header-bingo-row">
-              <div className="player-header-bingo-slot">
                 <button
                   type="button"
-                  className={`bingo-fab bingo-fab--canvas bingo-fab--chrome ${bingoHolding ? 'holding' : ''} ${hasValidBingo ? 'ready' : 'disabled'}`}
-                  aria-label={hasValidBingo ? 'Hold to call BINGO' : 'Complete a winning pattern, then hold to call BINGO'}
+                  className={`bingo-fab bingo-fab--canvas player-v2-call-button ${bingoHolding ? 'holding' : ''} ${hasValidBingo ? 'ready' : 'disabled'}`}
+                  aria-label={hasValidBingo ? 'Hold to call BINGO' : 'Hold to call BINGO'}
                   onPointerDown={startBingoHold}
                   onPointerUp={cancelBingoHold}
                   onPointerCancel={cancelBingoHold}
@@ -1603,7 +1609,7 @@ const PlayerView: React.FC = () => {
                   onTouchCancel={(e) => { e.preventDefault(); cancelBingoHold(); }}
                   onContextMenu={(e) => { e.preventDefault(); return false; }}
                   onMouseDown={(e) => { e.preventDefault(); }}
-                  title={hasValidBingo ? 'Hold to call BINGO' : 'Complete a winning pattern to call BINGO'}
+                  title={hasValidBingo ? 'Hold to call BINGO' : 'Hold to call BINGO'}
                   style={{
                     zIndex: 2,
                     userSelect: 'none',
@@ -1617,16 +1623,17 @@ const PlayerView: React.FC = () => {
                 >
                   <span
                     aria-hidden
+                    className="player-v2-call-outline"
                     style={{
                       position: 'absolute',
                       inset: 0,
                       borderRadius: 'inherit',
-                      border: '2px solid rgba(255,255,255,0.12)',
+                      border: '1px solid rgba(255,255,255,0.12)',
                       pointerEvents: 'none',
                     }}
                   />
                   <span
-                    className="bingo-fab-hold-track"
+                    className="bingo-fab-hold-track player-v2-call-track"
                     aria-hidden
                     style={{
                       position: 'absolute',
@@ -1637,7 +1644,7 @@ const PlayerView: React.FC = () => {
                       borderRadius: '0 0 999px 999px',
                       overflow: 'hidden',
                       pointerEvents: 'none',
-                      background: 'rgba(0,0,0,0.25)',
+                      background: 'rgba(0,0,0,0.28)',
                     }}
                   >
                     <span
@@ -1645,7 +1652,7 @@ const PlayerView: React.FC = () => {
                         display: 'block',
                         height: '100%',
                         width: `${Math.max(0, holdProgress) * 100}%`,
-                        background: 'linear-gradient(90deg, #0b3, #1aff8c)',
+                        background: 'linear-gradient(90deg, #00ff88 0%, #8b5cf6 100%)',
                         borderRadius: '0 2px 0 0',
                       }}
                     />
@@ -1665,99 +1672,133 @@ const PlayerView: React.FC = () => {
                     Hold to call BINGO
                   </span>
                 </button>
-              </div>
-            </div>
-            <div className="player-header-meta">
-              <span className="player-meta-line">
-                {gameState.playerCount} players
-                {gameState.isPlaying ? ` · ${songsPlayed} played` : ''}
-              </span>
-              {gameState.hasBingo ? (
-                <span className="player-bingo">BINGO!</span>
-              ) : (
-                <span className="player-bingo-spacer" aria-hidden />
-              )}
-            </div>
-          </motion.div>
+                <button
+                  type="button"
+                  className="player-v2-options-trigger"
+                  onClick={() => setOptionsOpen(true)}
+                >
+                  Card options
+                </button>
+              </motion.div>
+            ) : null}
 
-          <motion.div
-            className="player-controls player-controls-strip"
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, delay: 0.05 }}
-          >
-            {bingoCard && (
-              <div className="player-controls-row player-controls-row-display">
-                <span className="player-controls-label">Display</span>
-                <div className="player-controls-slot">
-                  <span className="player-controls-hint">{displayMode === 'title' ? 'Title' : 'Artist'}</span>
-                  <label className="toggle-switch toggle-switch--compact">
-                    <input
-                      type="checkbox"
-                      checked={displayMode === 'artist'}
-                      onChange={(e) => handleDisplayModeToggle(e.target.checked)}
-                    />
-                    <span className="slider" />
-                  </label>
-                </div>
+            {optionsOpen && (
+              <div
+                className="player-v2-sheet-backdrop"
+                onClick={() => setOptionsOpen(false)}
+              >
+                <motion.div
+                  className="player-v2-sheet player-v2-glass-panel"
+                  initial={{ opacity: 0, y: 24 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.22 }}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <div className="player-v2-sheet-handle" aria-hidden />
+                  <div className="player-v2-sheet-header">
+                    <div className="player-v2-sheet-header-copy">
+                      <div className="player-v2-sheet-title">Card options</div>
+                      <div className="player-v2-sheet-subtitle">
+                        Keep the first screen about the grid. Tweak the details here.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="player-v2-sheet-done"
+                      onClick={() => setOptionsOpen(false)}
+                    >
+                      Done
+                    </button>
+                  </div>
+
+                  <div className="player-v2-sheet-row">
+                    <div className="player-v2-sheet-copy">
+                      <div className="player-v2-sheet-label">Text size</div>
+                      <div className="player-v2-sheet-note">
+                        Adjust square text without changing the overall card layout.
+                      </div>
+                    </div>
+                    <div className="player-v2-font-controls">
+                      <button
+                        type="button"
+                        className="player-font-btn"
+                        onClick={() => bumpCardFont(-CARD_FONT_STEP)}
+                        disabled={cardFontPercent <= CARD_FONT_MIN}
+                        aria-label="Decrease text scale"
+                        title="Smaller"
+                      >
+                        −
+                      </button>
+                      <span
+                        className="font-size-readout"
+                        title="Relative to the automatic size for this bingo card (70–150%)"
+                        aria-label={`Text scale ${cardFontPercent} percent`}
+                      >
+                        {cardFontPercent}%
+                      </span>
+                      <button
+                        type="button"
+                        className="player-font-btn"
+                        onClick={() => bumpCardFont(CARD_FONT_STEP)}
+                        disabled={cardFontPercent >= CARD_FONT_MAX}
+                        aria-label="Increase text scale"
+                        title="Larger"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="player-v2-sheet-row">
+                    <div className="player-v2-sheet-copy">
+                      <div className="player-v2-sheet-label">Reconnect card</div>
+                      <div className="player-v2-sheet-note">{resyncStatusDescription}</div>
+                    </div>
+                    <button
+                      type="button"
+                      className={`player-v2-inline-button player-v2-inline-button--${connectionStatusTone}`}
+                      onClick={handleResync}
+                    >
+                      Resync
+                    </button>
+                  </div>
+
+                  <div className="player-v2-sheet-row">
+                    <div className="player-v2-sheet-copy">
+                      <div className="player-v2-sheet-label">Game status</div>
+                      <div className="player-v2-sheet-note">
+                        {gameState.playerCount} players
+                        {gameState.isPlaying ? ` · ${Math.max(songsPlayed, playedSongIds.length)} songs played` : ''}
+                      </div>
+                    </div>
+                    <div className={`player-v2-pill player-v2-pill--${connectionStatusTone}`}>{connectionStatusLabel}</div>
+                  </div>
+
+                  {hybridPrizeInPersonOnly && !inPersonJoin ? (
+                    <div className="player-v2-sheet-note-block">
+                      <strong>Online player:</strong> you can play along; when the host enables hybrid mode, the prize and
+                      round only finish when an <strong>in-person</strong> player wins.
+                    </div>
+                  ) : null}
+
+                  {venueBranding?.footerText ? (
+                    <div className="player-v2-sheet-note-block">{venueBranding.footerText}</div>
+                  ) : null}
+
+                  {venueBranding?.runbookUrl ? (
+                    <a
+                      href={venueBranding.runbookUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="player-v2-sheet-link"
+                    >
+                      Event runbook
+                    </a>
+                  ) : null}
+                </motion.div>
               </div>
             )}
-
-            <div
-              className={`player-controls-row player-controls-row-textsize${!bingoCard ? ' player-controls-row-full' : ''}`}
-            >
-              <span className="player-controls-label">Text scale</span>
-              <div className="player-controls-slot player-font-size-controls">
-                <button
-                  type="button"
-                  className="player-font-btn"
-                  onClick={() => bumpCardFont(-CARD_FONT_STEP)}
-                  disabled={cardFontPercent <= CARD_FONT_MIN}
-                  aria-label="Decrease text scale"
-                  title="Smaller"
-                >
-                  −
-                </button>
-                <span
-                  className="font-size-readout"
-                  title="Relative to the automatic size for this bingo card (70–150%)"
-                  aria-label={`Text scale ${cardFontPercent} percent`}
-                >
-                  {cardFontPercent}%
-                </span>
-                <button
-                  type="button"
-                  className="player-font-btn"
-                  onClick={() => bumpCardFont(CARD_FONT_STEP)}
-                  disabled={cardFontPercent >= CARD_FONT_MAX}
-                  aria-label="Increase text scale"
-                  title="Larger"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-          </motion.div>
-
-          {hybridPrizeInPersonOnly && !inPersonJoin && (
-            <div
-              className="player-hybrid-hint"
-              style={{
-                margin: '0 auto 10px',
-                maxWidth: 520,
-                padding: '10px 14px',
-                borderRadius: 10,
-                fontSize: '0.82rem',
-                lineHeight: 1.45,
-                color: 'rgba(230,240,255,0.92)',
-                background: 'rgba(0, 180, 255, 0.12)',
-                border: '1px solid rgba(0, 200, 255, 0.35)',
-                textAlign: 'center',
-              }}
-            >
-              <strong>Online player:</strong> you can play along; when the host enables hybrid mode, the prize and round only finish when an <strong>in-person</strong> player wins.
-            </div>
-          )}
+          </div>
 
           {connectionToast && (
             <motion.div
@@ -1776,21 +1817,6 @@ const PlayerView: React.FC = () => {
               {connectionToast}
             </motion.div>
           )}
-
-          {venueBranding?.footerText ? (
-            <footer className="player-venue-footer">{venueBranding.footerText}</footer>
-          ) : null}
-          {venueBranding?.runbookUrl ? (
-            <a
-              href={venueBranding.runbookUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="player-venue-runbook"
-            >
-              Event runbook
-            </a>
-          ) : null}
-        </div>
 
         {(bingoStatus !== 'idle' || bingoMessage) && (
           <motion.div
