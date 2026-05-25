@@ -8991,6 +8991,9 @@ const HostView: React.FC = () => {
                   onResumeGame={handleManualResumeGame}
                   getDisplaySongTitle={getDisplaySongTitle}
                   getDisplaySongArtist={getDisplaySongArtist}
+                  callLog={callLogRows}
+                  canUndoSkip={canUndoSkip}
+                  onUndoSkip={undoLastSkip}
                 />
 
                 {gameState === 'waiting' && !currentSong && !hasFinalizedSongPool && !gameTabRoundBuilderReady && (
@@ -9014,14 +9017,11 @@ const HostView: React.FC = () => {
                   </div>
                 )}
 
-                {gameState === 'playing' ? (
+                {gameState === 'playing' && bingoVerificationCount > 0 ? (
                   <HostGameLivePanel
                     bingoVerificationCount={bingoVerificationCount}
                     pendingPlayerName={pendingVerification?.playerName ?? null}
                     onOpenBingoVerification={openBingoVerification}
-                    callLog={callLogRows}
-                    canUndoSkip={canUndoSkip}
-                    onUndoSkip={undoLastSkip}
                   />
                 ) : null}
               </>

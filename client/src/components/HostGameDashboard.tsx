@@ -15,9 +15,12 @@ import {
   RotateCw,
   Check,
   Loader2,
+  ListOrdered,
+  Undo2,
 } from 'lucide-react';
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import type { BingoPoolSong } from './BingoPoolList';
+import type { CallLogRow } from './host/HostGameLivePanel';
 
 export type HostGameDashboardProps = {
   gameState: 'waiting' | 'playing' | 'ended';
@@ -84,6 +87,9 @@ export type HostGameDashboardProps = {
   onResumeGame: () => void;
   getDisplaySongTitle: (id: string, cleaned: string) => string;
   getDisplaySongArtist: (id: string, fallback: string) => string;
+  callLog: CallLogRow[];
+  canUndoSkip: boolean;
+  onUndoSkip: () => void;
 };
 
 function ProgressRing({
@@ -197,6 +203,9 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
     onResumeGame,
     getDisplaySongTitle,
     getDisplaySongArtist,
+    callLog,
+    canUndoSkip,
+    onUndoSkip,
   } = props;
 
   const totalTracks = poolCount > 0 ? poolCount : playbackTrackTotal ?? 75;
@@ -550,37 +559,67 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
         ) : null}
       </section>
 
-      {/* Up next / pool */}
-      <section className="host-r4-card host-glass-panel host-r4-queue" aria-label="Up next">
-        <div className="host-r4-card__head">
-          <p className="host-r4-card__eyebrow">Up next</p>
-          {hasFinalizedSongPool ? (
-            <button type="button" className="host-r4-link-btn" onClick={onOpenPool}>
-              View bingo pool
+      {/* Call log + up next */}
+      <section className="host-r4-card host-glass-panel host-r4-track-feed" aria-label="Call log and up next">
+        <div className="host-r4-track-feed__section host-r4-track-feed__section--log">
+          <h2 className="host-call-log__title">
+            <ListOrdered className="host-call-log__icon" aria-hidden />
+            Call log
+          </h2>
+          {callLog.length === 0 ? (
+            <p className="host-call-log__empty">No songs called yet this round.</p>
+          ) : (
+            <ol className="host-call-log__list" reversed>
+              {callLog.map((row) => (
+                <li key={`${row.id}-${row.index}`} className="host-call-log__row">
+                  <span className="host-call-log__num">#{row.index}</span>
+                  <span className="host-call-log__title">{row.name}</span>
+                  {row.artist ? <span className="host-call-log__artist"> — {row.artist}</span> : null}
+                </li>
+              ))}
+            </ol>
+          )}
+          {canUndoSkip ? (
+            <button type="button" className="btn-secondary host-call-log__undo" onClick={onUndoSkip}>
+              <Undo2 className="w-4 h-4" aria-hidden />
+              Undo last skip
             </button>
           ) : null}
         </div>
-        {upNext.length > 0 ? (
-          <ul className="host-r4-queue-list">
-            {upNext.map((song, i) => (
-              <li key={song.id} className="host-r4-queue-item">
-                <span className="host-r4-queue-thumb" aria-hidden>
-                  <Music />
-                </span>
-                <div className="host-r4-queue-text">
-                  <span className="host-r4-queue-title">
-                    {getDisplaySongTitle(song.id, song.name || '')}
+
+        <div className="host-r4-track-feed__divider" role="separator" aria-hidden />
+
+        <div className="host-r4-track-feed__section host-r4-track-feed__section--queue">
+          <div className="host-r4-card__head">
+            <p className="host-r4-card__eyebrow">Up next</p>
+            {hasFinalizedSongPool ? (
+              <button type="button" className="host-r4-link-btn" onClick={onOpenPool}>
+                View bingo pool
+              </button>
+            ) : null}
+          </div>
+          {upNext.length > 0 ? (
+            <ul className="host-r4-queue-list">
+              {upNext.map((song) => (
+                <li key={song.id} className="host-r4-queue-item">
+                  <span className="host-r4-queue-thumb" aria-hidden>
+                    <Music />
                   </span>
-                  <span className="host-r4-queue-artist">
-                    {getDisplaySongArtist(song.id, song.artist || '')}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="host-r4-empty">Build the pool from your round playlists to see upcoming tracks.</p>
-        )}
+                  <div className="host-r4-queue-text">
+                    <span className="host-r4-queue-title">
+                      {getDisplaySongTitle(song.id, song.name || '')}
+                    </span>
+                    <span className="host-r4-queue-artist">
+                      {getDisplaySongArtist(song.id, song.artist || '')}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="host-r4-empty">Build the pool from your round playlists to see upcoming tracks.</p>
+          )}
+        </div>
       </section>
 
       {/* Host actions */}

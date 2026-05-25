@@ -80,13 +80,13 @@
 }
 
 .host-glass-theme .host-sidebar {
-  width: 108px;
+  width: 124px;
   flex-shrink: 0;
-  padding: 12px 10px;
+  padding: 14px 12px;
   border-radius: var(--host-glass-radius);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   position: sticky;
   top: 0.5rem;
   align-self: flex-start;
@@ -98,15 +98,15 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
   width: 100%;
-  min-height: 58px;
-  padding: 8px 4px;
+  min-height: 72px;
+  padding: 10px 6px;
   border: 1px solid transparent;
   border-radius: 12px;
   background: transparent;
   color: rgba(255, 255, 255, 0.62);
-  font-size: 0.62rem;
+  font-size: 0.72rem;
   font-weight: 600;
   font-family: inherit;
   letter-spacing: 0.02em;
@@ -121,8 +121,8 @@
 }
 
 .host-glass-theme .host-sidebar__btn svg {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.5rem;
+  height: 1.5rem;
   flex-shrink: 0;
 }
 
@@ -760,6 +760,62 @@
   text-align: left;
 }
 
+.host-glass-theme .host-r4-track-feed {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  max-height: min(520px, calc(100vh - 280px));
+  min-height: 0;
+}
+
+.host-glass-theme .host-r4-track-feed__section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.host-glass-theme .host-r4-track-feed__section--log {
+  flex: 0 1 auto;
+}
+
+.host-glass-theme .host-r4-track-feed__section--log .host-call-log__title {
+  margin-bottom: 6px;
+}
+
+.host-glass-theme .host-r4-track-feed__section--queue {
+  flex: 1 1 auto;
+}
+
+.host-glass-theme .host-r4-track-feed__divider {
+  flex-shrink: 0;
+  height: 1px;
+  margin: 14px 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(167, 139, 250, 0.45) 20%,
+    rgba(0, 255, 136, 0.35) 80%,
+    transparent 100%
+  );
+}
+
+.host-glass-theme .host-r4-track-feed .host-call-log__list {
+  max-height: 168px;
+}
+
+.host-glass-theme .host-r4-track-feed .host-call-log__empty {
+  margin: 0 0 4px;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.host-glass-theme .host-r4-track-feed .host-call-log__undo {
+  margin-top: 10px;
+  align-self: flex-start;
+}
+
+/* Legacy alias — keep if referenced elsewhere */
 .host-glass-theme .host-r4-queue {
   grid-column: 2;
   grid-row: 2;
@@ -1438,6 +1494,7 @@
 
   .host-glass-theme .host-r4-now-playing,
   .host-glass-theme .host-r4-round,
+  .host-glass-theme .host-r4-track-feed,
   .host-glass-theme .host-r4-queue,
   .host-glass-theme .host-r4-actions {
     grid-column: 1;
@@ -1470,9 +1527,10 @@
   }
 
   .host-glass-theme .host-sidebar__btn {
-    flex: 1 1 64px;
-    max-width: 88px;
-    min-height: 52px;
+    flex: 1 1 72px;
+    max-width: 96px;
+    min-height: 64px;
+    font-size: 0.68rem;
   }
 
   .host-glass-theme .host-dashboard__top {
