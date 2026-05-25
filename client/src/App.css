@@ -4946,7 +4946,7 @@ button.conn-chip.conn-chip-compact {
 /* Player card v2: glass-aligned mobile interface */
 .player-container--v2 {
   --player-layout-reserve: clamp(176px, 26vh, 256px);
-  --player-v2-card-ratio: 0.82;
+  --player-v2-card-ratio: 0.72;
 }
 
 @media (max-width: 480px) and (max-height: 720px) {
@@ -5210,7 +5210,7 @@ button.conn-chip.conn-chip-compact {
 }
 
 .player-container--v2 .player-square-title {
-  font-size: calc(var(--player-card-font-scale, 1) * clamp(8px, 3.3cqi, 20px));
+  font-size: calc(var(--player-card-font-scale, 1) * clamp(9px, 4.2cqi, 24px));
   line-height: 1.06;
   font-weight: 800;
   color: rgba(248, 249, 255, 0.98);
@@ -5219,7 +5219,7 @@ button.conn-chip.conn-chip-compact {
 }
 
 .player-container--v2 .player-square-artist {
-  font-size: calc(var(--player-card-font-scale, 1) * clamp(6px, 2.1cqi, 12px));
+  font-size: calc(var(--player-card-font-scale, 1) * clamp(7px, 2.8cqi, 15px));
   line-height: 1.12;
   font-weight: 700;
   color: rgba(232, 230, 255, 0.62);
@@ -5524,7 +5524,7 @@ button.conn-chip.conn-chip-compact {
 @media (orientation: landscape) and (max-height: 560px) {
   .player-container--v2 {
     --player-layout-reserve: clamp(132px, 22vh, 176px);
-    --player-v2-card-ratio: 0.94;
+    --player-v2-card-ratio: 0.88;
   }
 
   .player-container--v2 .player-v2-topbar {
@@ -5556,11 +5556,11 @@ button.conn-chip.conn-chip-compact {
   }
 
   .player-container--v2 .player-square-title {
-    font-size: calc(var(--player-card-font-scale, 1) * clamp(7px, 2.5cqi, 14px));
+    font-size: calc(var(--player-card-font-scale, 1) * clamp(8px, 3cqi, 16px));
   }
 
   .player-container--v2 .player-square-artist {
-    font-size: calc(var(--player-card-font-scale, 1) * clamp(5px, 1.6cqi, 9px));
+    font-size: calc(var(--player-card-font-scale, 1) * clamp(6px, 2cqi, 10px));
   }
 
   .player-container--v2 .player-v2-action-bar {
