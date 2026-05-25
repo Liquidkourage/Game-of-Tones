@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, ListOrdered, Keyboard, Undo2 } from 'lucide-react';
+import { AlertTriangle, ListOrdered, Undo2 } from 'lucide-react';
 
 export type CallLogRow = {
   id: string;
@@ -15,9 +15,6 @@ type HostGameLivePanelProps = {
   callLog: CallLogRow[];
   canUndoSkip: boolean;
   onUndoSkip: () => void;
-  displayUrl: string;
-  displayConnected: boolean;
-  displaySyncLabel: string;
 };
 
 const HostGameLivePanel: React.FC<HostGameLivePanelProps> = ({
@@ -27,9 +24,6 @@ const HostGameLivePanel: React.FC<HostGameLivePanelProps> = ({
   callLog,
   canUndoSkip,
   onUndoSkip,
-  displayUrl,
-  displayConnected,
-  displaySyncLabel,
 }) => (
   <div className="host-game-live-extras">
     {bingoVerificationCount > 0 ? (
@@ -79,38 +73,6 @@ const HostGameLivePanel: React.FC<HostGameLivePanelProps> = ({
           <Undo2 className="w-4 h-4" aria-hidden />
           Undo last skip
         </button>
-      ) : null}
-    </section>
-
-    <section className="host-shortcuts-hint host-glass-panel" aria-label="Keyboard shortcuts">
-      <h2 className="host-shortcuts-hint__title">
-        <Keyboard className="host-shortcuts-hint__icon" aria-hidden />
-        Shortcuts
-      </h2>
-      <ul className="host-shortcuts-hint__list">
-        <li>
-          <kbd>Space</kbd> Pause / resume
-        </li>
-        <li>
-          <kbd>N</kbd> Skip song
-        </li>
-        <li>
-          <kbd>R</kbd> Replay clip
-        </li>
-        <li>
-          <kbd>M</kbd> Mark current played
-        </li>
-        <li>
-          <kbd>B</kbd> Bingo verification
-        </li>
-      </ul>
-      {displayUrl ? (
-        <p className="host-shortcuts-hint__display">
-          Projector:{' '}
-          <a href={displayUrl} target="_blank" rel="noreferrer">
-            {displayConnected ? `connected · ${displaySyncLabel}` : 'open display'}
-          </a>
-        </p>
       ) : null}
     </section>
   </div>

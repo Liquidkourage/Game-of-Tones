@@ -810,6 +810,30 @@ function poolHasTracks(ids: string[] | null | undefined): ids is string[] {
 /** Trim each 5×15 call row so five cards fit inside the column viewport (avoids bottom clip). */
 const FIVE_BY15_CARD_ROW_TRIM_PX = 2;
 
+type HeaderLockupLayout = { top: number; height: number; left: number; right: number };
+
+/** Place letter-reveal toast beside the centered TEMPO lockup when space allows. */
+function revealToastPlacement(
+  lockup: HeaderLockupLayout | null,
+  viewportW: number,
+): { top: number; left?: number; right?: number; transform: string } {
+  if (!lockup || viewportW < 1) {
+    return { top: 12, right: 16, transform: 'none' };
+  }
+  const gap = 12;
+  const estW = 200;
+  const centerY = lockup.top + lockup.height / 2;
+  const fitsRight = lockup.right + gap + estW <= viewportW - 8;
+  if (fitsRight) {
+    return { top: centerY, left: lockup.right + gap, transform: 'translateY(-50%)' };
+  }
+  const fitsLeft = lockup.left - gap - estW >= 8;
+  if (fitsLeft) {
+    return { top: centerY, right: viewportW - lockup.left + gap, transform: 'translateY(-50%)' };
+  }
+  return { top: lockup.top + lockup.height + 6, right: 12, transform: 'none' };
+}
+
 /** Base pause between 1×75 carousel column steps (~5s hold + ~1s slide). */
 const CAROUSEL_BASE_DWELL_MS = 6000;
 
@@ -908,6 +932,7 @@ const PublicDisplay: React.FC = () => {
   }, [showDiagOverlay, pushDiag]);
   /** Pixel `top` for portaled toasts: measured from `.app-header` so placement survives Framer/header animation. */
   const [headerToastTopPx, setHeaderToastTopPx] = useState<number>(78);
+  const [headerLockupLayout, setHeaderLockupLayout] = useState<HeaderLockupLayout | null>(null);
 
   useEffect(() => {
     const onResize = () =>
@@ -927,13 +952,28 @@ const PublicDisplay: React.FC = () => {
     [displayViewport.w, displayViewport.h, fontSizeMultiplier],
   );
 
+  const letterRevealToastPlacement = useMemo(
+    () => revealToastPlacement(headerLockupLayout, displayViewport.w),
+    [headerLockupLayout, displayViewport.w],
+  );
+
   useLayoutEffect(() => {
     let raf = 0;
     const measure = () => {
       const el = document.querySelector('.app-header');
       if (el) {
-        const bottom = el.getBoundingClientRect().bottom;
-        setHeaderToastTopPx(Math.round(bottom + 8));
+        const headerRect = el.getBoundingClientRect();
+        setHeaderToastTopPx(Math.round(headerRect.bottom + 8));
+        const lockup = el.querySelector('.logo--display-lockup, .logo');
+        if (lockup) {
+          const lockupRect = lockup.getBoundingClientRect();
+          setHeaderLockupLayout({
+            top: lockupRect.top,
+            height: lockupRect.height,
+            left: lockupRect.left,
+            right: lockupRect.right,
+          });
+        }
       }
     };
     measure();
@@ -970,6 +1010,26 @@ const PublicDisplay: React.FC = () => {
       );
     };
   }, [venueBranding]);
+
+  /** Re-measure header lockup when venue co-brand text loads (changes lockup width). */
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      const el = document.querySelector('.app-header');
+      const lockup = el?.querySelector('.logo--display-lockup, .logo');
+      if (el && lockup) {
+        const headerRect = el.getBoundingClientRect();
+        setHeaderToastTopPx(Math.round(headerRect.bottom + 8));
+        const lockupRect = lockup.getBoundingClientRect();
+        setHeaderLockupLayout({
+          top: lockupRect.top,
+          height: lockupRect.height,
+          left: lockupRect.left,
+          right: lockupRect.right,
+        });
+      }
+    }, 50);
+    return () => window.clearTimeout(t);
+  }, [venueBranding?.eventTitle, venueBranding?.sponsorLine]);
 
   /** Start fetching the venue logo as soon as we know the URL (socket delivers branding before hero mounts). */
   useEffect(() => {
@@ -4312,33 +4372,19 @@ const PublicDisplay: React.FC = () => {
             key={`toast-${revealToast}-${totalPlayedCount}`}
             role="status"
             aria-live="polite"
-            initial={{ opacity: 0, y: -14 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -14 }}
+            className="public-display-reveal-toast"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.25 }}
             style={{
               position: 'fixed',
-              left: 0,
-              right: 0,
-              top: `${headerToastTopPx}px`,
-              marginLeft: 'auto',
-              marginRight: 'auto',
-              width: 'min(96vw, 56rem)',
-              maxWidth: '96vw',
+              top: letterRevealToastPlacement.top,
+              ...(letterRevealToastPlacement.left != null
+                ? { left: letterRevealToastPlacement.left, right: 'auto' }
+                : { right: letterRevealToastPlacement.right, left: 'auto' }),
+              transform: letterRevealToastPlacement.transform,
               zIndex: 10000,
-              boxSizing: 'border-box',
-              background: 'rgba(0,0,0,0.88)',
-              color: '#00ff88',
-              padding: 'clamp(8px, 1.2vmin, 14px) clamp(12px, 2vmin, 22px)',
-              borderRadius: 'clamp(8px, 1vmin, 12px)',
-              fontWeight: 800,
-              letterSpacing: '0.04em',
-              fontSize: 'clamp(1rem, 2.2vmin, 1.5rem)',
-              lineHeight: 1.15,
-              textAlign: 'center',
-              wordBreak: 'break-word',
-              boxShadow: '0 12px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,255,136,0.25) inset',
-              border: 'max(2px, 0.2vmin) solid rgba(0,255,136,0.45)',
             }}
           >
             Revealed: {revealToast}

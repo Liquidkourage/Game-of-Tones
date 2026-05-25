@@ -12,8 +12,6 @@ import {
   Volume2,
   VolumeX,
   CheckCircle2,
-  AlertTriangle,
-  Monitor,
   RotateCw,
   Check,
   Loader2,
@@ -32,10 +30,6 @@ export type HostGameDashboardProps = {
   } | null;
   gamePaused: boolean;
   pendingVerification: { playerName: string } | null;
-  bingoVerificationCount: number;
-  onOpenBingoVerification: () => void;
-  displayPresence: { connected: boolean; lastSeenAt: number | null; stale: boolean };
-  displayStatusTick: number;
   onReplayClip: () => void;
   onMarkPlayed: () => void;
   markPlayedBusy: boolean;
@@ -143,25 +137,12 @@ function ProgressRing({
   );
 }
 
-function formatDisplaySyncAge(lastSeenAt: number | null, _tick: number): string {
-  if (lastSeenAt == null) return 'never';
-  const sec = Math.max(0, Math.floor((Date.now() - lastSeenAt) / 1000));
-  if (sec < 5) return 'just now';
-  if (sec < 60) return `${sec}s ago`;
-  const min = Math.floor(sec / 60);
-  return `${min}m ago`;
-}
-
 const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
   const {
     gameState,
     currentSong,
     gamePaused,
     pendingVerification,
-    bingoVerificationCount,
-    onOpenBingoVerification,
-    displayPresence,
-    displayStatusTick,
     onReplayClip,
     onMarkPlayed,
     markPlayedBusy,
@@ -270,38 +251,9 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
       ? `Loading playlists… ${finalizeMixElapsedSec}s`
       : 'Loading playlists…'
     : 'Show playlists';
-  const displaySyncLabel = formatDisplaySyncAge(displayPresence.lastSeenAt, displayStatusTick);
-  const displayStatusClass = !displayPresence.connected
-    ? 'host-r4-display-status--off'
-    : displayPresence.stale
-      ? 'host-r4-display-status--stale'
-      : 'host-r4-display-status--ok';
 
   return (
     <div className="host-r4-grid">
-      <div className="host-r4-live-status" role="status" aria-live="polite">
-        <span className={`host-r4-display-status ${displayStatusClass}`}>
-          <Monitor className="host-r4-display-status__icon" aria-hidden />
-          {displayPresence.connected
-            ? `Display connected · last sync ${displaySyncLabel}`
-            : 'Display not connected — open the projector URL for this room'}
-        </span>
-        {bingoVerificationCount > 0 ? (
-          <button
-            type="button"
-            className="host-r4-bingo-chip"
-            onClick={onOpenBingoVerification}
-            aria-label={`${bingoVerificationCount} bingo verification${bingoVerificationCount === 1 ? '' : 's'} pending — open`}
-          >
-            <AlertTriangle className="host-r4-bingo-chip__icon" aria-hidden />
-            <span className="host-r4-bingo-chip__count">{bingoVerificationCount}</span>
-            <span className="host-r4-bingo-chip__label">
-              bingo {bingoVerificationCount === 1 ? 'claim' : 'claims'}
-            </span>
-          </button>
-        ) : null}
-      </div>
-
       {/* Now playing / Ready */}
       <section
         className={

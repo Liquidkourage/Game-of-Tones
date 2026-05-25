@@ -731,7 +731,6 @@ const HostView: React.FC = () => {
     lastSeenAt: number | null;
     stale: boolean;
   }>({ connected: false, lastSeenAt: null, stale: false });
-  const [displayStatusTick, setDisplayStatusTick] = useState(0);
   const [markPlayedBusy, setMarkPlayedBusy] = useState(false);
   const bingoVerificationModalRef = useRef<HTMLDivElement | null>(null);
   const [gamePaused, setGamePaused] = useState(false);
@@ -5525,11 +5524,6 @@ const HostView: React.FC = () => {
     playHostAlertSound();
   }, []);
 
-  useEffect(() => {
-    const id = setInterval(() => setDisplayStatusTick((t) => t + 1), 5000);
-    return () => clearInterval(id);
-  }, []);
-
   const bingoVerificationCount = pendingVerification ? 1 + bingoVerificationBehindCount : 0;
 
 
@@ -8943,10 +8937,6 @@ const HostView: React.FC = () => {
                   currentSong={currentSong}
                   gamePaused={gamePaused}
                   pendingVerification={pendingVerification}
-                  bingoVerificationCount={bingoVerificationCount}
-                  onOpenBingoVerification={openBingoVerification}
-                  displayPresence={displayPresence}
-                  displayStatusTick={displayStatusTick}
                   onReplayClip={replayCurrentClip}
                   onMarkPlayed={markCurrentSongPlayed}
                   markPlayedBusy={markPlayedBusy}
@@ -9032,11 +9022,6 @@ const HostView: React.FC = () => {
                     callLog={callLogRows}
                     canUndoSkip={canUndoSkip}
                     onUndoSkip={undoLastSkip}
-                    displayUrl={
-                      roomId ? `${window.location.origin}/display/${encodeURIComponent(roomId)}` : ''
-                    }
-                    displayConnected={displayPresence.connected}
-                    displaySyncLabel={displaySyncLabel}
                   />
                 ) : null}
               </>

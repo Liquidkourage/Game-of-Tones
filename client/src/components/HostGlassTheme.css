@@ -768,97 +768,6 @@
   max-height: 320px;
 }
 
-.host-glass-theme .host-r4-live-status {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 14px;
-  border-radius: var(--host-glass-radius-sm);
-  border: 1px solid var(--host-glass-border);
-  background: rgba(10, 12, 22, 0.45);
-}
-
-.host-glass-theme .host-r4-display-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.78);
-  line-height: 1.35;
-}
-
-.host-glass-theme .host-r4-display-status__icon {
-  width: 1rem;
-  height: 1rem;
-  flex-shrink: 0;
-}
-
-.host-glass-theme .host-r4-display-status--ok .host-r4-display-status__icon {
-  color: var(--host-glass-mint);
-}
-
-.host-glass-theme .host-r4-display-status--stale {
-  color: #f5d061;
-}
-
-.host-glass-theme .host-r4-display-status--stale .host-r4-display-status__icon {
-  color: #f5d061;
-}
-
-.host-glass-theme .host-r4-display-status--off {
-  color: rgba(255, 160, 160, 0.92);
-}
-
-.host-glass-theme .host-r4-display-status--off .host-r4-display-status__icon {
-  color: #ff8a8a;
-}
-
-.host-glass-theme .host-r4-bingo-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(245, 208, 97, 0.55);
-  background: linear-gradient(135deg, rgba(245, 208, 97, 0.22), rgba(255, 120, 80, 0.12));
-  color: #fff4d6;
-  font-weight: 800;
-  font-size: 0.85rem;
-  cursor: pointer;
-  box-shadow: 0 0 24px rgba(245, 208, 97, 0.2);
-  animation: host-r4-bingo-chip-pulse 2s ease-in-out infinite;
-}
-
-.host-glass-theme .host-r4-bingo-chip:hover {
-  border-color: #f5d061;
-  background: linear-gradient(135deg, rgba(245, 208, 97, 0.32), rgba(255, 120, 80, 0.18));
-}
-
-.host-glass-theme .host-r4-bingo-chip__icon {
-  width: 1.1rem;
-  height: 1.1rem;
-  color: #f5d061;
-}
-
-.host-glass-theme .host-r4-bingo-chip__count {
-  min-width: 1.25rem;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-@keyframes host-r4-bingo-chip-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 16px rgba(245, 208, 97, 0.15);
-  }
-  50% {
-    box-shadow: 0 0 28px rgba(245, 208, 97, 0.35);
-  }
-}
-
 .host-glass-theme .host-r4-transport {
   flex-wrap: wrap;
 }
@@ -1804,24 +1713,6 @@
   color: var(--host-glass-mint);
   font-weight: 800;
   margin-right: 8px;
-}
-
-.host-glass-theme .host-shortcuts-hint__list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
-  font-size: 0.82rem;
-}
-
-.host-glass-theme .host-shortcuts-hint kbd {
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  font-size: 0.75rem;
 }
 
 .host-glass-theme .host-display-extras__diag {
