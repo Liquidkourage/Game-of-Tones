@@ -1783,6 +1783,76 @@ function letterRevealToastEnabledForRoom(room) {
   return room?.publicDisplayLetterRevealToast !== false;
 }
 
+function emptyPublicDisplayRevealState() {
+  return { revealSequence: [], songBaselines: {}, carouselIndex: 0 };
+}
+
+function ensurePublicDisplayRevealState(room) {
+  if (!room.publicDisplayRevealState || typeof room.publicDisplayRevealState !== 'object') {
+    room.publicDisplayRevealState = emptyPublicDisplayRevealState();
+  }
+  const s = room.publicDisplayRevealState;
+  if (!Array.isArray(s.revealSequence)) s.revealSequence = [];
+  if (!s.songBaselines || typeof s.songBaselines !== 'object') s.songBaselines = {};
+  if (typeof s.carouselIndex !== 'number' || !Number.isFinite(s.carouselIndex)) s.carouselIndex = 0;
+  return s;
+}
+
+function publicDisplayRevealStateForClient(room) {
+  const s = ensurePublicDisplayRevealState(room);
+  return {
+    revealSequence: [...s.revealSequence],
+    songBaselines: { ...s.songBaselines },
+    carouselIndex: Math.max(0, Math.floor(s.carouselIndex)),
+  };
+}
+
+function clearPublicDisplayRevealState(room) {
+  room.publicDisplayRevealState = emptyPublicDisplayRevealState();
+}
+
+function clearPublicDisplaySessionState(room) {
+  clearPublicDisplayRevealState(room);
+  room.lastDisplayWinner = null;
+}
+
+/** Room-state / sync-state fields for public display reconnect (letters, carousel, bingo UI). */
+function publicDisplayRoomStateExtras(room) {
+  const pending =
+    room.gameState === 'paused_for_verification' &&
+    Array.isArray(room.bingoVerificationQueue) &&
+    room.bingoVerificationQueue.length > 0;
+  const head = pending ? room.bingoVerificationQueue[0]?.verificationData : null;
+  return {
+    publicDisplayRevealState: publicDisplayRevealStateForClient(room),
+    bingoVerificationPending: pending,
+    bingoVerificationPlayerName: head?.playerName ? String(head.playerName) : null,
+    lastDisplayWinner: room.lastDisplayWinner || null,
+  };
+}
+
+function snippetElapsedMsForRoom(room) {
+  if (!room?.songStartAtMs || typeof room.songStartAtMs !== 'number') return 0;
+  const snippetMs = (room.snippetLength || 30) * 1000;
+  return Math.min(snippetMs, Math.max(0, Date.now() - room.songStartAtMs));
+}
+
+function emitCurrentSongPlayingToSocket(socket, room) {
+  if (!socket || !room?.currentSong?.id || !room.snippetLength) return;
+  const idx = room.currentSongIndex || 0;
+  socket.emit('song-playing', buildSongPlayingPayload(room, room.currentSong, idx));
+}
+
+function storeLastDisplayWinnerFromBingoCalled(room, payload) {
+  if (!payload?.playerName || !payload?.winningCard || !Array.isArray(payload.winningCard.squares)) return;
+  room.lastDisplayWinner = {
+    playerName: String(payload.playerName),
+    squares: payload.winningCard.squares,
+    winningPositions: Array.isArray(payload.winningPositions) ? payload.winningPositions : [],
+    pattern: typeof payload.pattern === 'string' ? payload.pattern : 'line',
+  };
+}
+
 const YOUTUBE_FALLBACK_DURATION_MS = 10 * 60 * 1000;
 
 function computeSnippetRandomStartMs(room, song) {
@@ -1859,6 +1929,7 @@ function buildSongPlayingPayload(room, song, currentIndex) {
     payload.youtubeVideoId = song.id;
     payload.startMs = startMs;
   }
+  payload.snippetElapsedMs = snippetElapsedMsForRoom(room);
   return payload;
 }
 
@@ -1915,6 +1986,7 @@ function syncRoomStateAfterSongStart(roomId, room) {
     currentSongIndex: room.currentSongIndex || 0,
     totalSongs: room.playlistSongs?.length || 0,
     syncTimestamp: Date.now(),
+    ...publicDisplayRoomStateExtras(room),
   };
   io.to(roomId).emit('room-state', syncPayload);
   routineServerLog(`🔄 Synced room-state after song start: ${playedSongIds.length} played songs`);
@@ -2280,7 +2352,8 @@ async function playNextSongSimple(roomId, deviceId) {
       totalPlayedCount: playedSongIds.length,
       currentSongIndex: room.currentSongIndex || 0,
       totalSongs: room.playlistSongs?.length || 0,
-      syncTimestamp: Date.now()
+      syncTimestamp: Date.now(),
+      ...publicDisplayRoomStateExtras(room),
     };
     
     io.to(roomId).emit('room-state', syncPayload);
@@ -3050,30 +3123,12 @@ io.on('connection', (socket) => {
             publicDisplayTitleRevealMode: publicDisplayTitleRevealModeForRoom(room),
             publicDisplayLetterRevealToast: letterRevealToastEnabledForRoom(room),
             venueBranding: venueBrandingForRoom(room),
+            ...publicDisplayRoomStateExtras(room),
           });
           
           // Send current song info if playing
           if (room.currentSong && room.snippetLength) {
-            const idx = room.currentSongIndex || 0;
-            const poolSong = room.playlistSongs?.[idx];
-            const explicit =
-              room.currentSong.explicit === true || poolSong?.explicit === true;
-            socket.emit('song-playing', {
-              songId: room.currentSong.id,
-              songName: room.currentSong.name,
-              ...songAliasDisplayFields(
-                room.currentSong.id,
-                room.currentSong.name,
-                room.currentSong.artist,
-                room.dbOrganizationId ?? null,
-              ),
-              artistName: room.currentSong.artist,
-              explicit,
-              snippetLength: room.snippetLength,
-              currentIndex: idx,
-              totalSongs: room.playlistSongs?.length || 0,
-              previewUrl: poolSong?.previewUrl || null,
-            });
+            emitCurrentSongPlayingToSocket(socket, room);
           }
           
           // Immediately send player cards to reconnecting host
@@ -3093,28 +3148,7 @@ io.on('connection', (socket) => {
           routineServerLog(`✅ Host reconnection state sync complete for ${playerName}`);
         } else {
           // Non-host player: Emit current song to sync display timing
-          if (room.currentSong && room.snippetLength) {
-            const idx = room.currentSongIndex || 0;
-            const poolSong = room.playlistSongs?.[idx];
-            const explicit =
-              room.currentSong.explicit === true || poolSong?.explicit === true;
-            socket.emit('song-playing', {
-              songId: room.currentSong.id,
-              songName: room.currentSong.name,
-              ...songAliasDisplayFields(
-                room.currentSong.id,
-                room.currentSong.name,
-                room.currentSong.artist,
-                room.dbOrganizationId ?? null,
-              ),
-              artistName: room.currentSong.artist,
-              explicit,
-              snippetLength: room.snippetLength,
-              currentIndex: idx,
-              totalSongs: room.playlistSongs?.length || 0,
-              previewUrl: poolSong?.previewUrl || null,
-            });
-          }
+          emitCurrentSongPlayingToSocket(socket, room);
         }
 
         // Ensure bingo card exists for ALL players (including hosts) if cards are available
@@ -4108,7 +4142,7 @@ io.on('connection', (socket) => {
       }
       
       // NOW emit the actual winner event for public display
-      io.to(roomId).emit('bingo-called', { 
+      const bingoCalledPayload = { 
         playerId: resolvedPlayerId, 
         playerName: player.name, 
         winners: room.winners,
@@ -4119,7 +4153,9 @@ io.on('connection', (socket) => {
         pattern: room.pattern || 'line',
         winningCard: winningCardPayload,
         winningPositions,
-      });
+      };
+      storeLastDisplayWinnerFromBingoCalled(room, bingoCalledPayload);
+      io.to(roomId).emit('bingo-called', bingoCalledPayload);
       
       // PAUSE GAME for host to decide: next round or end completely
       room.gameState = 'round_complete';
@@ -4394,6 +4430,7 @@ io.on('connection', (socket) => {
     room.calledSongIds = [];
     room.bingoVerificationQueue = [];
     room.roundWinners = []; // Reset round winners
+    clearPublicDisplaySessionState(room);
     
     // Reset all player bingo status but keep their cards
     room.players.forEach((player) => {
@@ -4487,6 +4524,7 @@ io.on('connection', (socket) => {
     room.playedSongs = [];
     room.calledSongIds = [];
     room.bingoVerificationQueue = [];
+    clearPublicDisplaySessionState(room);
     
     // Reset playlist and mix state - host needs to select playlists again
     room.playlists = [];
@@ -4605,6 +4643,7 @@ io.on('connection', (socket) => {
     
     // Set final game state
     room.gameState = 'ended';
+    clearPublicDisplaySessionState(room);
     
     // Notify all clients that the entire game session has ended
     io.to(roomId).emit('game-session-ended', { 
@@ -4693,7 +4732,7 @@ io.on('connection', (socket) => {
         hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline
       };
       
-      // Include fiveby15 columns if available (for public display)
+      Object.assign(payload, publicDisplayRoomStateExtras(room));
       if (room.fiveByFifteenColumnsIds && Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5) {
         const idToCol = {};
         room.fiveByFifteenColumnsIds.forEach((colIds, colIdx) => {
@@ -4727,6 +4766,7 @@ io.on('connection', (socket) => {
         });
       }
       
+      emitCurrentSongPlayingToSocket(socket, room);
       io.to(socket.id).emit('room-state', payload);
       routineServerLog(`✅ SYNC-STATE: Sent comprehensive state (${payload.totalPlayedCount} played songs, ${payload.playerCount} players)`);
     } catch (e) {
@@ -4791,8 +4831,9 @@ io.on('connection', (socket) => {
     try {
       room.winners = [];
       room.calledSongIds = [];
+      room.bingoVerificationQueue = [];
+      clearPublicDisplaySessionState(room);
       room.bingoCards = new Map();
-      // Reset persistent client-to-card mapping for the new round
       room.clientCards = new Map();
       room.currentSong = null;
       room.currentSongIndex = 0;
@@ -4834,6 +4875,7 @@ io.on('connection', (socket) => {
         // Initialize call history and round
         room.calledSongIds = [];
         room.bingoVerificationQueue = [];
+        clearPublicDisplaySessionState(room);
         room.currentSongIndex = 0;
         room.currentSong = null;
         room.round = (room.round || 0) + 1;
@@ -5823,7 +5865,41 @@ io.on('connection', (socket) => {
     if (!isCurrentHost) return;
     
     routineServerLog(`🔤 Letter reset requested for public display in room ${roomId}`);
+    clearPublicDisplayRevealState(room);
     io.to(roomId).emit('display-reset-letters');
+    io.to(roomId).emit('display-reveal-state', publicDisplayRevealStateForClient(room));
+  });
+
+  socket.on('display-reveal-state-update', (data = {}) => {
+    try {
+      const { roomId, revealSequence, songBaselines, carouselIndex } = data;
+      if (!roomId) return;
+      const room = rooms.get(roomId);
+      if (!room || !room.players.has(socket.id)) return;
+
+      const state = ensurePublicDisplayRevealState(room);
+      if (Array.isArray(revealSequence)) {
+        state.revealSequence = revealSequence
+          .filter((ch) => typeof ch === 'string' && /^[A-Z0-9]$/.test(ch))
+          .slice(0, 8000);
+      }
+      if (songBaselines && typeof songBaselines === 'object') {
+        const nextBaselines = {};
+        for (const [songId, baseline] of Object.entries(songBaselines)) {
+          if (typeof songId === 'string' && typeof baseline === 'number' && Number.isFinite(baseline)) {
+            nextBaselines[songId] = Math.max(0, Math.floor(baseline));
+          }
+        }
+        state.songBaselines = nextBaselines;
+      }
+      if (typeof carouselIndex === 'number' && Number.isFinite(carouselIndex)) {
+        state.carouselIndex = Math.max(0, Math.floor(carouselIndex));
+      }
+      state.updatedAt = Date.now();
+      io.to(roomId).emit('display-reveal-state', publicDisplayRevealStateForClient(room));
+    } catch (e) {
+      console.error('display-reveal-state-update:', e?.message || e);
+    }
   });
 
   // Song display aliases (per organization, persisted in song_display_aliases).

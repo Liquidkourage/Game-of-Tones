@@ -1188,7 +1188,12 @@ const PublicDisplay: React.FC = () => {
   const [playedOrderRevision, setPlayedOrderRevision] = useState(0);
   const idMetaRef = useRef<Record<string, { name: string; artist: string }>>({});
   const currentIndexRef = useRef<number>(-1);
-  // Initialize revealed letters from localStorage if available (persist across refresh)
+  const socketRef = useRef<any>(null);
+  const revealSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const applyingServerRevealRef = useRef(false);
+  const migratedLocalRevealRef = useRef(false);
+
+  /** One-time read: migrate pre-server localStorage into room state on reconnect. */
   const getStoredRevealedLetters = (): string[] => {
     try {
       const stored = localStorage.getItem(`display_revealed_letters_${roomId}`);
@@ -1211,17 +1216,22 @@ const PublicDisplay: React.FC = () => {
     return {};
   };
   
-  const revealSequenceRef = useRef<string[]>(getStoredRevealedLetters());
-  const songBaselineRef = useRef<Record<string, number>>(getStoredBaselines());
-  
-  // Persist revealed letters to localStorage whenever they change
-  const persistRevealedLetters = () => {
-    try {
-      localStorage.setItem(`display_revealed_letters_${roomId}`, JSON.stringify(revealSequenceRef.current));
-      localStorage.setItem(`display_baselines_${roomId}`, JSON.stringify(songBaselineRef.current));
-    } catch (e) {
-      console.warn('Failed to persist revealed letters:', e);
-    }
+  const revealSequenceRef = useRef<string[]>([]);
+  const songBaselineRef = useRef<Record<string, number>>({});
+
+  const syncRevealStateToServer = () => {
+    if (!roomId || !socketRef.current || applyingServerRevealRef.current) return;
+    if (revealSyncTimerRef.current) clearTimeout(revealSyncTimerRef.current);
+    revealSyncTimerRef.current = setTimeout(() => {
+      revealSyncTimerRef.current = null;
+      if (!socketRef.current || applyingServerRevealRef.current) return;
+      socketRef.current.emit('display-reveal-state-update', {
+        roomId,
+        revealSequence: revealSequenceRef.current,
+        songBaselines: songBaselineRef.current,
+        carouselIndex: carouselIndexRef.current,
+      });
+    }, 200);
   };
 
   const playedSeqRef = useRef<Record<string, number>>({});
@@ -1353,10 +1363,18 @@ const PublicDisplay: React.FC = () => {
   const [reconnectAttempts, setReconnectAttempts] = useState<number>(0);
   const [lastSyncTime, setLastSyncTime] = useState<number>(0);
   const [socket, setSocket] = useState<any>(null);
-  // Host/room can change call list layout mid-game; reset local carousel index so the swap is predictable
+  /** Continuous vertical scroll phase (5×15 columns stay aligned). */
+  const [phasePx, setPhasePx] = useState<number>(0);
+  const fiveBy15ScrollRafRef = useRef<number | null>(null);
+  /** Pause global scroll phase during bingo verification. */
+  const [freezeAll, setFreezeAll] = useState<boolean>(false);
+
+  // Host/room can change call list layout mid-game; reset local scroll/phase so the swap is predictable
   // (does not clear played order, reveals, or pool data).
   useEffect(() => {
     setCarouselIndex(0);
+    setPhasePx(0);
+    setFreezeAll(false);
   }, [callListMode]);
 
   // Per-ball animation seeds (stable for component lifetime)
@@ -1438,6 +1456,53 @@ const PublicDisplay: React.FC = () => {
       timeout: 20000,
     });
     setSocket(newSocket);
+    socketRef.current = newSocket;
+
+    const applyRevealStateFromServer = (
+      state: { revealSequence?: string[]; songBaselines?: Record<string, number>; carouselIndex?: number } | null | undefined,
+      opts?: { restoreCarousel?: boolean },
+    ) => {
+      if (!state || typeof state !== 'object') return;
+      applyingServerRevealRef.current = true;
+      try {
+        if (Array.isArray(state.revealSequence)) {
+          revealSequenceRef.current = state.revealSequence;
+        }
+        if (state.songBaselines && typeof state.songBaselines === 'object') {
+          songBaselineRef.current = { ...state.songBaselines };
+        }
+        if (opts?.restoreCarousel !== false && typeof state.carouselIndex === 'number' && Number.isFinite(state.carouselIndex)) {
+          const idx = Math.max(0, Math.floor(state.carouselIndex));
+          setCarouselIndex(idx);
+          carouselIndexRef.current = idx;
+        }
+        setRevealLayoutNonce((n) => n + 1);
+      } finally {
+        applyingServerRevealRef.current = false;
+      }
+    };
+
+    const maybeMigrateLocalRevealToServer = () => {
+      if (migratedLocalRevealRef.current) return;
+      const localLetters = getStoredRevealedLetters();
+      const localBaselines = getStoredBaselines();
+      if (localLetters.length === 0 && Object.keys(localBaselines).length === 0) return;
+      migratedLocalRevealRef.current = true;
+      revealSequenceRef.current = localLetters;
+      songBaselineRef.current = localBaselines;
+      setRevealLayoutNonce((n) => n + 1);
+      newSocket.emit('display-reveal-state-update', {
+        roomId,
+        revealSequence: localLetters,
+        songBaselines: localBaselines,
+        carouselIndex: carouselIndexRef.current,
+      });
+      try {
+        localStorage.removeItem(`display_revealed_letters_${roomId}`);
+        localStorage.removeItem(`display_baselines_${roomId}`);
+      } catch {}
+      console.log(`🔄 Migrated ${localLetters.length} local reveal letters to server for room ${roomId}`);
+    };
 
     /** Clears played-song refs so a new round/game cannot show the previous session's call list. */
     const resetPlayedTrackingRefs = () => {
@@ -1469,6 +1534,8 @@ const PublicDisplay: React.FC = () => {
       setTotalPlayedCount(0);
       setCarouselIndex(0);
       carouselIndexRef.current = 0;
+      setPhasePx(0);
+      setFreezeAll(false);
       setRevealLayoutNonce((n) => n + 1);
     };
 
@@ -1675,6 +1742,7 @@ const PublicDisplay: React.FC = () => {
           
           // CRITICAL: Sync played songs to internal tracking from server (single source of truth)
           // This is the ONLY place where playedOrderRef should be updated
+          let wasReconnecting = false;
           if (Array.isArray(payload.playedSongs) || Array.isArray(payload.playedSongIds)) {
             let playedIds = Array.isArray(payload.playedSongs)
               ? payload.playedSongs
@@ -1736,49 +1804,57 @@ const PublicDisplay: React.FC = () => {
               });
             }
             
-            // BUG #3 FIX: If reconnecting during active game, ensure baselines are set correctly
-            // Revealed letters should already be restored by pool handlers, but ensure baselines match
+            // Server-authoritative letter reveal (cross-device refresh)
+            if (payload.publicDisplayRevealState) {
+              applyRevealStateFromServer(payload.publicDisplayRevealState);
+            } else if (wasReconnecting) {
+              maybeMigrateLocalRevealToServer();
+            }
+
             if (wasReconnecting || (hadMismatch && serverCount > 0)) {
               console.log('🔄 Reconnection detected - ensuring baselines are correct');
-              
-              // If revealed letters weren't restored yet (shouldn't happen, but safe fallback)
-              if (revealSequenceRef.current.length === 0) {
-                const storedLetters = getStoredRevealedLetters();
-                if (storedLetters.length > 0) {
-                  console.log(`📝 Fallback: Restoring ${storedLetters.length} revealed letters from storage`);
-                  revealSequenceRef.current = storedLetters;
-                }
-              }
-              
-              // If baselines weren't restored yet, restore them
-              if (Object.keys(songBaselineRef.current).length === 0) {
-                const storedBaselines = getStoredBaselines();
-                if (Object.keys(storedBaselines).length > 0) {
-                  console.log(`📝 Fallback: Restoring baselines for ${Object.keys(storedBaselines).length} songs`);
-                  songBaselineRef.current = storedBaselines;
-                }
-              }
-              
-              // Ensure all played songs have baselines (set to current length if missing)
               const currentBaseline = revealSequenceRef.current.length;
               const newBaselines: Record<string, number> = {};
               playedIds.forEach((songId: string) => {
-                // If baseline doesn't exist, set it to current length (meaning no letters revealed before this song)
                 if (songBaselineRef.current[songId] === undefined) {
                   newBaselines[songId] = currentBaseline;
                 }
               });
-              // Merge with existing baselines
               if (Object.keys(newBaselines).length > 0) {
                 songBaselineRef.current = { ...songBaselineRef.current, ...newBaselines };
                 console.log(`✅ Set baselines for ${Object.keys(newBaselines).length} songs without baselines`);
+                syncRevealStateToServer();
               }
-              
-              // Persist the current state
-              persistRevealedLetters();
             }
           } else if (shouldClearPlayedList) {
             resetPlayedTrackingRefs();
+          } else if (payload.publicDisplayRevealState) {
+            applyRevealStateFromServer(payload.publicDisplayRevealState);
+          }
+
+          if (payload.bingoVerificationPending) {
+            setIsVerificationPending(true);
+          } else if (payload.gameState !== 'paused_for_verification') {
+            setIsVerificationPending(false);
+          }
+
+          const lw = payload.lastDisplayWinner;
+          if (
+            payload.gameState === 'round_complete' &&
+            lw &&
+            typeof lw.playerName === 'string' &&
+            Array.isArray(lw.squares) &&
+            lw.squares.length > 0
+          ) {
+            setWinnerCardModal((prev) => {
+              if (prev) return prev;
+              return {
+                playerName: lw.playerName,
+                squares: lw.squares,
+                winningPositions: Array.isArray(lw.winningPositions) ? lw.winningPositions : [],
+                pattern: typeof lw.pattern === 'string' ? lw.pattern : 'line',
+              };
+            });
           }
           
           // Use server timestamp if available, otherwise current time
@@ -1833,6 +1909,12 @@ const PublicDisplay: React.FC = () => {
       }
     });
 
+    newSocket.on('display-reveal-state', (data: any) => {
+      if (data && typeof data === 'object') {
+        applyRevealStateFromServer(data);
+      }
+    });
+
     newSocket.on('player-joined', (data: any) => {
       const count = Math.max(0, Number(data.playerCount || 0));
       setGameState(prev => ({ ...prev, playerCount: count }));
@@ -1862,35 +1944,27 @@ const PublicDisplay: React.FC = () => {
         oneBy75IdsRef.current = nextIds;
         poolOrderFingerprintRef.current = nextIds.join('\0');
 
-        const storedLetters = getStoredRevealedLetters();
-        const storedBaselines = getStoredBaselines();
-        const hasStoredState = storedLetters.length > 0 || Object.keys(storedBaselines).length > 0;
-
-        if (Array.isArray(data?.names)) setPlaylistNames(data.names);
-
         if (poolChanged) {
           console.log(`🔄 oneby75-pool order changed (${n} ids) — clearing call list / reveal state`);
           clearCallListSessionState();
-        } else if (hasStoredState) {
-          if (storedLetters.length > 0) {
-            console.log(`🔄 Reconnecting: Restoring ${storedLetters.length} revealed letters from storage`);
-            revealSequenceRef.current = storedLetters;
-          }
-          if (Object.keys(storedBaselines).length > 0) {
-            console.log(`🔄 Reconnecting: Restoring baselines for ${Object.keys(storedBaselines).length} songs`);
-            songBaselineRef.current = storedBaselines;
-          }
-          setRevealLayoutNonce((x) => x + 1);
+          newSocket.emit('display-reveal-state-update', {
+            roomId,
+            revealSequence: [],
+            songBaselines: {},
+            carouselIndex: 0,
+          });
         }
 
-        setCarouselIndex(0);
-        carouselIndexRef.current = 0;
-        const keepFiveBy15 =
-          (fiveBy15ColumnsRef.current && fiveBy15ColumnsRef.current.length === 5) ||
-          (Array.isArray(data?.names) && data.names.filter((n: string) => String(n || '').trim()).length === 5);
-        if (!keepFiveBy15) {
-          setFiveBy15Columns(null);
-          fiveBy15ColumnsRef.current = null;
+        if (Array.isArray(data?.names)) setPlaylistNames(data.names);
+
+        if (!poolChanged) {
+          const keepFiveBy15 =
+            (fiveBy15ColumnsRef.current && fiveBy15ColumnsRef.current.length === 5) ||
+            (Array.isArray(data?.names) && data.names.filter((n: string) => String(n || '').trim()).length === 5);
+          if (!keepFiveBy15) {
+            setFiveBy15Columns(null);
+            fiveBy15ColumnsRef.current = null;
+          }
         }
       }
     });
@@ -1921,40 +1995,16 @@ const PublicDisplay: React.FC = () => {
           const flat = ([] as string[]).concat(...cols);
           setOneBy75Ids(flat);
           oneBy75IdsRef.current = flat;
-          // Preserve playedOrder; do not clear
-          // BUG #3 FIX: Check if we're reconnecting (has stored letters) vs new game
-          // Restore revealed letters from localStorage if available (persists across refresh)
-          const storedLetters = getStoredRevealedLetters();
-          const storedBaselines = getStoredBaselines();
-          const hasStoredState = storedLetters.length > 0 || Object.keys(storedBaselines).length > 0;
-          
-          if (hasStoredState) {
-            // Reconnecting - restore revealed letters and baselines from localStorage
-            if (storedLetters.length > 0) {
-              console.log(`🔄 Reconnecting: Restoring ${storedLetters.length} revealed letters from storage`);
-              revealSequenceRef.current = storedLetters;
-            } else {
-              revealSequenceRef.current = [];
-            }
-            if (Object.keys(storedBaselines).length > 0) {
-              console.log(`🔄 Reconnecting: Restoring baselines for ${Object.keys(storedBaselines).length} songs`);
-              songBaselineRef.current = storedBaselines;
-            }
-          } else if (playedOrderRef.current.length === 0) {
-            // New game / first pool only — never wipe play order that room-state or song-playing already applied.
+          // Preserve playedOrder; reveal state comes from server (room-state / display-reveal-state)
+          if (playedOrderRef.current.length === 0 && revealSequenceRef.current.length === 0) {
             resetPlayedTrackingRefs();
             revealSequenceRef.current = [];
             songBaselineRef.current = {};
-            try {
-              localStorage.removeItem(`display_revealed_letters_${roomId}`);
-              localStorage.removeItem(`display_baselines_${roomId}`);
-            } catch {}
           } else {
             console.log(
               `🔄 fiveby15-pool: keeping ${playedOrderRef.current.length} played song(s) in call-list order`,
             );
           }
-          setCarouselIndex(0);
           setPlayedOrderRevision((n) => n + 1);
           // Do not seed by flattened pool; rely solely on actual play events
           // Reconcile any pending placements now that columns are known
@@ -2186,7 +2236,7 @@ const PublicDisplay: React.FC = () => {
         if (songBaselineRef.current[song.id] === undefined || isResettingRef.current) {
           // If reset is in progress or baseline doesn't exist, set to current length
           songBaselineRef.current[song.id] = currentBaseline;
-          persistRevealedLetters(); // Persist baseline change
+          syncRevealStateToServer(); // Persist baseline change
           console.log(`📝 Set baseline for song ${song.id} to ${currentBaseline} (reset=${isResettingRef.current})`);
         }
       }
@@ -2196,8 +2246,11 @@ const PublicDisplay: React.FC = () => {
         countdownRef.current = null;
       }
       const total = (Number(data.snippetLength) || 30) * 1000;
+      const elapsed = Math.max(0, Number(data.snippetElapsedMs) || 0);
+      const remaining = Math.max(0, total - elapsed);
       snippetCountdownSongIdRef.current = song.id;
-      setCountdownMs(total);
+      setCountdownMs(remaining);
+      if (remaining <= 0) return;
       countdownRef.current = setInterval(() => {
         setCountdownMs((ms) => {
           const next = Math.max(0, ms - 100);
@@ -2612,7 +2665,7 @@ const PublicDisplay: React.FC = () => {
           if (lettersToReveal.length > 0 && !isResettingRef.current) {
             revealSequenceRef.current = [...revealSequenceRef.current, ...lettersToReveal];
             console.log('🎡 Wheel of Fortune: Revealed letters:', lettersToReveal, 'Total revealed:', revealSequenceRef.current.length);
-            persistRevealedLetters(); // Persist revealed letters
+            syncRevealStateToServer(); // Persist revealed letters
           } else if (isResettingRef.current) {
             console.log('🎡 Manual reveal skipped - reset in progress');
           }
@@ -2647,6 +2700,11 @@ const PublicDisplay: React.FC = () => {
         clearInterval(countdownRef.current);
         countdownRef.current = null;
       }
+      if (revealSyncTimerRef.current) {
+        clearTimeout(revealSyncTimerRef.current);
+        revealSyncTimerRef.current = null;
+      }
+      socketRef.current = null;
       newSocket.close();
     };
   }, [roomId]);
@@ -2745,7 +2803,7 @@ const PublicDisplay: React.FC = () => {
         
         revealSequenceRef.current.push(revealedChar);
         console.log('🎡 Auto-revealed letter:', revealedChar, 'Total revealed:', revealSequenceRef.current.length);
-        persistRevealedLetters(); // Persist auto-revealed letter
+        syncRevealStateToServer(); // Persist auto-revealed letter
         if (revealToastTimerRef.current) { clearTimeout(revealToastTimerRef.current); revealToastTimerRef.current = null; }
         setRevealToast(revealedChar);
         revealToastTimerRef.current = setTimeout(() => {
@@ -2765,6 +2823,11 @@ const PublicDisplay: React.FC = () => {
   useEffect(() => {
     carouselIndexRef.current = carouselIndex;
   }, [carouselIndex]);
+
+  useEffect(() => {
+    if (columnCallListLayout || applyingServerRevealRef.current) return;
+    syncRevealStateToServer();
+  }, [carouselIndex, columnCallListLayout, roomId]);
 
   const snapCarouselAfterForwardLoop = useCallback(() => {
     if (columnCallListLayout || !animating) return;
@@ -2855,6 +2918,39 @@ const PublicDisplay: React.FC = () => {
       if (ro) ro.disconnect();
     };
   }, [columnCallListLayout, layoutFiveColumns, playedOrderRevision, oneBy75Ids]);
+
+  // 5×15: smooth aligned vertical scroll; pauses when freezeAll (e.g. bingo verify).
+  useEffect(() => {
+    if (!columnCallListLayout) return;
+    const secondsPerRow = 6;
+    let last = performance.now();
+    let running = true;
+    const rowPx = fiveBy15CardRowPx > 0 ? fiveBy15CardRowPx : rowHeightPx;
+    if (rowPx <= 0) return;
+
+    const step = (now: number) => {
+      if (!running) return;
+      const dt = (now - last) / 1000;
+      last = now;
+      if (!freezeAll) {
+        const delta = (rowPx / secondsPerRow) * dt;
+        setPhasePx((p) => p + delta);
+      }
+      fiveBy15ScrollRafRef.current = requestAnimationFrame(step);
+    };
+    fiveBy15ScrollRafRef.current = requestAnimationFrame(step);
+    return () => {
+      running = false;
+      if (fiveBy15ScrollRafRef.current != null) {
+        cancelAnimationFrame(fiveBy15ScrollRafRef.current);
+        fiveBy15ScrollRafRef.current = null;
+      }
+    };
+  }, [columnCallListLayout, fiveBy15CardRowPx, rowHeightPx, freezeAll]);
+
+  useEffect(() => {
+    setFreezeAll(isVerificationPending);
+  }, [isVerificationPending]);
 
   // Recover play order if stats show songs but call-list refs were cleared (e.g. late fiveby15-pool).
   useEffect(() => {
@@ -3617,10 +3713,13 @@ const PublicDisplay: React.FC = () => {
               {(() => {
                 const shouldScroll = !isFullCardPattern && col.length > 5 && fiveBy15CardRowPx > 0;
                 const useAbsoluteTrack = shouldScroll;
-                const displayItems = col;
-                // Pin newest played song to the bottom row; scroll up by however many rows overflow 5.
-                const scrollRows = shouldScroll ? Math.max(0, col.length - 5) : 0;
-                const yPx = scrollRows * fiveBy15CardRowPx;
+                const displayItems = shouldScroll ? [...col, ...col] : col;
+                let yPx = 0;
+                if (shouldScroll) {
+                  const baseRows = Math.max(0, col.length - 5);
+                  const loopPx = Math.max(1, col.length * fiveBy15CardRowPx);
+                  yPx = (baseRows * fiveBy15CardRowPx + phasePx) % loopPx;
+                }
                 return (
                   <div
                     className="call-vert-track"
@@ -3631,7 +3730,6 @@ const PublicDisplay: React.FC = () => {
                       top: 0,
                       willChange: useAbsoluteTrack ? 'transform' : undefined,
                       transform: useAbsoluteTrack ? `translateY(${-yPx}px)` : undefined,
-                      transition: useAbsoluteTrack ? 'transform 0.35s ease-out' : undefined,
                     }}
                   >
                 {displayItems.map((id, ri) => {
