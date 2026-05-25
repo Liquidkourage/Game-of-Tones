@@ -1815,6 +1815,8 @@ const PublicDisplay: React.FC = () => {
           // CRITICAL: Sync played songs to internal tracking from server (single source of truth)
           // This is the ONLY place where playedOrderRef should be updated
           let wasReconnecting = false;
+          let hadMismatch = false;
+          let playedIdsForBaselineSync: string[] | null = null;
           if (Array.isArray(payload.playedSongs) || Array.isArray(payload.playedSongIds)) {
             let playedIds = Array.isArray(payload.playedSongs)
               ? payload.playedSongs
@@ -1833,7 +1835,8 @@ const PublicDisplay: React.FC = () => {
             const serverCount = playedIds.length;
             const localCount = playedOrderRef.current.length;
             wasReconnecting = serverCount > 0 && localCount === 0;
-            const hadMismatch = serverCount !== localCount || JSON.stringify(playedIds) !== JSON.stringify(playedOrderRef.current);
+            hadMismatch = serverCount !== localCount || JSON.stringify(playedIds) !== JSON.stringify(playedOrderRef.current);
+            playedIdsForBaselineSync = playedIds;
             
             if (hadMismatch) {
               console.log(`🔄 Display sync detected mismatch: local=${localCount}, server=${serverCount} - syncing from server`);
@@ -1875,27 +1878,33 @@ const PublicDisplay: React.FC = () => {
                 }
               });
             }
-            
-            if (wasReconnecting || (hadMismatch && serverCount > 0)) {
-              console.log('🔄 Reconnection detected - ensuring baselines are correct');
-              const currentBaseline = revealSequenceRef.current.length;
-              const newBaselines: Record<string, number> = {};
-              playedIds.forEach((songId: string) => {
-                if (songBaselineRef.current[songId] === undefined) {
-                  newBaselines[songId] = currentBaseline;
-                }
-              });
-              if (Object.keys(newBaselines).length > 0) {
-                songBaselineRef.current = { ...songBaselineRef.current, ...newBaselines };
-                console.log(`✅ Set baselines for ${Object.keys(newBaselines).length} songs without baselines`);
-                syncRevealStateToServer();
-              }
-            }
           } else if (shouldClearPlayedList) {
             resetPlayedTrackingRefs();
           }
 
           hydrateRevealStateFromRoom(payload, wasReconnecting);
+
+          // After server reveal hydrate: backfill baselines for played songs still missing one.
+          if (
+            (wasReconnecting || hadMismatch) &&
+            Array.isArray(playedIdsForBaselineSync) &&
+            playedIdsForBaselineSync.length > 0
+          ) {
+            const currentBaseline = revealSequenceRef.current.length;
+            const newBaselines: Record<string, number> = {};
+            playedIdsForBaselineSync.forEach((songId: string) => {
+              if (songBaselineRef.current[songId] === undefined) {
+                newBaselines[songId] = currentBaseline;
+              }
+            });
+            if (Object.keys(newBaselines).length > 0) {
+              songBaselineRef.current = { ...songBaselineRef.current, ...newBaselines };
+              console.log(
+                `✅ Set baselines for ${Object.keys(newBaselines).length} played songs (post-hydrate, cutoff=${currentBaseline})`,
+              );
+              syncRevealStateToServer();
+            }
+          }
 
           if (payload.bingoVerificationPending) {
             setIsVerificationPending(true);
@@ -2268,9 +2277,10 @@ const PublicDisplay: React.FC = () => {
           }
         }
         // CRITICAL FIX: Update playedOrderRef immediately so songs appear and letters can reveal
+        const isNewCall = !playedOrderRef.current.includes(song.id);
         // But maintain order - if currentIndex is available, use it; otherwise append
         // room-state sync will still override with authoritative server order if there's a mismatch
-        if (!playedOrderRef.current.includes(song.id)) {
+        if (isNewCall) {
           if (typeof data.currentIndex === 'number' && data.currentIndex >= 0) {
             // Insert at correct position based on currentIndex
             // If currentIndex is 0, insert at start; if 1, after first, etc.
@@ -2300,11 +2310,12 @@ const PublicDisplay: React.FC = () => {
         // BUG #3 FIX: Always set baseline to current length, even if reset just happened
         // This ensures songs starting right after reset get correct baseline (0)
         const currentBaseline = revealSequenceRef.current.length;
-        if (songBaselineRef.current[song.id] === undefined || isResettingRef.current) {
-          // If reset is in progress or baseline doesn't exist, set to current length
+        if (isNewCall || songBaselineRef.current[song.id] === undefined || isResettingRef.current) {
           songBaselineRef.current[song.id] = currentBaseline;
           syncRevealStateToServer(); // Persist baseline change
-          console.log(`📝 Set baseline for song ${song.id} to ${currentBaseline} (reset=${isResettingRef.current})`);
+          console.log(
+            `📝 Set baseline for song ${song.id} to ${currentBaseline} (newCall=${isNewCall}, reset=${isResettingRef.current})`,
+          );
         }
       }
       // reset countdown timer
@@ -2838,7 +2849,11 @@ const PublicDisplay: React.FC = () => {
           const pid = ids[i];
           const meta = idMetaRef.current[pid];
           if (!meta) continue;
-          const baseline = songBaselineRef.current[pid] ?? 0;
+          const baselineRaw = songBaselineRef.current[pid];
+          const baseline =
+            typeof baselineRaw === 'number' && Number.isFinite(baselineRaw)
+              ? baselineRaw
+              : revealSequenceRef.current.length;
           const visibleForSong = new Set(revealSequenceRef.current.slice(baseline));
           const textUpper = (`${meta.name || ''} ${meta.artist || ''}`).toUpperCase();
           for (let j = 0; j < textUpper.length; j++) {
@@ -3124,9 +3139,16 @@ const PublicDisplay: React.FC = () => {
     | { kind: 'plain' }
     | { kind: 'playing_placeholder' };
 
+  /** Baseline index into revealSequence; missing = no global letters apply yet (not 0). */
+  const revealBaselineForSong = (songId: string): number => {
+    const stored = songBaselineRef.current[songId];
+    if (typeof stored === 'number' && Number.isFinite(stored)) return stored;
+    return revealSequenceRef.current.length;
+  };
+
   const getCallSongRevealUi = (songId: string): CallSongRevealUi => {
     if (titleRevealMode === 'letter') {
-      const baseline = songBaselineRef.current[songId] ?? 0;
+      const baseline = revealBaselineForSong(songId);
       return {
         kind: 'masked',
         revealedSet: new Set(revealSequenceRef.current.slice(baseline)),
@@ -3159,7 +3181,7 @@ const PublicDisplay: React.FC = () => {
       return { kind: 'playing_placeholder' };
     }
 
-    const baseline = songBaselineRef.current[songId] ?? 0;
+    const baseline = revealBaselineForSong(songId);
     return {
       kind: 'masked',
       revealedSet: new Set(revealSequenceRef.current.slice(baseline)),

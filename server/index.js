@@ -5896,7 +5896,11 @@ io.on('connection', (socket) => {
             nextBaselines[songId] = Math.max(0, Math.floor(baseline));
           }
         }
-        state.songBaselines = nextBaselines;
+        if (data.forceClear === true) {
+          state.songBaselines = nextBaselines;
+        } else if (Object.keys(nextBaselines).length > 0) {
+          state.songBaselines = { ...state.songBaselines, ...nextBaselines };
+        }
       }
       if (typeof carouselIndex === 'number' && Number.isFinite(carouselIndex)) {
         state.carouselIndex = Math.max(0, Math.floor(carouselIndex));
