@@ -1,0 +1,1059 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TEMPO Mobile Card Exact Direction</title>
+    <style>
+      :root {
+        --bg: #0a0a14;
+        --bg-2: #16122a;
+        --panel: rgba(56, 44, 96, 0.32);
+        --panel-2: rgba(64, 50, 110, 0.48);
+        --line: rgba(180, 160, 255, 0.16);
+        --line-2: rgba(167, 139, 250, 0.38);
+        --text: #e8e6ff;
+        --muted: rgba(232, 230, 255, 0.72);
+        --accent: #00ff88;
+        --accent-2: #8b5cf6;
+        --accent-3: #c4b5fd;
+        --good: #6ee7b7;
+        --danger: #fb7185;
+        --mint-rgb: 0, 255, 136;
+        --violet-rgb: 139, 92, 246;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: Inter, Arial, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(ellipse 90% 60% at 8% 6%, rgba(124, 58, 237, 0.48), transparent 52%),
+          radial-gradient(ellipse 75% 50% at 88% 92%, rgba(45, 130, 200, 0.28), transparent 48%),
+          radial-gradient(ellipse 50% 40% at 50% 100%, rgba(0, 255, 136, 0.08), transparent 55%),
+          linear-gradient(155deg, #0f0c24 0%, #141a32 40%, #0a0e16 100%);
+        position: relative;
+        overflow-x: hidden;
+      }
+
+      body::before,
+      body::after {
+        content: "";
+        position: fixed;
+        pointer-events: none;
+        z-index: 0;
+        border-radius: 50%;
+        filter: blur(72px);
+      }
+
+      body::before {
+        top: -10%;
+        left: -8%;
+        width: 46vw;
+        height: 46vw;
+        background: radial-gradient(circle, rgba(var(--violet-rgb), 0.38) 0%, transparent 68%);
+      }
+
+      body::after {
+        right: -8%;
+        bottom: -14%;
+        width: 38vw;
+        height: 38vw;
+        background: radial-gradient(circle, rgba(var(--mint-rgb), 0.18) 0%, transparent 68%);
+      }
+
+      .page {
+        width: 1760px;
+        margin: 0 auto;
+        padding: 44px;
+        position: relative;
+        z-index: 1;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: 1.35fr 0.65fr;
+        gap: 24px;
+      }
+
+      .card,
+      .meta,
+      .panel {
+        background: linear-gradient(
+          145deg,
+          rgba(72, 52, 120, 0.42) 0%,
+          rgba(32, 28, 56, 0.55) 55%,
+          rgba(18, 20, 36, 0.62) 100%
+        );
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        box-shadow:
+          0 10px 40px rgba(0, 0, 0, 0.36),
+          0 0 48px rgba(109, 40, 217, 0.08),
+          inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(22px);
+        -webkit-backdrop-filter: blur(22px);
+      }
+
+      .card {
+        padding: 30px;
+      }
+
+      .eyebrow {
+        color: var(--accent);
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        text-shadow: 0 0 18px rgba(var(--mint-rgb), 0.35);
+      }
+
+      h1 {
+        margin: 12px 0 14px;
+        font-size: 50px;
+        line-height: 1.03;
+      }
+
+      .lede {
+        margin: 0;
+        color: var(--muted);
+        font-size: 20px;
+        line-height: 1.45;
+      }
+
+      .principles {
+        margin-top: 22px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .principle {
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(var(--violet-rgb), 0.12);
+        border: 1px solid rgba(var(--violet-rgb), 0.24);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--accent-3);
+      }
+
+      .meta {
+        padding: 24px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .meta-row {
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.035);
+        border: 1px solid rgba(var(--violet-rgb), 0.16);
+      }
+
+      .meta-row .label {
+        color: var(--accent);
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 800;
+        margin-bottom: 6px;
+      }
+
+      .meta-row .value {
+        font-size: 18px;
+        line-height: 1.4;
+        font-weight: 700;
+      }
+
+      .layout {
+        margin-top: 28px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+      }
+
+      .panel {
+        padding: 18px;
+        display: grid;
+        gap: 16px;
+        align-content: start;
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .panel-title {
+        font-size: 28px;
+        font-weight: 800;
+      }
+
+      .panel-sub {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .badge {
+        padding: 7px 11px;
+        border-radius: 999px;
+        background: rgba(var(--mint-rgb), 0.14);
+        border: 1px solid rgba(var(--mint-rgb), 0.28);
+        color: #c9ffe7;
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        box-shadow: 0 0 18px rgba(var(--mint-rgb), 0.12);
+      }
+
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .chip {
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(var(--violet-rgb), 0.12);
+        border: 1px solid rgba(var(--violet-rgb), 0.22);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #e9ddff;
+      }
+
+      .device-slot {
+        padding: 18px;
+        background: linear-gradient(
+          160deg,
+          rgba(var(--violet-rgb), 0.12) 0%,
+          rgba(10, 10, 20, 0.36) 100%
+        );
+        border-radius: 24px;
+        border: 1px solid rgba(var(--mint-rgb), 0.18);
+        display: grid;
+        justify-content: center;
+        align-content: start;
+        box-shadow:
+          inset 0 0 40px rgba(var(--violet-rgb), 0.08),
+          0 0 28px rgba(0, 0, 0, 0.2);
+      }
+
+      .scaled {
+        position: relative;
+      }
+
+      .scaled.p390 {
+        width: 300px;
+        height: 650px;
+      }
+
+      .scaled.l844 {
+        width: 700px;
+        height: 324px;
+      }
+
+      .viewport {
+        position: absolute;
+        inset: 0 auto auto 0;
+        transform-origin: top left;
+        overflow: hidden;
+        border-radius: 34px;
+        border: 1px solid rgba(var(--mint-rgb), 0.35);
+        background: linear-gradient(155deg, var(--bg) 0%, var(--bg-2) 50%, var(--bg) 100%);
+        box-shadow:
+          0 20px 60px rgba(0, 0, 0, 0.34),
+          0 0 48px rgba(var(--violet-rgb), 0.22),
+          inset 0 0 60px rgba(var(--violet-rgb), 0.08);
+      }
+
+      .viewport::before,
+      .viewport::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .viewport::before {
+        opacity: 0.14;
+        background-image: repeating-linear-gradient(
+          -18deg,
+          transparent,
+          transparent 5px,
+          rgba(var(--mint-rgb), 0.14) 5px,
+          rgba(var(--mint-rgb), 0.14) 6px
+        );
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.92) 0%, transparent 86%);
+      }
+
+      .viewport::after {
+        background: radial-gradient(ellipse 80% 50% at 20% 0%, rgba(var(--violet-rgb), 0.22), transparent 55%);
+        opacity: 0.85;
+      }
+
+      .scaled.p390 .viewport {
+        width: 390px;
+        height: 844px;
+        transform: scale(0.77);
+      }
+
+      .scaled.l844 .viewport {
+        width: 844px;
+        height: 390px;
+        transform: scale(0.83);
+        border-radius: 26px;
+      }
+
+      .screen {
+        width: 100%;
+        height: 100%;
+        padding: 14px;
+        display: grid;
+        grid-template-rows: auto auto 1fr auto;
+        gap: 10px;
+      }
+
+      .landscape .screen {
+        grid-template-rows: auto 1fr;
+        gap: 10px;
+      }
+
+      .status-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(232, 230, 255, 0.72);
+        opacity: 1;
+      }
+
+      .top-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .event-block {
+        min-width: 0;
+      }
+
+      .event-kicker {
+        color: var(--accent);
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 800;
+        text-shadow: 0 0 14px rgba(var(--mint-rgb), 0.22);
+      }
+
+      .event-title {
+        margin-top: 5px;
+        font-size: 21px;
+        line-height: 1.1;
+        font-weight: 900;
+      }
+
+      .event-sub {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .stack-right {
+        display: grid;
+        gap: 8px;
+        justify-items: end;
+      }
+
+      .pill {
+        padding: 8px 12px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      }
+
+      .pill.primary {
+        background: rgba(var(--mint-rgb), 0.14);
+        border-color: rgba(var(--mint-rgb), 0.3);
+        color: var(--accent);
+        box-shadow: 0 0 18px rgba(var(--mint-rgb), 0.12);
+      }
+
+      .pill.soft {
+        background: rgba(var(--violet-rgb), 0.16);
+        border-color: rgba(var(--violet-rgb), 0.26);
+        color: var(--accent-3);
+      }
+
+      .bingo-tabs {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 6px;
+      }
+
+      .playlist-tabs {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+
+      .playlist-tab {
+        min-height: 40px;
+        padding: 6px 4px;
+        border-radius: 13px;
+        background: linear-gradient(
+          145deg,
+          rgba(var(--violet-rgb), 0.16) 0%,
+          rgba(26, 24, 44, 0.48) 100%
+        );
+        border: 1px solid rgba(var(--violet-rgb), 0.2);
+        display: grid;
+        align-content: center;
+        justify-items: center;
+        gap: 2px;
+        text-align: center;
+      }
+
+      .playlist-tab.active {
+        background: linear-gradient(
+          145deg,
+          rgba(var(--violet-rgb), 0.34) 0%,
+          rgba(var(--violet-rgb), 0.18) 100%
+        );
+        border-color: rgba(var(--mint-rgb), 0.35);
+        box-shadow:
+          0 0 22px rgba(var(--violet-rgb), 0.2),
+          inset 0 0 0 1px rgba(var(--mint-rgb), 0.1);
+      }
+
+      .playlist-tab-label {
+        color: var(--text);
+        font-size: 11px;
+        line-height: 1;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .playlist-tab-name {
+        font-size: 7px;
+        line-height: 1.05;
+        font-weight: 800;
+        color: rgba(232, 230, 255, 0.66);
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
+      .grid5 {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 7px;
+        align-content: start;
+      }
+
+      .cell {
+        min-height: 102px;
+        border-radius: 16px;
+        padding: 9px 8px;
+        background: linear-gradient(
+          155deg,
+          rgba(255, 255, 255, 0.045) 0%,
+          rgba(var(--violet-rgb), 0.08) 100%
+        );
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        display: grid;
+        align-content: start;
+        gap: 5px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      }
+
+      .cell.marked {
+        background: linear-gradient(
+          155deg,
+          rgba(var(--mint-rgb), 0.16) 0%,
+          rgba(var(--violet-rgb), 0.12) 100%
+        );
+        border-color: rgba(var(--mint-rgb), 0.42);
+        box-shadow:
+          inset 0 0 0 1px rgba(var(--mint-rgb), 0.14),
+          0 0 16px rgba(var(--mint-rgb), 0.12);
+      }
+
+      .cell.free {
+        background: linear-gradient(
+          155deg,
+          rgba(var(--violet-rgb), 0.28) 0%,
+          rgba(var(--mint-rgb), 0.16) 100%
+        );
+        border-color: rgba(var(--mint-rgb), 0.3);
+      }
+
+      .cell-title {
+        font-size: 11px;
+        line-height: 1.08;
+        font-weight: 900;
+      }
+
+      .cell-artist {
+        font-size: 8px;
+        line-height: 1.15;
+        color: rgba(232, 230, 255, 0.62);
+        font-weight: 700;
+      }
+
+      .cta-wrap {
+        display: grid;
+        gap: 8px;
+      }
+
+      .cta {
+        border: 0;
+        border-radius: 999px;
+        padding: 15px 18px;
+        background: linear-gradient(
+          135deg,
+          rgba(var(--mint-rgb), 0.9) 0%,
+          rgba(var(--violet-rgb), 0.88) 100%
+        );
+        color: #f8fbff;
+        font-size: 14px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        text-align: center;
+        box-shadow:
+          0 0 26px rgba(var(--violet-rgb), 0.26),
+          inset 0 1px 0 rgba(255, 255, 255, 0.18);
+      }
+
+      .drawer-link {
+        text-align: center;
+        color: rgba(232, 230, 255, 0.6);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .options-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(7, 11, 20, 0.42);
+      }
+
+      .options-sheet {
+        position: absolute;
+        left: 14px;
+        right: 14px;
+        bottom: 14px;
+        padding: 16px;
+        border-radius: 26px;
+        background: linear-gradient(
+          145deg,
+          rgba(72, 52, 120, 0.5) 0%,
+          rgba(32, 28, 56, 0.74) 55%,
+          rgba(18, 20, 36, 0.9) 100%
+        );
+        border: 1px solid rgba(var(--violet-rgb), 0.28);
+        box-shadow:
+          0 -10px 40px rgba(0, 0, 0, 0.28),
+          0 0 24px rgba(var(--violet-rgb), 0.14);
+        display: grid;
+        gap: 14px;
+        backdrop-filter: blur(22px);
+        -webkit-backdrop-filter: blur(22px);
+      }
+
+      .sheet-handle {
+        width: 46px;
+        height: 5px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.16);
+        margin: 0 auto;
+      }
+
+      .sheet-title {
+        font-size: 18px;
+        font-weight: 900;
+      }
+
+      .sheet-sub {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.4;
+      }
+
+      .option-grid {
+        display: grid;
+        gap: 10px;
+      }
+
+      .option-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 11px 12px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(var(--violet-rgb), 0.16);
+      }
+
+      .option-label {
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .option-note {
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .toggle,
+      .mini-pill {
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .toggle {
+        background: rgba(var(--mint-rgb), 0.14);
+        border: 1px solid rgba(var(--mint-rgb), 0.28);
+        color: #d6ffe9;
+      }
+
+      .mini-pill {
+        background: rgba(var(--violet-rgb), 0.16);
+        border: 1px solid rgba(var(--violet-rgb), 0.26);
+        color: #e9ddff;
+      }
+
+      .landscape-shell {
+        display: grid;
+        grid-template-columns: 1.2fr 0.72fr;
+        gap: 12px;
+        min-height: 100%;
+      }
+
+      .landscape-main {
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+        gap: 8px;
+      }
+
+      .landscape-side {
+        display: grid;
+        grid-template-rows: auto auto 1fr auto;
+        gap: 8px;
+      }
+
+      .landscape .grid5 {
+        gap: 5px;
+      }
+
+      .landscape .playlist-tabs {
+        gap: 5px;
+        margin-bottom: 6px;
+      }
+
+      .landscape .playlist-tab {
+        min-height: 28px;
+        padding: 4px 3px;
+        border-radius: 10px;
+      }
+
+      .landscape .playlist-tab-label {
+        font-size: 8px;
+      }
+
+      .landscape .playlist-tab-name {
+        font-size: 5px;
+      }
+
+      .landscape .cell {
+        min-height: 48px;
+        padding: 5px 6px;
+        gap: 2px;
+        border-radius: 12px;
+      }
+
+      .landscape .cell-title {
+        font-size: 8px;
+      }
+
+      .landscape .cell-artist {
+        font-size: 7px;
+      }
+
+      .landscape .cta {
+        padding: 13px 14px;
+      }
+
+      .decisions {
+        margin: 0;
+        padding-left: 18px;
+        color: #e7f0ff;
+        font-size: 15px;
+        line-height: 1.55;
+      }
+
+      .decisions li + li {
+        margin-top: 8px;
+      }
+
+      .decision-block {
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.035);
+        border: 1px solid rgba(var(--violet-rgb), 0.16);
+      }
+
+      .decision-block strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 14px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <section class="hero">
+        <div class="card">
+          <div class="eyebrow">One Exact Direction</div>
+          <h1>TEMPO Mobile Card: What I Would Ship</h1>
+          <p class="lede">
+            A grid-dominant mobile card with always-visible artist info, one unmistakable `Call Bingo` action, and every
+            advanced control demoted into a calm options sheet instead of competing with the game surface.
+          </p>
+          <div class="principles">
+            <div class="principle">Grid first</div>
+            <div class="principle">Artist always visible</div>
+            <div class="principle">No now playing block</div>
+            <div class="principle">One main CTA</div>
+            <div class="principle">Advanced tools demoted</div>
+          </div>
+        </div>
+        <div class="meta">
+          <div class="meta-row">
+            <div class="label">Directly informed by</div>
+            <div class="value">Real competitor screenshots plus our previous Tempo mock studies</div>
+          </div>
+          <div class="meta-row">
+            <div class="label">What disappears from first screen</div>
+            <div class="value">Resync button, text controls, display toggle, player count, verbose metadata rails</div>
+          </div>
+          <div class="meta-row">
+            <div class="label">What stays visible</div>
+            <div class="value">Event title, song progress, artist in squares, one clear bingo action</div>
+          </div>
+          <div class="meta-row">
+            <div class="label">Why</div>
+            <div class="value">Competitors win the first glance. Tempo should keep its trust features without sacrificing that clarity.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="layout">
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Portrait Play Screen</div>
+              <div class="panel-sub">The default mobile surface. Designed for one-hand scan, tap, and bingo call.</div>
+            </div>
+            <div class="badge">390 x 844</div>
+          </div>
+          <div class="chip-row">
+            <div class="chip">First-read simple</div>
+            <div class="chip">Artist always visible</div>
+            <div class="chip">No tool clutter</div>
+          </div>
+          <div class="device-slot">
+            <div class="scaled p390">
+              <div class="viewport" id="portrait-screen"></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Portrait Options Drawer</div>
+              <div class="panel-sub">All the powerful utility survives, but it no longer competes with the card itself.</div>
+            </div>
+            <div class="badge">Demoted utilities</div>
+          </div>
+          <div class="chip-row">
+            <div class="chip">Text sizing</div>
+            <div class="chip">Reconnect safely</div>
+            <div class="chip">House rules</div>
+          </div>
+          <div class="device-slot">
+            <div class="scaled p390">
+              <div class="viewport" id="portrait-sheet"></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Landscape Adaptation</div>
+              <div class="panel-sub">Same card system, but split for short-wide phones so the grid still feels large.</div>
+            </div>
+            <div class="badge">844 x 390</div>
+          </div>
+          <div class="chip-row">
+            <div class="chip">Grid left</div>
+            <div class="chip">Action right</div>
+            <div class="chip">Same hierarchy</div>
+          </div>
+          <div class="device-slot">
+            <div class="scaled l844">
+              <div class="viewport landscape" id="landscape-screen"></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Exact Product Decisions</div>
+              <div class="panel-sub">What I would do with the current player card, specifically.</div>
+            </div>
+            <div class="badge">Ship direction</div>
+          </div>
+          <div class="decision-block">
+            <strong>Keep on first screen</strong>
+            <div class="muted">Event title, progress count, title + artist in every cell, one huge bingo CTA.</div>
+          </div>
+          <div class="decision-block">
+            <strong>Move out of first screen</strong>
+            <div class="muted">Resync, text scale, advanced display preferences, hybrid explanation copy, validation detail, help links.</div>
+          </div>
+          <div class="decision-block">
+            <strong>Typography rule</strong>
+            <div class="muted">Bold title first; muted artist second; no metadata badges inside the main scan path unless essential.</div>
+          </div>
+          <ul class="decisions">
+            <li>Remove `Now Playing` from the first screen entirely and let the grid claim that space.</li>
+            <li>Keep artist always visible in every square, because one real competitor proves it can still read cleanly.</li>
+            <li>Let the card occupy almost all vertical space after the header, matching the strongest competitor pattern.</li>
+            <li>Preserve Tempo’s richer trust tools, but only inside the bottom sheet so the first read stays obvious.</li>
+            <li>In landscape, stop stacking everything vertically. Split the card and the action rail so the grid stays big.</li>
+          </ul>
+        </article>
+      </section>
+    </div>
+
+    <script>
+      const songs = [
+        ["Dancing Queen", "ABBA"],
+        ["Tiny Dancer", "Elton John"],
+        ["Sweet Escape", "Gwen Stefani"],
+        ["Take On Me", "a-ha"],
+        ["Fast Car", "Tracy Chapman"],
+        ["Dreams", "Fleetwood Mac"],
+        ["Mr. Brightside", "The Killers"],
+        ["Waterfalls", "TLC"],
+        ["Levitating", "Dua Lipa"],
+        ["Valerie", "Amy Winehouse"],
+        ["September", "Earth, Wind & Fire"],
+        ["Crazy Train", "Ozzy Osbourne"],
+        ["FREE", ""],
+        ["Bohemian Rhapsody", "Queen"],
+        ["Shut Up and Dance", "Walk the Moon"],
+        ["Blinding Lights", "The Weeknd"],
+        ["Rolling in the Deep", "Adele"],
+        ["Hot in Herre", "Nelly"],
+        ["Wonderwall", "Oasis"],
+        ["No Scrubs", "TLC"],
+        ["Since U Been Gone", "Kelly Clarkson"],
+        ["Teenage Dream", "Katy Perry"],
+        ["I Wanna Dance", "Whitney Houston"],
+        ["Uptown Funk", "Bruno Mars"],
+        ["Hey Ya!", "Outkast"],
+      ];
+
+      const playlistColumns = [
+        ["B", "Disco"],
+        ["I", "Y2K"],
+        ["N", "Pop"],
+        ["G", "Rock"],
+        ["O", "Country"],
+      ];
+
+      const marked = new Set([1, 6, 8, 12, 16, 18, 22]);
+
+      function cellHtml([title, artist], idx, landscape = false) {
+        const isMarked = marked.has(idx);
+        const isFree = title === "FREE";
+        return `
+          <div class="cell${isMarked ? " marked" : ""}${isFree ? " free" : ""}">
+            <div class="cell-title">${title}</div>
+            ${artist ? `<div class="cell-artist">${artist}</div>` : `<div class="cell-artist">Tempo Night</div>`}
+          </div>
+        `;
+      }
+
+      function gridHtml(landscape = false) {
+        return `
+          <div class="playlist-tabs">
+            ${playlistColumns
+              .map(
+                ([letter, name]) => `
+                  <div class="playlist-tab${letter === "N" ? " active" : ""}">
+                    <div class="playlist-tab-label">${letter}</div>
+                    <div class="playlist-tab-name">${name}</div>
+                  </div>
+                `
+              )
+              .join("")}
+          </div>
+          <div class="grid5">
+            ${songs.map((song, idx) => cellHtml(song, idx, landscape)).join("")}
+          </div>
+        `;
+      }
+
+      function portraitMain({ withSheet = false }) {
+        return `
+          <div class="screen">
+            <div class="status-row">
+              <span>Tempo</span>
+              <span>live sync</span>
+            </div>
+            <div class="top-row">
+              <div class="event-block">
+                <div class="event-kicker">Game of Tones</div>
+                <div class="event-title">Thursday Night Bingo</div>
+                <div class="event-sub">Juke's Bar · Room 5241</div>
+              </div>
+              <div class="stack-right">
+                <div class="pill primary">Song 24 / 75</div>
+                <div class="pill soft">Options</div>
+              </div>
+            </div>
+            <div>${gridHtml(false)}</div>
+            <div class="cta-wrap">
+              <div class="cta">Hold to Call Bingo</div>
+              <div class="drawer-link">Card options</div>
+            </div>
+            ${withSheet ? `
+              <div class="options-overlay"></div>
+              <div class="options-sheet">
+                <div class="sheet-handle"></div>
+                <div>
+                  <div class="sheet-title">Card options</div>
+                  <div class="sheet-sub">All advanced utilities live here so the first screen stays about the grid.</div>
+                </div>
+                <div class="option-grid">
+                  <div class="option-row">
+                    <div>
+                      <div class="option-label">Text size</div>
+                      <div class="option-note">Bump square text without changing the main layout.</div>
+                    </div>
+                    <div class="toggle">110%</div>
+                  </div>
+                  <div class="option-row">
+                    <div>
+                      <div class="option-label">Reconnect card</div>
+                      <div class="option-note">Safe resync if connection wobbles or the browser refreshes.</div>
+                    </div>
+                    <div class="mini-pill">Resync</div>
+                  </div>
+                  <div class="option-row">
+                    <div>
+                      <div class="option-label">High contrast mode</div>
+                      <div class="option-note">Extra legibility for dim venues and bright patios.</div>
+                    </div>
+                    <div class="toggle">On</div>
+                  </div>
+                  <div class="option-row">
+                    <div>
+                      <div class="option-label">House rules</div>
+                      <div class="option-note">Hybrid note, verification flow, and venue instructions.</div>
+                    </div>
+                    <div class="mini-pill">View</div>
+                  </div>
+                </div>
+              </div>
+            ` : ""}
+          </div>
+        `;
+      }
+
+      function landscapeMain() {
+        return `
+          <div class="screen">
+            <div class="status-row">
+              <span>Tempo · Game of Tones</span>
+              <span>Room 5241 · Song 24 / 75</span>
+            </div>
+            <div class="landscape-shell">
+              <div class="landscape-main">
+                <div class="top-row">
+                  <div class="event-block">
+                    <div class="event-kicker">Thursday Night Bingo</div>
+                    <div class="event-title">Juke's Bar</div>
+                  </div>
+                  <div class="pill soft">Options</div>
+                </div>
+                ${gridHtml(true)}
+              </div>
+              <div class="landscape-side">
+                <div class="pill primary">Artist visible in every square</div>
+                <div class="pill soft">Live sync on host playback</div>
+                <div class="decision-block">
+                  <strong>Landscape rule</strong>
+                  <div class="muted">Keep the grid big by moving metadata and action into a right rail instead of stacking above and below.</div>
+                </div>
+                <div class="cta">Hold to Call Bingo</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      document.getElementById("portrait-screen").innerHTML = portraitMain({ withSheet: false });
+      document.getElementById("portrait-sheet").innerHTML = portraitMain({ withSheet: true });
+      document.getElementById("landscape-screen").innerHTML = landscapeMain();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TEMPO Sales One-Sheet</title>
+    <style>
+      @page {
+        size: Letter portrait;
+        margin: 0;
+      }
+
+      :root {
+        --bg: #0b1020;
+        --ink: #eef2ff;
+        --muted: #b4bedf;
+        --line: rgba(255, 255, 255, 0.12);
+        --accent: #91f7d0;
+        --accent-2: #8db9ff;
+        --accent-3: #ffc86d;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: Inter, "Segoe UI", Arial, sans-serif;
+      }
+
+      body {
+        width: 8.5in;
+        height: 11in;
+        zoom: 0.92;
+        background:
+          radial-gradient(circle at top right, rgba(141, 185, 255, 0.22), transparent 24%),
+          radial-gradient(circle at top left, rgba(145, 247, 208, 0.18), transparent 22%),
+          linear-gradient(180deg, #121932 0%, #0b1020 46%, #080c18 100%);
+      }
+
+      .page {
+        width: 8.5in;
+        height: 11in;
+        padding: 0.32in 0.34in 0.24in;
+        display: flex;
+        flex-direction: column;
+        gap: 0.1in;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        font-size: 10px;
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: linear-gradient(180deg, var(--accent), var(--accent-2));
+      }
+
+      .hero {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 33px;
+        line-height: 0.96;
+        letter-spacing: -0.04em;
+        max-width: 6.7in;
+      }
+
+      .subhead {
+        margin: 0;
+        font-size: 12.8px;
+        line-height: 1.34;
+        color: var(--muted);
+        max-width: 6.75in;
+      }
+
+      .panel,
+      .feature,
+      .pricing-card,
+      .promise-band,
+      .closing {
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .promise-band {
+        padding: 12px 14px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04)),
+          rgba(255, 255, 255, 0.04);
+      }
+
+      .promise-text {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.35;
+        color: var(--ink);
+      }
+
+      .promise-text strong {
+        color: var(--accent);
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin-top: 10px;
+      }
+
+      .pill {
+        border-radius: 999px;
+        padding: 6px 9px;
+        font-size: 9px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-weight: 700;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1.06fr 0.94fr;
+        gap: 10px;
+      }
+
+      .panel {
+        padding: 13px;
+      }
+
+      h2 {
+        margin: 0 0 8px;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+      }
+
+      h3 {
+        margin: 0 0 5px;
+        font-size: 11px;
+        color: var(--ink);
+      }
+
+      p,
+      li {
+        margin: 0;
+        font-size: 10.2px;
+        line-height: 1.3;
+        color: var(--muted);
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 17px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .stat {
+        padding: 10px 8px;
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .stat-value {
+        font-size: 14px;
+        font-weight: 800;
+        color: var(--accent);
+      }
+
+      .stat-label {
+        margin-top: 4px;
+        font-size: 8px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .quote-box {
+        padding: 14px 14px 12px;
+        border-radius: 24px;
+        border: 1px solid rgba(145, 247, 208, 0.18);
+        background:
+          radial-gradient(circle at top right, rgba(145, 247, 208, 0.16), transparent 32%),
+          linear-gradient(180deg, rgba(26, 35, 67, 0.96), rgba(14, 20, 38, 0.92));
+      }
+
+      .quote-mark {
+        font-size: 28px;
+        line-height: 0.9;
+        color: var(--accent-3);
+        font-weight: 900;
+      }
+
+      .quote {
+        margin: 4px 0 8px;
+        font-size: 17px;
+        line-height: 1.12;
+        font-weight: 800;
+        color: var(--ink);
+      }
+
+      .quote-note {
+        font-size: 10px;
+        line-height: 1.32;
+      }
+
+      .middle-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .feature {
+        padding: 11px;
+      }
+
+      .feature-stack {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .display-card {
+        background:
+          linear-gradient(180deg, rgba(141, 185, 255, 0.12), rgba(255, 255, 255, 0.03)),
+          rgba(255, 255, 255, 0.04);
+      }
+
+      .pricing-wrap {
+        border: 1px solid var(--line);
+        border-radius: 26px;
+        padding: 13px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .pricing-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+
+      .pricing-note {
+        font-size: 9px;
+        line-height: 1.25;
+        color: var(--muted);
+        max-width: 2.8in;
+      }
+
+      .pricing {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .pricing-card {
+        padding: 11px 11px 10px;
+      }
+
+      .plan {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--accent);
+        font-weight: 800;
+      }
+
+      .price {
+        margin-top: 6px;
+        font-size: 20px;
+        line-height: 1;
+        font-weight: 900;
+        letter-spacing: -0.04em;
+      }
+
+      .unit {
+        font-size: 9px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .plan-meta {
+        margin-top: 7px;
+        padding-top: 6px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      .footer-grid {
+        display: grid;
+        grid-template-columns: 0.88fr 1.12fr;
+        gap: 10px;
+      }
+
+      .footer-note {
+        font-size: 9.6px;
+        line-height: 1.32;
+        color: var(--muted);
+      }
+
+      .closing {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 14px 16px 12px;
+        border-radius: 24px;
+        border: 1px solid rgba(145, 247, 208, 0.3);
+        background: rgba(145, 247, 208, 0.08);
+        font-size: 10.8px;
+        line-height: 1.32;
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      .closing strong {
+        color: var(--accent);
+      }
+
+      .closing small {
+        margin-top: 6px;
+        font-size: 8.8px;
+        line-height: 1.25;
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .brand {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+          <div class="eyebrow"><span class="dot"></span> TEMPO music bingo software</div>
+        <h1>
+          Music bingo that feels <span class="brand">premium in the room</span> and simple on the business side.
+        </h1>
+        <p class="subhead">
+          TEMPO helps indie hosts, venue groups, and entertainment orgs run nights that look polished, scale cleanly,
+          and stay affordable as bookings grow.
+        </p>
+      </section>
+
+      <section class="promise-band">
+        <p class="promise-text">
+          <strong>One org. One bill.</strong> Unlimited hosts. Unlimited rounds. Unlimited players. No room-size pricing.
+          TEMPO grows when you book more nights, not when your team grows or the crowd shows up.
+        </p>
+        <div class="pill-row">
+          <div class="pill">Unlimited hosts</div>
+          <div class="pill">Unlimited rounds</div>
+          <div class="pill">Unlimited players</div>
+          <div class="pill">No room-size pricing</div>
+        </div>
+      </section>
+
+      <section class="hero-grid">
+        <div class="panel">
+          <h2>Why Clients Say Yes</h2>
+          <ul>
+            <li>It gives venues a repeatable entertainment night that looks polished and feels easy to run.</li>
+            <li>It lets orgs add hosts without rebuying the platform as the roster changes.</li>
+            <li>Hosts can brand and name their events however they want. TEMPO stays behind the scenes as the software.</li>
+            <li>It works with paper cards, digital play, or both, depending on the room.</li>
+            <li>Packed rooms and extra rounds feel like upside, not billing risk.</li>
+          </ul>
+          <div class="stats">
+            <div class="stat">
+              <div class="stat-value">Spotify + YouTube</div>
+              <div class="stat-label">Integrations</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">Paper + Digital</div>
+              <div class="stat-label">Play options</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">Venue-ready</div>
+              <div class="stat-label">Display experience</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="quote-box">
+          <div class="quote-mark">"</div>
+          <p class="quote">Turn music bingo into a signature night, not a spreadsheet problem.</p>
+          <p class="quote-note">
+            Simple to run, easy to grow, and premium in the room.
+          </p>
+        </div>
+      </section>
+
+      <section class="middle-grid">
+        <div class="panel">
+          <h2>30-Second Pitch</h2>
+          <p>
+            TEMPO gives your team one music bingo system that is simple to run, easy to grow, and premium in the room.
+            Unlimited hosts, unlimited rounds, unlimited players, plus paper, digital, and a display that makes the night
+            feel like a real event. Pricing only changes when you run more events.
+          </p>
+        </div>
+
+        <div class="feature-stack">
+          <div class="feature">
+            <h3>Integrations</h3>
+            <p>Build around the music hosts already use with Spotify and YouTube Music workflows.</p>
+          </div>
+          <div class="feature">
+            <h3>Paper + digital</h3>
+            <p>Run printed cards, digital join flows, or both. TEMPO fits the room instead of forcing one style.</p>
+          </div>
+          <div class="feature display-card">
+            <h3>The display</h3>
+            <p>The public screen is part of the magic: splash, rules, live calls, reveals, and real stage presence.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="pricing-wrap">
+        <div class="pricing-head">
+          <h2>Plans At A Glance</h2>
+          <p class="pricing-note">Pricing scales by event-days, not by host count, room size, rounds, or players.</p>
+        </div>
+        <div class="pricing">
+          <div class="pricing-card">
+            <div class="plan">Event Pass</div>
+            <div class="price">$15 <span class="unit">/ event-day</span></div>
+            <div class="plan-meta">
+              <p>1 included event-day</p>
+              <p>One-off gigs and pilots.</p>
+            </div>
+          </div>
+          <div class="pricing-card">
+            <div class="plan">Pop-Up</div>
+            <div class="price">$19 <span class="unit">/ month</span></div>
+            <div class="plan-meta">
+              <p>4 event-days / month</p>
+              <p>Indie hosts and small orgs.</p>
+            </div>
+          </div>
+          <div class="pricing-card">
+            <div class="plan">Weekly</div>
+            <div class="price">$39 <span class="unit">/ month</span></div>
+            <div class="plan-meta">
+              <p>12 event-days / month</p>
+              <p>Recurring weekly venues.</p>
+            </div>
+          </div>
+          <div class="pricing-card">
+            <div class="plan">Residency</div>
+            <div class="price">$79 <span class="unit">/ month</span></div>
+            <div class="plan-meta">
+              <p>30 event-days / month</p>
+              <p>Busy calendars and multi-night operators.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="footer-grid">
+        <div class="panel">
+          <h2>Fair-Use Story</h2>
+          <p class="footer-note">
+            Fair use exists to stop abuse, not punish success. Breakout nights are upside. If a client outgrows a tier,
+            the first move is a friendly plan conversation, not surprise billing.
+          </p>
+        </div>
+        <div class="closing">
+          <strong>TEMPO helps indie hosts and growing orgs run nights that feel bigger than they are.</strong>
+          <small>Simple enough to say yes today. Polished enough to feel premium in the room.</small>
+        </div>
+      </section>
+    </main>
+  </body>
+  </html>

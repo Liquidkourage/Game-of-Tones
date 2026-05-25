@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Music Bingo Actual Screenshot Matrix</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: Inter, Arial, sans-serif;
+        color: #ecf4ff;
+        background:
+          radial-gradient(circle at top left, rgba(168, 85, 247, 0.2), transparent 28%),
+          radial-gradient(circle at top right, rgba(14, 165, 233, 0.18), transparent 24%),
+          linear-gradient(180deg, #09111f 0%, #0c1425 100%);
+      }
+
+      .page {
+        width: 1760px;
+        min-height: 2600px;
+        margin: 0 auto;
+        padding: 44px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: 1.35fr 0.75fr;
+        gap: 24px;
+      }
+
+      .card,
+      .meta,
+      .panel,
+      .table-card {
+        background: rgba(15, 25, 43, 0.88);
+        border: 1px solid rgba(160, 192, 255, 0.18);
+        border-radius: 28px;
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+      }
+
+      .card {
+        padding: 28px 30px;
+      }
+
+      .eyebrow {
+        color: #7dd3fc;
+        font-size: 14px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        font-weight: 800;
+      }
+
+      h1 {
+        margin: 12px 0 14px;
+        font-size: 48px;
+        line-height: 1.03;
+      }
+
+      .card p {
+        margin: 0;
+        color: #a7badb;
+        font-size: 20px;
+        line-height: 1.42;
+      }
+
+      .callout {
+        margin-top: 22px;
+        padding: 16px 18px;
+        border-radius: 20px;
+        background: rgba(56, 189, 248, 0.08);
+        border: 1px solid rgba(56, 189, 248, 0.16);
+        color: #d9f5ff;
+        font-size: 16px;
+        line-height: 1.45;
+      }
+
+      .meta {
+        padding: 22px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .meta-row {
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.035);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .meta-row .label {
+        color: #8fb0e8;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin-bottom: 6px;
+        font-weight: 800;
+      }
+
+      .meta-row .value {
+        font-size: 18px;
+        line-height: 1.35;
+        font-weight: 700;
+      }
+
+      .grid {
+        margin-top: 28px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 24px;
+      }
+
+      .panel {
+        padding: 18px;
+        display: grid;
+        gap: 16px;
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .title {
+        font-size: 28px;
+        font-weight: 800;
+      }
+
+      .subtitle {
+        margin-top: 6px;
+        color: #a7badb;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .badge {
+        padding: 7px 11px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+
+      .actual {
+        background: rgba(94, 234, 212, 0.12);
+        color: #aef9ed;
+        border: 1px solid rgba(94, 234, 212, 0.2);
+      }
+
+      .mock {
+        background: rgba(251, 191, 36, 0.12);
+        color: #ffe39b;
+        border: 1px solid rgba(251, 191, 36, 0.22);
+      }
+
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .chip {
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.04);
+        color: #deebff;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .shot {
+        background: rgba(255, 255, 255, 0.025);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 24px;
+        padding: 18px;
+        display: grid;
+        place-items: center;
+        min-height: 760px;
+      }
+
+      .shot img {
+        max-width: 100%;
+        max-height: 720px;
+        display: block;
+        object-fit: contain;
+        border-radius: 18px;
+      }
+
+      .observations {
+        margin: 0;
+        padding-left: 18px;
+        color: #e7f0ff;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      .observations li + li {
+        margin-top: 7px;
+      }
+
+      .table-card {
+        margin-top: 28px;
+        padding: 24px;
+      }
+
+      .table-title {
+        font-size: 26px;
+        font-weight: 800;
+        margin-bottom: 14px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+
+      thead th {
+        text-align: left;
+        color: #9bc1ff;
+        padding: 0 12px 10px 0;
+        border-bottom: 1px solid rgba(160, 192, 255, 0.18);
+        font-size: 12px;
+        font-weight: 900;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      tbody td {
+        padding: 14px 12px 14px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        vertical-align: top;
+        color: #e6efff;
+        line-height: 1.45;
+      }
+
+      .muted {
+        color: #a7badb;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <section class="hero">
+        <div class="card">
+          <div class="eyebrow">Observed Evidence Board</div>
+          <h1>Actual Competitor Screenshot Matrix</h1>
+          <p>
+            These four panels separate direct observation from reconstruction. Three are real competitor screenshots you
+            provided; the TEMPO panel is still our mock, included only so the comparison stays useful.
+          </p>
+          <div class="callout">
+            The biggest shift from the earlier reconstructions: the real cards are even more ruthless about first-read
+            simplicity. Two of the three actual examples keep the grid almost entirely title-first, with very little
+            persistent metadata competing against the squares.
+          </div>
+        </div>
+        <div class="meta">
+          <div class="meta-row">
+            <div class="label">Direct screenshots</div>
+            <div class="value">3 competitor cards</div>
+          </div>
+          <div class="meta-row">
+            <div class="label">Known brands shown</div>
+            <div class="value">Rockstar Bingo, Jindo, plus one unlabeled competitor screenshot</div>
+          </div>
+          <div class="meta-row">
+            <div class="label">Main pattern</div>
+            <div class="value">Big grid, loud call button, minimal always-on controls</div>
+          </div>
+          <div class="meta-row">
+            <div class="label">Tempo implication</div>
+            <div class="value">Demote utility controls harder and let the grid dominate the first screen</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="title">Rockstar Bingo</div>
+              <div class="subtitle">Actual screenshot. Dark, stripped-down, and almost entirely about the grid.</div>
+            </div>
+            <div class="badge actual">Actual screenshot</div>
+          </div>
+          <div class="chip-row">
+            <div class="chip">Title-first cells</div>
+            <div class="chip">Bottom nav present</div>
+            <div class="chip">Huge CTA</div>
+            <div class="chip">Very low chrome</div>
+          </div>
+          <div class="shot">
+            <img
+              src="file:///C:/Users/liqui/.cursor/projects/c-Users-liqui-GameOfTones/assets/c__Users_liqui_AppData_Roaming_Cursor_User_workspaceStorage_e6fac58fee35d4a79a3e1eb16ef9c043_images_image-0ee59a02-f917-4efc-a8f0-9b81aaf6728b.png"
+              alt="Rockstar Bingo screenshot"
+            />
+          </div>
+          <ul class="observations">
+            <li>The header is tiny; almost all visual weight goes to the 5x5 grid.</li>
+            <li>Cells appear title-only, which improves scan speed but hides artist context.</li>
+            <li>The only giant interaction is `Call Bingo`, which makes the player flow obvious.</li>
+          </ul>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="title">Jindo</div>
+              <div class="subtitle">Actual screenshot. Much louder branding, but still a very simple player surface.</div>
+            </div>
+            <div class="badge actual">Actual screenshot</div>
+          </div>
+          <div class="chip-row">
+            <div class="chip">Promo-style capture</div>
+            <div class="chip">Songs played list</div>
+            <div class="chip">Current song footer</div>
+            <div class="chip">High saturation</div>
+          </div>
+          <div class="shot">
+            <img
+              src="file:///C:/Users/liqui/.cursor/projects/c-Users-liqui-GameOfTones/assets/c__Users_liqui_AppData_Roaming_Cursor_User_workspaceStorage_e6fac58fee35d4a79a3e1eb16ef9c043_images_image-45f78717-8341-40f6-b880-d13b38e9f4ce.png"
+              alt="Jindo screenshot"
+            />
+          </div>
+          <ul class="observations">
+            <li>The card area is still the star, but Jindo spends extra space on played-song history.</li>
+            <li>Even with loud colors, it avoids a dense stack of utility controls near the grid.</li>
+            <li>The current-song area sits below the card instead of competing with the squares themselves.</li>
+          </ul>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="title">Unlabeled Competitor</div>
+              <div class="subtitle">Actual screenshot. Brand not visible in the crop, so this panel stays intentionally generic.</div>
+            </div>
+            <div class="badge actual">Actual screenshot</div>
+          </div>
+          <div class="chip-row">
+            <div class="chip">Color-coded columns</div>
+            <div class="chip">Song count visible</div>
+            <div class="chip">Title + artist in cells</div>
+            <div class="chip">Minimal chrome</div>
+          </div>
+          <div class="shot">
+            <img
+              src="file:///C:/Users/liqui/.cursor/projects/c-Users-liqui-GameOfTones/assets/c__Users_liqui_AppData_Roaming_Cursor_User_workspaceStorage_e6fac58fee35d4a79a3e1eb16ef9c043_images_image-4fe5ba9e-ac0e-4a45-a487-7db9b16b1984.png"
+              alt="Unlabeled competitor screenshot"
+            />
+          </div>
+          <ul class="observations">
+            <li>This is the strongest proof that always-visible artist info can coexist with a readable grid.</li>
+            <li>The event title and `song 24 of 75` indicator are present, but they stay compact.</li>
+            <li>Color blocking helps orientation without adding extra control clutter.</li>
+          </ul>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="title">TEMPO Direction</div>
+              <div class="subtitle">Our mock, not a live app screenshot. Included as the comparison target for where we can push next.</div>
+            </div>
+            <div class="badge mock">Tempo mock</div>
+          </div>
+          <div class="chip-row">
+            <div class="chip">Readable first</div>
+            <div class="chip">Metadata present</div>
+            <div class="chip">Cleaner than current UI</div>
+            <div class="chip">Still more chrome</div>
+          </div>
+          <div class="shot">
+            <img
+              src="file:///C:/Users/liqui/GameOfTones/docs/player-card-portrait-chip-390x844.png"
+              alt="Tempo player card mock"
+            />
+          </div>
+          <ul class="observations">
+            <li>Compared with the real competitors, we can still push harder toward a grid-dominant first screen.</li>
+            <li>Our strength is richer context, but that context likely needs a calmer visual treatment.</li>
+            <li>The opportunity is to keep artist visibility while matching competitor-level instant readability.</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="table-card">
+        <div class="table-title">Observed Matrix</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Card</th>
+              <th>What is directly visible</th>
+              <th>What it suggests</th>
+              <th>Tempo takeaway</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Rockstar Bingo</strong></td>
+              <td>Small header, title-only cells, huge bottom CTA, bottom nav tabs</td>
+              <td>The player flow is basically "scan grid, mark, call bingo"</td>
+              <td>Reduce header competition and keep the main CTA unmistakable</td>
+            </tr>
+            <tr>
+              <td><strong>Jindo</strong></td>
+              <td>Loud brand style, large grid, played-song history below, current-song footer</td>
+              <td>Extra info can exist, but it should live below the grid instead of around it</td>
+              <td>Put richer metadata in lower-priority zones, not in first-glance chrome</td>
+            </tr>
+            <tr>
+              <td><strong>Unlabeled competitor</strong></td>
+              <td>Compact top status, color-coded B-I-N-G-O row, title + artist inside cells</td>
+              <td>Persistent artist info is feasible when typography and spacing stay disciplined</td>
+              <td>Artist visibility does not require hover/tap if the cell system is designed for it</td>
+            </tr>
+            <tr>
+              <td><strong>TEMPO mock</strong></td>
+              <td>Readable grid, metadata support, clearer hierarchy than current UI</td>
+              <td>We are directionally right, but still more information-rich than the competitors</td>
+              <td>Next pass should preserve strengths while simplifying the first screen further</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </body>
+</html>

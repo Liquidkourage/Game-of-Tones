@@ -1,0 +1,864 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Music Bingo Digital Card Matrix</title>
+    <style>
+      :root {
+        --bg: #09111f;
+        --panel: rgba(14, 25, 42, 0.88);
+        --panel-border: rgba(160, 192, 255, 0.18);
+        --text: #eef4ff;
+        --muted: #9fb3d9;
+        --line: rgba(160, 192, 255, 0.16);
+        --good: #5eead4;
+        --warn: #fbbf24;
+        --mid: #93c5fd;
+        --soft: #c4b5fd;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: Inter, Arial, sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(79, 70, 229, 0.28), transparent 34%),
+          radial-gradient(circle at top right, rgba(6, 182, 212, 0.22), transparent 30%),
+          linear-gradient(180deg, #08101e 0%, #0c1526 100%);
+        color: var(--text);
+      }
+
+      .page {
+        width: 1760px;
+        min-height: 2300px;
+        margin: 0 auto;
+        padding: 48px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: 1.4fr 0.8fr;
+        gap: 24px;
+        align-items: start;
+      }
+
+      .hero-card,
+      .meta-card,
+      .panel,
+      .matrix-card {
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: 28px;
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+      }
+
+      .hero-card {
+        padding: 28px 30px;
+      }
+
+      .eyebrow {
+        color: #7dd3fc;
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 12px 0 14px;
+        font-size: 48px;
+        line-height: 1.02;
+      }
+
+      .hero-card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 20px;
+        line-height: 1.45;
+      }
+
+      .meta-card {
+        padding: 24px;
+        display: grid;
+        gap: 14px;
+      }
+
+      .meta-row {
+        display: grid;
+        gap: 5px;
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.035);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .meta-row .label {
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #8fb0e8;
+      }
+
+      .meta-row .value {
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .note {
+        margin-top: 24px;
+        padding: 18px 22px;
+        border-radius: 22px;
+        background: rgba(94, 234, 212, 0.08);
+        border: 1px solid rgba(94, 234, 212, 0.18);
+        color: #d7fffb;
+        font-size: 17px;
+        line-height: 1.5;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 22px;
+        margin-top: 28px;
+      }
+
+      .panel {
+        padding: 18px 18px 20px;
+        display: grid;
+        gap: 16px;
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .brand {
+        font-size: 25px;
+        font-weight: 800;
+      }
+
+      .sub {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.4;
+      }
+
+      .badge {
+        padding: 7px 11px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+
+      .badge.high {
+        background: rgba(94, 234, 212, 0.14);
+        border: 1px solid rgba(94, 234, 212, 0.24);
+        color: #a7fff2;
+      }
+
+      .badge.medium {
+        background: rgba(251, 191, 36, 0.14);
+        border: 1px solid rgba(251, 191, 36, 0.26);
+        color: #ffe39b;
+      }
+
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .chip {
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.04);
+        color: #dbe7ff;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .phone {
+        width: 100%;
+        aspect-ratio: 390 / 760;
+        border-radius: 34px;
+        padding: 14px;
+        display: grid;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .screen {
+        border-radius: 24px;
+        overflow: hidden;
+        position: relative;
+        display: grid;
+        grid-template-rows: auto auto 1fr auto;
+      }
+
+      .status {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 14px 7px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .screen-header {
+        padding: 10px 14px 12px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .screen-title {
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .screen-subtitle {
+        font-size: 12px;
+        line-height: 1.35;
+        opacity: 0.88;
+      }
+
+      .hero-pill {
+        padding: 9px 12px;
+        border-radius: 16px;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .info-strip {
+        margin: 0 14px 10px;
+        padding: 10px 12px;
+        border-radius: 16px;
+        font-size: 12px;
+        line-height: 1.4;
+        font-weight: 700;
+      }
+
+      .grid5 {
+        padding: 0 14px 14px;
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 7px;
+        align-content: start;
+      }
+
+      .cell {
+        min-height: 67px;
+        border-radius: 14px;
+        padding: 7px 6px;
+        display: grid;
+        align-content: start;
+        gap: 4px;
+        line-height: 1.08;
+      }
+
+      .cell .title {
+        font-size: 10px;
+        font-weight: 800;
+      }
+
+      .cell .artist {
+        font-size: 8px;
+        opacity: 0.8;
+      }
+
+      .cell .micro {
+        display: inline-flex;
+        width: fit-content;
+        padding: 2px 6px;
+        border-radius: 999px;
+        font-size: 7px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .footer-cta {
+        margin: 0 14px 14px;
+        padding: 12px 14px;
+        border-radius: 18px;
+        text-align: center;
+        font-size: 13px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .matrix-card {
+        margin-top: 30px;
+        padding: 24px;
+      }
+
+      .matrix-title {
+        font-size: 26px;
+        font-weight: 800;
+        margin-bottom: 16px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+
+      thead th {
+        text-align: left;
+        color: #9bc1ff;
+        padding: 0 10px 10px 0;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        border-bottom: 1px solid var(--line);
+      }
+
+      tbody td {
+        padding: 14px 10px 14px 0;
+        vertical-align: top;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        color: #e6efff;
+        line-height: 1.45;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .tiny {
+        font-size: 11px;
+      }
+
+      .tempo .screen {
+        background: linear-gradient(180deg, #0d1830 0%, #101f3e 100%);
+      }
+
+      .tempo .status,
+      .tempo .screen-header {
+        color: #ebf2ff;
+      }
+
+      .tempo .hero-pill,
+      .tempo .footer-cta {
+        background: linear-gradient(90deg, #7c3aed, #2563eb);
+        color: white;
+      }
+
+      .tempo .info-strip {
+        background: rgba(125, 211, 252, 0.12);
+        color: #c6eafe;
+      }
+
+      .tempo .cell {
+        background: rgba(255, 255, 255, 0.06);
+        color: #f4f8ff;
+      }
+
+      .tempo .micro {
+        background: rgba(125, 211, 252, 0.14);
+        color: #caf0ff;
+      }
+
+      .jindo .screen {
+        background: linear-gradient(180deg, #2e1320 0%, #471526 100%);
+      }
+
+      .jindo .status,
+      .jindo .screen-header {
+        color: #fff5ea;
+      }
+
+      .jindo .hero-pill,
+      .jindo .footer-cta {
+        background: linear-gradient(90deg, #fbbf24, #f59e0b);
+        color: #281200;
+      }
+
+      .jindo .info-strip {
+        background: rgba(255, 210, 102, 0.18);
+        color: #ffeec0;
+      }
+
+      .jindo .cell {
+        background: rgba(255, 245, 234, 0.08);
+        color: #fff5ea;
+      }
+
+      .jindo .micro {
+        background: rgba(255, 255, 255, 0.12);
+        color: #fff1c1;
+      }
+
+      .rockstar .screen {
+        background: linear-gradient(180deg, #091a24 0%, #0f2835 100%);
+      }
+
+      .rockstar .hero-pill,
+      .rockstar .footer-cta {
+        background: linear-gradient(90deg, #22c55e, #14b8a6);
+        color: #032116;
+      }
+
+      .rockstar .info-strip {
+        background: rgba(34, 197, 94, 0.14);
+        color: #c5ffe1;
+      }
+
+      .rockstar .cell {
+        background: rgba(255, 255, 255, 0.06);
+        color: white;
+      }
+
+      .rockstar .micro {
+        background: rgba(34, 197, 94, 0.16);
+        color: #bafad2;
+      }
+
+      .hitmix .screen {
+        background: linear-gradient(180deg, #f4f7fb 0%, #e5ebf5 100%);
+        color: #172133;
+      }
+
+      .hitmix .status,
+      .hitmix .screen-header {
+        color: #172133;
+      }
+
+      .hitmix .hero-pill,
+      .hitmix .footer-cta {
+        background: linear-gradient(90deg, #1d4ed8, #2563eb);
+        color: white;
+      }
+
+      .hitmix .info-strip {
+        background: rgba(29, 78, 216, 0.11);
+        color: #14317a;
+      }
+
+      .hitmix .cell {
+        background: rgba(23, 33, 51, 0.08);
+        color: #172133;
+      }
+
+      .hitmix .micro {
+        background: rgba(29, 78, 216, 0.12);
+        color: #173c9f;
+      }
+
+      .buzz .screen {
+        background: linear-gradient(180deg, #1f1439 0%, #21184b 100%);
+      }
+
+      .buzz .hero-pill,
+      .buzz .footer-cta {
+        background: linear-gradient(90deg, #8b5cf6, #ec4899);
+        color: white;
+      }
+
+      .buzz .info-strip {
+        background: rgba(236, 72, 153, 0.13);
+        color: #ffd2e8;
+      }
+
+      .buzz .cell {
+        background: rgba(255, 255, 255, 0.07);
+        color: white;
+      }
+
+      .buzz .micro {
+        background: rgba(139, 92, 246, 0.16);
+        color: #ddd0ff;
+      }
+
+      .lime .screen {
+        background: linear-gradient(180deg, #102916 0%, #17331c 100%);
+      }
+
+      .lime .hero-pill,
+      .lime .footer-cta {
+        background: linear-gradient(90deg, #84cc16, #4ade80);
+        color: #10250d;
+      }
+
+      .lime .info-strip {
+        background: rgba(132, 204, 22, 0.16);
+        color: #e1ffc4;
+      }
+
+      .lime .cell {
+        background: rgba(255, 255, 255, 0.06);
+        color: white;
+      }
+
+      .lime .micro {
+        background: rgba(132, 204, 22, 0.18);
+        color: #e7ffc1;
+      }
+
+      .phenom .screen {
+        background: linear-gradient(180deg, #121f3b 0%, #1a2551 100%);
+      }
+
+      .phenom .hero-pill,
+      .phenom .footer-cta {
+        background: linear-gradient(90deg, #38bdf8, #818cf8);
+        color: #05152e;
+      }
+
+      .phenom .info-strip {
+        background: rgba(129, 140, 248, 0.16);
+        color: #dee1ff;
+      }
+
+      .phenom .cell {
+        background: rgba(255, 255, 255, 0.06);
+        color: white;
+      }
+
+      .phenom .micro {
+        background: rgba(56, 189, 248, 0.14);
+        color: #d2f1ff;
+      }
+
+      .gen .screen {
+        background: linear-gradient(180deg, #0a131d 0%, #101820 100%);
+      }
+
+      .gen .hero-pill,
+      .gen .footer-cta {
+        background: linear-gradient(90deg, #06b6d4, #14b8a6);
+        color: #04171a;
+      }
+
+      .gen .info-strip {
+        background: rgba(6, 182, 212, 0.14);
+        color: #c8fcff;
+      }
+
+      .gen .cell {
+        background: rgba(255, 255, 255, 0.06);
+        color: white;
+      }
+
+      .gen .micro {
+        background: rgba(6, 182, 212, 0.14);
+        color: #c9fcff;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <section class="hero">
+        <div class="hero-card">
+          <div class="eyebrow">Competitive Reconstruction Board</div>
+          <h1>Music Bingo Digital Card Matrix</h1>
+          <p>
+            These are not vendor screenshots. They are careful visual reconstructions based on public product copy, onboarding
+            flows, and feature descriptions, with confidence labels where the public evidence is weaker.
+          </p>
+          <div class="note">
+            Best read as a pattern board: what each brand appears to prioritize on the player surface, how much chrome is visible,
+            whether artist info is likely in the grid, and how “phone first” the join flow feels.
+          </div>
+        </div>
+        <div class="meta-card">
+          <div class="meta-row">
+            <div class="label">Included visually</div>
+            <div class="value">8 strongest public digital-card competitors</div>
+          </div>
+          <div class="meta-row">
+            <div class="label">Evidence style</div>
+            <div class="value">Public product pages, feature lists, host-flow copy</div>
+          </div>
+          <div class="meta-row">
+            <div class="label">Confidence rule</div>
+            <div class="value">Only explicit digital-card claims get a full mock</div>
+          </div>
+          <div class="meta-row">
+            <div class="label">Why this matters</div>
+            <div class="value">Lets you compare hierarchy, information density, and paperless maturity at a glance</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid" id="boards"></section>
+
+      <section class="matrix-card">
+        <div class="matrix-title">Fast Matrix</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Brand</th>
+              <th>Join Flow</th>
+              <th>Publicly clear card traits</th>
+              <th>Paperless</th>
+              <th>Confidence</th>
+            </tr>
+          </thead>
+          <tbody id="matrix-rows"></tbody>
+        </table>
+      </section>
+    </div>
+
+    <script>
+      const songs = [
+        ["Dancing Queen", "ABBA"],
+        ["Mr. Brightside", "The Killers"],
+        ["Levitating", "Dua Lipa"],
+        ["Shut Up and Dance", "Walk the Moon"],
+        ["September", "Earth, Wind & Fire"],
+        ["Toxic", "Britney Spears"],
+        ["Hey Ya!", "Outkast"],
+        ["Uptown Funk", "Bruno Mars"],
+        ["Since U Been Gone", "Kelly Clarkson"],
+        ["Dreams", "Fleetwood Mac"],
+        ["Bye Bye Bye", "NSYNC"],
+        ["Shake It Off", "Taylor Swift"],
+        ["I Wanna Dance", "Whitney Houston"],
+        ["Valerie", "Amy Winehouse"],
+        ["Superstition", "Stevie Wonder"],
+        ["Waterloo", "ABBA"],
+        ["Everybody", "Backstreet Boys"],
+        ["Teenage Dream", "Katy Perry"],
+        ["Ain't No Mountain", "Marvin Gaye"],
+        ["No Scrubs", "TLC"],
+        ["Free Space", ""],
+        ["Faith", "George Michael"],
+        ["Take On Me", "a-ha"],
+        ["Roar", "Katy Perry"],
+        ["Billie Jean", "Michael Jackson"],
+      ];
+
+      const brands = [
+        {
+          key: "tempo",
+          name: "TEMPO",
+          confidence: "high",
+          access: "room code / link",
+          traits: "Our known player card; readable title-first grid with lighter secondary info",
+          paperless: "Yes",
+          chips: ["Browser card", "Hybrid ready", "Readable first"],
+          topTitle: "Tempo Card",
+          topSub: "Room 5241 · live sync · title-first grid",
+          pill: "Now playing verified",
+          strip: "Venue branding, safer resync, rich validation, and adaptable readability can coexist without crowding the first read.",
+          cta: "Call Bingo",
+          variant: "tempo",
+        },
+        {
+          key: "jindo",
+          name: "Jindo",
+          confidence: "high",
+          access: "QR code",
+          traits: "Strong paperless emphasis; browser cards on phones; bold call button language",
+          paperless: "Yes",
+          chips: ["QR join", "Auto-verify", "Phone-first"],
+          topTitle: "Call Jindo",
+          topSub: "Guests scan in and receive their card in-browser",
+          pill: "Paperless round",
+          strip: "Public copy strongly suggests a very obvious, low-friction phone card with minimal ornament.",
+          cta: "Call Jindo",
+          variant: "jindo",
+        },
+        {
+          key: "rockstar",
+          name: "Rockstar Bingo",
+          confidence: "high",
+          access: "game code / browser",
+          traits: "Electronic card on any device; song + artist customization; strong paperless pitch",
+          paperless: "Yes",
+          chips: ["Any device", "Song + artist", "Custom branding"],
+          topTitle: "Rockstar Card",
+          topSub: "Electronic card on phone browser with clear branding space",
+          pill: "Paperless lobby",
+          strip: "Public copy supports more metadata in-card than many competitors, especially song and artist customization.",
+          cta: "Call Bingo",
+          variant: "rockstar",
+        },
+        {
+          key: "hitmix",
+          name: "Hitmix Bingo",
+          confidence: "medium",
+          access: "host-enabled digital play",
+          traits: "Utility-first hybrid system; phones/tablets can replace paper, but public player UI detail is thinner",
+          paperless: "Hybrid",
+          chips: ["Hybrid", "Tablet / phone", "Configurable"],
+          topTitle: "Hitmix Card",
+          topSub: "Players can use smart devices instead of paper cards",
+          pill: "Digital play enabled",
+          strip: "This reconstruction is more schematic because public materials emphasize capability over precise player visuals.",
+          cta: "Bingo",
+          variant: "hitmix",
+        },
+        {
+          key: "buzz",
+          name: "Music.BuzzBuzzBingo",
+          confidence: "high",
+          access: "game code / browser",
+          traits: "Playable online, mobile-friendly, customizable headers and free-space branding",
+          paperless: "Hybrid",
+          chips: ["Online play", "Custom free space", "Mobile browser"],
+          topTitle: "MUSIC",
+          topSub: "Custom guest interface with room for themed headers",
+          pill: "Playable online",
+          strip: "The strongest public differentiator is flexibility: printable and browser play, plus visible host customization.",
+          cta: "Bingo",
+          variant: "buzz",
+        },
+        {
+          key: "lime",
+          name: "Lime DJ",
+          confidence: "high",
+          access: "QR code",
+          traits: "No app download; unique digital game-cards; QR join and optional marking restrictions",
+          paperless: "Yes",
+          chips: ["QR join", "No app", "Rule controls"],
+          topTitle: "Lime DJ Card",
+          topSub: "Scan QR, open phone browser, mark live",
+          pill: "No app required",
+          strip: "Their copy leans hard on easy join, unique cards, and a TV-friendly host screen plus phone companion.",
+          cta: "Call Bingo",
+          variant: "lime",
+        },
+        {
+          key: "phenom",
+          name: "Phenom Bingo",
+          confidence: "high",
+          access: "QR + game code",
+          traits: "Responsive digital cards, multiple cards, auto-save, large tap targets, sync alerts",
+          paperless: "Yes",
+          chips: ["Multiple cards", "Auto-save", "Large tap targets"],
+          topTitle: "Phenom Digital",
+          topSub: "Responsive card that mirrors the printed version",
+          pill: "Swipe between cards",
+          strip: "Public copy gives unusually strong digital detail: multi-card flow, auto-marking options, and call alerts.",
+          cta: "Call Bingo",
+          variant: "phenom",
+        },
+        {
+          key: "gen",
+          name: "Music Bingo Gen",
+          confidence: "medium",
+          access: "reusable QR cards",
+          traits: "Simple QR digital cards plus printable options; appears more lightweight and minimal",
+          paperless: "Hybrid",
+          chips: ["QR cards", "Print + digital", "Lightweight"],
+          topTitle: "QR Card",
+          topSub: "Digital cards for mobile devices with printable fallback",
+          pill: "Scan to play",
+          strip: "This looks like a simpler, lower-chrome mobile card experience centered on QR access and speed.",
+          cta: "Bingo",
+          variant: "gen",
+        },
+      ];
+
+      function makeCells(variant) {
+        return songs
+          .map(([title, artist], index) => {
+            const isFree = index === 20;
+            const showArtist =
+              variant === "rockstar" ||
+              variant === "phenom" ||
+              (variant === "tempo" && index % 3 === 0) ||
+              (variant === "hitmix" && index % 4 === 0);
+            const showMicro =
+              variant === "tempo" ||
+              variant === "buzz" ||
+              variant === "lime" ||
+              variant === "phenom" ||
+              variant === "rockstar";
+            const microText =
+              variant === "tempo"
+                ? "artist"
+                : variant === "buzz"
+                  ? "theme"
+                  : variant === "lime"
+                    ? "live"
+                    : variant === "phenom"
+                      ? "sync"
+                      : "meta";
+            return `
+              <div class="cell">
+                <div class="title">${isFree ? "FREE" : title}</div>
+                ${showArtist && artist ? `<div class="artist">${artist}</div>` : ""}
+                ${showMicro && !isFree ? `<div class="micro">${microText}</div>` : ""}
+              </div>
+            `;
+          })
+          .join("");
+      }
+
+      function brandPanel(brand) {
+        return `
+          <article class="panel ${brand.variant}">
+            <div class="panel-head">
+              <div>
+                <div class="brand">${brand.name}</div>
+                <div class="sub">${brand.traits}</div>
+              </div>
+              <div class="badge ${brand.confidence}">${brand.confidence} confidence</div>
+            </div>
+            <div class="chip-row">
+              ${brand.chips.map((chip) => `<div class="chip">${chip}</div>`).join("")}
+            </div>
+            <div class="phone">
+              <div class="screen">
+                <div class="status">
+                  <span>5G 9:41</span>
+                  <span>${brand.access}</span>
+                </div>
+                <div class="screen-header">
+                  <div class="screen-title">${brand.topTitle}</div>
+                  <div class="screen-subtitle">${brand.topSub}</div>
+                  <div class="hero-pill">${brand.pill}</div>
+                </div>
+                <div>
+                  <div class="info-strip">${brand.strip}</div>
+                  <div class="grid5">
+                    ${makeCells(brand.variant)}
+                  </div>
+                </div>
+                <div class="footer-cta">${brand.cta}</div>
+              </div>
+            </div>
+          </article>
+        `;
+      }
+
+      document.getElementById("boards").innerHTML = brands.map(brandPanel).join("");
+
+      document.getElementById("matrix-rows").innerHTML = brands
+        .map(
+          (brand) => `
+            <tr>
+              <td><strong>${brand.name}</strong></td>
+              <td>${brand.access}</td>
+              <td>${brand.traits}</td>
+              <td>${brand.paperless}</td>
+              <td class="muted">${brand.confidence}</td>
+            </tr>
+          `
+        )
+        .join("");
+    </script>
+  </body>
+</html>

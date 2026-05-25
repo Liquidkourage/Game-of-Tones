@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TEMPO Player Card Mock</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: rgba(255, 255, 255, 0.06);
+        --panel-2: rgba(255, 255, 255, 0.09);
+        --line: rgba(255, 255, 255, 0.12);
+        --line-2: rgba(255, 255, 255, 0.18);
+        --text: #eef2ff;
+        --muted: #b8c2df;
+        --accent: #89f2c6;
+        --accent-2: #76a8ff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: Inter, "Segoe UI", Arial, sans-serif;
+        background:
+          radial-gradient(circle at top right, rgba(118, 168, 255, 0.22), transparent 28%),
+          radial-gradient(circle at top left, rgba(137, 242, 198, 0.16), transparent 24%),
+          linear-gradient(180deg, #151d36 0%, #0b1020 52%, #080c18 100%);
+        color: var(--text);
+      }
+
+      body {
+        display: flex;
+        align-items: stretch;
+        justify-content: stretch;
+      }
+
+      .screen {
+        width: 100%;
+        height: 100%;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .strip {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 8px 10px;
+        background: var(--panel);
+      }
+
+      .strip.quiet {
+        background: var(--panel-2);
+      }
+
+      .strip-title {
+        font-size: 12px;
+        line-height: 1.2;
+        font-weight: 800;
+      }
+
+      .strip-subtitle {
+        margin-top: 2px;
+        font-size: 10px;
+        line-height: 1.25;
+        color: var(--muted);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 4px;
+      }
+
+      .cell {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .cell.marked {
+        border-color: rgba(137, 242, 198, 0.4);
+        background: rgba(137, 242, 198, 0.14);
+      }
+
+      .cell-inner {
+        width: 100%;
+        height: 100%;
+      }
+
+      .cell-title {
+        font-weight: 800;
+        font-size: 10px;
+        line-height: 1.08;
+      }
+
+      .cell-artist {
+        color: var(--muted);
+        font-size: 8px;
+        line-height: 1.1;
+      }
+
+      .chip {
+        position: absolute;
+        right: 3px;
+        bottom: 3px;
+        border: 1px solid var(--line-2);
+        border-radius: 999px;
+        padding: 1px 4px;
+        background: rgba(13, 18, 34, 0.9);
+        color: var(--muted);
+        font-size: 6px;
+        line-height: 1;
+        max-width: 36px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .bingo {
+        margin-top: auto;
+        border-radius: 999px;
+        border: 1px solid var(--line-2);
+        padding: 10px 12px;
+        text-align: center;
+        font-size: 11px;
+        line-height: 1.1;
+        font-weight: 900;
+        background: rgba(255, 255, 255, 0.09);
+      }
+
+      .bingo.premium {
+        background: var(--accent);
+        border-color: rgba(137, 242, 198, 0.55);
+        color: #08140f;
+      }
+
+      .cell.portrait-chip {
+        min-height: 36px;
+        padding: 3px 3px;
+      }
+
+      .cell.portrait-banner {
+        min-height: 30px;
+        padding: 3px 3px;
+      }
+
+      .cell.wide-split {
+        min-height: 22px;
+        padding: 2px 5px;
+      }
+
+      .cell.wide-premium {
+        min-height: 28px;
+        padding: 3px 4px;
+      }
+
+      .cell-inner.portrait-chip,
+      .cell-inner.portrait-banner,
+      .cell-inner.wide-premium {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1px;
+        text-align: center;
+      }
+
+      .cell-inner.wide-split {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 4px;
+      }
+
+      .cell-inner.wide-split .cell-title,
+      .cell-inner.wide-split .cell-artist {
+        font-size: 8px;
+        line-height: 1.05;
+      }
+
+      .landscape .screen {
+        padding: 8px;
+        gap: 6px;
+      }
+
+      .landscape .strip {
+        padding: 6px 8px;
+      }
+
+      .landscape .strip-title {
+        font-size: 11px;
+      }
+
+      .landscape .strip-subtitle {
+        font-size: 9px;
+      }
+
+      .landscape .grid {
+        gap: 3px;
+      }
+
+      .landscape .bingo {
+        padding: 8px 10px;
+        font-size: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="screen-root" class="screen"></div>
+    <script>
+      const songs = [
+        ["Dancing Queen", "ABBA"],
+        ["Tiny Dancer", "Elton John"],
+        ["Sweet Escape", "Gwen Stefani"],
+        ["Take On Me", "a-ha"],
+        ["Fast Car", "Tracy Chapman"],
+        ["Dreams", "Fleetwood Mac"],
+        ["Mr Brightside", "The Killers"],
+        ["Waterfalls", "TLC"],
+        ["Levitating", "Dua Lipa"],
+        ["Valerie", "Amy Winehouse"],
+        ["September", "Earth, Wind & Fire"],
+        ["Crazy Train", "Ozzy Osbourne"],
+        ["Edge of Glory", "Lady Gaga"],
+        ["FREE", ""],
+        ["Bohemian Rhapsody", "Queen"],
+        ["Shut Up and Dance", "Walk the Moon"],
+        ["Blinding Lights", "The Weeknd"],
+        ["Rolling in the Deep", "Adele"],
+        ["Hot in Herre", "Nelly"],
+        ["Wonderwall", "Oasis"],
+        ["Since U Been Gone", "Kelly Clarkson"],
+        ["Teenage Dream", "Katy Perry"],
+        ["No Scrubs", "TLC"],
+        ["Uptown Funk", "Bruno Mars"],
+        ["Hey Ya", "Outkast"],
+      ];
+
+      const marked = new Set([1, 6, 8, 13, 16, 18, 22]);
+      const params = new URLSearchParams(window.location.search);
+      const variant = params.get("variant") || "portrait-chip";
+      const landscape = window.innerWidth > window.innerHeight;
+      if (landscape) document.body.classList.add("landscape");
+
+      function makeStrip(title, subtitle, quiet = false) {
+        const strip = document.createElement("div");
+        strip.className = `strip${quiet ? " quiet" : ""}`;
+        const h = document.createElement("div");
+        h.className = "strip-title";
+        h.textContent = title;
+        strip.appendChild(h);
+        if (subtitle) {
+          const s = document.createElement("div");
+          s.className = "strip-subtitle";
+          s.textContent = subtitle;
+          strip.appendChild(s);
+        }
+        return strip;
+      }
+
+      function makeCell(title, artist, idx, mode) {
+        const cell = document.createElement("div");
+        cell.className = `cell ${mode}${marked.has(idx) ? " marked" : ""}`;
+
+        const inner = document.createElement("div");
+        inner.className = `cell-inner ${mode}`;
+
+        if (mode === "wide-split") {
+          const titleEl = document.createElement("div");
+          titleEl.className = "cell-title";
+          titleEl.textContent = title;
+          const artistEl = document.createElement("div");
+          artistEl.className = "cell-artist";
+          artistEl.textContent = artist;
+          inner.append(titleEl, artistEl);
+        } else {
+          if (mode === "wide-premium" && artist) {
+            const artistEl = document.createElement("div");
+            artistEl.className = "cell-artist";
+            artistEl.textContent = artist;
+            inner.appendChild(artistEl);
+          }
+          const titleEl = document.createElement("div");
+          titleEl.className = "cell-title";
+          titleEl.textContent = title;
+          inner.appendChild(titleEl);
+        }
+
+        cell.appendChild(inner);
+
+        if (mode === "portrait-chip" && artist) {
+          const chip = document.createElement("div");
+          chip.className = "chip";
+          chip.textContent = artist;
+          cell.appendChild(chip);
+        }
+
+        return cell;
+      }
+
+      const root = document.getElementById("screen-root");
+
+      if (variant === "portrait-chip") {
+        root.appendChild(makeStrip("Portrait chip", "Title-first with persistent artist chip", true));
+      }
+      if (variant === "portrait-banner") {
+        root.appendChild(makeStrip("Portrait banner", "Current-song artist context", true));
+        root.appendChild(makeStrip("Now playing: Tiny Dancer", "Elton John"));
+      }
+      if (variant === "wide-split") {
+        root.appendChild(makeStrip("Landscape split", "Title left · artist right", true));
+      }
+      if (variant === "wide-premium") {
+        root.appendChild(makeStrip("Landscape premium", "Branded + current song + trust cues", true));
+        root.appendChild(makeStrip("Now playing: Tiny Dancer", "Elton John · hybrid safe · reconnect protected"));
+      }
+
+      const grid = document.createElement("div");
+      grid.className = "grid";
+      songs.forEach(([title, artist], idx) => grid.appendChild(makeCell(title, artist, idx, variant)));
+      root.appendChild(grid);
+
+      if (variant === "portrait-chip") {
+        const bingo = document.createElement("div");
+        bingo.className = "bingo";
+        bingo.textContent = "Hold to call BINGO";
+        root.appendChild(bingo);
+      }
+      if (variant === "wide-premium") {
+        const bingo = document.createElement("div");
+        bingo.className = "bingo premium";
+        bingo.textContent = "Hold to call BINGO";
+        root.appendChild(bingo);
+      }
+    </script>
+  </body>
+  </html>
