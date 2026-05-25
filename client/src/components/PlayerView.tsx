@@ -904,108 +904,121 @@ const PlayerView: React.FC = () => {
 
     const gridEl = cardGridRef.current;
     let frame = 0;
+    let queuedSquares: HTMLElement[] = [];
+    let queuedIndex = 0;
 
-    const fitSquares = () => {
-      const squareEls = Array.from(gridEl.querySelectorAll<HTMLElement>('.bingo-square'));
-      squareEls.forEach((squareEl) => {
-        const contentEl = squareEl.querySelector<HTMLElement>('.square-content');
-        const titleEl = squareEl.querySelector<HTMLElement>('.player-square-title');
-        const artistEl = squareEl.querySelector<HTMLElement>('.player-square-artist');
-        if (!contentEl) return;
+    const fitSquare = (squareEl: HTMLElement) => {
+      const contentEl = squareEl.querySelector<HTMLElement>('.square-content');
+      const titleEl = squareEl.querySelector<HTMLElement>('.player-square-title');
+      const artistEl = squareEl.querySelector<HTMLElement>('.player-square-artist');
+      if (!contentEl) return;
 
-        const setScales = (titleScale: number, artistScale: number) => {
-          squareEl.style.setProperty('--player-cell-title-scale', titleScale.toFixed(4));
-          squareEl.style.setProperty('--player-cell-artist-scale', artistScale.toFixed(4));
-        };
+      const setScales = (titleScale: number, artistScale: number) => {
+        squareEl.style.setProperty('--player-cell-title-scale', titleScale.toFixed(4));
+        squareEl.style.setProperty('--player-cell-artist-scale', artistScale.toFixed(4));
+      };
 
-        const fitsAtScales = (titleScale: number, artistScale: number) => {
-          setScales(titleScale, artistScale);
-          return (
-            contentEl.scrollHeight <= contentEl.clientHeight + 1 &&
-            contentEl.scrollWidth <= contentEl.clientWidth + 1
-          );
-        };
+      const fitsAtScales = (titleScale: number, artistScale: number) => {
+        setScales(titleScale, artistScale);
+        return (
+          contentEl.scrollHeight <= contentEl.clientHeight + 1 &&
+          contentEl.scrollWidth <= contentEl.clientWidth + 1
+        );
+      };
 
-        const deriveArtistScale = (titleScale: number) => Math.min(1.08, Math.max(0.5, titleScale * 0.7));
-        const getLineCount = (el: HTMLElement | null) => {
-          if (!el) return 1;
-          const computed = window.getComputedStyle(el);
-          const lineHeight = Number.parseFloat(computed.lineHeight || '0');
-          if (!Number.isFinite(lineHeight) || lineHeight <= 0) return 1;
-          return Math.max(1, Math.round(el.getBoundingClientRect().height / lineHeight));
-        };
-        const relaxWrapIfWorthIt = (titleScale: number, artistScale: number) => {
-          let bestTitle = titleScale;
-          let bestArtist = artistScale;
-          let titleLines = getLineCount(titleEl);
-          let artistLines = getLineCount(artistEl);
+      const deriveArtistScale = (titleScale: number) => Math.min(1.08, Math.max(0.5, titleScale * 0.7));
+      const getLineCount = (el: HTMLElement | null) => {
+        if (!el) return 1;
+        const computed = window.getComputedStyle(el);
+        const lineHeight = Number.parseFloat(computed.lineHeight || '0');
+        if (!Number.isFinite(lineHeight) || lineHeight <= 0) return 1;
+        return Math.max(1, Math.round(el.getBoundingClientRect().height / lineHeight));
+      };
+      const relaxWrapIfWorthIt = (titleScale: number, artistScale: number) => {
+        let bestTitle = titleScale;
+        let bestArtist = artistScale;
+        let titleLines = getLineCount(titleEl);
+        let artistLines = getLineCount(artistEl);
 
-          for (let i = 0; i < 5; i += 1) {
-            const nextTitle = bestTitle * 0.965;
-            const nextArtist = Math.max(0.48, bestArtist * 0.97);
-            if (!fitsAtScales(nextTitle, nextArtist)) break;
-            const nextTitleLines = getLineCount(titleEl);
-            const nextArtistLines = getLineCount(artistEl);
-            const reducedWrap =
-              nextTitleLines < titleLines ||
-              (nextTitleLines === titleLines && nextArtistLines < artistLines);
-            if (!reducedWrap) continue;
-            bestTitle = nextTitle;
-            bestArtist = nextArtist;
-            titleLines = nextTitleLines;
-            artistLines = nextArtistLines;
-            if (titleLines <= 2 && artistLines <= 2) break;
-          }
-
-          setScales(bestTitle, bestArtist);
-        };
-
-        let titleLow = 0.48;
-        let titleHigh = 1.95;
-
-        if (!fitsAtScales(titleLow, deriveArtistScale(titleLow))) {
-          setScales(titleLow, 0.48);
-          return;
+        for (let i = 0; i < 5; i += 1) {
+          const nextTitle = bestTitle * 0.965;
+          const nextArtist = Math.max(0.48, bestArtist * 0.97);
+          if (!fitsAtScales(nextTitle, nextArtist)) break;
+          const nextTitleLines = getLineCount(titleEl);
+          const nextArtistLines = getLineCount(artistEl);
+          const reducedWrap =
+            nextTitleLines < titleLines ||
+            (nextTitleLines === titleLines && nextArtistLines < artistLines);
+          if (!reducedWrap) continue;
+          bestTitle = nextTitle;
+          bestArtist = nextArtist;
+          titleLines = nextTitleLines;
+          artistLines = nextArtistLines;
+          if (titleLines <= 2 && artistLines <= 2) break;
         }
 
-        fitsAtScales(titleHigh, deriveArtistScale(titleHigh));
-        for (let i = 0; i < 9; i += 1) {
-          const mid = (titleLow + titleHigh) / 2;
-          if (fitsAtScales(mid, deriveArtistScale(mid))) {
-            titleLow = mid;
-          } else {
-            titleHigh = mid;
-          }
+        setScales(bestTitle, bestArtist);
+      };
+
+      let titleLow = 0.48;
+      let titleHigh = 1.95;
+
+      if (!fitsAtScales(titleLow, deriveArtistScale(titleLow))) {
+        setScales(titleLow, 0.48);
+        return;
+      }
+
+      fitsAtScales(titleHigh, deriveArtistScale(titleHigh));
+      for (let i = 0; i < 9; i += 1) {
+        const mid = (titleLow + titleHigh) / 2;
+        if (fitsAtScales(mid, deriveArtistScale(mid))) {
+          titleLow = mid;
+        } else {
+          titleHigh = mid;
         }
+      }
 
-        const bestTitleScale = titleLow;
-        let artistLow = deriveArtistScale(bestTitleScale);
-        let artistHigh = Math.min(1.18, bestTitleScale * 0.84);
+      const bestTitleScale = titleLow;
+      let artistLow = deriveArtistScale(bestTitleScale);
+      let artistHigh = Math.min(1.18, bestTitleScale * 0.84);
 
-        if (!fitsAtScales(bestTitleScale, artistLow)) {
-          artistLow = Math.max(0.48, artistLow * 0.92);
-          setScales(bestTitleScale, artistLow);
-          return;
-        }
-
-        fitsAtScales(bestTitleScale, artistHigh);
-        for (let i = 0; i < 7; i += 1) {
-          const mid = (artistLow + artistHigh) / 2;
-          if (fitsAtScales(bestTitleScale, mid)) {
-            artistLow = mid;
-          } else {
-            artistHigh = mid;
-          }
-        }
-
+      if (!fitsAtScales(bestTitleScale, artistLow)) {
+        artistLow = Math.max(0.48, artistLow * 0.92);
         setScales(bestTitleScale, artistLow);
-        relaxWrapIfWorthIt(bestTitleScale, artistLow);
-      });
+        return;
+      }
+
+      fitsAtScales(bestTitleScale, artistHigh);
+      for (let i = 0; i < 7; i += 1) {
+        const mid = (artistLow + artistHigh) / 2;
+        if (fitsAtScales(bestTitleScale, mid)) {
+          artistLow = mid;
+        } else {
+          artistHigh = mid;
+        }
+      }
+
+      setScales(bestTitleScale, artistLow);
+      relaxWrapIfWorthIt(bestTitleScale, artistLow);
+    };
+
+    const processFitQueue = () => {
+      frame = 0;
+      const frameStart = performance.now();
+      while (queuedIndex < queuedSquares.length && performance.now() - frameStart < 7) {
+        fitSquare(queuedSquares[queuedIndex]);
+        queuedIndex += 1;
+      }
+      if (queuedIndex < queuedSquares.length) {
+        frame = requestAnimationFrame(processFitQueue);
+      }
     };
 
     const queueFit = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(fitSquares);
+      queuedSquares = Array.from(gridEl.querySelectorAll<HTMLElement>('.bingo-square'));
+      queuedIndex = 0;
+      frame = requestAnimationFrame(processFitQueue);
     };
 
     queueFit();
