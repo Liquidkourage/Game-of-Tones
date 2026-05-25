@@ -157,6 +157,48 @@ function songsFromServerPlaybackPayload(order: unknown): Song[] {
     .filter((s): s is Song => s != null);
 }
 
+/** Match projector/player sync payloads so host refresh shows aliased titles immediately. */
+function displayTitleFromSyncedSong(song: {
+  name?: string;
+  customSongName?: string | null;
+} | null | undefined): string {
+  if (!song) return '';
+  const custom = song.customSongName;
+  if (custom != null && String(custom).trim() !== '') return String(custom);
+  return cleanSongTitle(String(song.name || ''));
+}
+
+function displayArtistFromSyncedSong(song: {
+  artist?: string;
+  customArtistName?: string | null;
+} | null | undefined): string {
+  if (!song) return '';
+  const custom = song.customArtistName;
+  if (custom != null && String(custom).trim() !== '') return String(custom);
+  return typeof song.artist === 'string' ? song.artist : '';
+}
+
+function normalizeSyncedSongForHost(song: any): Song | null {
+  if (!song || typeof song !== 'object') return null;
+  const id = song.id != null ? String(song.id).trim() : '';
+  if (!id) return null;
+  return {
+    id,
+    name: displayTitleFromSyncedSong(song),
+    artist: displayArtistFromSyncedSong(song),
+    explicit: song.explicit === true,
+    youtubeMusic: song.youtubeMusic === true,
+    sourcePlaylistId: song.sourcePlaylistId != null ? String(song.sourcePlaylistId) : undefined,
+    sourcePlaylistName: typeof song.sourcePlaylistName === 'string' ? song.sourcePlaylistName : undefined,
+  };
+}
+
+function normalizeRoomGameStateForHost(gameState: unknown): 'waiting' | 'playing' | 'ended' {
+  if (gameState === 'ended') return 'ended';
+  if (gameState === 'playing' || gameState === 'paused_for_verification') return 'playing';
+  return 'waiting';
+}
+
 /** Saved-pattern display name for server sync (projector / clients). */
 function customPatternDisplayNameForEmit(
   mask: readonly string[],
@@ -3031,6 +3073,154 @@ const HostView: React.FC = () => {
     });
 
     newSocket.on('room-state', (payload: any) => {
+      if (payload?.gameState !== undefined) {
+        setGameState(normalizeRoomGameStateForHost(payload.gameState));
+      }
+      if (payload?.isPlaying !== undefined) {
+        setIsPlaying(!!payload.isPlaying);
+      }
+      if (payload?.bingoVerificationPending !== undefined || payload?.gameState !== undefined) {
+        setGamePaused(
+          payload?.bingoVerificationPending === true || payload?.gameState === 'paused_for_verification',
+        );
+      }
+      if (payload?.snippetLength !== undefined) {
+        const nextSnippetLength = Number(payload.snippetLength);
+        if (Number.isFinite(nextSnippetLength) && nextSnippetLength > 0) {
+          setSnippetLength(Math.round(nextSnippetLength));
+        }
+      }
+      if (payload?.currentSong !== undefined) {
+        const syncedSong = normalizeSyncedSongForHost(payload.currentSong);
+        setCurrentSong(syncedSong);
+        setPlaybackState((prev) => ({
+          ...prev,
+          isPlaying: payload?.isPlaying !== undefined ? !!payload.isPlaying : prev.isPlaying,
+          currentSong: syncedSong,
+          duration:
+            syncedSong && typeof payload?.snippetLength === 'number'
+              ? payload.snippetLength * 1000
+              : syncedSong
+                ? prev.duration
+                : 0,
+          currentTime: syncedSong ? prev.currentTime : 0,
+        }));
+        if (!syncedSong) {
+          setYoutubeHostPlayback(null);
+        }
+      }
+      if (Array.isArray(payload?.winners)) {
+        setWinners(payload.winners);
+      }
+      if (Array.isArray(payload?.roundWinners)) {
+        setRoundWinners(payload.roundWinners);
+      }
+      if (payload?.mixFinalized !== undefined) {
+        setMixFinalized(!!payload.mixFinalized);
+      }
+      if (payload?.pattern) {
+        const incomingPat = payload.pattern === 'blackout' ? 'full_card' : payload.pattern;
+        setPattern(incomingPat);
+        if (incomingPat === 'composite' && payload.patternComposite != null) {
+          const normalized = normalizePatternComposite(payload.patternComposite);
+          if (normalized) setPatternComposite(normalized);
+        }
+        if (incomingPat === 'line' && payload.linesRequired != null) {
+          setLinesRequired(normalizeLinesRequired(payload.linesRequired));
+        }
+        if (incomingPat === 'custom') {
+          setCustomMatchAllowRotation(!!payload.customMatchAllowRotation);
+          setCustomMatchAllowMirror(!!payload.customMatchAllowMirror);
+          if (Array.isArray(payload.customMask)) {
+            const nextMask = payload.customMask.map((pos: any) => String(pos));
+            setCustomMask(nextMask);
+            setCustomPattern(nextMask);
+          }
+        } else {
+          setCustomMatchAllowRotation(false);
+          setCustomMatchAllowMirror(false);
+          setCustomMask([]);
+        }
+      }
+      if (Array.isArray(payload?.playlists)) {
+        const syncedPlaylists = payload.playlists
+          .map((playlist: any) => {
+            const id = playlist?.id != null ? String(playlist.id).trim() : '';
+            if (!id) return null;
+            return {
+              id,
+              name: typeof playlist?.name === 'string' ? playlist.name : 'Playlist',
+              tracks:
+                typeof playlist?.tracks === 'number'
+                  ? playlist.tracks
+                  : typeof playlist?.trackCount === 'number'
+                    ? playlist.trackCount
+                    : 0,
+              description: typeof playlist?.description === 'string' ? playlist.description : undefined,
+              public: playlist?.public === true,
+              collaborative: playlist?.collaborative === true,
+              owner: typeof playlist?.owner === 'string' ? playlist.owner : undefined,
+              hasExplicitTracks: playlist?.hasExplicitTracks === true,
+              tracksLoaded: typeof playlist?.tracksLoaded === 'number' ? playlist.tracksLoaded : undefined,
+              catalog: playlist?.catalog === true,
+              youtubeMusic: playlist?.youtubeMusic === true,
+            } as Playlist;
+          })
+          .filter((playlist: Playlist | null): playlist is Playlist => playlist != null);
+
+        setSelectedPlaylists(syncedPlaylists.filter((playlist: Playlist) => !playlist.catalog));
+        setSelectedCatalogPlaylists(
+          syncedPlaylists.filter((playlist: Playlist) => playlist.catalog).map((playlist: Playlist) => ({
+            ...playlist,
+            catalog: true,
+          })),
+        );
+        setPlaylists((prev) => {
+          const merged = new Map(prev.map((playlist) => [normalizeSpotifyPlaylistId(playlist.id), playlist]));
+          syncedPlaylists.forEach((playlist: Playlist) => {
+            const id = normalizeSpotifyPlaylistId(playlist.id);
+            const existing = merged.get(id);
+            merged.set(id, existing ? { ...existing, ...playlist } : playlist);
+          });
+          return Array.from(merged.values());
+        });
+        if (payload?.mixFinalized === true) {
+          const syncedPlaylistKey = selectionPlaylistKey(syncedPlaylists);
+          if (syncedPlaylistKey) {
+            setFinalizedMixPlaylistKey(syncedPlaylistKey);
+            finalizedOrderPlaylistKeyRef.current = syncedPlaylistKey;
+          }
+        }
+      }
+      if (Array.isArray(payload?.playedSongs)) {
+        const detailedPlayedSongs = payload.playedSongs
+          .map((song: any) => normalizeSyncedSongForHost(song))
+          .filter((song: Song | null): song is Song => song != null);
+        if (detailedPlayedSongs.length > 0) {
+          const deduped = detailedPlayedSongs.filter(
+            (song: Song, index: number, arr: Song[]) =>
+              arr.findIndex((candidate: Song) => candidate.id === song.id) === index,
+          );
+          setPlayedInOrder(
+            deduped.map(({ id, name, artist }: Song) => ({ id, name, artist })),
+          );
+        } else if (
+          (typeof payload?.totalPlayedCount === 'number' && payload.totalPlayedCount === 0) ||
+          (Array.isArray(payload?.playedSongIds) && payload.playedSongIds.length === 0)
+        ) {
+          setPlayedInOrder([]);
+        }
+      }
+      if (typeof payload?.currentSongIndex === 'number' && Number.isFinite(payload.currentSongIndex)) {
+        setPlaybackTrackNumber(payload.currentSongIndex + 1);
+      } else if (payload?.currentSong == null) {
+        setPlaybackTrackNumber(null);
+      }
+      if (typeof payload?.totalSongs === 'number' && Number.isFinite(payload.totalSongs) && payload.totalSongs > 0) {
+        setPlaybackTrackTotal(payload.totalSongs);
+      } else if (payload?.totalSongs === 0 || payload?.currentSong == null) {
+        setPlaybackTrackTotal(null);
+      }
       if (typeof payload?.selectedDeviceId === 'string' && payload.selectedDeviceId.trim() !== '') {
         pendingRoomDeviceIdRef.current = payload.selectedDeviceId.trim();
       }
@@ -3436,6 +3626,10 @@ const HostView: React.FC = () => {
         setHybridInPersonPlusOnline(data.hybridInPersonPlusOnline);
       }
       addLog(`Joined room ${roomId} successfully`, 'info');
+      if (roomId) {
+        newSocket.emit('sync-state', { roomId });
+        newSocket.emit('request-finalized-order', { roomId });
+      }
     });
 
     // Join as host after the socket is connected so the handshake runs first; re-read JWT at emit time.
