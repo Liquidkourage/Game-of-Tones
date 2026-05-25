@@ -5307,6 +5307,29 @@ button.conn-chip.conn-chip-compact {
   padding: 2px 0 0;
 }
 
+.player-container--v2 .player-v2-action-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.player-container--v2 .player-v2-action-note {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(167, 139, 250, 0.16);
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(238, 240, 255, 0.76);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 .player-container--v2 .player-v2-sheet-backdrop {
   position: fixed;
   inset: 0;
@@ -5315,7 +5338,7 @@ button.conn-chip.conn-chip-compact {
   align-items: flex-end;
   justify-content: center;
   padding: 20px 12px calc(12px + env(safe-area-inset-bottom));
-  background: rgba(3, 5, 12, 0.58);
+  background: rgba(3, 5, 12, 0.74);
 }
 
 .player-container--v2 .player-v2-sheet {
@@ -5324,6 +5347,14 @@ button.conn-chip.conn-chip-compact {
   overflow-y: auto;
   border-radius: 28px;
   padding: 14px;
+  background:
+    linear-gradient(180deg, rgba(24, 26, 44, 0.96) 0%, rgba(16, 18, 34, 0.985) 100%),
+    radial-gradient(circle at top, rgba(139, 92, 246, 0.18), transparent 54%);
+  border: 1px solid rgba(188, 168, 255, 0.22);
+  box-shadow:
+    0 28px 60px rgba(0, 0, 0, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(18px);
 }
 
 .player-container--v2 .player-v2-sheet-handle {
@@ -5383,8 +5414,8 @@ button.conn-chip.conn-chip-compact {
   gap: 12px;
   padding: 12px;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(167, 139, 250, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(167, 139, 250, 0.2);
 }
 
 .player-container--v2 .player-v2-sheet-row + .player-v2-sheet-row {
@@ -5470,8 +5501,8 @@ button.conn-chip.conn-chip-compact {
   margin-top: 10px;
   padding: 12px 14px;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(167, 139, 250, 0.14);
+  background: rgba(255, 255, 255, 0.065);
+  border: 1px solid rgba(167, 139, 250, 0.18);
   font-size: 12px;
   line-height: 1.5;
   color: rgba(240, 244, 255, 0.92);
@@ -5520,6 +5551,14 @@ button.conn-chip.conn-chip-compact {
 
   .player-container--v2 .player-v2-font-controls {
     justify-content: flex-end;
+  }
+
+  .player-container--v2 .player-v2-action-footer {
+    justify-content: stretch;
+  }
+
+  .player-container--v2 .player-v2-action-note {
+    width: 100%;
   }
 }
 

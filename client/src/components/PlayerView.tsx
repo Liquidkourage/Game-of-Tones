@@ -895,6 +895,8 @@ const PlayerView: React.FC = () => {
       const squareEls = Array.from(gridEl.querySelectorAll<HTMLElement>('.bingo-square'));
       squareEls.forEach((squareEl) => {
         const contentEl = squareEl.querySelector<HTMLElement>('.square-content');
+        const titleEl = squareEl.querySelector<HTMLElement>('.player-square-title');
+        const artistEl = squareEl.querySelector<HTMLElement>('.player-square-artist');
         if (!contentEl) return;
 
         const setScales = (titleScale: number, artistScale: number) => {
@@ -911,6 +913,38 @@ const PlayerView: React.FC = () => {
         };
 
         const deriveArtistScale = (titleScale: number) => Math.min(1.12, Math.max(0.56, titleScale * 0.72));
+        const getLineCount = (el: HTMLElement | null) => {
+          if (!el) return 1;
+          const computed = window.getComputedStyle(el);
+          const lineHeight = Number.parseFloat(computed.lineHeight || '0');
+          if (!Number.isFinite(lineHeight) || lineHeight <= 0) return 1;
+          return Math.max(1, Math.round(el.getBoundingClientRect().height / lineHeight));
+        };
+        const relaxWrapIfWorthIt = (titleScale: number, artistScale: number) => {
+          let bestTitle = titleScale;
+          let bestArtist = artistScale;
+          let titleLines = getLineCount(titleEl);
+          let artistLines = getLineCount(artistEl);
+
+          for (let i = 0; i < 5; i += 1) {
+            const nextTitle = bestTitle * 0.965;
+            const nextArtist = Math.max(0.52, bestArtist * 0.97);
+            if (!fitsAtScales(nextTitle, nextArtist)) break;
+            const nextTitleLines = getLineCount(titleEl);
+            const nextArtistLines = getLineCount(artistEl);
+            const reducedWrap =
+              nextTitleLines < titleLines ||
+              (nextTitleLines === titleLines && nextArtistLines < artistLines);
+            if (!reducedWrap) continue;
+            bestTitle = nextTitle;
+            bestArtist = nextArtist;
+            titleLines = nextTitleLines;
+            artistLines = nextArtistLines;
+            if (titleLines <= 2 && artistLines <= 2) break;
+          }
+
+          setScales(bestTitle, bestArtist);
+        };
 
         let titleLow = 0.62;
         let titleHigh = 1.95;
@@ -951,6 +985,7 @@ const PlayerView: React.FC = () => {
         }
 
         setScales(bestTitleScale, artistLow);
+        relaxWrapIfWorthIt(bestTitleScale, artistLow);
       });
     };
 
@@ -1510,6 +1545,20 @@ const PlayerView: React.FC = () => {
       : connectionStatus === 'reconnecting'
         ? 'reconnecting'
         : 'disconnected';
+  const patternLabelMap: Record<string, string> = {
+    line: `${normalizeLinesRequired(gameState.linesRequired ?? 1)} line`,
+    full_card: 'Blackout',
+    blackout: 'Blackout',
+    four_corners: '4 corners',
+    x: 'X pattern',
+    t: 'T pattern',
+    l: 'L pattern',
+    u: 'U pattern',
+    plus: '+ pattern',
+    custom: 'Custom pattern',
+    composite: 'Combo pattern',
+  };
+  const currentPatternLabel = patternLabelMap[gameState.pattern] || 'Pattern live';
   const resyncStatusDescription =
     connectionStatus === 'connected'
       ? 'Connected. Use resync if you think you missed a call.'
@@ -1773,6 +1822,10 @@ const PlayerView: React.FC = () => {
                 >
                   Card options
                 </button>
+                <div className="player-v2-action-footer">
+                  <span className="player-v2-action-note">{currentPatternLabel}</span>
+                  <span className="player-v2-action-note">Long-press a square for full details</span>
+                </div>
               </motion.div>
             ) : null}
 
