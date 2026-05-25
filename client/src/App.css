@@ -5223,10 +5223,7 @@ button.conn-chip.conn-chip-compact {
   text-wrap: pretty;
   word-break: normal;
   overflow-wrap: normal;
-  hyphens: none;
-}
-
-.player-container--v2 .player-square-title--hyphenate {
+  -webkit-hyphens: auto;
   hyphens: auto;
 }
 
@@ -5241,10 +5238,7 @@ button.conn-chip.conn-chip-compact {
   text-wrap: pretty;
   word-break: normal;
   overflow-wrap: normal;
-  hyphens: none;
-}
-
-.player-container--v2 .player-square-artist--hyphenate {
+  -webkit-hyphens: auto;
   hyphens: auto;
 }
 

@@ -5,6 +5,7 @@ import io from 'socket.io-client';
 import { SOCKET_URL } from '../config';
 import { youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
 import { patchSquaresWithAlias, patchSquaresClearAlias } from '../utils/songAliasDisplay';
+import { softHyphenateLongWords, stripSoftHyphens } from '../utils/softHyphenateLongWords';
 import {
   STANDARD_BINGO_POSITIONS,
   validateBingoCardGrid,
@@ -912,8 +913,8 @@ const PlayerView: React.FC = () => {
       const titleEl = squareEl.querySelector<HTMLElement>('.player-square-title');
       const artistEl = squareEl.querySelector<HTMLElement>('.player-square-artist');
       if (!contentEl || !titleEl || !artistEl) return;
-      const titleText = titleEl.textContent?.trim() || '';
-      const artistText = artistEl.textContent?.trim() || '';
+      const titleText = stripSoftHyphens(titleEl.textContent || '').trim();
+      const artistText = stripSoftHyphens(artistEl.textContent || '').trim();
 
       const setScales = (titleScale: number, artistScale: number) => {
         squareEl.style.setProperty('--player-cell-title-scale', titleScale.toFixed(4));
@@ -1632,7 +1633,6 @@ const PlayerView: React.FC = () => {
       : connectionStatus === 'reconnecting'
         ? `Trying to reconnect${reconnectAttempts > 1 ? ` (${reconnectAttempts})` : ''}. You can resync manually at any time.`
         : 'Disconnected right now. Resync will rejoin the room and refresh your card state.';
-  const allowsGrammarHyphenation = (text: string) => /\b[A-Za-z]{8,}\b/.test(text);
 
   const renderBingoCard = () => {
     if (!bingoCard) {
@@ -1697,20 +1697,16 @@ const PlayerView: React.FC = () => {
               {(() => {
                 const free = square.isFreeSpace || square.songId === '__FREE_SPACE__';
                 const vis = youtubeBingoSquareDisplay(square);
-                const titleText = free ? 'FREE' : vis.title;
-                const artistText = free ? (venueBranding?.eventTitle?.trim() || 'Free space') : vis.artist;
+                const titleText = softHyphenateLongWords(free ? 'FREE' : vis.title);
+                const artistText = softHyphenateLongWords(
+                  free ? (venueBranding?.eventTitle?.trim() || 'Free space') : vis.artist,
+                );
                 return (
                   <div className="square-content">
-                    <div
-                      className={`player-square-title${allowsGrammarHyphenation(titleText) ? ' player-square-title--hyphenate' : ''}`}
-                      lang="en"
-                    >
+                    <div className="player-square-title" lang="en-US">
                       {titleText}
                     </div>
-                    <div
-                      className={`player-square-artist${allowsGrammarHyphenation(artistText) ? ' player-square-artist--hyphenate' : ''}`}
-                      lang="en"
-                    >
+                    <div className="player-square-artist" lang="en-US">
                       {artistText}
                     </div>
                   </div>
