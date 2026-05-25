@@ -927,40 +927,67 @@ const PlayerView: React.FC = () => {
         );
       };
 
-      const deriveArtistScale = (titleScale: number) => Math.min(1.02, Math.max(0.34, titleScale * 0.68));
+      const getLineCount = (el: HTMLElement) => {
+        const computed = window.getComputedStyle(el);
+        const lineHeight = Number.parseFloat(computed.lineHeight || '0');
+        if (!Number.isFinite(lineHeight) || lineHeight <= 0) return 1;
+        return Math.max(1, Math.round(el.getBoundingClientRect().height / lineHeight));
+      };
+      const TITLE_PREFERRED_MAX_LINES = 3;
+      const ARTIST_PREFERRED_MAX_LINES = 2;
+      const fitsPreferredLineCounts = (titleScale: number, artistScale: number) => {
+        if (!fitsAtScales(titleScale, artistScale)) return false;
+        return (
+          getLineCount(titleEl) <= TITLE_PREFERRED_MAX_LINES &&
+          getLineCount(artistEl) <= ARTIST_PREFERRED_MAX_LINES
+        );
+      };
+      const deriveArtistScale = (titleScale: number) => Math.min(0.96, Math.max(0.38, titleScale * 0.62));
 
-      let titleLow = 0.28;
-      let titleHigh = 1.95;
+      const findBestTitleScale = (preferReadableLines: boolean) => {
+        let titleLow = 0.28;
+        let titleHigh = 1.95;
+        const fits = preferReadableLines ? fitsPreferredLineCounts : fitsAtScales;
 
-      if (!fitsAtScales(titleLow, deriveArtistScale(titleLow))) {
-        setScales(titleLow, 0.34);
+        if (!fits(titleLow, deriveArtistScale(titleLow))) {
+          return null;
+        }
+
+        fits(titleHigh, deriveArtistScale(titleHigh));
+        for (let i = 0; i < 10; i += 1) {
+          const mid = (titleLow + titleHigh) / 2;
+          if (fits(mid, deriveArtistScale(mid))) {
+            titleLow = mid;
+          } else {
+            titleHigh = mid;
+          }
+        }
+
+        return titleLow;
+      };
+
+      const bestTitleScale = findBestTitleScale(true) ?? findBestTitleScale(false);
+      if (bestTitleScale == null) {
+        setScales(0.28, 0.38);
         return;
       }
 
-      fitsAtScales(titleHigh, deriveArtistScale(titleHigh));
-      for (let i = 0; i < 10; i += 1) {
-        const mid = (titleLow + titleHigh) / 2;
-        if (fitsAtScales(mid, deriveArtistScale(mid))) {
-          titleLow = mid;
-        } else {
-          titleHigh = mid;
-        }
-      }
-
-      const bestTitleScale = titleLow;
       let artistLow = deriveArtistScale(bestTitleScale);
-      let artistHigh = Math.min(1.18, bestTitleScale * 0.84);
+      let artistHigh = Math.min(1.02, bestTitleScale * 0.78);
+      const fitsArtist = (artistScale: number, preferReadableLines: boolean) =>
+        (preferReadableLines ? fitsPreferredLineCounts : fitsAtScales)(bestTitleScale, artistScale);
 
-      if (!fitsAtScales(bestTitleScale, artistLow)) {
-        artistLow = Math.max(0.34, artistLow * 0.9);
+      if (!fitsArtist(artistLow, true) && !fitsArtist(artistLow, false)) {
+        artistLow = Math.max(0.38, artistLow * 0.9);
         setScales(bestTitleScale, artistLow);
         return;
       }
 
-      fitsAtScales(bestTitleScale, artistHigh);
+      const preferReadableArtist = fitsArtist(artistLow, true);
+      fitsArtist(artistHigh, preferReadableArtist);
       for (let i = 0; i < 8; i += 1) {
         const mid = (artistLow + artistHigh) / 2;
-        if (fitsAtScales(bestTitleScale, mid)) {
+        if (fitsArtist(mid, preferReadableArtist)) {
           artistLow = mid;
         } else {
           artistHigh = mid;
