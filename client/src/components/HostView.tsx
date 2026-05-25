@@ -935,6 +935,7 @@ const HostView: React.FC = () => {
   const [youtubeStatusReady, setYoutubeStatusReady] = useState(false);
   const [canUndoSkip, setCanUndoSkip] = useState(false);
   const roundsPanelRef = useRef<HTMLElement>(null);
+  const hostShellMainRef = useRef<HTMLDivElement>(null);
   const displaySettingsRef = useRef<HTMLDetailsElement>(null);
   /** 5�15 mode: playlist title per column (from `fiveby15-pool`, else five selected playlists). */
   const [bingoColumnPlaylistNames, setBingoColumnPlaylistNames] = useState<string[]>([]);
@@ -951,6 +952,7 @@ const HostView: React.FC = () => {
 
   const onHostGlassNav = useCallback((id: HostGlassNavId) => {
     setHostGlassNav(id);
+    hostShellMainRef.current?.scrollTo({ top: 0 });
     if (id === 'rounds') {
       setTimeout(() => {
         document.getElementById('host-library-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -8827,7 +8829,7 @@ const HostView: React.FC = () => {
               </button>
             ))}
           </nav>
-          <div className="host-shell__main">
+          <div className="host-shell__main" ref={hostShellMainRef}>
         {/* Header */}
         <div className="host-header host-header--r4">
           <div className="host-header__brand" data-host-tour="header-brand">
