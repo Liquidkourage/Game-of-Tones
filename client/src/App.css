@@ -5149,10 +5149,11 @@ button.conn-chip.conn-chip-compact {
 }
 
 .player-container--v2 .bingo-column-headers__playlist {
-  font-size: clamp(7px, min(2vw, 1.8vmin), 9px) !important;
-  line-height: 1.05 !important;
-  color: rgba(232, 230, 255, 0.66) !important;
-  letter-spacing: 0.03em !important;
+  font-size: clamp(7.5px, min(2.2vw, 2vmin), 10px) !important;
+  line-height: 1.08 !important;
+  font-weight: 700;
+  color: rgba(238, 237, 255, 0.8) !important;
+  letter-spacing: 0.035em !important;
   text-transform: uppercase;
 }
 
@@ -5230,9 +5231,9 @@ button.conn-chip.conn-chip-compact {
 .player-container--v2 .player-square-artist {
   width: 100%;
   font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.72) * clamp(7px, 2.8cqi, 15px));
-  line-height: 1.02;
-  font-weight: 650;
-  color: rgba(232, 230, 255, 0.58);
+  line-height: 1.05;
+  font-weight: 680;
+  color: rgba(238, 236, 255, 0.72);
   max-width: 100%;
   white-space: normal;
   text-wrap: pretty;
@@ -5606,7 +5607,7 @@ button.conn-chip.conn-chip-compact {
   }
 
   .player-container--v2 .bingo-column-headers__playlist {
-    font-size: clamp(6px, min(1.4vw, 1.8vh), 8px) !important;
+    font-size: clamp(6.5px, min(1.55vw, 2vh), 8.75px) !important;
   }
 
   .player-container--v2 .player-square-title {
@@ -5614,7 +5615,7 @@ button.conn-chip.conn-chip-compact {
   }
 
   .player-container--v2 .player-square-artist {
-    font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.72) * clamp(6px, 2cqi, 10px));
+    font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.72) * clamp(6.5px, 2.15cqi, 10.75px));
   }
 
   .player-container--v2 .player-v2-action-bar {
