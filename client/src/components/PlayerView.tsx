@@ -912,6 +912,8 @@ const PlayerView: React.FC = () => {
       const titleEl = squareEl.querySelector<HTMLElement>('.player-square-title');
       const artistEl = squareEl.querySelector<HTMLElement>('.player-square-artist');
       if (!contentEl || !titleEl || !artistEl) return;
+      const titleText = titleEl.textContent?.trim() || '';
+      const artistText = artistEl.textContent?.trim() || '';
 
       const setScales = (titleScale: number, artistScale: number) => {
         squareEl.style.setProperty('--player-cell-title-scale', titleScale.toFixed(4));
@@ -933,30 +935,58 @@ const PlayerView: React.FC = () => {
         if (!Number.isFinite(lineHeight) || lineHeight <= 0) return 1;
         return Math.max(1, Math.round(el.getBoundingClientRect().height / lineHeight));
       };
-      const TITLE_PREFERRED_MAX_LINES = 3;
-      const ARTIST_PREFERRED_MAX_LINES = 2;
-      const fitsPreferredLineCounts = (titleScale: number, artistScale: number) => {
+      const getWordCount = (text: string) => {
+        const normalized = text.trim();
+        return normalized ? normalized.split(/\s+/).length : 0;
+      };
+      const getLongestWordLength = (text: string) => {
+        const words: string[] = text.match(/[A-Za-z]+/g) ?? [];
+        return words.reduce((max: number, word: string) => Math.max(max, word.length), 0);
+      };
+      const derivePreferredTitleMaxLines = (text: string) => {
+        const charCount = text.length;
+        const wordCount = getWordCount(text);
+        const longestWord = getLongestWordLength(text);
+        if (wordCount <= 2 && charCount <= 14 && longestWord < 8) return 2;
+        if (wordCount >= 5 || charCount >= 24 || longestWord >= 11) return 4;
+        return 3;
+      };
+      const derivePreferredArtistMaxLines = (text: string) => {
+        const charCount = text.length;
+        const wordCount = getWordCount(text);
+        const longestWord = getLongestWordLength(text);
+        if (wordCount <= 2 && charCount <= 16 && longestWord < 10) return 1;
+        return 2;
+      };
+      const fitsWithinLineCaps = (
+        titleScale: number,
+        artistScale: number,
+        titleMaxLines: number,
+        artistMaxLines: number,
+      ) => {
         if (!fitsAtScales(titleScale, artistScale)) return false;
         return (
-          getLineCount(titleEl) <= TITLE_PREFERRED_MAX_LINES &&
-          getLineCount(artistEl) <= ARTIST_PREFERRED_MAX_LINES
+          getLineCount(titleEl) <= titleMaxLines &&
+          getLineCount(artistEl) <= artistMaxLines
         );
       };
-      const deriveArtistScale = (titleScale: number) => Math.min(0.96, Math.max(0.38, titleScale * 0.62));
+      const ARTIST_MIN_SCALE = 0.34;
+      const deriveArtistScale = (titleScale: number) => Math.min(0.94, Math.max(ARTIST_MIN_SCALE, titleScale * 0.56));
 
-      const findBestTitleScale = (preferReadableLines: boolean) => {
+      const findBestTitleScale = (titleMaxLines: number, artistMaxLines: number) => {
         let titleLow = 0.28;
         let titleHigh = 1.95;
-        const fits = preferReadableLines ? fitsPreferredLineCounts : fitsAtScales;
+        const fits = (titleScale: number) =>
+          fitsWithinLineCaps(titleScale, ARTIST_MIN_SCALE, titleMaxLines, artistMaxLines);
 
-        if (!fits(titleLow, deriveArtistScale(titleLow))) {
+        if (!fits(titleLow)) {
           return null;
         }
 
-        fits(titleHigh, deriveArtistScale(titleHigh));
+        fits(titleHigh);
         for (let i = 0; i < 10; i += 1) {
           const mid = (titleLow + titleHigh) / 2;
-          if (fits(mid, deriveArtistScale(mid))) {
+          if (fits(mid)) {
             titleLow = mid;
           } else {
             titleHigh = mid;
@@ -966,28 +996,46 @@ const PlayerView: React.FC = () => {
         return titleLow;
       };
 
-      const bestTitleScale = findBestTitleScale(true) ?? findBestTitleScale(false);
+      const preferredTitleMaxLines = derivePreferredTitleMaxLines(titleText);
+      const preferredArtistMaxLines = derivePreferredArtistMaxLines(artistText);
+      const primaryTitleScale = findBestTitleScale(preferredTitleMaxLines, preferredArtistMaxLines);
+      const expandedTitleScale =
+        preferredTitleMaxLines < 4
+          ? findBestTitleScale(preferredTitleMaxLines + 1, preferredArtistMaxLines)
+          : null;
+
+      const bestTitleScale =
+        expandedTitleScale != null &&
+        (primaryTitleScale == null || expandedTitleScale >= primaryTitleScale * 1.08)
+          ? expandedTitleScale
+          : primaryTitleScale ?? expandedTitleScale;
+      const activeTitleMaxLines =
+        expandedTitleScale != null &&
+        bestTitleScale === expandedTitleScale &&
+        (primaryTitleScale == null || expandedTitleScale >= primaryTitleScale * 1.08)
+          ? preferredTitleMaxLines + 1
+          : preferredTitleMaxLines;
+
       if (bestTitleScale == null) {
-        setScales(0.28, 0.38);
+        setScales(0.28, ARTIST_MIN_SCALE);
         return;
       }
 
       let artistLow = deriveArtistScale(bestTitleScale);
-      let artistHigh = Math.min(1.02, bestTitleScale * 0.78);
-      const fitsArtist = (artistScale: number, preferReadableLines: boolean) =>
-        (preferReadableLines ? fitsPreferredLineCounts : fitsAtScales)(bestTitleScale, artistScale);
+      let artistHigh = Math.min(1.02, bestTitleScale * 0.74);
+      const fitsArtist = (artistScale: number) =>
+        fitsWithinLineCaps(bestTitleScale, artistScale, activeTitleMaxLines, preferredArtistMaxLines);
 
-      if (!fitsArtist(artistLow, true) && !fitsArtist(artistLow, false)) {
-        artistLow = Math.max(0.38, artistLow * 0.9);
+      if (!fitsArtist(artistLow)) {
+        artistLow = Math.max(ARTIST_MIN_SCALE, artistLow * 0.88);
         setScales(bestTitleScale, artistLow);
         return;
       }
 
-      const preferReadableArtist = fitsArtist(artistLow, true);
-      fitsArtist(artistHigh, preferReadableArtist);
+      fitsArtist(artistHigh);
       for (let i = 0; i < 8; i += 1) {
         const mid = (artistLow + artistHigh) / 2;
-        if (fitsArtist(mid, preferReadableArtist)) {
+        if (fitsArtist(mid)) {
           artistLow = mid;
         } else {
           artistHigh = mid;
