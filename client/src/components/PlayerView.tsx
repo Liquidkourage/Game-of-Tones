@@ -142,6 +142,7 @@ const PlayerView: React.FC = () => {
   /** 5×15 mode: playlist name per column (from server `fiveby15-pool`). */
   const [bingoColumnPlaylistNames, setBingoColumnPlaylistNames] = useState<string[]>([]);
   const [venueBranding, setVenueBranding] = useState<VenueBranding | null>(null);
+  const [cardTextFitReady, setCardTextFitReady] = useState(false);
 
   /** User multiplier (70–150) on the automatic square text size (CSS: --player-card-font-scale). */
   const CARD_FONT_STORAGE_KEY = 'player_card_font_percent';
@@ -901,12 +902,20 @@ const PlayerView: React.FC = () => {
   }, [bingoCard?.squares, venueBranding?.eventTitle]);
 
   useLayoutEffect(() => {
-    if (!bingoCard || !cardGridRef.current) return undefined;
+    setCardTextFitReady(false);
+  }, [cardTextFitSignature]);
+
+  useLayoutEffect(() => {
+    if (!bingoCard || !cardGridRef.current) {
+      setCardTextFitReady(false);
+      return undefined;
+    }
 
     const gridEl = cardGridRef.current;
     let frame = 0;
     let queuedSquares: HTMLElement[] = [];
     let queuedIndex = 0;
+    let cancelled = false;
 
     const fitSquare = (squareEl: HTMLElement) => {
       const contentEl = squareEl.querySelector<HTMLElement>('.square-content');
@@ -1047,6 +1056,7 @@ const PlayerView: React.FC = () => {
     };
 
     const processFitQueue = () => {
+      if (cancelled) return;
       frame = 0;
       const frameStart = performance.now();
       while (queuedIndex < queuedSquares.length && performance.now() - frameStart < 7) {
@@ -1055,6 +1065,8 @@ const PlayerView: React.FC = () => {
       }
       if (queuedIndex < queuedSquares.length) {
         frame = requestAnimationFrame(processFitQueue);
+      } else if (!cancelled) {
+        setCardTextFitReady(true);
       }
     };
 
@@ -1076,6 +1088,7 @@ const PlayerView: React.FC = () => {
     fontsReady?.then(() => queueFit()).catch(() => {});
 
     return () => {
+      cancelled = true;
       cancelAnimationFrame(frame);
       resizeObserver.disconnect();
     };
@@ -1644,7 +1657,10 @@ const PlayerView: React.FC = () => {
     }
 
     return (
-      <div className="bingo-card">
+      <div
+        className={`bingo-card ${cardTextFitReady ? 'bingo-card--fit-ready' : 'bingo-card--fit-pending'}`}
+        aria-busy={!cardTextFitReady}
+      >
         <div className="bingo-column-headers" aria-hidden="true">
           {(['B', 'I', 'N', 'G', 'O'] as const).map((letter, colIdx) => {
             const raw = bingoColumnPlaylistNames[colIdx] || '';

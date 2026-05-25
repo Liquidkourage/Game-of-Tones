@@ -5116,6 +5116,18 @@ button.conn-chip.conn-chip-compact {
     0 0 48px rgba(139, 92, 246, 0.16),
     inset 0 0 60px rgba(139, 92, 246, 0.08);
   padding: clamp(8px, 1.2vmin, 12px);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.player-container--v2 .bingo-card--fit-pending {
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+}
+
+.player-container--v2 .bingo-card--fit-ready {
+  opacity: 1;
+  transform: none;
 }
 
 .player-container--v2 .bingo-column-headers {
