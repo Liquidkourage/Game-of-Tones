@@ -1644,9 +1644,9 @@
 
 .host-glass-theme .host-players-workspace__title,
 .host-glass-theme .host-settings-workspace__title,
+.host-glass-theme .host-round-timeline__title,
 .host-glass-theme .host-inline-library__title,
 .host-glass-theme .host-preshow-checklist__title,
-.host-glass-theme .host-round-timeline__title,
 .host-glass-theme .host-pool-quality__title,
 .host-glass-theme .host-bingo-queue__title,
 .host-glass-theme .host-call-log__title,
@@ -1764,6 +1764,37 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.host-glass-theme .host-round-timeline__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.host-glass-theme .host-round-timeline__header .host-round-timeline__title {
+  margin-bottom: 0;
+}
+
+.host-glass-theme .host-round-timeline__summary {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.35;
+}
+
+.host-glass-theme .host-round-timeline__manage {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  padding: 8px 12px;
+  min-height: 0;
+}
+
+.host-glass-theme .host-round-timeline--game {
+  margin-bottom: 2px;
 }
 
 .host-glass-theme .host-round-timeline__chip {

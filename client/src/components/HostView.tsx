@@ -9093,6 +9093,25 @@ const HostView: React.FC = () => {
     [eventRounds, currentRoundIndex],
   );
 
+  const roundTimelineSummary = useMemo(() => {
+    const completed = eventRounds.filter((r) => r.status === 'completed').length;
+    const active = eventRounds.filter((r) => r.status === 'active').length;
+    const planned = eventRounds.filter(
+      (r) => r.status === 'planned' && (r.playlistIds || []).length > 0,
+    ).length;
+    const draft = eventRounds.filter(
+      (r) => r.status === 'unplanned' || (r.playlistIds || []).length === 0,
+    ).length;
+    const total = eventRounds.length;
+    const parts: string[] = [];
+    if (active > 0) parts.push(`${active} live`);
+    if (planned > 0) parts.push(`${planned} planned`);
+    if (completed > 0) parts.push(`${completed} done`);
+    if (draft > 0) parts.push(`${draft} draft`);
+    if (parts.length === 0) return `${total} round${total === 1 ? '' : 's'}`;
+    return `${parts.join(' · ')} · ${total} total`;
+  }, [eventRounds]);
+
   const callLogRows = useMemo(
     () =>
       playedInOrder.map((s, i) => ({
@@ -9355,6 +9374,14 @@ const HostView: React.FC = () => {
           <div className="tab-content host-unified host-glass-workspace">
             {hostGlassNav === 'game' && (
               <>
+                <HostRoundTimeline
+                  className="host-round-timeline--game"
+                  rounds={roundTimelineRows}
+                  summary={roundTimelineSummary}
+                  onSelectRound={handleSelectRoundForPrep}
+                  onDuplicateRound={handleDuplicateRound}
+                  onOpenRounds={() => onHostGlassNav('rounds')}
+                />
                 <HostGameDashboard
                   gameState={gameState}
                   currentSong={currentSong}
@@ -9500,6 +9527,7 @@ const HostView: React.FC = () => {
                 <HostPreShowChecklist items={preShowChecklistItems} />
                 <HostRoundTimeline
                   rounds={roundTimelineRows}
+                  summary={roundTimelineSummary}
                   onSelectRound={(idx) => {
                     handleSelectRoundForPrep(idx);
                     setHostGlassNav('rounds');

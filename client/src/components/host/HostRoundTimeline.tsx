@@ -13,6 +13,11 @@ type HostRoundTimelineProps = {
   rounds: RoundTimelineRow[];
   onSelectRound: (index: number) => void;
   onDuplicateRound?: (index: number) => void;
+  /** Short status line, e.g. "1 live · 2 planned · 4 total" */
+  summary?: string;
+  /** Jump to the full Rounds workspace (playlists, library, etc.) */
+  onOpenRounds?: () => void;
+  className?: string;
 };
 
 const statusLabel: Record<RoundTimelineRow['status'], string> = {
@@ -26,11 +31,27 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
   rounds,
   onSelectRound,
   onDuplicateRound,
+  summary,
+  onOpenRounds,
+  className,
 }) => {
   if (rounds.length === 0) return null;
   return (
-    <section className="host-round-timeline host-glass-panel" aria-label="Round timeline">
-      <h2 className="host-round-timeline__title">Tonight&apos;s rounds</h2>
+    <section
+      className={['host-round-timeline host-glass-panel', className].filter(Boolean).join(' ')}
+      aria-label="Round timeline"
+    >
+      <div className="host-round-timeline__header">
+        <div>
+          <h2 className="host-round-timeline__title">Tonight&apos;s rounds</h2>
+          {summary ? <p className="host-round-timeline__summary">{summary}</p> : null}
+        </div>
+        {onOpenRounds ? (
+          <button type="button" className="host-round-timeline__manage btn-secondary" onClick={onOpenRounds}>
+            Manage in Rounds
+          </button>
+        ) : null}
+      </div>
       <div className="host-round-timeline__track" role="list">
         {rounds.map((r) => (
           <div
