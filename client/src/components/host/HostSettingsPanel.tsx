@@ -6,6 +6,7 @@ import type { HostActivityEntry } from '../../host/hostActivityLog';
 
 type HostSettingsPanelProps = {
   connectionPanel: React.ReactNode;
+  templatesPanel: React.ReactNode;
   onOpenConnectionModal: () => void;
   activityEntries: HostActivityEntry[];
   onExportEventRecap: () => void;
@@ -19,6 +20,7 @@ type HostSettingsPanelProps = {
 
 const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
   connectionPanel,
+  templatesPanel,
   onOpenConnectionModal,
   activityEntries,
   onExportEventRecap,
@@ -123,6 +125,8 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
           Export event recap
         </button>
       </section>
+
+      {templatesPanel}
 
       <HostActivityFeed entries={activityEntries} />
     </div>
