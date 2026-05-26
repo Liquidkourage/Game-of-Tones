@@ -4443,20 +4443,26 @@ const HostView: React.FC = () => {
     [roomId, freeSpaceEnabled],
   );
 
-  const startGame = async () => {
+  const startGame = async (opts?: { roundOverride?: EventRound | null; playlistsOverride?: Playlist[] | null }) => {
     if (!socket) {
       console.error('Socket not connected');
-      return;
+      return false;
     }
 
-    if (mixNeedsHostSpotify && !isSpotifyConnected) {
-      alert('Spotify is not connected. Open Connection in the header and connect Spotify first.');
-      return;
-    }
-
-    const idxStart = currentRoundIndex;
     const roundForStart =
-      idxStart >= 0 && idxStart < eventRounds.length ? eventRounds[idxStart] : null;
+      opts?.roundOverride ??
+      (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length ? eventRounds[currentRoundIndex] : null);
+    const playlistsForStart =
+      opts?.playlistsOverride && opts.playlistsOverride.length > 0 ? opts.playlistsOverride : mixPlaylistSelection;
+    const needsHostSpotifyForStart = playlistsForStart.some(
+      (p) => p.youtubeMusic !== true && p.catalog !== true,
+    );
+
+    if (needsHostSpotifyForStart && !isSpotifyConnected) {
+      alert('Spotify is not connected. Open Connection in the header and connect Spotify first.');
+      return false;
+    }
+
     const freeSpaceForStart =
       roundForStart?.freeSpaceEnabled !== undefined
         ? roundForStart.freeSpaceEnabled
@@ -4466,30 +4472,30 @@ const HostView: React.FC = () => {
     const useSavedRoundPlayback =
       !!roundForStart && !!snapPool && snapPool.length >= needSnapTracks;
 
-    if (!useSavedRoundPlayback && mixPlaylistSelection.length === 0) {
+    if (!useSavedRoundPlayback && playlistsForStart.length === 0) {
       alert('Please select at least one playlist or official catalog pack');
-      return;
+      return false;
     }
 
-    if (mixNeedsHostSpotify && !selectedDevice) {
+    if (needsHostSpotifyForStart && !selectedDevice) {
       connectionModalOpenedByUserRef.current = false;
       setShowConnectionModal(true);
       alert(
         'Please select a Spotify playback device first.\n\nOpen Connection (header button), pick a device in Playback device, or open Spotify on your target device and tap Refresh devices.'
       );
-      return;
+      return false;
     }
 
-    if (mixNeedsHostSpotify && playbackDeviceNotInList) {
+    if (needsHostSpotifyForStart && playbackDeviceNotInList) {
       connectionModalOpenedByUserRef.current = false;
       setShowConnectionModal(true);
       alert(
         'Your selected Spotify device is not available right now. Open Spotify on that device, tap Refresh devices in Connection, and pick it again.'
       );
-      return;
+      return false;
     }
 
-    if (mixNeedsHostSpotify && selectedDevice) {
+    if (needsHostSpotifyForStart && selectedDevice) {
       syncSelectedPlaybackDeviceToRoom(selectedDevice);
     }
 
@@ -4502,22 +4508,22 @@ const HostView: React.FC = () => {
 
     if (!useSavedRoundPlayback && resolveSongListForStart().length === 0) {
       alert(
-        mixNeedsHostSpotify
+        needsHostSpotifyForStart
           ? 'No songs loaded from playlists. Ensure Spotify is connected and playlists have tracks, then try again.'
           : 'No songs loaded. Open Connection and connect YouTube Music if needed, load playlists, then try Show Playlists or Start Game again.'
       );
-      return;
+      return false;
     }
 
     try {
       if (!useSavedRoundPlayback && !mixFinalized) {
         addLog('Finalizing mix before start...', 'info');
-        const ok = await finalizeMix();
+        const ok = await finalizeMix(opts?.playlistsOverride ? { playlists: playlistsForStart } : undefined);
         if (!ok) {
           alert(
             'Could not finalize the mix in time. Try Show Playlists, wait for the confirmation, then Start Game.'
           );
-          return;
+          return false;
         }
       }
 
@@ -4527,10 +4533,10 @@ const HostView: React.FC = () => {
 
       if (songListForStart.length === 0) {
         alert('No song pool is available. Refresh the page or load playlists again.');
-        return;
+        return false;
       }
 
-      console.log('Starting game with playlists:', mixPlaylistSelection);
+      console.log('Starting game with playlists:', playlistsForStart);
       setIsStartingGame(true);
 
       let patternForStart: BingoPattern = roundForStart?.bingoPattern ?? pattern;
@@ -4552,7 +4558,7 @@ const HostView: React.FC = () => {
             'This round uses a combined pattern but it could not be loaded. Configure Combined (AND/OR) in Round builder.',
           );
           setIsStartingGame(false);
-          return;
+          return false;
         }
         compositeForStart = spec;
       }
@@ -4562,7 +4568,7 @@ const HostView: React.FC = () => {
           'This round uses a custom pattern but no squares are saved. Choose a saved custom pattern in Round builder.',
         );
         setIsStartingGame(false);
-        return;
+        return false;
       }
 
       if (patternForStart === 'custom' && maskForStart.length > 0) {
@@ -4595,9 +4601,9 @@ const HostView: React.FC = () => {
 
       socket.emit('start-game', {
         roomId,
-        playlists: mixPlaylistSelection,
+        playlists: playlistsForStart,
         snippetLength,
-        deviceId: mixNeedsHostSpotify && selectedDevice ? selectedDevice.id : undefined,
+        deviceId: needsHostSpotifyForStart && selectedDevice ? selectedDevice.id : undefined,
         songList: songListForStart,
         randomStarts,
         pattern: patternForStart,
@@ -4618,9 +4624,11 @@ const HostView: React.FC = () => {
       
       // Safety timeout in case no response comes back
       setTimeout(() => setIsStartingGame(false), 8000);
+      return true;
     } catch (error) {
       console.error('Error starting game:', error);
       setIsStartingGame(false);
+      return false;
     }
   };
 
@@ -7288,10 +7296,170 @@ const HostView: React.FC = () => {
   const resetCurrentRound = handleRestartRound;
 
   const getNextPlannedRound = useCallback(() => {
-    return eventRounds.findIndex(round => 
-      round.status === 'planned' && (round.playlistIds || []).length > 0
+    const rounds = eventRoundsRef.current;
+    if (!rounds.length) return -1;
+
+    const isPlannedRound = (round: EventRound | undefined) =>
+      !!round && round.status === 'planned' && (round.playlistIds || []).length > 0;
+
+    const cur = currentRoundIndexRef.current;
+    if (cur >= 0) {
+      for (let i = cur + 1; i < rounds.length; i += 1) {
+        if (isPlannedRound(rounds[i])) return i;
+      }
+    }
+
+    return rounds.findIndex((round) => isPlannedRound(round));
+  }, []);
+
+  const requestGameResetAck = useCallback(async () => {
+    if (!socket || !roomId) return false;
+
+    return await new Promise<boolean>((resolve) => {
+      let settled = false;
+      const cleanup = () => {
+        socket.off('game-reset', onReset);
+        window.clearTimeout(timeoutId);
+      };
+      const finish = (ok: boolean) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(ok);
+      };
+      const onReset = () => finish(true);
+      const timeoutId = window.setTimeout(() => finish(false), 8000);
+
+      socket.on('game-reset', onReset);
+      socket.emit('reset-game', { roomId, stopPlayback: true });
+    });
+  }, [socket, roomId]);
+
+  const handleStartNextPlannedRound = useCallback(async () => {
+    const nextIndex = getNextPlannedRound();
+    if (nextIndex < 0) {
+      handleStartNextRound();
+      return;
+    }
+
+    const round = eventRoundsRef.current[nextIndex];
+    if (!round || !(round.playlistIds || []).length) {
+      window.alert('Add playlists to the next round first.');
+      return;
+    }
+
+    const mixRows = resolveMixPlaylistRowsForRound(round);
+    if (!mixRows) {
+      window.alert(
+        'No playlists from the next planned round matched your library. Use Connection to refresh, or re-drag playlists from the library into that bucket.',
+      );
+      return;
+    }
+
+    const freeSpaceForRound =
+      round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : freeSpaceEnabled;
+    const needsSnapshotTracks = freeSpaceForRound ? 24 : 25;
+    const hasSavedSnapshot = Boolean(
+      round.savedMixSnapshot?.songs?.length && round.savedMixSnapshot.songs.length >= needsSnapshotTracks,
     );
-  }, [eventRounds]);
+    if (!hasSavedSnapshot) {
+      jumpToRound(nextIndex);
+      setRoundComplete(null);
+      showToast('Loaded the next planned round for prep. Save the round to enable one-click auto start.', 'info');
+      addLog(`Loaded ${round.name} for prep — save the round snapshot to auto-start it next time`, 'warn');
+      return;
+    }
+
+    const needsHostSpotifyForRound = mixRows.some((p) => p.youtubeMusic !== true && p.catalog !== true);
+    if (needsHostSpotifyForRound && !isSpotifyConnected) {
+      window.alert('Spotify is not connected. Open Connection in the header and connect Spotify first.');
+      return;
+    }
+    if (needsHostSpotifyForRound && !selectedDevice) {
+      connectionModalOpenedByUserRef.current = false;
+      setShowConnectionModal(true);
+      window.alert(
+        'Please select a Spotify playback device first.\n\nOpen Connection (header button), pick a device in Playback device, or open Spotify on your target device and tap Refresh devices.',
+      );
+      return;
+    }
+    if (needsHostSpotifyForRound && playbackDeviceNotInList) {
+      connectionModalOpenedByUserRef.current = false;
+      setShowConnectionModal(true);
+      window.alert(
+        'Your selected Spotify device is not available right now. Open Spotify on that device, tap Refresh devices in Connection, and pick it again.',
+      );
+      return;
+    }
+
+    const loaded = applyRoundPlaylistsToMixSelection(round);
+    if (!loaded) {
+      window.alert(
+        'No playlists from the next planned round matched your library. Use Connection to refresh, or re-drag playlists from the library into that bucket.',
+      );
+      return;
+    }
+
+    applyRoundBingoToHost(round, { restorePlaybackFromSnapshot: true });
+    setRoundBuilderFocusIndex(nextIndex);
+    setCurrentRoundIndex(nextIndex);
+    setEventRounds((prev) => {
+      const now = Date.now();
+      const next = [...prev];
+      const prevIndex = currentRoundIndexRef.current;
+      if (prevIndex >= 0 && prevIndex < next.length && prevIndex !== nextIndex) {
+        next[prevIndex] = {
+          ...next[prevIndex],
+          status: 'completed',
+          completedAt: now,
+        };
+      }
+      if (nextIndex >= 0 && nextIndex < next.length) {
+        next[nextIndex] = {
+          ...next[nextIndex],
+          status: 'active',
+          startedAt: now,
+          completedAt: undefined,
+        };
+      }
+      try {
+        localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+
+    addLog(`Advancing to ${round.name}...`, 'info');
+    const resetOk = await requestGameResetAck();
+    if (!resetOk) {
+      showToast('Timed out while clearing the finished round. Try again.', 'error');
+      addLog('Timed out waiting for room reset before starting next planned round', 'error');
+      return;
+    }
+
+    const started = await startGame({ roundOverride: round, playlistsOverride: mixRows });
+    if (started) {
+      setRoundComplete(null);
+      addLog(`Started ${round.name}`, 'info');
+    }
+  }, [
+    addLog,
+    applyRoundBingoToHost,
+    applyRoundPlaylistsToMixSelection,
+    freeSpaceEnabled,
+    getNextPlannedRound,
+    handleStartNextRound,
+    isSpotifyConnected,
+    jumpToRound,
+    playbackDeviceNotInList,
+    requestGameResetAck,
+    resolveMixPlaylistRowsForRound,
+    roomId,
+    selectedDevice,
+    showToast,
+    startGame,
+  ]);
 
   const getRoundStatusSummary = useCallback(() => {
     const completed = eventRounds.filter(r => r.status === 'completed').length;
@@ -10524,7 +10692,7 @@ const HostView: React.FC = () => {
               marginTop: '24px'
             }}>
               <button
-                onClick={handleStartNextRound}
+                onClick={getNextPlannedRound() >= 0 ? () => void handleStartNextPlannedRound() : handleStartNextRound}
                 style={{
                   background: 'linear-gradient(135deg, #00ff88, #00cc6d)',
                   border: 'none',
@@ -10551,8 +10719,37 @@ const HostView: React.FC = () => {
                 }}
               >
                 <SkipForward className="w-5 h-5" aria-hidden />
-                Start Next Round
+                {getNextPlannedRound() >= 0 ? 'Start Next Planned Round' : 'Start Next Round'}
               </button>
+
+              {getNextPlannedRound() >= 0 ? (
+                <button
+                  onClick={handleStartNextRound}
+                  style={{
+                    background: 'rgba(0, 170, 255, 0.12)',
+                    border: '2px solid rgba(0, 170, 255, 0.55)',
+                    borderRadius: '10px',
+                    padding: '12px 24px',
+                    fontSize: '1rem',
+                    fontWeight: 'bold',
+                    color: '#8edcff',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 10,
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.background = 'rgba(0, 170, 255, 0.2)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.background = 'rgba(0, 170, 255, 0.12)';
+                  }}
+                >
+                  Fresh Setup Instead
+                </button>
+              ) : null}
 
               <button
                 onClick={handleEndGameSession}
