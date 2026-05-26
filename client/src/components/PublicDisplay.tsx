@@ -1899,6 +1899,7 @@ const PublicDisplay: React.FC = () => {
             });
             if (Object.keys(newBaselines).length > 0) {
               songBaselineRef.current = { ...songBaselineRef.current, ...newBaselines };
+              setRevealLayoutNonce((n) => n + 1);
               console.log(
                 `✅ Set baselines for ${Object.keys(newBaselines).length} played songs (post-hydrate, cutoff=${currentBaseline})`,
               );
@@ -2312,6 +2313,7 @@ const PublicDisplay: React.FC = () => {
         const currentBaseline = revealSequenceRef.current.length;
         if (isNewCall || songBaselineRef.current[song.id] === undefined || isResettingRef.current) {
           songBaselineRef.current[song.id] = currentBaseline;
+          setRevealLayoutNonce((n) => n + 1);
           syncRevealStateToServer(); // Persist baseline change
           console.log(
             `📝 Set baseline for song ${song.id} to ${currentBaseline} (newCall=${isNewCall}, reset=${isResettingRef.current})`,
@@ -2344,6 +2346,7 @@ const PublicDisplay: React.FC = () => {
     newSocket.on('game-started', (data: any) => {
       diag('RX game-started · call-list session cleared on display');
       setWinnerCardModal(null);
+      setIsVerificationPending(false);
       setGameState(prev => ({ 
         ...prev, 
         isPlaying: true,
@@ -2742,6 +2745,7 @@ const PublicDisplay: React.FC = () => {
           // BUG #3 FIX: Skip manual reveal if reset is in progress
           if (lettersToReveal.length > 0 && !isResettingRef.current) {
             revealSequenceRef.current = [...revealSequenceRef.current, ...lettersToReveal];
+            setRevealLayoutNonce((n) => n + 1);
             console.log('🎡 Wheel of Fortune: Revealed letters:', lettersToReveal, 'Total revealed:', revealSequenceRef.current.length);
             syncRevealStateToServer(); // Persist revealed letters
           } else if (isResettingRef.current) {
@@ -2884,6 +2888,7 @@ const PublicDisplay: React.FC = () => {
         }
         
         revealSequenceRef.current.push(revealedChar);
+        setRevealLayoutNonce((n) => n + 1);
         console.log('🎡 Auto-revealed letter:', revealedChar, 'Total revealed:', revealSequenceRef.current.length);
         syncRevealStateToServer(); // Persist auto-revealed letter
         if (revealToastTimerRef.current) { clearTimeout(revealToastTimerRef.current); revealToastTimerRef.current = null; }

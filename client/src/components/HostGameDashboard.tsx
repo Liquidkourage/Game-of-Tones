@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Play,
   Pause,
@@ -255,6 +255,7 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
         : 0;
 
   const [albumArtUrl, setAlbumArtUrl] = useState<string | null>(null);
+  const callLogListRef = useRef<HTMLOListElement | null>(null);
 
   useEffect(() => {
     if (!currentSong?.id) {
@@ -277,6 +278,12 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
       .catch(() => setAlbumArtUrl(null));
     return () => ctrl.abort();
   }, [currentSong?.id, currentSong?.youtubeMusic]);
+
+  useEffect(() => {
+    const node = callLogListRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+  }, [callLog]);
 
   const tourGoLive = gameState === 'waiting' && !currentSong;
   const tourLiveDock = gameState === 'playing';
@@ -594,7 +601,7 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
           {callLog.length === 0 ? (
             <p className="host-r4-track-feed__empty">No songs called yet this round.</p>
           ) : (
-            <ol className="host-r4-track-feed__list" reversed>
+            <ol ref={callLogListRef} className="host-r4-track-feed__list" reversed>
               {callLog.map((row) => (
                 <TrackFeedRow
                   key={`${row.id}-${row.index}`}

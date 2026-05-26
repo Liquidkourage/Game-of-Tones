@@ -2080,6 +2080,17 @@ function startSimpleContextMonitor(roomId, deviceId) {
         clearPlaybackWatcher(roomId); 
         return; 
       }
+      const clearMonitorSuspect = () => {
+        room._simpleMonitorSuspect = null;
+      };
+      const confirmMonitorSuspect = (kind, key, minAgeMs = 5000) => {
+        const existing = room._simpleMonitorSuspect;
+        if (!existing || existing.kind !== kind || existing.key !== key) {
+          room._simpleMonitorSuspect = { kind, key, firstSeenAtMs: Date.now() };
+          return false;
+        }
+        return Date.now() - existing.firstSeenAtMs >= minAgeMs;
+      };
 
       const idx = room.currentSongIndex;
       const activeSong =
@@ -2096,12 +2107,17 @@ function startSimpleContextMonitor(roomId, deviceId) {
       
       // CRITICAL: Check if playback has switched to a different device
       if (targetDeviceId && currentDeviceId && currentDeviceId !== targetDeviceId) {
+        if (!confirmMonitorSuspect('device-switch', `${currentDeviceId}->${targetDeviceId}`)) {
+          routineServerLog(`🕵️ Device switch suspected once (${currentDeviceId} → ${targetDeviceId}); waiting for confirmation before correction`);
+          return;
+        }
         console.warn(`⚠️ Device switch detected! Expected: ${targetDeviceId}, Got: ${currentDeviceId}. Transferring back...`);
         
         try {
           // Immediately transfer playback back to the correct device
           await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
           routineServerLog(`✅ Transferred playback back to locked device: ${targetDeviceId}`);
+          clearMonitorSuspect();
           
           // Small delay then verify it worked
           await new Promise(resolve => setTimeout(resolve, 500));
@@ -2124,9 +2140,14 @@ function startSimpleContextMonitor(roomId, deviceId) {
       const currentTrackId = state?.item?.id;
       const expectedTrackId = room?.currentSong?.id;
       const progress = Number(state?.progress_ms || 0);
+      const expectedProgress = expectedPlaybackProgressMsForRoom(room);
       
       // Case 1: Wrong playlist context
-      if (expectedContext && currentContext && currentContext !== expectedContext) {
+      if (expectedContext && currentContext && currentContext !== expectedContext && currentTrackId && currentTrackId !== expectedTrackId) {
+        if (!confirmMonitorSuspect('context-loss', `${currentContext}->${expectedContext}`)) {
+          routineServerLog(`🕵️ Context loss suspected once (${currentContext} → ${expectedContext}); waiting for confirmation before correction`);
+          return;
+        }
         console.warn(`🔄 Context lost. Expected: ${expectedContext}, Got: ${currentContext}. Restoring...`);
         
         try {
@@ -2140,12 +2161,24 @@ function startSimpleContextMonitor(roomId, deviceId) {
           if (room.currentSongIndex !== undefined) {
             await spotifyFor(roomId).startPlaybackFromPlaylist(targetDeviceId || deviceId, room.temporaryPlaylistId, room.currentSongIndex, originalStartMs);
           }
+          clearMonitorSuspect();
         } catch (e) {
           console.warn('⚠️ Context restore failed:', e?.message);
         }
       }
       // Case 2: Same track restarted from beginning (back button pressed)
-      else if (currentTrackId === expectedTrackId && progress < 3000 && room.currentSongStartMs > 0) {
+      else if (
+        currentTrackId === expectedTrackId &&
+        progress < 3000 &&
+        room.currentSongStartMs > 0 &&
+        expectedProgress - progress > 8000
+      ) {
+        if (!confirmMonitorSuspect('track-restart', `${expectedTrackId}:${room.currentSongStartMs}`)) {
+          routineServerLog(
+            `🕵️ Track restart suspected once (progress=${progress}ms, expected≈${expectedProgress}ms); waiting for confirmation before seek correction`,
+          );
+          return;
+        }
         routineServerLog(`🔄 Track restart detected. Restoring original start position: ${room.currentSongStartMs}ms`);
         
         try {
@@ -2156,9 +2189,12 @@ function startSimpleContextMonitor(roomId, deviceId) {
           
           // Restore original start position for this track
           await spotifyFor(roomId).seekToPosition(room.currentSongStartMs, targetDeviceId || deviceId);
+          clearMonitorSuspect();
         } catch (e) {
           console.warn('⚠️ Failed to restore original start position:', e?.message);
         }
+      } else {
+        clearMonitorSuspect();
       }
     } catch (_e) {
       // Ignore monitor errors to prevent spam
@@ -4572,10 +4608,18 @@ io.on('connection', (socket) => {
     room.customPattern = new Set();
     room.customPatternName = '';
     room.patternComposite = undefined;
+    const preservedSnippetLength =
+      typeof room.snippetLength === 'number' && Number.isFinite(room.snippetLength) && room.snippetLength > 0
+        ? room.snippetLength
+        : 30;
+    const preservedRandomStarts =
+      room.randomStarts === 'early' || room.randomStarts === 'random' || room.randomStarts === 'none'
+        ? room.randomStarts
+        : 'none';
     
-    // Reset settings to defaults  
-    room.snippetLength = 30;
-    room.randomStarts = 'none';
+    // Keep host playback defaults across fresh setup resets.
+    room.snippetLength = preservedSnippetLength;
+    room.randomStarts = preservedRandomStarts;
     room.revealMode = 'off';
     
     // Clear all bingo cards - they'll be regenerated when new playlists are selected
@@ -4624,7 +4668,7 @@ io.on('connection', (socket) => {
         playedSongs: [],
         mixFinalized: false,
         playlists: [],
-        snippetLength: 30
+        snippetLength: preservedSnippetLength
       }
     });
     

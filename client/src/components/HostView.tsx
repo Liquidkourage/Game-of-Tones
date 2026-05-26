@@ -2962,8 +2962,6 @@ const HostView: React.FC = () => {
       setSelectedPlaylists([]);
       setSelectedCatalogPlaylists([]);
       setPattern('line');
-      setSnippetLength(30);
-      setRandomStarts('none');
       setRevealMode('off');
       setSongList([]);
       setFinalizedOrder([]);
@@ -3093,7 +3091,12 @@ const HostView: React.FC = () => {
           payload?.bingoVerificationPending === true || payload?.gameState === 'paused_for_verification',
         );
       }
-      if (payload?.snippetLength !== undefined) {
+      const shouldHydrateLiveSnippetLength =
+        payload?.isPlaying === true ||
+        payload?.gameState === 'playing' ||
+        payload?.gameState === 'paused_for_verification' ||
+        payload?.currentSong != null;
+      if (shouldHydrateLiveSnippetLength && payload?.snippetLength !== undefined) {
         const nextSnippetLength = Number(payload.snippetLength);
         if (Number.isFinite(nextSnippetLength) && nextSnippetLength > 0) {
           setSnippetLength(Math.round(nextSnippetLength));
