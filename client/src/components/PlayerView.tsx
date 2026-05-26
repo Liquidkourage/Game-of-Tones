@@ -112,6 +112,8 @@ const PlayerView: React.FC = () => {
   const [bingoCard, setBingoCard] = useState<BingoCard | null>(null);
   const [focusedSquare, setFocusedSquare] = useState<BingoSquare | null>(null);
   const longPressTimer = useRef<number | null>(null);
+  const hoverTooltipTimer = useRef<number | null>(null);
+  const suppressNextClickRef = useRef(false);
   const cardGridRef = useRef<HTMLDivElement | null>(null);
   const [longPressTooltip, setLongPressTooltip] = useState<{
     title: string;
@@ -1176,33 +1178,83 @@ const PlayerView: React.FC = () => {
     if (navigator.vibrate) navigator.vibrate(10);
   };
 
-  // Long-press: show title + artist (fixed panel; in-cell tooltips were clipped by overflow on the card).
+  // Long-press (touch) / hover (mouse): full title + artist in fixed panel — cells use soft hyphens for layout.
+  const squareTooltipContent = (square: BingoSquare) => {
+    const free = square.isFreeSpace || square.songId === '__FREE_SPACE__';
+    const vis = youtubeBingoSquareDisplay(square);
+    return {
+      title: free ? 'Free space' : vis.title,
+      artist: free ? '' : vis.artist,
+    };
+  };
+
+  const showSquareTooltip = (square: BingoSquare) => {
+    setLongPressTooltip(squareTooltipContent(square));
+  };
+
+  const clearLongPressTimer = () => {
+    if (longPressTimer.current) {
+      window.clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const clearHoverTooltipTimer = () => {
+    if (hoverTooltipTimer.current) {
+      window.clearTimeout(hoverTooltipTimer.current);
+      hoverTooltipTimer.current = null;
+    }
+  };
+
+  const dismissSquareTooltip = () => {
+    setLongPressTooltip(null);
+  };
+
+  const handleSquarePointerEnter = (square: BingoSquare, e: React.PointerEvent) => {
+    if (e.pointerType !== 'mouse') return;
+    clearHoverTooltipTimer();
+    hoverTooltipTimer.current = window.setTimeout(() => {
+      showSquareTooltip(square);
+    }, 400);
+  };
+
+  const handleSquarePointerLeave = (e: React.PointerEvent) => {
+    clearLongPressTimer();
+    if (e.pointerType === 'mouse') {
+      clearHoverTooltipTimer();
+      dismissSquareTooltip();
+      return;
+    }
+    dismissSquareTooltip();
+  };
+
+  const handleSquarePointerUp = (e: React.PointerEvent) => {
+    clearLongPressTimer();
+    if (e.pointerType === 'mouse') return;
+    dismissSquareTooltip();
+  };
+
   const handlePointerDown = (square: BingoSquare, e: React.PointerEvent) => {
-    if (e.pointerType === 'mouse' || e.pointerType === 'pen') {
+    if (e.pointerType === 'mouse') return;
+    if (e.pointerType === 'pen') {
       e.preventDefault();
     }
-    if (longPressTimer.current) window.clearTimeout(longPressTimer.current);
-    const vis = youtubeBingoSquareDisplay(square);
-    const title = vis.title;
-    const artist = vis.artist;
+    clearLongPressTimer();
     longPressTimer.current = window.setTimeout(() => {
-      const free = square.isFreeSpace || square.songId === '__FREE_SPACE__';
-      setLongPressTooltip({
-        title: free ? 'Free space' : title,
-        artist: free ? '' : artist,
-      });
+      showSquareTooltip(square);
+      suppressNextClickRef.current = true;
       try {
         if (navigator.vibrate) navigator.vibrate(12);
       } catch {}
     }, 350);
   };
 
-  const clearLongPress = () => {
-    if (longPressTimer.current) {
-      window.clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
+  const handleSquareClick = (position: string) => {
+    if (suppressNextClickRef.current) {
+      suppressNextClickRef.current = false;
+      return;
     }
-    setLongPressTooltip(null);
+    markSquare(position);
   };
 
   const vibrate = (pattern: number | number[]) => {
@@ -1719,11 +1771,12 @@ const PlayerView: React.FC = () => {
               key={square.position}
               className={`bingo-square ${square.marked ? 'marked' : ''} ${isPatternSquare(square.position) ? 'pattern-highlight' : ''} ${square.isFreeSpace || square.songId === '__FREE_SPACE__' ? 'free-space' : ''}`}
               data-position={square.position}
-              onClick={() => markSquare(square.position)}
+              onClick={() => handleSquareClick(square.position)}
+              onPointerEnter={(e) => handleSquarePointerEnter(square, e)}
               onPointerDown={(e) => handlePointerDown(square, e)}
-              onPointerUp={clearLongPress}
-              onPointerCancel={clearLongPress}
-              onPointerLeave={clearLongPress}
+              onPointerUp={handleSquarePointerUp}
+              onPointerCancel={handleSquarePointerLeave}
+              onPointerLeave={handleSquarePointerLeave}
               onContextMenu={(e) => { 
                 // Only prevent context menu on long press, allow normal scrolling
                 if (longPressTimer.current) {
