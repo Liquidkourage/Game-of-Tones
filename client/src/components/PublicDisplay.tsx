@@ -795,6 +795,40 @@ function compactPlayedOrderIds(playedOrder: readonly string[]): string[] {
   return playedOrder.filter((id) => id && !id.startsWith('__placeholder_'));
 }
 
+/** During live play, never regress to a shorter played list from a stale room-state. */
+function pickPlayedIdsForRoomStateSync(
+  incoming: string[],
+  local: string[],
+  opts: { isPlaying: boolean; reconnecting: boolean; syncTimestamp?: number; lastSyncTs: number },
+): { ids: string[]; syncTs: number } {
+  const inc = compactPlayedOrderIds(incoming);
+  const loc = compactPlayedOrderIds(local);
+  const syncTs = typeof opts.syncTimestamp === 'number' ? opts.syncTimestamp : 0;
+
+  if (opts.reconnecting || loc.length === 0) {
+    return { ids: inc, syncTs: Math.max(opts.lastSyncTs, syncTs) };
+  }
+
+  const isStale =
+    syncTs > 0 && syncTs < opts.lastSyncTs && inc.length <= loc.length;
+
+  if (isStale && opts.isPlaying) {
+    console.log(
+      `🔄 Display sync: ignoring stale room-state played list (ts=${syncTs} < ${opts.lastSyncTs})`,
+    );
+    return { ids: loc, syncTs: opts.lastSyncTs };
+  }
+
+  if (opts.isPlaying && inc.length < loc.length) {
+    console.log(
+      `🔄 Display sync: keeping local played list (${loc.length} > server ${inc.length})`,
+    );
+    return { ids: loc, syncTs: Math.max(opts.lastSyncTs, syncTs) };
+  }
+
+  return { ids: inc, syncTs: Math.max(opts.lastSyncTs, syncTs) };
+}
+
 /** B–O playlist column (0–4) for a track id using 5×15 columns, flat pool, or cached map. */
 function resolvePoolColumnForSongId(
   songId: string,
@@ -1231,6 +1265,8 @@ const PublicDisplay: React.FC = () => {
   const migratedLocalRevealRef = useRef(false);
   /** False until first room-state / display-reveal-state — blocks empty client push from wiping server. */
   const revealStateHydratedRef = useRef(false);
+  /** Latest applied played-list sync time — blocks out-of-order room-state from dropping calls. */
+  const lastRoomStatePlayedSyncTsRef = useRef(0);
 
   const persistRevealStateLocally = () => {
     try {
@@ -1242,6 +1278,7 @@ const PublicDisplay: React.FC = () => {
   useEffect(() => {
     revealStateHydratedRef.current = false;
     migratedLocalRevealRef.current = false;
+    lastRoomStatePlayedSyncTsRef.current = 0;
   }, [roomId]);
 
   /** One-time read: migrate pre-server localStorage into room state on reconnect. */
@@ -1917,7 +1954,16 @@ const PublicDisplay: React.FC = () => {
               });
             }
             
-            // Always use server state as source of truth (ensures correct order)
+            const picked = pickPlayedIdsForRoomStateSync(playedIds, playedOrderRef.current, {
+              isPlaying: !!payload.isPlaying,
+              reconnecting: wasReconnecting,
+              syncTimestamp: payload.syncTimestamp,
+              lastSyncTs: lastRoomStatePlayedSyncTsRef.current,
+            });
+            playedIds = picked.ids;
+            lastRoomStatePlayedSyncTsRef.current = picked.syncTs;
+            playedIdsForBaselineSync = playedIds;
+
             applyPlayedOrderFromServer(playedIds);
             for (const pid of playedIds) {
               if (idToColumnRef.current[pid] !== undefined) continue;
@@ -2383,6 +2429,7 @@ const PublicDisplay: React.FC = () => {
           : [];
         if (serverPlayedIds.length > 0) {
           applyPlayedOrderFromServer(serverPlayedIds);
+          lastRoomStatePlayedSyncTsRef.current = Date.now();
           for (const pid of serverPlayedIds) {
             if (idToColumnRef.current[pid] !== undefined) continue;
             const derived = resolvePoolColumnForSongId(
@@ -2401,6 +2448,7 @@ const PublicDisplay: React.FC = () => {
           );
         } else if (!wasAlreadyCalled) {
           playedOrderRef.current = [...compactPlayedOrderIds(playedOrderRef.current), song.id];
+          lastRoomStatePlayedSyncTsRef.current = Date.now();
           setPlayedOrderRevision((n) => n + 1);
           console.log(
             `🔄 Updated playedOrderRef (append): song ${song.id}, total: ${playedOrderRef.current.length}`,
@@ -3893,6 +3941,13 @@ const PublicDisplay: React.FC = () => {
         cols[colIdx] = sortPlayedIdsInColumn([...cols[colIdx], id], baseCols[colIdx] || [], playedSeqRef.current);
         idToColumnRef.current[id] = colIdx;
         shown.add(id);
+      } else {
+        cols[0] = sortPlayedIdsInColumn([...cols[0], id], baseCols[0] || [], playedSeqRef.current);
+        idToColumnRef.current[id] = 0;
+        shown.add(id);
+        if (debugMode) {
+          console.warn('[Display] orphan call placed in column 0 fallback', id);
+        }
       }
     }
     const visibleInCols = cols.reduce((n, c) => n + c.length, 0);

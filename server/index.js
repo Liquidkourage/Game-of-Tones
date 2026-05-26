@@ -674,6 +674,30 @@ function syncCalledSongIdsFromPlaybackIndex(room) {
   return [...existing];
 }
 
+function tryAcquireSongAdvance(room, { retrying = false } = {}) {
+  if (!room) return false;
+  if (retrying) return true;
+  if (room._advanceInFlight) {
+    routineServerLog('⏭️ Song advance already in flight — skipping duplicate');
+    return false;
+  }
+  room._advanceInFlight = true;
+  return true;
+}
+
+function releaseSongAdvance(room) {
+  if (room) room._advanceInFlight = false;
+}
+
+async function advancePlaybackFromWatchdog(roomId, deviceId) {
+  const room = rooms.get(roomId);
+  if (room?.simpleProgressionActive) {
+    await playNextSongSimple(roomId, deviceId);
+  } else {
+    await playNextSong(roomId, deviceId);
+  }
+}
+
 /** Non-host roster for host UI (in-person vs online/remote join). */
 function buildRoomPlayersRoster(room) {
   if (!room?.players) return [];
@@ -2355,6 +2379,7 @@ async function endGamePlaylistComplete(roomId, deviceId) {
   const room = rooms.get(roomId);
   if (!room) return;
   room.gameState = 'ended';
+  room.simpleProgressionActive = false;
   clearRoomTimer(roomId);
   clearPlaybackWatcher(roomId);
 
@@ -2383,6 +2408,7 @@ async function endGamePlaylistComplete(roomId, deviceId) {
 function startSimpleProgression(roomId, deviceId, snippetLengthSeconds) {
   const room = rooms.get(roomId);
   if (!room) return;
+  room.simpleProgressionActive = true;
 
   const total = Array.isArray(room.playlistSongs) ? room.playlistSongs.length : 0;
   const idx = room.currentSongIndex ?? 0;
@@ -2423,6 +2449,11 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
     return;
   }
 
+  if (!tryAcquireSongAdvance(room, { retrying })) {
+    return;
+  }
+
+  try {
   if (!retrying) {
     if (room.currentSongIndex + 1 >= room.playlistSongs.length) {
       await endGamePlaylistComplete(roomId, deviceId);
@@ -2484,6 +2515,9 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
     routineServerLog('🔄 Retrying same call in 3 seconds (will not skip index)...');
     setTimeout(() => playNextSongSimple(roomId, deviceId, { retrying: true }), 3000);
   }
+  } finally {
+    releaseSongAdvance(room);
+  }
 }
 
 function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
@@ -2525,7 +2559,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           console.warn(`⚠️ Ping-pong detected: ${currentId} corrected ${Math.floor(timeSinceLastCorrection/1000)}s ago. Advancing to next song instead.`);
           clearPlaybackWatcher(roomId);
           clearRoomTimer(roomId);
-          await playNextSong(roomId, deviceId);
+          await advancePlaybackFromWatchdog(roomId, deviceId);
           return;
         }
         
@@ -2660,13 +2694,13 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
             // Fallback if no track id known: advance
             clearPlaybackWatcher(roomId);
             clearRoomTimer(roomId);
-            await playNextSong(roomId, deviceId);
+            await advancePlaybackFromWatchdog(roomId, deviceId);
           }
         } catch (_) {
           // As a last resort, advance
           clearPlaybackWatcher(roomId);
           clearRoomTimer(roomId);
-          await playNextSong(roomId, deviceId);
+          await advancePlaybackFromWatchdog(roomId, deviceId);
         }
       }
       
@@ -2702,7 +2736,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
       if (!recentlyCorrected && room?.currentSong?.id && currentId === room.currentSong.id && progress >= Math.max(0, snippetMs - 300)) {
         clearPlaybackWatcher(roomId);
         clearRoomTimer(roomId);
-        await playNextSong(roomId, deviceId);
+        await advancePlaybackFromWatchdog(roomId, deviceId);
       }
     } catch (_e) {
       // ignore
@@ -3201,10 +3235,7 @@ io.on('connection', (socket) => {
           routineServerLog(`🔄 Host reconnecting - sending full state sync for ${playerName}`);
           
           // Send current game state
-          const playedSongIds = Array.isArray(room.calledSongIds) ? [...room.calledSongIds] : [];
-          if (room.currentSong && room.currentSong.id && !playedSongIds.includes(room.currentSong.id)) {
-            playedSongIds.push(room.currentSong.id);
-          }
+          const playedSongIds = syncCalledSongIdsFromPlaybackIndex(room);
           
           socket.emit('room-state', {
             isPlaying: room.gameState === 'playing',
@@ -3212,12 +3243,17 @@ io.on('connection', (socket) => {
             customMask: Array.from(room.customPattern || []),
             patternComposite: patternCompositeForClient(room),
             ...patternExtrasForClient(room),
-            currentSong: room.currentSong || null,
+            currentSong: currentSongPayloadForRoomState(room.currentSong, room.dbOrganizationId ?? null),
             snippetLength: room.snippetLength || 30,
             playerCount: getNonHostPlayerCount(room),
             gameState: room.gameState,
             winners: room.winners || [],
-            playedSongs: playedSongIds,
+            playedSongs: playedSongsPayloadForRoomState(room, playedSongIds),
+            playedSongIds,
+            totalPlayedCount: playedSongIds.length,
+            currentSongIndex: room.currentSongIndex || 0,
+            totalSongs: room.playlistSongs?.length || 0,
+            syncTimestamp: Date.now(),
             roundWinners: room.roundWinners || [],
             mixFinalized: room.mixFinalized || false,
             playlists: room.finalizedPlaylists || room.playlists || [],
