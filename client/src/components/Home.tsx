@@ -1,9 +1,10 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Sparkles, Play, UserPlus, Crown, CheckCircle2, AlertTriangle, Link2, ListOrdered, Building2 } from 'lucide-react';
+import { Sparkles, Play, UserPlus, Crown, CheckCircle2, AlertTriangle, Link2, ListOrdered, Building2, ListMusic } from 'lucide-react';
 import { API_BASE } from '../config';
 import { hostFetch, setHostJwt, browserGoogleLoginUrl, clearHostJwt, postHostLogout } from '../utils/hostFetch';
+import type { HostGlassNavId } from '../host/hostGlassNav';
 
 /** Express/HTML error pages are not JSON; show a short message instead of raw markup. */
 function formatHttpErrorBody(raw: string, status: number): string {
@@ -43,7 +44,7 @@ const Home: React.FC = () => {
    * bounced home, then the second click hit `reuse` — modal only on that second response. HostView now
    * emits one join per socket until disconnect/reconnect.
    */
-  const [hostRoomReuseModal, setHostRoomReuseModal] = useState<{ roomId: string } | null>(null);
+  const [hostRoomReuseModal, setHostRoomReuseModal] = useState<{ roomId: string; tab?: HostGlassNavId } | null>(null);
   const [isCreatingHostRoom, setIsCreatingHostRoom] = useState(false);
   const [hostSignInPageUrl, setHostSignInPageUrl] = useState('');
   const [hostSignInUrlCopied, setHostSignInUrlCopied] = useState(false);
@@ -186,17 +187,21 @@ const Home: React.FC = () => {
     setSearchParams(next, { replace: true });
   };
 
-  const goToHostRoom = (rid: string, displayName: string) => {
-    navigate(`/host/${encodeURIComponent(rid)}?name=${encodeURIComponent(displayName)}`);
+  const goToHostRoom = (rid: string, displayName: string, opts?: { tab?: HostGlassNavId }) => {
+    const q = new URLSearchParams();
+    q.set('name', displayName);
+    if (opts?.tab && opts.tab !== 'game') q.set('tab', opts.tab);
+    navigate(`/host/${encodeURIComponent(rid)}?${q.toString()}`);
   };
 
-  const startHosting = async (opts?: { forceNewRoom?: boolean }) => {
+  const startHosting = async (opts?: { forceNewRoom?: boolean; tab?: HostGlassNavId }) => {
     if (!hostSession) {
       alert('Sign in with Google first.');
       return;
     }
     const displayName = hostDisplayNameFromSession(hostSession);
     const forceNewRoom = opts?.forceNewRoom === true;
+    const hostTab = opts?.tab;
     setIsCreatingHostRoom(true);
     try {
       let r: Response;
@@ -264,11 +269,11 @@ const Home: React.FC = () => {
       const data = (await r.json()) as { roomId: string; mode?: string };
       const { roomId: created, mode } = data;
       if (mode === 'reuse' && !forceNewRoom) {
-        setHostRoomReuseModal({ roomId: created });
+        setHostRoomReuseModal({ roomId: created, tab: hostTab });
         return;
       }
       setHostRoomReuseModal(null);
-      goToHostRoom(created, displayName);
+      goToHostRoom(created, displayName, hostTab ? { tab: hostTab } : undefined);
     } finally {
       setIsCreatingHostRoom(false);
     }
@@ -333,8 +338,9 @@ const Home: React.FC = () => {
                 disabled={isCreatingHostRoom}
                 onClick={() => {
                   const name = hostDisplayNameFromSession(hostSession);
+                  const tab = hostRoomReuseModal.tab;
                   setHostRoomReuseModal(null);
-                  goToHostRoom(hostRoomReuseModal.roomId, name);
+                  goToHostRoom(hostRoomReuseModal.roomId, name, tab ? { tab } : undefined);
                 }}
               >
                 Continue to host
@@ -499,7 +505,7 @@ const Home: React.FC = () => {
                   — create your venue org, invite co-hosts, or pay as you like (optional for now).
                 </li>
                 <li>
-                  Click <strong>Create room &amp; host</strong> — you&apos;ll open the host screen with a <strong>room code</strong> to share.
+                  Click <strong>Create room &amp; host</strong> — or <strong>Plan rounds &amp; playlists</strong> to jump straight to round prep.
                 </li>
                 <li>
                   <strong>Connect Spotify</strong> and sign in to the <strong>Spotify</strong> account that should play music for this
@@ -680,15 +686,28 @@ const Home: React.FC = () => {
               </Link>
             ) : null}
 
-            <button 
-              type="button"
-              onClick={() => void startHosting()}
-              className="btn btn-primary"
-              disabled={!hostSession || hostSession === undefined || isCreatingHostRoom}
-            >
-              <Play className="btn-icon" />
-              {isCreatingHostRoom ? 'Creating…' : 'Create room & host'}
-            </button>
+            <div className="home-host-actions">
+              <button
+                type="button"
+                onClick={() => void startHosting()}
+                className="btn btn-primary"
+                disabled={!hostSession || hostSession === undefined || isCreatingHostRoom}
+              >
+                <Play className="btn-icon" />
+                {isCreatingHostRoom ? 'Creating…' : 'Create room & host'}
+              </button>
+              {hostSession ? (
+                <button
+                  type="button"
+                  onClick={() => void startHosting({ tab: 'rounds' })}
+                  className="btn btn-secondary home-host-actions__secondary"
+                  disabled={hostSession === undefined || isCreatingHostRoom}
+                >
+                  <ListMusic className="btn-icon" aria-hidden />
+                  Plan rounds &amp; playlists
+                </button>
+              ) : null}
+            </div>
           </motion.div>
           )}
         </div>

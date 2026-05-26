@@ -119,7 +119,7 @@ import './HostView.css';
 import './HostGlassTheme.css';
 import HostGameDashboard from './HostGameDashboard';
 import type { HostGlassNavId } from '../host/hostGlassNav';
-import { HOST_GLASS_NAV_ITEMS } from '../host/hostGlassNav';
+import { HOST_GLASS_NAV_ITEMS, parseHostGlassNavTab } from '../host/hostGlassNav';
 import { appendHostActivity, type HostActivityEntry } from '../host/hostActivityLog';
 import HostPlayersPanel from './host/HostPlayersPanel';
 import HostSettingsPanel from './host/HostSettingsPanel';
@@ -971,7 +971,9 @@ const HostView: React.FC = () => {
   /** When overlay is open: false = centered modal, true = viewport-filling panel */
   const [playerCardsMaximized, setPlayerCardsMaximized] = useState<boolean>(false);
   const [showBingoPoolModal, setShowBingoPoolModal] = useState(false);
-  const [hostGlassNav, setHostGlassNav] = useState<HostGlassNavId>('game');
+  const [hostGlassNav, setHostGlassNav] = useState<HostGlassNavId>(
+    () => parseHostGlassNavTab(searchParams.get('tab')) ?? 'game',
+  );
   const [activityLog, setActivityLog] = useState<HostActivityEntry[]>([]);
   const [youtubeMusicConnected, setYoutubeMusicConnected] = useState(false);
   const [youtubeStatusReady, setYoutubeStatusReady] = useState(false);
@@ -1001,6 +1003,15 @@ const HostView: React.FC = () => {
       }, 50);
     }
   }, []);
+
+  useEffect(() => {
+    const tab = parseHostGlassNavTab(searchParams.get('tab'));
+    if (!tab) return;
+    onHostGlassNav(tab);
+    const next = new URLSearchParams(searchParams);
+    next.delete('tab');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, onHostGlassNav]);
 
   const hostNavIcons: Record<HostGlassNavId, React.ReactNode> = useMemo(
     () => ({

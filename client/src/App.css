@@ -1240,6 +1240,18 @@ body {
   font-weight: 700;
 }
 
+.home-host-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.home-host-actions .btn-primary,
+.home-host-actions .home-host-actions__secondary {
+  width: 100%;
+}
+
 .home-host-guide a {
   color: #7dffc8;
   font-weight: 700;
