@@ -2328,6 +2328,29 @@ const HostView: React.FC = () => {
     lastFinalizeMixSongListRef.current = null;
   }, []);
 
+  /** Call log + now-playing UI for the prior round — reset when picking another round in prep. */
+  const clearPrepRoundCallLogUi = useCallback(() => {
+    setPlayedInOrder([]);
+    setCurrentSong(null);
+    setPlaybackTrackNumber(null);
+    setPlaybackTrackTotal(null);
+    setIsPlaying(false);
+    setYoutubeHostPlayback(null);
+    setPlaybackState((prev) => ({
+      ...prev,
+      isPlaying: false,
+      currentSong: null,
+      duration: 0,
+      currentTime: 0,
+    }));
+  }, []);
+
+  const notifyServerPrepRoundSwitch = useCallback(() => {
+    if (socket && roomId) {
+      socket.emit('prep-select-round', { roomId });
+    }
+  }, [socket, roomId]);
+
   const applyLoadedTrackCountsFromSongs = useCallback((songs: Song[]) => {
     const perPlaylist = new Map<string, number>();
     const seenPerPlaylist = new Map<string, Set<string>>();
@@ -6948,6 +6971,8 @@ const HostView: React.FC = () => {
         Boolean(round.savedMixSnapshot?.songs?.length);
 
       if (switchingRound) {
+        clearPrepRoundCallLogUi();
+        notifyServerPrepRoundSwitch();
         if (!hasSavedSnapshot) {
           clearPrepMixPlaybackState();
         }
@@ -6992,6 +7017,8 @@ const HostView: React.FC = () => {
       resolveMixPlaylistRowsForRound,
       applyRoundBingoToHost,
       clearPrepMixPlaybackState,
+      clearPrepRoundCallLogUi,
+      notifyServerPrepRoundSwitch,
       showToast,
       addLog,
       socket,
@@ -7167,6 +7194,9 @@ const HostView: React.FC = () => {
     setEventRounds(updatedRounds);
     setCurrentRoundIndex(roundIndex);
 
+    clearPrepRoundCallLogUi();
+    notifyServerPrepRoundSwitch();
+
     const loaded = applyRoundPlaylistsToMixSelection(round);
     if (loaded) {
       const playlistNames = round.playlistNames.join(', ');
@@ -7232,6 +7262,8 @@ const HostView: React.FC = () => {
     freeSpaceEnabled,
     finalizeMix,
     mixFinalized,
+    clearPrepRoundCallLogUi,
+    notifyServerPrepRoundSwitch,
     finalizedMixPlaylistKey,
     isSpotifyConnected,
     webApiQuarantine.active,

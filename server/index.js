@@ -1812,6 +1812,54 @@ function clearPublicDisplaySessionState(room) {
   room.lastDisplayWinner = null;
 }
 
+/** Prep round switch / refinalize while waiting — drop stale call log from the prior round. */
+function resetRoomCallHistoryForPrepSwitch(room) {
+  if (!room) return false;
+  if (room.gameState === 'playing' || room.gameState === 'paused_for_verification') {
+    return false;
+  }
+  room.calledSongIds = [];
+  room.currentSong = null;
+  room.currentSongIndex = 0;
+  room.currentSongStartMs = 0;
+  room.songStartAtMs = null;
+  clearPublicDisplaySessionState(room);
+  return true;
+}
+
+function emitRoomCallLogReset(roomId, room) {
+  const payload = {
+    isPlaying: room.gameState === 'playing',
+    pattern: room.pattern || 'line',
+    customMask: Array.from(room.customPattern || []),
+    patternComposite: patternCompositeForClient(room),
+    ...patternExtrasForClient(room),
+    currentSong: null,
+    snippetLength: room.snippetLength || 30,
+    playerCount: getNonHostPlayerCount(room),
+    gameState: room.gameState,
+    winners: room.winners || [],
+    roundWinners: room.roundWinners || [],
+    publicDisplayFontSize: room.publicDisplayFontSize || 1.0,
+    publicDisplayCallListMode: room.publicDisplayCallListMode || 'auto',
+    letterRevealIntervalSec: letterRevealIntervalSecForRoom(room),
+    publicDisplayTitleRevealMode: publicDisplayTitleRevealModeForRoom(room),
+    publicDisplayLetterRevealToast: letterRevealToastEnabledForRoom(room),
+    venueBranding: venueBrandingForRoom(room),
+    playedSongs: [],
+    playedSongIds: [],
+    totalPlayedCount: 0,
+    currentSongIndex: 0,
+    totalSongs: room.playlistSongs?.length || 0,
+    syncTimestamp: Date.now(),
+    hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline,
+    mixFinalized: !!room.mixFinalized,
+  };
+  Object.assign(payload, publicDisplayRoomStateExtras(room));
+  io.to(roomId).emit('room-state', payload);
+  io.to(roomId).emit('display-reveal-state', publicDisplayRevealStateForClient(room));
+}
+
 /** Room-state / sync-state fields for public display reconnect (letters, carousel, bingo UI). */
 function publicDisplayRoomStateExtras(room) {
   const pending =
@@ -3287,6 +3335,10 @@ io.on('connection', (socket) => {
       } catch (e) {
         console.error('finalize-mix resolveRoomVenueBranding:', e?.message || e);
       }
+    }
+
+    if (resetRoomCallHistoryForPrepSwitch(room)) {
+      emitRoomCallLogReset(roomId, room);
     }
 
     // Already finalized: replay only if playlists + free-space unchanged; otherwise full refinalize
@@ -4920,6 +4972,22 @@ io.on('connection', (socket) => {
       routineServerLog(`🔄 New round started for room ${roomId} (round ${room.round})`);
     } catch (e) {
       console.error('❌ Error starting new round:', e?.message || e);
+    }
+  });
+
+  socket.on('prep-select-round', (data = {}) => {
+    const { roomId } = data;
+    const room = rooms.get(roomId);
+    if (!room) return;
+    const isCurrentHost =
+      room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+    if (!isCurrentHost) return;
+    try {
+      if (!resetRoomCallHistoryForPrepSwitch(room)) return;
+      emitRoomCallLogReset(roomId, room);
+      routineServerLog(`🔄 Prep round selected — call log cleared for room ${roomId}`);
+    } catch (e) {
+      console.error('❌ Error on prep-select-round:', e?.message || e);
     }
   });
 
