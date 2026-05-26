@@ -50,6 +50,9 @@
   z-index: 1;
   background: transparent;
   padding-top: 0.5rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   min-height: 0;
 }
@@ -78,7 +81,7 @@
   min-height: 0;
   flex: 1;
   padding: 0 clamp(0.75rem, 2vw, 1.25rem) 1rem;
-  align-items: flex-start;
+  align-items: stretch;
   overflow: hidden;
 }
 
@@ -148,9 +151,10 @@
 }
 
 .host-glass-theme .host-shell__main {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
   min-height: 0;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1804,9 +1808,24 @@
   margin-top: 12px;
 }
 
-.host-glass-theme .host-inline-library__body .host-playlist-round-modal-root {
-  max-height: min(70vh, 720px);
-  overflow: auto;
+/* Inline playlist library on Rounds: grow with content; scroll via .host-shell__main */
+.host-glass-theme .host-inline-library__body .host-playlist-round-modal-root,
+.host-glass-theme .host-inline-library__body .host-playlist-round-modal-root .host-music-two-pane,
+.host-glass-theme .host-inline-library__body .host-playlist-round-modal-root .host-music-two-pane__library,
+.host-glass-theme .host-inline-library__body .host-playlist-round-modal-root .host-music-two-pane__rounds,
+.host-glass-theme .host-inline-library__body .host-playlist-library-panel,
+.host-glass-theme .host-inline-library__body .host-playlist-library-table-zone,
+.host-glass-theme .host-inline-library__body .host-playlist-round-modal-root .host-playlist-library-table,
+.host-glass-theme .host-inline-library__body .host-playlist-library-table__rows {
+  flex: none;
+  min-height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.host-glass-theme .host-inline-library__body .host-playlist-round-modal__tools {
+  max-height: none;
+  overflow: visible;
 }
 
 .host-glass-theme .host-activity-feed__list {
