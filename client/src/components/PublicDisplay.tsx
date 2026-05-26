@@ -1839,17 +1839,22 @@ const PublicDisplay: React.FC = () => {
           let hadMismatch = false;
           let playedIdsForBaselineSync: string[] | null = null;
           if (Array.isArray(payload.playedSongs) || Array.isArray(payload.playedSongIds)) {
-            let playedIds = Array.isArray(payload.playedSongs)
-              ? payload.playedSongs
+            let playedIds: string[] = [];
+            if (Array.isArray(payload.playedSongIds) && payload.playedSongIds.length > 0) {
+              playedIds = compactPlayedOrderIds(payload.playedSongIds);
+            } else if (Array.isArray(payload.playedSongs)) {
+              playedIds = compactPlayedOrderIds(
+                payload.playedSongs
                   .map((song: any) => (typeof song === 'string' ? song : song?.id))
-                  .filter(Boolean)
-              : [];
+                  .filter(Boolean),
+              );
+            }
             if (
               playedIds.length === 0 &&
               Array.isArray(payload.playedSongIds) &&
               payload.playedSongIds.length > 0
             ) {
-              playedIds = payload.playedSongIds.filter(Boolean);
+              playedIds = compactPlayedOrderIds(payload.playedSongIds);
               console.log(`🔄 Display sync: using playedSongIds (${playedIds.length}) — metadata not in playedSongs`);
             }
             // Validate sync: compare local vs server state
@@ -2259,6 +2264,17 @@ const PublicDisplay: React.FC = () => {
       };
       // cache metadata for reveal lookups
       idMetaRef.current[song.id] = { name: song.name, artist: song.artist };
+      if (Array.isArray(data.playedSongs)) {
+        data.playedSongs.forEach((entry: any) => {
+          const sid = typeof entry === 'string' ? entry : entry?.id;
+          if (sid && typeof entry === 'object' && entry.name != null) {
+            idMetaRef.current[sid] = {
+              name: displayTitleFromSyncedSong(entry),
+              artist: entry.artist || '',
+            };
+          }
+        });
+      }
       if (typeof data.currentIndex === 'number') {
         currentIndexRef.current = data.currentIndex;
       }
@@ -2324,16 +2340,24 @@ const PublicDisplay: React.FC = () => {
             pendingPlacementRef.current.add(song.id);
           }
         }
-        // Append in call order — never splice by currentIndex (pool index can skip ahead and create sparse holes).
-        // room-state playedSongIds remains authoritative when it differs.
-        const isNewCall = !playedOrderRef.current.includes(song.id);
-        if (isNewCall) {
+        // room-state / song-playing playedSongIds are authoritative when present.
+        const wasAlreadyCalled = playedOrderRef.current.includes(song.id);
+        const serverPlayedIds = Array.isArray(data.playedSongIds)
+          ? compactPlayedOrderIds(data.playedSongIds)
+          : [];
+        if (serverPlayedIds.length > 0) {
+          applyPlayedOrderFromServer(serverPlayedIds);
+          console.log(
+            `🔄 Updated playedOrderRef from song-playing: ${serverPlayedIds.length} song(s)`,
+          );
+        } else if (!wasAlreadyCalled) {
           playedOrderRef.current = [...compactPlayedOrderIds(playedOrderRef.current), song.id];
           setPlayedOrderRevision((n) => n + 1);
           console.log(
             `🔄 Updated playedOrderRef (append): song ${song.id}, total: ${playedOrderRef.current.length}`,
           );
         }
+        const isNewCall = !wasAlreadyCalled;
         if (debugMode) {
           const col = idToColumnRef.current[song.id];
           try { console.log('[Display] song-playing', { index: currentIndexRef.current, id: song.id, col, name: song.name }); } catch {}
@@ -3809,7 +3833,14 @@ const PublicDisplay: React.FC = () => {
       })
     );
     const visibleInCols = cols.reduce((n, c) => n + c.length, 0);
-    if (playedOrderForDisplay.length > 0 && visibleInCols === 0) {
+    const poolFlat = new Set(baseCols.flat());
+    const missingFromPool = playedOrderForDisplay.filter((id) => !poolFlat.has(id));
+    if (
+      playedOrderForDisplay.length > 0 &&
+      (visibleInCols === 0 ||
+        visibleInCols < playedOrderForDisplay.length ||
+        missingFromPool.length > 0)
+    ) {
       return renderSimplePlayedCallList({ withPlaylistHeaders: columnCallListLayout });
     }
     if (debugMode) {
