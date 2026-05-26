@@ -3095,7 +3095,7 @@
 .host-view .host-rounds-panel__planner {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
   padding: 4px 2px 8px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
