@@ -902,6 +902,16 @@ function rebuildIdToColumnFromFiveBy15(cols: string[][]): Record<string, number>
   return map;
 }
 
+/** Server 5×15 column ids — never derive from flat oneBy75Ids (that list is play order). */
+function authoritativeFiveBy15Columns(
+  stateCols: string[][] | null | undefined,
+  refCols: string[][] | null | undefined,
+): string[][] | null {
+  if (stateCols && stateCols.length === 5) return stateCols;
+  if (refCols && refCols.length === 5) return refCols;
+  return null;
+}
+
 function sortPlayedIdsInColumn(
   col: string[],
   colOrder: readonly string[],
@@ -1399,16 +1409,10 @@ const PublicDisplay: React.FC = () => {
     if (playlistNames.filter((n) => String(n || '').trim()).length === 5) return true;
     return false;
   }, [callListMode, fiveBy15Columns, searchParams, playlistNames]);
-  /** Columns to render for 5×15 layout: server map or 5×15-chunks of flat 1×75 pool. */
+  /** Columns to render for 5×15 layout: server fiveby15-pool only (not play-order flat ids). */
   const layoutFiveColumns = useMemo((): string[][] | null => {
-    if (fiveBy15Columns && fiveBy15Columns.length === 5) return fiveBy15Columns;
-    const colsRef = fiveBy15ColumnsRef.current;
-    if (colsRef && colsRef.length === 5) return colsRef;
-    if (!columnCallListLayout) return null;
-    const ids = oneBy75Ids || oneBy75IdsRef.current;
-    if (!ids || ids.length < 1) return null;
-    return [0, 1, 2, 3, 4].map((c) => ids.slice(c * 15, c * 15 + 15));
-  }, [columnCallListLayout, fiveBy15Columns, oneBy75Ids, playedOrderRevision]);
+    return authoritativeFiveBy15Columns(fiveBy15Columns, fiveBy15ColumnsRef.current);
+  }, [columnCallListLayout, fiveBy15Columns, playedOrderRevision]);
 
   /** Play order for call-list render — ref, then React state, then current clip. */
   const playedOrderForDisplay = useMemo((): string[] => {
@@ -2206,11 +2210,19 @@ const PublicDisplay: React.FC = () => {
         const prevPool = oneBy75IdsRef.current;
         // First pool delivery is not a "reorder" — do not wipe played songs synced from room-state.
         const poolChanged = prevPool != null && !poolsOrderEqual(prevPool, nextIds);
-        setOneBy75Ids(nextIds);
-        oneBy75IdsRef.current = nextIds;
-        poolOrderFingerprintRef.current = nextIds.join('\0');
+        const keepFiveBy15 =
+          (fiveBy15ColumnsRef.current && fiveBy15ColumnsRef.current.length === 5) ||
+          (Array.isArray(data?.names) && data.names.filter((n: string) => String(n || '').trim()).length === 5);
 
-        if (poolChanged) {
+        if (!keepFiveBy15) {
+          setOneBy75Ids(nextIds);
+          oneBy75IdsRef.current = nextIds;
+          poolOrderFingerprintRef.current = nextIds.join('\0');
+        } else {
+          diag('RX oneby75-pool · skipped flat ids (5×15 columns authoritative)');
+        }
+
+        if (poolChanged && !keepFiveBy15) {
           console.log(`🔄 oneby75-pool order changed (${n} ids) — clearing call list / reveal state`);
           clearCallListSessionState();
           newSocket.emit('display-reveal-state-update', {
@@ -2224,11 +2236,10 @@ const PublicDisplay: React.FC = () => {
 
         if (Array.isArray(data?.names)) setPlaylistNames(data.names);
 
-        if (!poolChanged) {
-          const keepFiveBy15 =
-            (fiveBy15ColumnsRef.current && fiveBy15ColumnsRef.current.length === 5) ||
-            (Array.isArray(data?.names) && data.names.filter((n: string) => String(n || '').trim()).length === 5);
-          if (!keepFiveBy15) {
+        if (!poolChanged && !keepFiveBy15) {
+          const hadFiveBy15 =
+            (fiveBy15ColumnsRef.current && fiveBy15ColumnsRef.current.length === 5);
+          if (!hadFiveBy15) {
             setFiveBy15Columns(null);
             fiveBy15ColumnsRef.current = null;
           }
@@ -3946,7 +3957,8 @@ const PublicDisplay: React.FC = () => {
   };
 
   const renderOneBy75Columns = () => {
-    if (columnCallListLayout && !layoutFiveColumns) {
+    const authCols = authoritativeFiveBy15Columns(fiveBy15Columns, fiveBy15ColumnsRef.current);
+    if (columnCallListLayout && !authCols) {
       return (
         <div className="call-list-content">
           <div className="no-calls">
@@ -3955,15 +3967,12 @@ const PublicDisplay: React.FC = () => {
         </div>
       );
     }
-    // CRITICAL FIX: Use ref as fallback if state isn't set yet (fixes first song not displaying)
-    const idsToUse = oneBy75Ids || oneBy75IdsRef.current;
+    const idsToUse = authCols ? authCols.flat() : oneBy75Ids || oneBy75IdsRef.current;
     if (!poolHasTracks(idsToUse)) return null;
     const played = new Set(playedOrderForDisplay);
-    // If we have explicit 5x15 columns, respect those per-column lists; otherwise derive from flat pool
-    // Build base columns from authoritative map if available, else fallback
     let baseCols: string[][];
-    if (layoutFiveColumns) {
-      baseCols = layoutFiveColumns;
+    if (authCols) {
+      baseCols = authCols;
     } else if (idToColumnRef.current && Object.keys(idToColumnRef.current).length > 0) {
       const colsInit: string[][] = [[], [], [], [], []];
       for (const id of idsToUse) {
@@ -3972,9 +3981,8 @@ const PublicDisplay: React.FC = () => {
       }
       baseCols = colsInit;
     } else {
-      baseCols = [0,1,2,3,4].map(c => idsToUse.slice(c*15, c*15 + 15));
+      baseCols = [0, 1, 2, 3, 4].map((c) => idsToUse.slice(c * 15, c * 15 + 15));
     }
-    // Build visible columns: filter by played and sort by per-song play sequence so new items append
     const cols = baseCols.map((col) =>
       sortPlayedIdsInColumn(
         col.filter((id) => played.has(id)),
@@ -3982,27 +3990,21 @@ const PublicDisplay: React.FC = () => {
         playedSeqRef.current,
       ),
     );
-    // Place any played calls not yet in a column (keep 5×15 layout — do not fall back to play-order col 0)
-    const poolCols = layoutFiveColumns ?? fiveBy15ColumnsRef.current;
     const shown = new Set(cols.flat());
     for (const id of playedOrderForDisplay) {
       if (shown.has(id)) continue;
       const colIdx = resolvePoolColumnForSongId(
         id,
-        poolCols,
-        idsToUse,
+        authCols,
+        authCols ? authCols.flat() : idsToUse,
         idToColumnRef.current,
       );
       if (typeof colIdx === 'number' && colIdx >= 0 && colIdx < 5) {
         cols[colIdx] = sortPlayedIdsInColumn([...cols[colIdx], id], baseCols[colIdx] || [], playedSeqRef.current);
         idToColumnRef.current[id] = colIdx;
         shown.add(id);
-      } else {
-        cols[0] = sortPlayedIdsInColumn([...cols[0], id], baseCols[0] || [], playedSeqRef.current);
-        shown.add(id);
-        if (debugMode) {
-          console.warn('[Display] orphan call placed in column 0 fallback (not cached)', id);
-        }
+      } else if (debugMode) {
+        console.warn('[Display] could not resolve 5×15 column for call', id);
       }
     }
     const visibleInCols = cols.reduce((n, c) => n + c.length, 0);
@@ -4025,8 +4027,8 @@ const PublicDisplay: React.FC = () => {
       const mapped = idToColumnRef.current[currentSongId];
       if (typeof mapped === 'number' && mapped >= 0 && mapped < 5) {
         activeColumnIndex = mapped;
-      } else if (layoutFiveColumns) {
-        const found = layoutFiveColumns.findIndex((col) => col.includes(currentSongId));
+      } else if (authCols) {
+        const found = authCols.findIndex((col) => col.includes(currentSongId));
         if (found >= 0) activeColumnIndex = found;
       }
     }
