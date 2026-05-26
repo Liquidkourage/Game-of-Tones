@@ -2013,10 +2013,10 @@ body {
  */
 .public-display-splash-join-card__qr-wrap img {
   display: block;
-  width: auto;
+  width: min(100%, clamp(220px, min(31vw, 31vh), 560px));
   max-width: 100%;
   height: auto;
-  max-height: min(88cqh, 86vmin, 82vh, 820px);
+  max-height: min(72cqh, 70vmin, 68vh, 680px);
   aspect-ratio: 1 / 1;
   object-fit: contain;
   border-radius: clamp(10px, 1.6vmin, 16px);
@@ -2063,7 +2063,7 @@ body {
   }
 
   .public-display-splash-join-card__split--triple .public-display-splash-join-card__qr-wrap img {
-    max-height: min(92cqh, 90vmin, 86vh, 900px);
+    max-height: min(78cqh, 74vmin, 72vh, 760px);
   }
 
   .public-display-splash-join-card__split--triple .public-display-splash-join-card__manual {
@@ -2154,7 +2154,7 @@ body {
     )
     .public-display-splash-join-card__qr-wrap
     img {
-    max-height: min(90cqh, 88vmin, 84vh, 860px);
+    max-height: min(76cqh, 72vmin, 70vh, 720px);
   }
 
   .public-display-splash-join-card__split:not(.public-display-splash-join-card__split--triple):not(
@@ -2221,7 +2221,7 @@ body {
   }
 
   .public-display-splash-join-card__split--triple .public-display-splash-join-card__qr-wrap img {
-    max-height: min(90vh, 92vmin, 900px);
+    max-height: min(72vh, 78vmin, 760px);
   }
 }
 
