@@ -799,7 +799,14 @@ function compactPlayedOrderIds(playedOrder: readonly string[]): string[] {
 function pickPlayedIdsForRoomStateSync(
   incoming: string[],
   local: string[],
-  opts: { isPlaying: boolean; reconnecting: boolean; syncTimestamp?: number; lastSyncTs: number },
+  opts: {
+    isPlaying: boolean;
+    reconnecting: boolean;
+    syncTimestamp?: number;
+    lastSyncTs: number;
+    currentSongIndex?: number;
+    currentSongId?: string;
+  },
 ): { ids: string[]; syncTs: number } {
   const inc = compactPlayedOrderIds(incoming);
   const loc = compactPlayedOrderIds(local);
@@ -820,8 +827,37 @@ function pickPlayedIdsForRoomStateSync(
   }
 
   if (opts.isPlaying && inc.length < loc.length) {
+    const prefixOk = inc.length === 0 || inc.every((id, i) => loc[i] === id);
+    const idx =
+      typeof opts.currentSongIndex === 'number' && opts.currentSongIndex >= 0
+        ? opts.currentSongIndex
+        : -1;
+    if (prefixOk && idx >= 0 && inc.length === idx + 1) {
+      console.log(
+        `🔄 Display sync: trimming local played list (${loc.length} → ${inc.length}) — server index authoritative`,
+      );
+      return { ids: inc, syncTs: Math.max(opts.lastSyncTs, syncTs) };
+    }
+    if (
+      prefixOk &&
+      idx >= 0 &&
+      loc.length === idx + 1 &&
+      opts.currentSongId &&
+      loc[loc.length - 1] === opts.currentSongId
+    ) {
+      console.log(
+        `🔄 Display sync: keeping local played list (${loc.length} > server ${inc.length}) — matches current song`,
+      );
+      return { ids: loc, syncTs: Math.max(opts.lastSyncTs, syncTs) };
+    }
+    if (prefixOk) {
+      console.log(
+        `🔄 Display sync: trimming local played list (${loc.length} → ${inc.length})`,
+      );
+      return { ids: inc, syncTs: Math.max(opts.lastSyncTs, syncTs) };
+    }
     console.log(
-      `🔄 Display sync: keeping local played list (${loc.length} > server ${inc.length})`,
+      `🔄 Display sync: keeping local played list (${loc.length} > server ${inc.length}) — order diverged`,
     );
     return { ids: loc, syncTs: Math.max(opts.lastSyncTs, syncTs) };
   }
@@ -836,18 +872,34 @@ function resolvePoolColumnForSongId(
   flatPoolIds: readonly string[] | null | undefined,
   idToColumn?: Record<string, number>,
 ): number | undefined {
-  const mapped = idToColumn?.[songId];
-  if (typeof mapped === 'number' && mapped >= 0 && mapped < 5) return mapped;
+  // Authoritative 5×15 columns beat a stale cached map (e.g. column-0 orphan fallback).
   if (fiveBy15Cols && fiveBy15Cols.length === 5) {
     for (let c = 0; c < 5; c++) {
-      if (fiveBy15Cols[c].includes(songId)) return c;
+      if (fiveBy15Cols[c].includes(songId)) {
+        if (idToColumn && idToColumn[songId] !== c) {
+          idToColumn[songId] = c;
+        }
+        return c;
+      }
     }
   }
+  const mapped = idToColumn?.[songId];
+  if (typeof mapped === 'number' && mapped >= 0 && mapped < 5) return mapped;
   if (flatPoolIds && flatPoolIds.length > 0) {
     const idx = flatPoolIds.indexOf(songId);
     if (idx >= 0) return Math.floor(idx / 15);
   }
   return undefined;
+}
+
+function rebuildIdToColumnFromFiveBy15(cols: string[][]): Record<string, number> {
+  const map: Record<string, number> = {};
+  cols.forEach((col, c) => {
+    col.forEach((id) => {
+      if (id) map[id] = c;
+    });
+  });
+  return map;
 }
 
 function sortPlayedIdsInColumn(
@@ -1959,6 +2011,9 @@ const PublicDisplay: React.FC = () => {
               reconnecting: wasReconnecting,
               syncTimestamp: payload.syncTimestamp,
               lastSyncTs: lastRoomStatePlayedSyncTsRef.current,
+              currentSongIndex:
+                typeof payload.currentSongIndex === 'number' ? payload.currentSongIndex : undefined,
+              currentSongId: payload.currentSong?.id,
             });
             playedIds = picked.ids;
             lastRoomStatePlayedSyncTsRef.current = picked.syncTs;
@@ -2193,6 +2248,7 @@ const PublicDisplay: React.FC = () => {
           const cols = data.columns.map((col: any) => col.slice(0, 15));
           fiveBy15ColumnsRef.current = cols;
           setFiveBy15Columns(cols);
+          idToColumnRef.current = rebuildIdToColumnFromFiveBy15(cols);
           if (Array.isArray(data?.names)) setPlaylistNames(data.names);
           // Preload metadata for revealed titles to avoid 'Unknown'
           if (data?.meta && typeof data.meta === 'object') {
@@ -2242,7 +2298,7 @@ const PublicDisplay: React.FC = () => {
     newSocket.on('fiveby15-map', (data: any) => {
       diag('RX fiveby15-map');
       if (data && data.idToColumn && typeof data.idToColumn === 'object') {
-        idToColumnRef.current = data.idToColumn;
+        idToColumnRef.current = { ...idToColumnRef.current, ...data.idToColumn };
         // Reconcile pending after receiving authoritative map
         try {
           if (pendingPlacementRef.current.size > 0) {
@@ -3943,10 +3999,9 @@ const PublicDisplay: React.FC = () => {
         shown.add(id);
       } else {
         cols[0] = sortPlayedIdsInColumn([...cols[0], id], baseCols[0] || [], playedSeqRef.current);
-        idToColumnRef.current[id] = 0;
         shown.add(id);
         if (debugMode) {
-          console.warn('[Display] orphan call placed in column 0 fallback', id);
+          console.warn('[Display] orphan call placed in column 0 fallback (not cached)', id);
         }
       }
     }

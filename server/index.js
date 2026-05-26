@@ -698,6 +698,18 @@ async function advancePlaybackFromWatchdog(roomId, deviceId) {
   }
 }
 
+/** Host skip / manual advance — must stay on simple progression path during live shows. */
+async function advanceToNextSongInRoom(roomId, deviceId, options = {}) {
+  const room = rooms.get(roomId);
+  if (!room) return;
+  const dev = deviceId || room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id || '';
+  if (room.simpleProgressionActive) {
+    await playNextSongSimple(roomId, dev, options);
+  } else {
+    await playNextSong(roomId, dev);
+  }
+}
+
 /** Non-host roster for host UI (in-person vs online/remote join). */
 function buildRoomPlayersRoster(room) {
   if (!room?.players) return [];
@@ -2333,6 +2345,44 @@ function startSimpleContextMonitor(roomId, deviceId) {
         } catch (e) {
           console.warn('⚠️ Failed to restore original start position:', e?.message);
         }
+      }
+      // Case 3: Wrong track in the correct temp playlist (Spotify auto-advanced or device skip)
+      else if (
+        expectedContext &&
+        currentContext === expectedContext &&
+        expectedTrackId &&
+        currentTrackId &&
+        currentTrackId !== expectedTrackId &&
+        room.temporaryPlaylistId &&
+        typeof room.currentSongIndex === 'number'
+      ) {
+        if (!confirmMonitorSuspect('wrong-track', `${expectedTrackId}->${currentTrackId}`)) {
+          routineServerLog(
+            `🕵️ Wrong track in playlist suspected once (expected ${expectedTrackId}, got ${currentTrackId}); waiting for confirmation`,
+          );
+          return;
+        }
+        routineServerLog(
+          `🔄 Wrong track in temp playlist. Restoring index ${room.currentSongIndex} (${room.currentSong?.name || expectedTrackId})…`,
+        );
+        try {
+          if (targetDeviceId && currentDeviceId !== targetDeviceId) {
+            await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
+          }
+          const resumeMs = Math.min(
+            Math.max(0, expectedProgress),
+            Math.max(0, Number(state?.item?.duration_ms || 0) - 1000),
+          );
+          await spotifyFor(roomId).startPlaybackFromPlaylist(
+            targetDeviceId || deviceId,
+            room.temporaryPlaylistId,
+            room.currentSongIndex,
+            resumeMs,
+          );
+          clearMonitorSuspect();
+        } catch (e) {
+          console.warn('⚠️ Wrong-track playlist restore failed:', e?.message);
+        }
       } else {
         clearMonitorSuspect();
       }
@@ -2450,6 +2500,10 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
   }
 
   if (!tryAcquireSongAdvance(room, { retrying })) {
+    if (!retrying) {
+      routineServerLog('⏭️ Advance in flight — retrying same timer tick in 500ms');
+      setTimeout(() => playNextSongSimple(roomId, deviceId), 500);
+    }
     return;
   }
 
@@ -5438,7 +5492,7 @@ io.on('connection', (socket) => {
         const prevSong = room.currentSong ? { ...room.currentSong } : null;
         // Clear existing timer and immediately play next song under our control
         clearRoomTimer(roomId);
-        await playNextSong(roomId, room.selectedDeviceId);
+        await advanceToNextSongInRoom(roomId, room.selectedDeviceId);
         if (prevIndex >= 0 && prevSong?.id) {
           room.lastSkipUndo = {
             previousIndex: prevIndex,
