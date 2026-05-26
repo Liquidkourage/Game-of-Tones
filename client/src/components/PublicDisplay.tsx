@@ -790,9 +790,14 @@ function poolsOrderEqual(a: string[] | null | undefined, b: string[] | null | un
   return true;
 }
 
+/** Drop sparse-array holes and placeholder ids from play-order lists. */
+function compactPlayedOrderIds(playedOrder: readonly string[]): string[] {
+  return playedOrder.filter((id) => id && !id.startsWith('__placeholder_'));
+}
+
 /** Play-order columns: 5 calls stacked per column, then next column (calls 1–5 | 6–10 | 11–15 …). */
 function playOrderColumnSlices(playedOrder: readonly string[]): string[][] {
-  const ids = playedOrder.filter((id) => id && !id.startsWith('__placeholder_'));
+  const ids = compactPlayedOrderIds(playedOrder);
   const cols: string[][] = [];
   for (let i = 0; i < ids.length; i += 5) {
     cols.push(ids.slice(i, i + 5));
@@ -1167,7 +1172,7 @@ const PublicDisplay: React.FC = () => {
   const [titleRevealMode, setTitleRevealMode] = useState<PublicDisplayTitleRevealMode>('letter');
   const titleRevealModeRef = useRef<PublicDisplayTitleRevealMode>('letter');
   /** Bumped when reveal refs mutate so masked call lists re-render. */
-  const [, setRevealLayoutNonce] = useState(0);
+  const [revealLayoutNonce, setRevealLayoutNonce] = useState(0);
 
   useEffect(() => {
     titleRevealModeRef.current = titleRevealMode;
@@ -1284,9 +1289,7 @@ const PublicDisplay: React.FC = () => {
 
   /** Play order for call-list render — ref, then React state, then current clip. */
   const playedOrderForDisplay = useMemo((): string[] => {
-    const fromRef = playedOrderRef.current.filter(
-      (id) => id && !id.startsWith('__placeholder_'),
-    );
+    const fromRef = compactPlayedOrderIds(playedOrderRef.current);
     if (fromRef.length > 0) return fromRef;
     const fromState = gameState.playedSongs.map((s) => s.id).filter(Boolean);
     if (fromState.length > 0) return fromState;
@@ -1509,16 +1512,34 @@ const PublicDisplay: React.FC = () => {
 
     const applyRevealStateFromServer = (
       state: { revealSequence?: string[]; songBaselines?: Record<string, number>; carouselIndex?: number } | null | undefined,
-      opts?: { restoreCarousel?: boolean },
+      opts?: { restoreCarousel?: boolean; forceClear?: boolean },
     ) => {
       if (!state || typeof state !== 'object') return;
       applyingServerRevealRef.current = true;
       try {
         if (Array.isArray(state.revealSequence)) {
-          revealSequenceRef.current = state.revealSequence;
+          const serverSeq = state.revealSequence;
+          if (opts?.forceClear) {
+            revealSequenceRef.current = serverSeq;
+          } else {
+            const localSeq = revealSequenceRef.current;
+            revealSequenceRef.current =
+              serverSeq.length >= localSeq.length ? serverSeq : localSeq;
+          }
         }
         if (state.songBaselines && typeof state.songBaselines === 'object') {
-          songBaselineRef.current = { ...state.songBaselines };
+          if (opts?.forceClear) {
+            songBaselineRef.current = { ...state.songBaselines };
+          } else {
+            const merged = { ...songBaselineRef.current };
+            for (const [songId, baseline] of Object.entries(state.songBaselines)) {
+              if (typeof baseline !== 'number' || !Number.isFinite(baseline)) continue;
+              const floor = Math.max(0, Math.floor(baseline));
+              const local = merged[songId];
+              merged[songId] = typeof local === 'number' ? Math.max(local, floor) : floor;
+            }
+            songBaselineRef.current = merged;
+          }
         }
         if (opts?.restoreCarousel !== false && typeof state.carouselIndex === 'number' && Number.isFinite(state.carouselIndex)) {
           const idx = Math.max(0, Math.floor(state.carouselIndex));
@@ -1584,7 +1605,7 @@ const PublicDisplay: React.FC = () => {
     };
 
     const applyPlayedOrderFromServer = (playedIds: string[]) => {
-      playedOrderRef.current = playedIds;
+      playedOrderRef.current = compactPlayedOrderIds(playedIds);
       playedSeqCounterRef.current = 0;
       playedIds.forEach((id: string) => {
         playedSeqCounterRef.current += 1;
@@ -1843,30 +1864,8 @@ const PublicDisplay: React.FC = () => {
               console.log(`🔄 Local order: [${playedOrderRef.current.slice(0, 5).join(', ')}...]`);
               console.log(`🔄 Server order: [${playedIds.slice(0, 5).join(', ')}...]`);
             }
-            
-            // Always use server state as source of truth (ensures correct order)
-            applyPlayedOrderFromServer(playedIds);
-            setTotalPlayedCount(playedIds.length);
-            console.log(`🔄 Synced playedSeqRef to match server order (${playedIds.length} songs)`);
 
-            if (
-              playedIds.length > 0 &&
-              (!Array.isArray(payload.playedSongs) || payload.playedSongs.length === 0)
-            ) {
-              setGameState((prev) => ({
-                ...prev,
-                playedSongs: playedIds.map((id: string) => {
-                  const meta = idMetaRef.current[id];
-                  return {
-                    id,
-                    name: meta?.name || 'Unknown',
-                    artist: meta?.artist || '',
-                  };
-                }),
-              }));
-            }
-            
-            // Update metadata cache
+            // Update metadata cache before applying order so call cards have titles
             if (Array.isArray(payload.playedSongs)) {
               payload.playedSongs.forEach((song: any) => {
                 const sid = typeof song === 'string' ? song : song?.id;
@@ -1877,6 +1876,44 @@ const PublicDisplay: React.FC = () => {
                   };
                 }
               });
+            }
+            
+            // Always use server state as source of truth (ensures correct order)
+            applyPlayedOrderFromServer(playedIds);
+            setTotalPlayedCount(playedIds.length);
+            console.log(`🔄 Synced playedSeqRef to match server order (${playedIds.length} songs)`);
+
+            if (playedIds.length > 0) {
+              const payloadPlayedLen = Array.isArray(payload.playedSongs) ? payload.playedSongs.length : 0;
+              if (payloadPlayedLen < playedIds.length) {
+                playedIds.forEach((id: string) => {
+                  if (idMetaRef.current[id]?.name) return;
+                  const fromPayload = Array.isArray(payload.playedSongs)
+                    ? payload.playedSongs.find(
+                        (song: any) => (typeof song === 'string' ? song : song?.id) === id,
+                      )
+                    : null;
+                  if (fromPayload && typeof fromPayload === 'object' && fromPayload.name != null) {
+                    idMetaRef.current[id] = {
+                      name: displayTitleFromSyncedSong(fromPayload),
+                      artist: fromPayload.artist || '',
+                    };
+                  }
+                });
+              }
+              if (payloadPlayedLen === 0) {
+                setGameState((prev) => ({
+                  ...prev,
+                  playedSongs: playedIds.map((id: string) => {
+                    const meta = idMetaRef.current[id];
+                    return {
+                      id,
+                      name: meta?.name || 'Unknown',
+                      artist: meta?.artist || '',
+                    };
+                  }),
+                }));
+              }
             }
           } else if (shouldClearPlayedList) {
             resetPlayedTrackingRefs();
@@ -2236,13 +2273,23 @@ const PublicDisplay: React.FC = () => {
         }, 100);
       }
       
-      setTotalPlayedCount(prev => (typeof data.currentIndex === 'number' ? (data.currentIndex + 1) : prev + 1));
+      setTotalPlayedCount((prev) => {
+        const fromPlayback =
+          typeof data.playbackNumber === 'number' && data.playbackNumber > 0
+            ? data.playbackNumber
+            : typeof data.currentIndex === 'number'
+              ? data.currentIndex + 1
+              : prev + 1;
+        return Math.max(prev, fromPlayback);
+      });
       setGameState(prev => ({
         ...prev,
         isPlaying: true,
         currentSong: song,
         snippetLength: Number(data.snippetLength) || prev.snippetLength,
-        playedSongs: [...prev.playedSongs, song],
+        playedSongs: prev.playedSongs.some((s) => s.id === song.id)
+          ? prev.playedSongs
+          : [...prev.playedSongs, song],
       }));
       // Track played order for reveal lag
       {
@@ -2277,31 +2324,15 @@ const PublicDisplay: React.FC = () => {
             pendingPlacementRef.current.add(song.id);
           }
         }
-        // CRITICAL FIX: Update playedOrderRef immediately so songs appear and letters can reveal
+        // Append in call order — never splice by currentIndex (pool index can skip ahead and create sparse holes).
+        // room-state playedSongIds remains authoritative when it differs.
         const isNewCall = !playedOrderRef.current.includes(song.id);
-        // But maintain order - if currentIndex is available, use it; otherwise append
-        // room-state sync will still override with authoritative server order if there's a mismatch
         if (isNewCall) {
-          if (typeof data.currentIndex === 'number' && data.currentIndex >= 0) {
-            // Insert at correct position based on currentIndex
-            // If currentIndex is 0, insert at start; if 1, after first, etc.
-            const newOrder = [...playedOrderRef.current];
-            // Remove if already exists (shouldn't happen, but safety check)
-            const existingIdx = newOrder.indexOf(song.id);
-            if (existingIdx >= 0) {
-              newOrder.splice(existingIdx, 1);
-            }
-            // Insert at position matching currentIndex
-            newOrder.splice(data.currentIndex, 0, song.id);
-            playedOrderRef.current = newOrder;
-            setPlayedOrderRevision((n) => n + 1);
-            console.log(`🔄 Updated playedOrderRef immediately: song ${song.id} at index ${data.currentIndex}, total: ${newOrder.length}`);
-          } else {
-            // Fallback: append if no index available
-            playedOrderRef.current = [...playedOrderRef.current, song.id];
-            setPlayedOrderRevision((n) => n + 1);
-            console.log(`🔄 Updated playedOrderRef (append): song ${song.id}, total: ${playedOrderRef.current.length}`);
-          }
+          playedOrderRef.current = [...compactPlayedOrderIds(playedOrderRef.current), song.id];
+          setPlayedOrderRevision((n) => n + 1);
+          console.log(
+            `🔄 Updated playedOrderRef (append): song ${song.id}, total: ${playedOrderRef.current.length}`,
+          );
         }
         if (debugMode) {
           const col = idToColumnRef.current[song.id];
@@ -3152,6 +3183,7 @@ const PublicDisplay: React.FC = () => {
   };
 
   const getCallSongRevealUi = (songId: string): CallSongRevealUi => {
+    void revealLayoutNonce;
     if (titleRevealMode === 'letter') {
       const baseline = revealBaselineForSong(songId);
       return {

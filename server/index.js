@@ -2028,6 +2028,29 @@ function clientSongMetaFromPlaylistSong(foundSong, orgId) {
   };
 }
 
+/** One entry per calledSongId — never drop ids missing from playlistSongs (display call cards). */
+function playedSongMetaForRoomState(room, songId) {
+  const orgId = room?.dbOrganizationId ?? null;
+  const foundSong = room?.playlistSongs?.find((s) => s.id === songId);
+  const meta = clientSongMetaFromPlaylistSong(foundSong, orgId);
+  if (meta) return meta;
+  if (room?.currentSong?.id === songId) {
+    const cur = clientSongMetaFromPlaylistSong(room.currentSong, orgId);
+    if (cur) return cur;
+  }
+  return {
+    id: songId,
+    name: 'Unknown',
+    artist: '',
+    ...songAliasDisplayFields(songId, 'Unknown', '', orgId),
+  };
+}
+
+function playedSongsPayloadForRoomState(room, playedSongIds) {
+  if (!Array.isArray(playedSongIds)) return [];
+  return playedSongIds.map((songId) => playedSongMetaForRoomState(room, songId));
+}
+
 function currentSongPayloadForRoomState(currentSong, orgId) {
   if (!currentSong || !currentSong.id) return currentSong || null;
   return {
@@ -2059,12 +2082,7 @@ function syncRoomStateAfterSongStart(roomId, room) {
     publicDisplayTitleRevealMode: publicDisplayTitleRevealModeForRoom(room),
     publicDisplayLetterRevealToast: letterRevealToastEnabledForRoom(room),
     venueBranding: venueBrandingForRoom(room),
-    playedSongs: playedSongIds
-      .map((songId) => {
-        const foundSong = room.playlistSongs?.find((s) => s.id === songId);
-        return clientSongMetaFromPlaylistSong(foundSong, room.dbOrganizationId ?? null);
-      })
-      .filter(Boolean),
+    playedSongs: playedSongsPayloadForRoomState(room, playedSongIds),
     playedSongIds,
     totalPlayedCount: playedSongIds.length,
     currentSongIndex: room.currentSongIndex || 0,
@@ -2454,10 +2472,7 @@ async function playNextSongSimple(roomId, deviceId) {
       publicDisplayTitleRevealMode: publicDisplayTitleRevealModeForRoom(room),
       publicDisplayLetterRevealToast: letterRevealToastEnabledForRoom(room),
       venueBranding: venueBrandingForRoom(room),
-      playedSongs: playedSongIds.map(songId => {
-        const foundSong = room.playlistSongs?.find(s => s.id === songId);
-        return clientSongMetaFromPlaylistSong(foundSong, room.dbOrganizationId ?? null);
-      }).filter(Boolean),
+      playedSongs: playedSongsPayloadForRoomState(room, playedSongIds),
       playedSongIds: playedSongIds,
       totalPlayedCount: playedSongIds.length,
       currentSongIndex: room.currentSongIndex || 0,
@@ -4846,10 +4861,7 @@ io.on('connection', (socket) => {
         publicDisplayLetterRevealToast: letterRevealToastEnabledForRoom(room),
         venueBranding: venueBrandingForRoom(room),
         // Include played songs for PublicDisplay sync (includes current song)
-        playedSongs: playedSongIds.map(songId => {
-          const foundSong = room.playlistSongs?.find(s => s.id === songId);
-          return clientSongMetaFromPlaylistSong(foundSong, room.dbOrganizationId ?? null);
-        }).filter(Boolean),
+        playedSongs: playedSongsPayloadForRoomState(room, playedSongIds),
         // Also send song IDs array for client state sync
         playedSongIds: playedSongIds,
         totalPlayedCount: playedSongIds.length,
