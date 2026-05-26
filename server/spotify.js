@@ -190,32 +190,33 @@ function readPlaylistListPageGapMs() {
  * @param {string} playlistId
  * @param {{ name?: string } | null} playlistInfo
  */
-function mapPlaylistItemRowToHostSong(row, playlistId, playlistInfo) {
-  const tr = row && (row.track ?? row.item);
-  if (!tr || typeof tr !== 'object' || !tr.id) return null;
-
+function trackArtistLabelFromSpotifyObject(tr) {
   const episodeLike =
     tr.type === 'episode' ||
     (typeof tr.uri === 'string' && tr.uri.includes(':episode:'));
-
-  let artistStr = 'Unknown Artist';
   if (Array.isArray(tr.artists) && tr.artists.length > 0) {
-    artistStr = tr.artists.map((a) => (a && a.name ? String(a.name) : '')).filter(Boolean).join(', ');
-  } else if (episodeLike && tr.show && typeof tr.show.name === 'string') {
-    artistStr = tr.show.name;
+    return tr.artists.map((a) => (a && a.name ? String(a.name) : '')).filter(Boolean).join(', ');
   }
+  if (episodeLike && tr.show && typeof tr.show.name === 'string') {
+    return tr.show.name;
+  }
+  return 'Unknown Artist';
+}
 
+function hostSongFromSpotifyTrackObject(tr, playlistId, playlistInfo) {
+  const episodeLike =
+    tr.type === 'episode' ||
+    (typeof tr.uri === 'string' && tr.uri.includes(':episode:'));
   let albumName = 'Unknown Album';
   if (tr.album && typeof tr.album.name === 'string') {
     albumName = tr.album.name;
   } else if (episodeLike && tr.show && typeof tr.show.name === 'string') {
     albumName = tr.show.name;
   }
-
   return {
     id: tr.id,
     name: typeof tr.name === 'string' ? tr.name : '(unknown)',
-    artist: artistStr,
+    artist: trackArtistLabelFromSpotifyObject(tr),
     album: albumName,
     duration: typeof tr.duration_ms === 'number' ? tr.duration_ms : 0,
     uri: typeof tr.uri === 'string' ? tr.uri : '',
@@ -224,6 +225,33 @@ function mapPlaylistItemRowToHostSong(row, playlistId, playlistInfo) {
     sourcePlaylistId: playlistId,
     sourcePlaylistName: playlistInfo?.name || 'Unknown Playlist',
   };
+}
+
+/** @returns {{ song: object } | { skip: 'removed' | 'unplayable', preview?: { name: string, artist: string } }} */
+function parsePlaylistItemRow(row, playlistId, playlistInfo) {
+  const tr = row && (row.track ?? row.item);
+  if (!tr || typeof tr !== 'object' || !tr.id) {
+    return { skip: 'removed' };
+  }
+  if (tr.is_playable === false) {
+    return {
+      skip: 'unplayable',
+      preview: {
+        name: typeof tr.name === 'string' ? tr.name : '(unknown)',
+        artist: trackArtistLabelFromSpotifyObject(tr),
+      },
+    };
+  }
+  return { song: hostSongFromSpotifyTrackObject(tr, playlistId, playlistInfo) };
+}
+
+function emptyPlaylistLoadStats() {
+  return { rawRows: 0, loaded: 0, removed: 0, unplayable: 0, market: null, samples: [] };
+}
+
+function mapPlaylistItemRowToHostSong(row, playlistId, playlistInfo) {
+  const parsed = parsePlaylistItemRow(row, playlistId, playlistInfo);
+  return parsed.song || null;
 }
 
 class SpotifyService {
@@ -1076,29 +1104,47 @@ class SpotifyService {
   }
 
   /** Hydrate in-memory cache from DB (host reconnect) before snapshot/items calls. */
-  seedPlaylistTracksCache(playlistId, { tracks, snapshotId }) {
+  seedPlaylistTracksCache(playlistId, { tracks, snapshotId, loadStats }) {
     const cacheKey = String(playlistId);
     if (!Array.isArray(tracks) || tracks.length === 0) return;
     this._playlistTracksCache.set(cacheKey, {
       at: Date.now(),
       tracks,
       snapshotId: snapshotId != null && String(snapshotId).trim() !== '' ? String(snapshotId) : null,
+      loadStats: loadStats && typeof loadStats === 'object' ? loadStats : null,
     });
   }
 
   peekPlaylistTracksCache(playlistId) {
     const e = this._playlistTracksCache.get(String(playlistId));
-    return e ? { at: e.at, tracks: e.tracks, snapshotId: e.snapshotId } : null;
+    return e
+      ? { at: e.at, tracks: e.tracks, snapshotId: e.snapshotId, loadStats: e.loadStats || null }
+      : null;
+  }
+
+  _playlistTracksPayloadFromCache(cached, playlistId, playlistInfo, mapRow) {
+    const tracks = cached.tracks.map(mapRow);
+    return {
+      tracks,
+      loadStats: cached.loadStats || {
+        ...emptyPlaylistLoadStats(),
+        rawRows: tracks.length,
+        loaded: tracks.length,
+      },
+    };
   }
 
   // Get playlist tracks (paginated via GET /playlists/{id}/items)
   async getPlaylistTracks(playlistId, playlistInfo = null, options = {}) {
     const cacheKey = String(playlistId);
     const force = options && options.forceRefresh === true;
+    const returnLoadStats = options && options.returnLoadStats === true;
+    const unwrap = (payload) => (returnLoadStats ? payload : payload.tracks);
+    const run = () => this._getPlaylistTracksImpl(playlistId, playlistInfo, options);
     if (!force && this._playlistTracksInflight.has(cacheKey)) {
-      return this._playlistTracksInflight.get(cacheKey);
+      return this._playlistTracksInflight.get(cacheKey).then(unwrap);
     }
-    const work = this._getPlaylistTracksImpl(playlistId, playlistInfo, options);
+    const work = run();
     if (!force) {
       this._playlistTracksInflight.set(cacheKey, work);
       work.finally(() => {
@@ -1107,7 +1153,7 @@ class SpotifyService {
         }
       });
     }
-    return work;
+    return work.then(unwrap);
   }
 
   async _getPlaylistTracksImpl(playlistId, playlistInfo = null, options = {}) {
@@ -1140,7 +1186,7 @@ class SpotifyService {
       Array.isArray(cached.tracks) &&
       cached.tracks.length > 0
     ) {
-      return cached.tracks.map(mapRow);
+      return this._playlistTracksPayloadFromCache(cached, playlistId, playlistInfo, mapRow);
     }
 
     if (
@@ -1150,16 +1196,31 @@ class SpotifyService {
       Array.isArray(cached.tracks) &&
       cached.tracks.length > 0
     ) {
-      return cached.tracks.map(mapRow);
+      return this._playlistTracksPayloadFromCache(cached, playlistId, playlistInfo, mapRow);
     }
 
     try {
       const tracks = [];
+      const loadStats = emptyPlaylistLoadStats();
       let offset = 0;
       const pageLimit = PLAYLIST_ITEMS_PAGE_LIMIT_MAX;
+      let market = null;
+      try {
+        const profile = await this.getCurrentUserProfileBrief();
+        if (profile?.country) {
+          market = profile.country;
+          loadStats.market = profile.country;
+        }
+      } catch {
+        /* host market optional */
+      }
 
       while (true) {
-        const page = await this._fetchPlaylistItemsPage(playlistId, { limit: pageLimit, offset });
+        const page = await this._fetchPlaylistItemsPage(playlistId, {
+          limit: pageLimit,
+          offset,
+          market,
+        });
         /** Raw rows from Spotify — advance `offset` by this length even when some rows lack `track` (deleted/null). */
         const rawItems = page.items || [];
 
@@ -1172,13 +1233,28 @@ class SpotifyService {
           break;
         }
 
-        // PlaylistTrackObject: use `item` (preferred) or deprecated `track`
-        const validTracks = rawItems
-          .map((row) => mapPlaylistItemRowToHostSong(row, playlistId, playlistInfo))
-          .filter(Boolean);
+        loadStats.rawRows += rawItems.length;
+        for (const row of rawItems) {
+          const parsed = parsePlaylistItemRow(row, playlistId, playlistInfo);
+          if (parsed.song) {
+            tracks.push(parsed.song);
+            loadStats.loaded += 1;
+            continue;
+          }
+          if (parsed.skip === 'unplayable') {
+            loadStats.unplayable += 1;
+            if (loadStats.samples.length < 5 && parsed.preview) {
+              loadStats.samples.push({ reason: 'unplayable', ...parsed.preview });
+            }
+          } else {
+            loadStats.removed += 1;
+            if (loadStats.samples.length < 5) {
+              loadStats.samples.push({ reason: 'removed', name: '(removed from Spotify)', artist: '' });
+            }
+          }
+        }
 
-        tracks.push(...validTracks);
-        if (offset === 0 && rawItems.length > 0 && validTracks.length === 0) {
+        if (offset === 0 && rawItems.length > 0 && tracks.length === 0) {
           console.warn(
             `[getPlaylistTracks] playlist ${playlistId}: ${rawItems.length} row(s) on first page but none mapped (removed-only playlist?)`
           );
@@ -1203,8 +1279,14 @@ class SpotifyService {
         at: Date.now(),
         tracks,
         snapshotId: snapStore || null,
+        loadStats,
       });
-      return tracks;
+      if (loadStats.removed + loadStats.unplayable > 0) {
+        routineSpotifyLog(
+          `[getPlaylistTracks] playlist ${playlistId}: ${loadStats.loaded} playable, ${loadStats.removed} removed, ${loadStats.unplayable} unavailable in market${market ? ` (${market})` : ''}`,
+        );
+      }
+      return { tracks: tracks.map(mapRow), loadStats };
     } catch (error) {
       this._rethrowIfRateLimited(error, 'getPlaylistTracks');
       console.error('Error getting playlist tracks:', error);

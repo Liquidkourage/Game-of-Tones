@@ -21,6 +21,8 @@ import {
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import type { BingoPoolSong } from './BingoPoolList';
 import type { CallLogRow } from './host/HostGameLivePanel';
+import type { PlaylistAvailabilityIssue } from './HostPlaylistAvailabilityWarnings';
+import HostPlaylistAvailabilityWarnings from './HostPlaylistAvailabilityWarnings';
 
 export type HostGameDashboardProps = {
   gameState: 'waiting' | 'playing' | 'ended';
@@ -59,6 +61,7 @@ export type HostGameDashboardProps = {
   lastPlayed: { name: string; artist: string } | null;
   playlistNames: string[];
   poolSongs: BingoPoolSong[];
+  playlistAvailabilityIssues: PlaylistAvailabilityIssue[];
   prepRoundReadyForGoLive: boolean;
   showPrimaryFinalizeMixButton: boolean;
   mixGameActionsBlocked: boolean;
@@ -197,6 +200,7 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
     lastPlayed,
     playlistNames,
     poolSongs,
+    playlistAvailabilityIssues,
     prepRoundReadyForGoLive,
     showPrimaryFinalizeMixButton,
     mixGameActionsBlocked,
@@ -482,6 +486,9 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
                     Start game will <strong>finalize the mix automatically</strong> if needed. Use Show playlists to
                     preview playlist names on the display.
                   </p>
+                ) : null}
+                {playlistAvailabilityIssues.length > 0 ? (
+                  <HostPlaylistAvailabilityWarnings issues={playlistAvailabilityIssues} compact />
                 ) : null}
               </>
             )}

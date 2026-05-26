@@ -1602,7 +1602,12 @@ async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { fo
   }
 
   try {
-    const tracks = await svc.getPlaylistTracks(playlistId, playlistInfo, { forceRefresh: force });
+    const fetched = await svc.getPlaylistTracks(playlistId, playlistInfo, {
+      forceRefresh: force,
+      returnLoadStats: true,
+    });
+    const tracks = fetched.tracks;
+    const loadStats = fetched.loadStats || null;
     if (orgId && Array.isArray(tracks) && tracks.length > 0) {
       const peek = svc.peekPlaylistTracksCache(playlistId);
       void saveHostPlaylistTracksCache(orgId, playlistId, {
@@ -1610,7 +1615,7 @@ async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { fo
         snapshotId: peek?.snapshotId ?? null,
       });
     }
-    return { tracks, fromTracksCache: false };
+    return { tracks, loadStats, fromTracksCache: false };
   } catch (error) {
     if (svc.isRateLimitError(error) && dbRow && Array.isArray(dbRow.tracks) && dbRow.tracks.length > 0) {
       if (spotifyPipelineLog.isEnabled()) {
@@ -12147,6 +12152,7 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
     res.json({
       success: true,
       tracks: result.tracks,
+      ...(result.loadStats ? { loadStats: result.loadStats } : {}),
       ...(result.fromTracksCache ? { fromTracksCache: true } : {}),
       ...(result.stale ? { stale: true } : {}),
       ...(result.cacheUpdatedAt ? { cacheUpdatedAt: result.cacheUpdatedAt } : {}),

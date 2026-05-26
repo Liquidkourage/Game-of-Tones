@@ -118,6 +118,9 @@ import { validateSongTitle, validateSongTitleSync, getValidationMessage, getVali
 import './HostView.css';
 import './HostGlassTheme.css';
 import HostGameDashboard from './HostGameDashboard';
+import HostPlaylistAvailabilityWarnings, {
+  buildPlaylistAvailabilityIssues,
+} from './HostPlaylistAvailabilityWarnings';
 import type { HostGlassNavId } from '../host/hostGlassNav';
 import { HOST_GLASS_NAV_ITEMS, parseHostGlassNavTab } from '../host/hostGlassNav';
 import { appendHostActivity, type HostActivityEntry } from '../host/hostActivityLog';
@@ -227,6 +230,11 @@ interface Playlist {
   hasExplicitTracks?: boolean;
   /** Unique tracks loaded this session (may be less than Spotify list total until fetched). */
   tracksLoaded?: number;
+  /** Rows dropped while loading — deleted/null on Spotify. */
+  tracksRemoved?: number;
+  /** Rows dropped — Spotify marked not playable in host market. */
+  tracksUnplayable?: number;
+  unplayableSamples?: Array<{ reason: string; name?: string; artist?: string }>;
   /** Track list loaded via server catalog token (LK-owned allowlisted playlists). */
   catalog?: boolean;
   /** User library via YouTube Music / YouTube Data API (playlist items are videos). */
@@ -750,6 +758,11 @@ const HostView: React.FC = () => {
         (p) => p.youtubeMusic !== true && p.catalog !== true
       ),
     [mixPlaylistSelection]
+  );
+
+  const playlistAvailabilityIssues = useMemo(
+    () => buildPlaylistAvailabilityIssues(mixPlaylistSelection),
+    [mixPlaylistSelection],
   );
 
   const [snippetLength, setSnippetLength] = useState(() => {
@@ -2372,6 +2385,33 @@ const HostView: React.FC = () => {
         const loaded = perPlaylist.get(canonicalPlaylistIdForMatch(pl.id));
         if (loaded == null) return pl;
         return { ...pl, tracksLoaded: loaded };
+      });
+    setPlaylists(merge);
+    setSelectedPlaylists(merge);
+    setSelectedCatalogPlaylists(merge);
+  }, []);
+
+  type PlaylistLoadStats = {
+    removed?: number;
+    unplayable?: number;
+    samples?: Array<{ reason: string; name?: string; artist?: string }>;
+  };
+
+  const applyPlaylistLoadStats = useCallback((playlistId: string, stats: PlaylistLoadStats) => {
+    const removed = stats.removed ?? 0;
+    const unplayable = stats.unplayable ?? 0;
+    const samples = Array.isArray(stats.samples) ? stats.samples.slice(0, 5) : [];
+    const merge = (prev: Playlist[]) =>
+      prev.map((pl) => {
+        if (canonicalPlaylistIdForMatch(pl.id) !== canonicalPlaylistIdForMatch(playlistId)) {
+          return pl;
+        }
+        return {
+          ...pl,
+          tracksRemoved: removed,
+          tracksUnplayable: unplayable,
+          unplayableSamples: samples,
+        };
       });
     setPlaylists(merge);
     setSelectedPlaylists(merge);
@@ -6057,6 +6097,7 @@ const HostView: React.FC = () => {
           const data = (await response.json()) as {
             success?: boolean;
             tracks?: Song[];
+            loadStats?: PlaylistLoadStats;
             webApiQuarantine?: unknown;
           };
 
@@ -6096,6 +6137,9 @@ const HostView: React.FC = () => {
             if (!catalog && !yt) {
               applyPlaylistExplicitKnowledge(playlist.id, data.tracks, setPlaylists, setSelectedPlaylists);
             }
+            if (!catalog && !yt && data.loadStats) {
+              applyPlaylistLoadStats(playlist.id, data.loadStats);
+            }
           }
         }
 
@@ -6112,7 +6156,7 @@ const HostView: React.FC = () => {
         return [];
       }
     },
-    [mixPlaylistSelection, isSpotifyConnected, setPlaylists, setSelectedPlaylists, applyLoadedTrackCountsFromSongs]
+    [mixPlaylistSelection, isSpotifyConnected, setPlaylists, setSelectedPlaylists, applyLoadedTrackCountsFromSongs, applyPlaylistLoadStats]
   );
 
   /** Always latest generateSongList — debounced effect must not depend on this callback (identity churn retriggers → duplicate playlist-tracks waves). */
@@ -8620,6 +8664,7 @@ const HostView: React.FC = () => {
                           const loadedCount =
                             p.tracksLoaded != null && p.tracksLoaded > 0 ? p.tracksLoaded : null;
                           const trackCount = loadedCount ?? listedCount;
+                          const availGap = (p.tracksRemoved ?? 0) + (p.tracksUnplayable ?? 0);
                           const isInsufficient = trackCount < 15;
                           const isAcceptable = trackCount >= 15;
                           
@@ -8754,6 +8799,13 @@ const HostView: React.FC = () => {
                                     )}
                                   </span>
                                 </span>
+                                {availGap > 0 && !p.youtubeMusic && !p.catalog ? (
+                                  <span className="host-playlist-library-row__avail-warn" title="Excluded from Tempo pool">
+                                    {p.tracksUnplayable ? `${p.tracksUnplayable} unavailable` : null}
+                                    {p.tracksUnplayable && p.tracksRemoved ? ' · ' : null}
+                                    {p.tracksRemoved ? `${p.tracksRemoved} removed` : null}
+                                  </span>
+                                ) : null}
                               </span>
                               <span
                                 role="presentation"
@@ -9445,6 +9497,7 @@ const HostView: React.FC = () => {
                   lastPlayed={hostActiveRoundSummary.lastPlayed}
                   playlistNames={hostActiveRoundSummary.playlistNames}
                   poolSongs={finalizedPoolSongs}
+                  playlistAvailabilityIssues={playlistAvailabilityIssues}
                   prepRoundReadyForGoLive={prepRoundReadyForGoLive}
                   showPrimaryFinalizeMixButton={showPrimaryFinalizeMixButton}
                   mixGameActionsBlocked={mixGameActionsBlocked}
@@ -10065,6 +10118,7 @@ const HostView: React.FC = () => {
                   matches what bingo uses.
                 </p>
               )}
+              <HostPlaylistAvailabilityWarnings issues={playlistAvailabilityIssues} />
               <BingoPoolList
                 songs={finalizedPoolSongs}
                 currentSongId={currentSong?.id}
