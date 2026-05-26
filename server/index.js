@@ -15,8 +15,6 @@ const usersStore = require('./users');
 const organizationsStore = require('./organizations');
 const billingStore = require('./billing');
 const hostRoomPrepStore = require('./hostRoomPrep');
-const eventTemplatesStore = require('./eventTemplates');
-const roomSessionEventsStore = require('./roomSessionEvents');
 const songAliasesStore = require('./songAliases');
 const fiveByFifteenAssign = require('./fiveByFifteenAssign');
 const venueLogoCache = require('./venueLogoCache');
@@ -1251,8 +1249,6 @@ async function initializeDatabase() {
     await organizationsStore.ensureOrganizationsTable(db);
     await songAliasesStore.ensureSongAliasesTable(db);
     await hostRoomPrepStore.ensureHostRoomPrepTable(db);
-    await eventTemplatesStore.ensureEventTemplatesTable(db);
-    await roomSessionEventsStore.ensureRoomSessionEventsTable(db);
     await db.query(`
       CREATE TABLE IF NOT EXISTS host_spotify_playlist_list_cache (
         organization_id VARCHAR(50) PRIMARY KEY,
@@ -1881,14 +1877,6 @@ function emitSongPlayingToRoom(roomId, room, song, currentIndex) {
           )
         : fallbackIndex;
   io.to(roomId).emit('song-playing', buildSongPlayingPayload(room, song, idx));
-  appendRoomSessionEventSafe(roomId, room, 'song_playing', {
-    songId: song.id,
-    songName: song.name || '',
-    artistName: song.artist || '',
-    currentIndex: idx,
-    totalSongs: Array.isArray(room.playlistSongs) ? room.playlistSongs.length : 0,
-    playbackNumber: idx + 1,
-  });
 }
 
 function storeLastDisplayWinnerFromBingoCalled(room, payload) {
@@ -2044,30 +2032,6 @@ function syncRoomStateAfterSongStart(roomId, room) {
 function getOrganizationFromRoom(roomId) {
   const room = rooms.get(roomId);
   return room ? spotifyOrgForRoom(room) : 'DEFAULT';
-}
-
-function numericOrganizationIdForRoom(room) {
-  if (!room) return null;
-  if (room.dbOrganizationId != null && Number.isFinite(Number(room.dbOrganizationId))) {
-    return Number(room.dbOrganizationId);
-  }
-  if (room.organizationId != null && Number.isFinite(Number(room.organizationId))) {
-    return Number(room.organizationId);
-  }
-  return null;
-}
-
-function appendRoomSessionEventSafe(roomId, room, eventType, payload = {}) {
-  if (!db || !roomId || !eventType) return;
-  void roomSessionEventsStore.appendRoomSessionEvent(db, {
-    roomId,
-    ownerUserId: room?.ownerUserId ?? null,
-    organizationId: numericOrganizationIdForRoom(room),
-    eventType,
-    payload,
-  }).catch((err) => {
-    console.error(`roomSessionEvents ${eventType}:`, err?.message || err);
-  });
 }
 
 /** Spotify HTTP API: logged-in host only — each host uses user_${uid} tokens (never shared DEFAULT). */
@@ -3150,12 +3114,6 @@ io.on('connection', (socket) => {
       playerCount: getNonHostPlayerCount(room),
       hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline,
       venueBranding: venueBrandingForRoom(room),
-    });
-    appendRoomSessionEventSafe(roomId, room, effectiveIsHost ? 'host_joined' : 'player_joined', {
-      socketId: socket.id,
-      playerName,
-      inPerson,
-      playerCount: getNonHostPlayerCount(room),
     });
 
     // Log available devices for debugging
@@ -4334,11 +4292,6 @@ io.on('connection', (socket) => {
         roundWinners: room.roundWinners,
         message: `Round ${room.roundWinners.length} complete! Waiting for next round...`
       });
-      appendRoomSessionEventSafe(roomId, room, 'round_complete', {
-        winner: player.name,
-        roundNumber: room.roundWinners.length,
-        roundWinnersCount: Array.isArray(room.roundWinners) ? room.roundWinners.length : 0,
-      });
 
       // Pop confirmed winner from FIFO queue; dismiss anyone still waiting (same round ended)
       if (Array.isArray(room.bingoVerificationQueue) && room.bingoVerificationQueue.length > 0) {
@@ -5186,13 +5139,6 @@ io.on('connection', (socket) => {
           patternComposite: patternCompositeForClient(room),
           playbackOrder: playbackOrderPayload,
           ...patternExtrasForClient(room),
-        });
-        appendRoomSessionEventSafe(roomId, room, 'game_started', {
-          snippetLength,
-          deviceId: deviceId || null,
-          playbackOrderCount: playbackOrderPayload.length,
-          pattern: room.pattern || 'line',
-          savedRoundPlayback: useSavedRoundPlayback === true,
         });
 
         routineServerLog('🎵 Starting automatic playback (sequential 1→N through pool)...');
@@ -9703,7 +9649,6 @@ app.get('/api/auth/me', async (req, res) => {
             hasCustomSpotifyApp: !!(organization.spotify_client_id && String(organization.spotify_client_id).trim()),
           }
         : null,
-      membership: ctx?.membership ?? null,
       billing,
       ...(rawJwt ? { hostToken: rawJwt } : {}),
     });
@@ -10030,7 +9975,6 @@ app.get('/api/org/me', async (req, res) => {
     return res.json({
       role: ctx.role,
       organization: ctx.organization,
-      membership: ctx.membership,
       members,
       invites,
       payments,
@@ -10277,7 +10221,6 @@ app.post('/api/host/rooms', async (req, res) => {
     if (!uid) return;
     if (!(await requireHostOrgBillingAccess(uid, res))) return;
     if (!db) return res.status(503).json({ error: 'DATABASE_URL required' });
-    const orgCtx = await organizationsStore.getUserOrganizationContext(db, uid);
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     const forceNewRoom = body.forceNewRoom === true || body.forceNew === true;
     const picked = allocateHostOwnedRoom(uid, { forceNew: forceNewRoom });
@@ -10288,8 +10231,7 @@ app.post('/api/host/rooms', async (req, res) => {
     if (mode === 'create') {
       const newRoom = {
         id: code,
-        organizationId: orgCtx.organization?.id ?? 'DEFAULT',
-        dbOrganizationId: orgCtx.organization?.id ?? null,
+        organizationId: 'DEFAULT',
         ownerUserId: uid,
         licenseKey: null,
         host: null,
@@ -10309,11 +10251,6 @@ app.post('/api/host/rooms', async (req, res) => {
         createdAt: new Date().toISOString(),
       };
       rooms.set(code, newRoom);
-      appendRoomSessionEventSafe(code, newRoom, 'room_created', {
-        mode,
-        ownerUserId: uid,
-        organizationId: orgCtx.organization?.id ?? null,
-      });
     }
     const roomRef = rooms.get(code);
     if (roomRef) {
@@ -10401,125 +10338,6 @@ app.put('/api/host/rooms/:roomId/prep', async (req, res) => {
   } catch (e) {
     console.error('PUT /api/host/rooms/:roomId/prep:', e?.message || e);
     res.status(500).json({ error: 'failed', message: e?.message || 'Failed to save prep' });
-  }
-});
-
-/** List reusable event templates for this host (and their org, when present). */
-app.get('/api/host/event-templates', async (req, res) => {
-  try {
-    const uid = await requireApprovedHostUid(req, res);
-    if (!uid) return;
-    if (!db) return res.status(503).json({ error: 'database_unavailable', message: 'DATABASE_URL required.' });
-    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
-    const templates = await eventTemplatesStore.listEventTemplates(db, {
-      userId: uid,
-      organizationId: ctx.organization?.id ?? null,
-      limit: req.query?.limit,
-    });
-    res.json({ templates });
-  } catch (e) {
-    console.error('GET /api/host/event-templates:', e?.message || e);
-    res.status(500).json({ error: 'failed', message: e?.message || 'Failed to list templates' });
-  }
-});
-
-app.post('/api/host/event-templates', async (req, res) => {
-  try {
-    const uid = await requireApprovedHostUid(req, res);
-    if (!uid) return;
-    if (!db) return res.status(503).json({ error: 'database_unavailable', message: 'DATABASE_URL required.' });
-    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
-    const body = req.body && typeof req.body === 'object' ? req.body : {};
-    const template = await eventTemplatesStore.createEventTemplate(db, {
-      userId: uid,
-      organizationId: ctx.organization?.id ?? null,
-      name: body.name,
-      payload: body.payload,
-    });
-    res.json({ ok: true, template });
-  } catch (e) {
-    console.error('POST /api/host/event-templates:', e?.message || e);
-    res.status(400).json({ error: 'failed', message: e?.message || 'Failed to create template' });
-  }
-});
-
-app.get('/api/host/event-templates/:templateId', async (req, res) => {
-  try {
-    const uid = await requireApprovedHostUid(req, res);
-    if (!uid) return;
-    if (!db) return res.status(503).json({ error: 'database_unavailable', message: 'DATABASE_URL required.' });
-    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
-    const template = await eventTemplatesStore.getEventTemplateById(db, {
-      templateId: req.params.templateId,
-      userId: uid,
-      organizationId: ctx.organization?.id ?? null,
-    });
-    if (!template) return res.status(404).json({ error: 'not_found', message: 'Template not found.' });
-    res.json({ template });
-  } catch (e) {
-    console.error('GET /api/host/event-templates/:templateId:', e?.message || e);
-    res.status(500).json({ error: 'failed', message: e?.message || 'Failed to load template' });
-  }
-});
-
-app.put('/api/host/event-templates/:templateId', async (req, res) => {
-  try {
-    const uid = await requireApprovedHostUid(req, res);
-    if (!uid) return;
-    if (!db) return res.status(503).json({ error: 'database_unavailable', message: 'DATABASE_URL required.' });
-    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
-    const body = req.body && typeof req.body === 'object' ? req.body : {};
-    const template = await eventTemplatesStore.updateEventTemplate(db, {
-      templateId: req.params.templateId,
-      userId: uid,
-      organizationId: ctx.organization?.id ?? null,
-      name: body.name,
-      payload: body.payload,
-    });
-    res.json({ ok: true, template });
-  } catch (e) {
-    console.error('PUT /api/host/event-templates/:templateId:', e?.message || e);
-    const status = /not found/i.test(e?.message || '') ? 404 : 400;
-    res.status(status).json({ error: 'failed', message: e?.message || 'Failed to update template' });
-  }
-});
-
-app.delete('/api/host/event-templates/:templateId', async (req, res) => {
-  try {
-    const uid = await requireApprovedHostUid(req, res);
-    if (!uid) return;
-    if (!db) return res.status(503).json({ error: 'database_unavailable', message: 'DATABASE_URL required.' });
-    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
-    const result = await eventTemplatesStore.deleteEventTemplate(db, {
-      templateId: req.params.templateId,
-      userId: uid,
-      organizationId: ctx.organization?.id ?? null,
-    });
-    res.json(result);
-  } catch (e) {
-    console.error('DELETE /api/host/event-templates/:templateId:', e?.message || e);
-    const status = /not found/i.test(e?.message || '') ? 404 : 400;
-    res.status(status).json({ error: 'failed', message: e?.message || 'Failed to delete template' });
-  }
-});
-
-/** Durable room/session timeline for host recap and support visibility. */
-app.get('/api/host/rooms/:roomId/events', async (req, res) => {
-  try {
-    const uid = await requireApprovedHostUid(req, res);
-    if (!uid) return;
-    if (!db) return res.status(503).json({ error: 'database_unavailable', message: 'DATABASE_URL required.' });
-    const roomId = sanitizeHostPrepRoomId(req.params.roomId);
-    if (!roomId) return res.status(400).json({ error: 'invalid_room_id' });
-    const events = await roomSessionEventsStore.listRoomSessionEvents(db, {
-      roomId,
-      ownerUserId: uid,
-      limit: req.query?.limit,
-    });
-    res.json({ roomId, events });
-  } catch (e) {
-    console.error('GET /api/host/rooms/:roomId/events:', e?.message || e);
-    res.status(500).json({ error: 'failed', message: e?.message || 'Failed to load room events' });
   }
 });
 

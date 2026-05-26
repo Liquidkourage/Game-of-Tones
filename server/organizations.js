@@ -118,116 +118,7 @@ async function ensureOrganizationsTable(db) {
       PRIMARY KEY (organization_id, email)
     )
   `);
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS organization_memberships (
-      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      role TEXT NOT NULL DEFAULT 'host',
-      status TEXT NOT NULL DEFAULT 'active',
-      invited_by_user_id INTEGER REFERENCES users(id),
-      created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (organization_id, user_id)
-    )
-  `);
-  await db.query(`
-    DELETE FROM organization_memberships om
-    USING users u
-    WHERE om.user_id = u.id
-      AND (u.organization_id IS NULL OR om.organization_id <> u.organization_id)
-  `);
-  await db.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_organization_memberships_user_id
-    ON organization_memberships (user_id)
-  `);
-  await db.query(`
-    CREATE INDEX IF NOT EXISTS idx_organization_memberships_org_role
-    ON organization_memberships (organization_id, status, role, updated_at DESC)
-  `);
-  await db.query(`
-    INSERT INTO organization_memberships (
-      organization_id,
-      user_id,
-      role,
-      status,
-      invited_by_user_id,
-      created_at,
-      updated_at
-    )
-    SELECT
-      u.organization_id,
-      u.id,
-      CASE
-        WHEN o.owner_user_id IS NOT NULL AND o.owner_user_id = u.id THEN 'owner'
-        ELSE 'host'
-      END,
-      'active',
-      NULL,
-      CURRENT_TIMESTAMP,
-      CURRENT_TIMESTAMP
-    FROM users u
-    JOIN organizations o ON o.id = u.organization_id
-    WHERE u.organization_id IS NOT NULL
-    ON CONFLICT (organization_id, user_id) DO UPDATE SET
-      role = EXCLUDED.role,
-      status = 'active',
-      updated_at = CURRENT_TIMESTAMP
-  `);
   return true;
-}
-
-function normalizeMembershipRole(role, fallbackRole = 'host') {
-  const raw = String(role || '').trim().toLowerCase();
-  if (raw === 'owner') return 'owner';
-  if (raw === 'host') return 'host';
-  return fallbackRole === 'owner' ? 'owner' : 'host';
-}
-
-function normalizeMembershipStatus(status) {
-  const raw = String(status || '').trim().toLowerCase();
-  if (raw === 'invited') return 'invited';
-  if (raw === 'inactive') return 'inactive';
-  if (raw === 'removed') return 'removed';
-  return 'active';
-}
-
-async function upsertOrganizationMembership(
-  db,
-  { organizationId, userId, role = 'host', status = 'active', invitedByUserId = null },
-) {
-  if (!db) throw new Error('DATABASE_URL required');
-  await ensureOrganizationsTable(db);
-  const orgId = Number(organizationId);
-  const uid = Number(userId);
-  if (!Number.isFinite(orgId) || !Number.isFinite(uid)) {
-    throw new Error('organizationId and userId are required');
-  }
-  const membershipRole = normalizeMembershipRole(role);
-  const membershipStatus = normalizeMembershipStatus(status);
-  await db.query(
-    `INSERT INTO organization_memberships (
-       organization_id,
-       user_id,
-       role,
-       status,
-       invited_by_user_id,
-       created_at,
-       updated_at
-     )
-     VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-     ON CONFLICT (organization_id, user_id) DO UPDATE SET
-       role = EXCLUDED.role,
-       status = EXCLUDED.status,
-       invited_by_user_id = COALESCE(EXCLUDED.invited_by_user_id, organization_memberships.invited_by_user_id),
-       updated_at = CURRENT_TIMESTAMP`,
-    [orgId, uid, membershipRole, membershipStatus, invitedByUserId],
-  );
-  return {
-    organizationId: orgId,
-    userId: uid,
-    role: membershipRole,
-    status: membershipStatus,
-  };
 }
 
 /**
@@ -305,26 +196,14 @@ async function createOrganization(db, { name, spotifyClientId, spotifyClientSecr
 async function setUserOrganizationId(db, userId, organizationId) {
   if (!db) throw new Error('DATABASE_URL required');
   await ensureOrganizationsTable(db);
-  const uid = Number(userId);
-  if (!Number.isFinite(uid)) throw new Error('userId is required');
   if (organizationId == null) {
-    await db.query('UPDATE users SET organization_id = NULL WHERE id = $1', [uid]);
-    await db.query('DELETE FROM organization_memberships WHERE user_id = $1', [uid]);
-    return { ok: true, userId: uid, organizationId: null };
+    await db.query('UPDATE users SET organization_id = NULL WHERE id = $1', [userId]);
+    return { ok: true, userId, organizationId: null };
   }
-  const orgId = Number(organizationId);
-  if (!Number.isFinite(orgId)) throw new Error('organizationId is required');
-  const check = await db.query('SELECT owner_user_id FROM organizations WHERE id = $1', [orgId]);
+  const check = await db.query('SELECT 1 FROM organizations WHERE id = $1', [organizationId]);
   if (check.rows.length === 0) throw new Error('organization not found');
-  await db.query('UPDATE users SET organization_id = $2 WHERE id = $1', [uid, orgId]);
-  await db.query('DELETE FROM organization_memberships WHERE user_id = $1 AND organization_id <> $2', [uid, orgId]);
-  await upsertOrganizationMembership(db, {
-    organizationId: orgId,
-    userId: uid,
-    role: sameUserId(check.rows[0].owner_user_id, uid) ? 'owner' : 'host',
-    status: 'active',
-  });
-  return { ok: true, userId: uid, organizationId: orgId };
+  await db.query('UPDATE users SET organization_id = $2 WHERE id = $1', [userId, organizationId]);
+  return { ok: true, userId, organizationId };
 }
 
 const MAX_VENUE = {
@@ -478,17 +357,6 @@ async function resolveOrganizationRole(db, organizationId, userId) {
   const orgId = Number(organizationId);
   const uid = Number(userId);
   if (!Number.isFinite(orgId) || !Number.isFinite(uid)) return 'host';
-  const membership = await db.query(
-    `SELECT role, status
-     FROM organization_memberships
-     WHERE organization_id = $1 AND user_id = $2 AND status <> 'removed'
-     ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, updated_at DESC
-     LIMIT 1`,
-    [orgId, uid],
-  );
-  if (membership.rows.length > 0) {
-    return normalizeMembershipRole(membership.rows[0].role);
-  }
   const r = await db.query(
     `SELECT owner_user_id FROM organizations WHERE id = $1`,
     [orgId]
@@ -507,12 +375,6 @@ async function resolveOrganizationRole(db, organizationId, userId) {
       orgId,
       uid,
     ]);
-    await upsertOrganizationMembership(db, {
-      organizationId: orgId,
-      userId: uid,
-      role: 'owner',
-      status: 'active',
-    });
     return 'owner';
   }
   return 'host';
@@ -522,51 +384,6 @@ async function getUserOrganizationContext(db, userId) {
   if (!db || userId == null) return { organization: null, role: null, membership: null };
   await ensureOrganizationsTable(db);
   const uid = Number(userId);
-  const membershipRow = await db.query(
-    `SELECT
-       om.organization_id,
-       om.role,
-       om.status,
-       om.created_at AS membership_created_at,
-       om.updated_at AS membership_updated_at,
-       u.id AS user_id,
-       u.email,
-       o.id,
-       o.name,
-       o.spotify_client_id,
-       o.created_at,
-       o.venue_settings,
-       o.owner_user_id,
-       o.billing_status,
-       o.lifetime_paid_cents,
-       o.last_payment_at
-     FROM organization_memberships om
-     JOIN users u ON u.id = om.user_id
-     JOIN organizations o ON o.id = om.organization_id
-     WHERE om.user_id = $1 AND om.status <> 'removed'
-     ORDER BY
-       CASE WHEN om.status = 'active' THEN 0 ELSE 1 END,
-       CASE WHEN om.role = 'owner' THEN 0 ELSE 1 END,
-       om.updated_at DESC
-     LIMIT 1`,
-    [uid],
-  );
-  if (membershipRow.rows.length > 0) {
-    const row = membershipRow.rows[0];
-    return {
-      organization: orgRowToSummary(row),
-      role: normalizeMembershipRole(row.role, sameUserId(row.owner_user_id, uid) ? 'owner' : 'host'),
-      membership: {
-        userId: row.user_id,
-        email: row.email,
-        organizationId: row.organization_id,
-        role: normalizeMembershipRole(row.role, sameUserId(row.owner_user_id, uid) ? 'owner' : 'host'),
-        status: normalizeMembershipStatus(row.status),
-        createdAt: row.membership_created_at,
-        updatedAt: row.membership_updated_at,
-      },
-    };
-  }
   const u = await db.query(
     'SELECT id, email, display_name, organization_id FROM users WHERE id = $1',
     [uid]
@@ -584,13 +401,7 @@ async function getUserOrganizationContext(db, userId) {
       return {
         organization: orgRowToSummary(owned.rows[0]),
         role: 'owner',
-        membership: {
-          userId: user.id,
-          email: user.email,
-          organizationId: owned.rows[0].id,
-          role: 'owner',
-          status: 'active',
-        },
+        membership: { userId: user.id, email: user.email, organizationId: owned.rows[0].id },
       };
     }
     return { organization: null, role: null, membership: null };
@@ -604,13 +415,7 @@ async function getUserOrganizationContext(db, userId) {
   return {
     organization: org,
     role,
-    membership: {
-      userId: user.id,
-      email: user.email,
-      organizationId: orgId,
-      role,
-      status: 'active',
-    },
+    membership: { userId: user.id, email: user.email, organizationId: orgId },
   };
 }
 
@@ -645,12 +450,6 @@ async function createSelfServeOrganization(db, { name, ownerUserId }) {
   );
   const org = orgRowToSummary(r.rows[0]);
   await db.query('UPDATE users SET organization_id = $2 WHERE id = $1', [uid, org.id]);
-  await upsertOrganizationMembership(db, {
-    organizationId: org.id,
-    userId: uid,
-    role: 'owner',
-    status: 'active',
-  });
   if (ownerEmail) {
     await usersStore.addHostAllowlistEmail(db, ownerEmail);
   }
@@ -687,12 +486,6 @@ async function claimOrganizationOwnership(db, userId, organizationId) {
   const members = await db.query('SELECT id FROM users WHERE organization_id = $1', [orgId]);
   if (members.rows.length === 1 && sameUserId(members.rows[0].id, uid)) {
     await db.query('UPDATE organizations SET owner_user_id = $2 WHERE id = $1', [orgId, uid]);
-    await upsertOrganizationMembership(db, {
-      organizationId: orgId,
-      userId: uid,
-      role: 'owner',
-      status: 'active',
-    });
     return { ok: true, organizationId: orgId, role: 'owner' };
   }
 
@@ -705,47 +498,17 @@ async function listOrganizationMembers(db, organizationId) {
   if (!db || organizationId == null) return [];
   await ensureOrganizationsTable(db);
   const r = await db.query(
-    `SELECT
-       u.id,
-       u.email,
-       u.display_name,
-       u.created_at,
-       om.role,
-       om.status,
-       om.created_at AS membership_created_at,
-       om.updated_at AS membership_updated_at
-     FROM organization_memberships om
-     JOIN users u ON u.id = om.user_id
-     WHERE om.organization_id = $1 AND om.status <> 'removed'
-     ORDER BY CASE WHEN om.role = 'owner' THEN 0 ELSE 1 END, u.id ASC`,
+    `SELECT id, email, display_name, created_at
+     FROM users
+     WHERE organization_id = $1
+     ORDER BY id ASC`,
     [organizationId]
   );
-  if (r.rows.length === 0) {
-    const fallback = await db.query(
-      `SELECT id, email, display_name, created_at
-       FROM users
-       WHERE organization_id = $1
-       ORDER BY id ASC`,
-      [organizationId]
-    );
-    return fallback.rows.map((row) => ({
-      id: row.id,
-      email: row.email,
-      displayName: row.display_name,
-      createdAt: row.created_at,
-      role: 'host',
-      status: 'active',
-    }));
-  }
   return r.rows.map((row) => ({
     id: row.id,
     email: row.email,
     displayName: row.display_name,
     createdAt: row.created_at,
-    role: normalizeMembershipRole(row.role),
-    status: normalizeMembershipStatus(row.status),
-    membershipCreatedAt: row.membership_created_at,
-    membershipUpdatedAt: row.membership_updated_at,
   }));
 }
 
@@ -788,17 +551,6 @@ async function inviteHostToOrganization(db, { organizationId, email, invitedByUs
       existingUser.rows[0].id,
       orgId,
     ]);
-    await db.query('DELETE FROM organization_memberships WHERE user_id = $1 AND organization_id <> $2', [
-      existingUser.rows[0].id,
-      orgId,
-    ]);
-    await upsertOrganizationMembership(db, {
-      organizationId: orgId,
-      userId: existingUser.rows[0].id,
-      role: 'host',
-      status: 'active',
-      invitedByUserId,
-    });
   }
   return { email: norm, organizationId: orgId };
 }
@@ -837,16 +589,6 @@ async function applyPendingInvitesForUser(db, userId, email) {
   if (inv.rows.length === 0) return null;
   const orgId = inv.rows[0].organization_id;
   await db.query('UPDATE users SET organization_id = $2 WHERE id = $1', [userId, orgId]);
-  await db.query('DELETE FROM organization_memberships WHERE user_id = $1 AND organization_id <> $2', [
-    userId,
-    orgId,
-  ]);
-  await upsertOrganizationMembership(db, {
-    organizationId: orgId,
-    userId,
-    role: 'host',
-    status: 'active',
-  });
   await usersStore.addHostAllowlistEmail(db, norm);
   return orgId;
 }
@@ -915,7 +657,6 @@ module.exports = {
   createOrganization,
   createSelfServeOrganization,
   setUserOrganizationId,
-  upsertOrganizationMembership,
   getOrganizationById,
   getUserOrganizationContext,
   isOrganizationOwner,
