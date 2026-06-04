@@ -179,6 +179,31 @@ const PlayerView: React.FC = () => {
     });
   };
 
+  type PlayerCardTheme = 'dark' | 'light';
+  const CARD_THEME_STORAGE_KEY = 'player_card_theme';
+
+  const [cardTheme, setCardTheme] = useState<PlayerCardTheme>(() => {
+    try {
+      const stored = localStorage.getItem(CARD_THEME_STORAGE_KEY);
+      if (stored === 'light' || stored === 'dark') return stored;
+    } catch {
+      /* ignore */
+    }
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches) {
+      return 'light';
+    }
+    return 'dark';
+  });
+
+  const chooseCardTheme = (theme: PlayerCardTheme) => {
+    setCardTheme(theme);
+    try {
+      localStorage.setItem(CARD_THEME_STORAGE_KEY, theme);
+    } catch {
+      /* ignore */
+    }
+  };
+
   /** Extra bottom inset when browser UI (e.g. Safari toolbar) overlaps the layout viewport — not covered by safe-area alone. */
   const [visualBottomGapPx, setVisualBottomGapPx] = useState(0);
 
@@ -1854,7 +1879,7 @@ const PlayerView: React.FC = () => {
 
   return (
     <div
-      className={`player-container player-container--v2 ${bingoCard ? 'has-card' : ''}${venueBranding ? ' player-container--venue' : ''}${compactCardCells ? ' player-container--compact-cells' : ''}`}
+      className={`player-container player-container--v2 ${bingoCard ? 'has-card' : ''}${venueBranding ? ' player-container--venue' : ''}${compactCardCells ? ' player-container--compact-cells' : ''}${cardTheme === 'light' ? ' player-container--light' : ''}`}
       style={{
         '--player-card-font-scale': cardFontPercent / 100,
         '--player-visual-bottom-gap': `${visualBottomGapPx}px`,
@@ -2081,6 +2106,33 @@ const PlayerView: React.FC = () => {
                     >
                       Done
                     </button>
+                  </div>
+
+                  <div className="player-v2-sheet-row">
+                    <div className="player-v2-sheet-copy">
+                      <div className="player-v2-sheet-label">Card appearance</div>
+                      <div className="player-v2-sheet-note">
+                        Dark or light styling for the card and controls.
+                      </div>
+                    </div>
+                    <div className="player-v2-theme-toggle" role="group" aria-label="Card appearance">
+                      <button
+                        type="button"
+                        className={`player-v2-theme-btn${cardTheme === 'dark' ? ' player-v2-theme-btn--active' : ''}`}
+                        aria-pressed={cardTheme === 'dark'}
+                        onClick={() => chooseCardTheme('dark')}
+                      >
+                        Dark
+                      </button>
+                      <button
+                        type="button"
+                        className={`player-v2-theme-btn${cardTheme === 'light' ? ' player-v2-theme-btn--active' : ''}`}
+                        aria-pressed={cardTheme === 'light'}
+                        onClick={() => chooseCardTheme('light')}
+                      >
+                        Light
+                      </button>
+                    </div>
                   </div>
 
                   <div className="player-v2-sheet-row">
