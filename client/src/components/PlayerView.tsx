@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { useParams, useSearchParams } from 'react-router-dom';
 import io from 'socket.io-client';
@@ -1877,6 +1878,7 @@ const PlayerView: React.FC = () => {
   };
 
   return (
+    <>
     <div
       className={`player-container player-container--v2 ${bingoCard ? 'has-card' : ''}${venueBranding ? ' player-container--venue' : ''}${compactCardCells ? ' player-container--compact-cells' : ''}${cardTheme === 'light' ? ' player-container--light' : ''}`}
       style={{
@@ -2050,164 +2052,6 @@ const PlayerView: React.FC = () => {
               </motion.div>
             ) : null}
 
-            {optionsOpen && (
-              <div
-                className="player-v2-sheet-backdrop"
-                onClick={() => setOptionsOpen(false)}
-              >
-                <motion.div
-                  className="player-v2-sheet player-v2-glass-panel"
-                  initial={{ opacity: 0, y: 24 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.22 }}
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <div className="player-v2-sheet-handle" aria-hidden />
-                  <div className="player-v2-sheet-header">
-                    <div className="player-v2-sheet-header-copy">
-                      <div className="player-v2-sheet-title">Options</div>
-                    </div>
-                    <button
-                      type="button"
-                      className="player-v2-sheet-done"
-                      onClick={() => setOptionsOpen(false)}
-                    >
-                      Done
-                    </button>
-                  </div>
-
-                  <div className="player-v2-sheet-row">
-                    <div className="player-v2-sheet-copy">
-                      <div className="player-v2-sheet-label">Game status</div>
-                      <div className="player-v2-sheet-note">
-                        {playerSurfaceTitle}
-                        {playerSurfaceSubtitle ? ` · ${playerSurfaceSubtitle}` : ''}
-                      </div>
-                      <div className="player-v2-sheet-note">
-                        {currentPatternLabel}
-                        {gameState.isPlaying
-                          ? ` · Song ${Math.max(songsPlayed, playedSongIds.length)} / 75`
-                          : ''}
-                        {gameState.playerCount > 0 ? ` · ${gameState.playerCount} players` : ''}
-                      </div>
-                      <div className="player-v2-sheet-note">
-                        Long-press a square for artist and full song details.
-                      </div>
-                    </div>
-                    <div className={`player-v2-pill player-v2-pill--${connectionStatusTone}`}>{connectionStatusLabel}</div>
-                  </div>
-
-                  <div className="player-v2-sheet-row">
-                    <div className="player-v2-sheet-copy">
-                      <div className="player-v2-sheet-label">Card appearance</div>
-                      <div className="player-v2-sheet-note">
-                        Dark or light styling for the card and controls.
-                      </div>
-                    </div>
-                    <div className="player-v2-theme-toggle" role="group" aria-label="Card appearance">
-                      <button
-                        type="button"
-                        className={`player-v2-theme-btn${cardTheme === 'dark' ? ' player-v2-theme-btn--active' : ''}`}
-                        aria-pressed={cardTheme === 'dark'}
-                        onClick={() => chooseCardTheme('dark')}
-                      >
-                        Dark
-                      </button>
-                      <button
-                        type="button"
-                        className={`player-v2-theme-btn${cardTheme === 'light' ? ' player-v2-theme-btn--active' : ''}`}
-                        aria-pressed={cardTheme === 'light'}
-                        onClick={() => chooseCardTheme('light')}
-                      >
-                        Light
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="player-v2-sheet-row">
-                    <div className="player-v2-sheet-copy">
-                      <div className="player-v2-sheet-label">Text size</div>
-                      <div className="player-v2-sheet-note">
-                        Adjust square text without changing the overall card layout.
-                      </div>
-                    </div>
-                    <div className="player-v2-font-controls">
-                      <button
-                        type="button"
-                        className="player-font-btn"
-                        onClick={() => bumpCardFont(-CARD_FONT_STEP)}
-                        disabled={cardFontPercent <= CARD_FONT_MIN}
-                        aria-label="Decrease text scale"
-                        title="Smaller"
-                      >
-                        −
-                      </button>
-                      <span
-                        className="font-size-readout"
-                        title="Relative to the automatic size for this bingo card (70–150%)"
-                        aria-label={`Text scale ${cardFontPercent} percent`}
-                      >
-                        {cardFontPercent}%
-                      </span>
-                      <button
-                        type="button"
-                        className="player-font-btn"
-                        onClick={() => bumpCardFont(CARD_FONT_STEP)}
-                        disabled={cardFontPercent >= CARD_FONT_MAX}
-                        aria-label="Increase text scale"
-                        title="Larger"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="player-v2-sheet-row">
-                    <div className="player-v2-sheet-copy">
-                      <div className="player-v2-sheet-label">Reconnect card</div>
-                      <div className="player-v2-sheet-note">{resyncStatusDescription}</div>
-                    </div>
-                    <button
-                      type="button"
-                      className={`player-v2-inline-button player-v2-inline-button--${connectionStatusTone}`}
-                      onClick={handleResync}
-                    >
-                      Resync
-                    </button>
-                  </div>
-
-                  {venueBranding?.logoUrl ? (
-                    <div className="player-v2-sheet-venue">
-                      <img src={venueBranding.logoUrl} alt="" className="player-v2-sheet-venue-logo" />
-                    </div>
-                  ) : null}
-
-                  {hybridPrizeInPersonOnly && !inPersonJoin ? (
-                    <div className="player-v2-sheet-note-block">
-                      <strong>Online player:</strong> you can play along; when the host enables hybrid mode, the prize and
-                      round only finish when an <strong>in-person</strong> player wins.
-                    </div>
-                  ) : null}
-
-                  {venueBranding?.footerText ? (
-                    <div className="player-v2-sheet-note-block">{venueBranding.footerText}</div>
-                  ) : null}
-
-                  {venueBranding?.runbookUrl ? (
-                    <a
-                      href={venueBranding.runbookUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="player-v2-sheet-link"
-                    >
-                      Event runbook
-                    </a>
-                  ) : null}
-                </motion.div>
-              </div>
-            )}
-          </div>
-
           {connectionToast && (
             <motion.div
               className="player-connection-toast"
@@ -2282,9 +2126,182 @@ const PlayerView: React.FC = () => {
             <div className="player-longpress-tooltip-line">{longPressTooltip.artist}</div>
           </div>
         )}
+          </div>
         </div>
       </div>
     </div>
+
+    {optionsOpen && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            className={`player-v2-sheet-portal player-container--v2${cardTheme === 'light' ? ' player-container--light' : ''}${venueBranding ? ' player-container--venue' : ''}`}
+          >
+            <div
+              className="player-v2-sheet-backdrop"
+              onClick={() => setOptionsOpen(false)}
+            >
+              <motion.div
+                className="player-v2-sheet player-v2-glass-panel"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="player-v2-sheet-title"
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.22 }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="player-v2-sheet-handle" aria-hidden />
+                <div className="player-v2-sheet-header">
+                  <div className="player-v2-sheet-header-copy">
+                    <div className="player-v2-sheet-title" id="player-v2-sheet-title">
+                      Options
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="player-v2-sheet-done"
+                    onClick={() => setOptionsOpen(false)}
+                  >
+                    Done
+                  </button>
+                </div>
+
+                <div className="player-v2-sheet-row">
+                  <div className="player-v2-sheet-copy">
+                    <div className="player-v2-sheet-label">Game status</div>
+                    <div className="player-v2-sheet-note">
+                      {playerSurfaceTitle}
+                      {playerSurfaceSubtitle ? ` · ${playerSurfaceSubtitle}` : ''}
+                    </div>
+                    <div className="player-v2-sheet-note">
+                      {currentPatternLabel}
+                      {gameState.isPlaying
+                        ? ` · Song ${Math.max(songsPlayed, playedSongIds.length)} / 75`
+                        : ''}
+                      {gameState.playerCount > 0 ? ` · ${gameState.playerCount} players` : ''}
+                    </div>
+                    <div className="player-v2-sheet-note">
+                      Long-press a square for artist and full song details.
+                    </div>
+                  </div>
+                  <div className={`player-v2-pill player-v2-pill--${connectionStatusTone}`}>
+                    {connectionStatusLabel}
+                  </div>
+                </div>
+
+                <div className="player-v2-sheet-row">
+                  <div className="player-v2-sheet-copy">
+                    <div className="player-v2-sheet-label">Card appearance</div>
+                    <div className="player-v2-sheet-note">
+                      Dark or light styling for the card and controls.
+                    </div>
+                  </div>
+                  <div className="player-v2-theme-toggle" role="group" aria-label="Card appearance">
+                    <button
+                      type="button"
+                      className={`player-v2-theme-btn${cardTheme === 'dark' ? ' player-v2-theme-btn--active' : ''}`}
+                      aria-pressed={cardTheme === 'dark'}
+                      onClick={() => chooseCardTheme('dark')}
+                    >
+                      Dark
+                    </button>
+                    <button
+                      type="button"
+                      className={`player-v2-theme-btn${cardTheme === 'light' ? ' player-v2-theme-btn--active' : ''}`}
+                      aria-pressed={cardTheme === 'light'}
+                      onClick={() => chooseCardTheme('light')}
+                    >
+                      Light
+                    </button>
+                  </div>
+                </div>
+
+                <div className="player-v2-sheet-row">
+                  <div className="player-v2-sheet-copy">
+                    <div className="player-v2-sheet-label">Text size</div>
+                    <div className="player-v2-sheet-note">
+                      Adjust square text without changing the overall card layout.
+                    </div>
+                  </div>
+                  <div className="player-v2-font-controls">
+                    <button
+                      type="button"
+                      className="player-font-btn"
+                      onClick={() => bumpCardFont(-CARD_FONT_STEP)}
+                      disabled={cardFontPercent <= CARD_FONT_MIN}
+                      aria-label="Decrease text scale"
+                      title="Smaller"
+                    >
+                      −
+                    </button>
+                    <span
+                      className="font-size-readout"
+                      title="Relative to the automatic size for this bingo card (70–150%)"
+                      aria-label={`Text scale ${cardFontPercent} percent`}
+                    >
+                      {cardFontPercent}%
+                    </span>
+                    <button
+                      type="button"
+                      className="player-font-btn"
+                      onClick={() => bumpCardFont(CARD_FONT_STEP)}
+                      disabled={cardFontPercent >= CARD_FONT_MAX}
+                      aria-label="Increase text scale"
+                      title="Larger"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <div className="player-v2-sheet-row">
+                  <div className="player-v2-sheet-copy">
+                    <div className="player-v2-sheet-label">Reconnect card</div>
+                    <div className="player-v2-sheet-note">{resyncStatusDescription}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className={`player-v2-inline-button player-v2-inline-button--${connectionStatusTone}`}
+                    onClick={handleResync}
+                  >
+                    Resync
+                  </button>
+                </div>
+
+                {venueBranding?.logoUrl ? (
+                  <div className="player-v2-sheet-venue">
+                    <img src={venueBranding.logoUrl} alt="" className="player-v2-sheet-venue-logo" />
+                  </div>
+                ) : null}
+
+                {hybridPrizeInPersonOnly && !inPersonJoin ? (
+                  <div className="player-v2-sheet-note-block">
+                    <strong>Online player:</strong> you can play along; when the host enables hybrid mode, the prize and
+                    round only finish when an <strong>in-person</strong> player wins.
+                  </div>
+                ) : null}
+
+                {venueBranding?.footerText ? (
+                  <div className="player-v2-sheet-note-block">{venueBranding.footerText}</div>
+                ) : null}
+
+                {venueBranding?.runbookUrl ? (
+                  <a
+                    href={venueBranding.runbookUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="player-v2-sheet-link"
+                  >
+                    Event runbook
+                  </a>
+                ) : null}
+              </motion.div>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null}
+    </>
   );
 };
 
