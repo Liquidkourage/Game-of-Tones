@@ -87,6 +87,13 @@ export function cleanSongTitle(title: string, options: CleanTitleOptions = DEFAU
     cleaned = cleaned.replace(/\s*-\s*instrumental\s*$/i, '');
     cleaned = cleaned.replace(/\s*-\s*acoustic\s*$/i, '');
     cleaned = cleaned.replace(/\s*-\s*studio\s*version\s*$/i, '');
+    cleaned = cleaned.replace(/\s*-\s*deluxe\s+edition\s*$/i, '');
+    cleaned = cleaned.replace(/\s*-\s*super\s+deluxe\s+edition\s*$/i, '');
+    cleaned = cleaned.replace(/\s*-\s*super\s+deluxe\s*$/i, '');
+    cleaned = cleaned.replace(/\s*-\s*deluxe\s*$/i, '');
+    cleaned = cleaned.replace(/\s*-\s*digital\s+remaster\s*$/i, '');
+    cleaned = cleaned.replace(/\s*-\s*anniversary\s+edition\s*$/i, '');
+    cleaned = cleaned.replace(/\s*-\s*bonus\s+track\s*$/i, '');
     cleaned = cleaned.replace(/\s*\(single\s*version\)\s*$/i, '');
     cleaned = cleaned.replace(/\s*\(radio\s*edit\)\s*$/i, '');
     cleaned = cleaned.replace(/\s*\(album\s*version\)\s*$/i, '');
@@ -94,6 +101,11 @@ export function cleanSongTitle(title: string, options: CleanTitleOptions = DEFAU
     cleaned = cleaned.replace(/\s*\(instrumental\)\s*$/i, '');
     cleaned = cleaned.replace(/\s*\(acoustic\)\s*$/i, '');
     cleaned = cleaned.replace(/\s*\(studio\s*version\)\s*$/i, '');
+    cleaned = cleaned.replace(/\s*\(deluxe\s+edition\)\s*$/i, '');
+    cleaned = cleaned.replace(/\s*\(super\s+deluxe[^)]*\)\s*$/i, '');
+    cleaned = cleaned.replace(/\s*\(deluxe\)\s*$/i, '');
+    cleaned = cleaned.replace(/\s*\(digital\s+remaster\)\s*$/i, '');
+    cleaned = cleaned.replace(/\s*\(anniversary\s+edition\)\s*$/i, '');
   }
 
   // Remove years (standalone or in parentheses)

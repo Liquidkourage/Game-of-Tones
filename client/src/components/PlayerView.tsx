@@ -5,7 +5,10 @@ import io from 'socket.io-client';
 import { SOCKET_URL } from '../config';
 import { youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
 import { patchSquaresWithAlias, patchSquaresClearAlias } from '../utils/songAliasDisplay';
-import { softHyphenateLongWords, stripSoftHyphens } from '../utils/softHyphenateLongWords';
+import { stripSoftHyphens } from '../utils/softHyphenateLongWords';
+
+/** Narrow phones / fold cover: title-only cells; artist via long-press. */
+const PLAYER_COMPACT_VIEWPORT_PX = 400;
 import {
   STANDARD_BINGO_POSITIONS,
   validateBingoCardGrid,
@@ -190,10 +193,16 @@ const PlayerView: React.FC = () => {
     return window.innerHeight;
   });
 
+  const [compactCardCells, setCompactCardCells] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth <= PLAYER_COMPACT_VIEWPORT_PX;
+  });
+
   useLayoutEffect(() => {
     const vv = window.visualViewport;
     if (!vv) {
       setVisualViewportHeightPx(Math.round(window.innerHeight * 10) / 10);
+      setCompactCardCells(window.innerWidth <= PLAYER_COMPACT_VIEWPORT_PX);
       return undefined;
     }
 
@@ -240,6 +249,10 @@ const PlayerView: React.FC = () => {
         const next = Math.round(applied * 10) / 10;
         return Math.abs(prev - next) < 0.5 ? prev : next;
       });
+
+      const layoutWidth = Math.round(v.width * 10) / 10;
+      const compact = layoutWidth <= PLAYER_COMPACT_VIEWPORT_PX;
+      setCompactCardCells((prev) => (prev === compact ? prev : compact));
     };
 
     measure();
@@ -938,186 +951,204 @@ const PlayerView: React.FC = () => {
 
     const gridEl = cardGridRef.current;
     let frame = 0;
-    let queuedSquares: HTMLElement[] = [];
-    let queuedIndex = 0;
     let cancelled = false;
 
-    const fitSquare = (squareEl: HTMLElement) => {
-      const contentEl = squareEl.querySelector<HTMLElement>('.square-content');
-      const titleEl = squareEl.querySelector<HTMLElement>('.player-square-title');
-      const artistEl = squareEl.querySelector<HTMLElement>('.player-square-artist');
-      if (!contentEl || !titleEl || !artistEl) return;
-      const titleText = stripSoftHyphens(titleEl.textContent || '').trim();
-      const artistText = stripSoftHyphens(artistEl.textContent || '').trim();
+    /** ~Discord body (~16px) at typical card width; cap stops short-title blow-up. */
+    const TITLE_SCALE_MAX = 1.06;
+    const TITLE_SCALE_PREFERRED_MIN = 0.78;
+    const TITLE_SCALE_ABSOLUTE_MIN = 0.58;
+    const ARTIST_MIN_SCALE = 0.34;
+    const titleOnlyCells = compactCardCells;
 
-      const setScales = (titleScale: number, artistScale: number) => {
-        squareEl.style.setProperty('--player-cell-title-scale', titleScale.toFixed(4));
-        squareEl.style.setProperty('--player-cell-artist-scale', artistScale.toFixed(4));
-      };
-
-      const fitsAtScales = (titleScale: number, artistScale: number) => {
-        setScales(titleScale, artistScale);
-        return (
-          contentEl.scrollHeight <= contentEl.clientHeight + 1 &&
-          titleEl.scrollWidth <= titleEl.clientWidth + 1 &&
-          artistEl.scrollWidth <= artistEl.clientWidth + 1
-        );
-      };
-
-      const getLineCount = (el: HTMLElement) => {
-        const computed = window.getComputedStyle(el);
-        const lineHeight = Number.parseFloat(computed.lineHeight || '0');
-        if (!Number.isFinite(lineHeight) || lineHeight <= 0) return 1;
-        return Math.max(1, Math.round(el.getBoundingClientRect().height / lineHeight));
-      };
-      const getWordCount = (text: string) => {
-        const normalized = text.trim();
-        return normalized ? normalized.split(/\s+/).length : 0;
-      };
-      const getLongestWordLength = (text: string) => {
-        const words: string[] = text.match(/[A-Za-z]+/g) ?? [];
-        return words.reduce((max: number, word: string) => Math.max(max, word.length), 0);
-      };
-      const derivePreferredTitleMaxLines = (text: string) => {
-        const charCount = text.length;
-        const wordCount = getWordCount(text);
-        const longestWord = getLongestWordLength(text);
+    const getLineCount = (el: HTMLElement) => {
+      const computed = window.getComputedStyle(el);
+      const lineHeight = Number.parseFloat(computed.lineHeight || '0');
+      if (!Number.isFinite(lineHeight) || lineHeight <= 0) return 1;
+      return Math.max(1, Math.round(el.getBoundingClientRect().height / lineHeight));
+    };
+    const getWordCount = (text: string) => {
+      const normalized = text.trim();
+      return normalized ? normalized.split(/\s+/).length : 0;
+    };
+    const getLongestWordLength = (text: string) => {
+      const words: string[] = text.match(/[A-Za-z]+/g) ?? [];
+      return words.reduce((max: number, word: string) => Math.max(max, word.length), 0);
+    };
+    const derivePreferredTitleMaxLines = (text: string) => {
+      const charCount = text.length;
+      const wordCount = getWordCount(text);
+      const longestWord = getLongestWordLength(text);
+      if (titleOnlyCells) {
         if (wordCount <= 2 && charCount <= 14 && longestWord < 8) return 2;
-        if (wordCount >= 5 || charCount >= 24 || longestWord >= 11) return 4;
+        if (wordCount >= 5 || charCount >= 24 || longestWord >= 11) return 3;
         return 3;
+      }
+      if (wordCount <= 2 && charCount <= 14 && longestWord < 8) return 2;
+      if (wordCount >= 5 || charCount >= 24 || longestWord >= 11) return 4;
+      return 3;
+    };
+    const derivePreferredArtistMaxLines = (text: string) => {
+      if (titleOnlyCells || !text.trim()) return 0;
+      const charCount = text.length;
+      const wordCount = getWordCount(text);
+      const longestWord = getLongestWordLength(text);
+      if (wordCount <= 2 && charCount <= 16 && longestWord < 10) return 1;
+      return 2;
+    };
+
+    const fitCardText = () => {
+      const squareEls = Array.from(gridEl.querySelectorAll<HTMLElement>('.bingo-square'));
+      if (squareEls.length === 0) {
+        if (!cancelled) setCardTextFitReady(true);
+        return;
+      }
+
+      type SquareCtx = {
+        el: HTMLElement;
+        contentEl: HTMLElement;
+        titleEl: HTMLElement;
+        artistEl: HTMLElement;
+        titleMaxLines: number;
+        artistMaxLines: number;
       };
-      const derivePreferredArtistMaxLines = (text: string) => {
-        const charCount = text.length;
-        const wordCount = getWordCount(text);
-        const longestWord = getLongestWordLength(text);
-        if (wordCount <= 2 && charCount <= 16 && longestWord < 10) return 1;
-        return 2;
+
+      const contexts: SquareCtx[] = [];
+      for (const squareEl of squareEls) {
+        const contentEl = squareEl.querySelector<HTMLElement>('.square-content');
+        const titleEl = squareEl.querySelector<HTMLElement>('.player-square-title');
+        const artistEl = squareEl.querySelector<HTMLElement>('.player-square-artist');
+        if (!contentEl || !titleEl || !artistEl) continue;
+        const titleText = stripSoftHyphens(titleEl.textContent || '').trim();
+        const artistText = stripSoftHyphens(artistEl.textContent || '').trim();
+        contexts.push({
+          el: squareEl,
+          contentEl,
+          titleEl,
+          artistEl,
+          titleMaxLines: derivePreferredTitleMaxLines(titleText),
+          artistMaxLines: derivePreferredArtistMaxLines(artistText),
+        });
+      }
+
+      const setScales = (ctx: SquareCtx, titleScale: number, artistScale: number) => {
+        ctx.el.style.setProperty('--player-cell-title-scale', titleScale.toFixed(4));
+        ctx.el.style.setProperty('--player-cell-artist-scale', artistScale.toFixed(4));
       };
-      const fitsWithinLineCaps = (
+
+      const fitsAtScales = (
+        ctx: SquareCtx,
         titleScale: number,
         artistScale: number,
         titleMaxLines: number,
         artistMaxLines: number,
       ) => {
-        if (!fitsAtScales(titleScale, artistScale)) return false;
-        return (
-          getLineCount(titleEl) <= titleMaxLines &&
-          getLineCount(artistEl) <= artistMaxLines
-        );
+        setScales(ctx, titleScale, artistScale);
+        if (ctx.contentEl.scrollHeight > ctx.contentEl.clientHeight + 1) return false;
+        if (ctx.titleEl.scrollWidth > ctx.titleEl.clientWidth + 1) return false;
+        if (titleMaxLines > 0 && getLineCount(ctx.titleEl) > titleMaxLines) return false;
+        if (titleOnlyCells || artistMaxLines === 0 || !ctx.artistEl.textContent?.trim()) {
+          return true;
+        }
+        if (ctx.artistEl.scrollWidth > ctx.artistEl.clientWidth + 1) return false;
+        return getLineCount(ctx.artistEl) <= artistMaxLines;
       };
-      const ARTIST_MIN_SCALE = 0.34;
-      const deriveArtistScale = (titleScale: number) => Math.min(0.94, Math.max(ARTIST_MIN_SCALE, titleScale * 0.56));
 
-      const findBestTitleScale = (titleMaxLines: number, artistMaxLines: number) => {
-        let titleLow = 0.28;
-        let titleHigh = 1.95;
+      const findMaxTitleScale = (ctx: SquareCtx) => {
+        let titleLow = TITLE_SCALE_ABSOLUTE_MIN;
+        let titleHigh = TITLE_SCALE_MAX;
         const fits = (titleScale: number) =>
-          fitsWithinLineCaps(titleScale, ARTIST_MIN_SCALE, titleMaxLines, artistMaxLines);
+          fitsAtScales(ctx, titleScale, ARTIST_MIN_SCALE, ctx.titleMaxLines, ctx.artistMaxLines);
 
-        if (!fits(titleLow)) {
-          return null;
-        }
+        if (!fits(titleLow)) return TITLE_SCALE_ABSOLUTE_MIN;
 
-        fits(titleHigh);
-        for (let i = 0; i < 10; i += 1) {
-          const mid = (titleLow + titleHigh) / 2;
-          if (fits(mid)) {
-            titleLow = mid;
-          } else {
-            titleHigh = mid;
+        if (!fits(titleHigh)) {
+          for (let i = 0; i < 10; i += 1) {
+            const mid = (titleLow + titleHigh) / 2;
+            if (fits(mid)) {
+              titleLow = mid;
+            } else {
+              titleHigh = mid;
+            }
           }
+          return titleLow;
         }
 
-        return titleLow;
+        return TITLE_SCALE_MAX;
       };
 
-      const preferredTitleMaxLines = derivePreferredTitleMaxLines(titleText);
-      const preferredArtistMaxLines = derivePreferredArtistMaxLines(artistText);
-      const primaryTitleScale = findBestTitleScale(preferredTitleMaxLines, preferredArtistMaxLines);
-      const expandedTitleScale =
-        preferredTitleMaxLines < 4
-          ? findBestTitleScale(preferredTitleMaxLines + 1, preferredArtistMaxLines)
-          : null;
+      const perSquareTitleScales = contexts.map((ctx) => findMaxTitleScale(ctx));
+      let uniformTitleScale = Math.min(...perSquareTitleScales, TITLE_SCALE_MAX);
+      uniformTitleScale = Math.max(uniformTitleScale, TITLE_SCALE_PREFERRED_MIN);
 
-      const bestTitleScale =
-        expandedTitleScale != null &&
-        (primaryTitleScale == null || expandedTitleScale >= primaryTitleScale * 1.08)
-          ? expandedTitleScale
-          : primaryTitleScale ?? expandedTitleScale;
-      const activeTitleMaxLines =
-        expandedTitleScale != null &&
-        bestTitleScale === expandedTitleScale &&
-        (primaryTitleScale == null || expandedTitleScale >= primaryTitleScale * 1.08)
-          ? preferredTitleMaxLines + 1
-          : preferredTitleMaxLines;
+      const allFitAtTitle = (titleScale: number) =>
+        contexts.every((ctx) =>
+          fitsAtScales(ctx, titleScale, ARTIST_MIN_SCALE, ctx.titleMaxLines, ctx.artistMaxLines),
+        );
 
-      if (bestTitleScale == null) {
-        setScales(0.28, ARTIST_MIN_SCALE);
-        return;
+      if (!allFitAtTitle(uniformTitleScale)) {
+        uniformTitleScale = Math.max(Math.min(...perSquareTitleScales), TITLE_SCALE_ABSOLUTE_MIN);
       }
 
-      let artistLow = deriveArtistScale(bestTitleScale);
-      let artistHigh = Math.min(1.02, bestTitleScale * 0.74);
-      const fitsArtist = (artistScale: number) =>
-        fitsWithinLineCaps(bestTitleScale, artistScale, activeTitleMaxLines, preferredArtistMaxLines);
-
-      if (!fitsArtist(artistLow)) {
-        artistLow = Math.max(ARTIST_MIN_SCALE, artistLow * 0.88);
-        setScales(bestTitleScale, artistLow);
-        return;
+      for (const ctx of contexts) {
+        setScales(ctx, uniformTitleScale, ARTIST_MIN_SCALE);
       }
 
-      fitsArtist(artistHigh);
-      for (let i = 0; i < 8; i += 1) {
-        const mid = (artistLow + artistHigh) / 2;
-        if (fitsArtist(mid)) {
-          artistLow = mid;
-        } else {
-          artistHigh = mid;
+      if (!titleOnlyCells) {
+        const findMaxArtistScale = (ctx: SquareCtx) => {
+          if (ctx.artistMaxLines === 0 || !ctx.artistEl.textContent?.trim()) {
+            return ARTIST_MIN_SCALE;
+          }
+          let artistLow = ARTIST_MIN_SCALE;
+          let artistHigh = Math.min(1.02, uniformTitleScale * 0.74);
+          const fits = (artistScale: number) =>
+            fitsAtScales(ctx, uniformTitleScale, artistScale, ctx.titleMaxLines, ctx.artistMaxLines);
+
+          if (!fits(artistLow)) return ARTIST_MIN_SCALE;
+          if (fits(artistHigh)) return artistHigh;
+
+          for (let i = 0; i < 8; i += 1) {
+            const mid = (artistLow + artistHigh) / 2;
+            if (fits(mid)) {
+              artistLow = mid;
+            } else {
+              artistHigh = mid;
+            }
+          }
+          return artistLow;
+        };
+
+        const perSquareArtistScales = contexts.map((ctx) => findMaxArtistScale(ctx));
+        const uniformArtistScale = Math.min(...perSquareArtistScales);
+        for (const ctx of contexts) {
+          setScales(ctx, uniformTitleScale, uniformArtistScale);
         }
       }
 
-      setScales(bestTitleScale, artistLow);
+      if (!cancelled) setCardTextFitReady(true);
     };
 
-    const processFitQueue = () => {
-      if (cancelled) return;
-      frame = 0;
-      const frameStart = performance.now();
-      while (queuedIndex < queuedSquares.length && performance.now() - frameStart < 7) {
-        fitSquare(queuedSquares[queuedIndex]);
-        queuedIndex += 1;
-      }
-      if (queuedIndex < queuedSquares.length) {
-        frame = requestAnimationFrame(processFitQueue);
-      } else if (!cancelled) {
-        setCardTextFitReady(true);
-      }
-    };
-
-    const queueFit = () => {
-      cancelAnimationFrame(frame);
-      queuedSquares = Array.from(gridEl.querySelectorAll<HTMLElement>('.bingo-square'));
-      queuedIndex = 0;
-      frame = requestAnimationFrame(processFitQueue);
-    };
-
-    queueFit();
+    frame = requestAnimationFrame(fitCardText);
 
     const resizeObserver = new ResizeObserver(() => {
-      queueFit();
+      cancelAnimationFrame(frame);
+      setCardTextFitReady(false);
+      frame = requestAnimationFrame(fitCardText);
     });
     resizeObserver.observe(gridEl);
 
     const fontsReady = (document as Document & { fonts?: FontFaceSet }).fonts?.ready;
-    fontsReady?.then(() => queueFit()).catch(() => {});
+    fontsReady?.then(() => {
+      cancelAnimationFrame(frame);
+      setCardTextFitReady(false);
+      frame = requestAnimationFrame(fitCardText);
+    }).catch(() => {});
 
     return () => {
       cancelled = true;
       cancelAnimationFrame(frame);
       resizeObserver.disconnect();
     };
-  }, [cardTextFitSignature, cardFontPercent, visualViewportHeightPx]);
+  }, [cardTextFitSignature, cardFontPercent, visualViewportHeightPx, compactCardCells]);
 
   const handleResync = () => {
     if (!socket) return;
@@ -1178,7 +1209,7 @@ const PlayerView: React.FC = () => {
     if (navigator.vibrate) navigator.vibrate(10);
   };
 
-  // Long-press (touch) / hover (mouse): full title + artist in fixed panel — cells use soft hyphens for layout.
+  // Long-press (touch) / hover (mouse): full title + artist in fixed panel.
   const squareTooltipContent = (square: BingoSquare) => {
     const free = square.isFreeSpace || square.songId === '__FREE_SPACE__';
     const vis = youtubeBingoSquareDisplay(square);
@@ -1799,16 +1830,16 @@ const PlayerView: React.FC = () => {
               {(() => {
                 const free = square.isFreeSpace || square.songId === '__FREE_SPACE__';
                 const vis = youtubeBingoSquareDisplay(square);
-                const titleText = softHyphenateLongWords(free ? 'FREE' : vis.title);
-                const artistText = softHyphenateLongWords(
-                  free ? (venueBranding?.eventTitle?.trim() || 'Free space') : vis.artist,
-                );
+                const titleText = free ? 'FREE' : vis.title;
+                const artistText = free
+                  ? (venueBranding?.eventTitle?.trim() || 'Free space')
+                  : vis.artist;
                 return (
                   <div className="square-content">
-                    <div className="player-square-title" lang="en-US">
+                    <div className="player-square-title">
                       {titleText}
                     </div>
-                    <div className="player-square-artist" lang="en-US">
+                    <div className="player-square-artist">
                       {artistText}
                     </div>
                   </div>
@@ -1823,7 +1854,7 @@ const PlayerView: React.FC = () => {
 
   return (
     <div
-      className={`player-container player-container--v2 ${bingoCard ? 'has-card' : ''}${venueBranding ? ' player-container--venue' : ''}`}
+      className={`player-container player-container--v2 ${bingoCard ? 'has-card' : ''}${venueBranding ? ' player-container--venue' : ''}${compactCardCells ? ' player-container--compact-cells' : ''}`}
       style={{
         '--player-card-font-scale': cardFontPercent / 100,
         '--player-visual-bottom-gap': `${visualBottomGapPx}px`,
@@ -2000,7 +2031,11 @@ const PlayerView: React.FC = () => {
                 </button>
                 <div className="player-v2-action-footer">
                   <span className="player-v2-action-note">{currentPatternLabel}</span>
-                  <span className="player-v2-action-note">Long-press a square for full details</span>
+                  <span className="player-v2-action-note">
+                    {compactCardCells
+                      ? 'Long-press a square for artist & full details'
+                      : 'Long-press a square for full details'}
+                  </span>
                 </div>
               </motion.div>
             ) : null}
