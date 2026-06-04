@@ -5331,18 +5331,19 @@ button.conn-chip.conn-chip-compact {
 }
 
 .player-container--v2 .player-bingo-stage {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
   display: flex;
   flex-direction: column;
   align-self: stretch;
   padding: 0 clamp(4px, 1vw, 8px);
+  overflow: hidden;
 }
 
 .player-container--v2 .bingo-section-measure {
-  flex: 1 1 auto;
-  min-height: 0;
-  height: 100%;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
   display: flex;
   align-items: stretch;
   justify-content: center;
@@ -5526,6 +5527,7 @@ button.conn-chip.conn-chip-compact {
 .player-container--v2 .bingo-column-headers {
   gap: clamp(4px, 0.9vmin, 6px) !important;
   padding: 0 0 clamp(8px, 1.2vmin, 10px) !important;
+  flex-shrink: 0 !important;
 }
 
 .player-container--v2 .bingo-column-headers__cell {
@@ -5558,19 +5560,17 @@ button.conn-chip.conn-chip-compact {
   text-transform: uppercase;
 }
 
-.player-container--v2 .bingo-card-grid {
-  flex: 1 1 auto;
-  min-height: 0;
-  height: 100%;
+.player-container--v2 .bingo-card-grid,
+.player-container--v2 .bingo-card-grid--placeholder {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  width: 100% !important;
   grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
   grid-template-rows: repeat(5, minmax(0, 1fr)) !important;
   gap: clamp(4px, 0.9vmin, 6px) !important;
-}
-
-.player-container--v2 .bingo-card-grid--placeholder {
-  flex: 1 1 auto;
-  min-height: 0;
-  height: 100%;
+  aspect-ratio: unset !important;
+  margin: 0 !important;
 }
 
 .player-container--v2 .bingo-card .bingo-square {
@@ -5722,6 +5722,18 @@ button.conn-chip.conn-chip-compact {
   padding: 0 4px calc(env(safe-area-inset-bottom, 0px) + var(--player-visual-bottom-gap, 0px));
   margin-top: clamp(2px, 0.5vmin, 4px);
   overflow: visible;
+}
+
+.player-container--v2:not(.has-card) .player-rest {
+  flex: 0 0 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.player-container--v2:not(.has-card) {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--player-visual-bottom-gap, 0px));
 }
 
 .player-container--v2 .player-chrome--v2 {
