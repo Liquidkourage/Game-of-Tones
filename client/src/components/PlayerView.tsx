@@ -7,9 +7,6 @@ import { SOCKET_URL } from '../config';
 import { youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
 import { patchSquaresWithAlias, patchSquaresClearAlias } from '../utils/songAliasDisplay';
 import { stripSoftHyphens } from '../utils/softHyphenateLongWords';
-
-/** Narrow phones / fold cover: title-only cells; artist via long-press. */
-const PLAYER_COMPACT_VIEWPORT_PX = 400;
 import {
   STANDARD_BINGO_POSITIONS,
   validateBingoCardGrid,
@@ -25,6 +22,11 @@ import {
   evaluateCustomPatternStrict,
   customMaskHighlightPositions,
 } from '../patternDefinitions';
+
+/** Extra px trimmed from measured card height so the card clears chrome comfortably. */
+const PLAYER_V2_CARD_HEIGHT_TRIM_PX = 26;
+/** Narrow phones / fold cover: title-only cells; artist via long-press. */
+const PLAYER_COMPACT_VIEWPORT_PX = 400;
 
 interface BingoSquare {
   position: string;
@@ -989,11 +991,11 @@ const PlayerView: React.FC = () => {
     let cancelled = false;
 
     /** ~Discord body (~16px) at typical card width; cap stops short-title blow-up. */
-    const TITLE_SCALE_MAX = 1.12;
-    const TITLE_SCALE_PREFERRED_MIN = 0.82;
-    const TITLE_SCALE_ABSOLUTE_MIN = 0.62;
-    const ARTIST_TO_TITLE_MAX = 0.74;
-    const ARTIST_TO_TITLE_MIN = 0.56;
+    const TITLE_SCALE_MAX = 1.14;
+    const TITLE_SCALE_PREFERRED_MIN = 0.86;
+    const TITLE_SCALE_ABSOLUTE_MIN = 0.64;
+    const ARTIST_TO_TITLE_MAX = 0.76;
+    const ARTIST_TO_TITLE_MIN = 0.58;
     const artistScaleForTitle = (titleScale: number) => titleScale * ARTIST_TO_TITLE_MAX;
     const titleOnlyCells = compactCardCells;
 
@@ -1773,8 +1775,8 @@ const PlayerView: React.FC = () => {
   const showStatusRail = connectionStatus !== 'connected';
   const playerCardHeightPx = useMemo(() => {
     if (visualViewportHeightPx <= 0) return undefined;
-    const statusRailPx = showStatusRail ? 38 : 0;
-    const actionBarPx = bingoCard ? 58 : 0;
+    const statusRailPx = showStatusRail ? 40 : 0;
+    const actionBarPx = bingoCard ? 62 : 0;
     return Math.max(
       280,
       Math.round(
@@ -1783,7 +1785,7 @@ const PlayerView: React.FC = () => {
           - statusRailPx
           - actionBarPx
           - visualBottomGapPx
-          - 10,
+          - PLAYER_V2_CARD_HEIGHT_TRIM_PX,
       ),
     );
   }, [

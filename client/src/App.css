@@ -4987,8 +4987,8 @@ button.conn-chip.conn-chip-compact {
   --player-v2-stage-gap: clamp(2px, 0.6vmin, 6px);
   --player-nav-bottom: 0px;
   --player-app-header-offset: 32px;
-  --player-v2-title-size: clamp(14px, 5.4cqi, 20px);
-  --player-v2-artist-size: clamp(10px, 3.6cqi, 14px);
+  --player-v2-title-size: clamp(15px, 6cqi, 22px);
+  --player-v2-artist-size: clamp(11px, 4.2cqi, 16px);
   padding-bottom: 0;
   --player-card-h-budget: calc(
     var(--player-vh-budget) - var(--player-app-header-offset) - var(--player-nav-bottom, 0px) - var(--player-visual-bottom-gap, 0px) - var(--player-v2-chrome-height) - var(--player-v2-stage-gap)
@@ -6172,11 +6172,11 @@ button.conn-chip.conn-chip-compact {
   }
 
   .player-container--v2 .player-square-title {
-    font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-title-scale, 1) * clamp(12px, 4.6cqi, 17px));
+    font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-title-scale, 1) * clamp(13px, 5.2cqi, 19px));
   }
 
   .player-container--v2 .player-square-artist {
-    font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.72) * clamp(9px, 3.2cqi, 12px));
+    font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.72) * clamp(10px, 3.8cqi, 14px));
   }
 
   .player-container--v2 .player-v2-action-bar {
