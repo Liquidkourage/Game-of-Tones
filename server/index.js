@@ -961,6 +961,17 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
           return;
     }
 
+    targetDeviceId = await resolveRoomSpotifyPlaybackDeviceId(roomId, room, targetDeviceId, null);
+    if (spotifyDevices.isVenueSpotifyJamMode(room) && !spotifyDevices.isSpotifyJamDeviceId(targetDeviceId)) {
+      io.to(roomId).emit('playback-error', {
+        message:
+          'Venue Jam mode is on but no Jam session was found. Start Jam on the venue speaker, refresh devices in Connection, then try again.',
+        type: 'jam_not_found',
+      });
+      return;
+    }
+    room.selectedDeviceId = targetDeviceId;
+
     try {
       await spotifyFor(roomId).withRetries('transferPlayback(initial)', () => spotifyFor(roomId).transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
     } catch (e) {
@@ -2219,6 +2230,10 @@ function clearPlaybackWatcher(roomId) {
 }
 
 async function transferToLockedDeviceIfNeeded(roomId, room, targetDeviceId, currentDeviceId, state, sp) {
+  if (!spotifyDevices.shouldEnforceDeviceLock(room)) {
+    if (currentDeviceId) spotifyDevices.cacheJamDeviceId(room, currentDeviceId);
+    return true;
+  }
   if (!targetDeviceId || !currentDeviceId) return true;
   if (spotifyDevices.playbackDevicesMatch(room, targetDeviceId, currentDeviceId)) return true;
 
@@ -2242,6 +2257,18 @@ async function transferToLockedDeviceIfNeeded(roomId, room, targetDeviceId, curr
   await spotifyFor(roomId).transferPlayback(transferTarget, false);
   spotifyDevices.cacheJamDeviceId(room, transferTarget);
   return true;
+}
+
+async function resolveRoomSpotifyPlaybackDeviceId(roomId, room, explicitDeviceId, state) {
+  let target =
+    explicitDeviceId != null && String(explicitDeviceId).trim() !== ''
+      ? String(explicitDeviceId).trim()
+      : room?.selectedDeviceId || null;
+  if (!target) {
+    const saved = loadSavedDeviceForRoom(roomId);
+    if (saved?.id) target = saved.id;
+  }
+  return spotifyDevices.resolveRoomPlaybackDeviceId(room, target, spotifyFor(roomId), state);
 }
 
 // NEW: Simplified context monitor - watches for context hijacks AND device switches
@@ -2299,8 +2326,10 @@ function startSimpleContextMonitor(roomId, deviceId) {
         spotifyDevices.cacheJamDeviceId(room, currentDeviceId);
       }
 
-      // CRITICAL: Check if playback has switched to a different device
-      if (targetDeviceId && currentDeviceId && !spotifyDevices.playbackDevicesMatch(room, targetDeviceId, currentDeviceId)) {
+      // Venue Jam: Spotify routes audio — do not fight device switches; fix track/context only.
+      if (spotifyDevices.isVenueSpotifyJamMode(room)) {
+        if (currentDeviceId) spotifyDevices.cacheJamDeviceId(room, currentDeviceId);
+      } else if (targetDeviceId && currentDeviceId && !spotifyDevices.playbackDevicesMatch(room, targetDeviceId, currentDeviceId)) {
         const currentIsJam = spotifyDevices.isSpotifyJamDeviceId(currentDeviceId);
         if (
           !spotifyDevices.shouldAttemptJamDeviceCorrection(room, currentDeviceId, targetDeviceId, state)
@@ -2599,6 +2628,11 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
     `📝 SIMPLE PLAYBACK: Call #${room.currentSongIndex + 1} marked: ${nextSong.name} (${nextSong.id})`,
   );
 
+  const resolvedDeviceId = await resolveRoomSpotifyPlaybackDeviceId(roomId, room, deviceId, null);
+  if (spotifyDevices.isVenueSpotifyJamMode(room)) {
+    room.selectedDeviceId = resolvedDeviceId;
+  }
+
   try {
     routineServerLog(`🎵 Starting playback for: ${nextSong.name} by ${nextSong.artist} at ${room.currentSongStartMs}ms`);
     
@@ -2606,15 +2640,15 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
     
     if (room.temporaryPlaylistId) {
       routineServerLog(`🎼 Using playlist context: ${room.temporaryPlaylistId}, track ${room.currentSongIndex}`);
-      await spotifyFor(roomId).startPlaybackFromPlaylist(deviceId, room.temporaryPlaylistId, room.currentSongIndex, room.currentSongStartMs);
+      await spotifyFor(roomId).startPlaybackFromPlaylist(resolvedDeviceId, room.temporaryPlaylistId, room.currentSongIndex, room.currentSongStartMs);
     } else {
       routineServerLog(`🎵 Using individual track: ${nextSong.id}`);
-      await spotifyFor(roomId).startPlayback(deviceId, [`spotify:track:${nextSong.id}`], room.currentSongStartMs);
+      await spotifyFor(roomId).startPlayback(resolvedDeviceId, [`spotify:track:${nextSong.id}`], room.currentSongStartMs);
     }
 
     routineServerLog(`✅ Playback started successfully for: ${nextSong.name}`);
     routineServerLog(`✅ Simple advance: ${nextSong.name} by ${nextSong.artist}`);
-    startSimpleProgression(roomId, deviceId, room.snippetLength);
+    startSimpleProgression(roomId, resolvedDeviceId, room.snippetLength);
 
   } catch (error) {
     console.error('❌ Error in simple song advance:', error);
@@ -2622,7 +2656,7 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
     
     try {
       routineServerLog('🔄 Attempting to resume playback after song advance failure...');
-      await spotifyFor(roomId).resumePlayback(deviceId);
+      await spotifyFor(roomId).resumePlayback(resolvedDeviceId);
       routineServerLog('✅ Resume attempt completed');
     } catch (resumeError) {
       console.warn('⚠️ Failed to resume playback:', resumeError?.message);
@@ -8231,6 +8265,19 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         targetDeviceId = savedDevice.id;
         routineServerLog(`🎵 Using saved device for playback: ${savedDevice.name}`);
       }
+    }
+
+    if (needsSpotifyTransport) {
+      targetDeviceId = await resolveRoomSpotifyPlaybackDeviceId(roomId, room, targetDeviceId, null);
+      if (spotifyDevices.isVenueSpotifyJamMode(room) && !spotifyDevices.isSpotifyJamDeviceId(targetDeviceId)) {
+        io.to(roomId).emit('playback-error', {
+          message:
+            'Venue Jam mode is on but no Jam session was found. Start Jam on the venue speaker, refresh devices in Connection, then Start Game again.',
+          type: 'jam_not_found',
+        });
+        return;
+      }
+      room.selectedDeviceId = targetDeviceId;
     }
 
     if (songUsesYoutubePlayback(firstSong)) {

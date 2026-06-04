@@ -170,6 +170,27 @@ async function resolveMonitorTargetDeviceId(roomId, room, fallbackDeviceId, stat
   return target;
 }
 
+/** Resolve the Spotify device id to use for playback commands (Start Game, advance, etc.). */
+async function resolveRoomPlaybackDeviceId(room, explicitDeviceId, sp, state) {
+  let target =
+    explicitDeviceId != null && String(explicitDeviceId).trim() !== ''
+      ? String(explicitDeviceId).trim()
+      : room?.selectedDeviceId || null;
+
+  if (!isVenueSpotifyJamMode(room)) {
+    return target;
+  }
+
+  const jamId = await findJamDeviceId(sp, room, state);
+  if (jamId) return jamId;
+  if (isSpotifyJamDeviceId(target)) return target;
+  return target;
+}
+
+function shouldEnforceDeviceLock(room) {
+  return !isVenueSpotifyJamMode(room);
+}
+
 module.exports = {
   JAM_DEVICE_ID_PREFIX,
   JAM_DEVICE_TRANSFER_COOLDOWN_MS,
@@ -182,6 +203,8 @@ module.exports = {
   playbackDevicesMatch,
   resolvePlaybackTargetDeviceId,
   resolveMonitorTargetDeviceId,
+  resolveRoomPlaybackDeviceId,
+  shouldEnforceDeviceLock,
   findJamDeviceId,
   jamTransferOnCooldown,
   markJamTransferAttempt,

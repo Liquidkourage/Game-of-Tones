@@ -843,8 +843,7 @@ const HostView: React.FC = () => {
 
   const selectablePlaybackDevices = useMemo(() => {
     if (venueSpotifyJamMode) {
-      const jamOnly = devices.filter((d) => isSpotifyJamDevice(d));
-      return jamOnly.length > 0 ? jamOnly : devices;
+      return devices.filter((d) => isSpotifyJamDevice(d));
     }
     return devices.filter((d) => !isSpotifyJamDevice(d));
   }, [devices, venueSpotifyJamMode]);

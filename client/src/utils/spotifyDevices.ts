@@ -20,7 +20,8 @@ export function pickPreferredPlaybackDevice<T extends { id: string; is_active?: 
 
   if (venueJamMode) {
     const jamDevices = devices.filter((d) => isSpotifyJamDeviceId(d.id));
-    const pool = jamDevices.length > 0 ? jamDevices : devices;
+    if (jamDevices.length === 0) return null;
+    const pool = jamDevices;
 
     if (pendingId) {
       const pending = pool.find((d) => d.id === pendingId);
