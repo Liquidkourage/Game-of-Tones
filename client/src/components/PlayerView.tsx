@@ -989,14 +989,14 @@ const PlayerView: React.FC = () => {
     let cancelled = false;
 
     /** Title leads. Artist uses its own scale (not × titleScale); hierarchy enforced after fit. */
-    const TITLE_SCALE_MAX = 1.14;
-    const TITLE_SCALE_PREFERRED_MIN = 0.86;
+    const TITLE_SCALE_MAX = 1.16;
+    const TITLE_SCALE_PREFERRED_MIN = 0.88;
     const TITLE_SCALE_ABSOLUTE_MIN = 0.64;
-    const ARTIST_PROBE_SCALE = 0.96;
-    const ARTIST_SCALE_MIN = 0.88;
-    const ARTIST_SCALE_MAX = 1.03;
-    const ARTIST_SCALE_FLOOR = 0.92;
-    const ARTIST_MAX_TITLE_RATIO = 0.82;
+    const ARTIST_PROBE_SCALE = 0.9;
+    const ARTIST_SCALE_MIN = 0.84;
+    const ARTIST_SCALE_MAX = 1;
+    const ARTIST_SCALE_FLOOR = 0.86;
+    const ARTIST_MAX_TITLE_RATIO = 0.76;
     const titleOnlyCells = compactCardCells;
 
     const getLineCount = (el: HTMLElement) => {
