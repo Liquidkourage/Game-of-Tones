@@ -4983,15 +4983,15 @@ button.conn-chip.conn-chip-compact {
 .player-container--v2 {
   /* Bottom controls are a flex sibling — budget only real chrome, not layout-reserve */
   --player-layout-reserve: 0px;
-  --player-v2-chrome-height: clamp(48px, 10vmin, 56px);
-  --player-v2-stage-gap: clamp(4px, 1vmin, 8px);
-  --player-nav-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 4px), 40px);
-  --player-app-header-offset: 36px;
+  --player-v2-chrome-height: clamp(44px, 9vmin, 52px);
+  --player-v2-stage-gap: clamp(2px, 0.6vmin, 6px);
+  --player-nav-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 4px), 36px);
+  --player-app-header-offset: 32px;
   --player-card-h-budget: calc(
-    var(--player-vh-budget) - var(--player-app-header-offset) - var(--player-nav-bottom, 0px) - var(--player-visual-bottom-gap, 0px) - var(--player-v2-chrome-height) - var(--player-v2-stage-gap) - 2px
+    var(--player-vh-budget) - var(--player-app-header-offset) - var(--player-nav-bottom, 0px) - var(--player-visual-bottom-gap, 0px) - var(--player-v2-chrome-height) - var(--player-v2-stage-gap)
   );
   /* Lower ratio = taller card at full width (width / ratio = height) */
-  --player-v2-card-ratio: 0.62;
+  --player-v2-card-ratio: 0.52;
   min-height: 0;
   height: 100%;
   color-scheme: dark;
@@ -5557,7 +5557,7 @@ button.conn-chip.conn-chip-compact {
 
 .player-container--v2 .bingo-card .bingo-square {
   --player-cell-title-scale: 1;
-  --player-cell-artist-scale: 0.72;
+  --player-cell-artist-scale: 0.88;
   position: relative;
   overflow: hidden;
   border-right-width: 1px !important;
@@ -5631,7 +5631,7 @@ button.conn-chip.conn-chip-compact {
   width: 100%;
   justify-content: center;
   align-items: center;
-  gap: clamp(1px, 0.4vmin, 3px);
+  gap: clamp(2px, 0.5vmin, 4px);
   text-align: center;
 }
 
@@ -5652,9 +5652,9 @@ button.conn-chip.conn-chip-compact {
 
 .player-container--v2 .player-square-artist {
   width: 100%;
-  font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.72) * clamp(10px, 2.6cqi, 13px));
-  line-height: 1.08;
-  font-weight: 680;
+  font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.88) * clamp(11px, 3.4cqi, 16px));
+  line-height: 1.1;
+  font-weight: 700;
   color: var(--player-v2-text-secondary);
   max-width: 100%;
   white-space: normal;
@@ -6101,7 +6101,7 @@ button.conn-chip.conn-chip-compact {
 @media (orientation: landscape) and (max-height: 560px) {
   .player-container--v2 {
     --player-v2-chrome-height: clamp(44px, 9vh, 52px);
-    --player-v2-card-ratio: 0.78;
+    --player-v2-card-ratio: 0.68;
   }
 
   .player-container--v2 .player-v2-topbar {
@@ -6137,7 +6137,7 @@ button.conn-chip.conn-chip-compact {
   }
 
   .player-container--v2 .player-square-artist {
-    font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.72) * clamp(9px, 2.2cqi, 12px));
+    font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.88) * clamp(10px, 2.8cqi, 14px));
   }
 
   .player-container--v2 .player-v2-action-bar {

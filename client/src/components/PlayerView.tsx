@@ -983,7 +983,7 @@ const PlayerView: React.FC = () => {
     const TITLE_SCALE_MAX = 1.06;
     const TITLE_SCALE_PREFERRED_MIN = 0.78;
     const TITLE_SCALE_ABSOLUTE_MIN = 0.58;
-    const ARTIST_MIN_SCALE = 0.34;
+    const ARTIST_MIN_SCALE = 0.48;
     const titleOnlyCells = compactCardCells;
 
     const getLineCount = (el: HTMLElement) => {
@@ -1125,7 +1125,7 @@ const PlayerView: React.FC = () => {
             return ARTIST_MIN_SCALE;
           }
           let artistLow = ARTIST_MIN_SCALE;
-          let artistHigh = Math.min(1.02, uniformTitleScale * 0.74);
+          let artistHigh = Math.min(1.08, uniformTitleScale * 0.9);
           const fits = (artistScale: number) =>
             fitsAtScales(ctx, uniformTitleScale, artistScale, ctx.titleMaxLines, ctx.artistMaxLines);
 
