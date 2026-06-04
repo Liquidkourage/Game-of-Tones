@@ -1176,13 +1176,6 @@ const PlayerView: React.FC = () => {
     };
   }, [cardTextFitSignature, cardFontPercent, visualViewportHeightPx, compactCardCells]);
 
-  const handleResync = () => {
-    if (!socket) return;
-    try {
-      socket.emit('join-room', { roomId, playerName, isHost: false, clientId, inPerson: inPersonJoin });
-    } catch (_e) {}
-  };
-
   // Keep screen awake during game using Wake Lock API
   useEffect(() => {
     let wakeLock: any = null;
@@ -1733,16 +1726,6 @@ const PlayerView: React.FC = () => {
     return false;
   };
 
-  const roomCode = roomId?.toUpperCase() || '';
-  const playerSurfaceTitle =
-    venueBranding?.eventTitle?.trim() || 'Music Bingo';
-  const playerSurfaceSubtitle = [
-    venueBranding?.sponsorLine?.trim() || null,
-    roomCode ? `Room ${roomCode}` : null,
-    playerName?.trim() ? playerName.trim() : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
   const connectionStatusLabel =
     connectionStatus === 'connected'
       ? 'Live sync'
@@ -1771,12 +1754,6 @@ const PlayerView: React.FC = () => {
     composite: 'Combo pattern',
   };
   const currentPatternLabel = patternLabelMap[gameState.pattern] || 'Pattern live';
-  const resyncStatusDescription =
-    connectionStatus === 'connected'
-      ? 'Connected. Use resync if you think you missed a call.'
-      : connectionStatus === 'reconnecting'
-        ? `Trying to reconnect${reconnectAttempts > 1 ? ` (${reconnectAttempts})` : ''}. You can resync manually at any time.`
-        : 'Disconnected right now. Resync will rejoin the room and refresh your card state.';
 
   const renderBingoCard = () => {
     const headerCells = (['B', 'I', 'N', 'G', 'O'] as const).map((letter, colIdx) => {
@@ -2170,22 +2147,11 @@ const PlayerView: React.FC = () => {
                   <div className="player-v2-sheet-copy">
                     <div className="player-v2-sheet-label">Game status</div>
                     <div className="player-v2-sheet-note">
-                      {playerSurfaceTitle}
-                      {playerSurfaceSubtitle ? ` · ${playerSurfaceSubtitle}` : ''}
-                    </div>
-                    <div className="player-v2-sheet-note">
                       {currentPatternLabel}
                       {gameState.isPlaying
                         ? ` · Song ${Math.max(songsPlayed, playedSongIds.length)} / 75`
                         : ''}
-                      {gameState.playerCount > 0 ? ` · ${gameState.playerCount} players` : ''}
                     </div>
-                    <div className="player-v2-sheet-note">
-                      Long-press a square for artist and full song details.
-                    </div>
-                  </div>
-                  <div className={`player-v2-pill player-v2-pill--${connectionStatusTone}`}>
-                    {connectionStatusLabel}
                   </div>
                 </div>
 
@@ -2252,20 +2218,6 @@ const PlayerView: React.FC = () => {
                       +
                     </button>
                   </div>
-                </div>
-
-                <div className="player-v2-sheet-row">
-                  <div className="player-v2-sheet-copy">
-                    <div className="player-v2-sheet-label">Reconnect card</div>
-                    <div className="player-v2-sheet-note">{resyncStatusDescription}</div>
-                  </div>
-                  <button
-                    type="button"
-                    className={`player-v2-inline-button player-v2-inline-button--${connectionStatusTone}`}
-                    onClick={handleResync}
-                  >
-                    Resync
-                  </button>
                 </div>
 
                 {venueBranding?.logoUrl ? (
