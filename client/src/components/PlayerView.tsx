@@ -23,8 +23,8 @@ import {
   customMaskHighlightPositions,
 } from '../patternDefinitions';
 
-/** Extra px trimmed from measured card height so the card clears chrome comfortably. */
-const PLAYER_V2_CARD_HEIGHT_TRIM_PX = 34;
+/** Small fudge when sizing card from the measured stage slot (px). */
+const PLAYER_V2_CARD_HEIGHT_TRIM_PX = 4;
 /** Narrow phones / fold cover: title-only cells; artist via long-press. */
 const PLAYER_COMPACT_VIEWPORT_PX = 400;
 
@@ -304,6 +304,52 @@ const PlayerView: React.FC = () => {
       window.removeEventListener('orientationchange', measure);
     };
   }, []);
+
+  const showStatusRail = connectionStatus !== 'connected';
+  const bingoMeasureRef = useRef<HTMLDivElement>(null);
+  const [playerCardHeightPx, setPlayerCardHeightPx] = useState<number | undefined>(undefined);
+
+  useLayoutEffect(() => {
+    const measureEl = bingoMeasureRef.current;
+    if (!measureEl) return undefined;
+
+    const measure = () => {
+      const h = Math.floor(measureEl.getBoundingClientRect().height);
+      if (h <= 0) return;
+      const next = Math.max(260, h - PLAYER_V2_CARD_HEIGHT_TRIM_PX);
+      setPlayerCardHeightPx((prev) => (prev === next ? prev : next));
+    };
+
+    measure();
+    const ro = new ResizeObserver(() => {
+      requestAnimationFrame(measure);
+    });
+    ro.observe(measureEl);
+
+    const mainColumn = measureEl.closest('.player-main-column');
+    if (mainColumn) ro.observe(mainColumn);
+
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', measure);
+    vv?.addEventListener('scroll', measure);
+    window.addEventListener('resize', measure);
+    window.addEventListener('orientationchange', measure);
+
+    return () => {
+      ro.disconnect();
+      vv?.removeEventListener('resize', measure);
+      vv?.removeEventListener('scroll', measure);
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('orientationchange', measure);
+    };
+  }, [
+    showStatusRail,
+    bingoCard,
+    connectionStatus,
+    visualViewportHeightPx,
+    visualBottomGapPx,
+    appHeaderHeightPx,
+  ]);
 
   // Mark persistence functions
   const getStoredMarks = (): Record<string, boolean> => {
@@ -1191,7 +1237,7 @@ const PlayerView: React.FC = () => {
       cancelAnimationFrame(frame);
       resizeObserver.disconnect();
     };
-  }, [cardTextFitSignature, cardFontPercent, visualViewportHeightPx, compactCardCells]);
+  }, [cardTextFitSignature, cardFontPercent, visualViewportHeightPx, compactCardCells, playerCardHeightPx]);
 
   // Keep screen awake during game using Wake Lock API
   useEffect(() => {
@@ -1772,30 +1818,6 @@ const PlayerView: React.FC = () => {
   };
   const currentPatternLabel = patternLabelMap[gameState.pattern] || 'Pattern live';
 
-  const showStatusRail = connectionStatus !== 'connected';
-  const playerCardHeightPx = useMemo(() => {
-    if (visualViewportHeightPx <= 0) return undefined;
-    const statusRailPx = showStatusRail ? 40 : 0;
-    const actionBarPx = bingoCard ? 62 : 0;
-    return Math.max(
-      280,
-      Math.round(
-        visualViewportHeightPx
-          - appHeaderHeightPx
-          - statusRailPx
-          - actionBarPx
-          - visualBottomGapPx
-          - PLAYER_V2_CARD_HEIGHT_TRIM_PX,
-      ),
-    );
-  }, [
-    visualViewportHeightPx,
-    appHeaderHeightPx,
-    showStatusRail,
-    bingoCard,
-    visualBottomGapPx,
-  ]);
-
   const renderBingoCard = () => {
     const headerCells = (['B', 'I', 'N', 'G', 'O'] as const).map((letter, colIdx) => {
       const raw = bingoColumnPlaylistNames[colIdx] || '';
@@ -1968,7 +1990,7 @@ const PlayerView: React.FC = () => {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.35 }}
         >
-          <div className="bingo-section-measure">{renderBingoCard()}</div>
+          <div className="bingo-section-measure" ref={bingoMeasureRef}>{renderBingoCard()}</div>
         </motion.div>
 
         <div className="player-rest">
