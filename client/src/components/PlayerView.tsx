@@ -6,7 +6,7 @@ import io from 'socket.io-client';
 import { SOCKET_URL } from '../config';
 import { youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
 import { patchSquaresWithAlias, patchSquaresClearAlias } from '../utils/songAliasDisplay';
-import { stripSoftHyphens } from '../utils/softHyphenateLongWords';
+import { softHyphenateLongWords, stripSoftHyphens } from '../utils/softHyphenateLongWords';
 import {
   STANDARD_BINGO_POSITIONS,
   validateBingoCardGrid,
@@ -1876,10 +1876,10 @@ const PlayerView: React.FC = () => {
               {(() => {
                 const free = square.isFreeSpace || square.songId === '__FREE_SPACE__';
                 const vis = youtubeBingoSquareDisplay(square);
-                const titleText = free ? 'FREE' : (vis.title || '\u00a0');
+                const titleText = free ? 'FREE' : softHyphenateLongWords(vis.title || '\u00a0');
                 const artistText = free
                   ? (venueBranding?.eventTitle?.trim() || 'Free space')
-                  : (vis.artist || '\u00a0');
+                  : softHyphenateLongWords(vis.artist || '\u00a0');
                 return (
                   <div className="square-content">
                     <div className="player-square-title">

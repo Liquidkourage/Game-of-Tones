@@ -903,6 +903,10 @@ function setRoomTimer(roomId, callback, delay) {
     }
     
     roomTimers.delete(roomId);
+    if (!roomStillPlaying(roomId)) {
+      if (VERBOSE) routineServerLog(`🔍 Timer callback skipped — room ${roomId} no longer playing`);
+      return;
+    }
     if (VERBOSE) routineServerLog(`🔍 About to execute callback for room ${roomId}`);
     callback();
     if (VERBOSE) routineServerLog(`🔍 Callback executed for room ${roomId}`);
@@ -1052,7 +1056,10 @@ async function playSongAtIndex(roomId, deviceId, songIndex) {
   } catch (error) {
     console.error('❌ Error playing song at index:', error);
     // Try to continue with next song after a delay using simple system
-    setTimeout(() => playNextSongSimple(roomId, deviceId), 3000);
+    setTimeout(() => {
+      if (!roomStillPlaying(roomId)) return;
+      playNextSongSimple(roomId, deviceId);
+    }, 3000);
   }
 }
 
@@ -2252,6 +2259,8 @@ function roomStillPlaying(roomId) {
 function stopLiveRoundTimers(roomId, room) {
   if (!room) return;
   room.simpleProgressionActive = false;
+  room._playbackEpoch = (room._playbackEpoch || 0) + 1;
+  releaseSongAdvance(room);
   clearRoomTimer(roomId);
   clearPlaybackWatcher(roomId);
 }
@@ -2260,12 +2269,24 @@ async function pauseSpotifyForRoom(roomId, room) {
   const deviceId = room?.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
   if (!deviceId) return;
   try {
+    const sp = spotifyFor(roomId);
+    let deviceVisible = true;
     try {
-      await spotifyFor(roomId).transferPlayback(deviceId, false);
+      const devices = await sp.getUserDevices();
+      deviceVisible = devices.some((d) => d.id === deviceId);
+    } catch {
+      /* proceed with pause attempt */
+    }
+    if (!deviceVisible) {
+      routineServerLog(`⏸️ Skipping Spotify pause — device ${deviceId} not in device list`);
+      return;
+    }
+    try {
+      await sp.transferPlayback(deviceId, false);
     } catch {
       /* ignore */
     }
-    await spotifyFor(roomId).pausePlayback(deviceId);
+    await sp.pausePlayback(deviceId);
   } catch (e) {
     console.warn('⚠️ pauseSpotifyForRoom failed:', e?.message || e);
   }
@@ -2596,7 +2617,7 @@ async function endGamePlaylistComplete(roomId, deviceId) {
 // NEW: Simple timer-based song progression - let timer control everything
 function startSimpleProgression(roomId, deviceId, snippetLengthSeconds) {
   const room = rooms.get(roomId);
-  if (!room) return;
+  if (!room || !roomStillPlaying(roomId)) return;
   room.simpleProgressionActive = true;
 
   const total = Array.isArray(room.playlistSongs) ? room.playlistSongs.length : 0;
@@ -2641,7 +2662,10 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
   if (!tryAcquireSongAdvance(room, { retrying })) {
     if (!retrying) {
       routineServerLog('⏭️ Advance in flight — retrying same timer tick in 500ms');
-      setTimeout(() => playNextSongSimple(roomId, deviceId), 500);
+      setTimeout(() => {
+        if (!roomStillPlaying(roomId)) return;
+        playNextSongSimple(roomId, deviceId);
+      }, 500);
     }
     return;
   }
@@ -2663,6 +2687,7 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
   }
 
   if (songUsesYoutubePlayback(nextSong)) {
+    if (!roomStillPlaying(roomId)) return;
     room.currentSongStartMs = computeSnippetRandomStartMs(room, nextSong);
     markNextSongCalledAndNotify(roomId, room, nextSong, room.currentSongIndex);
     routineServerLog(`✅ Simple advance (YouTube): ${nextSong.name}`);
@@ -2671,20 +2696,23 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
   }
 
   room.currentSongStartMs = computeSpotifySnippetRandomStartMs(room, nextSong, 'playNextSongSimple');
+
+  const resolvedDeviceId = await resolveRoomSpotifyPlaybackDeviceId(roomId, room, deviceId, null);
+  if (!roomStillPlaying(roomId)) return;
+  if (spotifyDevices.isVenueSpotifyJamMode(room)) {
+    room.selectedDeviceId = resolvedDeviceId;
+  }
+
   markNextSongCalledAndNotify(roomId, room, nextSong, room.currentSongIndex);
   routineServerLog(
     `📝 SIMPLE PLAYBACK: Call #${room.currentSongIndex + 1} marked: ${nextSong.name} (${nextSong.id})`,
   );
 
-  const resolvedDeviceId = await resolveRoomSpotifyPlaybackDeviceId(roomId, room, deviceId, null);
-  if (spotifyDevices.isVenueSpotifyJamMode(room)) {
-    room.selectedDeviceId = resolvedDeviceId;
-  }
-
   try {
     routineServerLog(`🎵 Starting playback for: ${nextSong.name} by ${nextSong.artist} at ${room.currentSongStartMs}ms`);
     
     await new Promise(resolve => setTimeout(resolve, 100));
+    if (!roomStillPlaying(roomId)) return;
     
     if (room.temporaryPlaylistId) {
       routineServerLog(`🎼 Using playlist context: ${room.temporaryPlaylistId}, track ${room.currentSongIndex}`);
@@ -2696,7 +2724,9 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
 
     routineServerLog(`✅ Playback started successfully for: ${nextSong.name}`);
     routineServerLog(`✅ Simple advance: ${nextSong.name} by ${nextSong.artist}`);
-    startSimpleProgression(roomId, resolvedDeviceId, room.snippetLength);
+    if (roomStillPlaying(roomId)) {
+      startSimpleProgression(roomId, resolvedDeviceId, room.snippetLength);
+    }
 
   } catch (error) {
     showLog.logSpotifyApiError('simple song advance', error);
@@ -8724,6 +8754,7 @@ async function playNextSong(roomId, deviceId) {
     routineServerLog(`🎵 Playing song ${room.currentSongIndex + 1}/${room.playlistSongs.length}: ${nextSong.name} by ${nextSong.artist}`);
 
     if (songUsesYoutubePlayback(nextSong)) {
+      if (!roomStillPlaying(roomId)) return;
       room.currentSongStartMs = computeSnippetRandomStartMs(room, nextSong);
       markNextSongCalledAndNotify(roomId, room, nextSong, room.currentSongIndex);
       routineServerLog(`✅ Playing next song (YouTube host browser): ${nextSong.name}`);
@@ -8737,7 +8768,6 @@ async function playNextSong(roomId, deviceId) {
     }
 
     room.currentSongStartMs = computeSpotifySnippetRandomStartMs(room, nextSong, 'playNextSong');
-    markNextSongCalledAndNotify(roomId, room, nextSong, room.currentSongIndex);
 
     // STRICT device control: use provided device or saved device only
     let targetDeviceId = deviceId;
@@ -8772,7 +8802,10 @@ async function playNextSong(roomId, deviceId) {
     } catch (e) {
       console.warn('⚠️ Transfer playback failed (will still try play):', e?.message || e);
     }
+    if (!roomStillPlaying(roomId)) return;
     routineServerLog(`🎵 Starting playback on device: ${targetDeviceId}`);
+
+    markNextSongCalledAndNotify(roomId, room, nextSong, room.currentSongIndex);
 
     try {
       // Ensure device still visible; attempt activation if not
@@ -8791,6 +8824,7 @@ async function playNextSong(roomId, deviceId) {
       // Reset repeat to 'off' before advancing (clears any previous 'track' repeat)
       try { await spotifyFor(roomId).withRetries('setRepeat(off,next)', () => spotifyFor(roomId).setRepeatState('off', targetDeviceId), { attempts: 2, backoffMs: 200 }); } catch (_) {}
       await new Promise(resolve => setTimeout(resolve, 200));
+      if (!roomStillPlaying(roomId)) return;
       const startMs = room.currentSongStartMs || 0;
       // Use playlist context if available, otherwise fall back to individual track
       if (room.temporaryPlaylistId) {
@@ -8804,6 +8838,7 @@ async function playNextSong(roomId, deviceId) {
       
       // Stabilization delay to prevent context hijacks from volume changes
       await new Promise(resolve => setTimeout(resolve, 800));
+      if (!roomStillPlaying(roomId)) return;
       
       // Set initial volume to 100% (or room's saved volume) with single retry
             try {
@@ -8873,12 +8908,16 @@ async function playNextSong(roomId, deviceId) {
       if (!isPlaying || progress < 2000) { // Increased threshold from 1s to 2s
         console.warn(`⚠️ Early-fail detected (playing=${isPlaying}, progress=${progress}ms); advancing via playNextSong`);
         clearRoomTimer(roomId);
-        await playNextSong(roomId, targetDeviceId);
+        if (roomStillPlaying(roomId)) {
+          await playNextSong(roomId, targetDeviceId);
+        }
         return; // Prevent duplicate timer setting below
       }
     } catch (e) {
       console.warn('⚠️ Early-fail check error:', e?.message || e);
     }
+
+    if (!roomStillPlaying(roomId)) return;
 
     // No pre-queue - deterministic playback only
 
