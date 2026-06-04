@@ -4981,7 +4981,7 @@ button.conn-chip.conn-chip-compact {
 
 /* Player card v2: glass-aligned mobile interface */
 .player-container--v2 {
-  --player-layout-reserve: clamp(148px, 21vh, 208px);
+  --player-layout-reserve: clamp(112px, 15vh, 168px);
   --player-v2-card-ratio: 0.72;
   color-scheme: dark;
 
@@ -5265,19 +5265,19 @@ button.conn-chip.conn-chip-compact {
 
 @media (max-width: 480px) and (max-height: 720px) {
   .player-container--v2 {
-    --player-layout-reserve: clamp(138px, 19vh, 188px);
+    --player-layout-reserve: clamp(104px, 14vh, 152px);
   }
 }
 
 @media (max-height: 620px) {
   .player-container--v2 {
-    --player-layout-reserve: clamp(132px, 20vh, 176px);
+    --player-layout-reserve: clamp(100px, 15vh, 144px);
   }
 }
 
 @media (max-width: 400px) {
   .player-container--v2 {
-    --player-layout-reserve: clamp(128px, 18vh, 168px);
+    --player-layout-reserve: clamp(96px, 14vh, 136px);
   }
 }
 
@@ -5655,12 +5655,22 @@ button.conn-chip.conn-chip-compact {
   width: 100%;
 }
 
+.player-container--v2 .player-v2-status-rail {
+  display: flex;
+  justify-content: center;
+  padding: 0 clamp(4px, 1.2vw, 10px);
+  min-height: 0;
+}
+
 .player-container--v2 .player-v2-action-bar {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: clamp(8px, 1.6vmin, 12px);
-  border-radius: clamp(16px, 2.8vmin, 22px);
+  gap: 0;
+  padding: 0 clamp(4px, 1.2vw, 10px);
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .player-container--v2 .player-v2-action-row {
@@ -5838,6 +5848,19 @@ button.conn-chip.conn-chip-compact {
   border-radius: 18px;
   background: var(--player-v2-sheet-row-bg);
   border: 1px solid var(--player-v2-sheet-row-border);
+}
+
+.player-container--v2 .player-v2-sheet-venue {
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
+  padding: 8px 0 2px;
+}
+
+.player-container--v2 .player-v2-sheet-venue-logo {
+  max-height: 44px;
+  max-width: min(180px, 60vw);
+  object-fit: contain;
 }
 
 .player-container--v2 .player-v2-sheet-row + .player-v2-sheet-row {
@@ -6025,7 +6048,7 @@ button.conn-chip.conn-chip-compact {
 
 @media (orientation: landscape) and (max-height: 560px) {
   .player-container--v2 {
-    --player-layout-reserve: clamp(132px, 22vh, 176px);
+    --player-layout-reserve: clamp(96px, 16vh, 140px);
     --player-v2-card-ratio: 0.88;
   }
 

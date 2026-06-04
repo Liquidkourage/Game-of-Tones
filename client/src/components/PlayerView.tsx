@@ -1742,7 +1742,6 @@ const PlayerView: React.FC = () => {
   ]
     .filter(Boolean)
     .join(' · ');
-  const songsProgressLabel = `Song ${Math.max(songsPlayed, playedSongIds.length)} / 75`;
   const connectionStatusLabel =
     connectionStatus === 'connected'
       ? 'Live sync'
@@ -1932,33 +1931,19 @@ const PlayerView: React.FC = () => {
       ) : null}
 
       <div className="player-main-column">
-        <motion.div
-          className="player-v2-topbar player-v2-glass-panel"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
-        >
-          <div className="player-v2-brand">
-            {venueBranding?.logoUrl ? (
-              <img src={venueBranding.logoUrl} alt="" className="player-v2-brand-logo" />
-            ) : null}
-            <div className="player-v2-brand-copy">
-              <div className="player-v2-brand-eyebrow">Tempo</div>
-              <div className="player-v2-brand-title">{playerSurfaceTitle}</div>
-              <div className="player-v2-brand-subtitle">{playerSurfaceSubtitle}</div>
-            </div>
+        {connectionStatus !== 'connected' ? (
+          <div className="player-v2-status-rail" aria-live="polite">
+            <span className={`player-v2-pill player-v2-pill--${connectionStatusTone}`}>
+              {connectionStatusLabel}
+            </span>
           </div>
-          <div className="player-v2-topbar-meta">
-            <span className="player-v2-pill player-v2-pill--progress">{songsProgressLabel}</span>
-            <span className={`player-v2-pill player-v2-pill--${connectionStatusTone}`}>{connectionStatusLabel}</span>
-          </div>
-        </motion.div>
+        ) : null}
 
         <motion.div
           className="bingo-section player-bingo-stage"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.45, delay: 0.08 }}
+          transition={{ duration: 0.35 }}
         >
           <div className="bingo-section-measure">{renderBingoCard()}</div>
         </motion.div>
@@ -1967,7 +1952,7 @@ const PlayerView: React.FC = () => {
           <div className="player-chrome player-chrome--v2">
             {bingoCard ? (
               <motion.div
-                className="player-v2-action-bar player-v2-glass-panel"
+                className="player-v2-action-bar"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35, delay: 0.05 }}
@@ -2062,20 +2047,6 @@ const PlayerView: React.FC = () => {
                   Options
                 </button>
                 </div>
-                <p className="player-v2-action-meta" aria-live="polite">
-                  <span className="player-v2-action-meta-pattern">{currentPatternLabel}</span>
-                  {!compactCardCells ? (
-                    <>
-                      <span className="player-v2-action-meta-sep" aria-hidden>·</span>
-                      <span className="player-v2-action-meta-hint">Long-press a square for full details</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="player-v2-action-meta-sep" aria-hidden>·</span>
-                      <span className="player-v2-action-meta-hint">Long-press for artist &amp; details</span>
-                    </>
-                  )}
-                </p>
               </motion.div>
             ) : null}
 
@@ -2094,10 +2065,7 @@ const PlayerView: React.FC = () => {
                   <div className="player-v2-sheet-handle" aria-hidden />
                   <div className="player-v2-sheet-header">
                     <div className="player-v2-sheet-header-copy">
-                      <div className="player-v2-sheet-title">Card options</div>
-                      <div className="player-v2-sheet-subtitle">
-                        Keep the first screen about the grid. Tweak the details here.
-                      </div>
+                      <div className="player-v2-sheet-title">Options</div>
                     </div>
                     <button
                       type="button"
@@ -2106,6 +2074,27 @@ const PlayerView: React.FC = () => {
                     >
                       Done
                     </button>
+                  </div>
+
+                  <div className="player-v2-sheet-row">
+                    <div className="player-v2-sheet-copy">
+                      <div className="player-v2-sheet-label">Game status</div>
+                      <div className="player-v2-sheet-note">
+                        {playerSurfaceTitle}
+                        {playerSurfaceSubtitle ? ` · ${playerSurfaceSubtitle}` : ''}
+                      </div>
+                      <div className="player-v2-sheet-note">
+                        {currentPatternLabel}
+                        {gameState.isPlaying
+                          ? ` · Song ${Math.max(songsPlayed, playedSongIds.length)} / 75`
+                          : ''}
+                        {gameState.playerCount > 0 ? ` · ${gameState.playerCount} players` : ''}
+                      </div>
+                      <div className="player-v2-sheet-note">
+                        Long-press a square for artist and full song details.
+                      </div>
+                    </div>
+                    <div className={`player-v2-pill player-v2-pill--${connectionStatusTone}`}>{connectionStatusLabel}</div>
                   </div>
 
                   <div className="player-v2-sheet-row">
@@ -2187,16 +2176,11 @@ const PlayerView: React.FC = () => {
                     </button>
                   </div>
 
-                  <div className="player-v2-sheet-row">
-                    <div className="player-v2-sheet-copy">
-                      <div className="player-v2-sheet-label">Game status</div>
-                      <div className="player-v2-sheet-note">
-                        {gameState.playerCount} players
-                        {gameState.isPlaying ? ` · ${Math.max(songsPlayed, playedSongIds.length)} songs played` : ''}
-                      </div>
+                  {venueBranding?.logoUrl ? (
+                    <div className="player-v2-sheet-venue">
+                      <img src={venueBranding.logoUrl} alt="" className="player-v2-sheet-venue-logo" />
                     </div>
-                    <div className={`player-v2-pill player-v2-pill--${connectionStatusTone}`}>{connectionStatusLabel}</div>
-                  </div>
+                  ) : null}
 
                   {hybridPrizeInPersonOnly && !inPersonJoin ? (
                     <div className="player-v2-sheet-note-block">
