@@ -5307,10 +5307,9 @@ button.conn-chip.conn-chip-compact {
   }
 
   .player-container--v2 .bingo-card {
-    max-height: min(
-      calc((100vw - 8px) / var(--player-v2-card-ratio)),
-      var(--player-card-h-budget)
-    ) !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    aspect-ratio: unset !important;
   }
 }
 
@@ -5333,14 +5332,16 @@ button.conn-chip.conn-chip-compact {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  align-self: stretch;
   padding: 0 clamp(4px, 1vw, 8px);
 }
 
 .player-container--v2 .bingo-section-measure {
   flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
   width: 100%;
 }
@@ -5479,9 +5480,11 @@ button.conn-chip.conn-chip-compact {
 .player-container--v2 .bingo-card {
   width: min(100%, calc(100vw - 8px)) !important;
   max-width: min(100%, calc(100vw - 8px)) !important;
-  max-height: min(calc((100vw - 8px) / var(--player-v2-card-ratio)), var(--player-card-h-budget)) !important;
-  height: auto !important;
-  aspect-ratio: var(--player-v2-card-ratio) !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+  flex: 1 1 auto !important;
+  aspect-ratio: unset !important;
   background: var(--player-v2-card-bg);
   border: 1px solid var(--player-v2-card-border);
   border-radius: clamp(20px, 3.2vmin, 28px);
@@ -5518,7 +5521,7 @@ button.conn-chip.conn-chip-compact {
 }
 
 .player-container--v2 .bingo-column-headers__cell {
-  min-height: clamp(34px, 7vmin, 44px);
+  min-height: clamp(28px, 5.5vmin, 36px);
   padding: 4px 4px 5px;
   border-radius: clamp(12px, 2vmin, 14px);
   background: var(--player-v2-header-bg);
@@ -5548,6 +5551,8 @@ button.conn-chip.conn-chip-compact {
 }
 
 .player-container--v2 .bingo-card-grid {
+  flex: 1 1 auto;
+  min-height: 0;
   gap: clamp(4px, 0.9vmin, 6px) !important;
 }
 
@@ -5557,7 +5562,7 @@ button.conn-chip.conn-chip-compact {
 
 .player-container--v2 .bingo-card .bingo-square {
   --player-cell-title-scale: 1;
-  --player-cell-artist-scale: 0.88;
+  --player-cell-artist-scale: 0.92;
   position: relative;
   overflow: hidden;
   border-right-width: 1px !important;
@@ -5652,7 +5657,7 @@ button.conn-chip.conn-chip-compact {
 
 .player-container--v2 .player-square-artist {
   width: 100%;
-  font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.88) * clamp(11px, 3.4cqi, 16px));
+  font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.92) * clamp(12px, 4.2cqi, 17px));
   line-height: 1.1;
   font-weight: 700;
   color: var(--player-v2-text-secondary);

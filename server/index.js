@@ -8371,9 +8371,11 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         if (room._gotPlaylistCleanupTimer) clearTimeout(room._gotPlaylistCleanupTimer);
         const deferTempPlaylistMs = computeTempPlaylistDeferMs(room, trackUris.length);
         const snippetSec = Math.max(5, Number(room.snippetLength) || 30);
+        const gotCleanupEnv = parseInt(process.env.SPOTIFY_GOT_PLAYLIST_CLEANUP_DEFER_MS || '', 10);
         const deferGotCleanupMs =
-          Number(process.env.SPOTIFY_GOT_PLAYLIST_CLEANUP_DEFER_MS) ||
-          Math.max(120_000, snippetSec * trackUris.length * 1000 + 60_000);
+          Number.isFinite(gotCleanupEnv) && gotCleanupEnv > 0
+            ? gotCleanupEnv
+            : Math.max(120_000, snippetSec * trackUris.length * 1000 + 60_000);
         room._tempPlaylistDeferTimer = setTimeout(() => {
           room._tempPlaylistDeferTimer = null;
           void (async () => {
