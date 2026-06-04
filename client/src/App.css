@@ -4982,7 +4982,7 @@ button.conn-chip.conn-chip-compact {
 /* Player card v2: glass-aligned mobile interface */
 .player-container--v2 {
   --player-layout-reserve: clamp(72px, 9vh, 96px);
-  --player-nav-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 4px), 44px);
+  --player-nav-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 4px), 36px);
   --player-app-header-offset: 38px;
   --player-card-h-budget: calc(
     var(--player-vh-budget) - var(--player-layout-reserve) - var(--player-nav-bottom, 0px) - var(--player-visual-bottom-gap, 0px) - var(--player-app-header-offset) - 4px
@@ -5302,10 +5302,10 @@ button.conn-chip.conn-chip-compact {
   }
 
   .player-container--v2 .bingo-card {
-    max-height: min(
-      calc((100vw - 8px) / var(--player-v2-card-ratio)),
-      var(--player-card-h-budget)
-    ) !important;
+    width: 100cqw !important;
+    max-width: 100cqw !important;
+    height: 100cqh !important;
+    max-height: 100cqh !important;
   }
 }
 
@@ -5319,8 +5319,8 @@ button.conn-chip.conn-chip-compact {
   height: 100%;
   justify-content: flex-start;
   overflow: hidden;
-  gap: clamp(6px, 1.4vmin, 12px);
-  padding: 0 clamp(4px, 1.2vw, 10px) clamp(4px, 1vmin, 10px);
+  gap: clamp(4px, 1vmin, 8px);
+  padding: 0 clamp(4px, 1.2vw, 10px) clamp(2px, 0.6vmin, 6px);
 }
 
 .player-container--v2 .player-bingo-stage {
@@ -5328,16 +5328,20 @@ button.conn-chip.conn-chip-compact {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  align-self: stretch;
   padding: 0 clamp(4px, 1vw, 8px);
 }
 
 .player-container--v2 .bingo-section-measure {
   flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
+  container-type: size;
+  container-name: player-card-stage;
 }
 
 .player-container--v2 .player-v2-glass-panel {
@@ -5472,11 +5476,12 @@ button.conn-chip.conn-chip-compact {
 }
 
 .player-container--v2 .bingo-card {
-  width: min(100%, calc(var(--player-card-h-budget) * var(--player-v2-card-ratio)), calc(100vw - 8px)) !important;
-  max-width: min(100%, calc(var(--player-card-h-budget) * var(--player-v2-card-ratio)), calc(100vw - 8px)) !important;
-  max-height: min(calc((100vw - 8px) / var(--player-v2-card-ratio)), var(--player-card-h-budget)) !important;
-  height: auto !important;
-  aspect-ratio: var(--player-v2-card-ratio) !important;
+  /* Grow to fill the flex stage between header and bottom controls */
+  width: 100cqw !important;
+  max-width: 100cqw !important;
+  height: 100cqh !important;
+  max-height: 100cqh !important;
+  aspect-ratio: unset !important;
   background: var(--player-v2-card-bg);
   border: 1px solid var(--player-v2-card-border);
   border-radius: clamp(20px, 3.2vmin, 28px);
@@ -5485,6 +5490,20 @@ button.conn-chip.conn-chip-compact {
   transition: opacity 160ms ease, transform 160ms ease;
   position: relative;
   z-index: 1;
+}
+
+@supports not (container-type: size) {
+  .player-container--v2 .bingo-section-measure {
+    height: 100%;
+  }
+
+  .player-container--v2 .bingo-card {
+    width: min(100%, calc(100vw - 8px)) !important;
+    max-width: min(100%, calc(100vw - 8px)) !important;
+    height: 100% !important;
+    max-height: var(--player-card-h-budget) !important;
+    aspect-ratio: unset !important;
+  }
 }
 
 .player-container--v2 .bingo-card--fit-pending {
@@ -5543,6 +5562,8 @@ button.conn-chip.conn-chip-compact {
 }
 
 .player-container--v2 .bingo-card-grid {
+  flex: 1 1 auto;
+  min-height: 0;
   gap: clamp(4px, 0.9vmin, 6px) !important;
 }
 
