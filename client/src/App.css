@@ -4981,13 +4981,17 @@ button.conn-chip.conn-chip-compact {
 
 /* Player card v2: glass-aligned mobile interface */
 .player-container--v2 {
-  --player-layout-reserve: clamp(72px, 9vh, 96px);
-  --player-nav-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 4px), 44px);
-  --player-app-header-offset: 38px;
+  /* Bottom controls are a flex sibling — budget only real chrome, not layout-reserve */
+  --player-layout-reserve: 0px;
+  --player-v2-chrome-height: clamp(48px, 10vmin, 56px);
+  --player-v2-stage-gap: clamp(4px, 1vmin, 8px);
+  --player-nav-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 4px), 40px);
+  --player-app-header-offset: 36px;
   --player-card-h-budget: calc(
-    var(--player-vh-budget) - var(--player-layout-reserve) - var(--player-nav-bottom, 0px) - var(--player-visual-bottom-gap, 0px) - var(--player-app-header-offset) - 4px
+    var(--player-vh-budget) - var(--player-app-header-offset) - var(--player-nav-bottom, 0px) - var(--player-visual-bottom-gap, 0px) - var(--player-v2-chrome-height) - var(--player-v2-stage-gap) - 2px
   );
-  --player-v2-card-ratio: 0.72;
+  /* Lower ratio = taller card at full width (width / ratio = height) */
+  --player-v2-card-ratio: 0.62;
   min-height: 0;
   height: 100%;
   color-scheme: dark;
@@ -5272,33 +5276,34 @@ button.conn-chip.conn-chip-compact {
 
 @media (max-width: 480px) and (max-height: 720px) {
   .player-container--v2 {
-    --player-layout-reserve: clamp(68px, 8vh, 88px);
+    --player-v2-chrome-height: clamp(46px, 9.5vmin, 54px);
   }
 }
 
 @media (max-height: 620px) {
   .player-container--v2 {
-    --player-layout-reserve: clamp(64px, 9vh, 84px);
+    --player-v2-chrome-height: clamp(44px, 10vmin, 52px);
+    --player-v2-stage-gap: 4px;
   }
 }
 
 @media (max-width: 400px) {
   .player-container--v2 {
-    --player-layout-reserve: clamp(60px, 8vh, 80px);
+    --player-v2-chrome-height: clamp(44px, 10vmin, 52px);
   }
 }
 
 @media (max-height: 640px) {
   .player-container--v2 {
-    --player-app-header-offset: 40px;
-    --player-layout-reserve: clamp(64px, 10vh, 88px);
+    --player-app-header-offset: 38px;
+    --player-v2-chrome-height: clamp(44px, 10vmin, 52px);
   }
 }
 
 @media (max-width: 420px) and (max-height: 700px) {
   .player-container--v2 {
-    --player-nav-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 4px), 40px);
-    --player-layout-reserve: clamp(64px, 9vh, 84px);
+    --player-nav-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 4px), 38px);
+    --player-v2-chrome-height: clamp(44px, 10vmin, 52px);
   }
 
   .player-container--v2 .bingo-card {
@@ -5472,8 +5477,8 @@ button.conn-chip.conn-chip-compact {
 }
 
 .player-container--v2 .bingo-card {
-  width: min(100%, calc(var(--player-card-h-budget) * var(--player-v2-card-ratio)), calc(100vw - 8px)) !important;
-  max-width: min(100%, calc(var(--player-card-h-budget) * var(--player-v2-card-ratio)), calc(100vw - 8px)) !important;
+  width: min(100%, calc(100vw - 8px)) !important;
+  max-width: min(100%, calc(100vw - 8px)) !important;
   max-height: min(calc((100vw - 8px) / var(--player-v2-card-ratio)), var(--player-card-h-budget)) !important;
   height: auto !important;
   aspect-ratio: var(--player-v2-card-ratio) !important;
@@ -6095,8 +6100,8 @@ button.conn-chip.conn-chip-compact {
 
 @media (orientation: landscape) and (max-height: 560px) {
   .player-container--v2 {
-    --player-layout-reserve: clamp(64px, 10vh, 92px);
-    --player-v2-card-ratio: 0.88;
+    --player-v2-chrome-height: clamp(44px, 9vh, 52px);
+    --player-v2-card-ratio: 0.78;
   }
 
   .player-container--v2 .player-v2-topbar {
