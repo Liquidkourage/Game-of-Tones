@@ -980,11 +980,12 @@ const PlayerView: React.FC = () => {
     let cancelled = false;
 
     /** ~Discord body (~16px) at typical card width; cap stops short-title blow-up. */
-    const TITLE_SCALE_MAX = 1.06;
-    const TITLE_SCALE_PREFERRED_MIN = 0.78;
-    const TITLE_SCALE_ABSOLUTE_MIN = 0.58;
-    const ARTIST_MIN_SCALE = 0.58;
-    const ARTIST_SCALE_FLOOR = 0.78;
+    const TITLE_SCALE_MAX = 1.12;
+    const TITLE_SCALE_PREFERRED_MIN = 0.82;
+    const TITLE_SCALE_ABSOLUTE_MIN = 0.62;
+    const ARTIST_TO_TITLE_MAX = 0.74;
+    const ARTIST_TO_TITLE_MIN = 0.56;
+    const artistScaleForTitle = (titleScale: number) => titleScale * ARTIST_TO_TITLE_MAX;
     const titleOnlyCells = compactCardCells;
 
     const getLineCount = (el: HTMLElement) => {
@@ -1084,7 +1085,7 @@ const PlayerView: React.FC = () => {
         let titleLow = TITLE_SCALE_ABSOLUTE_MIN;
         let titleHigh = TITLE_SCALE_MAX;
         const fits = (titleScale: number) =>
-          fitsAtScales(ctx, titleScale, ARTIST_MIN_SCALE, ctx.titleMaxLines, ctx.artistMaxLines);
+          fitsAtScales(ctx, titleScale, artistScaleForTitle(titleScale), ctx.titleMaxLines, ctx.artistMaxLines);
 
         if (!fits(titleLow)) return TITLE_SCALE_ABSOLUTE_MIN;
 
@@ -1109,7 +1110,7 @@ const PlayerView: React.FC = () => {
 
       const allFitAtTitle = (titleScale: number) =>
         contexts.every((ctx) =>
-          fitsAtScales(ctx, titleScale, ARTIST_MIN_SCALE, ctx.titleMaxLines, ctx.artistMaxLines),
+          fitsAtScales(ctx, titleScale, artistScaleForTitle(titleScale), ctx.titleMaxLines, ctx.artistMaxLines),
         );
 
       if (!allFitAtTitle(uniformTitleScale)) {
@@ -1117,20 +1118,20 @@ const PlayerView: React.FC = () => {
       }
 
       for (const ctx of contexts) {
-        setScales(ctx, uniformTitleScale, ARTIST_MIN_SCALE);
+        setScales(ctx, uniformTitleScale, artistScaleForTitle(uniformTitleScale));
       }
 
       if (!titleOnlyCells) {
         const findMaxArtistScale = (ctx: SquareCtx) => {
           if (ctx.artistMaxLines === 0 || !ctx.artistEl.textContent?.trim()) {
-            return ARTIST_MIN_SCALE;
+            return uniformTitleScale * ARTIST_TO_TITLE_MIN;
           }
-          let artistLow = ARTIST_MIN_SCALE;
-          let artistHigh = Math.min(1.08, uniformTitleScale * 0.9);
+          let artistLow = uniformTitleScale * ARTIST_TO_TITLE_MIN;
+          let artistHigh = Math.min(1.05, uniformTitleScale * ARTIST_TO_TITLE_MAX);
           const fits = (artistScale: number) =>
             fitsAtScales(ctx, uniformTitleScale, artistScale, ctx.titleMaxLines, ctx.artistMaxLines);
 
-          if (!fits(artistLow)) return ARTIST_MIN_SCALE;
+          if (!fits(artistLow)) return artistLow;
           if (fits(artistHigh)) return artistHigh;
 
           for (let i = 0; i < 8; i += 1) {
@@ -1146,7 +1147,10 @@ const PlayerView: React.FC = () => {
 
         const perSquareArtistScales = contexts.map((ctx) => findMaxArtistScale(ctx));
         let uniformArtistScale = Math.min(...perSquareArtistScales);
-        uniformArtistScale = Math.max(uniformArtistScale, ARTIST_SCALE_FLOOR);
+        const artistScaleFloor = uniformTitleScale * ARTIST_TO_TITLE_MIN;
+        const artistScaleCap = uniformTitleScale * ARTIST_TO_TITLE_MAX;
+        uniformArtistScale = Math.max(uniformArtistScale, artistScaleFloor);
+        uniformArtistScale = Math.min(uniformArtistScale, artistScaleCap);
         for (const ctx of contexts) {
           setScales(ctx, uniformTitleScale, uniformArtistScale);
         }
@@ -1834,10 +1838,10 @@ const PlayerView: React.FC = () => {
               {(() => {
                 const free = square.isFreeSpace || square.songId === '__FREE_SPACE__';
                 const vis = youtubeBingoSquareDisplay(square);
-                const titleText = free ? 'FREE' : vis.title;
+                const titleText = free ? 'FREE' : (vis.title || '\u00a0');
                 const artistText = free
                   ? (venueBranding?.eventTitle?.trim() || 'Free space')
-                  : vis.artist;
+                  : (vis.artist || '\u00a0');
                 return (
                   <div className="square-content">
                     <div className="player-square-title">
