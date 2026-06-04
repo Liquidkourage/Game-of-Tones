@@ -8075,6 +8075,27 @@ async function generateBingoCardForPlayer(roomId, playerId) {
   }
 }
 
+/**
+ * Delay before building the temp Spotify playlist after Start Game.
+ * Clears the transfer/play burst first; must finish before song 2 (snippetLength later).
+ */
+function computeTempPlaylistDeferMs(room, trackCount) {
+  const envOverride = parseInt(process.env.SPOTIFY_TEMP_PLAYLIST_DEFER_MS || '', 10);
+  if (Number.isFinite(envOverride) && envOverride > 0) return envOverride;
+
+  const snippetSec = Math.max(5, Number(room?.snippetLength) || 30);
+  const snippetMs = snippetSec * 1000;
+  const tracks = Math.max(1, Number(trackCount) || 75);
+  const postStartSettleMs = Math.min(6000, Math.max(3500, Math.round(snippetMs * 0.18)));
+  const addBatches = Math.max(1, Math.ceil(tracks / 100));
+  const pacingMs = 700;
+  const buildEstimateMs = 1800 + addBatches * pacingMs;
+  const marginBeforeSong2Ms = 2500;
+  const latestStartMs = Math.max(0, snippetMs - buildEstimateMs - marginBeforeSong2Ms);
+  const deferMs = Math.max(postStartSettleMs, Math.min(latestStartMs, snippetMs - marginBeforeSong2Ms));
+  return Math.max(0, deferMs);
+}
+
 async function startAutomaticPlayback(roomId, playlists, deviceId, songList = null) {
   routineServerLog('🎵 Starting automatic playback for room:', roomId);
   const room = rooms.get(roomId);
@@ -8348,8 +8369,11 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         room.temporaryPlaylistId = null;
         if (room._tempPlaylistDeferTimer) clearTimeout(room._tempPlaylistDeferTimer);
         if (room._gotPlaylistCleanupTimer) clearTimeout(room._gotPlaylistCleanupTimer);
-        const deferTempPlaylistMs = Number(process.env.SPOTIFY_TEMP_PLAYLIST_DEFER_MS) || 45_000;
-        const deferGotCleanupMs = Number(process.env.SPOTIFY_GOT_PLAYLIST_CLEANUP_DEFER_MS) || 120_000;
+        const deferTempPlaylistMs = computeTempPlaylistDeferMs(room, trackUris.length);
+        const snippetSec = Math.max(5, Number(room.snippetLength) || 30);
+        const deferGotCleanupMs =
+          Number(process.env.SPOTIFY_GOT_PLAYLIST_CLEANUP_DEFER_MS) ||
+          Math.max(120_000, snippetSec * trackUris.length * 1000 + 60_000);
         room._tempPlaylistDeferTimer = setTimeout(() => {
           room._tempPlaylistDeferTimer = null;
           void (async () => {
@@ -8382,7 +8406,7 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
             });
         }, deferGotCleanupMs);
         routineServerLog(
-          `📋 First track via URIs; temp playlist in ${Math.round(deferTempPlaylistMs / 1000)}s (first 5): ${trackUris.slice(0, 5).join(', ')}`,
+          `📋 First track via URIs; temp playlist in ${Math.round(deferTempPlaylistMs / 1000)}s (${snippetSec}s snippets, song 2 ~${snippetSec}s) — first 5: ${trackUris.slice(0, 5).join(', ')}`,
         );
       } catch (error) {
         console.warn('⚠️ Failed to schedule temporary playlist, falling back to individual track playback:', error);
