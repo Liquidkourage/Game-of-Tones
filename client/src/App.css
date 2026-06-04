@@ -2334,7 +2334,7 @@ body {
 }
 
 /* Primary: screen width drives the square; cap height so card + chrome fit in viewport. */
-.player-container .bingo-card {
+.player-container:not(.player-container--v2) .bingo-card {
   display: flex !important;
   flex-direction: column !important;
   width: min(100%, calc(100vw - 8px)) !important;
@@ -2406,7 +2406,7 @@ body {
   }
 }
 
-.player-container .bingo-card-grid {
+.player-container:not(.player-container--v2) .bingo-card-grid {
   display: grid !important;
   grid-template-columns: repeat(5, 1fr) !important;
   grid-template-rows: repeat(5, 1fr) !important;
@@ -5308,12 +5308,6 @@ button.conn-chip.conn-chip-compact {
     --player-nav-bottom: 0px;
     --player-v2-chrome-height: clamp(44px, 10vmin, 52px);
   }
-
-  .player-container--v2 .bingo-card {
-    height: 100% !important;
-    max-height: 100% !important;
-    aspect-ratio: unset !important;
-  }
 }
 
 .player-container--v2 {
@@ -5343,9 +5337,8 @@ button.conn-chip.conn-chip-compact {
 .player-container--v2 .bingo-section-measure {
   flex: 1 1 auto !important;
   min-height: 0 !important;
-  height: 100% !important;
   display: flex;
-  align-items: stretch;
+  align-items: flex-start;
   justify-content: center;
   width: 100%;
 }
@@ -5484,10 +5477,10 @@ button.conn-chip.conn-chip-compact {
 .player-container--v2 .bingo-card {
   width: min(100%, calc(100vw - 8px)) !important;
   max-width: min(100%, calc(100vw - 8px)) !important;
-  height: 100% !important;
-  max-height: 100% !important;
+  height: var(--player-v2-card-height-px, 100%) !important;
+  max-height: var(--player-v2-card-height-px, 100%) !important;
   min-height: 0 !important;
-  flex: 1 1 auto !important;
+  flex: 0 0 auto !important;
   aspect-ratio: unset !important;
   background: var(--player-v2-card-bg);
   border: 1px solid var(--player-v2-card-border);
@@ -5517,10 +5510,10 @@ button.conn-chip.conn-chip-compact {
 .player-container--v2 .bingo-card--empty {
   display: flex;
   flex-direction: column;
-  height: 100% !important;
-  max-height: 100% !important;
+  height: var(--player-v2-card-height-px, 100%) !important;
+  max-height: var(--player-v2-card-height-px, 100%) !important;
   min-height: 0 !important;
-  flex: 1 1 auto !important;
+  flex: 0 0 auto !important;
   position: relative;
 }
 
@@ -5562,15 +5555,17 @@ button.conn-chip.conn-chip-compact {
 
 .player-container--v2 .bingo-card-grid,
 .player-container--v2 .bingo-card-grid--placeholder {
+  display: grid !important;
   flex: 1 1 auto !important;
   min-height: 0 !important;
-  height: 100% !important;
+  height: auto !important;
   width: 100% !important;
   grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
   grid-template-rows: repeat(5, minmax(0, 1fr)) !important;
   gap: clamp(4px, 0.9vmin, 6px) !important;
   aspect-ratio: unset !important;
   margin: 0 !important;
+  overflow: hidden;
 }
 
 .player-container--v2 .bingo-card .bingo-square {

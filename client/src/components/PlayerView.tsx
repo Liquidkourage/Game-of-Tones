@@ -219,6 +219,8 @@ const PlayerView: React.FC = () => {
     return window.innerHeight;
   });
 
+  const [appHeaderHeightPx, setAppHeaderHeightPx] = useState(44);
+
   const [compactCardCells, setCompactCardCells] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.innerWidth <= PLAYER_COMPACT_VIEWPORT_PX;
@@ -229,6 +231,9 @@ const PlayerView: React.FC = () => {
     if (!vv) {
       setVisualViewportHeightPx(Math.round(window.innerHeight * 10) / 10);
       setCompactCardCells(window.innerWidth <= PLAYER_COMPACT_VIEWPORT_PX);
+      const headerEl = document.querySelector<HTMLElement>('.app-header');
+      const headerH = headerEl ? Math.ceil(headerEl.getBoundingClientRect().height) : 44;
+      setAppHeaderHeightPx(headerH);
       return undefined;
     }
 
@@ -279,6 +284,10 @@ const PlayerView: React.FC = () => {
       const layoutWidth = Math.round(v.width * 10) / 10;
       const compact = layoutWidth <= PLAYER_COMPACT_VIEWPORT_PX;
       setCompactCardCells((prev) => (prev === compact ? prev : compact));
+
+      const headerEl = document.querySelector<HTMLElement>('.app-header');
+      const headerH = headerEl ? Math.ceil(headerEl.getBoundingClientRect().height) : 44;
+      setAppHeaderHeightPx((prev) => (prev === headerH ? prev : headerH));
     };
 
     measure();
@@ -1761,6 +1770,30 @@ const PlayerView: React.FC = () => {
   };
   const currentPatternLabel = patternLabelMap[gameState.pattern] || 'Pattern live';
 
+  const showStatusRail = connectionStatus !== 'connected';
+  const playerCardHeightPx = useMemo(() => {
+    if (visualViewportHeightPx <= 0) return undefined;
+    const statusRailPx = showStatusRail ? 38 : 0;
+    const actionBarPx = bingoCard ? 58 : 0;
+    return Math.max(
+      280,
+      Math.round(
+        visualViewportHeightPx
+          - appHeaderHeightPx
+          - statusRailPx
+          - actionBarPx
+          - visualBottomGapPx
+          - 10,
+      ),
+    );
+  }, [
+    visualViewportHeightPx,
+    appHeaderHeightPx,
+    showStatusRail,
+    bingoCard,
+    visualBottomGapPx,
+  ]);
+
   const renderBingoCard = () => {
     const headerCells = (['B', 'I', 'N', 'G', 'O'] as const).map((letter, colIdx) => {
       const raw = bingoColumnPlaylistNames[colIdx] || '';
@@ -1869,6 +1902,9 @@ const PlayerView: React.FC = () => {
         '--player-visual-bottom-gap': `${visualBottomGapPx}px`,
         ...(visualViewportHeightPx > 0
           ? { '--player-vh-budget': `${visualViewportHeightPx}px` }
+          : {}),
+        ...(playerCardHeightPx != null
+          ? { '--player-v2-card-height-px': `${playerCardHeightPx}px` }
           : {}),
         ...(venueBranding?.primaryColor ? { '--venue-primary': venueBranding.primaryColor } : {}),
         ...(venueBranding?.accentColor ? { '--venue-accent': venueBranding.accentColor } : {}),
