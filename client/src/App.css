@@ -5008,11 +5008,11 @@ button.conn-chip.conn-chip-compact {
   --player-v2-header-playlist: rgba(238, 237, 255, 0.8);
   --player-v2-cell-bg: linear-gradient(
     155deg,
-    rgba(255, 255, 255, 0.045) 0%,
-    rgba(139, 92, 246, 0.08) 100%
+    rgba(255, 255, 255, 0.09) 0%,
+    rgba(139, 92, 246, 0.14) 100%
   );
   --player-v2-cell-border: rgba(167, 139, 250, 0.18);
-  --player-v2-cell-inset: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --player-v2-cell-inset: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   --player-v2-marked-bg: linear-gradient(
     155deg,
     rgba(0, 255, 136, 0.46) 0%,
@@ -5043,8 +5043,8 @@ button.conn-chip.conn-chip-compact {
   --player-v2-pattern-inset: inset 0 0 0 1px rgba(255, 193, 7, 0.18);
   --player-v2-placeholder-bg: linear-gradient(
     155deg,
-    rgba(255, 255, 255, 0.035) 0%,
-    rgba(139, 92, 246, 0.065) 100%
+    rgba(255, 255, 255, 0.065) 0%,
+    rgba(139, 92, 246, 0.11) 100%
   );
   --player-v2-placeholder-border: rgba(167, 139, 250, 0.14);
   --player-v2-empty-note: rgba(233, 230, 255, 0.66);
@@ -5134,11 +5134,11 @@ button.conn-chip.conn-chip-compact {
   --player-v2-header-playlist: #5c5678;
   --player-v2-cell-bg: linear-gradient(
     155deg,
-    #ffffff 0%,
-    #f8f6fc 100%
+    #e6e1ec 0%,
+    #dad4e4 100%
   );
   --player-v2-cell-border: rgba(139, 120, 180, 0.28);
-  --player-v2-cell-inset: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  --player-v2-cell-inset: inset 0 1px 0 rgba(255, 255, 255, 0.35);
   --player-v2-marked-bg: linear-gradient(
     155deg,
     rgba(10, 155, 98, 0.28) 0%,
@@ -5166,8 +5166,8 @@ button.conn-chip.conn-chip-compact {
   --player-v2-pattern-inset: inset 0 0 0 1px rgba(180, 130, 0, 0.22);
   --player-v2-placeholder-bg: linear-gradient(
     155deg,
-    rgba(248, 246, 252, 0.98) 0%,
-    rgba(241, 236, 250, 0.98) 100%
+    #ded8e4 0%,
+    #d2cad8 100%
   );
   --player-v2-placeholder-border: rgba(139, 120, 180, 0.22);
   --player-v2-empty-note: #6a6488;
