@@ -23,10 +23,6 @@ import {
   customMaskHighlightPositions,
 } from '../patternDefinitions';
 
-/** Small fudge when sizing card from the measured stage slot (px). */
-const PLAYER_V2_CARD_HEIGHT_TRIM_PX = 4;
-/** Ignore sub-pixel / layout-noise height churn from ResizeObserver. */
-const PLAYER_V2_CARD_HEIGHT_MIN_DELTA_PX = 6;
 /** Narrow phones / fold cover: title-only cells; artist via long-press. */
 const PLAYER_COMPACT_VIEWPORT_PX = 400;
 
@@ -306,59 +302,6 @@ const PlayerView: React.FC = () => {
       window.removeEventListener('orientationchange', measure);
     };
   }, []);
-
-  const showStatusRail = connectionStatus !== 'connected';
-  const playerContainerRef = useRef<HTMLDivElement>(null);
-  const bingoStageRef = useRef<HTMLDivElement>(null);
-  const appliedCardHeightRef = useRef<number | undefined>(undefined);
-  const cardHeightMeasureFrameRef = useRef(0);
-
-  useLayoutEffect(() => {
-    const stageEl = bingoStageRef.current;
-    const containerEl = playerContainerRef.current;
-    if (!stageEl || !containerEl) return undefined;
-
-    appliedCardHeightRef.current = undefined;
-
-    const applyMeasuredCardHeight = () => {
-      const stageHeightPx = Math.floor(stageEl.getBoundingClientRect().height);
-      if (stageHeightPx <= 0) return;
-      const next = Math.max(260, stageHeightPx - PLAYER_V2_CARD_HEIGHT_TRIM_PX);
-      const prev = appliedCardHeightRef.current;
-      if (prev != null && Math.abs(prev - next) < PLAYER_V2_CARD_HEIGHT_MIN_DELTA_PX) return;
-      appliedCardHeightRef.current = next;
-      containerEl.style.setProperty('--player-v2-card-height-px', `${next}px`);
-    };
-
-    const scheduleCardHeightMeasure = () => {
-      cancelAnimationFrame(cardHeightMeasureFrameRef.current);
-      cardHeightMeasureFrameRef.current = requestAnimationFrame(() => {
-        cardHeightMeasureFrameRef.current = 0;
-        applyMeasuredCardHeight();
-      });
-    };
-
-    scheduleCardHeightMeasure();
-
-    const ro = new ResizeObserver(scheduleCardHeightMeasure);
-    ro.observe(stageEl);
-
-    const vv = window.visualViewport;
-    vv?.addEventListener('resize', scheduleCardHeightMeasure);
-    vv?.addEventListener('scroll', scheduleCardHeightMeasure);
-    window.addEventListener('resize', scheduleCardHeightMeasure);
-    window.addEventListener('orientationchange', scheduleCardHeightMeasure);
-
-    return () => {
-      cancelAnimationFrame(cardHeightMeasureFrameRef.current);
-      cardHeightMeasureFrameRef.current = 0;
-      ro.disconnect();
-      vv?.removeEventListener('resize', scheduleCardHeightMeasure);
-      vv?.removeEventListener('scroll', scheduleCardHeightMeasure);
-      window.removeEventListener('resize', scheduleCardHeightMeasure);
-      window.removeEventListener('orientationchange', scheduleCardHeightMeasure);
-    };
-  }, [showStatusRail, bingoCard]);
 
   // Mark persistence functions
   const getStoredMarks = (): Record<string, boolean> => {
@@ -1933,7 +1876,6 @@ const PlayerView: React.FC = () => {
   return (
     <>
     <div
-      ref={playerContainerRef}
       className={`player-container player-container--v2 ${bingoCard ? 'has-card' : ''}${venueBranding ? ' player-container--venue' : ''}${compactCardCells ? ' player-container--compact-cells' : ''}${cardTheme === 'light' ? ' player-container--light' : ''}`}
       style={{
         '--player-card-font-scale': cardFontPercent / 100,
@@ -1996,7 +1938,6 @@ const PlayerView: React.FC = () => {
         ) : null}
 
         <motion.div
-          ref={bingoStageRef}
           className="bingo-section player-bingo-stage"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
