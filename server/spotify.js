@@ -1,6 +1,7 @@
 const SpotifyWebApi = require('spotify-web-api-node');
 const https = require('https');
 const pl = require('./spotifyPipelineLog');
+const showLog = require('./showLog');
 const webApi = require('./spotifyWebApiMeter');
 
 /**
@@ -1311,7 +1312,7 @@ class SpotifyService {
       });
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlayback');
-      console.error('Error starting playback:', error);
+      showLog.logSpotifyApiError('startPlayback', error);
       throw error;
     }
   }
@@ -1974,7 +1975,7 @@ class SpotifyService {
       routineSpotifyLog(`✅ Started playlist playback: track ${trackIndex} at ${positionMs}ms`);
     } catch (error) {
       this._rethrowIfRateLimited(error, 'startPlaybackFromPlaylist');
-      console.error('Error starting playback from playlist:', error);
+      showLog.logSpotifyApiError('startPlaybackFromPlaylist', error);
       throw error;
     }
   }

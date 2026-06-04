@@ -9,6 +9,7 @@ const cookieParser = require('cookie-parser');
 const { OAuth2Client } = require('google-auth-library');
 const SpotifyService = require('./spotify');
 const spotifyDevices = require('./spotifyDevices');
+const showLog = require('./showLog');
 const fs = require('fs');
 const path = require('path');
 const hostAuth = require('./hostAuth');
@@ -2651,15 +2652,14 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
     startSimpleProgression(roomId, resolvedDeviceId, room.snippetLength);
 
   } catch (error) {
-    console.error('❌ Error in simple song advance:', error);
-    console.error('❌ Error details:', error?.message, error?.body?.error);
+    showLog.logSpotifyApiError('simple song advance', error);
     
     try {
       routineServerLog('🔄 Attempting to resume playback after song advance failure...');
       await spotifyFor(roomId).resumePlayback(resolvedDeviceId);
       routineServerLog('✅ Resume attempt completed');
     } catch (resumeError) {
-      console.warn('⚠️ Failed to resume playback:', resumeError?.message);
+      console.warn('⚠️ Failed to resume playback:', showLog.spotifyErrorSummary(resumeError));
     }
     
     routineServerLog('🔄 Retrying same call in 3 seconds (will not skip index)...');
@@ -3347,7 +3347,12 @@ io.on('connection', (socket) => {
     }
     
     routineServerLog(`Player ${playerName} joined room ${roomId}. Total players: ${room.players.size}`);
-    routineServerLog(`Room host: ${room.host}, Current socket: ${socket.id}`);
+    showLog.routineLogThrottled(
+      `room-host:${roomId}`,
+      `Room host: ${room.host ?? 'null'}, current socket: ${socket.id}`,
+      routineServerLog,
+      120_000,
+    );
     
     // Emit player joined event to all players in the room
     io.to(roomId).emit('player-joined', {
@@ -3374,8 +3379,13 @@ io.on('connection', (socket) => {
       venueBranding: venueBrandingForRoom(room),
     });
 
-    // Log available devices for debugging
-    routineServerLog('Available devices:', Array.from(room.players.values()).map(p => p.name));
+    // Log join roster count only (full name list is noisy with 50+ players).
+    showLog.routineLogThrottled(
+      `room-roster:${roomId}`,
+      `👥 Room ${roomId}: ${getNonHostPlayerCount(room)} players (+${effectiveIsHost ? 'host' : playerName})`,
+      routineServerLog,
+      60_000,
+    );
 
     // If a game is already in progress or mix is finalized, provide the joining player with state
     (async () => {
@@ -5009,11 +5019,6 @@ io.on('connection', (socket) => {
       if (room.ownerUserId != null && db) {
         try {
           await resolveRoomVenueBranding(room);
-          const b = room.venueBranding;
-          routineServerLog(
-            `🎨 SYNC-STATE venue: room ${roomId} ownerUserId=${room.ownerUserId} ` +
-              `${b ? `logo=${!!b.logoUrl} title=${!!b.eventTitle}` : 'branding=null'}`
-          );
           try {
             io.to(roomId).emit('venue-branding', { venueBranding: venueBrandingForRoom(room) });
           } catch (emitErr) {
@@ -5022,14 +5027,8 @@ io.on('connection', (socket) => {
         } catch (e) {
           console.error('sync-state resolveRoomVenueBranding:', e?.message || e);
         }
-      } else {
-        routineServerLog(
-          `🎨 SYNC-STATE venue skipped: room ${roomId} ownerUserId=${room.ownerUserId ?? 'null'} db=${!!db}`
-        );
       }
 
-      routineServerLog(`🔄 SYNC-STATE: Sending state to ${socket.id} for room ${roomId}`);
-      
       // Build played songs list from playback index prefix (no gaps when a transport retry skips emit)
       const playedSongIds = syncCalledSongIdsFromPlaybackIndex(room);
       
@@ -5101,7 +5100,12 @@ io.on('connection', (socket) => {
       emitCurrentSongPlayingToSocket(socket, room);
       socket.emit('display-reveal-state', publicDisplayRevealStateForClient(room));
       io.to(socket.id).emit('room-state', payload);
-      routineServerLog(`✅ SYNC-STATE: Sent comprehensive state (${payload.totalPlayedCount} played songs, ${payload.playerCount} players)`);
+      showLog.routineLogThrottled(
+        `sync-state:${roomId}`,
+        `✅ SYNC-STATE room ${roomId}: ${payload.totalPlayedCount} played, ${payload.playerCount} players → ${socket.id}`,
+        routineServerLog,
+        60_000,
+      );
     } catch (e) {
       console.error('❌ SYNC-STATE error:', e?.message || e);
     }
@@ -5146,9 +5150,12 @@ io.on('connection', (socket) => {
       if (room.players.get(socket.id)?.isHost) {
         emitRoomPlayersRosterToHosts(roomId, room);
       }
-      routineServerLog(`📋 Sent ${Object.keys(playerCardsData).length} player cards to host in room ${roomId}`);
-      routineServerLog(`📋 CalledSongIds being sent:`, room.calledSongIds);
-      routineServerLog(`📋 CalledSongIds length:`, room.calledSongIds?.length || 0);
+      showLog.routineLogThrottled(
+        `player-cards:${roomId}`,
+        `📋 Sent ${Object.keys(playerCardsData).length} player cards (${room.calledSongIds?.length || 0} calls) → host in room ${roomId}`,
+        routineServerLog,
+        30_000,
+      );
     } catch (e) {
       console.error('❌ Error sending player cards:', e?.message || e);
     }
@@ -8807,7 +8814,12 @@ function sendPlayerCardUpdatesNow(roomId) {
       }
     });
     
-    routineServerLog(`📋 Real-time update: Sent ${Object.keys(playerCardsData).length} player cards to host(s) in room ${roomId}`);
+    showLog.routineLogThrottled(
+      `player-cards-rt:${roomId}`,
+      `📋 Real-time update: ${Object.keys(playerCardsData).length} player cards → host(s) in room ${roomId}`,
+      routineServerLog,
+      30_000,
+    );
   } catch (e) {
     console.error('❌ Error sending real-time player card updates:', e?.message || e);
   }
