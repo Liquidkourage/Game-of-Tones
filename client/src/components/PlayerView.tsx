@@ -1045,13 +1045,14 @@ const PlayerView: React.FC = () => {
     let frame = 0;
     let cancelled = false;
 
-    /** ~Discord body (~16px) at typical card width; cap stops short-title blow-up. */
+    /** Title leads; artist base size in CSS is already ~85% of title — fit scales hover near 1.0. */
     const TITLE_SCALE_MAX = 1.14;
     const TITLE_SCALE_PREFERRED_MIN = 0.86;
     const TITLE_SCALE_ABSOLUTE_MIN = 0.64;
-    const ARTIST_TO_TITLE_MAX = 0.78;
-    const ARTIST_TO_TITLE_MIN = 0.60;
-    const artistScaleForTitle = (titleScale: number) => titleScale * ARTIST_TO_TITLE_MAX;
+    const ARTIST_PROBE_SCALE = 1;
+    const ARTIST_SCALE_MIN = 0.9;
+    const ARTIST_SCALE_MAX = 1.06;
+    const ARTIST_SCALE_FLOOR = 0.94;
     const titleOnlyCells = compactCardCells;
 
     const getLineCount = (el: HTMLElement) => {
@@ -1151,7 +1152,7 @@ const PlayerView: React.FC = () => {
         let titleLow = TITLE_SCALE_ABSOLUTE_MIN;
         let titleHigh = TITLE_SCALE_MAX;
         const fits = (titleScale: number) =>
-          fitsAtScales(ctx, titleScale, artistScaleForTitle(titleScale), ctx.titleMaxLines, ctx.artistMaxLines);
+          fitsAtScales(ctx, titleScale, ARTIST_PROBE_SCALE, ctx.titleMaxLines, ctx.artistMaxLines);
 
         if (!fits(titleLow)) return TITLE_SCALE_ABSOLUTE_MIN;
 
@@ -1176,7 +1177,7 @@ const PlayerView: React.FC = () => {
 
       const allFitAtTitle = (titleScale: number) =>
         contexts.every((ctx) =>
-          fitsAtScales(ctx, titleScale, artistScaleForTitle(titleScale), ctx.titleMaxLines, ctx.artistMaxLines),
+          fitsAtScales(ctx, titleScale, ARTIST_PROBE_SCALE, ctx.titleMaxLines, ctx.artistMaxLines),
         );
 
       if (!allFitAtTitle(uniformTitleScale)) {
@@ -1184,16 +1185,16 @@ const PlayerView: React.FC = () => {
       }
 
       for (const ctx of contexts) {
-        setScales(ctx, uniformTitleScale, artistScaleForTitle(uniformTitleScale));
+        setScales(ctx, uniformTitleScale, ARTIST_PROBE_SCALE);
       }
 
       if (!titleOnlyCells) {
         const findMaxArtistScale = (ctx: SquareCtx) => {
           if (ctx.artistMaxLines === 0 || !ctx.artistEl.textContent?.trim()) {
-            return uniformTitleScale * ARTIST_TO_TITLE_MIN;
+            return ARTIST_SCALE_FLOOR;
           }
-          let artistLow = uniformTitleScale * ARTIST_TO_TITLE_MIN;
-          let artistHigh = Math.min(1.05, uniformTitleScale * ARTIST_TO_TITLE_MAX);
+          let artistLow = ARTIST_SCALE_MIN;
+          let artistHigh = ARTIST_SCALE_MAX;
           const fits = (artistScale: number) =>
             fitsAtScales(ctx, uniformTitleScale, artistScale, ctx.titleMaxLines, ctx.artistMaxLines);
 
@@ -1212,11 +1213,14 @@ const PlayerView: React.FC = () => {
         };
 
         const perSquareArtistScales = contexts.map((ctx) => findMaxArtistScale(ctx));
-        let uniformArtistScale = Math.min(...perSquareArtistScales);
-        const artistScaleFloor = uniformTitleScale * ARTIST_TO_TITLE_MIN;
-        const artistScaleCap = uniformTitleScale * ARTIST_TO_TITLE_MAX;
-        uniformArtistScale = Math.max(uniformArtistScale, artistScaleFloor);
-        uniformArtistScale = Math.min(uniformArtistScale, artistScaleCap);
+        const sortedArtistScales = [...perSquareArtistScales].sort((a, b) => a - b);
+        const percentileIndex = Math.min(
+          sortedArtistScales.length - 1,
+          Math.floor(sortedArtistScales.length * 0.35),
+        );
+        let uniformArtistScale = sortedArtistScales[percentileIndex] ?? ARTIST_SCALE_FLOOR;
+        uniformArtistScale = Math.max(uniformArtistScale, ARTIST_SCALE_FLOOR);
+        uniformArtistScale = Math.min(uniformArtistScale, ARTIST_SCALE_MAX);
         for (const ctx of contexts) {
           setScales(ctx, uniformTitleScale, uniformArtistScale);
         }
