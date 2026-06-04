@@ -4988,7 +4988,7 @@ button.conn-chip.conn-chip-compact {
   --player-nav-bottom: 0px;
   --player-app-header-offset: 32px;
   --player-v2-title-size: clamp(15px, 6cqi, 22px);
-  --player-v2-artist-size: clamp(13px, 5.2cqi, 18px);
+  --player-v2-artist-size: clamp(12px, 4.5cqi, 15px);
   --player-v2-card-width: 95vw;
   --player-v2-card-height: 80vh;
   padding-bottom: 0;
@@ -5581,7 +5581,7 @@ button.conn-chip.conn-chip-compact {
 
 .player-container--v2 .bingo-card .bingo-square {
   --player-cell-title-scale: 1;
-  --player-cell-artist-scale: 1;
+  --player-cell-artist-scale: 0.74;
   position: relative;
   overflow: hidden;
   border-right-width: 1px !important;
@@ -5690,12 +5690,9 @@ button.conn-chip.conn-chip-compact {
 
 .player-container--v2 .player-square-artist {
   width: 100%;
-  font-size: max(
-    13px,
-    calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 1) * var(--player-v2-artist-size))
-  );
-  line-height: 1.14;
-  font-weight: 600;
+  font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.74) * var(--player-v2-artist-size));
+  line-height: 1.12;
+  font-weight: 700;
   color: var(--player-v2-text-secondary);
   max-width: 100%;
   white-space: normal;
@@ -6190,10 +6187,7 @@ button.conn-chip.conn-chip-compact {
   }
 
   .player-container--v2 .player-square-artist {
-    font-size: max(
-      12px,
-      calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 1) * clamp(12px, 4.8cqi, 16px))
-    );
+    font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.74) * clamp(11px, 4cqi, 14px));
   }
 
   .player-container--v2 .player-v2-action-bar {
