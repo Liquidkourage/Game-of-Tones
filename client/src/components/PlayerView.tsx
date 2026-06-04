@@ -1947,6 +1947,7 @@ const PlayerView: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35, delay: 0.05 }}
               >
+                <div className="player-v2-action-row">
                 <button
                   type="button"
                   className={`bingo-fab bingo-fab--canvas player-v2-call-button ${bingoHolding ? 'holding' : ''} ${hasValidBingo ? 'ready' : 'disabled'}`}
@@ -2008,7 +2009,7 @@ const PlayerView: React.FC = () => {
                     />
                   </span>
                   <span
-                    className="bingo-fab-label"
+                    className="bingo-fab-label player-v2-call-label-wrap"
                     style={{
                       position: 'relative',
                       zIndex: 1,
@@ -2019,24 +2020,37 @@ const PlayerView: React.FC = () => {
                       pointerEvents: 'none',
                     }}
                   >
-                    Hold to call BINGO
+                    <span className="player-v2-call-label player-v2-call-label--long">
+                      Hold to call BINGO
+                    </span>
+                    <span className="player-v2-call-label player-v2-call-label--short">
+                      Hold · BINGO
+                    </span>
                   </span>
                 </button>
                 <button
                   type="button"
-                  className="player-v2-options-trigger"
+                  className="player-v2-options-button"
                   onClick={() => setOptionsOpen(true)}
+                  aria-label="Card options"
                 >
-                  Card options
+                  Options
                 </button>
-                <div className="player-v2-action-footer">
-                  <span className="player-v2-action-note">{currentPatternLabel}</span>
-                  <span className="player-v2-action-note">
-                    {compactCardCells
-                      ? 'Long-press a square for artist & full details'
-                      : 'Long-press a square for full details'}
-                  </span>
                 </div>
+                <p className="player-v2-action-meta" aria-live="polite">
+                  <span className="player-v2-action-meta-pattern">{currentPatternLabel}</span>
+                  {!compactCardCells ? (
+                    <>
+                      <span className="player-v2-action-meta-sep" aria-hidden>·</span>
+                      <span className="player-v2-action-meta-hint">Long-press a square for full details</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="player-v2-action-meta-sep" aria-hidden>·</span>
+                      <span className="player-v2-action-meta-hint">Long-press for artist &amp; details</span>
+                    </>
+                  )}
+                </p>
               </motion.div>
             ) : null}
 
