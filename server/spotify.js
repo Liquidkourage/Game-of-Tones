@@ -36,6 +36,10 @@ function readSpotifyQuarantineMaxMs() {
 }
 const SPOTIFY_QUARANTINE_MAX_MS = readSpotifyQuarantineMaxMs();
 
+/** Reuse GET /me/player/devices briefly to avoid 429 bursts on host reconnect + Start Game. */
+const USER_DEVICES_CACHE_TTL_MS = 12_000;
+const USER_DEVICES_CACHE_STALE_OK_MS = 45_000;
+
 /** Suppress routine Spotify success logs when MISSION_CRITICAL_LOGS=1; keep console.error (incl. [SPOTIFY_429_DIAGNOSTIC]). */
 function missionCriticalLogsOnlySpotify() {
   const v = process.env.MISSION_CRITICAL_LOGS;
@@ -313,6 +317,18 @@ class SpotifyService {
     this._pacingBoostUntil = 0;
     /** Last api.spotify.com 429 incident (structured); survives clearRateLimitQuarantine() for forensics. */
     this._last429Incident = null;
+    /** Cached GET /v1/me/player/devices — short TTL to collapse parallel host polls. */
+    this._userDevicesCache = null;
+    this._lastDevicesFromCache = false;
+  }
+
+  invalidateUserDevicesCache() {
+    this._userDevicesCache = null;
+    this._lastDevicesFromCache = false;
+  }
+
+  wasLastUserDevicesFromCache() {
+    return this._lastDevicesFromCache === true;
   }
 
   // Classify common Spotify Web API errors
@@ -1445,11 +1461,25 @@ class SpotifyService {
   }
 
   // Get user's devices
-  async getUserDevices() {
+  async getUserDevices(options = {}) {
+    const forceRefresh = options.forceRefresh === true;
+    const now = Date.now();
+    const cached = this._userDevicesCache;
+    if (!forceRefresh && cached && now - cached.at < USER_DEVICES_CACHE_TTL_MS) {
+      this._lastDevicesFromCache = true;
+      return cached.devices;
+    }
+    if (this.isQuarantined() && cached && now - cached.at < USER_DEVICES_CACHE_STALE_OK_MS) {
+      this._lastDevicesFromCache = true;
+      routineSpotifyLog('Serving cached Spotify devices during API quarantine');
+      return cached.devices;
+    }
+    this._lastDevicesFromCache = false;
     await this._ensureCanCallWebApi('getUserDevices');
     try {
       const response = await this.spotifyApi.getMyDevices();
       const devices = response.body.devices;
+      this._userDevicesCache = { devices, at: Date.now() };
       if (process.env.NODE_ENV !== 'production' || process.env.DEBUG) {
         routineSpotifyLog(`Found ${devices.length} devices from Spotify API`);
         devices.forEach((device) => {
@@ -1460,6 +1490,11 @@ class SpotifyService {
     } catch (error) {
       if (this.isRateLimitError(error)) {
         this.applyRateLimitQuarantine(error, 'getUserDevices');
+        if (cached && now - cached.at < USER_DEVICES_CACHE_STALE_OK_MS) {
+          this._lastDevicesFromCache = true;
+          routineSpotifyLog('Serving stale cached Spotify devices after devices 429');
+          return cached.devices;
+        }
         throw error;
       }
       console.error('Error getting user devices:', error);

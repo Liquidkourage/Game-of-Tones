@@ -8340,40 +8340,52 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
     routineServerLog(`📝 Stored ${allSongs.length} songs in room ${roomId} for ordered playback`);
     routineServerLog(`📋 First 5 songs in order: ${allSongs.slice(0, 5).map(s => `${s.name} (${s.id})`).join(', ')}`);
     
-    // Spotify-only: build a temp playlist in the background for reliable context on song 2+.
-    // Do not await creation before first play — each Web API call is paced (~550ms default), so
-    // create+add-items alone costs >1s before audio; first track uses URIs + repeat 'track' immediately.
+    // Spotify-only: defer temp playlist + GOT cleanup so Start Game does not burst Web API calls.
     if (needsSpotifyTransport && !playlistHasYoutube) {
       try {
-        void spotifyFor(roomId)
-          .deleteAllGameOfTonesOutputPlaylists()
-          .catch((clearErr) => {
-            console.warn(
-              '⚠️ Deferred GOT output playlist cleanup failed (non-fatal):',
-              clearErr?.message || clearErr
-            );
-          });
         const trackUris = allSongs.map((song) => `spotify:track:${song.id}`);
         const playlistName = `TEMPO Bingo Room ${roomId} - ${new Date().toISOString().slice(0, 16)}`;
         room.temporaryPlaylistId = null;
-        void (async () => {
-          try {
-            const id = await spotifyFor(roomId).createTemporaryPlaylist(playlistName, trackUris);
-            const r = rooms.get(roomId);
-            if (r && r.gameState === 'playing') {
-              r.temporaryPlaylistId = id;
-              routineServerLog(`🎼 Background temp playlist ready: ${id} (${trackUris.length} tracks)`);
+        if (room._tempPlaylistDeferTimer) clearTimeout(room._tempPlaylistDeferTimer);
+        if (room._gotPlaylistCleanupTimer) clearTimeout(room._gotPlaylistCleanupTimer);
+        const deferTempPlaylistMs = Number(process.env.SPOTIFY_TEMP_PLAYLIST_DEFER_MS) || 45_000;
+        const deferGotCleanupMs = Number(process.env.SPOTIFY_GOT_PLAYLIST_CLEANUP_DEFER_MS) || 120_000;
+        room._tempPlaylistDeferTimer = setTimeout(() => {
+          room._tempPlaylistDeferTimer = null;
+          void (async () => {
+            try {
+              const sp = spotifyFor(roomId);
+              if (!sp || sp.isQuarantined()) return;
+              const id = await sp.createTemporaryPlaylist(playlistName, trackUris);
+              const r = rooms.get(roomId);
+              if (r && r.gameState === 'playing') {
+                r.temporaryPlaylistId = id;
+                routineServerLog(`🎼 Deferred temp playlist ready: ${id} (${trackUris.length} tracks)`);
+              }
+            } catch (err) {
+              console.warn(
+                '⚠️ Deferred temp playlist failed (per-track playback continues):',
+                err?.message || err
+              );
             }
-          } catch (err) {
-            console.warn(
-              '⚠️ Background temp playlist failed (per-track playback continues):',
-              err?.message || err
-            );
-          }
-        })();
-        routineServerLog(`📋 Queued background playlist; first track via URIs (first 5): ${trackUris.slice(0, 5).join(', ')}`);
+          })();
+        }, deferTempPlaylistMs);
+        room._gotPlaylistCleanupTimer = setTimeout(() => {
+          room._gotPlaylistCleanupTimer = null;
+          void spotifyFor(roomId)
+            .deleteAllGameOfTonesOutputPlaylists()
+            .catch((clearErr) => {
+              console.warn(
+                '⚠️ Deferred GOT output playlist cleanup failed (non-fatal):',
+                clearErr?.message || clearErr
+              );
+            });
+        }, deferGotCleanupMs);
+        routineServerLog(
+          `📋 First track via URIs; temp playlist in ${Math.round(deferTempPlaylistMs / 1000)}s (first 5): ${trackUris.slice(0, 5).join(', ')}`,
+        );
       } catch (error) {
-        console.warn('⚠️ Failed to queue temporary playlist, falling back to individual track playback:', error);
+        console.warn('⚠️ Failed to schedule temporary playlist, falling back to individual track playback:', error);
         room.temporaryPlaylistId = null;
       }
     } else {
@@ -8452,20 +8464,23 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
         routineServerLog('⚠️ transfer-first failed; resolving device list…', e?.body?.error?.message || e?.message || e);
       }
       if (!transferred) {
-        const devices = await spotifyFor(roomId).getUserDevices();
-        const deviceInList = devices.find((d) => d.id === targetDeviceId);
+        const spPlay = spotifyFor(roomId);
+        let devices = await spPlay.getUserDevices();
+        let deviceInList = devices.find((d) => d.id === targetDeviceId);
         if (!deviceInList) {
           routineServerLog('⚠️ Locked device not in list; attempting activation...');
           try {
-            await spotifyFor(roomId).activateDevice(targetDeviceId);
+            await spPlay.activateDevice(targetDeviceId);
           } catch (activateErr) {
             routineServerLog(
               '⚠️ activateDevice failed:',
               activateErr?.body?.error?.message || activateErr?.message || activateErr,
             );
           }
-          const devicesAfterActivate = await spotifyFor(roomId).getUserDevices();
-          if (!devicesAfterActivate.find((d) => d.id === targetDeviceId)) {
+          spPlay.invalidateUserDevicesCache();
+          devices = await spPlay.getUserDevices({ forceRefresh: true });
+          deviceInList = devices.find((d) => d.id === targetDeviceId);
+          if (!deviceInList) {
             io.to(roomId).emit('playback-error', {
               message:
                 'Spotify playback device is offline or missing. Open Spotify on that device (or pick another device in Connection → Refresh devices), then Start Game again.',
@@ -8515,13 +8530,14 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       if (/token expired/i.test(message)) {
         routineServerLog('🔄 Token expired, refreshing and retrying...');
         try {
-          await spotifyFor(roomId).refreshAccessToken();
-          // Re-check device after refresh
-          const devicesAfter = await spotifyFor(roomId).getUserDevices();
-          const stillMissing = !devicesAfter.find(d => d.id === targetDeviceId);
+          const spRefresh = spotifyFor(roomId);
+          await spRefresh.refreshAccessToken();
+          spRefresh.invalidateUserDevicesCache();
+          const devicesAfter = await spRefresh.getUserDevices({ forceRefresh: true });
+          const stillMissing = !devicesAfter.find((d) => d.id === targetDeviceId);
           if (stillMissing) {
             routineServerLog('⚠️ Locked device still missing after refresh; attempting activation...');
-            await spotifyFor(roomId).activateDevice(targetDeviceId);
+            await spRefresh.activateDevice(targetDeviceId);
           }
           await spotifyFor(roomId).withRetries('transferPlayback(after-refresh)', () => spotifyFor(roomId).transferPlayback(targetDeviceId, false), { attempts: 3, backoffMs: 300 });
           // Skip-based queue clearing removed to avoid context hijacks
@@ -11962,20 +11978,25 @@ app.get('/api/spotify/devices', async (req, res) => {
     }
 
     const spotifyReq = spotifyForRequest(req);
-    if (spotifyReq && spotifyReq.isQuarantined()) {
+    const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
+    if (spotifyReq && spotifyReq.isQuarantined() && forceRefresh) {
       return res.status(429).json({
         error: 'spotify_rate_limited',
-        message: 'Spotify API quarantine active (recent 429).',
+        message: 'Spotify API quarantine active (recent 429). Wait a few seconds, then tap Refresh devices.',
         retryAfterSec: spotifyReq.getQuarantineRemainingSec(),
         webApiQuarantine: spotifyReq.getWebApiQuarantineInfo(),
       });
     }
-    routineServerLog(`📱 Fetching available Spotify devices (org ${orgId})...`);
-    const devices = await spotifyForRequest(req).getUserDevices();
+    routineServerLog(
+      `📱 Fetching available Spotify devices (org ${orgId}${forceRefresh ? ', refresh=1' : ''})...`,
+    );
+    const devices = await spotifyReq.getUserDevices({ forceRefresh });
     let currentPlayback = null;
-    try {
-      currentPlayback = await spotifyForRequest(req).getCurrentPlaybackState();
-    } catch (_) {}
+    if (!spotifyReq.wasLastUserDevicesFromCache()) {
+      try {
+        currentPlayback = await spotifyReq.getCurrentPlaybackState();
+      } catch (_) {}
+    }
     const currentDevice = currentPlayback?.device || null;
     
     const savedDevice = loadSavedDeviceForUser(uid);
@@ -12107,25 +12128,27 @@ app.post('/api/spotify/transfer', async (req, res) => {
     routineServerLog(`🔀 Transfer request to device ${deviceId} (play=${!!play})`);
     await spotifyForRequest(req).ensureValidToken();
 
-    // Verify device presence; attempt activation if missing
-    const devices = await spotifyForRequest(req).getUserDevices();
-    const found = devices.find(d => d.id === deviceId);
+    const spTransfer = spotifyForRequest(req);
+    spTransfer.invalidateUserDevicesCache();
+    const devices = await spTransfer.getUserDevices({ forceRefresh: true });
+    const found = devices.find((d) => d.id === deviceId);
     if (!found) {
       routineServerLog('⚠️ Target device not in list; attempting activation...');
-      const activated = await spotifyForRequest(req).activateDevice(deviceId);
+      const activated = await spTransfer.activateDevice(deviceId);
       if (!activated) {
         return res.status(404).json({ success: false, error: 'Device not available; open Spotify on that device and try again' });
       }
     }
 
-    await spotifyForRequest(req).transferPlayback(deviceId, !!play);
+    await spTransfer.transferPlayback(deviceId, !!play);
+    spTransfer.invalidateUserDevicesCache();
     routineServerLog(`✅ Transferred playback to ${deviceId}`);
 
     // Return diagnostic info to help verify account/device context
     let profile = null;
-    try { profile = await spotifyForRequest(req).getCurrentUserProfile(); } catch (_) {}
-    const devicesAfter = await spotifyForRequest(req).getUserDevices();
-    const currentPlayback = await spotifyForRequest(req).getCurrentPlaybackState();
+    try { profile = await spTransfer.getCurrentUserProfile(); } catch (_) {}
+    const devicesAfter = await spTransfer.getUserDevices({ forceRefresh: true });
+    const currentPlayback = await spTransfer.getCurrentPlaybackState();
     res.json({ 
       success: true, 
       deviceId,

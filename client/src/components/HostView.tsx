@@ -2177,12 +2177,18 @@ const HostView: React.FC = () => {
     [socket, roomId],
   );
 
-  const loadDevices = useCallback(async () => {
+  const loadDevices = useCallback(async (options?: { force?: boolean }) => {
     if (!readHostSpotifyWebEnabled()) return;
+    const force = options?.force === true;
+    const now = Date.now();
+    if (!force && now - lastLoadDevicesAtRef.current < LOAD_DEVICES_MIN_GAP_MS) {
+      return;
+    }
     try {
       setIsLoadingDevices(true);
       console.log('Loading Spotify devices...');
-      const response = await hostFetch(`${API_BASE || ''}/api/spotify/devices`);
+      const refreshQuery = force ? '?refresh=1' : '';
+      const response = await hostFetch(`${API_BASE || ''}/api/spotify/devices${refreshQuery}`);
       if (response.status === 401) {
         console.warn('Spotify not connected (401) while loading devices');
         setIsSpotifyConnected(false);
@@ -2224,6 +2230,7 @@ const HostView: React.FC = () => {
     } catch (error) {
       console.error('Error loading devices:', error);
     } finally {
+      lastLoadDevicesAtRef.current = Date.now();
       setIsLoadingDevices(false);
     }
   }, [syncSelectedPlaybackDeviceToRoom, venueSpotifyJamMode]);
@@ -2279,12 +2286,11 @@ const HostView: React.FC = () => {
           setIsSpotifyConnecting(false);
           setlistDebounceExtraAfterSpotifyConnectMsRef.current = 2400;
           await loadPlaylists();
-          await new Promise((r) => setTimeout(r, 1200));
+          await new Promise((r) => setTimeout(r, 1500));
           await loadDevices();
-          // Devices often appear a few seconds after Spotify app / Web Player activates.
           deviceRetryTimer = window.setTimeout(() => {
-            if (!ac.signal.aborted) void loadDevices();
-          }, 2000);
+            if (!ac.signal.aborted) void loadDevices({ force: true });
+          }, 4000);
         } else {
           setSpotifyError(
             'Spotify did not report connected yet. Wait a few seconds and use Connect Spotify again, or refresh the page.'
@@ -2327,6 +2333,9 @@ const HostView: React.FC = () => {
   const spotifyPollBackoffUntilRef = useRef(0);
   /** Throttle getUserPlaylists on socket reconnect to avoid piling on Spotify (429) next to OAuth / status checks. */
   const lastLoadPlaylistsOnSocketReconnectAtRef = useRef(0);
+  const lastLoadDevicesOnSocketReconnectAtRef = useRef(0);
+  const lastLoadDevicesAtRef = useRef(0);
+  const LOAD_DEVICES_MIN_GAP_MS = 12_000;
   /** Last non-empty list sent in finalize-mix (React state can lag right after setSongList / socket events). */
   const lastFinalizeMixSongListRef = useRef<Song[] | null>(null);
   /** Mirror songList for incremental setlist fetches (avoids refetching every playlist on each new selection). */
@@ -3496,8 +3505,11 @@ const HostView: React.FC = () => {
               lastLoadPlaylistsOnSocketReconnectAtRef.current = now;
               await loadPlaylistsSocketRef.current();
             }
-            await new Promise((r) => setTimeout(r, 800));
-            await loadDevicesSocketRef.current();
+            if (now - lastLoadDevicesOnSocketReconnectAtRef.current > 60_000) {
+              lastLoadDevicesOnSocketReconnectAtRef.current = now;
+              await new Promise((r) => setTimeout(r, 1200));
+              await loadDevicesSocketRef.current();
+            }
             await new Promise((r) => setTimeout(r, 800));
             await fetchPlaybackState();
           } else {
@@ -3804,9 +3816,8 @@ const HostView: React.FC = () => {
           setIsSpotifyConnected(true);
           setIsSpotifyConnecting(false);
           await loadPlaylistsSocketRef.current();
-          // Stagger Web API calls (dev-mode Spotify quota is tight; parallel /devices + /playlists + /player hurts 429s)
-          await new Promise((r) => setTimeout(r, 800));
-          await loadDevicesSocketRef.current(); // Load devices when connected
+          await new Promise((r) => setTimeout(r, 1500));
+          await loadDevicesSocketRef.current();
           
           // Sync volume when Spotify connects to ensure it matches interface
           setTimeout(() => {
@@ -8227,7 +8238,7 @@ const HostView: React.FC = () => {
         <button
           type="button"
           className="btn-secondary"
-          onClick={() => void loadDevices()}
+          onClick={() => void loadDevices({ force: true })}
           disabled={isLoadingDevices}
         >
           {isLoadingDevices ? 'Refreshing…' : 'Refresh devices'}
