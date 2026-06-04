@@ -87,6 +87,7 @@ import HostScreenTour from './HostScreenTour';
 import { buildHostScreenTourSteps } from '../hostScreenTourSteps';
 import BingoPoolList from './BingoPoolList';
 import { loadHostPreferences, saveHostPreferences } from '../utils/hostPreferences';
+import { isSpotifyJamDevice, pickPreferredPlaybackDevice } from '../utils/spotifyDevices';
 import { computeOptimalPublicDisplayFontMultiplier } from '../utils/publicDisplayFontScale';
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
 import { HostYoutubeMusicPlaylistLibrary, type YoutubeMixPlaylistRow } from './HostYoutubeMusicPlaylistLibrary';
@@ -531,6 +532,7 @@ interface Device {
   is_active: boolean;
   is_private_session: boolean;
   is_restricted: boolean;
+  isJam?: boolean;
 }
 
 interface PlaybackState {
@@ -820,19 +822,32 @@ const HostView: React.FC = () => {
   const connectionModalOpenedByUserRef = useRef(false);
   const connectionModalDismissedRef = useRef(false);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
+  const [spotifyJamActive, setSpotifyJamActive] = useState(false);
+  const [venueSpotifyJamMode, setVenueSpotifyJamMode] = useState(false);
 
   const playbackDeviceNotInList = useMemo(() => {
     if (!mixNeedsHostSpotify || !isSpotifyConnected || isLoadingDevices) return false;
     if (!selectedDevice?.id) return true;
     if (devices.length === 0) return false;
-    return !devices.some((d) => d.id === selectedDevice.id);
+    if (devices.some((d) => d.id === selectedDevice.id)) return false;
+    if (venueSpotifyJamMode && devices.some((d) => isSpotifyJamDevice(d))) return false;
+    return true;
   }, [
     mixNeedsHostSpotify,
     isSpotifyConnected,
     isLoadingDevices,
     selectedDevice,
     devices,
+    venueSpotifyJamMode,
   ]);
+
+  const selectablePlaybackDevices = useMemo(() => {
+    if (venueSpotifyJamMode) {
+      const jamOnly = devices.filter((d) => isSpotifyJamDevice(d));
+      return jamOnly.length > 0 ? jamOnly : devices;
+    }
+    return devices.filter((d) => !isSpotifyJamDevice(d));
+  }, [devices, venueSpotifyJamMode]);
 
   const mixGameActionsBlocked = useMemo(
     () =>
@@ -2133,6 +2148,18 @@ const HostView: React.FC = () => {
     }
   }, []);
 
+  const syncVenueSpotifyJamModeToRoom = useCallback(
+    (enabled: boolean) => {
+      if (!socket || !roomId) return;
+      try {
+        socket.emit('set-venue-spotify-jam-mode', { roomId, venueSpotifyJamMode: enabled });
+      } catch {
+        /* ignore */
+      }
+    },
+    [socket, roomId],
+  );
+
   const syncSelectedPlaybackDeviceToRoom = useCallback(
     (device: Device | null) => {
       if (!socket || !roomId) return;
@@ -2169,26 +2196,23 @@ const HostView: React.FC = () => {
       
       if (data.devices) {
         setDevices(data.devices);
+        setSpotifyJamActive(!!data.jamActive);
         console.log('Devices loaded:', data.devices.length, 'devices');
         console.log('Device details:', data.devices);
         if (data.currentDevice) {
           console.log('Current playback device:', data.currentDevice.name, data.currentDevice.id);
         }
 
-        let picked: Device | null = null;
         const pendingId = pendingRoomDeviceIdRef.current;
-        if (pendingId) {
-          picked = data.devices.find((d: Device) => d.id === pendingId) ?? null;
-          if (picked) pendingRoomDeviceIdRef.current = null;
-        }
-        if (!picked && data.savedDevice) {
-          picked = data.devices.find((d: Device) => d.id === data.savedDevice.id) ?? null;
-        }
-        if (!picked && data.currentDevice) {
-          picked = data.devices.find((d: Device) => d.id === data.currentDevice.id) ?? null;
-        }
-        if (!picked && data.devices.length > 0) {
-          picked = data.devices[0];
+        const deviceList = data.devices as Device[];
+        const picked = pickPreferredPlaybackDevice(deviceList, {
+          pendingId: pendingId ?? undefined,
+          savedId: data.savedDevice?.id,
+          currentId: data.currentDevice?.id,
+          venueJamMode: venueSpotifyJamMode,
+        });
+        if (pendingId && picked?.id === pendingId) {
+          pendingRoomDeviceIdRef.current = null;
         }
         if (picked) {
           setSelectedDevice(picked);
@@ -2203,7 +2227,7 @@ const HostView: React.FC = () => {
     } finally {
       setIsLoadingDevices(false);
     }
-  }, [syncSelectedPlaybackDeviceToRoom]);
+  }, [syncSelectedPlaybackDeviceToRoom, venueSpotifyJamMode]);
 
   /** After YouTube Music OAuth redirect (?youtube_music=connected), strip param and refetch merged library playlists. */
   useEffect(() => {
@@ -2455,6 +2479,10 @@ const HostView: React.FC = () => {
       alert('Please select a device first');
       return;
     }
+    if (isSpotifyJamDevice(selectedDevice) && !venueSpotifyJamMode) {
+      alert('Enable “Venue uses Spotify Jam” in Connection before selecting a Jam session as the playback device.');
+      return;
+    }
     if (!readHostSpotifyWebEnabled()) {
       alert('Connect Spotify from Connection first.');
       return;
@@ -2467,7 +2495,7 @@ const HostView: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ device: selectedDevice })
+        body: JSON.stringify({ device: selectedDevice, venueSpotifyJamMode }),
       });
 
       const data = await response.json();
@@ -2477,13 +2505,13 @@ const HostView: React.FC = () => {
         alert(`Device saved: ${selectedDevice.name}`);
       } else {
         console.error('Failed to save device:', data.error);
-        alert('Failed to save device');
+        alert(data.message || data.error || 'Failed to save device');
       }
     } catch (error) {
       console.error('Error saving device:', error);
       alert('Error saving device');
     }
-  }, [selectedDevice, syncSelectedPlaybackDeviceToRoom]);
+  }, [selectedDevice, syncSelectedPlaybackDeviceToRoom, venueSpotifyJamMode]);
 
   /** Room socket handlers — refs so io() is not recreated when loadPlaylists / mix selection changes. */
   const loadPlaylistsSocketRef = useRef(loadPlaylists);
@@ -7702,6 +7730,7 @@ const HostView: React.FC = () => {
       setPublicDisplayLetterRevealToast(p.publicDisplayLetterRevealToast);
     }
     if (p.freeSpaceEnabled != null) setFreeSpaceEnabled(p.freeSpaceEnabled);
+    if (p.venueSpotifyJamMode != null) setVenueSpotifyJamMode(p.venueSpotifyJamMode);
     hostPrefsHydratedRef.current = true;
   }, [hostAccount?.id]);
 
@@ -7716,6 +7745,7 @@ const HostView: React.FC = () => {
       letterRevealIntervalSec,
       publicDisplayLetterRevealToast,
       freeSpaceEnabled,
+      venueSpotifyJamMode,
     });
     try {
       localStorage.setItem('game-snippet-length', String(snippetLength));
@@ -7733,7 +7763,24 @@ const HostView: React.FC = () => {
     letterRevealIntervalSec,
     publicDisplayLetterRevealToast,
     freeSpaceEnabled,
+    venueSpotifyJamMode,
   ]);
+
+  /** Sync venue Jam mode to server when pref or socket changes. */
+  useEffect(() => {
+    if (!socket || !roomId || !hostPrefsHydratedRef.current) return;
+    syncVenueSpotifyJamModeToRoom(venueSpotifyJamMode);
+  }, [socket, roomId, venueSpotifyJamMode, syncVenueSpotifyJamModeToRoom]);
+
+  /** Re-pick playback device when venue Jam mode toggles. */
+  useEffect(() => {
+    if (!readHostSpotifyWebEnabled() || devices.length === 0) return;
+    const picked = pickPreferredPlaybackDevice(devices, { venueJamMode: venueSpotifyJamMode });
+    if (picked && picked.id !== selectedDevice?.id) {
+      setSelectedDevice(picked);
+      syncSelectedPlaybackDeviceToRoom(picked);
+    }
+  }, [venueSpotifyJamMode]); // eslint-disable-line react-hooks/exhaustive-deps -- intentional: only on mode toggle
 
   /** Push loaded prefs to the room once socket is ready. */
   useEffect(() => {
@@ -8098,16 +8145,63 @@ const HostView: React.FC = () => {
         </button>
       </div>
       <p style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)', marginBottom: 12, lineHeight: 1.4 }}>
-        Choose where Spotify should play. Open Spotify on your computer, phone, or speaker so it appears in the list. Use{' '}
-        <strong style={{ color: '#cfcfcf' }}>Refresh devices</strong> if the list is empty.
+        {venueSpotifyJamMode
+          ? 'Venue Jam mode: start a Jam session on the venue Spotify account, then refresh devices and select the Jam entry. Tempo controls playback through that session.'
+          : 'Choose where Spotify should play. Open Spotify on your computer, phone, or speaker so it appears in the list. Use '}
+        {!venueSpotifyJamMode && (
+          <>
+            <strong style={{ color: '#cfcfcf' }}>Refresh devices</strong> if the list is empty.
+          </>
+        )}
       </p>
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 10,
+          marginBottom: 12,
+          fontSize: '0.88rem',
+          color: 'rgba(255,255,255,0.88)',
+          cursor: 'pointer',
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={venueSpotifyJamMode}
+          onChange={(e) => setVenueSpotifyJamMode(e.target.checked)}
+          style={{ marginTop: 3 }}
+        />
+        <span>
+          <strong>Venue uses Spotify Jam</strong>
+          <span style={{ display: 'block', fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>
+            Required when the PA is controlled through the venue account&apos;s Jam session (common at bars and clubs).
+          </span>
+        </span>
+      </label>
+      {venueSpotifyJamMode && !spotifyJamActive && devices.length > 0 && (
+        <p style={{ marginBottom: 12, fontSize: '0.82rem', color: '#ffb347', lineHeight: 1.45 }}>
+          Jam mode is on but no active Jam session was found. Start Jam on the venue speaker, then tap{' '}
+          <strong>Refresh devices</strong>.
+        </p>
+      )}
+      {spotifyJamActive && !venueSpotifyJamMode && (
+        <p style={{ marginBottom: 12, fontSize: '0.82rem', color: '#ffb347', lineHeight: 1.45 }}>
+          Spotify Jam is active. If the show must run through Jam, enable <strong>Venue uses Spotify Jam</strong> above.
+        </p>
+      )}
+      {spotifyJamActive && venueSpotifyJamMode && (
+        <p style={{ marginBottom: 12, fontSize: '0.82rem', color: '#8fd9a8', lineHeight: 1.45 }}>
+          Jam session detected — Tempo will route playback through it and will not fight the venue speaker.
+        </p>
+      )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
         <select
           aria-label="Spotify playback device"
           value={selectedDevice?.id ?? ''}
           onChange={(e) => {
             const id = e.target.value;
-            const d = devices.find((x) => x.id === id) ?? null;
+            const d = selectablePlaybackDevices.find((x) => x.id === id) ?? null;
+            if (d && isSpotifyJamDevice(d) && !venueSpotifyJamMode) return;
             setSelectedDevice(d);
             syncSelectedPlaybackDeviceToRoom(d);
           }}
@@ -8123,9 +8217,10 @@ const HostView: React.FC = () => {
           }}
         >
           <option value="">Select a device</option>
-          {devices.map((d) => (
+          {selectablePlaybackDevices.map((d) => (
             <option key={d.id} value={d.id}>
               {d.name}
+              {isSpotifyJamDevice(d) ? ' (Jam)' : ''}
               {d.is_active ? ' (active)' : ''}
             </option>
           ))}

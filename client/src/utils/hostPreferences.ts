@@ -12,6 +12,7 @@ export type HostPreferencesV1 = {
   letterRevealIntervalSec: number;
   publicDisplayLetterRevealToast: boolean;
   freeSpaceEnabled: boolean;
+  venueSpotifyJamMode: boolean;
 };
 
 const STORAGE_PREFIX = 'got-host-prefs-v1';
@@ -30,6 +31,7 @@ export function defaultHostPreferences(): HostPreferencesV1 {
     letterRevealIntervalSec: 15,
     publicDisplayLetterRevealToast: true,
     freeSpaceEnabled: false,
+    venueSpotifyJamMode: false,
   };
 }
 
@@ -70,6 +72,8 @@ export function loadHostPreferences(
           : undefined,
       freeSpaceEnabled:
         typeof parsed.freeSpaceEnabled === 'boolean' ? parsed.freeSpaceEnabled : undefined,
+      venueSpotifyJamMode:
+        typeof parsed.venueSpotifyJamMode === 'boolean' ? parsed.venueSpotifyJamMode : undefined,
     };
   } catch {
     return {};

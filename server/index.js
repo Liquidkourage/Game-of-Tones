@@ -8,6 +8,7 @@ const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const { OAuth2Client } = require('google-auth-library');
 const SpotifyService = require('./spotify');
+const spotifyDevices = require('./spotifyDevices');
 const fs = require('fs');
 const path = require('path');
 const hostAuth = require('./hostAuth');
@@ -2217,6 +2218,32 @@ function clearPlaybackWatcher(roomId) {
   }
 }
 
+async function transferToLockedDeviceIfNeeded(roomId, room, targetDeviceId, currentDeviceId, state, sp) {
+  if (!targetDeviceId || !currentDeviceId) return true;
+  if (spotifyDevices.playbackDevicesMatch(room, targetDeviceId, currentDeviceId)) return true;
+
+  let transferTarget = targetDeviceId;
+  if (spotifyDevices.isVenueSpotifyJamMode(room) && !spotifyDevices.isSpotifyJamDeviceId(transferTarget)) {
+    const jamId = await spotifyDevices.findJamDeviceId(sp || spotifyFor(roomId), room, state);
+    if (jamId) transferTarget = jamId;
+  }
+
+  if (
+    !spotifyDevices.shouldAttemptJamDeviceCorrection(room, currentDeviceId, transferTarget, state)
+  ) {
+    spotifyDevices.maybeEmitJamActiveWarning(io, roomId, room);
+    return false;
+  }
+  if (spotifyDevices.isSpotifyJamDeviceId(currentDeviceId) || spotifyDevices.isVenueSpotifyJamMode(room)) {
+    spotifyDevices.maybeEmitJamActiveWarning(io, roomId, room);
+    if (spotifyDevices.jamTransferOnCooldown(room)) return false;
+    spotifyDevices.markJamTransferAttempt(room);
+  }
+  await spotifyFor(roomId).transferPlayback(transferTarget, false);
+  spotifyDevices.cacheJamDeviceId(room, transferTarget);
+  return true;
+}
+
 // NEW: Simplified context monitor - watches for context hijacks AND device switches
 function startSimpleContextMonitor(roomId, deviceId) {
   clearPlaybackWatcher(roomId);
@@ -2261,33 +2288,69 @@ function startSimpleContextMonitor(roomId, deviceId) {
       const state = await spMon.getCurrentPlaybackState();
       if (state == null && spMon._playbackNullDueToRateLimit) return;
       const currentDeviceId = state?.device?.id;
-      
+      const targetDeviceId = await spotifyDevices.resolveMonitorTargetDeviceId(
+        roomId,
+        room,
+        deviceId,
+        state,
+        spMon,
+      );
+      if (currentDeviceId && spotifyDevices.isSpotifyJamDeviceId(currentDeviceId)) {
+        spotifyDevices.cacheJamDeviceId(room, currentDeviceId);
+      }
+
       // CRITICAL: Check if playback has switched to a different device
-      if (targetDeviceId && currentDeviceId && currentDeviceId !== targetDeviceId) {
+      if (targetDeviceId && currentDeviceId && !spotifyDevices.playbackDevicesMatch(room, targetDeviceId, currentDeviceId)) {
+        const currentIsJam = spotifyDevices.isSpotifyJamDeviceId(currentDeviceId);
+        if (
+          !spotifyDevices.shouldAttemptJamDeviceCorrection(room, currentDeviceId, targetDeviceId, state)
+        ) {
+          spotifyDevices.maybeEmitJamActiveWarning(io, roomId, room);
+          clearMonitorSuspect();
+          return;
+        }
+
         if (!confirmMonitorSuspect('device-switch', `${currentDeviceId}->${targetDeviceId}`)) {
           routineServerLog(`🕵️ Device switch suspected once (${currentDeviceId} → ${targetDeviceId}); waiting for confirmation before correction`);
           return;
         }
-        console.warn(`⚠️ Device switch detected! Expected: ${targetDeviceId}, Got: ${currentDeviceId}. Transferring back...`);
+
+        if (currentIsJam || spotifyDevices.isVenueSpotifyJamMode(room)) {
+          spotifyDevices.maybeEmitJamActiveWarning(io, roomId, room);
+          if (spotifyDevices.jamTransferOnCooldown(room)) {
+            return;
+          }
+          spotifyDevices.markJamTransferAttempt(room);
+        }
+
+        let transferTarget = targetDeviceId;
+        if (spotifyDevices.isVenueSpotifyJamMode(room) && !spotifyDevices.isSpotifyJamDeviceId(transferTarget)) {
+          const jamId = await spotifyDevices.findJamDeviceId(spMon, room, state);
+          if (jamId) transferTarget = jamId;
+        }
+
+        console.warn(`⚠️ Device switch detected! Expected: ${transferTarget}, Got: ${currentDeviceId}. Transferring back...`);
         
         try {
-          // Immediately transfer playback back to the correct device
-          await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
-          routineServerLog(`✅ Transferred playback back to locked device: ${targetDeviceId}`);
+          await spotifyFor(roomId).transferPlayback(transferTarget, false);
+          spotifyDevices.cacheJamDeviceId(room, transferTarget);
+          routineServerLog(`✅ Transferred playback back to locked device: ${transferTarget}`);
           clearMonitorSuspect();
           
-          // Small delay then verify it worked
           await new Promise(resolve => setTimeout(resolve, 500));
           const verifyState = await spotifyFor(roomId).getCurrentPlaybackState();
-          if (verifyState?.device?.id === targetDeviceId) {
+          if (spotifyDevices.playbackDevicesMatch(room, transferTarget, verifyState?.device?.id)) {
             routineServerLog(`✅ Device lock restored successfully`);
+          } else if (spotifyDevices.isSpotifyJamDeviceId(verifyState?.device?.id)) {
+            spotifyDevices.cacheJamDeviceId(room, verifyState.device.id);
+            routineServerLog(`ℹ️ Playback on Spotify Jam session (${verifyState.device.id})`);
           } else {
             console.warn(`⚠️ Device transfer may have failed - still on ${verifyState?.device?.id}`);
           }
         } catch (e) {
           console.warn('⚠️ Failed to transfer playback back to locked device:', e?.message);
         }
-        return; // Skip other checks this cycle
+        return;
       }
       
       const expectedContext = room.temporaryPlaylistId ? `spotify:playlist:${room.temporaryPlaylistId}` : null;
@@ -2309,9 +2372,7 @@ function startSimpleContextMonitor(roomId, deviceId) {
         
         try {
           // Ensure we're on the correct device first
-          if (targetDeviceId && currentDeviceId !== targetDeviceId) {
-            await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
-          }
+          await transferToLockedDeviceIfNeeded(roomId, room, targetDeviceId, currentDeviceId, state, spMon);
           
           // Restore playlist context with original start position
           const originalStartMs = room.currentSongStartMs || 0;
@@ -2340,9 +2401,7 @@ function startSimpleContextMonitor(roomId, deviceId) {
         
         try {
           // Ensure we're on the correct device first
-          if (targetDeviceId && currentDeviceId !== targetDeviceId) {
-            await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
-          }
+          await transferToLockedDeviceIfNeeded(roomId, room, targetDeviceId, currentDeviceId, state, spMon);
           
           // Restore original start position for this track
           await spotifyFor(roomId).seekToPosition(room.currentSongStartMs, targetDeviceId || deviceId);
@@ -2371,9 +2430,7 @@ function startSimpleContextMonitor(roomId, deviceId) {
           `🔄 Wrong track in temp playlist. Restoring index ${room.currentSongIndex} (${room.currentSong?.name || expectedTrackId})…`,
         );
         try {
-          if (targetDeviceId && currentDeviceId !== targetDeviceId) {
-            await spotifyFor(roomId).transferPlayback(targetDeviceId, false);
-          }
+          await transferToLockedDeviceIfNeeded(roomId, room, targetDeviceId, currentDeviceId, state, spMon);
           const resumeMs = Math.min(
             Math.max(0, expectedProgress),
             Math.max(0, Number(state?.item?.duration_ms || 0) - 1000),
@@ -3758,7 +3815,18 @@ io.on('connection', (socket) => {
         : device && device.id != null
           ? String(device.id).trim()
           : '';
+    if (id && spotifyDevices.isSpotifyJamDeviceId(id) && !room.venueSpotifyJamMode) {
+      socket.emit('playback-warning', {
+        message:
+          'Spotify Jam is selected but Venue Jam mode is off. Enable “Venue uses Spotify Jam” in Connection, or pick your speaker.',
+        code: 'spotify_jam_not_allowed',
+      });
+      return;
+    }
     room.selectedDeviceId = id || null;
+    if (id && spotifyDevices.isSpotifyJamDeviceId(id)) {
+      spotifyDevices.cacheJamDeviceId(room, id);
+    }
     if (id && device && typeof device.name === 'string') {
       const uid = room.ownerUserId;
       if (uid != null && Number.isFinite(Number(uid))) {
@@ -3773,6 +3841,29 @@ io.on('connection', (socket) => {
     routineServerLog(
       `🔊 Room ${roomId} selected playback device: ${room.selectedDeviceId || '(none)'}`,
     );
+  });
+
+  socket.on('set-venue-spotify-jam-mode', (data = {}) => {
+    try {
+      const { roomId, venueSpotifyJamMode } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost =
+        room.host === socket.id ||
+        (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+      if (!isCurrentHost) return;
+      room.venueSpotifyJamMode = !!venueSpotifyJamMode;
+      room._jamWarningEmitted = false;
+      room._jamVenueModeInfoEmitted = false;
+      io.to(roomId).emit('venue-spotify-jam-mode-updated', {
+        venueSpotifyJamMode: room.venueSpotifyJamMode,
+      });
+      routineServerLog(
+        `🎧 Venue Spotify Jam mode for room ${roomId}: ${room.venueSpotifyJamMode ? 'ON' : 'OFF'}`,
+      );
+    } catch (e) {
+      console.error('❌ Error setting venue Spotify Jam mode:', e?.message || e);
+    }
   });
 
   // Hybrid in-person + online: only in-person verified bingos end the round / prize
@@ -11720,21 +11811,29 @@ app.get('/api/spotify/devices', async (req, res) => {
     }
     
     // If we have a saved device but it's not in the current list, add it
-    let allDevices = [...devices];
+    let allDevices = devices.map(spotifyDevices.annotateSpotifyDevice);
     if (savedDevice && !devices.find(d => d.id === savedDevice.id)) {
       routineServerLog(`📁 Adding saved device to list: ${savedDevice.name}`);
-      allDevices.push({
-        ...savedDevice,
-        is_active: false,
-        is_restricted: false,
-        is_private_session: false
-      });
+      allDevices.push(
+        spotifyDevices.annotateSpotifyDevice({
+          ...savedDevice,
+          is_active: false,
+          is_restricted: false,
+          is_private_session: false,
+        }),
+      );
+    }
+
+    const jamActive = allDevices.some((d) => d.isJam && d.is_active);
+    if (jamActive) {
+      routineServerLog('ℹ️ Spotify Jam (social-connect) session is active');
     }
     
     res.json({ 
       devices: allDevices,
       savedDevice: savedDevice,
-      currentDevice: currentDevice
+      currentDevice: currentDevice ? spotifyDevices.annotateSpotifyDevice(currentDevice) : null,
+      jamActive,
     });
   } catch (error) {
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
@@ -11746,11 +11845,18 @@ app.get('/api/spotify/devices', async (req, res) => {
 // Save selected device
 app.post('/api/spotify/save-device', async (req, res) => {
   try {
-    const { device } = req.body;
+    const { device, venueSpotifyJamMode } = req.body;
     const uid = hostAuth.getHostUserIdFromRequest(req);
     
     if (!device || !device.id) {
       return res.status(400).json({ error: 'Device information required' });
+    }
+    if (spotifyDevices.isSpotifyJamDevice(device) && !venueSpotifyJamMode) {
+      return res.status(400).json({
+        error: 'jam_device_requires_venue_mode',
+        message:
+          'Enable “Venue uses Spotify Jam” in Connection before saving a Jam session as your playback device.',
+      });
     }
     if (uid == null) {
       return res.status(401).json({ error: 'login_required' });
