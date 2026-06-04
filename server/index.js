@@ -1573,6 +1573,25 @@ async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { fo
     throw err;
   }
 
+  const mapTracks = (rows) =>
+    (Array.isArray(rows) ? rows : []).map((t) => ({
+      ...t,
+      sourcePlaylistId: playlistId,
+      sourcePlaylistName: playlistInfo?.name || t.sourcePlaylistName || 'Unknown Playlist',
+    }));
+
+  if (isInternalPlaylistId(playlistId)) {
+    const embedded = dedupeSongsByIdPreserveOrder(
+      Array.isArray(playlistInfo?.songs) ? playlistInfo.songs : [],
+    );
+    if (embedded.length > 0) {
+      return { tracks: mapTracks(embedded), fromTracksCache: true };
+    }
+    const err = new Error('Internal playlist snapshot has no embedded tracks');
+    err.statusCode = 400;
+    throw err;
+  }
+
   const force = forceRefresh === true;
   let dbRow = null;
   if (orgId && !force) {
@@ -1584,13 +1603,6 @@ async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { fo
       });
     }
   }
-
-  const mapTracks = (rows) =>
-    (Array.isArray(rows) ? rows : []).map((t) => ({
-      ...t,
-      sourcePlaylistId: playlistId,
-      sourcePlaylistName: playlistInfo?.name || t.sourcePlaylistName || 'Unknown Playlist',
-    }));
 
   if (svc.isQuarantined()) {
     if (dbRow && Array.isArray(dbRow.tracks) && dbRow.tracks.length > 0) {
@@ -5311,7 +5323,7 @@ io.on('connection', (socket) => {
             room.clientCards.clear();
           }
 
-          const SNAP = '__saved_round_snap__';
+          const SNAP = SAVED_ROUND_SNAP_PLAYLIST_ID;
           let playlistsToUse;
           let songOrderForCards;
           if (useSavedRoundPlayback) {
@@ -5332,13 +5344,10 @@ io.on('connection', (socket) => {
               room.fiveByFifteenMeta = null;
               const tagged = showDeck.map((s) => ({
                 ...s,
-                sourcePlaylistId:
-                  s.sourcePlaylistId != null && String(s.sourcePlaylistId).trim() !== ''
-                    ? String(s.sourcePlaylistId)
-                    : SNAP,
+                sourcePlaylistId: SNAP,
                 sourcePlaylistName:
                   typeof s.sourcePlaylistName === 'string' && s.sourcePlaylistName.trim() !== ''
-                    ? s.sourcePlaylistName
+                    ? s.sourcePlaylistName.trim()
                     : 'Saved round',
               }));
               playlistsToUse = [{ id: SNAP, name: 'Saved round snapshot', songs: tagged }];
@@ -5363,7 +5372,19 @@ io.on('connection', (socket) => {
                 : room.finalizedSongOrder ||
                   (Array.isArray(songList) && songList.length > 0 ? songList : null);
           }
-          await generateBingoCards(roomId, playlistsToUse, songOrderForCards);
+          const cardsOk = await generateBingoCards(roomId, playlistsToUse, songOrderForCards);
+          if (!cardsOk) {
+            const playersNeedingCards = Array.from(room.players.values()).filter(
+              (p) => p && !p.isHost && p.name !== 'Display',
+            ).length;
+            if (playersNeedingCards > 0) {
+              socket.emit('error', {
+                message:
+                  'Could not generate bingo cards for this round. If using a saved round, try Show Playlists and Start Game again.',
+              });
+              return;
+            }
+          }
 
           if (useSavedRoundPlayback) {
             // Stale 1×75 pool breaks 5×15 projector columns; only clear when this round is 5×15.
@@ -6415,6 +6436,13 @@ function properShuffle(array) {
 
 /** Center square (2-2): pre-marked, counts toward patterns without a played song */
 const FREE_SPACE_SONG_ID = '__FREE_SPACE__';
+/** Synthetic playlist id for saved-round 1×75 card pool — never call Spotify /items with this. */
+const SAVED_ROUND_SNAP_PLAYLIST_ID = '__saved_round_snap__';
+
+function isInternalPlaylistId(id) {
+  const s = String(id || '').trim();
+  return s.length > 4 && s.startsWith('__') && s.endsWith('__');
+}
 
 function makeFreeSpaceSquare() {
   return {
@@ -6475,6 +6503,22 @@ function playlistsWithSongsFromHostSongOrder(playlists, songOrder) {
   return rows;
 }
 
+/**
+ * Playlists that already carry a non-empty songs[] (e.g. saved-round snapshot on Start Game).
+ * Avoids Spotify GET /items for synthetic ids like __saved_round_snap__.
+ */
+function playlistsWithEmbeddedSongLists(playlists) {
+  if (!Array.isArray(playlists) || playlists.length === 0) return null;
+  const rows = [];
+  for (let i = 0; i < playlists.length; i++) {
+    const pl = playlists[i];
+    const songs = dedupeSongsByIdPreserveOrder(Array.isArray(pl?.songs) ? pl.songs : []);
+    if (songs.length === 0) return null;
+    rows.push({ ...pl, songs, originalIndex: i });
+  }
+  return rows;
+}
+
 const {
   assignGloballyUniqueFiveByFifteenColumns,
   flattenFiveByFifteenColumns,
@@ -6495,6 +6539,7 @@ async function supplementPerListPlaylistsFromSpotify(roomId, perListUnique, play
   for (let i = 0; i < perListUnique.length; i++) {
     if (perListUnique[i].songs.length >= FIVE_BY_FIFTEEN_COLUMN_SLOTS) continue;
     const pl = playlistsMeta[i] || { id: perListUnique[i].id, name: perListUnique[i].name };
+    if (isInternalPlaylistId(pl.id)) continue;
     try {
       const fetched = await spotifyFor(roomId).getPlaylistTracks(pl.id, pl);
       const merged = dedupeSongsByIdPreserveOrder([...perListUnique[i].songs, ...(fetched || [])]);
@@ -6909,6 +6954,10 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
 
     let playlistsWithSongs = playlistsWithSongsFromHostSongOrder(playlists, songOrder);
 
+    if (!playlistsWithSongs) {
+      playlistsWithSongs = playlistsWithEmbeddedSongLists(playlists);
+    }
+
     if (playlistsWithSongs) {
       const trackTotal = playlistsWithSongs.reduce((n, pl) => n + (Array.isArray(pl.songs) ? pl.songs.length : 0), 0);
       routineServerLog(
@@ -6954,6 +7003,20 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
         playlistsWithSongs = [];
         for (let i = 0; i < playlists.length; i++) {
           const playlist = playlists[i];
+          if (isInternalPlaylistId(playlist.id)) {
+            const embedded = dedupeSongsByIdPreserveOrder(
+              Array.isArray(playlist.songs) && playlist.songs.length > 0
+                ? playlist.songs
+                : Array.isArray(songOrder) && playlists.length === 1
+                  ? songOrder
+                  : [],
+            );
+            routineServerLog(
+              `📋 Using embedded snapshot for internal playlist "${playlist.name}" (${embedded.length} songs) — skipping Spotify`,
+            );
+            playlistsWithSongs.push({ ...playlist, songs: embedded, originalIndex: i });
+            continue;
+          }
           try {
             routineServerLog(`📋 [${i + 1}/${playlists.length}] Fetching songs for playlist: ${playlist.name}`);
             const songs = await spotifyFor(roomId).getPlaylistTracks(playlist.id, playlist);
@@ -7708,6 +7771,14 @@ async function fetchTracksForLateJoinPlaylist(roomId, room, playlist) {
     routineServerLog(`📋 Late-join: ${cached.length} cached tracks for playlist "${playlist.name}" (${playlist.id})`);
     return cached;
   }
+  if (isInternalPlaylistId(playlist.id)) {
+    const embedded = dedupeSongsByIdPreserveOrder(Array.isArray(playlist.songs) ? playlist.songs : []);
+    if (embedded.length > 0) {
+      routineServerLog(`📋 Late-join: ${embedded.length} embedded snapshot tracks for "${playlist.name}"`);
+      return embedded;
+    }
+    return [];
+  }
   if (playlist.youtubeMusic === true) {
     const uid = room.ownerUserId;
     if (uid != null && youtubeMusic.hasCredentials(uid)) {
@@ -7999,6 +8070,15 @@ async function startAutomaticPlayback(roomId, playlists, deviceId, songList = nu
       // Fallback: fetch songs from playlists (for backward compatibility)
       routineServerLog('📋 Fetching songs from playlists for playback...');
       for (const playlist of playlists) {
+        if (isInternalPlaylistId(playlist.id)) {
+          const embedded = dedupeSongsByIdPreserveOrder(Array.isArray(playlist.songs) ? playlist.songs : []);
+          routineServerLog(
+            `📋 Playback: using embedded snapshot for "${playlist.name}" (${embedded.length} songs) — skipping Spotify`,
+          );
+          perListFetched.push({ id: playlist.id, name: playlist.name, songs: embedded });
+          allSongs.push(...embedded);
+          continue;
+        }
         try {
           routineServerLog(`📋 Fetching songs for playlist: ${playlist.name}`);
           const songs = await spotifyFor(roomId).getPlaylistTracks(playlist.id, playlist);
@@ -11820,6 +11900,12 @@ app.post('/api/spotify/playlist-lookup', async (req, res) => {
 app.get('/api/spotify/playlists/:playlistId/tracks', async (req, res) => {
   try {
     const { playlistId } = req.params;
+    if (isInternalPlaylistId(playlistId)) {
+      return res.status(400).json({
+        error: 'internal_playlist_id',
+        message: 'This playlist id is a server snapshot, not a Spotify playlist.',
+      });
+    }
     const tracks = await spotifyForRequest(req).getPlaylistTracks(playlistId);
     res.json(tracks);
   } catch (error) {

@@ -15,6 +15,12 @@ const webApi = require('./spotifyWebApiMeter');
  */
 const GOT_OUTPUT_PLAYLIST_NAME_PREFIX = 'Game Of Tones Output - ';
 
+/** Synthetic playlist ids (saved-round snapshot, etc.) — not valid Spotify base62 ids. */
+function isInternalTempoPlaylistId(playlistId) {
+  const s = String(playlistId || '').trim();
+  return s.length > 4 && s.startsWith('__') && s.endsWith('__');
+}
+
 /**
  * Spotify sends Retry-After from seconds (often 1) up to 86400+ when rate-limiting.
  * Capping quarantine too low (historically 8 min) caused TEMPO to resume Web API calls while Spotify
@@ -1020,6 +1026,7 @@ class SpotifyService {
     await this._ensureCanCallWebApi('getPlaylistSnapshot');
     const id = String(playlistId || '').trim();
     if (!id) throw new Error('playlist id required');
+    if (isInternalTempoPlaylistId(id)) return null;
     const path = `/v1/playlists/${encodeURIComponent(id)}?fields=${encodeURIComponent('snapshot_id')}`;
     const { body } = await this._webApiGet(path, 'getPlaylistSnapshot');
     if (!body || typeof body !== 'object' || body.snapshot_id == null) return null;
@@ -1161,6 +1168,18 @@ class SpotifyService {
     await this._ensureCanCallWebApi('getPlaylistTracks');
 
     const cacheKey = String(playlistId);
+    if (isInternalTempoPlaylistId(cacheKey)) {
+      const mapRow = (t) => ({
+        ...t,
+        sourcePlaylistId: cacheKey,
+        sourcePlaylistName: playlistInfo?.name || 'Unknown Playlist',
+      });
+      const embedded = Array.isArray(playlistInfo?.songs) ? playlistInfo.songs : [];
+      const tracks = embedded.filter((t) => t && t.id).map(mapRow);
+      const loadStats = emptyPlaylistLoadStats();
+      loadStats.loaded = tracks.length;
+      return { tracks, loadStats };
+    }
     const now = Date.now();
     if (options && options.forceRefresh === true) {
       this._playlistTracksCache.delete(cacheKey);
