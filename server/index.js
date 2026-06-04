@@ -692,6 +692,7 @@ function releaseSongAdvance(room) {
 }
 
 async function advancePlaybackFromWatchdog(roomId, deviceId) {
+  if (!roomStillPlaying(roomId)) return;
   const room = rooms.get(roomId);
   if (room?.simpleProgressionActive) {
     await playNextSongSimple(roomId, deviceId);
@@ -2242,6 +2243,34 @@ function clearPlaybackWatcher(roomId) {
   }
 }
 
+/** True only while the live round is actively advancing songs (not paused/ended/waiting). */
+function roomStillPlaying(roomId) {
+  const room = rooms.get(roomId);
+  return !!room && room.gameState === 'playing';
+}
+
+function stopLiveRoundTimers(roomId, room) {
+  if (!room) return;
+  room.simpleProgressionActive = false;
+  clearRoomTimer(roomId);
+  clearPlaybackWatcher(roomId);
+}
+
+async function pauseSpotifyForRoom(roomId, room) {
+  const deviceId = room?.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
+  if (!deviceId) return;
+  try {
+    try {
+      await spotifyFor(roomId).transferPlayback(deviceId, false);
+    } catch {
+      /* ignore */
+    }
+    await spotifyFor(roomId).pausePlayback(deviceId);
+  } catch (e) {
+    console.warn('⚠️ pauseSpotifyForRoom failed:', e?.message || e);
+  }
+}
+
 async function transferToLockedDeviceIfNeeded(roomId, room, targetDeviceId, currentDeviceId, state, sp) {
   if (!spotifyDevices.shouldEnforceDeviceLock(room)) {
     if (currentDeviceId) spotifyDevices.cacheJamDeviceId(room, currentDeviceId);
@@ -2413,8 +2442,10 @@ function startSimpleContextMonitor(roomId, deviceId) {
         console.warn(`🔄 Context lost. Expected: ${expectedContext}, Got: ${currentContext}. Restoring...`);
         
         try {
+          if (!roomStillPlaying(roomId)) return;
           // Ensure we're on the correct device first
           await transferToLockedDeviceIfNeeded(roomId, room, targetDeviceId, currentDeviceId, state, spMon);
+          if (!roomStillPlaying(roomId)) return;
           
           // Restore playlist context with original start position
           const originalStartMs = room.currentSongStartMs || 0;
@@ -2442,8 +2473,10 @@ function startSimpleContextMonitor(roomId, deviceId) {
         routineServerLog(`🔄 Track restart detected. Restoring original start position: ${room.currentSongStartMs}ms`);
         
         try {
+          if (!roomStillPlaying(roomId)) return;
           // Ensure we're on the correct device first
           await transferToLockedDeviceIfNeeded(roomId, room, targetDeviceId, currentDeviceId, state, spMon);
+          if (!roomStillPlaying(roomId)) return;
           
           // Restore original start position for this track
           await spotifyFor(roomId).seekToPosition(room.currentSongStartMs, targetDeviceId || deviceId);
@@ -2472,7 +2505,9 @@ function startSimpleContextMonitor(roomId, deviceId) {
           `🔄 Wrong track in temp playlist. Restoring index ${room.currentSongIndex} (${room.currentSong?.name || expectedTrackId})…`,
         );
         try {
+          if (!roomStillPlaying(roomId)) return;
           await transferToLockedDeviceIfNeeded(roomId, room, targetDeviceId, currentDeviceId, state, spMon);
+          if (!roomStillPlaying(roomId)) return;
           const resumeMs = Math.min(
             Math.max(0, expectedProgress),
             Math.max(0, Number(state?.item?.duration_ms || 0) - 1000),
@@ -2666,16 +2701,21 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
   } catch (error) {
     showLog.logSpotifyApiError('simple song advance', error);
     
-    try {
-      routineServerLog('🔄 Attempting to resume playback after song advance failure...');
-      await spotifyFor(roomId).resumePlayback(resolvedDeviceId);
-      routineServerLog('✅ Resume attempt completed');
-    } catch (resumeError) {
-      console.warn('⚠️ Failed to resume playback:', showLog.spotifyErrorSummary(resumeError));
+    if (roomStillPlaying(roomId)) {
+      try {
+        routineServerLog('🔄 Attempting to resume playback after song advance failure...');
+        await spotifyFor(roomId).resumePlayback(resolvedDeviceId);
+        routineServerLog('✅ Resume attempt completed');
+      } catch (resumeError) {
+        console.warn('⚠️ Failed to resume playback:', showLog.spotifyErrorSummary(resumeError));
+      }
     }
     
     routineServerLog('🔄 Retrying same call in 3 seconds (will not skip index)...');
-    setTimeout(() => playNextSongSimple(roomId, deviceId, { retrying: true }), 3000);
+    setTimeout(() => {
+      if (!roomStillPlaying(roomId)) return;
+      playNextSongSimple(roomId, deviceId, { retrying: true });
+    }, 3000);
   }
   } finally {
     releaseSongAdvance(room);
@@ -2734,6 +2774,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
         } else {
           console.warn(`⚠️ Watchdog detected track mismatch. Expected ${expectedId}, got ${currentId}. Correcting…`);
         }
+        if (!roomStillPlaying(roomId)) return;
         try {
           // Store correction info for ping-pong detection
           if (room) {
@@ -2743,6 +2784,7 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
           
           // Ensure control on target device without autoplaying a random context
           try { await spotifyFor(roomId).transferPlayback(deviceId, false); } catch {}
+          if (!roomStillPlaying(roomId)) return;
           // Hard pause to stop any stray context audio before restart
           try { await spotifyFor(roomId).pausePlayback(deviceId); } catch {}
           // Restart intended track (position 0 to avoid drift); timers already handle overrun
@@ -2831,8 +2873,11 @@ function startPlaybackWatchdog(roomId, deviceId, snippetMs) {
       if (isPlaying && (!expectedId || currentId === expectedId)) { attempts = 0; return; }
       attempts += 1;
       if (attempts === 1) {
-        try { await spotifyFor(roomId).resumePlayback(deviceId); } catch {}
+        if (roomStillPlaying(roomId)) {
+          try { await spotifyFor(roomId).resumePlayback(deviceId); } catch {}
+        }
       } else if (attempts >= 2) {
+        if (!roomStillPlaying(roomId)) return;
         io.to(roomId).emit('playback-warning', { message: 'Playback stalled; restarting current track.' });
         // Try to restart the intended current track at expected progress
         try {
@@ -3046,23 +3091,31 @@ function supersedeRemainingBingoQueue(room, roomId, io) {
 
 function resumeGameAfterVerificationQueueEmpty(roomId, room) {
   if (room.gameState !== 'paused_for_verification') return;
-  room.gameState = 'playing';
   (async () => {
+    const live = rooms.get(roomId);
+    if (!live || live.gameState !== 'paused_for_verification') {
+      routineServerLog('⏹️ Skipping bingo resume — no longer paused for verification');
+      return;
+    }
+    live.gameState = 'playing';
     try {
-      const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
-      if (deviceId) {
+      const deviceId = live.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
+      if (deviceId && roomStillPlaying(roomId)) {
         await spotifyFor(roomId).resumePlayback(deviceId);
         routineServerLog(`▶️ Spotify resumed — bingo verification queue empty`);
-      } else {
+      } else if (!deviceId) {
         routineServerLog(`⚠️ No device ID available for resuming after bingo verification`);
       }
-      startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
+      if (!roomStillPlaying(roomId)) return;
+      startSimpleProgression(roomId, live.selectedDeviceId, live.snippetLength || 30);
+      io.to(roomId).emit('game-resumed', { reason: 'Bingo verification queue cleared' });
     } catch (error) {
       routineServerLog(`⚠️ Failed to resume Spotify after bingo verification: ${error.message}`);
-      startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
+      if (!roomStillPlaying(roomId)) return;
+      startSimpleProgression(roomId, live.selectedDeviceId, live.snippetLength || 30);
+      io.to(roomId).emit('game-resumed', { reason: 'Bingo verification queue cleared' });
     }
   })();
-  io.to(roomId).emit('game-resumed', { reason: 'Bingo verification queue cleared' });
 }
 
 function advanceBingoVerificationQueueAfterReject(io, room, roomId) {
@@ -4670,28 +4723,30 @@ io.on('connection', (socket) => {
     // Only resume if game is paused for verification
     if (room.gameState === 'paused_for_verification') {
       routineServerLog(`▶️ Host manually resuming game from paused_for_verification state`);
-      room.gameState = 'playing';
-      
-      // Resume Spotify playback
       (async () => {
+        const live = rooms.get(roomId);
+        if (!live || live.gameState !== 'paused_for_verification') {
+          routineServerLog('⏹️ Manual resume skipped — no longer paused for verification');
+          return;
+        }
+        live.gameState = 'playing';
         try {
-          const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
-          if (deviceId) {
+          const deviceId = live.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
+          if (deviceId && roomStillPlaying(roomId)) {
             await spotifyFor(roomId).resumePlayback(deviceId);
             routineServerLog(`▶️ Spotify resumed after manual resume`);
           }
-          // Start progression timer for the remainder of the current song
-          startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
+          if (!roomStillPlaying(roomId)) return;
+          startSimpleProgression(roomId, live.selectedDeviceId, live.snippetLength || 30);
+          io.to(roomId).emit('game-resumed', { reason: 'Host manually resumed game' });
+          routineServerLog(`✅ Game manually resumed by host`);
         } catch (error) {
           routineServerLog(`⚠️ Failed to resume Spotify: ${error.message}`);
-          // Still start progression timer as fallback
-          startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
+          if (!roomStillPlaying(roomId)) return;
+          startSimpleProgression(roomId, live.selectedDeviceId, live.snippetLength || 30);
+          io.to(roomId).emit('game-resumed', { reason: 'Host manually resumed game' });
         }
       })();
-      
-      // Notify all clients that game has resumed
-      io.to(roomId).emit('game-resumed', { reason: 'Host manually resumed game' });
-      routineServerLog(`✅ Game manually resumed by host`);
     } else {
       routineServerLog(`⚠️ Cannot manually resume: game state is ${room.gameState}, expected paused_for_verification`);
     }
@@ -4710,18 +4765,30 @@ io.on('connection', (socket) => {
     if (action === 'continue') {
       // Resume the game
       if (room.gameState === 'paused_for_verification') {
-        room.gameState = 'playing';
-        startSimpleProgression(roomId, room.selectedDeviceId, room.snippetLength || 30);
-        routineServerLog(`▶️ Host chose to continue game after bingo verification`);
-        
-        io.to(roomId).emit('game-resumed', { reason: 'Host continued after bingo' });
+        (async () => {
+          const live = rooms.get(roomId);
+          if (!live || live.gameState !== 'paused_for_verification') return;
+          live.gameState = 'playing';
+          if (!roomStillPlaying(roomId)) return;
+          try {
+            const deviceId = live.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
+            if (deviceId) await spotifyFor(roomId).resumePlayback(deviceId);
+          } catch (e) {
+            routineServerLog(`⚠️ Spotify resume on continue-after-bingo failed: ${e?.message || e}`);
+          }
+          if (!roomStillPlaying(roomId)) return;
+          startSimpleProgression(roomId, live.selectedDeviceId, live.snippetLength || 30);
+          routineServerLog(`▶️ Host chose to continue game after bingo verification`);
+          io.to(roomId).emit('game-resumed', { reason: 'Host continued after bingo' });
+        })();
       }
     } else if (action === 'end') {
-      // End the current round
+      stopLiveRoundTimers(roomId, room);
       room.gameState = 'ended';
-      clearRoomTimer(roomId);
+      (async () => {
+        await pauseSpotifyForRoom(roomId, room);
+      })();
       routineServerLog(`🏁 Host ended game after bingo verification`);
-      
       io.to(roomId).emit('game-ended', { reason: 'Host ended after bingo', winners: room.winners });
     }
   });
@@ -4981,17 +5048,10 @@ io.on('connection', (socket) => {
     
     routineServerLog(`🏁 Host ending game session for room ${roomId}`);
     
-    // Stop any current playback and clean up
-    clearRoomTimer(roomId);
-    clearPlaybackWatcher(roomId);
+    stopLiveRoundTimers(roomId, room);
     clearPlayerCardUpdateTimer(roomId); // Clear debounce timer
-    
-    try {
-      const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
-      if (deviceId) {
-        spotifyFor(roomId).pausePlayback(deviceId).catch(() => {});
-      }
-    } catch (e) {}
+    room.gameState = 'ended';
+    pauseSpotifyForRoom(roomId, room).catch(() => {});
     
     // Clean up temporary playlist
     if (room.temporaryPlaylistId) {
@@ -5001,8 +5061,6 @@ io.on('connection', (socket) => {
       room.temporaryPlaylistId = null;
     }
     
-    // Set final game state
-    room.gameState = 'ended';
     clearPublicDisplaySessionState(room);
     
     // Notify all clients that the entire game session has ended
@@ -5572,19 +5630,11 @@ io.on('connection', (socket) => {
     if (!room) return;
     if (room.host !== socket.id && !room.players.get(socket.id)?.isHost) return;
     try {
-      clearRoomTimer(roomId);
-      if (stopPlayback) {
-        try {
-          const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
-          if (deviceId) {
-            try { await spotifyFor(roomId).transferPlayback(deviceId, false); } catch {}
-            await spotifyFor(roomId).pausePlayback(deviceId);
-          }
-        } catch (e) {
-          console.warn('⚠️ Pause on end-game failed:', e?.message || e);
-        }
-      }
+      stopLiveRoundTimers(roomId, room);
       room.gameState = 'ended';
+      if (stopPlayback) {
+        await pauseSpotifyForRoom(roomId, room);
+      }
       
       // Clean up temporary playlist
       if (room.temporaryPlaylistId) {
@@ -5608,20 +5658,12 @@ io.on('connection', (socket) => {
     if (!room) return;
     if (room.host !== socket.id && !room.players.get(socket.id)?.isHost) return;
     try {
-      clearRoomTimer(roomId);
+      stopLiveRoundTimers(roomId, room);
+      room.gameState = 'waiting';
       if (stopPlayback) {
-        try {
-          const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
-          if (deviceId) {
-            try { await spotifyFor(roomId).transferPlayback(deviceId, false); } catch {}
-            await spotifyFor(roomId).pausePlayback(deviceId);
-          }
-        } catch (e) {
-          console.warn('⚠️ Pause on reset-game failed:', e?.message || e);
-        }
+        await pauseSpotifyForRoom(roomId, room);
       }
       // Reset state but keep players and host
-      room.gameState = 'waiting';
       room.winners = [];
       room.playlistSongs = [];
       room.currentSongIndex = 0;
@@ -9829,15 +9871,9 @@ app.post('/api/rooms/:roomId/end', async (req, res) => {
     const room = rooms.get(roomId);
     if (!room) return res.status(404).json({ error: 'Room not found' });
     try {
-      clearRoomTimer(roomId);
-      try {
-        const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
-        if (deviceId) {
-          try { await spotifyFor(roomId).transferPlayback(deviceId, false); } catch {}
-          await spotifyFor(roomId).pausePlayback(deviceId);
-        }
-      } catch {}
+      stopLiveRoundTimers(roomId, room);
       room.gameState = 'ended';
+      await pauseSpotifyForRoom(roomId, room);
       
       // Clean up temporary playlist
       if (room.temporaryPlaylistId) {
