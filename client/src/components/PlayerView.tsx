@@ -24,7 +24,7 @@ import {
 } from '../patternDefinitions';
 
 /** Extra px trimmed from measured card height so the card clears chrome comfortably. */
-const PLAYER_V2_CARD_HEIGHT_TRIM_PX = 26;
+const PLAYER_V2_CARD_HEIGHT_TRIM_PX = 34;
 /** Narrow phones / fold cover: title-only cells; artist via long-press. */
 const PLAYER_COMPACT_VIEWPORT_PX = 400;
 
@@ -994,8 +994,8 @@ const PlayerView: React.FC = () => {
     const TITLE_SCALE_MAX = 1.14;
     const TITLE_SCALE_PREFERRED_MIN = 0.86;
     const TITLE_SCALE_ABSOLUTE_MIN = 0.64;
-    const ARTIST_TO_TITLE_MAX = 0.76;
-    const ARTIST_TO_TITLE_MIN = 0.58;
+    const ARTIST_TO_TITLE_MAX = 0.78;
+    const ARTIST_TO_TITLE_MIN = 0.60;
     const artistScaleForTitle = (titleScale: number) => titleScale * ARTIST_TO_TITLE_MAX;
     const titleOnlyCells = compactCardCells;
 

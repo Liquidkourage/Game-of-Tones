@@ -4988,7 +4988,7 @@ button.conn-chip.conn-chip-compact {
   --player-nav-bottom: 0px;
   --player-app-header-offset: 32px;
   --player-v2-title-size: clamp(15px, 6cqi, 22px);
-  --player-v2-artist-size: clamp(11px, 4.2cqi, 16px);
+  --player-v2-artist-size: clamp(12px, 4.6cqi, 17px);
   padding-bottom: 0;
   --player-card-h-budget: calc(
     var(--player-vh-budget) - var(--player-app-header-offset) - var(--player-nav-bottom, 0px) - var(--player-visual-bottom-gap, 0px) - var(--player-v2-chrome-height) - var(--player-v2-stage-gap)
@@ -5570,7 +5570,7 @@ button.conn-chip.conn-chip-compact {
 
 .player-container--v2 .bingo-card .bingo-square {
   --player-cell-title-scale: 1;
-  --player-cell-artist-scale: 0.72;
+  --player-cell-artist-scale: 0.76;
   position: relative;
   overflow: hidden;
   border-right-width: 1px !important;
@@ -5679,7 +5679,7 @@ button.conn-chip.conn-chip-compact {
 
 .player-container--v2 .player-square-artist {
   width: 100%;
-  font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.72) * var(--player-v2-artist-size));
+  font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.76) * var(--player-v2-artist-size));
   line-height: 1.12;
   font-weight: 700;
   color: var(--player-v2-text-secondary);
@@ -6176,7 +6176,7 @@ button.conn-chip.conn-chip-compact {
   }
 
   .player-container--v2 .player-square-artist {
-    font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.72) * clamp(10px, 3.8cqi, 14px));
+    font-size: calc(var(--player-card-font-scale, 1) * var(--player-cell-artist-scale, 0.76) * clamp(11px, 4.2cqi, 15px));
   }
 
   .player-container--v2 .player-v2-action-bar {
