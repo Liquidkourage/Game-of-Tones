@@ -2123,6 +2123,110 @@ function computeSpotifySnippetRandomStartMs(room, song, contextLabel) {
   return startMs;
 }
 
+function normalizeSnippetLengthSec(value, fallback = 30) {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(120, Math.max(5, n));
+}
+
+function normalizeRandomStartsMode(value, fallback = 'none') {
+  const v = String(value || '').trim().toLowerCase();
+  if (v === 'early' || v === 'random' || v === 'none') return v;
+  return fallback === 'early' || fallback === 'random' || fallback === 'none' ? fallback : 'none';
+}
+
+function remainingSnippetMsForRoom(room) {
+  const snippetMs = (room.snippetLength || 30) * 1000;
+  return Math.max(0, snippetMs - snippetElapsedMsForRoom(room));
+}
+
+/** Reschedule auto-advance for the in-progress clip (used when snippet length changes mid-round). */
+function scheduleSimpleProgressionRemaining(roomId, deviceId, remainingMs) {
+  const room = rooms.get(roomId);
+  if (!room || !roomStillPlaying(roomId)) return;
+
+  const remaining = Math.max(0, Math.floor(Number(remainingMs) || 0));
+  const idx = room.currentSongIndex ?? 0;
+  const total = Array.isArray(room.playlistSongs) ? room.playlistSongs.length : 0;
+  const isLast = total > 0 && idx >= total - 1;
+
+  room.simpleProgressionActive = true;
+  clearRoomTimer(roomId);
+  startSimpleContextMonitor(roomId, deviceId);
+
+  const fireAdvance = async () => {
+    if (!roomStillPlaying(roomId)) return;
+    if (isLast) {
+      routineServerLog('⏰ Final song timer fired (remaining reschedule) — ending game');
+      emitFinalSongStartedIfNeeded(roomId, room, room.snippetLength || 30);
+      await endGamePlaylistComplete(roomId, deviceId);
+      return;
+    }
+    routineServerLog('⏰ Timer fired (remaining reschedule) — advancing to next song');
+    await playNextSongSimple(roomId, deviceId);
+  };
+
+  if (remaining <= 0) {
+    void fireAdvance();
+    return;
+  }
+
+  routineServerLog(`⏰ Rescheduled progression: ${Math.round(remaining / 1000)}s remaining on current clip`);
+  setRoomTimer(roomId, () => {
+    void fireAdvance();
+  }, remaining);
+}
+
+function applyLivePlaybackSettings(roomId, room, patch = {}) {
+  let snippetChanged = false;
+  let randomChanged = false;
+
+  if (patch.snippetLength !== undefined) {
+    const next = normalizeSnippetLengthSec(patch.snippetLength, room.snippetLength || 30);
+    if (next !== room.snippetLength) {
+      room.snippetLength = next;
+      snippetChanged = true;
+    }
+  }
+  if (patch.randomStarts !== undefined) {
+    const next = normalizeRandomStartsMode(patch.randomStarts, room.randomStarts || 'none');
+    if (next !== room.randomStarts) {
+      room.randomStarts = next;
+      randomChanged = true;
+    }
+  }
+
+  if (!snippetChanged && !randomChanged) return { changed: false };
+
+  const live =
+    room.gameState === 'playing' || room.gameState === 'paused_for_verification';
+
+  if (snippetChanged && room.gameState === 'playing' && room.currentSong?.id) {
+    const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
+    if (deviceId) {
+      scheduleSimpleProgressionRemaining(roomId, deviceId, remainingSnippetMsForRoom(room));
+    }
+    emitSongPlayingToRoom(roomId, room, room.currentSong, room.currentSongIndex);
+  }
+
+  if (live) {
+    syncRoomStateAfterSongStart(roomId, room);
+  }
+
+  io.to(roomId).emit('playback-settings-updated', {
+    snippetLength: room.snippetLength || 30,
+    randomStarts: room.randomStarts || 'none',
+  });
+
+  routineServerLog(
+    `🎚️ Playback settings for room ${roomId}: snippet=${room.snippetLength}s random=${room.randomStarts}` +
+      (snippetChanged ? ' (snippet timer rescheduled)' : '') +
+      (randomChanged ? ' (random starts apply from next song)' : ''),
+  );
+
+  return { changed: true, snippetChanged, randomChanged };
+}
+
 /** Display titles for room-state: matches song-playing (host overrides + cleaned Spotify titles). */
 function clientSongMetaFromPlaylistSong(foundSong, orgId) {
   if (!foundSong) return null;
@@ -2205,6 +2309,7 @@ function syncRoomStateAfterSongStart(roomId, room) {
     ...patternExtrasForClient(room),
     currentSong: currentSongPayloadForRoomState(room.currentSong, room.dbOrganizationId ?? null),
     snippetLength: room.snippetLength || 30,
+    randomStarts: room.randomStarts || 'none',
     playerCount: getNonHostPlayerCount(room),
     gameState: room.gameState,
     winners: room.winners || [],
@@ -3550,6 +3655,7 @@ io.on('connection', (socket) => {
             ...patternExtrasForClient(room),
             currentSong: currentSongPayloadForRoomState(room.currentSong, room.dbOrganizationId ?? null),
             snippetLength: room.snippetLength || 30,
+            randomStarts: room.randomStarts || 'none',
             playerCount: getNonHostPlayerCount(room),
             gameState: room.gameState,
             winners: room.winners || [],
@@ -4086,6 +4192,31 @@ io.on('connection', (socket) => {
       routineServerLog(`🌐 Hybrid in-person+online for room ${roomId}: ${room.hybridInPersonPlusOnline}`);
     } catch (e) {
       console.error('❌ Error setting hybrid mode:', e?.message || e);
+    }
+  });
+
+  /** Host: update snippet length and/or random starts during live play (applies to current + future clips). */
+  socket.on('set-playback-settings', (data = {}) => {
+    try {
+      const { roomId, snippetLength, randomStarts } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost =
+        room.host === socket.id ||
+        (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+      if (!isCurrentHost) return;
+
+      if (snippetLength === undefined && randomStarts === undefined) return;
+
+      const result = applyLivePlaybackSettings(roomId, room, { snippetLength, randomStarts });
+      if (result.changed) {
+        socket.emit('playback-settings-updated', {
+          snippetLength: room.snippetLength || 30,
+          randomStarts: room.randomStarts || 'none',
+        });
+      }
+    } catch (e) {
+      console.error('❌ Error setting playback settings:', e?.message || e);
     }
   });
 

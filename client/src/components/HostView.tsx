@@ -731,6 +731,10 @@ const HostView: React.FC = () => {
   });
   const [socket, setSocket] = useState<any>(null);
   const [gameState, setGameState] = useState<'waiting' | 'playing' | 'ended'>('waiting');
+  const gameStateRef = useRef<'waiting' | 'playing' | 'ended'>('waiting');
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   /** YouTube Music playlists (API); merged into Playlist library table and Round planner. */
@@ -3227,6 +3231,12 @@ const HostView: React.FC = () => {
         const nextSnippetLength = Number(payload.snippetLength);
         if (Number.isFinite(nextSnippetLength) && nextSnippetLength > 0) {
           setSnippetLength(Math.round(nextSnippetLength));
+        }
+      }
+      if (shouldHydrateLiveSnippetLength && payload?.randomStarts !== undefined) {
+        const rs = payload.randomStarts;
+        if (rs === 'none' || rs === 'early' || rs === 'random') {
+          setRandomStarts(rs);
         }
       }
       if (payload?.currentSong !== undefined) {
@@ -5745,6 +5755,54 @@ const HostView: React.FC = () => {
       socket.emit('clear-song-alias', { roomId, songId });
     }
   };
+
+  const playbackSettingsSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (playbackSettingsSyncTimerRef.current) {
+        clearTimeout(playbackSettingsSyncTimerRef.current);
+        playbackSettingsSyncTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const syncLivePlaybackSettingsToServer = useCallback(
+    (patch: { snippetLength?: number; randomStarts?: 'none' | 'early' | 'random' }) => {
+      if (!socket || !roomId) return;
+      const gs = gameStateRef.current;
+      if (gs !== 'playing') return;
+      try {
+        socket.emit('set-playback-settings', { roomId, ...patch });
+      } catch {
+        /* ignore */
+      }
+    },
+    [socket, roomId],
+  );
+
+  const handleSnippetLengthChange = useCallback(
+    (seconds: number) => {
+      const n = Math.min(120, Math.max(5, Math.round(seconds)));
+      setSnippetLength(n);
+      if (playbackSettingsSyncTimerRef.current) {
+        clearTimeout(playbackSettingsSyncTimerRef.current);
+      }
+      playbackSettingsSyncTimerRef.current = setTimeout(() => {
+        playbackSettingsSyncTimerRef.current = null;
+        syncLivePlaybackSettingsToServer({ snippetLength: n });
+      }, 200);
+    },
+    [syncLivePlaybackSettingsToServer],
+  );
+
+  const handleRandomStartsChange = useCallback(
+    (mode: 'none' | 'early' | 'random') => {
+      setRandomStarts(mode);
+      syncLivePlaybackSettingsToServer({ randomStarts: mode });
+    },
+    [syncLivePlaybackSettingsToServer],
+  );
 
   const getDisplaySongTitle = (songId: string, originalTitle: string) =>
     displayTitleForSong(songId, originalTitle, songAliases);
@@ -8506,9 +8564,9 @@ const HostView: React.FC = () => {
       printableCardCount={printableCardCount}
       onPrintableCardCountChange={setPrintableCardCount}
       snippetLength={snippetLength}
-      onSnippetLengthChange={setSnippetLength}
+      onSnippetLengthChange={handleSnippetLengthChange}
       randomStarts={randomStarts}
-      onRandomStartsChange={setRandomStarts}
+      onRandomStartsChange={handleRandomStartsChange}
       initialFocusedIndex={roundBuilderFocusIndex}
       onFocusedRoundChange={setRoundBuilderFocusIndex}
       prepHints={{
@@ -9801,9 +9859,9 @@ const HostView: React.FC = () => {
                   }
                 }}
                 snippetLength={snippetLength}
-                onSnippetLengthChange={setSnippetLength}
+                onSnippetLengthChange={handleSnippetLengthChange}
                 randomStarts={randomStarts}
-                onRandomStartsChange={setRandomStarts}
+                onRandomStartsChange={handleRandomStartsChange}
               />
               </div>
             ) : null}
