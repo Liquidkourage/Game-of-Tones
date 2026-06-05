@@ -4,6 +4,14 @@ import { motion } from 'framer-motion';
 import { useParams, useSearchParams } from 'react-router-dom';
 import io from 'socket.io-client';
 import { SOCKET_URL } from '../config';
+import {
+  fetchPlayerSession,
+  getPlayerJwt,
+  playerLogout,
+  type PlayerAccountUser,
+  type PlayerStats,
+} from '../utils/playerFetch';
+import PlayerAccountGate from './PlayerAccountGate';
 import { youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
 import { patchSquaresWithAlias, patchSquaresClearAlias } from '../utils/songAliasDisplay';
 import { softHyphenateLongWords, stripSoftHyphens } from '../utils/softHyphenateLongWords';
@@ -98,9 +106,12 @@ const PlayerView: React.FC = () => {
   const inPersonJoin = searchParams.get('remote') !== '1';
   const [playerName, setPlayerName] = useState<string>(() => {
     const fromStorage = (() => { try { return localStorage.getItem('player_name') || ''; } catch { return ''; } })();
-    const fromQuery = searchParams.get('name') || '';
-    return fromStorage || fromQuery || '';
+    const fromUrl = searchParams.get('name') || '';
+    return fromUrl.trim() || fromStorage.trim();
   });
+  const [joinReady, setJoinReady] = useState(false);
+  const [playerAccount, setPlayerAccount] = useState<PlayerAccountUser | null>(null);
+  const [playerStats, setPlayerStats] = useState<PlayerStats | null>(null);
   const [clientId] = useState<string>(() => {
     try {
       const existing = localStorage.getItem('client_id');
@@ -382,7 +393,57 @@ const PlayerView: React.FC = () => {
   };
 
   useEffect(() => {
-    // Initialize socket connection with robust reconnection
+    let cancelled = false;
+    fetchPlayerSession().then((session) => {
+      if (cancelled || !session.user) return;
+      setPlayerAccount(session.user);
+      setPlayerStats(session.stats);
+      setPlayerName(session.user.displayName);
+      try {
+        localStorage.setItem('player_name', session.user.displayName);
+      } catch {
+        /* ignore */
+      }
+      setJoinReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const buildJoinPayload = (name: string) => ({
+    roomId,
+    playerName: name,
+    isHost: false,
+    clientId,
+    inPerson: inPersonJoin,
+    playerPreferences: { cardFontPercent, cardTheme },
+    playerToken: getPlayerJwt() || '',
+  });
+
+  const finishGuestOrAccountJoin = (name: string, account?: PlayerAccountUser | null, stats?: PlayerStats | null) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    try {
+      localStorage.setItem('player_name', trimmed);
+    } catch {
+      /* ignore */
+    }
+    setPlayerName(trimmed);
+    if (account) setPlayerAccount(account);
+    if (stats !== undefined) setPlayerStats(stats);
+    setJoinReady(true);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('name', trimmed);
+      window.history.replaceState({}, '', url.toString());
+    } catch {
+      /* ignore */
+    }
+  };
+
+  useEffect(() => {
+    const playerJwt = getPlayerJwt();
     const newSocket = io(SOCKET_URL || undefined, {
       transports: ['websocket'],
       reconnection: true,
@@ -390,6 +451,7 @@ const PlayerView: React.FC = () => {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       timeout: 20000,
+      auth: playerJwt ? { playerToken: playerJwt } : {},
     });
     setSocket(newSocket);
 
@@ -399,8 +461,8 @@ const PlayerView: React.FC = () => {
       setConnectionStatus('connected');
       setReconnectAttempts(0);
       // Join only if we have a name; otherwise wait for user input
-      if (playerName && playerName.trim()) {
-        newSocket.emit('join-room', { roomId, playerName, isHost: false, clientId, inPerson: inPersonJoin });
+      if (joinReady && playerName && playerName.trim()) {
+        newSocket.emit('join-room', buildJoinPayload(playerName.trim()));
       }
       // Ask server for state in case game already started
       // This will trigger room-state which will calculate missed songs
@@ -954,10 +1016,12 @@ const PlayerView: React.FC = () => {
 
   // If name becomes available after initial connect, join the room
   useEffect(() => {
-    if (socket && socket.connected && playerName && playerName.trim()) {
-      try { socket.emit('join-room', { roomId, playerName, isHost: false, clientId, inPerson: inPersonJoin }); } catch {}
+    if (socket && socket.connected && joinReady && playerName && playerName.trim()) {
+      try {
+        socket.emit('join-room', buildJoinPayload(playerName.trim()));
+      } catch {}
     }
-  }, [socket, playerName, roomId, clientId, inPersonJoin]);
+  }, [socket, joinReady, playerName, roomId, clientId, inPersonJoin, cardFontPercent, cardTheme]);
 
   useEffect(() => {
     if (!optionsOpen) return undefined;
@@ -1951,44 +2015,29 @@ const PlayerView: React.FC = () => {
       } as React.CSSProperties}
     >
       {/* Name prompt overlay if no name provided */}
-      {!playerName || !playerName.trim() ? (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <div style={{ width: 'min(90vw, 520px)', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 14, padding: 18 }}>
-            <h3 style={{ margin: 0, marginBottom: 12, fontSize: '1.4rem' }}>Enter your name to join</h3>
-            <input
-              type="text"
-              placeholder="Your name"
-              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-              onBlur={(e) => {
-                const name = e.target.value.trim();
-                if (!name) return;
-                try { localStorage.setItem('player_name', name); } catch {}
-                setPlayerName(name);
-                try {
-                  const url = new URL(window.location.href);
-                  url.searchParams.set('name', name);
-                  window.history.replaceState({}, '', url.toString());
-                } catch {}
-                if (socket && socket.connected) {
-                  try { socket.emit('join-room', { roomId, playerName: name, isHost: false, clientId, inPerson: inPersonJoin }); } catch {}
-                }
-              }}
-              autoFocus
-              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(0,0,0,0.3)', color: '#fff' }}
-            />
-            <div style={{ marginTop: 10, display: 'flex', gap: 10 }}>
-              <button
-                className="btn-secondary"
-                onClick={() => {
-                  const el = document.querySelector<HTMLInputElement>('input[placeholder=\"Your name\"]');
-                  if (el) el.focus();
-                }}
-              >
-                Continue
-              </button>
-            </div>
-          </div>
-        </div>
+      {!joinReady ? (
+        <PlayerAccountGate
+          onGuestContinue={(name) => {
+            finishGuestOrAccountJoin(name);
+            if (socket && socket.connected) {
+              try {
+                socket.emit('join-room', buildJoinPayload(name));
+              } catch {
+                /* ignore */
+              }
+            }
+          }}
+          onAccountReady={(user, stats) => {
+            finishGuestOrAccountJoin(user.displayName, user, stats);
+            if (socket && socket.connected) {
+              try {
+                socket.emit('join-room', buildJoinPayload(user.displayName));
+              } catch {
+                /* ignore */
+              }
+            }
+          }}
+        />
       ) : null}
 
       <div className="player-main-column">
@@ -2221,6 +2270,48 @@ const PlayerView: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {playerAccount ? (
+                  <div className="player-v2-sheet-row">
+                    <div className="player-v2-sheet-copy">
+                      <div className="player-v2-sheet-label">Your account</div>
+                      <div className="player-v2-sheet-note">
+                        {playerAccount.displayName} · {playerAccount.email}
+                      </div>
+                      {playerStats ? (
+                        <div className="player-v2-sheet-note" style={{ marginTop: 6 }}>
+                          {playerStats.gamesJoined} games · {playerStats.marksMade} marks ·{' '}
+                          {playerStats.bingosCalled} bingos called · {playerStats.bingosWon} wins
+                        </div>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => {
+                        void playerLogout().then(() => {
+                          setPlayerAccount(null);
+                          setPlayerStats(null);
+                          setJoinReady(false);
+                        });
+                      }}
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                ) : (
+                  <div className="player-v2-sheet-row">
+                    <div className="player-v2-sheet-copy">
+                      <div className="player-v2-sheet-label">Player account</div>
+                      <div className="player-v2-sheet-note">
+                        Sign in to save stats across games. Playing as guest: {playerName}
+                      </div>
+                    </div>
+                    <button type="button" className="btn-secondary" onClick={() => setJoinReady(false)}>
+                      Sign in
+                    </button>
+                  </div>
+                )}
 
                 <div className="player-v2-sheet-row">
                   <div className="player-v2-sheet-copy">

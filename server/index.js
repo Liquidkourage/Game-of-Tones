@@ -17,6 +17,9 @@ const usersStore = require('./users');
 const organizationsStore = require('./organizations');
 const billingStore = require('./billing');
 const hostRoomPrepStore = require('./hostRoomPrep');
+const playersStore = require('./players');
+const playerAuth = require('./playerAuth');
+const playerAccountsStore = require('./playerAccounts');
 const songAliasesStore = require('./songAliases');
 const fiveByFifteenAssign = require('./fiveByFifteenAssign');
 const venueLogoCache = require('./venueLogoCache');
@@ -392,6 +395,101 @@ async function ensureRoomDbOrganizationId(room, socket) {
   const orgId = await songAliasesStore.getOrganizationIdForUserId(db, Number(uid));
   if (orgId != null) room.dbOrganizationId = orgId;
   return room.dbOrganizationId ?? null;
+}
+
+function playerDataRoundTokenForRoom(room) {
+  if (!room) return 'unknown';
+  if (room.playerDataRoundToken) return room.playerDataRoundToken;
+  const token = playersStore.buildRoundTokenFromRoom(room);
+  room.playerDataRoundToken = token;
+  return token;
+}
+
+function playerDataSessionContext(room, player) {
+  return {
+    clientId: player?.clientId,
+    roomId: room?.id,
+    roundToken: playerDataRoundTokenForRoom(room),
+    displayName: player?.name,
+    inPerson: player?.inPerson !== false,
+    hostUserId: room?.ownerUserId ?? null,
+    organizationId: room?.dbOrganizationId ?? null,
+    socketId: player?.id,
+    playerUserId: player?.playerUserId ?? null,
+  };
+}
+
+function playerStatsContext(room, player) {
+  return {
+    roomId: room?.id,
+    roundToken: playerDataRoundTokenForRoom(room),
+    organizationId: room?.dbOrganizationId ?? null,
+    displayName: player?.name,
+  };
+}
+
+function resolvePlayerUserIdFromJoin(socket, data) {
+  if (socket.playerUserId != null) return socket.playerUserId;
+  const fromPayload =
+    typeof data?.playerToken === 'string' && data.playerToken.trim()
+      ? playerAuth.decodePlayerJwtPayload(data.playerToken.trim())
+      : null;
+  if (fromPayload?.userId != null) return fromPayload.userId;
+  const fromHandshake = playerAuth.getPlayerSessionTokenFromHandshake(socket.handshake);
+  if (fromHandshake) {
+    const p = playerAuth.decodePlayerJwtPayload(fromHandshake);
+    if (p?.userId != null) return p.userId;
+  }
+  return null;
+}
+
+async function persistPlayerDataCard(room, player, card) {
+  if (!db || !player?.clientId || !room?.id || !card) return;
+  try {
+    await playersStore.savePlayerSession(db, {
+      ...playerDataSessionContext(room, player),
+      card,
+    });
+  } catch (e) {
+    console.error('persistPlayerDataCard:', e?.message || e);
+  }
+}
+
+async function recordPlayerDataJoin(room, player, preferences) {
+  if (!db || !player?.clientId || !room?.id) return;
+  try {
+    await playersStore.recordPlayerJoin(db, {
+      ...playerDataSessionContext(room, player),
+      preferences,
+    });
+  } catch (e) {
+    console.error('recordPlayerDataJoin:', e?.message || e);
+  }
+}
+
+async function tryRestorePlayerCardFromDb(room, clientId) {
+  if (!db || !clientId || !room?.id) return null;
+  try {
+    const session = await playersStore.loadPlayerSession(
+      db,
+      clientId,
+      room.id,
+      playerDataRoundTokenForRoom(room),
+    );
+    return session?.card || null;
+  } catch (e) {
+    console.error('tryRestorePlayerCardFromDb:', e?.message || e);
+    return null;
+  }
+}
+
+async function clearPlayerDataForRoom(roomId) {
+  if (!db || !roomId) return;
+  try {
+    await playersStore.clearRoomSessions(db, roomId);
+  } catch (e) {
+    console.error('clearPlayerDataForRoom:', e?.message || e);
+  }
 }
 
 async function ensureSongAliasCacheForOrg(orgId) {
@@ -1321,6 +1419,8 @@ async function initializeDatabase() {
     await organizationsStore.ensureOrganizationsTable(db);
     await songAliasesStore.ensureSongAliasesTable(db);
     await hostRoomPrepStore.ensureHostRoomPrepTable(db);
+    await playersStore.ensurePlayerTables(db);
+    await playerAccountsStore.ensurePlayerAccountTables(db);
     await db.query(`
       CREATE TABLE IF NOT EXISTS host_spotify_playlist_list_cache (
         organization_id VARCHAR(50) PRIMARY KEY,
@@ -3136,6 +3236,11 @@ io.use((socket, next) => {
         socket.hostEmailFromJwt = p.email || null;
       }
     }
+    const playerToken = playerAuth.getPlayerSessionTokenFromHandshake(socket.handshake);
+    if (playerToken) {
+      const pp = playerAuth.decodePlayerJwtPayload(playerToken);
+      if (pp?.userId != null) socket.playerUserId = pp.userId;
+    }
   } catch (_) {}
   next();
 });
@@ -3277,7 +3382,7 @@ io.on('connection', (socket) => {
 
   // Join room
   socket.on('join-room', async (data) => {
-    const { roomId, playerName, isHost = false, clientId, hostSecret, hostToken } = data;
+    const { roomId, playerName, isHost = false, clientId, hostSecret, hostToken, playerPreferences, playerToken } = data;
     const hostSecretEnv = (process.env.TEMPO_HOST_SECRET || '').trim();
     let wantsHost = isHost;
 
@@ -3505,6 +3610,8 @@ io.on('connection', (socket) => {
     }
     
     const inPerson = data.inPerson !== false;
+    const joinedPlayerUserId = !effectiveIsHost ? resolvePlayerUserIdFromJoin(socket, data) : null;
+    if (joinedPlayerUserId != null) socket.playerUserId = joinedPlayerUserId;
     const player = {
       id: socket.id,
       name: playerName,
@@ -3512,10 +3619,19 @@ io.on('connection', (socket) => {
       hasBingo: false,
       clientId: clientId || null,
       /** false = joined as remote/online when host enables hybrid mode */
-      inPerson
+      inPerson,
+      playerUserId: joinedPlayerUserId,
     };
     
     room.players.set(socket.id, player);
+
+    if (!effectiveIsHost && clientId) {
+      void recordPlayerDataJoin(room, player, playerPreferences);
+      if (joinedPlayerUserId != null) {
+        void playerAccountsStore.linkClientToAccount(db, clientId, joinedPlayerUserId);
+        void playerAccountsStore.recordGameJoin(db, joinedPlayerUserId, playerStatsContext(room, player));
+      }
+    }
 
     if (isDisplayConnectionPlayer(player)) {
       touchDisplayPresence(room, socket.id);
@@ -3684,7 +3800,21 @@ io.on('connection', (socket) => {
           // Card already has marks preserved from clientCards
           // Don't send isNewCard flag on reconnect - this is an existing card with marks
           io.to(socket.id).emit('bingo-card', existingCard);
-        } else if (room.playlistSongs?.length || room.playlists?.length || room.finalizedPlaylists?.length) {
+          void persistPlayerDataCard(room, player, existingCard);
+        } else if (clientId && db) {
+          const dbCard = await tryRestorePlayerCardFromDb(room, clientId);
+          if (dbCard) {
+            if (!room.clientCards) room.clientCards = new Map();
+            room.clientCards.set(clientId, dbCard);
+            room.bingoCards.set(socket.id, dbCard);
+            player.bingoCard = dbCard;
+            io.to(socket.id).emit('bingo-card', dbCard);
+          }
+        }
+        if (
+          !room.bingoCards?.get(socket.id) &&
+          (room.playlistSongs?.length || room.playlists?.length || room.finalizedPlaylists?.length)
+        ) {
           // Generate card for any player (host or not) if playlists exist
           routineServerLog(`🎲 Generating bingo card for ${effectiveIsHost ? 'host' : 'player'} ${playerName}`);
           const card = await generateBingoCardForPlayer(roomId, socket.id);
@@ -3792,6 +3922,8 @@ io.on('connection', (socket) => {
       room.freeSpaceEnabled = false;
       if (room.bingoCards) room.bingoCards.clear();
       if (room.clientCards) room.clientCards.clear();
+      room.playerDataRoundToken = null;
+      void clearPlayerDataForRoom(roomId);
       room.fiveByFifteenColumnsIds = null;
       room.fiveByFifteenColumns = null;
       room.fiveByFifteenPlaylistNames = null;
@@ -4344,6 +4476,9 @@ io.on('connection', (socket) => {
           timestamp: Date.now()
         });
         routineServerLog(`🌐 Remote hybrid bingo (unofficial) for ${player.name}`);
+        if (player.playerUserId != null) {
+          void playerAccountsStore.recordBingoCalled(db, player.playerUserId, playerStatsContext(room, player));
+        }
       } else {
         socket.emit('bingo-result', {
           success: false,
@@ -4387,6 +4522,9 @@ io.on('connection', (socket) => {
       player.hasBingo = true;
       const winnerData = { playerId: socket.id, playerName: player.name, timestamp: Date.now() };
       room.winners.push(winnerData);
+      if (player.playerUserId != null) {
+        void playerAccountsStore.recordBingoCalled(db, player.playerUserId, playerStatsContext(room, player));
+      }
       
       // Send success to the caller
       socket.emit('bingo-result', { 
@@ -4766,6 +4904,9 @@ io.on('connection', (socket) => {
       })();
       
       routineServerLog(`🏁 Round complete - ${player.name} wins! Waiting for host decision...`);
+      if (player.playerUserId != null) {
+        void playerAccountsStore.recordBingoWon(db, player.playerUserId, playerStatsContext(room, player));
+      }
       
       // Store round winner
       if (!room.roundWinners) room.roundWinners = [];
@@ -5161,6 +5302,8 @@ io.on('connection', (socket) => {
     // Clear all bingo cards - they'll be regenerated when new playlists are selected
     room.bingoCards = new Map();
     room.clientCards = new Map();
+    room.playerDataRoundToken = null;
+    void clearPlayerDataForRoom(roomId);
     room.oneBySeventyFivePool = [];
     room.fiveByFifteenColumnsIds = [];
     room.fiveByFifteenPlaylistNames = [];
@@ -5561,6 +5704,8 @@ io.on('connection', (socket) => {
           if (room.clientCards) {
             room.clientCards.clear();
           }
+          room.playerDataRoundToken = null;
+          void clearPlayerDataForRoom(roomId);
 
           const SNAP = SAVED_ROUND_SNAP_PLAYLIST_ID;
           let playlistsToUse;
@@ -6412,6 +6557,10 @@ io.on('connection', (socket) => {
           
           // Send real-time player card updates to host (immediate so marks show without delay)
           sendPlayerCardUpdates(roomId, true);
+          void persistPlayerDataCard(room, player, card);
+          if (player.playerUserId != null) {
+            void playerAccountsStore.recordMark(db, player.playerUserId, playerStatsContext(room, player), 1);
+          }
           
           // Check for bingo pattern completion (but don't auto-announce)
           // Use the same validation logic as the actual bingo call for consistency
@@ -7185,6 +7334,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
 
   try {
     routineServerLog(`📋 Playlist order received: ${playlists.map((p, i) => `${i + 1}. ${p.name}`).join(', ')}`);
+    room.playerDataRoundToken = playersStore.buildRoundTokenFromRoom(room);
 
     let playlistsWithSongs = playlistsWithSongsFromHostSongOrder(playlists, songOrder);
 
@@ -7646,6 +7796,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
       }
     // Emit card with isNewCard flag to help client detect new rounds
     io.to(playerId).emit('bingo-card', { ...card, isNewCard: true });
+      void persistPlayerDataCard(room, player, card);
     } catch (e) {
       console.error(`❌ Error generating card for player ${player.name} (${playerId}):`, e?.message || e);
       // Continue with other players
@@ -8261,6 +8412,7 @@ async function generateBingoCardForPlayer(roomId, playerId) {
     if (p) p.bingoCard = card;
     // Emit card with isNewCard flag to help client detect new rounds
     io.to(playerId).emit('bingo-card', { ...card, isNewCard: true });
+    if (p) void persistPlayerDataCard(room, p, card);
     return card;
   } catch (e) {
     console.error('❌ Error generating single player card:', e?.message || e);
@@ -10281,6 +10433,87 @@ app.get('/api/auth/google/callback', async (req, res) => {
     console.error('Google callback error:', e?.message || e);
     return res.redirect(302, `${appBase}/?auth_error=1`);
   }
+});
+
+/** Player accounts (email/password) — separate from host Google OAuth. */
+app.post('/api/player/signup', async (req, res) => {
+  try {
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const row = await playerAccountsStore.createAccount(db, {
+      email: body.email,
+      password: body.password,
+      displayName: body.displayName || body.display_name,
+    });
+    const token = playerAuth.setPlayerSessionCookie(res, row.id);
+    const stats = await playerAccountsStore.getStats(db, row.id);
+    const recentRounds = await playerAccountsStore.listRecentRounds(db, row.id, 10);
+    return res.json({
+      ok: true,
+      token,
+      user: playerAccountsStore.accountPublicRow(row),
+      stats: playerAccountsStore.statsPublicRow(stats),
+      recentRounds,
+    });
+  } catch (e) {
+    console.error('POST /api/player/signup:', e?.message || e);
+    res.status(400).json({ error: 'failed', message: e?.message || 'Signup failed' });
+  }
+});
+
+app.post('/api/player/login', async (req, res) => {
+  try {
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const row = await playerAccountsStore.authenticateAccount(db, {
+      email: body.email,
+      password: body.password,
+    });
+    const token = playerAuth.setPlayerSessionCookie(res, row.id);
+    const stats = await playerAccountsStore.getStats(db, row.id);
+    const recentRounds = await playerAccountsStore.listRecentRounds(db, row.id, 10);
+    return res.json({
+      ok: true,
+      token,
+      user: playerAccountsStore.accountPublicRow(row),
+      stats: playerAccountsStore.statsPublicRow(stats),
+      recentRounds,
+    });
+  } catch (e) {
+    console.error('POST /api/player/login:', e?.message || e);
+    res.status(401).json({ error: 'failed', message: e?.message || 'Login failed' });
+  }
+});
+
+app.get('/api/player/me', async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+  try {
+    const uid = playerAuth.getPlayerUserIdFromRequest(req);
+    if (!uid) return res.json({ user: null });
+    if (!db) {
+      return res.json({ user: { id: uid }, stats: playerAccountsStore.statsPublicRow(null) });
+    }
+    const row = await playerAccountsStore.getAccountById(db, uid);
+    if (!row) return res.json({ user: null });
+    const stats = await playerAccountsStore.getStats(db, uid);
+    const recentRounds = await playerAccountsStore.listRecentRounds(db, uid, 10);
+    const rawJwt = playerAuth.getPlayerJwtRawFromRequest(req);
+    return res.json({
+      user: playerAccountsStore.accountPublicRow(row),
+      stats: playerAccountsStore.statsPublicRow(stats),
+      recentRounds,
+      ...(rawJwt ? { playerToken: rawJwt } : {}),
+    });
+  } catch (e) {
+    console.error('GET /api/player/me:', e?.message || e);
+    res.status(500).json({ error: 'failed', message: 'Failed to load player account' });
+  }
+});
+
+app.post('/api/player/logout', (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+  playerAuth.clearPlayerSessionCookie(res);
+  res.json({ ok: true });
 });
 
 app.get('/api/auth/me', async (req, res) => {

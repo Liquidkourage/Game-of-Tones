@@ -61,4 +61,20 @@ Hosts want to **plan an entire event upfront**: for **each round**, set the **bi
 
 ---
 
-*Last updated: roadmap item added for multi-round presets & printing.*
+*Last updated: player data layer + deferred product backlog.*
+
+---
+
+## Deferred product backlog (hold)
+
+1. Multi-round show runner — pattern per round, pre-show print bundle  
+2. Show reliability — resume state, host takeover, projector recovery URL  
+3. Billing entitlements — tiers (Basic / Pro / Venue) beyond pay gate  
+4. White-label venue identity — per-org themes from glass mockups  
+5. Post-show report — songs, bingos, players, export  
+6. Deterministic round audit trail — seeded shuffle + immutable log  
+7. Catalog intelligence — alias packs, duplicate/warning tooling  
+8. Hybrid mode productized — official vs unofficial bingo UX  
+9. Player UX at venue scale — PWA, optimistic marks, misfire-proof bingo call  
+10. Playback abstraction — one non-Spotify provider path done well
+
