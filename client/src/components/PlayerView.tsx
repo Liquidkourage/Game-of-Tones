@@ -25,6 +25,9 @@ import {
 
 /** Narrow phones / fold cover: title-only cells; artist via long-press. */
 const PLAYER_COMPACT_VIEWPORT_PX = 400;
+/** Default text scale on first visit when no saved preference (narrow vs desktop). */
+const CARD_FONT_DEFAULT_NARROW = 90;
+const CARD_FONT_DEFAULT_WIDE = 100;
 
 interface BingoSquare {
   position: string;
@@ -159,12 +162,17 @@ const PlayerView: React.FC = () => {
   const [cardFontPercent, setCardFontPercent] = useState<number>(() => {
     try {
       const raw = localStorage.getItem(CARD_FONT_STORAGE_KEY);
-      if (raw == null) return 100;
+      if (raw == null) {
+        if (typeof window !== 'undefined' && window.innerWidth <= PLAYER_COMPACT_VIEWPORT_PX) {
+          return CARD_FONT_DEFAULT_NARROW;
+        }
+        return CARD_FONT_DEFAULT_WIDE;
+      }
       const n = parseInt(raw, 10);
-      if (!Number.isFinite(n)) return 100;
+      if (!Number.isFinite(n)) return CARD_FONT_DEFAULT_WIDE;
       return Math.min(CARD_FONT_MAX, Math.max(CARD_FONT_MIN, n));
     } catch {
-      return 100;
+      return CARD_FONT_DEFAULT_WIDE;
     }
   });
 
@@ -989,15 +997,15 @@ const PlayerView: React.FC = () => {
     let cancelled = false;
 
     /** Title leads. Artist uses its own scale (not × titleScale); hierarchy enforced after fit. */
-    const TITLE_SCALE_MAX = 1.16;
-    const TITLE_SCALE_PREFERRED_MIN = 0.88;
-    const TITLE_SCALE_ABSOLUTE_MIN = 0.64;
-    const ARTIST_PROBE_SCALE = 0.9;
-    const ARTIST_SCALE_MIN = 0.84;
-    const ARTIST_SCALE_MAX = 1;
-    const ARTIST_SCALE_FLOOR = 0.86;
-    const ARTIST_MAX_TITLE_RATIO = 0.76;
     const titleOnlyCells = compactCardCells;
+    const TITLE_SCALE_MAX = titleOnlyCells ? 1.08 : 1.16;
+    const TITLE_SCALE_PREFERRED_MIN = titleOnlyCells ? 0.7 : 0.88;
+    const TITLE_SCALE_ABSOLUTE_MIN = titleOnlyCells ? 0.5 : 0.64;
+    const ARTIST_PROBE_SCALE = 0.9;
+    const ARTIST_SCALE_MIN = titleOnlyCells ? 0.78 : 0.84;
+    const ARTIST_SCALE_MAX = 1;
+    const ARTIST_SCALE_FLOOR = titleOnlyCells ? 0.8 : 0.86;
+    const ARTIST_MAX_TITLE_RATIO = 0.76;
 
     const getLineCount = (el: HTMLElement) => {
       const computed = window.getComputedStyle(el);
@@ -1019,7 +1027,7 @@ const PlayerView: React.FC = () => {
       const longestWord = getLongestWordLength(text);
       if (titleOnlyCells) {
         if (wordCount <= 2 && charCount <= 14 && longestWord < 8) return 2;
-        if (wordCount >= 5 || charCount >= 24 || longestWord >= 11) return 3;
+        if (wordCount >= 5 || charCount >= 28 || longestWord >= 11) return 4;
         return 3;
       }
       if (wordCount <= 2 && charCount <= 14 && longestWord < 8) return 2;
@@ -1040,6 +1048,15 @@ const PlayerView: React.FC = () => {
       if (squareEls.length === 0) {
         if (!cancelled) setCardTextFitReady(true);
         return;
+      }
+
+      // Measure fit at 100% user scale — Options text-size is a pure CSS multiplier on top.
+      const playerContainer = gridEl.closest<HTMLElement>('.player-container');
+      let savedUserFontScale = '1';
+      if (playerContainer) {
+        savedUserFontScale =
+          getComputedStyle(playerContainer).getPropertyValue('--player-card-font-scale').trim() || '1';
+        playerContainer.style.setProperty('--player-card-font-scale', '1');
       }
 
       type SquareCtx = {
@@ -1194,6 +1211,10 @@ const PlayerView: React.FC = () => {
         }
       }
 
+      if (playerContainer) {
+        playerContainer.style.setProperty('--player-card-font-scale', savedUserFontScale);
+      }
+
       if (!cancelled) setCardTextFitReady(true);
     };
 
@@ -1218,7 +1239,7 @@ const PlayerView: React.FC = () => {
       cancelAnimationFrame(frame);
       resizeObserver.disconnect();
     };
-  }, [cardTextFitSignature, cardFontPercent, visualViewportHeightPx, compactCardCells]);
+  }, [cardTextFitSignature, visualViewportHeightPx, compactCardCells]);
 
   // Keep screen awake during game using Wake Lock API
   useEffect(() => {
@@ -2144,7 +2165,7 @@ const PlayerView: React.FC = () => {
             <div className="player-longpress-tooltip-heading">Title</div>
             <div className="player-longpress-tooltip-line player-longpress-tooltip-primary">{longPressTooltip.title}</div>
             <div className="player-longpress-tooltip-heading">Artist</div>
-            <div className="player-longpress-tooltip-line">{longPressTooltip.artist}</div>
+            <div className="player-longpress-tooltip-line player-longpress-tooltip-artist">{longPressTooltip.artist}</div>
           </div>
         )}
           </div>
@@ -2230,7 +2251,9 @@ const PlayerView: React.FC = () => {
                   <div className="player-v2-sheet-copy">
                     <div className="player-v2-sheet-label">Text size</div>
                     <div className="player-v2-sheet-note">
-                      Adjust square text without changing the overall card layout.
+                      {compactCardCells
+                        ? 'Long titles on a narrow screen? Tap − to shrink text, or hover / long-press a square for the full name.'
+                        : 'Adjust square text without changing the overall card layout.'}
                     </div>
                   </div>
                   <div className="player-v2-font-controls">

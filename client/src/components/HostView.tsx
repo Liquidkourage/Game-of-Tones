@@ -551,6 +551,22 @@ function isBingoFreeSpaceSquare(square: { isFreeSpace?: boolean; songId?: string
   return !!(square && (square.isFreeSpace || square.songId === '__FREE_SPACE__'));
 }
 
+/** Row-major 5×5 order for host grids — must match player card CSS grid (position `row-col`). */
+function bingoSquaresInGridOrder<T extends { position?: string }>(
+  squares: T[] | undefined | null,
+): T[] {
+  const list = squares ?? [];
+  const out: T[] = [];
+  for (let row = 0; row < 5; row++) {
+    for (let col = 0; col < 5; col++) {
+      const pos = `${row}-${col}`;
+      const sq = list.find((s) => s.position === pos);
+      out.push((sq ?? ({ position: pos } as T)));
+    }
+  }
+  return out;
+}
+
 /** Stable fingerprint for host player-card payloads so we detect mark changes, not only played-song count. */
 function hostPlayerCardSnapshot(cardData: {
   card?: { squares?: Array<{ position?: string; marked?: boolean }> };
@@ -5148,7 +5164,7 @@ const HostView: React.FC = () => {
                   aspectRatio: '1/1',
                 }}
               >
-              {playerData.card.squares.map((square: any) => {
+              {bingoSquaresInGridOrder(playerData.card.squares).map((square: any) => {
                 const isFree = !!(square.isFreeSpace || square.songId === '__FREE_SPACE__');
                 const isPlayed = (playerData.playedSongs || []).includes(square.songId);
                 const isMarked = square.marked;
@@ -6748,9 +6764,8 @@ const HostView: React.FC = () => {
         socket.emit('sync-state', { roomId });
         socket.emit('request-finalized-order', { roomId });
         socket.emit('request-player-cards', { roomId });
-        if (gameState === 'playing' || currentSong) {
-          socket.emit('resume-song', { roomId });
-        }
+        // Do not resume-song here — server transfer+resume causes ~0.5s Spotify blips when the
+        // host tab regains focus even though Connect playback never paused. Use play if truly paused.
       } catch {
         /* ignore */
       }
@@ -6768,7 +6783,7 @@ const HostView: React.FC = () => {
       window.removeEventListener('focus', resyncFromForeground);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [socket, roomId, gameState, currentSong]);
+  }, [socket, roomId]);
 
   // When a new song starts via socket, prefetch preview if available
   useEffect(() => {
@@ -10561,7 +10576,7 @@ const HostView: React.FC = () => {
                       </div>
                     );
                   })}
-                  {pendingVerification.playerCard.squares?.map((square: any) => {
+                  {bingoSquaresInGridOrder(pendingVerification.playerCard.squares).map((square: any) => {
                     const isInWinningPattern = pendingVerification.winningPatternPositions?.includes(square.position);
                     const wasPlayed =
                       isBingoFreeSpaceSquare(square) ||

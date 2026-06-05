@@ -756,6 +756,15 @@ function hostPlayerCardEmitPayload(room, playerId, card, playedSongs) {
   };
 }
 
+/** Played-song ids for host player-card legitimacy colors — aligned with playback index + current call. */
+function playedSongIdsForHostPlayerCards(room) {
+  const played = syncCalledSongIdsFromPlaybackIndex(room);
+  if (room?.currentSong?.id && !played.includes(room.currentSong.id)) {
+    played.push(room.currentSong.id);
+  }
+  return played;
+}
+
 // Token storage file path
 const TOKEN_FILE = path.join(__dirname, 'spotify_tokens.json');
 // Device storage file path
@@ -2256,6 +2265,15 @@ function roomStillPlaying(roomId) {
   return !!room && room.gameState === 'playing';
 }
 
+/** Context monitor must not act on cached / 429-backoff playback reads (progress_ms goes stale). */
+function monitorPlaybackStateIsFresh(sp) {
+  if (!sp) return false;
+  if (sp._playbackNullDueToRateLimit) return false;
+  if (typeof sp.isQuarantined === 'function' && sp.isQuarantined()) return false;
+  if (Date.now() < (sp._playbackStateBackoffUntil || 0)) return false;
+  return true;
+}
+
 function stopLiveRoundTimers(roomId, room) {
   if (!room) return;
   room.simpleProgressionActive = false;
@@ -2485,18 +2503,50 @@ function startSimpleContextMonitor(roomId, deviceId) {
         room.currentSongStartMs > 0 &&
         expectedProgress - progress > 8000
       ) {
+        if (!monitorPlaybackStateIsFresh(spMon)) {
+          routineServerLog(
+            `🕵️ Track restart skipped — playback state not fresh (429/cache); progress=${progress}ms expected≈${expectedProgress}ms`,
+          );
+          return;
+        }
+        // Early-snippet progress_ms blips are common on desktop Connect; don't seek yet.
+        if (snippetElapsedMsForRoom(room) < 5000) {
+          return;
+        }
         if (!confirmMonitorSuspect('track-restart', `${expectedTrackId}:${room.currentSongStartMs}`)) {
           routineServerLog(
             `🕵️ Track restart suspected once (progress=${progress}ms, expected≈${expectedProgress}ms); waiting for confirmation before seek correction`,
           );
           return;
         }
+
+        const verifySp = spotifyFor(roomId);
+        const verifyState = await verifySp.getCurrentPlaybackState();
+        if (!monitorPlaybackStateIsFresh(verifySp) || !verifyState) {
+          routineServerLog('🕵️ Track restart correction aborted — verify poll not fresh');
+          clearMonitorSuspect();
+          return;
+        }
+        const verifyProgress = Number(verifyState?.progress_ms || 0);
+        const verifyExpected = expectedPlaybackProgressMsForRoom(room);
+        if (
+          verifyState?.item?.id !== expectedTrackId ||
+          verifyProgress >= 3000 ||
+          verifyExpected - verifyProgress <= 8000
+        ) {
+          routineServerLog(
+            `🕵️ Track restart correction aborted — verify poll disagrees (progress=${verifyProgress}ms expected≈${verifyExpected}ms)`,
+          );
+          clearMonitorSuspect();
+          return;
+        }
+
         routineServerLog(`🔄 Track restart detected. Restoring original start position: ${room.currentSongStartMs}ms`);
         
         try {
           if (!roomStillPlaying(roomId)) return;
           // Ensure we're on the correct device first
-          await transferToLockedDeviceIfNeeded(roomId, room, targetDeviceId, currentDeviceId, state, spMon);
+          await transferToLockedDeviceIfNeeded(roomId, room, targetDeviceId, currentDeviceId, verifyState, verifySp);
           if (!roomStillPlaying(roomId)) return;
           
           // Restore original start position for this track
@@ -3558,6 +3608,14 @@ io.on('connection', (socket) => {
           io.to(socket.id).emit('bingo-card', bySocket);
         } else if (clientId && room.clientCards && room.clientCards.has(clientId)) {
           const existingCard = room.clientCards.get(clientId);
+          // Drop stale socket-keyed copies so host card view does not show ghost players
+          if (room.bingoCards) {
+            for (const [pid, c] of room.bingoCards.entries()) {
+              if (pid !== socket.id && c === existingCard) {
+                room.bingoCards.delete(pid);
+              }
+            }
+          }
           // CRITICAL: Restore card to room.bingoCards with preserved marks
           room.bingoCards.set(socket.id, existingCard);
           player.bingoCard = existingCard; // Set on player object
@@ -5222,11 +5280,7 @@ io.on('connection', (socket) => {
       const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
       if (!isHost) return;
       
-      // Build playedSongs array that includes current song if it exists
-      const playedSongs = Array.isArray(room.calledSongIds) ? [...room.calledSongIds] : [];
-      if (room.currentSong && room.currentSong.id && !playedSongs.includes(room.currentSong.id)) {
-        playedSongs.push(room.currentSong.id);
-      }
+      const playedSongs = playedSongIdsForHostPlayerCards(room);
       
       const playerCardsData = {};
       if (room.bingoCards) {
@@ -5906,6 +5960,25 @@ io.on('connection', (socket) => {
           return;
         }
 
+        // Tab-focus / socket resync often emits resume while Connect is already playing — skip to avoid blips.
+        if (resumePosition === undefined && room.currentSong?.id) {
+          try {
+            const spCheck = spotifyFor(roomId);
+            const playingNow = await spCheck.getCurrentPlaybackState();
+            if (
+              playingNow?.is_playing &&
+              playingNow?.device?.id === deviceId &&
+              playingNow?.item?.id === room.currentSong.id
+            ) {
+              routineServerLog('▶️ Resume skipped — already playing on target device');
+              room.gameState = 'playing';
+              return;
+            }
+          } catch (e) {
+            routineServerLog('▶️ Resume pre-check failed, continuing:', e?.message || e);
+          }
+        }
+
         // Ensure playback is locked to the device before resuming
         try {
           await spotifyFor(roomId).transferPlayback(deviceId, false);
@@ -6209,34 +6282,26 @@ io.on('connection', (socket) => {
     
     if (room) {
       const player = room.players.get(socket.id);
-      if (player && player.bingoCard) {
-        // Mark the square
-        const card = player.bingoCard;
+      const roomCard = room.bingoCards?.get(socket.id) || player?.bingoCard || null;
+      if (player && roomCard) {
+        player.bingoCard = roomCard;
+        const card = roomCard;
         const square = card.squares.find(s => s.position === position);
         if (square && (square.isFreeSpace || square.songId === FREE_SPACE_SONG_ID)) {
           return;
         }
         if (square && square.songId === songId) {
-          // Toggle mark state to support unmarking
+          // Toggle mark state to support unmarking (room.bingoCards is source of truth for host)
           square.marked = !square.marked;
           
-          // CRITICAL: Persist mark to room.bingoCards FIRST (source of truth for host)
-          if (room.bingoCards && room.bingoCards.has(socket.id)) {
-            const roomCard = room.bingoCards.get(socket.id);
-            const roomSquare = roomCard.squares.find(s => s.position === position);
-            if (roomSquare && roomSquare.songId === songId) {
-              roomSquare.marked = square.marked;
-              // CRITICAL: Also update player.bingoCard to keep them in sync
-              player.bingoCard = roomCard;
-            }
-          }
-          
-          // Also persist to clientCards if clientId exists (for reconnection)
+          // Persist to clientCards if clientId exists (for reconnection)
           if (player.clientId && room.clientCards && room.clientCards.has(player.clientId)) {
             const clientCard = room.clientCards.get(player.clientId);
-            const clientSquare = clientCard.squares.find(s => s.position === position);
-            if (clientSquare && clientSquare.songId === songId) {
-              clientSquare.marked = square.marked;
+            if (clientCard !== card) {
+              const clientSquare = clientCard.squares.find(s => s.position === position);
+              if (clientSquare && clientSquare.songId === songId) {
+                clientSquare.marked = square.marked;
+              }
             }
           }
           
@@ -8985,11 +9050,7 @@ function sendPlayerCardUpdatesNow(roomId) {
     const room = rooms.get(roomId);
     if (!room || !room.bingoCards) return;
     
-    // Build playedSongs array that includes current song if it exists
-    const playedSongs = Array.isArray(room.calledSongIds) ? [...room.calledSongIds] : [];
-    if (room.currentSong && room.currentSong.id && !playedSongs.includes(room.currentSong.id)) {
-      playedSongs.push(room.currentSong.id);
-    }
+    const playedSongs = playedSongIdsForHostPlayerCards(room);
     
     const playerCardsData = {};
     room.bingoCards.forEach((card, playerId) => {
