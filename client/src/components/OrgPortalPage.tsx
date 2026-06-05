@@ -41,11 +41,18 @@ type OrgMe = {
   payments: OrgPayment[];
   billing: {
     gateEnabled: boolean;
+    gateEnforced?: boolean;
+    billingReady?: boolean;
     stripeConfigured: boolean;
+    subscriptionsConfigured?: boolean;
+    subscriptionTiers?: { key: string; label: string; usd: number; priceId: string }[];
     active: boolean;
     status: string;
     lifetimePaidCents: number;
     lastPaymentAt: string | null;
+    subscriptionStatus?: string;
+    subscriptionPeriodEnd?: string | null;
+    subscriptionActive?: boolean;
   };
 };
 
@@ -138,7 +145,7 @@ const OrgPortalPage: React.FC = () => {
 
   useEffect(() => {
     if (billingNotice === 'success') {
-      setBanner('Thank you! Payment received — your organization is marked as a supporter.');
+      setBanner('Thank you! Payment received — your organization billing is updated.');
       const next = new URLSearchParams(searchParams);
       next.delete('billing');
       setSearchParams(next, { replace: true });
@@ -148,6 +155,12 @@ const OrgPortalPage: React.FC = () => {
       const next = new URLSearchParams(searchParams);
       next.delete('billing');
       setSearchParams(next, { replace: true });
+    } else if (billingNotice === 'portal') {
+      setBanner('Returned from Stripe billing portal.');
+      const next = new URLSearchParams(searchParams);
+      next.delete('billing');
+      setSearchParams(next, { replace: true });
+      refresh();
     }
   }, [billingNotice, refresh, searchParams, setSearchParams]);
 
@@ -237,6 +250,54 @@ const OrgPortalPage: React.FC = () => {
     startCheckout(usd);
   };
 
+  const startSubscription = async (tierKey: string) => {
+    setBusy(true);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/org/billing/subscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tierKey }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert((j && j.message) || `Subscription checkout failed (${res.status})`);
+        return;
+      }
+      if (j.url) {
+        window.location.href = j.url;
+        return;
+      }
+      alert('No checkout URL returned.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openBillingPortal = async () => {
+    setBusy(true);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/org/billing/portal`, { method: 'POST' });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert((j && j.message) || `Could not open billing portal (${res.status})`);
+        return;
+      }
+      if (j.url) {
+        window.location.href = j.url;
+        return;
+      }
+      alert('No portal URL returned.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const subscriptionTiers = data?.billing?.subscriptionTiers ?? [];
+  const subscriptionActive = !!data?.billing?.subscriptionActive;
+  const subscriptionPeriodEnd = data?.billing?.subscriptionPeriodEnd
+    ? new Date(data.billing.subscriptionPeriodEnd).toLocaleDateString()
+    : null;
+
   if (loading) {
     return (
       <div className="org-portal">
@@ -313,10 +374,15 @@ const OrgPortalPage: React.FC = () => {
         </div>
       ) : null}
 
-      {data?.billing?.gateEnabled ? (
+      {data?.billing?.gateEnforced ? (
         <div className="org-portal__notice org-portal__notice--warn" role="note">
-          Hosting will require organization support soon.{' '}
-          {data.billing.active ? 'Your org is covered.' : 'Complete a payment below when you are ready.'}
+          Hosting requires organization support on this server.{' '}
+          {data.billing.active ? 'Your org is covered.' : 'Complete payment below to host.'}
+        </div>
+      ) : data?.billing?.gateEnabled && !data?.billing?.billingReady ? (
+        <div className="org-portal__notice" role="note">
+          Billing gate is enabled but Stripe setup is not finished yet — hosting stays open until checkout and
+          webhooks are configured.
         </div>
       ) : (
         <div className="org-portal__notice" role="note">
@@ -357,6 +423,13 @@ const OrgPortalPage: React.FC = () => {
             </div>
             <p className="org-portal__meta">
               Status: <strong>{data?.billing?.status || 'none'}</strong>
+              {subscriptionActive ? (
+                <>
+                  {' '}
+                  · Monthly: <strong>{data?.billing?.subscriptionStatus}</strong>
+                  {subscriptionPeriodEnd ? <> · Renews {subscriptionPeriodEnd}</> : null}
+                </>
+              ) : null}
               {Number(data?.billing?.lifetimePaidCents) > 0 ? (
                 <>
                   {' '}
@@ -368,11 +441,54 @@ const OrgPortalPage: React.FC = () => {
 
           {isOwner ? (
             <>
+              {data?.billing?.stripeConfigured && subscriptionTiers.length > 0 ? (
+                <section className="org-portal__card">
+                  <h2>Monthly support</h2>
+                  <p>Recurring subscription — covers all hosts. Change or cancel anytime in Stripe.</p>
+                  {subscriptionActive ? (
+                    <div className="org-portal__row">
+                      <p className="org-portal__muted">
+                        Active plan ({data?.billing?.subscriptionStatus}
+                        {subscriptionPeriodEnd ? ` · renews ${subscriptionPeriodEnd}` : ''}).
+                      </p>
+                      <button type="button" className="btn-primary" disabled={busy} onClick={() => void openBillingPortal()}>
+                        Manage billing
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="org-portal__amounts">
+                        {subscriptionTiers.map((tier) => (
+                          <button
+                            key={tier.key}
+                            type="button"
+                            className="btn-secondary org-portal__amount-btn"
+                            disabled={busy}
+                            onClick={() => void startSubscription(tier.key)}
+                          >
+                            {tier.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="org-portal__muted">Prefer a one-time tip? Use pay-as-you-like below.</p>
+                    </>
+                  )}
+                </section>
+              ) : null}
+
               <section className="org-portal__card">
                 <h2>
                   <Heart aria-hidden /> Pay as you like
                 </h2>
-                <p>Covers all hosts in this organization. Stripe processes payment securely.</p>
+                <p>One-time support — covers all hosts in this organization. Stripe processes payment securely.</p>
+                {subscriptionActive ? (
+                  <p className="org-portal__muted">
+                    You have an active monthly plan.{' '}
+                    <button type="button" className="btn-secondary" disabled={busy} onClick={() => void openBillingPortal()}>
+                      Manage billing
+                    </button>
+                  </p>
+                ) : null}
                 {!data?.billing?.stripeConfigured ? (
                   <div className="org-portal__stripe-setup">
                     <p>
@@ -397,8 +513,13 @@ const OrgPortalPage: React.FC = () => {
                         <a href="https://dashboard.stripe.com/test/webhooks" target="_blank" rel="noreferrer">
                           Stripe → Webhooks
                         </a>{' '}
-                        — endpoint below, event <code>checkout.session.completed</code> → set{' '}
-                        <code>STRIPE_WEBHOOK_SECRET</code>
+                        — endpoint below, events <code>checkout.session.completed</code>,{' '}
+                        <code>customer.subscription.updated</code>, <code>customer.subscription.deleted</code>,{' '}
+                        <code>invoice.payment_failed</code> → set <code>STRIPE_WEBHOOK_SECRET</code>
+                      </li>
+                      <li>
+                        Create monthly Prices in Stripe → set <code>STRIPE_PRICE_MONTHLY_10</code>,{' '}
+                        <code>STRIPE_PRICE_MONTHLY_25</code>, <code>STRIPE_PRICE_MONTHLY_50</code> (optional)
                       </li>
                       <li>
                         Set <code>PUBLIC_APP_URL</code> to your app URL (where users open TEMPO)

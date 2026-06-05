@@ -1300,49 +1300,6 @@ class MultiTenantSpotifyManager {
   }
 }
 
-// License Key Validation
-function validateLicenseKey(licenseKey) {
-  if (!licenseKey || typeof licenseKey !== 'string') {
-    return null;
-  }
-  
-  const parts = licenseKey.split('-');
-  if (parts.length !== 4 || parts[0] !== 'TEMPO') {
-    return null;
-  }
-  
-  const [prefix, orgCode, year, checksum] = parts;
-  
-  // Validate year
-  const currentYear = new Date().getFullYear();
-  if (parseInt(year) < 2024 || parseInt(year) > currentYear + 1) {
-    return null;
-  }
-  
-  // Validate checksum
-  const expectedChecksum = generateChecksum(orgCode, year);
-  if (checksum !== expectedChecksum) {
-    return null;
-  }
-  
-  return orgCode; // Return organization ID
-}
-
-function generateChecksum(orgCode, year) {
-  // Simple checksum - combines org code, year, and secret
-  const secret = process.env.LICENSE_SECRET || 'TEMPO_DEFAULT_SECRET_2024';
-  const combined = orgCode + year + secret;
-  
-  let hash = 0;
-  for (let i = 0; i < combined.length; i++) {
-    const char = combined.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  
-  return Math.abs(hash).toString(16).toUpperCase().substring(0, 6);
-}
-
 // Database functions for persistent token storage
 async function initializeDatabase() {
   if (!db) return false;
@@ -3320,7 +3277,7 @@ io.on('connection', (socket) => {
 
   // Join room
   socket.on('join-room', async (data) => {
-    const { roomId, playerName, isHost = false, clientId, licenseKey, hostSecret, hostToken } = data;
+    const { roomId, playerName, isHost = false, clientId, hostSecret, hostToken } = data;
     const hostSecretEnv = (process.env.TEMPO_HOST_SECRET || '').trim();
     let wantsHost = isHost;
 
@@ -3430,8 +3387,7 @@ io.on('connection', (socket) => {
       logger.info(`Creating new room: ${roomId} for organization: ${organizationId}`, 'room-create');
       const newRoom = {
         id: roomId,
-        organizationId: organizationId, // Add organization support
-        licenseKey: licenseKey || null, // Store license key
+        organizationId: organizationId,
         host: wantsHost ? socket.id : null,
         hostClientId: wantsHost && clientId ? clientId : null,
         players: new Map(),
@@ -3461,7 +3417,7 @@ io.on('connection', (socket) => {
       
       // Log organization info
       if (organizationId !== 'DEFAULT') {
-        routineServerLog(`🏢 Room ${roomId} created for organization ${organizationId} with license ${licenseKey}`);
+        routineServerLog(`🏢 Room ${roomId} created for organization ${organizationId}`);
       }
     }
 
@@ -10825,6 +10781,74 @@ app.post('/api/org/billing/checkout', async (req, res) => {
   }
 });
 
+app.get('/api/org/billing/tiers', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    return res.json({
+      ok: true,
+      tiers: billingStore.getSubscriptionTiers().map(({ key, label, usd }) => ({ key, label, usd })),
+      subscriptionsConfigured: billingStore.isSubscriptionsConfigured(),
+    });
+  } catch (e) {
+    console.error('GET /api/org/billing/tiers:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.post('/api/org/billing/subscribe', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    if (!ctx.organization || ctx.role !== 'owner') {
+      return res.status(403).json({ error: 'forbidden', message: 'Only the organization owner can subscribe for the organization.' });
+    }
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    let priceId = String(body.priceId || body.price_id || '').trim();
+    if (!priceId && body.tierKey != null) {
+      const tier = billingStore.getSubscriptionTiers().find((t) => t.key === String(body.tierKey));
+      priceId = tier?.priceId || '';
+    }
+    if (!priceId) {
+      return res.status(400).json({ error: 'invalid', message: 'priceId is required' });
+    }
+    const checkout = await billingStore.createSubscriptionCheckout(db, {
+      organizationId: ctx.organization.id,
+      orgName: ctx.organization.name,
+      priceId,
+      hostUserId: uid,
+    });
+    return res.json({ ok: true, ...checkout });
+  } catch (e) {
+    console.error('POST /api/org/billing/subscribe:', e);
+    const msg = e?.message || 'Failed';
+    const code = msg.includes('Stripe') || msg.includes('subscription') || msg.includes('configured') ? 400 : 500;
+    res.status(code).json({ error: 'failed', message: msg });
+  }
+});
+
+app.post('/api/org/billing/portal', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    if (!ctx.organization || ctx.role !== 'owner') {
+      return res.status(403).json({ error: 'forbidden', message: 'Only the organization owner can manage billing.' });
+    }
+    const portal = await billingStore.createBillingPortalSession(db, {
+      organizationId: ctx.organization.id,
+    });
+    return res.json({ ok: true, ...portal });
+  } catch (e) {
+    console.error('POST /api/org/billing/portal:', e);
+    const msg = e?.message || 'Failed';
+    res.status(400).json({ error: 'failed', message: msg });
+  }
+});
+
 /**
  * When TEMPO_APPROVED_HOSTS_ONLY is on, require JWT + allowlisted email. Sends response and returns null if denied.
  */
@@ -10868,9 +10892,9 @@ async function requireApprovedHostUid(req, res) {
   return uid;
 }
 
-/** When TEMPO_REQUIRE_ORG_BILLING=1, host must belong to an org with at least one completed payment. */
+/** When TEMPO_REQUIRE_ORG_BILLING=1 and Stripe is fully configured, host must have active org billing. */
 async function requireHostOrgBillingAccess(uid, res) {
-  if (!billingStore.isBillingGateEnabled()) return true;
+  if (!billingStore.isBillingGateEnforced()) return true;
   if (!db) {
     res.status(503).json({ error: 'database_required', message: 'DATABASE_URL required' });
     return false;
@@ -10949,7 +10973,6 @@ app.post('/api/host/rooms', async (req, res) => {
         id: code,
         organizationId: 'DEFAULT',
         ownerUserId: uid,
-        licenseKey: null,
         host: null,
         hostClientId: null,
         players: new Map(),

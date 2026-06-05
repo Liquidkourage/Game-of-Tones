@@ -1,5 +1,7 @@
 # Multi-Tenant Spotify Architecture Design
 
+> **Note (2026):** Production onboarding uses **Google OAuth + PostgreSQL organizations** (`/org`), not license keys. Stripe billing (monthly subscription + pay-as-you-like) is tied to the org record. Sections below describing `licenseKey` room creation are legacy design notes.
+
 ## Current State (Single Tenant)
 - One global `spotifyService` instance
 - One global `spotifyTokens` variable  

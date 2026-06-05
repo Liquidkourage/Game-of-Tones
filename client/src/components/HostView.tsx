@@ -1185,15 +1185,6 @@ const HostView: React.FC = () => {
     setPrepCloudHydrated(false);
   }, [roomId]);
 
-  // License key management
-  const [licenseKey, setLicenseKey] = useState<string>(() => {
-    const saved = localStorage.getItem('tempo-license-key');
-    return saved || '';
-  });
-  const [licenseError, setLicenseError] = useState<string | null>(null);
-  const [isJoiningRoom, setIsJoiningRoom] = useState<boolean>(false);
-  const [isLicenseValidated, setIsLicenseValidated] = useState<boolean>(false);
-
   /** Dev / audit trail — console + in-app activity feed (Settings tab). */
   const addLog = useCallback((message: string, level: 'info' | 'warn' | 'error' = 'info') => {
     const line = `[TEMPO host] ${message}`;
@@ -1239,43 +1230,6 @@ const HostView: React.FC = () => {
       } catch {} 
     }, 3000);
   };
-
-  // Handle license key changes
-  const handleLicenseKeyChange = useCallback((newLicenseKey: string) => {
-    setLicenseKey(newLicenseKey);
-    localStorage.setItem('tempo-license-key', newLicenseKey);
-    
-    // Reset validation state when key changes
-    if (newLicenseKey !== licenseKey) {
-      setIsLicenseValidated(false);
-    }
-    
-    // If we have a socket and room, try to rejoin with new license key
-    if (socket && roomId && newLicenseKey.trim()) {
-      console.log('Attempting to join room with license key:', newLicenseKey.trim());
-      setIsJoiningRoom(true);
-      setLicenseError(null);
-      socket.emit('join-room', {
-        roomId,
-        playerName: hostPlayerName,
-        isHost: true,
-        licenseKey: newLicenseKey.trim(),
-        clientId,
-        hostSecret: '',
-        hostToken: getHostJwt() || '',
-        inPerson: true
-      });
-      
-      // Add timeout fallback in case server doesn't respond
-      setTimeout(() => {
-        if (isJoiningRoom) {
-          console.log('Join timeout - clearing connecting state');
-          setIsJoiningRoom(false);
-          setLicenseError('Connection timeout. Please try again.');
-        }
-      }, 10000); // 10 second timeout
-    }
-  }, [socket, roomId, isJoiningRoom, licenseKey, hostPlayerName, clientId]);
 
   // Advanced playback states
   const [playbackState, setPlaybackState] = useState<PlaybackState>({
@@ -3694,16 +3648,8 @@ const HostView: React.FC = () => {
       addLog(`Call revealed: ${data.hint || 'full'} ${data.songName ? '— ' + data.songName : ''} ${data.artistName ? '— ' + data.artistName : ''}`, 'info');
     });
 
-    // Handle join errors (license key validation)
-    newSocket.on('join-error', (data: any) => {
-      console.log('Join error:', data);
-      setLicenseError(data.error || 'Failed to join room');
-      setIsJoiningRoom(false);
-    });
-
     newSocket.on('host-join-denied', (data: any) => {
       console.warn('host-join-denied:', data);
-      setIsJoiningRoom(false);
       addLog(data.message || 'This room already has a host.', 'error');
       if (data.reason === 'host_not_approved') {
         try {
@@ -3771,9 +3717,6 @@ const HostView: React.FC = () => {
     // Handle successful room join
     newSocket.on('room-joined', (data: any) => {
       console.log('Successfully joined room:', data);
-      setIsJoiningRoom(false);
-      setLicenseError(null);
-      setIsLicenseValidated(true);
       if (typeof data?.hybridInPersonPlusOnline === 'boolean') {
         setHybridInPersonPlusOnline(data.hybridInPersonPlusOnline);
       }
@@ -3789,7 +3732,7 @@ const HostView: React.FC = () => {
     emitHostJoinImpl = () => {
       if (!roomId || hostJoinEmitted) return;
       hostJoinEmitted = true;
-      console.log('?? License validation disabled - joining room as host');
+      console.log('Joining room as host');
       newSocket.emit('join-room', {
         roomId,
         playerName: hostPlayerName,

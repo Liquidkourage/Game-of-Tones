@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * TEMPO License Key Generator
- * 
+ * TEMPO License Key Generator (DEPRECATED)
+ *
+ * License keys are no longer used for host onboarding or billing.
+ * Use Google sign-in + /org (organizations in PostgreSQL) instead.
+ * Kept for historical reference / manual admin experiments only.
+ *
  * Generates license keys for multi-tenant TEMPO deployments
  * Format: TEMPO-{ORG_CODE}-{YEAR}-{CHECKSUM}
  * 

@@ -1,5 +1,5 @@
 /**
- * Org billing: Stripe Checkout (pay-as-you-like) + optional host gate.
+ * Org billing: Stripe Checkout (pay-as-you-like + monthly subscriptions) + optional host gate.
  */
 
 const Stripe = require('stripe');
@@ -7,9 +7,27 @@ const Stripe = require('stripe');
 const MIN_AMOUNT_CENTS = 100;
 const MAX_AMOUNT_CENTS = 500_000;
 
+const SUBSCRIPTION_ACTIVE_STATUSES = new Set(['active', 'trialing']);
+
+const SUBSCRIPTION_TIER_SPECS = [
+  { key: '10', label: '$10/month', usd: 10, env: 'STRIPE_PRICE_MONTHLY_10' },
+  { key: '25', label: '$25/month', usd: 25, env: 'STRIPE_PRICE_MONTHLY_25' },
+  { key: '50', label: '$50/month', usd: 50, env: 'STRIPE_PRICE_MONTHLY_50' },
+];
+
 function isBillingGateEnabled() {
   const v = String(process.env.TEMPO_REQUIRE_ORG_BILLING || '').trim().toLowerCase();
   return v === '1' || v === 'true' || v === 'yes';
+}
+
+/** Stripe Checkout + webhooks must work before we block hosting — avoids lockout before setup. */
+function isBillingReady() {
+  return isStripeConfigured() && isWebhookSecretConfigured();
+}
+
+/** Env gate is on and Stripe can actually take payment and update org status. */
+function isBillingGateEnforced() {
+  return isBillingGateEnabled() && isBillingReady();
 }
 
 function isStripeConfigured() {
@@ -55,7 +73,23 @@ function stripeWebhookUrl() {
   return `${webhookBaseOrigin()}/api/webhooks/stripe`;
 }
 
+function getSubscriptionTiers() {
+  const tiers = [];
+  for (const spec of SUBSCRIPTION_TIER_SPECS) {
+    const priceId = (process.env[spec.env] || '').trim();
+    if (priceId) {
+      tiers.push({ key: spec.key, label: spec.label, usd: spec.usd, priceId });
+    }
+  }
+  return tiers;
+}
+
+function isSubscriptionsConfigured() {
+  return getSubscriptionTiers().length > 0;
+}
+
 function billingSetupStatus(req) {
+  const tiers = getSubscriptionTiers();
   return {
     stripeSecretConfigured: isStripeConfigured(),
     stripeWebhookConfigured: isWebhookSecretConfigured(),
@@ -64,7 +98,11 @@ function billingSetupStatus(req) {
     webhookUrl: req ? stripeWebhookUrlFromRequest(req) : stripeWebhookUrl(),
     webhookUrlEnv: stripeWebhookUrl(),
     gateEnabled: isBillingGateEnabled(),
-    ready: isStripeConfigured() && isWebhookSecretConfigured(),
+    gateEnforced: isBillingGateEnforced(),
+    billingReady: isBillingReady(),
+    ready: isBillingReady(),
+    subscriptionTiersConfigured: tiers.length,
+    subscriptionTiers: tiers.map(({ key, label, usd }) => ({ key, label, usd })),
   };
 }
 
@@ -99,34 +137,121 @@ async function ensureBillingTables(db) {
   return true;
 }
 
-/** When gate is off, all orgs pass. When on, org must have paid at least once (supporter). */
-function isOrgBillingActive(orgRow) {
-  if (!isBillingGateEnabled()) return true;
+function isSubscriptionActive(orgRow) {
   if (!orgRow) return false;
-  if (orgRow.billing_status === 'supporter') return true;
-  if (orgRow.lifetime_paid_cents > 0) return true;
+  const status = String(orgRow.subscription_status || '').toLowerCase();
+  if (SUBSCRIPTION_ACTIVE_STATUSES.has(status)) return true;
+  if (status === 'past_due') return true;
+  return false;
+}
+
+/** When gate is not enforced, all orgs pass. When enforced, org needs subscription or prior payment. */
+function isOrgBillingActive(orgRow) {
+  if (!isBillingGateEnforced()) return true;
+  if (!orgRow) return false;
+  if (isSubscriptionActive(orgRow)) return true;
+  if (orgRow.billing_status === 'supporter' || orgRow.billing_status === 'subscribed') return true;
+  if (Number(orgRow.lifetime_paid_cents) > 0) return true;
   return false;
 }
 
 function billingSummaryFromOrg(orgRow) {
+  const gateEnabled = isBillingGateEnabled();
+  const gateEnforced = isBillingGateEnforced();
+  const billingReady = isBillingReady();
+  const tiers = getSubscriptionTiers().map(({ key, label, usd, priceId }) => ({ key, label, usd, priceId }));
   if (!orgRow) {
     return {
-      gateEnabled: isBillingGateEnabled(),
+      gateEnabled,
+      gateEnforced,
+      billingReady,
       stripeConfigured: isStripeConfigured(),
-      active: !isBillingGateEnabled(),
+      subscriptionsConfigured: isSubscriptionsConfigured(),
+      subscriptionTiers: tiers,
+      active: !gateEnforced,
       status: 'none',
       lifetimePaidCents: 0,
       lastPaymentAt: null,
+      subscriptionStatus: 'none',
+      subscriptionPeriodEnd: null,
+      subscriptionActive: false,
     };
   }
+  const subStatus = orgRow.subscription_status || 'none';
   return {
-    gateEnabled: isBillingGateEnabled(),
+    gateEnabled,
+    gateEnforced,
+    billingReady,
     stripeConfigured: isStripeConfigured(),
+    subscriptionsConfigured: isSubscriptionsConfigured(),
+    subscriptionTiers: tiers,
     active: isOrgBillingActive(orgRow),
     status: orgRow.billing_status || 'none',
     lifetimePaidCents: Number(orgRow.lifetime_paid_cents) || 0,
     lastPaymentAt: orgRow.last_payment_at || null,
+    subscriptionStatus: subStatus,
+    subscriptionPeriodEnd: orgRow.subscription_period_end || null,
+    subscriptionActive: isSubscriptionActive(orgRow),
   };
+}
+
+async function getOrganizationBillingRow(db, organizationId) {
+  const r = await db.query(
+    `SELECT id, billing_status, lifetime_paid_cents, last_payment_at, stripe_customer_id,
+            stripe_subscription_id, subscription_status, subscription_period_end, subscription_price_id
+     FROM organizations WHERE id = $1`,
+    [organizationId]
+  );
+  return r.rows[0] || null;
+}
+
+async function getOrCreateStripeCustomer(stripe, db, organizationId, orgName) {
+  const row = await getOrganizationBillingRow(db, organizationId);
+  if (!row) throw new Error('Organization not found');
+  if (row.stripe_customer_id) return row.stripe_customer_id;
+  const customer = await stripe.customers.create({
+    name: String(orgName || 'TEMPO').trim() || 'TEMPO',
+    metadata: { organization_id: String(organizationId) },
+  });
+  await db.query('UPDATE organizations SET stripe_customer_id = $2 WHERE id = $1', [organizationId, customer.id]);
+  return customer.id;
+}
+
+async function applySubscriptionToOrg(db, organizationId, subscription) {
+  if (!subscription) return;
+  const status = subscription.status || 'none';
+  const periodEnd =
+    subscription.current_period_end != null ? new Date(subscription.current_period_end * 1000) : null;
+  const subId = subscription.id || null;
+  const priceId = subscription.items?.data?.[0]?.price?.id || null;
+  const customerId =
+    typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id || null;
+
+  let billingStatus = null;
+  if (status === 'active' || status === 'trialing') billingStatus = 'subscribed';
+  else if (status === 'past_due') billingStatus = 'past_due';
+  else if (status === 'canceled' || status === 'unpaid') billingStatus = 'supporter';
+
+  await db.query(
+    `UPDATE organizations SET
+       stripe_subscription_id = $2,
+       subscription_status = $3,
+       subscription_period_end = $4,
+       subscription_price_id = COALESCE($5, subscription_price_id),
+       stripe_customer_id = COALESCE(stripe_customer_id, $6),
+       billing_status = COALESCE($7, billing_status)
+     WHERE id = $1`,
+    [organizationId, subId, status, periodEnd, priceId, customerId, billingStatus]
+  );
+}
+
+async function resolveOrganizationIdForSubscription(db, subscription) {
+  const metaId = parseInt(subscription.metadata?.organization_id || '', 10);
+  if (Number.isFinite(metaId) && metaId > 0) return metaId;
+  const subId = subscription.id;
+  if (!subId) return null;
+  const r = await db.query('SELECT id FROM organizations WHERE stripe_subscription_id = $1 LIMIT 1', [subId]);
+  return r.rows[0]?.id ?? null;
 }
 
 async function recordOrgPayment(db, {
@@ -150,7 +275,7 @@ async function recordOrgPayment(db, {
   if (status === 'completed' && amountCents > 0) {
     await db.query(
       `UPDATE organizations SET
-         billing_status = 'supporter',
+         billing_status = CASE WHEN billing_status = 'subscribed' THEN billing_status ELSE 'supporter' END,
          lifetime_paid_cents = COALESCE(lifetime_paid_cents, 0) + $2,
          last_payment_at = CURRENT_TIMESTAMP
        WHERE id = $1`,
@@ -165,7 +290,9 @@ async function createPayAsYouLikeCheckout(db, { organizationId, orgName, amountC
   }
   const cents = Math.round(Number(amountCents));
   if (!Number.isFinite(cents) || cents < MIN_AMOUNT_CENTS || cents > MAX_AMOUNT_CENTS) {
-    throw new Error(`Amount must be between $${(MIN_AMOUNT_CENTS / 100).toFixed(2)} and $${(MAX_AMOUNT_CENTS / 100).toFixed(2)}`);
+    throw new Error(
+      `Amount must be between $${(MIN_AMOUNT_CENTS / 100).toFixed(2)} and $${(MAX_AMOUNT_CENTS / 100).toFixed(2)}`
+    );
   }
   await ensureBillingTables(db);
   const stripe = getStripe();
@@ -205,6 +332,61 @@ async function createPayAsYouLikeCheckout(db, { organizationId, orgName, amountC
   return { sessionId: session.id, url: session.url };
 }
 
+async function createSubscriptionCheckout(db, { organizationId, orgName, priceId, hostUserId }) {
+  if (!isStripeConfigured()) {
+    throw new Error('Stripe is not configured on this server (STRIPE_SECRET_KEY)');
+  }
+  const tier = getSubscriptionTiers().find((t) => t.priceId === priceId);
+  if (!tier) {
+    throw new Error('Subscription tier is not configured on this server (check STRIPE_PRICE_MONTHLY_* env vars)');
+  }
+  const orgRow = await getOrganizationBillingRow(db, organizationId);
+  if (!orgRow) throw new Error('Organization not found');
+  if (isSubscriptionActive(orgRow)) {
+    throw new Error('Your organization already has an active subscription. Use Manage billing to change or cancel.');
+  }
+
+  await ensureBillingTables(db);
+  const stripe = getStripe();
+  const appBase = publicAppOrigin();
+  const customerId = await getOrCreateStripeCustomer(stripe, db, organizationId, orgName);
+  const session = await stripe.checkout.sessions.create({
+    mode: 'subscription',
+    customer: customerId,
+    payment_method_types: ['card'],
+    line_items: [{ price: priceId, quantity: 1 }],
+    success_url: `${appBase}/org?billing=success`,
+    cancel_url: `${appBase}/org?billing=cancelled`,
+    metadata: {
+      organization_id: String(organizationId),
+      host_user_id: String(hostUserId),
+    },
+    subscription_data: {
+      metadata: {
+        organization_id: String(organizationId),
+      },
+    },
+  });
+  return { sessionId: session.id, url: session.url, tier: tier.key };
+}
+
+async function createBillingPortalSession(db, { organizationId }) {
+  if (!isStripeConfigured()) {
+    throw new Error('Stripe is not configured on this server (STRIPE_SECRET_KEY)');
+  }
+  const orgRow = await getOrganizationBillingRow(db, organizationId);
+  if (!orgRow?.stripe_customer_id) {
+    throw new Error('No Stripe customer on file yet. Start a monthly plan or one-time payment first.');
+  }
+  const stripe = getStripe();
+  const appBase = publicAppOrigin();
+  const session = await stripe.billingPortal.sessions.create({
+    customer: orgRow.stripe_customer_id,
+    return_url: `${appBase}/org?billing=portal`,
+  });
+  return { url: session.url };
+}
+
 async function listOrgPayments(db, organizationId, limit = 20) {
   await ensureBillingTables(db);
   const r = await db.query(
@@ -216,6 +398,45 @@ async function listOrgPayments(db, organizationId, limit = 20) {
     [organizationId, Math.min(50, Math.max(1, limit))]
   );
   return r.rows;
+}
+
+async function handleCheckoutSessionCompleted(db, stripe, session) {
+  const orgId = parseInt(session.metadata?.organization_id || '', 10);
+  if (!Number.isFinite(orgId) || orgId <= 0) return;
+
+  if (session.mode === 'subscription') {
+    const subRef = session.subscription;
+    const subId = typeof subRef === 'string' ? subRef : subRef?.id;
+    if (subId) {
+      const subscription = await stripe.subscriptions.retrieve(subId);
+      await applySubscriptionToOrg(db, orgId, subscription);
+    }
+    const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id || null;
+    if (customerId) {
+      await db.query('UPDATE organizations SET stripe_customer_id = $2 WHERE id = $1 AND stripe_customer_id IS NULL', [
+        orgId,
+        customerId,
+      ]);
+    }
+    return;
+  }
+
+  const amount = session.amount_total != null ? session.amount_total : 0;
+  await recordOrgPayment(db, {
+    organizationId: orgId,
+    sessionId: session.id,
+    paymentIntentId: typeof session.payment_intent === 'string' ? session.payment_intent : null,
+    amountCents: amount,
+    currency: session.currency || 'usd',
+    status: 'completed',
+  });
+  const customerId = typeof session.customer === 'string' ? session.customer : null;
+  if (customerId) {
+    await db.query('UPDATE organizations SET stripe_customer_id = $2 WHERE id = $1 AND stripe_customer_id IS NULL', [
+      orgId,
+      customerId,
+    ]);
+  }
 }
 
 async function handleStripeWebhook(db, req, res) {
@@ -239,27 +460,30 @@ async function handleStripeWebhook(db, req, res) {
     return;
   }
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    const orgId = parseInt(session.metadata?.organization_id || '', 10);
-    const amount = session.amount_total != null ? session.amount_total : 0;
-    if (Number.isFinite(orgId) && orgId > 0) {
-      await recordOrgPayment(db, {
-        organizationId: orgId,
-        sessionId: session.id,
-        paymentIntentId: typeof session.payment_intent === 'string' ? session.payment_intent : null,
-        amountCents: amount,
-        currency: session.currency || 'usd',
-        status: 'completed',
-      });
-      const customerId = typeof session.customer === 'string' ? session.customer : null;
-      if (customerId) {
-        await db.query('UPDATE organizations SET stripe_customer_id = $2 WHERE id = $1 AND stripe_customer_id IS NULL', [
-          orgId,
-          customerId,
-        ]);
+  try {
+    if (event.type === 'checkout.session.completed') {
+      await handleCheckoutSessionCompleted(db, stripe, event.data.object);
+    } else if (
+      event.type === 'customer.subscription.updated' ||
+      event.type === 'customer.subscription.deleted'
+    ) {
+      const subscription = event.data.object;
+      const orgId = await resolveOrganizationIdForSubscription(db, subscription);
+      if (orgId) await applySubscriptionToOrg(db, orgId, subscription);
+    } else if (event.type === 'invoice.payment_failed') {
+      const invoice = event.data.object;
+      const subRef = invoice.subscription;
+      const subId = typeof subRef === 'string' ? subRef : subRef?.id;
+      if (subId) {
+        const subscription = await stripe.subscriptions.retrieve(subId);
+        const orgId = await resolveOrganizationIdForSubscription(db, subscription);
+        if (orgId) await applySubscriptionToOrg(db, orgId, subscription);
       }
     }
+  } catch (err) {
+    console.error('Stripe webhook handler error:', err?.message || err);
+    res.status(500).json({ error: 'webhook_handler_failed' });
+    return;
   }
 
   res.json({ received: true });
@@ -269,12 +493,19 @@ module.exports = {
   MIN_AMOUNT_CENTS,
   MAX_AMOUNT_CENTS,
   isBillingGateEnabled,
+  isBillingGateEnforced,
+  isBillingReady,
   isStripeConfigured,
   isWebhookSecretConfigured,
+  isSubscriptionsConfigured,
+  isSubscriptionActive,
   isOrgBillingActive,
   billingSummaryFromOrg,
   ensureBillingTables,
   createPayAsYouLikeCheckout,
+  createSubscriptionCheckout,
+  createBillingPortalSession,
+  getSubscriptionTiers,
   listOrgPayments,
   handleStripeWebhook,
   publicAppOrigin,

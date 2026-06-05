@@ -99,6 +99,18 @@ async function ensureOrganizationsTable(db) {
   await db.query(`
     ALTER TABLE organizations ADD COLUMN IF NOT EXISTS last_payment_at TIMESTAMP
   `);
+  await db.query(`
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT
+  `);
+  await db.query(`
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT 'none'
+  `);
+  await db.query(`
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS subscription_period_end TIMESTAMP
+  `);
+  await db.query(`
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS subscription_price_id TEXT
+  `);
   try {
     await db.query(`ALTER TABLE organizations ALTER COLUMN spotify_client_id DROP NOT NULL`);
   } catch {
@@ -327,6 +339,9 @@ function orgRowToSummary(row) {
     billing_status: row.billing_status || 'none',
     lifetime_paid_cents: Number(row.lifetime_paid_cents) || 0,
     last_payment_at: row.last_payment_at || null,
+    subscription_status: row.subscription_status || 'none',
+    subscription_period_end: row.subscription_period_end || null,
+    subscription_price_id: row.subscription_price_id || null,
     venueSettings: sanitizeVenueSettings(row.venue_settings),
   };
 }
@@ -336,7 +351,8 @@ async function getOrganizationById(db, id) {
   await ensureOrganizationsTable(db);
   const r = await db.query(
     `SELECT id, name, spotify_client_id, created_at, venue_settings,
-            owner_user_id, billing_status, lifetime_paid_cents, last_payment_at
+            owner_user_id, billing_status, lifetime_paid_cents, last_payment_at,
+            subscription_status, subscription_period_end, subscription_price_id
      FROM organizations WHERE id = $1`,
     [id]
   );
@@ -393,7 +409,8 @@ async function getUserOrganizationContext(db, userId) {
   if (user.organization_id == null) {
     const owned = await db.query(
       `SELECT id, name, spotify_client_id, created_at, venue_settings,
-              owner_user_id, billing_status, lifetime_paid_cents, last_payment_at
+              owner_user_id, billing_status, lifetime_paid_cents, last_payment_at,
+              subscription_status, subscription_period_end, subscription_price_id
        FROM organizations WHERE owner_user_id = $1 ORDER BY id ASC LIMIT 1`,
       [uid]
     );
@@ -445,7 +462,8 @@ async function createSelfServeOrganization(db, { name, ownerUserId }) {
     `INSERT INTO organizations (name, spotify_client_id, spotify_client_secret_encrypted, owner_user_id)
      VALUES ($1, NULL, NULL, $2)
      RETURNING id, name, spotify_client_id, created_at, venue_settings,
-               owner_user_id, billing_status, lifetime_paid_cents, last_payment_at`,
+               owner_user_id, billing_status, lifetime_paid_cents, last_payment_at,
+               subscription_status, subscription_period_end, subscription_price_id`,
     [n, uid]
   );
   const org = orgRowToSummary(r.rows[0]);

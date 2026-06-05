@@ -10,9 +10,12 @@ type OrgMe = {
   members: { id: number }[];
   billing: {
     gateEnabled: boolean;
+    gateEnforced?: boolean;
     active: boolean;
     status: string;
     lifetimePaidCents: number;
+    subscriptionActive?: boolean;
+    subscriptionStatus?: string;
   };
 };
 
@@ -59,7 +62,7 @@ const HostOrgBillingCard: React.FC = () => {
         </Link>
       </div>
       <p className="host-settings-workspace__lead">
-        Create your venue org, invite co-hosts, and pay as you like — one payment covers every host in the org.
+        Create your venue org, invite co-hosts, and support TEMPO monthly or pay-as-you-like — one org covers every host.
       </p>
 
       {loading ? (
@@ -87,11 +90,14 @@ const HostOrgBillingCard: React.FC = () => {
             <Users size={14} aria-hidden /> {data.members.length} host{data.members.length === 1 ? '' : 's'}
             {' · '}
             Billing: <strong>{data.billing.status}</strong>
+            {data.billing.subscriptionActive ? (
+              <> · Monthly <strong>{data.billing.subscriptionStatus}</strong></>
+            ) : null}
             {data.billing.lifetimePaidCents > 0 ? (
               <> · ${(data.billing.lifetimePaidCents / 100).toFixed(2)} lifetime support</>
             ) : null}
           </p>
-          {data.billing.gateEnabled && !data.billing.active && data.role === 'owner' ? (
+          {data.billing.gateEnforced && !data.billing.active && data.role === 'owner' ? (
             <p className="host-org-billing-card__warn">
               <Heart size={14} aria-hidden /> Hosting will require org support soon — complete payment in Manage.
             </p>
