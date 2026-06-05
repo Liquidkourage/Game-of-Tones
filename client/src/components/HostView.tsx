@@ -2746,6 +2746,7 @@ const HostView: React.FC = () => {
           setGamePaused(true);
           setIsPlaying(false);
           setCurrentSong(null);
+          setGameState('waiting');
           addLog(`Round ${data.roundNumber} complete - ${data.playerName} wins!`, 'info');
           console.log('Round complete, showing options to host');
         } else if (data.gameEnded) {
@@ -5989,6 +5990,15 @@ const HostView: React.FC = () => {
     }
   };
 
+  /** Close round-complete celebration without starting the next round or ending the session. */
+  const dismissRoundCompleteModal = useCallback(() => {
+    setRoundComplete(null);
+    setGamePaused(true);
+    setGameState('waiting');
+    showToast('Round complete — host screen restored. Start the next round when you\'re ready.', 'info');
+    addLog('Round complete modal dismissed — host controls available', 'info');
+  }, [showToast, addLog]);
+
 
 
 
@@ -7159,27 +7169,98 @@ const HostView: React.FC = () => {
       );
       return;
     }
-    applyRoundPlaylistsToMixSelection(round0);
+
+    /** Live show: snapshot to local prep only — never finalize-mix (would replace cards + projector mid-round). */
+    const isLiveRound = gameState === 'playing';
+    const liveRoundIndex = currentRoundIndexRef.current;
+
+    let restoreLiveHostMix: (() => void) | null = null;
+    if (isLiveRound) {
+      const liveRound =
+        liveRoundIndex >= 0 ? eventRoundsRef.current[liveRoundIndex] : null;
+      const liveMixSnapshot = mixPlaylistSelectionRef.current.map((p) => ({ ...p }));
+      const liveSongListSnapshot = songListRef.current.map(cloneSongForSnapshot);
+      const liveFinalizedSnapshot = finalizedOrderRef.current?.map(cloneSongForSnapshot) ?? null;
+      restoreLiveHostMix = () => {
+        if (liveRound) {
+          applyRoundPlaylistsToMixSelection(liveRound);
+        } else if (liveMixSnapshot.length > 0) {
+          setSelectedPlaylists(liveMixSnapshot.filter((p) => p.catalog !== true));
+          setSelectedCatalogPlaylists(liveMixSnapshot.filter((p) => p.catalog === true));
+        }
+        setSongList(liveSongListSnapshot);
+        if (liveFinalizedSnapshot && liveFinalizedSnapshot.length > 0) {
+          finalizedOrderRef.current = liveFinalizedSnapshot;
+          setFinalizedOrder(liveFinalizedSnapshot);
+        }
+      };
+    } else {
+      applyRoundPlaylistsToMixSelection(round0);
+    }
+
+    const blockIfFivePlaylistsTooShort = (listToSend: Song[]): boolean => {
+      if (mixRows.length !== 5) return true;
+      const perListCounts = mixRows.map((pl) => {
+        const canon = canonicalPlaylistIdForMatch(String(pl.id));
+        const n = listToSend.filter(
+          (s) => canonicalPlaylistIdForMatch(String(s.sourcePlaylistId || '')) === canon,
+        ).length;
+        return { name: pl.name, count: n };
+      });
+      const trueShort = perListCounts.filter((p) => p.count < 15);
+      if (trueShort.length === 0) return true;
+      const warnings = trueShort.map(
+        (p) =>
+          `Playlist "${p.name}" has only ${p.count} track(s) in the mix (needs 15). Reload playlists or check tags.`,
+      );
+      addLog('Save round blocked: each of five playlists needs at least 15 tracks in the mix.', 'error');
+      warnings.forEach((line) => addLog(`  ${line}`, 'warn'));
+      setFiveByFifteenInsufficientModal({ variant: 'blocked', warnings });
+      return false;
+    };
 
     setSaveRoundBusy(true);
     try {
-      const ok = await finalizeMix({ playlists: mixRows });
-      if (!ok) {
-        addLog('Save round: finalize did not complete.', 'warn');
-        return;
-      }
+      let pool: Song[];
 
-      const saveMixKey = selectionPlaylistKey(mixRows);
-      const orderReady = await ensureFinalizedOrderFromServer(saveMixKey);
-      const fo = finalizedOrderRef.current;
-      if (!orderReady || !fo || fo.length === 0) {
-        window.alert(
-          'The server did not send the finalized playback order in time. Wait until you see “Finalized order received” in the activity log, or tap Finalize mix again, then Save round. Saved rounds must match projector/host playback order, not the longer prep list.',
+      if (isLiveRound) {
+        addLog(
+          `Saving ${round0.name} locally only — live round in progress (room, player cards, and projector unchanged).`,
+          'info',
         );
-        addLog('Save round: no finalized playback order after replay request.', 'warn');
-        return;
+        const listToSend = await generateSongList({
+          force: true,
+          reason: 'finalize',
+          playlists: mixRows,
+        });
+        if (listToSend.length === 0) {
+          window.alert(
+            'No songs could be loaded from this round\'s playlists. Check Spotify / YouTube under Connection, then try Save round again.',
+          );
+          addLog('Save round: no tracks loaded (live/local path).', 'warn');
+          return;
+        }
+        if (!blockIfFivePlaylistsTooShort(listToSend)) return;
+        pool = listToSend.map(cloneSongForSnapshot);
+      } else {
+        const ok = await finalizeMix({ playlists: mixRows });
+        if (!ok) {
+          addLog('Save round: finalize did not complete.', 'warn');
+          return;
+        }
+
+        const saveMixKey = selectionPlaylistKey(mixRows);
+        const orderReady = await ensureFinalizedOrderFromServer(saveMixKey);
+        const fo = finalizedOrderRef.current;
+        if (!orderReady || !fo || fo.length === 0) {
+          window.alert(
+            'The server did not send the finalized playback order in time. Wait until you see “Finalized order received” in the activity log, or tap Finalize mix again, then Save round. Saved rounds must match projector/host playback order, not the longer prep list.',
+          );
+          addLog('Save round: no finalized playback order after replay request.', 'warn');
+          return;
+        }
+        pool = fo.map(cloneSongForSnapshot);
       }
-      const pool = fo.map(cloneSongForSnapshot);
 
       const r = eventRoundsRef.current[roundIndex];
       if (!r) return;
@@ -7198,11 +7279,11 @@ const HostView: React.FC = () => {
       const need = fs ? 24 : 25;
       if (filteredSongs.length < need) {
         const stalePoolHint =
-          pool.length > 0 && filteredSongs.length === 0
+          !isLiveRound && pool.length > 0 && filteredSongs.length === 0
             ? ' The finalized playback pool still looked like a different mix — tap Show Playlists once on the host screen, then Save round again.'
             : '';
         window.alert(
-          `This round only has ${filteredSongs.length} unique tracks from its playlists in the finalized mix (need ${need}).${stalePoolHint} Include those playlists in the mix, finalize, then save again.`,
+          `This round only has ${filteredSongs.length} unique tracks from its playlists in the mix (need ${need}).${stalePoolHint} Include those playlists in the mix, finalize, then save again.`,
         );
         return;
       }
@@ -7233,10 +7314,19 @@ const HostView: React.FC = () => {
         }
         return next;
       });
-      setCurrentRoundIndex(roundIndex);
-      showToast(`Saved ${r.name} — ${filteredSongs.length} tracks (${snap.mixGeometry})`, 'success');
-      addLog(`Round snapshot saved: ${r.name}, ${filteredSongs.length} tracks`, 'info');
+      if (!isLiveRound || roundIndex === liveRoundIndex) {
+        setCurrentRoundIndex(roundIndex);
+      }
+      const liveNote = isLiveRound ? ' — local prep; live round unchanged' : '';
+      showToast(`Saved ${r.name} — ${filteredSongs.length} tracks (${snap.mixGeometry})${liveNote}`, 'success');
+      addLog(
+        `Round snapshot saved: ${r.name}, ${filteredSongs.length} tracks${isLiveRound ? ' (local only, live room untouched)' : ''}`,
+        'info',
+      );
     } finally {
+      if (isLiveRound) {
+        restoreLiveHostMix?.();
+      }
       setSaveRoundBusy(false);
     }
   };
@@ -10894,6 +10984,7 @@ const HostView: React.FC = () => {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.3 }}
             style={{
+              position: 'relative',
               background: 'linear-gradient(135deg, #1a1a1a, #2a2a2a)',
               border: '3px solid #00ff88',
               borderRadius: '20px',
@@ -10904,6 +10995,30 @@ const HostView: React.FC = () => {
               textAlign: 'center'
             }}
           >
+            <button
+              type="button"
+              onClick={dismissRoundCompleteModal}
+              aria-label="Close and return to host"
+              title="Back to host (decide later)"
+              style={{
+                position: 'absolute',
+                top: 14,
+                right: 14,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 36,
+                height: 36,
+                padding: 0,
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                borderRadius: 10,
+                background: 'rgba(255, 255, 255, 0.08)',
+                color: '#e8e8e8',
+                cursor: 'pointer',
+              }}
+            >
+              <X className="w-5 h-5" aria-hidden />
+            </button>
             <h2 style={{ color: '#00ff88', marginBottom: '20px', fontSize: '2rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
               <PartyPopper className="w-9 h-9" aria-hidden />
               Round Complete!
@@ -10936,6 +11051,34 @@ const HostView: React.FC = () => {
               gap: '12px',
               marginTop: '24px'
             }}>
+              <button
+                type="button"
+                onClick={dismissRoundCompleteModal}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '2px solid rgba(255, 255, 255, 0.28)',
+                  borderRadius: '10px',
+                  padding: '14px 24px',
+                  fontSize: '1.05rem',
+                  fontWeight: 700,
+                  color: '#f4f4f4',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10,
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.16)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                }}
+              >
+                Back to host
+              </button>
+
               <button
                 onClick={getNextPlannedRound() >= 0 ? () => void handleStartNextPlannedRound() : handleStartNextRound}
                 style={{
@@ -11031,7 +11174,8 @@ const HostView: React.FC = () => {
               marginTop: '20px',
               fontStyle: 'italic'
             }}>
-              The game is paused. Choose an option above to continue.
+              Playback is paused. Use <strong style={{ color: '#ccc', fontStyle: 'normal' }}>Back to host</strong> to
+              return to the host screen now, or pick a next-round option when you&apos;re ready.
             </p>
           </motion.div>
         </div>

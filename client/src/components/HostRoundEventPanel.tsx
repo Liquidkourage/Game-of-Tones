@@ -219,6 +219,11 @@ const HostRoundEventPanel: React.FC<HostRoundEventPanelProps> = ({
                         className="btn-secondary"
                         disabled={saveRoundBusy || printablePdfLoading || mixGameActionsBlocked}
                         onClick={() => onSaveRound(index)}
+                        title={
+                          gameState === 'playing'
+                            ? 'Saves this round to prep on this device only — live round, cards, and projector stay unchanged'
+                            : undefined
+                        }
                       >
                         <Save className="w-4 h-4" aria-hidden />
                         Save round

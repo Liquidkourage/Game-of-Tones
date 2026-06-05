@@ -1394,6 +1394,8 @@ const PublicDisplay: React.FC = () => {
   const [carouselIndex, setCarouselIndex] = useState<number>(0);
   const carouselIndexRef = useRef(0);
   const carouselTickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Populated column bands the last time the carousel timer ran (detect 1×75 scroll-mode entry). */
+  const carouselColumnCountRef = useRef(0);
   const [animating, setAnimating] = useState<boolean>(true); // kept for compatibility but no longer toggled
   const carouselViewportRef = useRef<HTMLDivElement | null>(null);
   const [viewportWidth, setViewportWidth] = useState<number>(0);
@@ -1669,7 +1671,15 @@ const PublicDisplay: React.FC = () => {
           }
         }
         if (opts?.restoreCarousel !== false && typeof state.carouselIndex === 'number' && Number.isFinite(state.carouselIndex)) {
-          const idx = Math.max(0, Math.floor(state.carouselIndex));
+          const serverIdx = Math.max(0, Math.floor(state.carouselIndex));
+          const localIdx = carouselIndexRef.current;
+          // room-state often carries carouselIndex 0 until the display sync lands — never regress live scroll.
+          const idx =
+            opts?.forceClear === true
+              ? serverIdx
+              : serverIdx >= localIdx
+                ? serverIdx
+                : localIdx;
           setCarouselIndex(idx);
           carouselIndexRef.current = idx;
         }
@@ -1685,11 +1695,12 @@ const PublicDisplay: React.FC = () => {
       const serverLetterCount = Array.isArray(serverReveal?.revealSequence)
         ? serverReveal.revealSequence.length
         : 0;
+      const restoreCarousel = reconnecting;
 
       if (serverReveal && serverLetterCount > 0) {
-        applyRevealStateFromServer(serverReveal);
+        applyRevealStateFromServer(serverReveal, { restoreCarousel });
       } else if (serverReveal) {
-        applyRevealStateFromServer(serverReveal);
+        applyRevealStateFromServer(serverReveal, { restoreCarousel });
       }
 
       if (revealSequenceRef.current.length === 0 && reconnecting) {
@@ -1752,6 +1763,7 @@ const PublicDisplay: React.FC = () => {
       setTotalPlayedCount(0);
       setCarouselIndex(0);
       carouselIndexRef.current = 0;
+      carouselColumnCountRef.current = 0;
       setPhasePx(0);
       setFreezeAll(false);
       setRevealLayoutNonce((n) => n + 1);
@@ -3135,9 +3147,16 @@ const PublicDisplay: React.FC = () => {
     syncRevealStateToServer();
   }, [carouselIndex, columnCallListLayout, roomId]);
 
+  const remeasureCarouselViewport = useCallback(() => {
+    const el = carouselViewportRef.current;
+    if (!el) return;
+    const w = el.clientWidth || 0;
+    if (w > 0) setViewportWidth(w);
+  }, []);
+
   const snapCarouselAfterForwardLoop = useCallback(() => {
     if (columnCallListLayout || !animating) return;
-    const total = countPlayOrderColumns(playedOrderForDisplay);
+    const total = countPlayOrderColumns(playedOrderRef.current);
     if (total <= visibleCols) return;
     const idx = carouselIndexRef.current;
     if (idx < total) return;
@@ -3145,7 +3164,7 @@ const PublicDisplay: React.FC = () => {
     setCarouselIndex(idx - total);
     carouselIndexRef.current = idx - total;
     requestAnimationFrame(() => setAnimating(true));
-  }, [columnCallListLayout, animating, visibleCols, playedOrderForDisplay]);
+  }, [columnCallListLayout, animating, visibleCols]);
 
   // Auto-advance the 1×75 carousel; dwell grows for later leftmost bands (see carouselDwellMsForLeftColumn).
   useEffect(() => {
@@ -3155,7 +3174,10 @@ const PublicDisplay: React.FC = () => {
 
     const scheduleTick = () => {
       if (cancelled) return;
-      const total = countPlayOrderColumns(playedOrderForDisplay);
+      const total = countPlayOrderColumns(playedOrderRef.current);
+      const prevTotal = carouselColumnCountRef.current;
+      carouselColumnCountRef.current = total;
+
       if (total === 0) {
         carouselTickTimerRef.current = setTimeout(scheduleTick, CAROUSEL_BASE_DWELL_MS);
         return;
@@ -3164,6 +3186,13 @@ const PublicDisplay: React.FC = () => {
       if (total <= visibleCols) {
         carouselTickTimerRef.current = setTimeout(scheduleTick, CAROUSEL_BASE_DWELL_MS);
         return;
+      }
+
+      // First band past one visible window: swap static grid → scroll track and measure width.
+      if (prevTotal <= visibleCols && total > visibleCols) {
+        requestAnimationFrame(() => {
+          remeasureCarouselViewport();
+        });
       }
 
       const leftIdx = carouselIndexRef.current;
@@ -3188,7 +3217,17 @@ const PublicDisplay: React.FC = () => {
         carouselTickTimerRef.current = null;
       }
     };
-  }, [oneBy75Ids, visibleCols, columnCallListLayout, totalPlayedCount, playedOrderRevision, playedOrderForDisplay]);
+  }, [
+    oneBy75Ids,
+    visibleCols,
+    columnCallListLayout,
+    totalPlayedCount,
+    playedOrderRevision,
+    remeasureCarouselViewport,
+  ]);
+
+  const carouselScrollEnabled =
+    !columnCallListLayout && countPlayOrderColumns(playedOrderForDisplay) > visibleCols;
 
   // Measure viewport width for pixel-perfect slides (one column per step)
   useEffect(() => {
@@ -3204,7 +3243,14 @@ const PublicDisplay: React.FC = () => {
       window.removeEventListener('resize', update);
       if (ro) ro.disconnect();
     };
-  }, [visibleCols, oneBy75Ids, columnCallListLayout, totalPlayedCount, playedOrderRevision]);
+  }, [
+    visibleCols,
+    oneBy75Ids,
+    columnCallListLayout,
+    totalPlayedCount,
+    playedOrderRevision,
+    carouselScrollEnabled,
+  ]);
 
   // Measure per-column viewport height to derive row height (5 visible rows)
   useEffect(() => {

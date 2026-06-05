@@ -1,0 +1,61 @@
+.host-song-alias .host-field-text {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.host-song-alias__intro {
+  margin: 0 0 16px;
+  font-size: 0.9rem;
+  color: #b3b3b3;
+  line-height: 1.45;
+}
+
+.host-song-alias__field {
+  margin-bottom: 16px;
+}
+
+.host-song-alias__field-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  color: #b3b3b3;
+}
+
+.host-song-alias__field-label--accent {
+  color: #00ffa3;
+}
+
+.host-song-alias__original {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #a0a0a0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.host-song-alias__original-artist {
+  font-size: 0.85rem;
+}
+
+.host-song-alias__hint {
+  margin: 0 0 16px;
+  font-size: 0.8rem;
+  color: #888;
+}
+
+.host-song-alias__error {
+  margin-top: 4px;
+  font-size: 0.8rem;
+  color: #ff6b6b;
+}
+
+.host-song-alias__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-end;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}

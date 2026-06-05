@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Save, RotateCcw } from 'lucide-react';
+import { Save, RotateCcw } from 'lucide-react';
+import HostSubmodalPortal from './HostSubmodalPortal';
+import './SongAliasModal.css';
 
 interface SongAliasModalProps {
   isOpen: boolean;
@@ -66,179 +67,108 @@ const SongAliasModal: React.FC<SongAliasModalProps> = ({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && e.ctrlKey) {
+      e.preventDefault();
       handleSave();
-    } else if (e.key === 'Escape') {
-      onClose();
     }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="modal-overlay"
-          onClick={onClose}
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            transition={{ type: 'spring', duration: 0.3 }}
-            className="modal-content"
-            onClick={(e) => e.stopPropagation()}
+    <HostSubmodalPortal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Alias track"
+      subtitle="Shown on bingo cards, the projector, and printouts. Playback still uses the original track."
+      titleId="host-song-alias-title"
+      maxWidth="520px"
+    >
+      <div className="host-ui host-song-alias">
+        <div className="host-song-alias__field">
+          <span className="host-song-alias__field-label">Original (from catalog)</span>
+          <div className="host-song-alias__original">
+            {originalTitle}
+            <br />
+            <span className="host-song-alias__original-artist">by {originalArtist || '—'}</span>
+          </div>
+        </div>
+
+        <div className="host-song-alias__field">
+          <label className="host-song-alias__field-label host-song-alias__field-label--accent" htmlFor="host-song-alias-title-input">
+            Display title
+          </label>
+          <input
+            id="host-song-alias-title-input"
+            type="text"
+            className="host-field-text"
+            value={editedTitle}
+            onChange={(e) => {
+              setEditedTitle(e.target.value);
+              updateChanges(e.target.value, editedArtist);
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder="Title on cards and projector"
+            autoFocus
+          />
+        </div>
+
+        <div className="host-song-alias__field">
+          <label className="host-song-alias__field-label host-song-alias__field-label--accent" htmlFor="host-song-alias-artist-input">
+            Display artist
+          </label>
+          <input
+            id="host-song-alias-artist-input"
+            type="text"
+            className="host-field-text"
+            value={editedArtist}
+            onChange={(e) => {
+              setEditedArtist(e.target.value);
+              updateChanges(editedTitle, e.target.value);
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder="Artist on cards and projector"
+          />
+          {!artistOk && hasChanges ? (
+            <div className="host-song-alias__error">Artist is required.</div>
+          ) : null}
+        </div>
+
+        <p className="host-song-alias__hint">Ctrl+Enter to save · Escape to cancel</p>
+
+        <div className="host-song-alias__actions">
+          <button
+            type="button"
+            onClick={handleReset}
+            disabled={!aliasTitle && !aliasArtist && !hasChanges}
+            className="btn-secondary"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              opacity: aliasTitle || aliasArtist || hasChanges ? 1 : 0.5,
+            }}
           >
-            <div className="modal-header">
-              <h2
-                style={{
-                  color: '#00ffa3',
-                  fontSize: '1.3rem',
-                  fontWeight: '600',
-                  margin: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                }}
-              >
-                Alias track
-              </h2>
-              <button type="button" onClick={onClose} className="modal-close-btn" aria-label="Close">
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="modal-body" style={{ padding: '20px 0' }}>
-              <p style={{ color: '#b3b3b3', fontSize: '0.9rem', marginTop: 0, marginBottom: '16px' }}>
-                Shown on bingo cards, the projector, and printouts. Playback still uses the original track.
-              </p>
-
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', color: '#b3b3b3', fontSize: '0.9rem', marginBottom: '8px' }}>
-                  Original (from catalog)
-                </label>
-                <div
-                  style={{
-                    padding: '12px',
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: '8px',
-                    color: '#a0a0a0',
-                    fontSize: '0.9rem',
-                  }}
-                >
-                  {originalTitle}
-                  <br />
-                  <span style={{ fontSize: '0.85rem' }}>by {originalArtist || '—'}</span>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', color: '#00ffa3', fontSize: '0.9rem', marginBottom: '8px' }}>
-                  Display title
-                </label>
-                <input
-                  type="text"
-                  value={editedTitle}
-                  onChange={(e) => {
-                    setEditedTitle(e.target.value);
-                    updateChanges(e.target.value, editedArtist);
-                  }}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Title on cards and projector"
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    background: 'rgba(255,255,255,0.08)',
-                    border: '2px solid rgba(0,255,163,0.3)',
-                    borderRadius: '8px',
-                    color: '#ffffff',
-                    fontSize: '1rem',
-                    outline: 'none',
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', color: '#00ffa3', fontSize: '0.9rem', marginBottom: '8px' }}>
-                  Display artist
-                </label>
-                <input
-                  type="text"
-                  value={editedArtist}
-                  onChange={(e) => {
-                    setEditedArtist(e.target.value);
-                    updateChanges(editedTitle, e.target.value);
-                  }}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Artist on cards and projector"
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    background: 'rgba(255,255,255,0.08)',
-                    border: '2px solid rgba(0,255,163,0.3)',
-                    borderRadius: '8px',
-                    color: '#ffffff',
-                    fontSize: '1rem',
-                    outline: 'none',
-                  }}
-                />
-                {!artistOk && hasChanges ? (
-                  <div style={{ fontSize: '0.8rem', color: '#ff6b6b', marginTop: '4px' }}>
-                    Artist is required.
-                  </div>
-                ) : null}
-              </div>
-
-              <div style={{ fontSize: '0.8rem', color: '#888' }}>Ctrl+Enter to save · Escape to cancel</div>
-            </div>
-
-            <div
-              className="modal-footer"
-              style={{
-                display: 'flex',
-                gap: '12px',
-                justifyContent: 'flex-end',
-                paddingTop: '20px',
-                borderTop: '1px solid rgba(255,255,255,0.1)',
-              }}
-            >
-              <button
-                type="button"
-                onClick={handleReset}
-                disabled={!aliasTitle && !aliasArtist && !hasChanges}
-                className="btn-secondary"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  opacity: aliasTitle || aliasArtist || hasChanges ? 1 : 0.5,
-                }}
-              >
-                <RotateCcw size={16} />
-                Reset to original
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={!canSave}
-                className="btn-primary"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  opacity: canSave ? 1 : 0.5,
-                }}
-              >
-                <Save size={16} />
-                Save alias
-              </button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+            <RotateCcw size={16} aria-hidden />
+            Reset to original
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!canSave}
+            className="btn-primary"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              opacity: canSave ? 1 : 0.5,
+            }}
+          >
+            <Save size={16} aria-hidden />
+            Save alias
+          </button>
+        </div>
+      </div>
+    </HostSubmodalPortal>
   );
 };
 

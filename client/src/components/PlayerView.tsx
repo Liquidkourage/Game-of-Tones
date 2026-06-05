@@ -178,7 +178,9 @@ const PlayerView: React.FC = () => {
 
   const bumpCardFont = (delta: number) => {
     setCardFontPercent((prev) => {
-      const next = Math.min(CARD_FONT_MAX, Math.max(CARD_FONT_MIN, prev + delta));
+      const current = Number(prev);
+      const safe = Number.isFinite(current) ? current : CARD_FONT_DEFAULT_WIDE;
+      const next = Math.min(CARD_FONT_MAX, Math.max(CARD_FONT_MIN, safe + delta));
       try {
         localStorage.setItem(CARD_FONT_STORAGE_KEY, String(next));
       } catch {
@@ -995,6 +997,9 @@ const PlayerView: React.FC = () => {
     const gridEl = cardGridRef.current;
     let frame = 0;
     let cancelled = false;
+    let fitGeneration = 0;
+    let measuring = false;
+    let pendingRefit = false;
 
     /** Title leads. Artist uses its own scale (not × titleScale); hierarchy enforced after fit. */
     const titleOnlyCells = compactCardCells;
@@ -1044,19 +1049,23 @@ const PlayerView: React.FC = () => {
     };
 
     const fitCardText = () => {
+      if (measuring) {
+        pendingRefit = true;
+        return;
+      }
+      const gen = ++fitGeneration;
       const squareEls = Array.from(gridEl.querySelectorAll<HTMLElement>('.bingo-square'));
       if (squareEls.length === 0) {
         if (!cancelled) setCardTextFitReady(true);
         return;
       }
 
-      // Measure fit at 100% user scale — Options text-size is a pure CSS multiplier on top.
+      // Measure at 100% user scale — cardFontPercent stays React-owned (no save/restore on the CSS var).
       const playerContainer = gridEl.closest<HTMLElement>('.player-container');
-      let savedUserFontScale = '1';
+      measuring = true;
       if (playerContainer) {
-        savedUserFontScale =
-          getComputedStyle(playerContainer).getPropertyValue('--player-card-font-scale').trim() || '1';
-        playerContainer.style.setProperty('--player-card-font-scale', '1');
+        playerContainer.setAttribute('data-fit-measuring', '1');
+        void playerContainer.offsetHeight;
       }
 
       type SquareCtx = {
@@ -1212,10 +1221,17 @@ const PlayerView: React.FC = () => {
       }
 
       if (playerContainer) {
-        playerContainer.style.setProperty('--player-card-font-scale', savedUserFontScale);
+        playerContainer.removeAttribute('data-fit-measuring');
       }
+      measuring = false;
 
-      if (!cancelled) setCardTextFitReady(true);
+      if (cancelled || gen !== fitGeneration) return;
+      setCardTextFitReady(true);
+      if (pendingRefit) {
+        pendingRefit = false;
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(fitCardText);
+      }
     };
 
     frame = requestAnimationFrame(fitCardText);
@@ -1238,6 +1254,7 @@ const PlayerView: React.FC = () => {
       cancelled = true;
       cancelAnimationFrame(frame);
       resizeObserver.disconnect();
+      gridEl.closest<HTMLElement>('.player-container')?.removeAttribute('data-fit-measuring');
     };
   }, [cardTextFitSignature, visualViewportHeightPx, compactCardCells]);
 
@@ -1992,6 +2009,39 @@ const PlayerView: React.FC = () => {
           <div className="bingo-section-measure">{renderBingoCard()}</div>
         </motion.div>
 
+        {(bingoStatus !== 'idle' || bingoMessage) && (
+          <motion.div
+            className={`player-bingo-status-toast player-bingo-status-toast--${bingoStatus !== 'idle' ? bingoStatus : 'info'}`}
+            role="alert"
+            aria-live={bingoStatus === 'failed' ? 'assertive' : 'polite'}
+            initial={{ opacity: 0, y: 12, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+          >
+            {bingoStatus === 'checking' && (
+              <motion.span
+                className="player-bingo-status-toast__spinner"
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                aria-hidden
+              >
+                ⏳
+              </motion.span>
+            )}
+            {bingoStatus === 'success' && (
+              <span className="player-bingo-status-toast__icon" aria-hidden>
+                🏆
+              </span>
+            )}
+            {bingoStatus === 'failed' && (
+              <span className="player-bingo-status-toast__icon" aria-hidden>
+                ❌
+              </span>
+            )}
+            <span className="player-bingo-status-toast__text">{bingoMessage}</span>
+          </motion.div>
+        )}
+
         <div className="player-rest">
           <div className="player-chrome player-chrome--v2">
             {bingoCard ? (
@@ -2111,54 +2161,6 @@ const PlayerView: React.FC = () => {
               {connectionToast}
             </motion.div>
           )}
-
-        {(bingoStatus !== 'idle' || bingoMessage) && (
-          <motion.div
-            className="player-bingo-status-toast"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            style={{
-              position: 'absolute',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              padding: '12px 20px',
-              borderRadius: '25px',
-              fontWeight: 700,
-              fontSize: 15,
-              zIndex: 1150,
-              textAlign: 'center',
-              minWidth: 200,
-              maxWidth: 312,
-              background: 
-                bingoStatus === 'success' ? 'linear-gradient(135deg, #00ff88, #00cc6d)' :
-                bingoStatus === 'failed' ? 'linear-gradient(135deg, #ff4444, #cc3333)' :
-                bingoStatus === 'checking' ? 'linear-gradient(135deg, #ffaa00, #ff8800)' :
-                'rgba(255,255,255,0.1)',
-              color: 
-                bingoStatus === 'success' ? '#001a0d' :
-                bingoStatus === 'failed' ? '#ffffff' :
-                bingoStatus === 'checking' ? '#ffffff' :
-                '#ffffff',
-              border: '2px solid rgba(255,255,255,0.2)',
-              backdropFilter: 'blur(10px)',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
-            }}
-          >
-            {bingoStatus === 'checking' && (
-              <motion.span
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                style={{ display: 'inline-block', marginRight: '8px' }}
-              >
-                ⏳
-              </motion.span>
-            )}
-            {bingoStatus === 'success' && '🏆 '}
-            {bingoStatus === 'failed' && '❌ '}
-            {bingoMessage}
-          </motion.div>
-        )}
 
         {longPressTooltip && (
           <div className="player-longpress-tooltip" role="status" aria-live="polite">

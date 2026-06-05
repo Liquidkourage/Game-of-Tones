@@ -3664,6 +3664,16 @@ io.on('connection', (socket) => {
       return;
     }
 
+    if (room.gameState === 'playing' || room.gameState === 'paused_for_verification') {
+      routineServerLog('❌ finalize-mix rejected — live round in progress:', roomId);
+      socket.emit('finalize-mix-failed', {
+        code: 'live_round_in_progress',
+        message:
+          'Cannot finalize mix while a round is live. Save other rounds as local prep only, or wait until between rounds.',
+      });
+      return;
+    }
+
     if (socket.hostUserId != null && room.ownerUserId == null) {
       room.ownerUserId = socket.hostUserId;
     }
