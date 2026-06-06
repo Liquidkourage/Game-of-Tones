@@ -18,13 +18,13 @@ export type PlayerStats = {
 };
 
 export type PlayerRoundHistory = {
-  room_id: string;
-  round_token: string;
-  marks_count: number;
-  bingo_called: boolean;
-  bingo_won: boolean;
-  started_at?: string;
-  ended_at?: string | null;
+  roomId: string;
+  roundToken: string;
+  marksCount: number;
+  bingoCalled: boolean;
+  bingoWon: boolean;
+  startedAt?: string | null;
+  endedAt?: string | null;
 };
 
 export function getPlayerJwt(): string | null {
@@ -90,4 +90,19 @@ export async function playerLogout(): Promise<void> {
   } catch {
     /* ignore */
   }
+}
+
+export async function updatePlayerDisplayName(displayName: string): Promise<{
+  user: PlayerAccountUser;
+}> {
+  const res = await playerFetch(`${API_BASE || ''}/api/player/profile`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ displayName: displayName.trim() }),
+  });
+  const j = (await res.json().catch(() => ({}))) as { user?: PlayerAccountUser; message?: string };
+  if (!res.ok || !j.user) {
+    throw new Error(j.message || 'Could not update display name');
+  }
+  return { user: j.user };
 }

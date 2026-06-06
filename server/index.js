@@ -10447,7 +10447,9 @@ app.post('/api/player/signup', async (req, res) => {
     });
     const token = playerAuth.setPlayerSessionCookie(res, row.id);
     const stats = await playerAccountsStore.getStats(db, row.id);
-    const recentRounds = await playerAccountsStore.listRecentRounds(db, row.id, 10);
+    const recentRounds = playerAccountsStore.roundHistoryPublicRows(
+      await playerAccountsStore.listRecentRounds(db, row.id, 10),
+    );
     return res.json({
       ok: true,
       token,
@@ -10471,7 +10473,9 @@ app.post('/api/player/login', async (req, res) => {
     });
     const token = playerAuth.setPlayerSessionCookie(res, row.id);
     const stats = await playerAccountsStore.getStats(db, row.id);
-    const recentRounds = await playerAccountsStore.listRecentRounds(db, row.id, 10);
+    const recentRounds = playerAccountsStore.roundHistoryPublicRows(
+      await playerAccountsStore.listRecentRounds(db, row.id, 10),
+    );
     return res.json({
       ok: true,
       token,
@@ -10496,7 +10500,9 @@ app.get('/api/player/me', async (req, res) => {
     const row = await playerAccountsStore.getAccountById(db, uid);
     if (!row) return res.json({ user: null });
     const stats = await playerAccountsStore.getStats(db, uid);
-    const recentRounds = await playerAccountsStore.listRecentRounds(db, uid, 10);
+    const recentRounds = playerAccountsStore.roundHistoryPublicRows(
+      await playerAccountsStore.listRecentRounds(db, uid, 10),
+    );
     const rawJwt = playerAuth.getPlayerJwtRawFromRequest(req);
     return res.json({
       user: playerAccountsStore.accountPublicRow(row),
@@ -10507,6 +10513,24 @@ app.get('/api/player/me', async (req, res) => {
   } catch (e) {
     console.error('GET /api/player/me:', e?.message || e);
     res.status(500).json({ error: 'failed', message: 'Failed to load player account' });
+  }
+});
+
+app.patch('/api/player/profile', async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+  try {
+    const uid = playerAuth.getPlayerUserIdFromRequest(req);
+    if (!uid) return res.status(401).json({ error: 'unauthorized', message: 'Sign in required' });
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const row = await playerAccountsStore.updateDisplayName(db, uid, body.displayName || body.display_name);
+    return res.json({
+      ok: true,
+      user: playerAccountsStore.accountPublicRow(row),
+    });
+  } catch (e) {
+    console.error('PATCH /api/player/profile:', e?.message || e);
+    res.status(400).json({ error: 'failed', message: e?.message || 'Could not update profile' });
   }
 });
 

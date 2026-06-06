@@ -134,6 +134,20 @@ async function getAccountById(db, id) {
   return r.rows[0] || null;
 }
 
+async function updateDisplayName(db, playerUserId, displayName) {
+  if (!db || playerUserId == null) throw new Error('Account not found');
+  await ensurePlayerAccountTables(db);
+  const name = normalizeDisplayName(displayName);
+  const r = await db.query(
+    `UPDATE player_accounts SET display_name = $2, updated_at = CURRENT_TIMESTAMP
+     WHERE id = $1
+     RETURNING id, email, display_name, created_at`,
+    [playerUserId, name]
+  );
+  if (r.rows.length === 0) throw new Error('Account not found');
+  return r.rows[0];
+}
+
 async function getStats(db, playerUserId) {
   if (!db || playerUserId == null) return null;
   await ensurePlayerAccountTables(db);
@@ -301,11 +315,29 @@ function statsPublicRow(row) {
   };
 }
 
+function roundHistoryPublicRow(row) {
+  if (!row) return null;
+  return {
+    roomId: row.room_id,
+    roundToken: row.round_token || '',
+    marksCount: Number(row.marks_count) || 0,
+    bingoCalled: !!row.bingo_called,
+    bingoWon: !!row.bingo_won,
+    startedAt: row.started_at || null,
+    endedAt: row.ended_at || null,
+  };
+}
+
+function roundHistoryPublicRows(rows) {
+  return (Array.isArray(rows) ? rows : []).map(roundHistoryPublicRow).filter(Boolean);
+}
+
 module.exports = {
   ensurePlayerAccountTables,
   createAccount,
   authenticateAccount,
   getAccountById,
+  updateDisplayName,
   getStats,
   listRecentRounds,
   linkClientToAccount,
@@ -315,4 +347,6 @@ module.exports = {
   recordBingoWon,
   accountPublicRow,
   statsPublicRow,
+  roundHistoryPublicRow,
+  roundHistoryPublicRows,
 };

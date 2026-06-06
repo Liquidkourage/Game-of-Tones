@@ -3,6 +3,7 @@ import { API_BASE } from '../config';
 import {
   PlayerAccountUser,
   PlayerStats,
+  PlayerRoundHistory,
   playerFetch,
   setPlayerJwt,
 } from '../utils/playerFetch';
@@ -11,7 +12,7 @@ type Mode = 'login' | 'signup' | 'guest';
 
 type Props = {
   onGuestContinue: (displayName: string) => void;
-  onAccountReady: (user: PlayerAccountUser, stats: PlayerStats | null) => void;
+  onAccountReady: (user: PlayerAccountUser, stats: PlayerStats | null, recentRounds: PlayerRoundHistory[]) => void;
   initialMode?: Mode;
 };
 
@@ -44,7 +45,7 @@ const PlayerAccountGate: React.FC<Props> = ({ onGuestContinue, onAccountReady, i
         return;
       }
       if (j.token) setPlayerJwt(String(j.token));
-      if (j.user) onAccountReady(j.user, j.stats ?? null);
+      if (j.user) onAccountReady(j.user, j.stats ?? null, j.recentRounds ?? []);
     } catch (e) {
       setError(String(e));
     } finally {

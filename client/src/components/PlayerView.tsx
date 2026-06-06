@@ -8,7 +8,9 @@ import {
   fetchPlayerSession,
   getPlayerJwt,
   playerLogout,
+  updatePlayerDisplayName,
   type PlayerAccountUser,
+  type PlayerRoundHistory,
   type PlayerStats,
 } from '../utils/playerFetch';
 import PlayerAccountGate from './PlayerAccountGate';
@@ -95,6 +97,15 @@ function stripGotPlaylistPrefix(raw: string): string {
   return raw.replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
 }
 
+function formatPlayerRoundDate(iso: string | null | undefined): string {
+  if (!iso) return 'Unknown date';
+  try {
+    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return 'Unknown date';
+  }
+}
+
 /**
  * Canonical player UI (CSS px). Uniformly scaled to fit viewport — same layout on every device.
  */
@@ -112,6 +123,10 @@ const PlayerView: React.FC = () => {
   const [joinReady, setJoinReady] = useState(false);
   const [playerAccount, setPlayerAccount] = useState<PlayerAccountUser | null>(null);
   const [playerStats, setPlayerStats] = useState<PlayerStats | null>(null);
+  const [playerRecentRounds, setPlayerRecentRounds] = useState<PlayerRoundHistory[]>([]);
+  const [displayNameDraft, setDisplayNameDraft] = useState('');
+  const [displayNameBusy, setDisplayNameBusy] = useState(false);
+  const [displayNameError, setDisplayNameError] = useState<string | null>(null);
   const [clientId] = useState<string>(() => {
     try {
       const existing = localStorage.getItem('client_id');
@@ -398,6 +413,7 @@ const PlayerView: React.FC = () => {
       if (cancelled || !session.user) return;
       setPlayerAccount(session.user);
       setPlayerStats(session.stats);
+      setPlayerRecentRounds(session.recentRounds);
       setPlayerName(session.user.displayName);
       try {
         localStorage.setItem('player_name', session.user.displayName);
@@ -411,6 +427,23 @@ const PlayerView: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (playerAccount) setDisplayNameDraft(playerAccount.displayName);
+  }, [playerAccount?.id, playerAccount?.displayName]);
+
+  useEffect(() => {
+    if (!optionsOpen || !playerAccount) return;
+    let cancelled = false;
+    void fetchPlayerSession().then((session) => {
+      if (cancelled || !session.user) return;
+      setPlayerStats(session.stats);
+      setPlayerRecentRounds(session.recentRounds);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [optionsOpen, playerAccount?.id]);
+
   const buildJoinPayload = (name: string) => ({
     roomId,
     playerName: name,
@@ -421,7 +454,12 @@ const PlayerView: React.FC = () => {
     playerToken: getPlayerJwt() || '',
   });
 
-  const finishGuestOrAccountJoin = (name: string, account?: PlayerAccountUser | null, stats?: PlayerStats | null) => {
+  const finishGuestOrAccountJoin = (
+    name: string,
+    account?: PlayerAccountUser | null,
+    stats?: PlayerStats | null,
+    recentRounds?: PlayerRoundHistory[],
+  ) => {
     const trimmed = name.trim();
     if (!trimmed) return;
     try {
@@ -432,6 +470,7 @@ const PlayerView: React.FC = () => {
     setPlayerName(trimmed);
     if (account) setPlayerAccount(account);
     if (stats !== undefined) setPlayerStats(stats);
+    if (recentRounds !== undefined) setPlayerRecentRounds(recentRounds);
     setJoinReady(true);
     try {
       const url = new URL(window.location.href);
@@ -439,6 +478,31 @@ const PlayerView: React.FC = () => {
       window.history.replaceState({}, '', url.toString());
     } catch {
       /* ignore */
+    }
+  };
+
+  const saveDisplayName = async () => {
+    const trimmed = displayNameDraft.trim();
+    if (!trimmed || !playerAccount) return;
+    if (trimmed === playerAccount.displayName) return;
+    setDisplayNameBusy(true);
+    setDisplayNameError(null);
+    try {
+      const { user } = await updatePlayerDisplayName(trimmed);
+      setPlayerAccount(user);
+      setDisplayNameDraft(user.displayName);
+      finishGuestOrAccountJoin(user.displayName, user, playerStats, playerRecentRounds);
+      if (socket && socket.connected) {
+        try {
+          socket.emit('join-room', buildJoinPayload(user.displayName));
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch (e) {
+      setDisplayNameError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDisplayNameBusy(false);
     }
   };
 
@@ -2027,8 +2091,8 @@ const PlayerView: React.FC = () => {
               }
             }
           }}
-          onAccountReady={(user, stats) => {
-            finishGuestOrAccountJoin(user.displayName, user, stats);
+          onAccountReady={(user, stats, recentRounds) => {
+            finishGuestOrAccountJoin(user.displayName, user, stats, recentRounds);
             if (socket && socket.connected) {
               try {
                 socket.emit('join-room', buildJoinPayload(user.displayName));
@@ -2272,33 +2336,126 @@ const PlayerView: React.FC = () => {
                 </div>
 
                 {playerAccount ? (
-                  <div className="player-v2-sheet-row">
-                    <div className="player-v2-sheet-copy">
-                      <div className="player-v2-sheet-label">Your account</div>
-                      <div className="player-v2-sheet-note">
-                        {playerAccount.displayName} · {playerAccount.email}
+                  <>
+                    <div className="player-v2-sheet-row player-v2-sheet-row--stacked">
+                      <div className="player-v2-sheet-copy">
+                        <div className="player-v2-sheet-label">Your account</div>
+                        <div className="player-v2-sheet-note">{playerAccount.email}</div>
                       </div>
-                      {playerStats ? (
-                        <div className="player-v2-sheet-note" style={{ marginTop: 6 }}>
-                          {playerStats.gamesJoined} games · {playerStats.marksMade} marks ·{' '}
-                          {playerStats.bingosCalled} bingos called · {playerStats.bingosWon} wins
+                      <label className="player-v2-profile-name-field">
+                        <span className="player-v2-profile-name-label">Display name</span>
+                        <div className="player-v2-profile-name-row">
+                          <input
+                            type="text"
+                            className="player-v2-profile-input"
+                            value={displayNameDraft}
+                            maxLength={80}
+                            onChange={(e) => {
+                              setDisplayNameDraft(e.target.value);
+                              setDisplayNameError(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') void saveDisplayName();
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="player-v2-inline-button player-v2-profile-save"
+                            disabled={
+                              displayNameBusy
+                              || !displayNameDraft.trim()
+                              || displayNameDraft.trim() === playerAccount.displayName
+                            }
+                            onClick={() => void saveDisplayName()}
+                          >
+                            {displayNameBusy ? 'Saving…' : 'Save'}
+                          </button>
                         </div>
+                      </label>
+                      {displayNameError ? (
+                        <p className="player-v2-profile-error" role="alert">
+                          {displayNameError}
+                        </p>
                       ) : null}
                     </div>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => {
-                        void playerLogout().then(() => {
-                          setPlayerAccount(null);
-                          setPlayerStats(null);
-                          setJoinReady(false);
-                        });
-                      }}
-                    >
-                      Sign out
-                    </button>
-                  </div>
+
+                    {playerStats ? (
+                      <div className="player-v2-sheet-note-block player-v2-stats-panel">
+                        <div className="player-v2-sheet-label">Lifetime stats</div>
+                        <div className="player-v2-stats-grid">
+                          <div className="player-v2-stat-cell">
+                            <span className="player-v2-stat-value">{playerStats.gamesJoined}</span>
+                            <span className="player-v2-stat-label">Games</span>
+                          </div>
+                          <div className="player-v2-stat-cell">
+                            <span className="player-v2-stat-value">{playerStats.marksMade}</span>
+                            <span className="player-v2-stat-label">Marks</span>
+                          </div>
+                          <div className="player-v2-stat-cell">
+                            <span className="player-v2-stat-value">{playerStats.bingosCalled}</span>
+                            <span className="player-v2-stat-label">Called</span>
+                          </div>
+                          <div className="player-v2-stat-cell">
+                            <span className="player-v2-stat-value">{playerStats.bingosWon}</span>
+                            <span className="player-v2-stat-label">Wins</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {playerRecentRounds.length > 0 ? (
+                      <div className="player-v2-sheet-note-block player-v2-stats-panel">
+                        <div className="player-v2-sheet-label">Recent games</div>
+                        <ul className="player-v2-round-list">
+                          {playerRecentRounds.map((round) => {
+                            const outcome = round.bingoWon
+                              ? 'Won'
+                              : round.bingoCalled
+                                ? 'Called bingo'
+                                : 'Played';
+                            return (
+                              <li
+                                key={`${round.roomId}-${round.roundToken || round.startedAt || 'round'}`}
+                                className="player-v2-round-item"
+                              >
+                                <div className="player-v2-round-main">
+                                  <span className="player-v2-round-room">{round.roomId}</span>
+                                  <span className="player-v2-round-date">
+                                    {formatPlayerRoundDate(round.startedAt)}
+                                  </span>
+                                </div>
+                                <div className="player-v2-round-meta">
+                                  {round.marksCount} marks · {outcome}
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    <div className="player-v2-sheet-row">
+                      <div className="player-v2-sheet-copy">
+                        <div className="player-v2-sheet-note">
+                          Sign out to switch accounts or continue as a guest on this device.
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => {
+                          void playerLogout().then(() => {
+                            setPlayerAccount(null);
+                            setPlayerStats(null);
+                            setPlayerRecentRounds([]);
+                            setJoinReady(false);
+                          });
+                        }}
+                      >
+                        Sign out
+                      </button>
+                    </div>
+                  </>
                 ) : (
                   <div className="player-v2-sheet-row">
                     <div className="player-v2-sheet-copy">

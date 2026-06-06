@@ -16,6 +16,7 @@ Hosts still use **Google OAuth** (`users` table). Player accounts are separate.
 - **Sign up / sign in:** `POST /api/player/signup`, `POST /api/player/login`
 - **Session:** JWT in `tempo_player_jwt` (localStorage) + HttpOnly cookie `tempo_player_session`
 - **Profile:** `GET /api/player/me` → user, stats, recent rounds
+- **Update display name:** `PATCH /api/player/profile` — `{ displayName }`
 - **Sign out:** `POST /api/player/logout`
 
 Passwords are hashed with **scrypt** (no plaintext stored). Minimum 8 characters.
@@ -46,10 +47,12 @@ When a logged-in player joins, `client_id` links to `player_user_id`.
 | POST | `/api/player/signup` |
 | POST | `/api/player/login` |
 | GET | `/api/player/me` |
+| PATCH | `/api/player/profile` |
 | POST | `/api/player/logout` |
 
 ## Client
 
 - Join gate: `PlayerAccountGate` (sign in / sign up / guest)
+- Options sheet: display name edit, lifetime stats grid, recent games list
 - Utils: `client/src/utils/playerFetch.ts`
 - Socket: `auth.playerToken` on connect; `playerToken` on `join-room`
