@@ -2039,3 +2039,63 @@
 .host-glass-theme .host-org-billing-card a {
   color: var(--host-glass-mint);
 }
+
+.host-glass-theme .host-event-activation {
+  margin-bottom: 12px;
+  padding: 12px 14px;
+}
+
+.host-glass-theme .host-event-activation__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.host-glass-theme .host-event-activation__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.host-glass-theme .host-event-activation__badge {
+  font-size: 0.78rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--host-glass-mint, #5eead4);
+}
+
+.host-glass-theme .host-event-activation__lead {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.45;
+}
+
+.host-glass-theme .host-event-activation__msg {
+  margin: 0 0 8px;
+  font-size: 0.84rem;
+  color: var(--host-glass-mint, #5eead4);
+}
+
+.host-glass-theme .host-event-activation__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.host-glass-theme .host-event-activation__actions .btn-primary,
+.host-glass-theme .host-event-activation__actions .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.host-glass-theme .host-event-activation__spin {
+  animation: host-org-billing-spin 0.9s linear infinite;
+}

@@ -42,7 +42,7 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
             Playback &amp; connections
           </h2>
           <button type="button" className="btn-secondary" onClick={onOpenConnectionModal}>
-            Full-screen panel
+            Panel
           </button>
         </div>
         <label className="host-settings-workspace__toggle">
@@ -51,23 +51,19 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
             checked={showAdvancedConnection}
             onChange={(e) => setShowAdvancedConnection(e.target.checked)}
           />
-          Show connection details here
+          Details
         </label>
         {showAdvancedConnection ? (
           <div className="host-settings-workspace__connection-body">{connectionPanel}</div>
         ) : (
           <p className="host-settings-workspace__hint">
-            Use <strong>Connection</strong> in the header or open the full-screen panel for Spotify device
-            picker and YouTube Music.
+            Use <strong>Connection</strong> in the header.
           </p>
         )}
       </section>
 
       <section className="host-glass-panel host-settings-workspace__prefs">
-        <h2 className="host-settings-workspace__title">Playback defaults</h2>
-        <p className="host-settings-workspace__lead">
-          Applied to new rounds on this device. Projector reveal timing is under Display.
-        </p>
+        <h2 className="host-settings-workspace__title">Defaults</h2>
         <label className="host-host-prefs__field">
           <span className="host-host-prefs__label">Snippet length ({snippetLength}s)</span>
           <input
@@ -109,18 +105,16 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
             onChange={(e) => onHybridChange(e.target.checked)}
           />
           <span>
-            <strong>Hybrid in-person + online</strong> — remote players can play; only in-person bingos end the
-            round for prizes.
+            <strong>Hybrid</strong> — in-person wins prizes first.
           </span>
         </label>
       </section>
 
       <section className="host-glass-panel host-settings-workspace__export">
-        <h2 className="host-settings-workspace__title">Event recap</h2>
-        <p className="host-settings-workspace__lead">Download a JSON snapshot of rounds, calls, and winners.</p>
+        <h2 className="host-settings-workspace__title">Recap</h2>
         <button type="button" className="btn-secondary" onClick={onExportEventRecap}>
           <Download className="w-4 h-4" aria-hidden />
-          Export event recap
+          Export JSON
         </button>
       </section>
 

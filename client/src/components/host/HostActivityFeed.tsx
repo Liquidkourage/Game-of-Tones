@@ -12,9 +12,8 @@ function formatTime(ts: number): string {
 const HostActivityFeed: React.FC<{ entries: HostActivityEntry[] }> = ({ entries }) => (
   <section className="host-activity-feed host-glass-panel" aria-label="Host activity">
     <h2 className="host-activity-feed__title">Activity</h2>
-    <p className="host-activity-feed__lead">Recent host and room events on this device.</p>
     {entries.length === 0 ? (
-      <p className="host-activity-feed__empty">No activity yet this session.</p>
+      <p className="host-activity-feed__empty">None yet.</p>
     ) : (
       <ol className="host-activity-feed__list">
         {entries.map((e) => (

@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Sparkles, Play, UserPlus, Crown, CheckCircle2, AlertTriangle, Link2, ListOrdered, Building2, ListMusic } from 'lucide-react';
+import { Sparkles, Play, UserPlus, Crown, CheckCircle2, AlertTriangle, ListOrdered, UserCircle, ListMusic } from 'lucide-react';
 import { API_BASE } from '../config';
 import { hostFetch, setHostJwt, browserGoogleLoginUrl, clearHostJwt, postHostLogout } from '../utils/hostFetch';
 import type { HostGlassNavId } from '../host/hostGlassNav';
@@ -242,7 +242,7 @@ const Home: React.FC = () => {
       }
       if (r.status === 402) {
         const raw = await r.text().catch(() => '');
-        let msg = 'Organization billing is required before hosting.';
+        let msg = 'Account billing required before hosting.';
         try {
           const j = raw ? JSON.parse(raw) : {};
           if (j && j.message) msg = String(j.message);
@@ -357,7 +357,6 @@ const Home: React.FC = () => {
       >
         <Sparkles className="home-hero__mark" aria-hidden />
         <h1 className="home-hero__title">TEMPO</h1>
-        <p className="home-hero__tagline">Music bingo</p>
       </motion.header>
 
       <motion.main
@@ -372,13 +371,11 @@ const Home: React.FC = () => {
             <div className="home-auth-banner__text">
               {authError === 'not_invited' ? (
                 <>
-                  <strong>Host sign-in not enabled for this account.</strong> Ask your organizer to add your email, then try signing
-                  in again with Google.
+                  <strong>Not allowlisted.</strong> Ask your organizer, then sign in again.
                 </>
               ) : (
                 <>
-                  <strong>Not approved to host.</strong> Ask your organizer to add your email to the host allowlist, then refresh
-                  and try again.
+                  <strong>Not approved.</strong> Ask your organizer to allowlist you.
                 </>
               )}
             </div>
@@ -487,41 +484,22 @@ const Home: React.FC = () => {
               <Crown className="card-icon" />
               <h3>Host</h3>
             </div>
-            <p className="home-card-lead">Sign in, connect Spotify on the host screen, then run your game.</p>
+            <p className="home-card-lead">Sign in, connect Spotify, run your show.</p>
 
-            <details className="home-host-guide" open>
+            <details className="home-host-guide">
               <summary>
                 <ListOrdered className="home-host-guide__icon" size={18} aria-hidden />
-                <span>Host quick start (first time?)</span>
+                <span>Help</span>
               </summary>
               <ol>
+                <li>Sign in with Google (allowlisted email).</li>
                 <li>
-                  <strong>Sign in with Google</strong> using the email your organizer allowlisted (often your work address).
+                  <Link to="/org">Account</Link> — org, invites, billing.
                 </li>
-                <li>
-                  <strong>
-                    <Link to="/org">Organization &amp; billing</Link>
-                  </strong>{' '}
-                  — create your venue org, invite co-hosts, or pay as you like (optional for now).
-                </li>
-                <li>
-                  Click <strong>Create room &amp; host</strong> — or <strong>Plan rounds &amp; playlists</strong> to jump straight to round prep.
-                </li>
-                <li>
-                  <strong>Connect Spotify</strong> and sign in to the <strong>Spotify</strong> account that should play music for this
-                  show (e.g. your event or work Spotify — you don’t need a Spotify <em>Developer</em> account).
-                </li>
-                <li>
-                  In host controls, pick a <strong>playback device</strong> (speaker / laptop) so sound goes to the right place.
-                </li>
-                <li>
-                  Players use <strong>Join</strong> on this site and enter the room code.
-                </li>
+                <li>Create room or plan rounds.</li>
+                <li>Connect Spotify and pick playback device.</li>
+                <li>Players join with room code.</li>
               </ol>
-              <p className="home-host-guide__foot">
-                If your organization uses a custom setup, your team may have you <strong>Connect Spotify</strong> again
-                after your account is linked — that is normal.
-              </p>
             </details>
 
             {hostSession !== undefined && (
@@ -547,7 +525,7 @@ const Home: React.FC = () => {
                       <strong style={{ color: '#a8ffd9' }}>{hostSession.email || hostDisplayName}</strong>
                     </>
                   ) : (
-                    <>No host sign-in on this device — hosting uses Google; there is no separate sign-up.</>
+                    <>Not signed in.</>
                   )}
                 </span>
                 {hostSession ? (
@@ -573,38 +551,17 @@ const Home: React.FC = () => {
             )}
 
             {hostSignInPageUrl && (
-              <div
-                className="home-host-signin-page-url"
-                style={{
-                  marginBottom: 14,
-                  padding: '12px 14px',
-                  borderRadius: 10,
-                  background: 'rgba(0,0,0,0.28)',
-                  border: '1px solid rgba(0,255,170,0.2)',
-                }}
-              >
-                <p
-                  className="home-card-lead"
+              <details className="home-host-signin-page-url" style={{ marginBottom: 14 }}>
+                <summary style={{ cursor: 'pointer', fontSize: '0.88rem', opacity: 0.9 }}>Sign-in link</summary>
+                <div
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    margin: '0 0 8px',
-                    fontSize: '0.88rem',
-                    opacity: 0.95,
-                    lineHeight: 1.45,
+                    marginTop: 10,
+                    padding: '12px 14px',
+                    borderRadius: 10,
+                    background: 'rgba(0,0,0,0.28)',
+                    border: '1px solid rgba(0,255,170,0.2)',
                   }}
                 >
-                  <Link2 size={16} style={{ opacity: 0.85, flexShrink: 0 }} aria-hidden />
-                  <span>
-                    <strong>Optional:</strong> bookmark or share this link — you never have to copy it. When you are not signed in,
-                    use <strong>Sign in with Google</strong> below (or paste this URL in the address bar).{' '}
-                    {hostSession ? (
-                      <span style={{ opacity: 0.85 }}>You are signed in on this device; the link is for another browser or a co-host.</span>
-                    ) : null}
-                  </span>
-                </p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
                   <code
                     style={{
                       fontSize: '0.78rem',
@@ -623,12 +580,12 @@ const Home: React.FC = () => {
                     type="button"
                     className="btn btn-secondary"
                     onClick={copyHostSignInPageUrl}
-                    style={{ fontSize: '0.85rem', padding: '8px 14px' }}
+                    style={{ fontSize: '0.85rem', padding: '8px 14px', marginTop: 10 }}
                   >
-                    {hostSignInUrlCopied ? 'Copied' : 'Copy link'}
+                    {hostSignInUrlCopied ? 'Copied' : 'Copy'}
                   </button>
                 </div>
-              </div>
+              </details>
             )}
 
             {hostSession === undefined ? (
@@ -637,11 +594,8 @@ const Home: React.FC = () => {
               <div className="home-host-account" role="status" aria-live="polite">
                 <div className="home-host-account__title">
                   <CheckCircle2 className="home-host-account__check" aria-hidden />
-                  <span>Tempo host account active</span>
+                  <span>Signed in</span>
                 </div>
-                <p className="home-host-account__blurb">
-                  Your Google sign-in is linked on this server. Host ID and Spotify tokens are tied to this account.
-                </p>
                 <dl className="home-host-account__meta">
                   <div>
                     <dt>Host ID</dt>
@@ -661,13 +615,13 @@ const Home: React.FC = () => {
                   ) : null}
                 </dl>
                 <p className="home-host-account__shown-as">
-                  Players will see you as <strong>{hostDisplayName}</strong>
+                  Shown as <strong>{hostDisplayName}</strong>
                 </p>
               </div>
             ) : (
               <div className="home-host-signin" role="region" aria-label="Host sign in">
                 <p className="home-card-lead" style={{ marginBottom: 14, opacity: 0.95, lineHeight: 1.5 }}>
-                  Sign in with Google to create a room. Your Spotify link and host controls stay on this account.
+                  Sign in with Google to host.
                 </p>
                 <button
                   type="button"
@@ -681,8 +635,8 @@ const Home: React.FC = () => {
 
             {hostSession ? (
               <Link to="/org" className="home-org-link home-org-link--primary btn btn-primary">
-                <Building2 className="btn-icon" aria-hidden />
-                Organization &amp; billing
+                <UserCircle className="btn-icon" aria-hidden />
+                Account
               </Link>
             ) : null}
 

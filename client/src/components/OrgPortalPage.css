@@ -152,6 +152,32 @@
   font-weight: 700;
 }
 
+.org-portal__interval-toggle {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.org-portal__interval-toggle .btn-secondary.is-active {
+  border-color: rgba(94, 234, 212, 0.55);
+  background: rgba(94, 234, 212, 0.12);
+}
+
+.org-portal__credit-sources {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.org-portal__credit-sources li {
+  margin: 0;
+}
+
 .org-portal__org-head {
   display: flex;
   flex-wrap: wrap;

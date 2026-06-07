@@ -8,15 +8,49 @@ const eventCredits = require('./eventCredits');
 const MIN_AMOUNT_CENTS = 100;
 const MAX_AMOUNT_CENTS = 500_000;
 const SINGLE_EVENT_USD = 15;
+const TRIAL_CREDIT_CENTS = 2900;
+const ANNUAL_DISCOUNT = 0.15;
 
 const SUBSCRIPTION_ACTIVE_STATUSES = new Set(['active', 'trialing']);
 
-/** @type {Array<{ key: string, label: string, usd: number, eventsPerMonth: number|null, unlimited?: boolean, env: string, annualEnv?: string }>} */
+function annualUsdForTier(monthlyUsd) {
+  return Math.round(Number(monthlyUsd) * 12 * (1 - ANNUAL_DISCOUNT));
+}
+
+/** @type {Array<{ key: string, label: string, usd: number, eventsPerMonth: number|null, unlimited?: boolean, env: string, annualEnv: string }>} */
 const SUBSCRIPTION_TIER_SPECS = [
-  { key: 'basic', label: 'Basic — $59/mo', usd: 59, eventsPerMonth: 5, env: 'STRIPE_PRICE_MONTHLY_BASIC' },
-  { key: 'pro', label: 'Pro — $99/mo', usd: 99, eventsPerMonth: 10, env: 'STRIPE_PRICE_MONTHLY_PRO' },
-  { key: 'plus', label: 'Plus — $149/mo', usd: 149, eventsPerMonth: 20, env: 'STRIPE_PRICE_MONTHLY_PLUS' },
-  { key: 'company', label: 'Company — $299/mo', usd: 299, eventsPerMonth: 50, env: 'STRIPE_PRICE_MONTHLY_COMPANY' },
+  {
+    key: 'basic',
+    label: 'Basic — $59/mo',
+    usd: 59,
+    eventsPerMonth: 5,
+    env: 'STRIPE_PRICE_MONTHLY_BASIC',
+    annualEnv: 'STRIPE_PRICE_ANNUAL_BASIC',
+  },
+  {
+    key: 'pro',
+    label: 'Pro — $99/mo',
+    usd: 99,
+    eventsPerMonth: 10,
+    env: 'STRIPE_PRICE_MONTHLY_PRO',
+    annualEnv: 'STRIPE_PRICE_ANNUAL_PRO',
+  },
+  {
+    key: 'plus',
+    label: 'Plus — $149/mo',
+    usd: 149,
+    eventsPerMonth: 20,
+    env: 'STRIPE_PRICE_MONTHLY_PLUS',
+    annualEnv: 'STRIPE_PRICE_ANNUAL_PLUS',
+  },
+  {
+    key: 'company',
+    label: 'Company — $299/mo',
+    usd: 299,
+    eventsPerMonth: 50,
+    env: 'STRIPE_PRICE_MONTHLY_COMPANY',
+    annualEnv: 'STRIPE_PRICE_ANNUAL_COMPANY',
+  },
   {
     key: 'enterprise',
     label: 'Enterprise — $499/mo',
@@ -24,6 +58,7 @@ const SUBSCRIPTION_TIER_SPECS = [
     eventsPerMonth: null,
     unlimited: true,
     env: 'STRIPE_PRICE_MONTHLY_ENTERPRISE',
+    annualEnv: 'STRIPE_PRICE_ANNUAL_ENTERPRISE',
   },
 ];
 
@@ -67,11 +102,13 @@ function oneTimeLineItem({ priceId, usd, name, description }) {
   };
 }
 
-/** Stripe recurring Price ID when set; otherwise ad-hoc price_data (monthly interval). */
-function subscriptionLineItem({ priceId, tierSpec }) {
+/** Stripe recurring Price ID when set; otherwise ad-hoc price_data. */
+function subscriptionLineItem({ priceId, tierSpec, interval = 'month' }) {
   const id = String(priceId || '').trim();
   if (id) return { price: id, quantity: 1 };
-  const cents = Math.round(Number(tierSpec.usd) * 100);
+  const isYear = interval === 'year';
+  const usd = isYear ? annualUsdForTier(tierSpec.usd) : tierSpec.usd;
+  const cents = Math.round(Number(usd) * 100);
   if (!Number.isFinite(cents) || cents < MIN_AMOUNT_CENTS) {
     throw new Error('Invalid subscription tier amount');
   }
@@ -79,14 +116,16 @@ function subscriptionLineItem({ priceId, tierSpec }) {
     ? 'Unlimited event activations'
     : `${tierSpec.eventsPerMonth} event credits per month`;
   const tierName = tierSpec.key.charAt(0).toUpperCase() + tierSpec.key.slice(1);
+  const cadence = isYear ? '/yr' : '/mo';
+  const saveNote = isYear ? ' · 15% annual savings' : '';
   return {
     price_data: {
       currency: 'usd',
       unit_amount: cents,
-      recurring: { interval: 'month' },
+      recurring: { interval: isYear ? 'year' : 'month' },
       product_data: {
-        name: `TEMPO ${tierName} — $${tierSpec.usd}/mo`,
-        description: `${creditsNote}. One credit = one activated event night (up to 12 rounds).`,
+        name: `TEMPO ${tierName} — $${usd}${cadence}`,
+        description: `${creditsNote}${saveNote}. One credit = one activated event night (up to 12 rounds).`,
       },
     },
     quantity: 1,
@@ -154,6 +193,43 @@ function tierForKey(key) {
   return SUBSCRIPTION_TIER_SPECS.find((s) => s.key === k) || LEGACY_TIER_SPECS.find((s) => s.key === k) || null;
 }
 
+function tierDisplayName(key) {
+  const k = String(key || '').trim().toLowerCase();
+  if (!k) return 'Plan';
+  return k.charAt(0).toUpperCase() + k.slice(1);
+}
+
+function getSubscriptionPlans() {
+  const plans = [];
+  for (const spec of SUBSCRIPTION_TIER_SPECS) {
+    const monthlyPriceId = priceFromEnv(spec.env) || null;
+    plans.push({
+      key: spec.key,
+      interval: 'month',
+      label: `${tierDisplayName(spec.key)} — $${spec.usd}/mo`,
+      usd: spec.usd,
+      eventsPerMonth: spec.eventsPerMonth,
+      unlimited: !!spec.unlimited,
+      priceId: monthlyPriceId,
+      catalogPriceConfigured: !!monthlyPriceId,
+    });
+    const annualUsd = annualUsdForTier(spec.usd);
+    const annualPriceId = priceFromEnv(spec.annualEnv) || null;
+    plans.push({
+      key: spec.key,
+      interval: 'year',
+      label: `${tierDisplayName(spec.key)} — $${annualUsd}/yr`,
+      usd: annualUsd,
+      eventsPerMonth: spec.eventsPerMonth,
+      unlimited: !!spec.unlimited,
+      priceId: annualPriceId,
+      catalogPriceConfigured: !!annualPriceId,
+      annualSavingsPercent: Math.round(ANNUAL_DISCOUNT * 100),
+    });
+  }
+  return plans;
+}
+
 function getSubscriptionTiers() {
   const tiers = SUBSCRIPTION_TIER_SPECS.map(({ key, label, usd, eventsPerMonth, unlimited, env }) => {
     const priceId = priceFromEnv(env) || null;
@@ -211,8 +287,17 @@ function tierForPriceId(priceId) {
   if (!id) return null;
   for (const spec of [...SUBSCRIPTION_TIER_SPECS, ...LEGACY_TIER_SPECS]) {
     if (priceFromEnv(spec.env) === id) return spec;
+    if (spec.annualEnv && priceFromEnv(spec.annualEnv) === id) return spec;
   }
   return null;
+}
+
+function subscriptionIntervalFromSubscription(subscription) {
+  const fromPrice = subscription?.items?.data?.[0]?.price?.recurring?.interval;
+  if (fromPrice === 'year' || fromPrice === 'month') return fromPrice;
+  const meta = String(subscription?.metadata?.billing_interval || '').toLowerCase();
+  if (meta === 'year' || meta === 'month') return meta;
+  return 'month';
 }
 
 function resolveTierSpecForSubscription(subscription) {
@@ -281,6 +366,7 @@ async function ensureBillingTables(db) {
     )
   `);
   await db.query(`ALTER TABLE org_payments ADD COLUMN IF NOT EXISTS purchase_type TEXT`);
+  await db.query(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS trial_credit_applied_at TIMESTAMP`);
   await db.query(`
     CREATE INDEX IF NOT EXISTS idx_org_payments_org_id ON org_payments (organization_id)
   `);
@@ -325,6 +411,8 @@ async function billingSummaryFromOrg(db, orgRow) {
     stripeConfigured: isStripeConfigured(),
     subscriptionsConfigured: isSubscriptionsConfigured(),
     subscriptionTiers: tiers,
+    subscriptionPlans: getSubscriptionPlans(),
+    annualDiscountPercent: Math.round(ANNUAL_DISCOUNT * 100),
     packProducts: packs.map(({ key, label, usd, credits }) => ({ key, label, usd, credits })),
     oneTimeProducts: oneTime.map(({ key, label, usd }) => ({ key, label, usd })),
     singleEventUsd: SINGLE_EVENT_USD,
@@ -382,11 +470,39 @@ async function getOrganizationBillingRow(db, organizationId) {
   const r = await db.query(
     `SELECT id, billing_status, lifetime_paid_cents, last_payment_at, stripe_customer_id,
             stripe_subscription_id, subscription_status, subscription_period_end, subscription_price_id,
-            subscription_tier, trial_ends_at, subscription_paused_at, monthly_credits_granted_period
+            subscription_tier, trial_ends_at, subscription_paused_at, monthly_credits_granted_period,
+            trial_credit_applied_at
      FROM organizations WHERE id = $1`,
     [organizationId]
   );
   return r.rows[0] || null;
+}
+
+async function orgHasPendingTrialCredit(db, organizationId) {
+  const org = await getOrganizationBillingRow(db, organizationId);
+  if (!org || org.trial_credit_applied_at) return false;
+  const pay = await db.query(
+    `SELECT 1 FROM org_payments
+     WHERE organization_id = $1 AND purchase_type = 'trial_7d' AND status = 'completed'
+     LIMIT 1`,
+    [organizationId]
+  );
+  return pay.rows.length > 0;
+}
+
+/** Stripe customer balance credit ($29) toward first subscription invoice. */
+async function applyPendingTrialCreditIfEligible(stripe, db, organizationId, customerId) {
+  if (!customerId || !(await orgHasPendingTrialCredit(db, organizationId))) return false;
+  await stripe.customers.createBalanceTransaction(String(customerId), {
+    amount: -TRIAL_CREDIT_CENTS,
+    currency: 'usd',
+    description: 'TEMPO trial — $29 credit toward first subscription',
+    metadata: { organization_id: String(organizationId), type: 'trial_credit' },
+  });
+  await db.query(`UPDATE organizations SET trial_credit_applied_at = CURRENT_TIMESTAMP WHERE id = $1`, [
+    organizationId,
+  ]);
+  return true;
 }
 
 async function getOrCreateStripeCustomer(stripe, db, organizationId, orgName) {
@@ -444,6 +560,10 @@ async function applySubscriptionToOrg(db, organizationId, subscription) {
       paused,
     ]
   );
+
+  if (status === 'canceled' || status === 'unpaid') {
+    await eventCredits.forfeitRolloverCredits(db, organizationId);
+  }
 }
 
 async function resolveOrganizationIdForSubscription(db, subscription) {
@@ -512,6 +632,7 @@ async function createCheckoutSession(db, { organizationId, orgName, hostUserId, 
       metadata: {
         organization_id: String(organizationId),
         tier_key: metadata.tier_key || '',
+        billing_interval: metadata.billing_interval || 'month',
       },
     };
     if (allowPromotionCodes) sessionParams.allow_promotion_codes = true;
@@ -659,13 +780,23 @@ async function createPackCheckout(db, { organizationId, orgName, hostUserId, pac
   return { ...checkout, packKey: pack.key, credits: pack.credits };
 }
 
-async function createSubscriptionCheckout(db, { organizationId, orgName, tierKey, priceId, hostUserId, promoCode }) {
+async function createSubscriptionCheckout(db, {
+  organizationId,
+  orgName,
+  tierKey,
+  priceId,
+  hostUserId,
+  promoCode,
+  billingInterval,
+}) {
   const key = String(tierKey || '').trim().toLowerCase();
   const tier = tierForKey(key);
   if (!tier) {
     throw new Error('Unknown subscription tier');
   }
-  const catalogPriceId = priceFromEnv(tier.env);
+  const interval = String(billingInterval || 'month').toLowerCase() === 'year' ? 'year' : 'month';
+  const envName = interval === 'year' ? tier.annualEnv : tier.env;
+  const catalogPriceId = envName ? priceFromEnv(envName) : '';
   const resolvedPriceId = String(priceId || catalogPriceId || '').trim() || null;
   const orgRow = await getOrganizationBillingRow(db, organizationId);
   if (isSubscriptionActive(orgRow) && !eventCredits.isSubscriptionPaused(orgRow)) {
@@ -682,21 +813,26 @@ async function createSubscriptionCheckout(db, { organizationId, orgName, tierKey
     if (promo) tempoPromoId = String(promo.id);
   }
 
+  const stripe = getStripe();
+  const customerId = await getOrCreateStripeCustomer(stripe, db, organizationId, orgName);
+  await applyPendingTrialCreditIfEligible(stripe, db, organizationId, customerId);
+
   const checkout = await createCheckoutSession(db, {
     organizationId,
     orgName,
     hostUserId,
     mode: 'subscription',
-    lineItems: [subscriptionLineItem({ priceId: resolvedPriceId, tierSpec: tier })],
+    lineItems: [subscriptionLineItem({ priceId: resolvedPriceId, tierSpec: tier, interval })],
     metadata: {
       purchase_type: 'subscription',
       tier_key: tier.key,
+      billing_interval: interval,
       tempo_promo_id: tempoPromoId || '',
     },
     allowPromotionCodes: !discounts,
     discounts,
   });
-  return { ...checkout, tier: tier.key };
+  return { ...checkout, tier: tier.key, billingInterval: interval };
 }
 
 async function createBillingPortalSession(db, { organizationId }) {
@@ -777,7 +913,9 @@ async function handleCheckoutSessionCompleted(db, stripe, session) {
         tierForKey(session.metadata?.tier_key) || tierForPriceId(subscription.items?.data?.[0]?.price?.id);
       const tierKey = tierSpec?.key || session.metadata?.tier_key || null;
       if (tierKey) await eventCredits.setSubscriptionTier(db, orgId, tierKey);
-      if (tierSpec?.eventsPerMonth) {
+      const billingInterval =
+        session.metadata?.billing_interval || subscriptionIntervalFromSubscription(subscription);
+      if (tierSpec?.eventsPerMonth && billingInterval !== 'year') {
         await eventCredits.grantMonthlyPlanCredits(
           db,
           orgId,
@@ -832,7 +970,12 @@ async function handleInvoicePaid(db, stripe, invoice) {
   if (!orgId) return;
   const tierSpec = resolveTierSpecForSubscription(subscription);
   if (!tierSpec || tierSpec.unlimited || !tierSpec.eventsPerMonth) return;
+  const interval = subscriptionIntervalFromSubscription(subscription);
   const periodStart = invoice.period_start ? new Date(invoice.period_start * 1000) : new Date();
+  if (interval === 'year') {
+    await eventCredits.grantAnnualSubscriptionCredits(db, orgId, tierSpec.eventsPerMonth, periodStart);
+    return;
+  }
   const periodKey = eventCredits.currentPeriodKey(periodStart);
   await eventCredits.grantMonthlyPlanCredits(db, orgId, tierSpec.eventsPerMonth, periodKey);
 }
@@ -850,7 +993,15 @@ async function gateHostedEventAction(db, orgRow, roomId, { billingReady = false 
       orgPortalUrl: '/org',
     };
   }
-  return { ok: true, event: result.event, activated: result.activated };
+  return {
+    ok: true,
+    event: result.event,
+    activated: result.activated,
+    consumed: result.consumed,
+    trial: result.trial,
+    enterprise: result.enterprise,
+    alreadyActive: result.alreadyActive,
+  };
 }
 
 async function handleStripeWebhook(db, req, res) {
@@ -909,6 +1060,7 @@ module.exports = {
   MIN_AMOUNT_CENTS,
   MAX_AMOUNT_CENTS,
   SINGLE_EVENT_USD,
+  TRIAL_CREDIT_CENTS,
   SUBSCRIPTION_TIER_SPECS,
   PACK_SPECS,
   isBillingGateEnabled,
@@ -929,6 +1081,7 @@ module.exports = {
   createSubscriptionCheckout,
   createBillingPortalSession,
   getSubscriptionTiers,
+  getSubscriptionPlans,
   getPackProducts,
   getOneTimeProducts,
   listOrgPayments,

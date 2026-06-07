@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, Crown, Heart, Loader2, Users } from 'lucide-react';
+import { Crown, Heart, Loader2, UserCircle, Users } from 'lucide-react';
 import { API_BASE } from '../../config';
 import { hostFetch } from '../../utils/hostFetch';
+import ContextHelp from '../ContextHelp';
+import '../ContextHelp.css';
 
 type OrgMe = {
   role: 'owner' | 'host' | null;
@@ -54,16 +56,16 @@ const HostOrgBillingCard: React.FC = () => {
     <section className="host-glass-panel host-org-billing-card" aria-labelledby="host-org-billing-title">
       <div className="host-org-billing-card__head">
         <h2 id="host-org-billing-title" className="host-settings-workspace__title">
-          <Building2 className="host-settings-workspace__title-icon" aria-hidden />
-          Organization &amp; billing
+          <UserCircle className="host-settings-workspace__title-icon" aria-hidden />
+          Account
+          <ContextHelp title="Account">
+            <p>Venue org, co-host invites, and billing. One org covers every host on your team.</p>
+          </ContextHelp>
         </h2>
         <Link to="/org" className="btn-primary host-org-billing-card__open">
-          {data?.organization ? 'Manage' : 'Set up'}
+          {data?.organization ? 'Open' : 'Set up'}
         </Link>
       </div>
-      <p className="host-settings-workspace__lead">
-        Create your venue org, invite co-hosts, and support TEMPO monthly or pay-as-you-like — one org covers every host.
-      </p>
 
       {loading ? (
         <p className="host-org-billing-card__status">
@@ -71,8 +73,7 @@ const HostOrgBillingCard: React.FC = () => {
         </p>
       ) : needsLogin ? (
         <p className="host-org-billing-card__status">
-          Sign in with Google on the{' '}
-          <Link to="/?mode=host">home page</Link> to use organization features.
+          <Link to="/?mode=host">Sign in</Link> to use account features.
         </p>
       ) : data?.organization ? (
         <div className="host-org-billing-card__summary">
@@ -89,24 +90,17 @@ const HostOrgBillingCard: React.FC = () => {
           <p className="host-org-billing-card__meta">
             <Users size={14} aria-hidden /> {data.members.length} host{data.members.length === 1 ? '' : 's'}
             {' · '}
-            Billing: <strong>{data.billing.status}</strong>
-            {data.billing.subscriptionActive ? (
-              <> · Monthly <strong>{data.billing.subscriptionStatus}</strong></>
-            ) : null}
-            {data.billing.lifetimePaidCents > 0 ? (
-              <> · ${(data.billing.lifetimePaidCents / 100).toFixed(2)} lifetime support</>
-            ) : null}
+            <strong>{data.billing.status}</strong>
+            {data.billing.subscriptionActive ? <> · {data.billing.subscriptionStatus}</> : null}
           </p>
           {data.billing.gateEnforced && !data.billing.active && data.role === 'owner' ? (
             <p className="host-org-billing-card__warn">
-              <Heart size={14} aria-hidden /> Hosting will require org support soon — complete payment in Manage.
+              <Heart size={14} aria-hidden /> Payment required — open Account.
             </p>
           ) : null}
         </div>
       ) : (
-        <p className="host-org-billing-card__status">
-          No organization yet. Open <strong>Set up</strong> to create one and invite your team.
-        </p>
+        <p className="host-org-billing-card__status">No org yet.</p>
       )}
     </section>
   );

@@ -21,6 +21,18 @@ Create **one-time** and **recurring** prices in Stripe → **Product catalog**.
 | `STRIPE_PRICE_MONTHLY_COMPANY` | Company — $299/mo | Optional |
 | `STRIPE_PRICE_MONTHLY_ENTERPRISE` | Enterprise — $499/mo (unlimited) | Optional |
 
+### Annual subscriptions (15% off)
+
+| Variable | Product | Required? |
+|----------|---------|-----------|
+| `STRIPE_PRICE_ANNUAL_BASIC` | Basic — ~$602/yr | Optional — dynamic yearly checkout if unset |
+| `STRIPE_PRICE_ANNUAL_PRO` | Pro — ~$1,009/yr | Optional |
+| `STRIPE_PRICE_ANNUAL_PLUS` | Plus — ~$1,519/yr | Optional |
+| `STRIPE_PRICE_ANNUAL_COMPANY` | Company — ~$3,053/yr | Optional |
+| `STRIPE_PRICE_ANNUAL_ENTERPRISE` | Enterprise — ~$5,089/yr | Optional |
+
+Annual plans grant **12 months of event credits** on each paid invoice.
+
 Legacy (optional): `STRIPE_PRICE_MONTHLY_10`, `_25`, `_50` — only shown if no Basic+ catalog prices are set.
 
 Copy each **Price ID** (`price_…`) into Railway/env when you want named Stripe catalog products; otherwise TEMPO builds the recurring Checkout line item from the list price.

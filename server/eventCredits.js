@@ -48,6 +48,9 @@ async function ensureEntitlementTables(db) {
     ALTER TABLE organizations ADD COLUMN IF NOT EXISTS monthly_credits_granted_period TEXT
   `);
   await db.query(`
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS trial_credit_applied_at TIMESTAMP
+  `);
+  await db.query(`
     CREATE TABLE IF NOT EXISTS org_credit_buckets (
       id SERIAL PRIMARY KEY,
       organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -186,12 +189,22 @@ async function grantCredits(db, organizationId, { amount, source, expiresAt = nu
   return r.rows[0];
 }
 
+async function isOrgRolloverExpiryFrozen(db, organizationId) {
+  const r = await db.query(
+    `SELECT subscription_paused_at, subscription_status FROM organizations WHERE id = $1`,
+    [organizationId]
+  );
+  return isSubscriptionPaused(r.rows[0] || null);
+}
+
 async function expireStaleBuckets(db, organizationId) {
+  const freezeRollover = await isOrgRolloverExpiryFrozen(db, organizationId);
   await db.query(
     `UPDATE org_credit_buckets SET credits_remaining = 0
      WHERE organization_id = $1 AND credits_remaining > 0
-       AND expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP`,
-    [organizationId]
+       AND expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP
+       AND ($2::boolean = FALSE OR source <> 'rollover')`,
+    [organizationId, freezeRollover]
   );
 }
 
@@ -273,6 +286,57 @@ async function grantMonthlyPlanCredits(db, organizationId, eventsPerMonth, perio
     periodKey,
   ]);
   return bucket;
+}
+
+/** Pre-grant 12 monthly buckets when an annual subscription invoice is paid. */
+async function grantAnnualSubscriptionCredits(db, organizationId, eventsPerMonth, anchorDate = new Date()) {
+  if (!eventsPerMonth || eventsPerMonth <= 0) return;
+  const anchor = anchorDate instanceof Date ? anchorDate : new Date(anchorDate);
+  const org = await db.query(`SELECT monthly_credits_granted_period FROM organizations WHERE id = $1`, [
+    organizationId,
+  ]);
+  const firstPeriodKey = currentPeriodKey(anchor);
+  const prev = org.rows[0]?.monthly_credits_granted_period || null;
+  if (prev && prev !== firstPeriodKey) {
+    await rolloverUnusedMonthlyCredits(db, organizationId, prev);
+  }
+  let lastGranted = prev;
+  for (let i = 0; i < 12; i += 1) {
+    const d = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + i, 1));
+    const periodKey = currentPeriodKey(d);
+    const dup = await db.query(
+      `SELECT 1 FROM org_credit_buckets
+       WHERE organization_id = $1 AND source = 'monthly' AND period_key = $2 AND credits_initial >= $3 LIMIT 1`,
+      [organizationId, periodKey, eventsPerMonth]
+    );
+    if (dup.rows.length > 0) {
+      lastGranted = periodKey;
+      continue;
+    }
+    await grantCredits(db, organizationId, {
+      amount: eventsPerMonth,
+      source: 'monthly',
+      periodKey,
+      expiresAt: addDays(d, ROLLOVER_EXPIRY_DAYS + 31),
+      note: `Annual plan ${periodKey}`,
+    });
+    lastGranted = periodKey;
+  }
+  if (lastGranted) {
+    await db.query(`UPDATE organizations SET monthly_credits_granted_period = $2 WHERE id = $1`, [
+      organizationId,
+      lastGranted,
+    ]);
+  }
+}
+
+async function forfeitRolloverCredits(db, organizationId) {
+  await ensureEntitlementTables(db);
+  await db.query(
+    `UPDATE org_credit_buckets SET credits_remaining = 0
+     WHERE organization_id = $1 AND source = 'rollover' AND credits_remaining > 0`,
+    [organizationId]
+  );
 }
 
 async function pickBucketForConsumption(db, organizationId) {
@@ -420,6 +484,21 @@ async function tryAutoRefundEvent(db, organizationId, roomId) {
   return true;
 }
 
+/** End active org event for a room; auto-refund credit when eligibility rules pass. */
+async function closeActiveOrgEvent(db, organizationId, roomId, { tryRefund = true } = {}) {
+  if (tryRefund) {
+    const refunded = await tryAutoRefundEvent(db, organizationId, roomId);
+    if (refunded) return { closed: true, refunded: true };
+  }
+  const ev = await getActiveEventForRoom(db, organizationId, roomId);
+  if (!ev) return { closed: false, refunded: false };
+  await db.query(
+    `UPDATE org_events SET status = 'closed', closed_at = CURRENT_TIMESTAMP WHERE id = $1 AND status = 'active'`,
+    [ev.id]
+  );
+  return { closed: true, refunded: false };
+}
+
 async function startTrial(db, organizationId, days = 7) {
   const ends = addDays(new Date(), days);
   await db.query(
@@ -512,13 +591,16 @@ module.exports = {
   getCreditSummary,
   grantCredits,
   grantMonthlyPlanCredits,
+  grantAnnualSubscriptionCredits,
   rolloverUnusedMonthlyCredits,
+  forfeitRolloverCredits,
   getActiveEventForRoom,
   ensureActivatedEvent,
   markFullPdfIssued,
   incrementEventRound,
   updateEventStats,
   tryAutoRefundEvent,
+  closeActiveOrgEvent,
   startTrial,
   setSubscriptionTier,
   findPromoByCode,

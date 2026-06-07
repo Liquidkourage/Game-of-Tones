@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, useLocation, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Sparkles, Shield, Building2 } from 'lucide-react';
+import { Sparkles, Shield, Home as HomeIcon, UserCircle } from 'lucide-react';
 import { API_BASE } from './config';
 import { hostFetch } from './utils/hostFetch';
 import './App.css';
@@ -111,7 +111,7 @@ function AppHeader() {
       <div className="header-content" style={isDisplay ? { width: 'auto', maxWidth: 'min(96vw, 1200px)' } : {}}>
         <div className={`logo${isDisplay ? ' logo--display-lockup' : ''}`}>
           <Sparkles className="logo-icon" />
-          <h1>TEMPO - Music Bingo</h1>
+          <h1>TEMPO</h1>
           <span style={{ 
             marginLeft: 12, 
             fontSize: '1.35rem', 
@@ -146,10 +146,14 @@ function AppHeader() {
           className="app-header__trailing"
           style={{ position: 'absolute', right: '2rem', top: '50%', transform: 'translateY(-50%)', zIndex: 101 }}
         >
+          <Link to="/" className="app-header__org-link" title="Home">
+            <HomeIcon size={16} aria-hidden className="app-header__org-icon" />
+            <span>Home</span>
+          </Link>
           {showOrgLink && (
-            <Link to="/org" className="app-header__org-link" title="Organization and billing">
-              <Building2 size={16} aria-hidden className="app-header__org-icon" />
-              <span>Organization</span>
+            <Link to="/org" className="app-header__org-link" title="Account and billing">
+              <UserCircle size={16} aria-hidden className="app-header__org-icon" />
+              <span>Account</span>
             </Link>
           )}
           {showAdminLink && (

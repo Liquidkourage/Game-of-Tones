@@ -286,7 +286,7 @@ function drawPageHeader(doc: jsPDF, layout: PageLayout, opts: PrintablePdfOpts):
   doc.setTextColor(INK.r, INK.g, INK.b);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(titleFontPt);
-  doc.text('TEMPO — Music Bingo', pageW / 2, titleBaseline, { align: 'center' });
+  doc.text('TEMPO', pageW / 2, titleBaseline, { align: 'center' });
 
   const meta = headerMetaLines(opts);
   doc.setFont('helvetica', 'normal');

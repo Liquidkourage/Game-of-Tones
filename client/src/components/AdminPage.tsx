@@ -102,6 +102,12 @@ const AdminPage: React.FC = () => {
   const [promoError, setPromoError] = useState<string | null>(null);
   const [promoForm, setPromoForm] = useState<PromoForm>(emptyPromoForm);
   const [promoSavedAt, setPromoSavedAt] = useState<number | null>(null);
+  const [grantOrgId, setGrantOrgId] = useState('');
+  const [grantDelta, setGrantDelta] = useState('1');
+  const [grantReason, setGrantReason] = useState('');
+  const [grantError, setGrantError] = useState<string | null>(null);
+  const [grantSavedAt, setGrantSavedAt] = useState<number | null>(null);
+  const [grantCreditTotal, setGrantCreditTotal] = useState<number | null>(null);
 
   const refreshList = useCallback(async () => {
     setListError(null);
@@ -468,6 +474,40 @@ const AdminPage: React.FC = () => {
     if (!raw) return '—';
     const d = new Date(raw);
     return Number.isFinite(d.getTime()) ? d.toLocaleDateString() : '—';
+  };
+
+  const grantCreditsToOrg = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const id = grantOrgId.trim();
+    const delta = Math.round(Number(grantDelta.trim()));
+    if (!id || !Number.isFinite(delta) || delta <= 0) return;
+    setBusy(true);
+    setGrantError(null);
+    setGrantSavedAt(null);
+    setGrantCreditTotal(null);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/admin/organizations/${encodeURIComponent(id)}/credits`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          delta,
+          reason: grantReason.trim() || 'Admin grant',
+        }),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        credits?: { total?: number };
+      };
+      if (!res.ok) {
+        setGrantError(j.message || `Could not grant credits (${res.status})`);
+        return;
+      }
+      setGrantSavedAt(Date.now());
+      setGrantCreditTotal(typeof j.credits?.total === 'number' ? j.credits.total : null);
+      setGrantReason('');
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (me === null && !loadError) {
@@ -1010,6 +1050,64 @@ const AdminPage: React.FC = () => {
               </table>
             </div>
           )}
+        </section>
+
+        <section className="admin-page__table-wrap" style={{ marginBottom: '2rem' }}>
+          <h2 className="admin-page__h2">Grant event credits</h2>
+          <p className="admin-page__muted" style={{ marginBottom: '0.75rem' }}>
+            Manually add event credits to an organization (launch partners, make-goods, support). Credits appear on{' '}
+            <Link to="/org">/org</Link> and are consumed when the host activates an event.
+          </p>
+          {grantError && <p className="admin-page__error">{grantError}</p>}
+          {grantSavedAt != null && (
+            <p className="admin-page__muted" style={{ marginBottom: '0.5rem' }}>
+              Credits granted.{grantCreditTotal != null ? ` Org now has ${grantCreditTotal} available.` : ''}
+            </p>
+          )}
+          <form className="admin-page__add" onSubmit={(e) => void grantCreditsToOrg(e)}>
+            <div className="admin-page__add-row" style={{ flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.65rem' }}>
+              <select
+                className="input"
+                value={grantOrgId}
+                onChange={(e) => setGrantOrgId(e.target.value)}
+                disabled={busy}
+                style={{ minWidth: '220px' }}
+              >
+                <option value="">Select organization…</option>
+                {(orgs || []).map((o) => (
+                  <option key={o.id} value={String(o.id)}>
+                    #{o.id} {o.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                inputMode="numeric"
+                className="input"
+                placeholder="Credits to add"
+                value={grantDelta}
+                onChange={(e) => setGrantDelta(e.target.value)}
+                disabled={busy}
+                style={{ maxWidth: '120px' }}
+              />
+            </div>
+            <input
+              type="text"
+              className="input"
+              placeholder="Reason (e.g. Launch partner — ACME)"
+              value={grantReason}
+              onChange={(e) => setGrantReason(e.target.value)}
+              disabled={busy}
+              style={{ width: '100%', marginBottom: '0.65rem' }}
+            />
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={busy || !grantOrgId.trim() || !Number.isFinite(Number(grantDelta)) || Number(grantDelta) <= 0}
+            >
+              Grant credits
+            </button>
+          </form>
         </section>
 
         <h2 className="admin-page__h2" style={{ marginBottom: '0.75rem' }}>

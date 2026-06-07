@@ -5036,7 +5036,7 @@ const PublicDisplay: React.FC = () => {
                   display: 'none'
                 }}
               >
-                Tempo - Music Bingo
+                Tempo
               </div>
               <div style={{ fontSize: 'clamp(1.8rem, 3.8vw, 2.6rem)', opacity: 0.98, marginTop: 18, display: 'none' }}>The game is on, the volume is up, the win is yours.</div>
               <PublicDisplayTempoBallRow seeds={ballAnimSeedsRef.current} variant="splash" />
@@ -5075,7 +5075,7 @@ const PublicDisplay: React.FC = () => {
                     filter: 'drop-shadow(0 8px 28px rgba(123,255,217,0.4))',
                   }}
                 >
-                  Music Bingo
+                  TEMPO
                 </div>
                 <Sparkles
                   style={{

@@ -93,6 +93,7 @@ import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
 import { HostYoutubeMusicPlaylistLibrary, type YoutubeMixPlaylistRow } from './HostYoutubeMusicPlaylistLibrary';
 import { HostYoutubeIframePlayer, primeYoutubeHostPlaybackAudioUnlock } from './HostYoutubeIframePlayer';
 import RoundPlanner from './RoundPlanner';
+import HostEventActivationBar from './host/HostEventActivationBar';
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
 import { youtubeTrackDisplayFields, youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
@@ -6624,7 +6625,7 @@ const HostView: React.FC = () => {
         body: JSON.stringify({
           name: playlistName,
           trackIds: trackIds,
-          description: `Output playlist from TEMPO Music Bingo - Room ${roomId} - ${mixPlaylistSelection.map(p => p.name).join(', ')}`
+          description: `TEMPO output — Room ${roomId} — ${mixPlaylistSelection.map(p => p.name).join(', ')}`
         }),
       });
 
@@ -9293,7 +9294,7 @@ const HostView: React.FC = () => {
                                 titles on the <strong style={{ color: '#c8dcff' }}>catalog</strong> Spotify account must{' '}
                                 <strong style={{ color: '#c8dcff' }}>start with that exact prefix</strong> (e.g.{' '}
                                 <code style={{ fontSize: '0.72rem' }}>GoT Friday Hits</code>, not{' '}
-                                <code style={{ fontSize: '0.72rem' }}>Music Bingo - …</code>
+                                <code style={{ fontSize: '0.72rem' }}>TEMPO — …</code>
                                 ). Or set{' '}
                                 <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> /{' '}
                                 <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code>. New matches can take
@@ -9331,7 +9332,10 @@ const HostView: React.FC = () => {
 
                   </motion.div>
               </div>
-              <div className="host-music-two-pane__rounds">{hostRoundPlanner}</div>
+              <div className="host-music-two-pane__rounds">
+                {roomId ? <HostEventActivationBar roomId={roomId} /> : null}
+                {hostRoundPlanner}
+              </div>
             </div>
             </div>
   );
@@ -9626,10 +9630,10 @@ const HostView: React.FC = () => {
               to="/org"
               className="btn-secondary host-org-toolbar-btn"
               style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}
-              title="Organization, invites, and pay-as-you-like billing"
+              title="Account and billing"
             >
               <Building2 className="w-4 h-4" aria-hidden />
-              Organization
+              Account
             </Link>
             <button
               type="button"

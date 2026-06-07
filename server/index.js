@@ -5395,6 +5395,8 @@ io.on('connection', (socket) => {
     
     routineServerLog(`🏁 Host ending game session for room ${roomId}`);
     
+    void finalizeOrgEventForRoom(room);
+    
     stopLiveRoundTimers(roomId, room);
     clearPlayerCardUpdateTimer(roomId); // Clear debounce timer
     room.gameState = 'ended';
@@ -5984,6 +5986,7 @@ io.on('connection', (socket) => {
     if (!room) return;
     if (room.host !== socket.id && !room.players.get(socket.id)?.isHost) return;
     try {
+      await finalizeOrgEventForRoom(room);
       stopLiveRoundTimers(roomId, room);
       room.gameState = 'ended';
       if (stopPlayback) {
@@ -6012,6 +6015,7 @@ io.on('connection', (socket) => {
     if (!room) return;
     if (room.host !== socket.id && !room.players.get(socket.id)?.isHost) return;
     try {
+      await finalizeOrgEventForRoom(room);
       stopLiveRoundTimers(roomId, room);
       room.gameState = 'waiting';
       if (stopPlayback) {
@@ -6814,6 +6818,7 @@ io.on('connection', (socket) => {
             }
           } else {
             // No players left, remove the room
+            void finalizeOrgEventForRoom(room);
             rooms.delete(roomId);
             routineServerLog(`Removed empty room: ${roomId}`);
           }
@@ -11111,6 +11116,7 @@ app.post('/api/org/billing/subscribe', async (req, res) => {
       orgName: ctx.organization.name,
       tierKey,
       priceId: priceId || undefined,
+      billingInterval: body.billingInterval || body.billing_interval || 'month',
       hostUserId: uid,
       promoCode: body.promoCode || body.promo_code || '',
     });
@@ -11140,6 +11146,112 @@ app.post('/api/org/billing/portal', async (req, res) => {
     console.error('POST /api/org/billing/portal:', e);
     const msg = e?.message || 'Failed';
     res.status(400).json({ error: 'failed', message: msg });
+  }
+});
+
+app.get('/api/org/event-status', async (req, res) => {
+  try {
+    const access = await resolveHostRoomForOrgBilling(req, res, req.query.roomId);
+    if (!access) return;
+    const { roomId, orgRow } = access;
+    if (!billingStore.isBillingReady()) {
+      return res.json({ ok: true, billingReady: false, skipped: true });
+    }
+    if (!orgRow) {
+      return res.json({ ok: true, billingReady: true, noOrg: true, active: false });
+    }
+    const credits = await billingStore.eventCredits.getCreditSummary(db, orgRow.id);
+    const ev = await billingStore.eventCredits.getActiveEventForRoom(db, orgRow.id, roomId);
+    return res.json({
+      ok: true,
+      billingReady: true,
+      active: !!ev,
+      trialActive: billingStore.eventCredits.isTrialActive(orgRow),
+      enterpriseUnlimited:
+        billingStore.eventCredits.isEnterpriseTier(orgRow.subscription_tier) &&
+        ['active', 'trialing'].includes(String(orgRow.subscription_status || '').toLowerCase()),
+      credits: credits.total,
+      creditsBySource: credits.bySource,
+      event: ev
+        ? {
+            id: ev.id,
+            activatedAt: ev.activated_at,
+            closesAt: ev.closes_at,
+            creditConsumed: ev.credit_consumed,
+            roundsStarted: ev.rounds_started,
+            songsPlayed: ev.songs_played,
+            playerPeak: ev.player_peak,
+          }
+        : null,
+    });
+  } catch (e) {
+    console.error('GET /api/org/event-status:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.post('/api/org/event/activate', async (req, res) => {
+  try {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const access = await resolveHostRoomForOrgBilling(req, res, body.roomId);
+    if (!access) return;
+    const { room, roomId, orgRow } = access;
+    if (!billingStore.isBillingReady()) {
+      return res.json({ ok: true, billingReady: false, skipped: true });
+    }
+    if (!orgRow) {
+      return res.status(400).json({ error: 'no_org', message: 'Organization billing is not linked to this room.' });
+    }
+    const gate = await billingStore.gateHostedEventAction(db, orgRow, roomId, { billingReady: true });
+    if (!gate.ok) {
+      return res.status(402).json({
+        error: gate.code || 'no_credits',
+        message: gate.message || 'No event credits available.',
+        orgPortalUrl: gate.orgPortalUrl || '/org',
+      });
+    }
+    if (gate.event?.id) room.activeOrgEventId = gate.event.id;
+    return res.json({
+      ok: true,
+      active: true,
+      activated: !!gate.activated,
+      consumed: !!gate.consumed,
+      trial: !!gate.trial,
+      enterprise: !!gate.enterprise,
+      alreadyActive: !!gate.alreadyActive,
+      event: gate.event
+        ? {
+            id: gate.event.id,
+            closesAt: gate.event.closes_at,
+            creditConsumed: gate.event.credit_consumed,
+          }
+        : null,
+    });
+  } catch (e) {
+    console.error('POST /api/org/event/activate:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.post('/api/org/event/end', async (req, res) => {
+  try {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const access = await resolveHostRoomForOrgBilling(req, res, body.roomId);
+    if (!access) return;
+    const { room } = access;
+    const result = await finalizeOrgEventForRoom(room);
+    const orgRow = access.orgRow;
+    const credits =
+      orgRow && db ? await billingStore.eventCredits.getCreditSummary(db, orgRow.id) : { total: 0, bySource: {} };
+    return res.json({
+      ok: true,
+      closed: !!result.closed,
+      refunded: !!result.refunded,
+      credits: credits.total,
+    });
+  } catch (e) {
+    console.error('POST /api/org/event/end:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
   }
 });
 
@@ -11217,7 +11329,7 @@ app.get('/api/org/billing/products', async (req, res) => {
     if (!uid) return;
     return res.json({
       ok: true,
-      tiers: billingStore.getSubscriptionTiers(),
+      tiers: billingStore.getSubscriptionPlans(),
       packs: billingStore.getPackProducts(),
       oneTime: billingStore.getOneTimeProducts(),
       singleEventUsd: billingStore.SINGLE_EVENT_USD,
@@ -11597,12 +11709,61 @@ async function requireEventCreditGate(room, roomId, socket, emitEvent) {
 
 function syncEventStatsForRoom(room) {
   if (!db || !room?.dbOrganizationId || !room.id) return;
-  const playerCount = room.players ? room.players.size : 0;
+  const playerCount = getNonHostPlayerCount(room);
   const songsPlayed =
     typeof room.currentSongIndex === 'number' && room.currentSongIndex >= 0 ? room.currentSongIndex + 1 : 0;
   void billingStore.eventCredits
     .updateEventStats(db, room.dbOrganizationId, room.id, { songsPlayed, playerCount })
     .catch((e) => console.warn('syncEventStatsForRoom:', e?.message || e));
+}
+
+/** Sync stats, auto-refund if eligible, and close active org event when host ends a session. */
+async function finalizeOrgEventForRoom(room) {
+  if (!db || !room?.dbOrganizationId || !room?.id) return { closed: false, refunded: false };
+  if (!billingStore.isBillingReady()) return { closed: false, refunded: false, skipped: true };
+  try {
+    syncEventStatsForRoom(room);
+    const result = await billingStore.eventCredits.closeActiveOrgEvent(db, room.dbOrganizationId, room.id);
+    if (result.refunded) {
+      routineServerLog(`💰 Auto-refunded event credit for org ${room.dbOrganizationId} room ${room.id}`);
+    }
+    room.activeOrgEventId = null;
+    return result;
+  } catch (e) {
+    console.warn('finalizeOrgEventForRoom:', e?.message || e);
+    return { closed: false, refunded: false, error: true };
+  }
+}
+
+async function resolveHostRoomForOrgBilling(req, res, roomIdRaw) {
+  const uid = await requireApprovedHostUid(req, res);
+  if (!uid) return null;
+  const roomId = String(roomIdRaw || '').trim();
+  if (!roomId) {
+    res.status(400).json({ error: 'invalid', message: 'roomId is required' });
+    return null;
+  }
+  const room = rooms.get(roomId);
+  if (!room) {
+    res.status(404).json({ error: 'room_not_found', message: 'Room not found or not active on this server.' });
+    return null;
+  }
+  if (room.ownerUserId != null && Number(room.ownerUserId) !== Number(uid)) {
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    await resolveRoomVenueBranding(room);
+    if (!ctx.organization || !room.dbOrganizationId || ctx.organization.id !== room.dbOrganizationId) {
+      res.status(403).json({ error: 'forbidden', message: 'You do not have access to this room.' });
+      return null;
+    }
+  }
+  if (room.dbOrganizationId == null) {
+    await resolveRoomVenueBranding(room);
+  }
+  const orgRow =
+    room.dbOrganizationId != null
+      ? await billingStore.getOrganizationBillingRow(db, room.dbOrganizationId)
+      : null;
+  return { uid, room, roomId, orgRow };
 }
 
 function venueBrandingForRoom(room) {
