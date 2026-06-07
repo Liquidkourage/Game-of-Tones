@@ -4994,6 +4994,42 @@ button.conn-chip.conn-chip-compact {
   border-bottom: none;
 }
 
+.admin-page__promo-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.admin-page__promo-table th,
+.admin-page__promo-table td {
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  vertical-align: top;
+}
+
+.admin-page__promo-table th {
+  font-weight: 600;
+  color: rgba(232, 234, 239, 0.85);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.admin-page__promo-table tbody tr {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.admin-page__promo-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-page__promo-table code {
+  font-size: 0.82rem;
+  word-break: break-all;
+}
+
 .admin-page__row-email {
   font-size: 0.95rem;
   word-break: break-all;

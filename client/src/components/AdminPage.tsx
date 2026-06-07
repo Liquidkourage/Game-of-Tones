@@ -37,6 +37,25 @@ type VenueForm = {
   volumeCap: string;
 };
 
+type PromoCodeRow = {
+  id: number;
+  code: string;
+  stripe_promotion_code_id?: string | null;
+  bonus_event_credits?: number;
+  max_redemptions?: number | null;
+  redeem_by?: string | null;
+  active?: boolean;
+  created_at?: string;
+};
+
+type PromoForm = {
+  code: string;
+  stripePromotionCodeId: string;
+  bonusEventCredits: string;
+  maxRedemptions: string;
+  redeemBy: string;
+};
+
 const emptyVenueForm = (): VenueForm => ({
   eventTitle: '',
   sponsorLine: '',
@@ -47,6 +66,14 @@ const emptyVenueForm = (): VenueForm => ({
   accentColor: '',
   defaultSnippetLength: '',
   volumeCap: '',
+});
+
+const emptyPromoForm = (): PromoForm => ({
+  code: '',
+  stripePromotionCodeId: '',
+  bonusEventCredits: '0',
+  maxRedemptions: '',
+  redeemBy: '',
 });
 
 const AdminPage: React.FC = () => {
@@ -71,6 +98,10 @@ const AdminPage: React.FC = () => {
   const [venueError, setVenueError] = useState<string | null>(null);
   const [venueSavedAt, setVenueSavedAt] = useState<number | null>(null);
   const [venueLoading, setVenueLoading] = useState(false);
+  const [promoCodes, setPromoCodes] = useState<PromoCodeRow[] | null>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [promoForm, setPromoForm] = useState<PromoForm>(emptyPromoForm);
+  const [promoSavedAt, setPromoSavedAt] = useState<number | null>(null);
 
   const refreshList = useCallback(async () => {
     setListError(null);
@@ -141,6 +172,28 @@ const AdminPage: React.FC = () => {
     }
   }, []);
 
+  const refreshPromoCodes = useCallback(async () => {
+    setPromoError(null);
+    try {
+      const res = await hostFetch(`${API_BASE || ''}/api/admin/promo-codes`);
+      if (res.status === 401 || res.status === 403) {
+        setPromoCodes([]);
+        return;
+      }
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setPromoError((j && j.message) || `HTTP ${res.status}`);
+        setPromoCodes(null);
+        return;
+      }
+      const data = (await res.json()) as { promoCodes?: PromoCodeRow[] };
+      setPromoCodes(Array.isArray(data.promoCodes) ? data.promoCodes : []);
+    } catch (e) {
+      setPromoError(String(e));
+      setPromoCodes(null);
+    }
+  }, []);
+
   useEffect(() => {
     if (me?.admin) void refreshList();
   }, [me?.admin, refreshList]);
@@ -148,6 +201,10 @@ const AdminPage: React.FC = () => {
   useEffect(() => {
     if (me?.admin) void refreshOrgs();
   }, [me?.admin, refreshOrgs]);
+
+  useEffect(() => {
+    if (me?.admin) void refreshPromoCodes();
+  }, [me?.admin, refreshPromoCodes]);
 
   useEffect(() => {
     if (!me?.admin) return;
@@ -366,6 +423,51 @@ const AdminPage: React.FC = () => {
     } finally {
       setBusy(false);
     }
+  };
+
+  const createPromoCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const code = promoForm.code.trim();
+    if (!code) return;
+    setBusy(true);
+    setPromoError(null);
+    setPromoSavedAt(null);
+    try {
+      const bonusRaw = promoForm.bonusEventCredits.trim();
+      const bonusEventCredits = bonusRaw === '' ? 0 : Math.round(Number(bonusRaw));
+      const maxRaw = promoForm.maxRedemptions.trim();
+      const maxRedemptions = maxRaw === '' ? undefined : Math.round(Number(maxRaw));
+      const redeemRaw = promoForm.redeemBy.trim();
+      const payload: Record<string, unknown> = {
+        code,
+        bonusEventCredits: Number.isFinite(bonusEventCredits) ? bonusEventCredits : 0,
+      };
+      const stripeId = promoForm.stripePromotionCodeId.trim();
+      if (stripeId) payload.stripePromotionCodeId = stripeId;
+      if (maxRedemptions != null && Number.isFinite(maxRedemptions)) payload.maxRedemptions = maxRedemptions;
+      if (redeemRaw) payload.redeemBy = new Date(`${redeemRaw}T23:59:59`).toISOString();
+      const res = await hostFetch(`${API_BASE || ''}/api/admin/promo-codes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPromoError((j && j.message) || `Could not create promo code (${res.status})`);
+        return;
+      }
+      setPromoForm(emptyPromoForm());
+      setPromoSavedAt(Date.now());
+      void refreshPromoCodes();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const formatPromoDate = (raw?: string | null) => {
+    if (!raw) return '—';
+    const d = new Date(raw);
+    return Number.isFinite(d.getTime()) ? d.toLocaleDateString() : '—';
   };
 
   if (me === null && !loadError) {
@@ -791,6 +893,123 @@ const AdminPage: React.FC = () => {
               Save venue settings
             </button>
           </form>
+        </section>
+
+        <section className="admin-page__table-wrap" style={{ marginBottom: '2rem' }}>
+          <h2 className="admin-page__h2">Promo codes</h2>
+          <p className="admin-page__muted" style={{ marginBottom: '0.75rem' }}>
+            Create a coupon + promotion code in Stripe first, then register the same customer-facing code here. Owners enter it on{' '}
+            <Link to="/org">/org</Link> when subscribing. Link the Stripe <code>promo_…</code> id for checkout discounts; set bonus
+            credits for extra event nights TEMPO grants after checkout.
+          </p>
+          {promoError && <p className="admin-page__error">{promoError}</p>}
+          {promoSavedAt != null && (
+            <p className="admin-page__muted" style={{ marginBottom: '0.5rem' }}>
+              Promo code saved.
+            </p>
+          )}
+          <form className="admin-page__add" onSubmit={(e) => void createPromoCode(e)}>
+            <div
+              className="admin-page__venue-grid"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                gap: '0.65rem',
+                marginBottom: '0.75rem',
+              }}
+            >
+              <input
+                type="text"
+                className="input"
+                placeholder="Code (e.g. ACME15)"
+                value={promoForm.code}
+                onChange={(e) => setPromoForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
+                disabled={busy}
+                autoComplete="off"
+              />
+              <input
+                type="text"
+                className="input"
+                placeholder="Stripe promo id (promo_…)"
+                value={promoForm.stripePromotionCodeId}
+                onChange={(e) => setPromoForm((f) => ({ ...f, stripePromotionCodeId: e.target.value.trim() }))}
+                disabled={busy}
+                autoComplete="off"
+              />
+              <input
+                type="text"
+                inputMode="numeric"
+                className="input"
+                placeholder="Bonus event credits"
+                value={promoForm.bonusEventCredits}
+                onChange={(e) => setPromoForm((f) => ({ ...f, bonusEventCredits: e.target.value }))}
+                disabled={busy}
+              />
+              <input
+                type="text"
+                inputMode="numeric"
+                className="input"
+                placeholder="Max redemptions (optional)"
+                value={promoForm.maxRedemptions}
+                onChange={(e) => setPromoForm((f) => ({ ...f, maxRedemptions: e.target.value }))}
+                disabled={busy}
+              />
+              <input
+                type="date"
+                className="input"
+                placeholder="Redeem by"
+                value={promoForm.redeemBy}
+                onChange={(e) => setPromoForm((f) => ({ ...f, redeemBy: e.target.value }))}
+                disabled={busy}
+                title="Redeem by date (optional)"
+              />
+            </div>
+            <button type="submit" className="btn btn-primary" disabled={busy || !promoForm.code.trim()}>
+              Create promo code
+            </button>
+          </form>
+          {promoCodes === null ? (
+            <p className="admin-page__muted" style={{ marginTop: '0.75rem' }}>
+              Loading promo codes…
+            </p>
+          ) : promoCodes.length === 0 ? (
+            <p className="admin-page__muted" style={{ marginTop: '0.75rem' }}>
+              No promo codes yet.
+            </p>
+          ) : (
+            <div className="admin-page__promo-table-wrap" style={{ marginTop: '0.75rem', overflowX: 'auto' }}>
+              <table className="admin-page__promo-table">
+                <thead>
+                  <tr>
+                    <th>Code</th>
+                    <th>Stripe promo</th>
+                    <th>Bonus credits</th>
+                    <th>Max uses</th>
+                    <th>Redeem by</th>
+                    <th>Active</th>
+                    <th>Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {promoCodes.map((p) => (
+                    <tr key={p.id}>
+                      <td>
+                        <strong>{p.code}</strong>
+                      </td>
+                      <td>
+                        <code>{p.stripe_promotion_code_id || '—'}</code>
+                      </td>
+                      <td>{p.bonus_event_credits ?? 0}</td>
+                      <td>{p.max_redemptions ?? '—'}</td>
+                      <td>{formatPromoDate(p.redeem_by)}</td>
+                      <td>{p.active === false ? 'No' : 'Yes'}</td>
+                      <td>{formatPromoDate(p.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
         <h2 className="admin-page__h2" style={{ marginBottom: '0.75rem' }}>
