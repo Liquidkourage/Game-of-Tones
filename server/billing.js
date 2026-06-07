@@ -313,6 +313,7 @@ async function billingSummaryFromOrg(db, orgRow) {
 }
 
 async function getOrganizationBillingRow(db, organizationId) {
+  await ensureBillingTables(db);
   const r = await db.query(
     `SELECT id, billing_status, lifetime_paid_cents, last_payment_at, stripe_customer_id,
             stripe_subscription_id, subscription_status, subscription_period_end, subscription_price_id,

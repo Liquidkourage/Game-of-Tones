@@ -111,6 +111,18 @@ async function ensureOrganizationsTable(db) {
   await db.query(`
     ALTER TABLE organizations ADD COLUMN IF NOT EXISTS subscription_price_id TEXT
   `);
+  await db.query(`
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS subscription_tier TEXT NOT NULL DEFAULT 'none'
+  `);
+  await db.query(`
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP
+  `);
+  await db.query(`
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS subscription_paused_at TIMESTAMP
+  `);
+  await db.query(`
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS monthly_credits_granted_period TEXT
+  `);
   try {
     await db.query(`ALTER TABLE organizations ALTER COLUMN spotify_client_id DROP NOT NULL`);
   } catch {

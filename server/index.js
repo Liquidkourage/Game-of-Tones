@@ -1418,6 +1418,7 @@ async function initializeDatabase() {
     await usersStore.ensureUsersTable(db);
     await usersStore.ensureHostAllowlistTable(db);
     await organizationsStore.ensureOrganizationsTable(db);
+    await billingStore.ensureBillingTables(db);
     await songAliasesStore.ensureSongAliasesTable(db);
     await hostRoomPrepStore.ensureHostRoomPrepTable(db);
     await playersStore.ensurePlayerTables(db);
