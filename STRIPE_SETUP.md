@@ -25,15 +25,15 @@ Legacy (optional fallback if Basic+ not set): `STRIPE_PRICE_MONTHLY_10`, `_25`, 
 
 ### One-time
 
-| Variable | Product |
-|----------|---------|
-| `STRIPE_PRICE_TRIAL_7D` | 7-day trial — $29 |
-| `STRIPE_PRICE_SINGLE_EVENT` | Single event pass — $15 |
-| `STRIPE_PRICE_PACK_5` | 5 events — $60 |
-| `STRIPE_PRICE_PACK_10` | 10 events — $100 |
-| `STRIPE_PRICE_PACK_25` | 25 events — $200 |
+| Variable | Product | Required? |
+|----------|---------|-----------|
+| `STRIPE_PRICE_TRIAL_7D` | 7-day trial — $29 | Optional — uses $29 checkout if unset |
+| `STRIPE_PRICE_SINGLE_EVENT` | Single event pass — $15 | Optional — uses $15 checkout if unset |
+| `STRIPE_PRICE_PACK_5` | 5 events — $60 | Optional — uses catalog amount if unset |
+| `STRIPE_PRICE_PACK_10` | 10 events — $100 | Optional |
+| `STRIPE_PRICE_PACK_25` | 25 events — $200 | Optional |
 
-Copy each **Price ID** (`price_…`) into Railway/env.
+Copy each **Price ID** (`price_…`) into Railway/env when you want named Stripe catalog products; otherwise TEMPO builds the Checkout line item from the list price.
 
 ## 3. Customer Portal
 

@@ -49,6 +49,24 @@ function priceFromEnv(envName) {
   return (process.env[envName] || '').trim();
 }
 
+/** Stripe Price ID when set; otherwise ad-hoc price_data (works in test mode without catalog setup). */
+function oneTimeLineItem({ priceId, usd, name, description }) {
+  const id = String(priceId || '').trim();
+  if (id) return { price: id, quantity: 1 };
+  const cents = Math.round(Number(usd) * 100);
+  if (!Number.isFinite(cents) || cents < MIN_AMOUNT_CENTS) {
+    throw new Error('Invalid one-time product amount');
+  }
+  return {
+    price_data: {
+      currency: 'usd',
+      unit_amount: cents,
+      product_data: { name, description },
+    },
+    quantity: 1,
+  };
+}
+
 function isBillingGateEnabled() {
   const v = String(process.env.TEMPO_REQUIRE_ORG_BILLING || '').trim().toLowerCase();
   return v === '1' || v === 'true' || v === 'yes';
@@ -131,21 +149,23 @@ function getSubscriptionTiers() {
 }
 
 function getPackProducts() {
-  return PACK_SPECS.filter((p) => priceFromEnv(p.env)).map(({ key, label, usd, credits, env }) => ({
+  return PACK_SPECS.map(({ key, label, usd, credits, env }) => ({
     key,
     label,
     usd,
     credits,
-    priceId: priceFromEnv(env),
+    priceId: priceFromEnv(env) || null,
+    catalogPriceConfigured: !!priceFromEnv(env),
   }));
 }
 
 function getOneTimeProducts() {
-  return ONE_TIME_PRODUCTS.filter((p) => priceFromEnv(p.env)).map(({ key, label, usd, env }) => ({
+  return ONE_TIME_PRODUCTS.map(({ key, label, usd, env }) => ({
     key,
     label,
     usd,
-    priceId: priceFromEnv(env),
+    priceId: priceFromEnv(env) || null,
+    catalogPriceConfigured: !!priceFromEnv(env),
   }));
 }
 
@@ -496,17 +516,24 @@ async function createPayAsYouLikeCheckout(db, { organizationId, orgName, amountC
 async function createTrialCheckout(db, { organizationId, orgName, hostUserId }) {
   const product = ONE_TIME_PRODUCTS.find((p) => p.key === 'trial_7d');
   const priceId = product ? priceFromEnv(product.env) : '';
-  if (!priceId) throw new Error('Trial is not configured (STRIPE_PRICE_TRIAL_7D)');
   const orgRow = await getOrganizationBillingRow(db, organizationId);
   if (eventCredits.isTrialActive(orgRow) || orgRow?.trial_ends_at) {
     throw new Error('This organization already used a trial.');
   }
+  const label = String(orgName || 'TEMPO').trim() || 'TEMPO';
   const checkout = await createCheckoutSession(db, {
     organizationId,
     orgName,
     hostUserId,
     mode: 'payment',
-    lineItems: [{ price: priceId, quantity: 1 }],
+    lineItems: [
+      oneTimeLineItem({
+        priceId,
+        usd: product?.usd ?? 29,
+        name: `TEMPO 7-day trial — ${label}`,
+        description: 'Unlimited event nights for 7 days. $29 credited toward first Basic+ subscription.',
+      }),
+    ],
     metadata: { purchase_type: 'trial_7d' },
   });
   await recordOrgPayment(db, {
@@ -522,13 +549,20 @@ async function createTrialCheckout(db, { organizationId, orgName, hostUserId }) 
 
 async function createSingleEventCheckout(db, { organizationId, orgName, hostUserId }) {
   const priceId = priceFromEnv('STRIPE_PRICE_SINGLE_EVENT');
-  if (!priceId) throw new Error('Single event is not configured (STRIPE_PRICE_SINGLE_EVENT)');
+  const label = String(orgName || 'TEMPO').trim() || 'TEMPO';
   const checkout = await createCheckoutSession(db, {
     organizationId,
     orgName,
     hostUserId,
     mode: 'payment',
-    lineItems: [{ price: priceId, quantity: 1 }],
+    lineItems: [
+      oneTimeLineItem({
+        priceId,
+        usd: SINGLE_EVENT_USD,
+        name: `TEMPO single event — ${label}`,
+        description: 'One activated event night — up to 12 rounds, unlimited players. No subscription required.',
+      }),
+    ],
     metadata: { purchase_type: 'single_event' },
   });
   await recordOrgPayment(db, {
@@ -550,13 +584,20 @@ async function createPackCheckout(db, { organizationId, orgName, hostUserId, pac
   const pack = PACK_SPECS.find((p) => p.key === packKey);
   if (!pack) throw new Error('Unknown pack');
   const priceId = priceFromEnv(pack.env);
-  if (!priceId) throw new Error(`Pack is not configured (${pack.env})`);
+  const label = String(orgName || 'TEMPO').trim() || 'TEMPO';
   const checkout = await createCheckoutSession(db, {
     organizationId,
     orgName,
     hostUserId,
     mode: 'payment',
-    lineItems: [{ price: priceId, quantity: 1 }],
+    lineItems: [
+      oneTimeLineItem({
+        priceId,
+        usd: pack.usd,
+        name: `TEMPO event pack — ${pack.label}`,
+        description: `${pack.credits} event credits for ${label}. Requires active Basic+ subscription.`,
+      }),
+    ],
     metadata: { purchase_type: pack.key, pack_credits: String(pack.credits) },
   });
   await recordOrgPayment(db, {
