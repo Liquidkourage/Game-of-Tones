@@ -13,15 +13,17 @@ Create **one-time** and **recurring** prices in Stripe → **Product catalog**.
 
 ### Monthly subscriptions
 
-| Variable | Product |
-|----------|---------|
-| `STRIPE_PRICE_MONTHLY_BASIC` | Basic — $59/mo (5 events) |
-| `STRIPE_PRICE_MONTHLY_PRO` | Pro — $99/mo |
-| `STRIPE_PRICE_MONTHLY_PLUS` | Plus — $149/mo |
-| `STRIPE_PRICE_MONTHLY_COMPANY` | Company — $299/mo |
-| `STRIPE_PRICE_MONTHLY_ENTERPRISE` | Enterprise — $499/mo (unlimited) |
+| Variable | Product | Required? |
+|----------|---------|-----------|
+| `STRIPE_PRICE_MONTHLY_BASIC` | Basic — $59/mo (5 events) | Optional — uses $59/mo checkout if unset |
+| `STRIPE_PRICE_MONTHLY_PRO` | Pro — $99/mo | Optional |
+| `STRIPE_PRICE_MONTHLY_PLUS` | Plus — $149/mo | Optional |
+| `STRIPE_PRICE_MONTHLY_COMPANY` | Company — $299/mo | Optional |
+| `STRIPE_PRICE_MONTHLY_ENTERPRISE` | Enterprise — $499/mo (unlimited) | Optional |
 
-Legacy (optional fallback if Basic+ not set): `STRIPE_PRICE_MONTHLY_10`, `_25`, `_50`.
+Legacy (optional): `STRIPE_PRICE_MONTHLY_10`, `_25`, `_50` — only shown if no Basic+ catalog prices are set.
+
+Copy each **Price ID** (`price_…`) into Railway/env when you want named Stripe catalog products; otherwise TEMPO builds the recurring Checkout line item from the list price.
 
 ### One-time
 

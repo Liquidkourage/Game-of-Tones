@@ -11097,18 +11097,20 @@ app.post('/api/org/billing/subscribe', async (req, res) => {
       return res.status(403).json({ error: 'forbidden', message: 'Only the organization owner can subscribe for the organization.' });
     }
     const body = req.body && typeof req.body === 'object' ? req.body : {};
-    let priceId = String(body.priceId || body.price_id || '').trim();
-    if (!priceId && body.tierKey != null) {
-      const tier = billingStore.getSubscriptionTiers().find((t) => t.key === String(body.tierKey));
-      priceId = tier?.priceId || '';
+    let tierKey = String(body.tierKey || body.tier_key || '').trim().toLowerCase();
+    const priceId = String(body.priceId || body.price_id || '').trim();
+    if (!tierKey && priceId) {
+      const tier = billingStore.getSubscriptionTiers().find((t) => t.priceId === priceId);
+      tierKey = tier?.key || '';
     }
-    if (!priceId) {
-      return res.status(400).json({ error: 'invalid', message: 'priceId is required' });
+    if (!tierKey) {
+      return res.status(400).json({ error: 'invalid', message: 'tierKey is required' });
     }
     const checkout = await billingStore.createSubscriptionCheckout(db, {
       organizationId: ctx.organization.id,
       orgName: ctx.organization.name,
-      priceId,
+      tierKey,
+      priceId: priceId || undefined,
       hostUserId: uid,
       promoCode: body.promoCode || body.promo_code || '',
     });

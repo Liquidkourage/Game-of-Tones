@@ -545,7 +545,7 @@ const OrgPortalPage: React.FC = () => {
                     </div>
                   </section>
 
-                  {subscriptionTiers.length > 0 ? (
+                  {data?.billing?.stripeConfigured ? (
                     <section className="org-portal__card">
                       <h2>Monthly plans</h2>
                       <p>Recurring subscription — includes monthly event credits. Pause or cancel in Stripe portal.</p>

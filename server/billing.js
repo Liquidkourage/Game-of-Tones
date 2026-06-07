@@ -67,6 +67,32 @@ function oneTimeLineItem({ priceId, usd, name, description }) {
   };
 }
 
+/** Stripe recurring Price ID when set; otherwise ad-hoc price_data (monthly interval). */
+function subscriptionLineItem({ priceId, tierSpec }) {
+  const id = String(priceId || '').trim();
+  if (id) return { price: id, quantity: 1 };
+  const cents = Math.round(Number(tierSpec.usd) * 100);
+  if (!Number.isFinite(cents) || cents < MIN_AMOUNT_CENTS) {
+    throw new Error('Invalid subscription tier amount');
+  }
+  const creditsNote = tierSpec.unlimited
+    ? 'Unlimited event activations'
+    : `${tierSpec.eventsPerMonth} event credits per month`;
+  const tierName = tierSpec.key.charAt(0).toUpperCase() + tierSpec.key.slice(1);
+  return {
+    price_data: {
+      currency: 'usd',
+      unit_amount: cents,
+      recurring: { interval: 'month' },
+      product_data: {
+        name: `TEMPO ${tierName} — $${tierSpec.usd}/mo`,
+        description: `${creditsNote}. One credit = one activated event night (up to 12 rounds).`,
+      },
+    },
+    quantity: 1,
+  };
+}
+
 function isBillingGateEnabled() {
   const v = String(process.env.TEMPO_REQUIRE_ORG_BILLING || '').trim().toLowerCase();
   return v === '1' || v === 'true' || v === 'yes';
@@ -122,30 +148,41 @@ function stripeWebhookUrl() {
   return `${webhookBaseOrigin()}/api/webhooks/stripe`;
 }
 
-function resolveTierSpecs() {
-  const tiers = [];
-  for (const spec of SUBSCRIPTION_TIER_SPECS) {
-    const priceId = priceFromEnv(spec.env);
-    if (priceId) tiers.push({ ...spec, priceId });
-  }
-  if (tiers.length === 0) {
-    for (const spec of LEGACY_TIER_SPECS) {
-      const priceId = priceFromEnv(spec.env);
-      if (priceId) tiers.push({ ...spec, priceId });
-    }
-  }
-  return tiers;
+function tierForKey(key) {
+  const k = String(key || '').trim().toLowerCase();
+  if (!k) return null;
+  return SUBSCRIPTION_TIER_SPECS.find((s) => s.key === k) || LEGACY_TIER_SPECS.find((s) => s.key === k) || null;
 }
 
 function getSubscriptionTiers() {
-  return resolveTierSpecs().map(({ key, label, usd, priceId, eventsPerMonth, unlimited }) => ({
-    key,
-    label,
-    usd,
-    priceId,
-    eventsPerMonth,
-    unlimited: !!unlimited,
-  }));
+  const tiers = SUBSCRIPTION_TIER_SPECS.map(({ key, label, usd, eventsPerMonth, unlimited, env }) => {
+    const priceId = priceFromEnv(env) || null;
+    return {
+      key,
+      label,
+      usd,
+      priceId,
+      eventsPerMonth,
+      unlimited: !!unlimited,
+      catalogPriceConfigured: !!priceId,
+    };
+  });
+  if (tiers.some((t) => t.catalogPriceConfigured)) return tiers;
+  for (const spec of LEGACY_TIER_SPECS) {
+    const priceId = priceFromEnv(spec.env);
+    if (priceId) {
+      tiers.push({
+        key: spec.key,
+        label: spec.label,
+        usd: spec.usd,
+        priceId,
+        eventsPerMonth: spec.eventsPerMonth,
+        unlimited: false,
+        catalogPriceConfigured: true,
+      });
+    }
+  }
+  return tiers;
 }
 
 function getPackProducts() {
@@ -178,8 +215,15 @@ function tierForPriceId(priceId) {
   return null;
 }
 
+function resolveTierSpecForSubscription(subscription) {
+  const fromMeta = tierForKey(subscription?.metadata?.tier_key);
+  if (fromMeta) return fromMeta;
+  const priceId = subscription?.items?.data?.[0]?.price?.id;
+  return tierForPriceId(priceId);
+}
+
 function isSubscriptionsConfigured() {
-  return getSubscriptionTiers().length > 0;
+  return isStripeConfigured();
 }
 
 function billingSetupStatus(req) {
@@ -195,7 +239,8 @@ function billingSetupStatus(req) {
     gateEnforced: isBillingGateEnforced(),
     billingReady: isBillingReady(),
     ready: isBillingReady(),
-    subscriptionTiersConfigured: tiers.length,
+    subscriptionTiersConfigured: tiers.filter((t) => t.catalogPriceConfigured).length,
+    subscriptionTiersAvailable: tiers.length,
     subscriptionTiers: tiers.map(({ key, label, usd, eventsPerMonth, unlimited }) => ({
       key,
       label,
@@ -367,8 +412,8 @@ async function applySubscriptionToOrg(db, organizationId, subscription) {
     typeof subscription.customer === 'string' ? subscription.customer : subscription.customer?.id || null;
 
   const paused = eventCredits.isSubscriptionPaused(null, subscription);
-  const tierSpec = tierForPriceId(priceId);
-  const tierKey = tierSpec?.key || null;
+  const tierSpec = resolveTierSpecForSubscription(subscription);
+  const tierKey = tierSpec?.key || subscription.metadata?.tier_key || null;
 
   let billingStatus = null;
   if (paused) billingStatus = 'paused';
@@ -464,7 +509,10 @@ async function createCheckoutSession(db, { organizationId, orgName, hostUserId, 
   };
   if (mode === 'subscription') {
     sessionParams.subscription_data = {
-      metadata: { organization_id: String(organizationId) },
+      metadata: {
+        organization_id: String(organizationId),
+        tier_key: metadata.tier_key || '',
+      },
     };
     if (allowPromotionCodes) sessionParams.allow_promotion_codes = true;
     if (discounts?.length) sessionParams.discounts = discounts;
@@ -611,11 +659,14 @@ async function createPackCheckout(db, { organizationId, orgName, hostUserId, pac
   return { ...checkout, packKey: pack.key, credits: pack.credits };
 }
 
-async function createSubscriptionCheckout(db, { organizationId, orgName, priceId, hostUserId, promoCode }) {
-  const tier = resolveTierSpecs().find((t) => t.priceId === priceId);
+async function createSubscriptionCheckout(db, { organizationId, orgName, tierKey, priceId, hostUserId, promoCode }) {
+  const key = String(tierKey || '').trim().toLowerCase();
+  const tier = tierForKey(key);
   if (!tier) {
-    throw new Error('Subscription tier is not configured on this server (check STRIPE_PRICE_MONTHLY_* env vars)');
+    throw new Error('Unknown subscription tier');
   }
+  const catalogPriceId = priceFromEnv(tier.env);
+  const resolvedPriceId = String(priceId || catalogPriceId || '').trim() || null;
   const orgRow = await getOrganizationBillingRow(db, organizationId);
   if (isSubscriptionActive(orgRow) && !eventCredits.isSubscriptionPaused(orgRow)) {
     throw new Error('Your organization already has an active subscription. Use Manage billing to change, pause, or cancel.');
@@ -636,7 +687,7 @@ async function createSubscriptionCheckout(db, { organizationId, orgName, priceId
     orgName,
     hostUserId,
     mode: 'subscription',
-    lineItems: [{ price: priceId, quantity: 1 }],
+    lineItems: [subscriptionLineItem({ priceId: resolvedPriceId, tierSpec: tier })],
     metadata: {
       purchase_type: 'subscription',
       tier_key: tier.key,
@@ -722,8 +773,18 @@ async function handleCheckoutSessionCompleted(db, stripe, session) {
     if (subId) {
       const subscription = await stripe.subscriptions.retrieve(subId);
       await applySubscriptionToOrg(db, orgId, subscription);
-      const tierKey = session.metadata?.tier_key || tierForPriceId(subscription.items?.data?.[0]?.price?.id)?.key;
+      const tierSpec =
+        tierForKey(session.metadata?.tier_key) || tierForPriceId(subscription.items?.data?.[0]?.price?.id);
+      const tierKey = tierSpec?.key || session.metadata?.tier_key || null;
       if (tierKey) await eventCredits.setSubscriptionTier(db, orgId, tierKey);
+      if (tierSpec?.eventsPerMonth) {
+        await eventCredits.grantMonthlyPlanCredits(
+          db,
+          orgId,
+          tierSpec.eventsPerMonth,
+          eventCredits.currentPeriodKey()
+        );
+      }
     }
     const promoId = parseInt(session.metadata?.tempo_promo_id || '', 10);
     if (Number.isFinite(promoId) && promoId > 0) {
@@ -769,8 +830,7 @@ async function handleInvoicePaid(db, stripe, invoice) {
   if (eventCredits.isSubscriptionPaused(null, subscription)) return;
   const orgId = await resolveOrganizationIdForSubscription(db, subscription);
   if (!orgId) return;
-  const priceId = subscription.items?.data?.[0]?.price?.id;
-  const tierSpec = tierForPriceId(priceId);
+  const tierSpec = resolveTierSpecForSubscription(subscription);
   if (!tierSpec || tierSpec.unlimited || !tierSpec.eventsPerMonth) return;
   const periodStart = invoice.period_start ? new Date(invoice.period_start * 1000) : new Date();
   const periodKey = eventCredits.currentPeriodKey(periodStart);
