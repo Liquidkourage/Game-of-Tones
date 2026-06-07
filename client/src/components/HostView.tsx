@@ -4292,6 +4292,37 @@ const HostView: React.FC = () => {
     [socket, roomId],
   );
 
+  const handlePreviewPrintPdf = useCallback(() => {
+    if (!socket || !roomId) return;
+    void (async () => {
+      setPrintablePdfLoading(true);
+      try {
+        let finalizedOk = mixFinalized;
+        if (!finalizedOk) finalizedOk = await finalizeMix();
+        if (!finalizedOk) return;
+        const { cards, freeSpace, logoUrl } = await fetchPrintableCardsFromServer(1, { previewOnly: true });
+        const blob = await buildPrintableBingoPdfBlob(cards, {
+          freeSpace,
+          logoUrl,
+          previewWatermark: true,
+          subtitle: 'Preview — watermarked sample',
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tempo-preview-${roomId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : 'Could not build preview PDF.');
+      } finally {
+        setPrintablePdfLoading(false);
+      }
+    })();
+  }, [socket, roomId, mixFinalized, finalizeMix, fetchPrintableCardsFromServer]);
+
   const requestPrintablePdfDownload = useCallback(
     (opts: {
       pdfSubtitle: string;
@@ -8497,6 +8528,7 @@ const HostView: React.FC = () => {
       snapshotMeetsSave={(r) => eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled)}
       onPrintPdf={(idx) => handleDownloadRoundPrintablePdf(eventRounds[idx])}
       onPrintAllPreShow={handlePrintAllPreShowPdf}
+      onPreviewPrint={handlePreviewPrintPdf}
       savedRoundCount={eventRounds.filter((r) =>
         eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled),
       ).length}

@@ -3,7 +3,6 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   Building2,
   Crown,
-  Heart,
   Loader2,
   Mail,
   Users,
@@ -45,7 +44,17 @@ type OrgMe = {
     billingReady?: boolean;
     stripeConfigured: boolean;
     subscriptionsConfigured?: boolean;
-    subscriptionTiers?: { key: string; label: string; usd: number; priceId: string }[];
+    subscriptionTiers?: {
+      key: string;
+      label: string;
+      usd: number;
+      priceId?: string;
+      eventsPerMonth?: number | null;
+      unlimited?: boolean;
+    }[];
+    packProducts?: { key: string; label: string; usd: number; credits: number }[];
+    oneTimeProducts?: { key: string; label: string; usd: number }[];
+    singleEventUsd?: number;
     active: boolean;
     status: string;
     lifetimePaidCents: number;
@@ -53,10 +62,31 @@ type OrgMe = {
     subscriptionStatus?: string;
     subscriptionPeriodEnd?: string | null;
     subscriptionActive?: boolean;
+    subscriptionTier?: string;
+    subscriptionPaused?: boolean;
+    trialActive?: boolean;
+    trialEndsAt?: string | null;
+    credits?: { total: number; bySource: Record<string, number> };
+    packsEligible?: boolean;
+    enterpriseUnlimited?: boolean;
   };
 };
 
 const SUGGESTED_AMOUNTS_USD = [10, 25, 50, 100];
+
+async function billingCheckoutPost(path: string, body: Record<string, unknown> = {}) {
+  const res = await hostFetch(`${API_BASE || ''}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((j && j.message) || `Checkout failed (${res.status})`);
+  }
+  if (!j.url) throw new Error('No checkout URL returned.');
+  window.location.href = j.url;
+}
 
 type BillingSetup = {
   stripeSecretConfigured: boolean;
@@ -80,6 +110,7 @@ const OrgPortalPage: React.FC = () => {
   const [banner, setBanner] = useState<string | null>(null);
   const [billingSetup, setBillingSetup] = useState<BillingSetup | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [promoCode, setPromoCode] = useState('');
 
   const billingNotice = searchParams.get('billing');
 
@@ -253,21 +284,45 @@ const OrgPortalPage: React.FC = () => {
   const startSubscription = async (tierKey: string) => {
     setBusy(true);
     try {
-      const res = await hostFetch(`${API_BASE || ''}/api/org/billing/subscribe`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tierKey }),
+      await billingCheckoutPost('/api/org/billing/subscribe', {
+        tierKey,
+        ...(promoCode.trim() ? { promoCode: promoCode.trim() } : {}),
       });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        alert((j && j.message) || `Subscription checkout failed (${res.status})`);
-        return;
-      }
-      if (j.url) {
-        window.location.href = j.url;
-        return;
-      }
-      alert('No checkout URL returned.');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const buyTrial = async () => {
+    setBusy(true);
+    try {
+      await billingCheckoutPost('/api/org/billing/trial');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const buySingleEvent = async () => {
+    setBusy(true);
+    try {
+      await billingCheckoutPost('/api/org/billing/single-event');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const buyPack = async (packKey: string) => {
+    setBusy(true);
+    try {
+      await billingCheckoutPost('/api/org/billing/pack', { packKey });
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
@@ -293,7 +348,14 @@ const OrgPortalPage: React.FC = () => {
   };
 
   const subscriptionTiers = data?.billing?.subscriptionTiers ?? [];
+  const packProducts = data?.billing?.packProducts ?? [];
   const subscriptionActive = !!data?.billing?.subscriptionActive;
+  const subscriptionPaused = !!data?.billing?.subscriptionPaused;
+  const trialActive = !!data?.billing?.trialActive;
+  const creditTotal = data?.billing?.credits?.total ?? 0;
+  const enterpriseUnlimited = !!data?.billing?.enterpriseUnlimited;
+  const packsEligible = !!data?.billing?.packsEligible;
+  const singleEventUsd = data?.billing?.singleEventUsd ?? 15;
   const subscriptionPeriodEnd = data?.billing?.subscriptionPeriodEnd
     ? new Date(data.billing.subscriptionPeriodEnd).toLocaleDateString()
     : null;
@@ -364,7 +426,7 @@ const OrgPortalPage: React.FC = () => {
           <Building2 aria-hidden /> Organization
         </h1>
         <p className="org-portal__lead">
-          One organization covers every host you invite. Pay as you like — suggested amounts or your own.
+          One organization covers every host you invite. Event credits, subscriptions, and packs are managed here.
         </p>
       </header>
 
@@ -423,17 +485,30 @@ const OrgPortalPage: React.FC = () => {
             </div>
             <p className="org-portal__meta">
               Status: <strong>{data?.billing?.status || 'none'}</strong>
-              {subscriptionActive ? (
+              {trialActive ? (
                 <>
                   {' '}
-                  · Monthly: <strong>{data?.billing?.subscriptionStatus}</strong>
+                  · Trial until{' '}
+                  <strong>
+                    {data?.billing?.trialEndsAt
+                      ? new Date(data.billing.trialEndsAt).toLocaleDateString()
+                      : '—'}
+                  </strong>
+                </>
+              ) : null}
+              {subscriptionActive || subscriptionPaused ? (
+                <>
+                  {' '}
+                  · Plan: <strong>{data?.billing?.subscriptionTier || data?.billing?.subscriptionStatus}</strong>
+                  {subscriptionPaused ? <> (paused)</> : null}
                   {subscriptionPeriodEnd ? <> · Renews {subscriptionPeriodEnd}</> : null}
                 </>
               ) : null}
-              {Number(data?.billing?.lifetimePaidCents) > 0 ? (
+              {enterpriseUnlimited ? <> · <strong>Unlimited events</strong></> : null}
+              {!enterpriseUnlimited ? (
                 <>
                   {' '}
-                  · Lifetime support: <strong>${lifetimeUsd}</strong>
+                  · Credits: <strong>{creditTotal}</strong>
                 </>
               ) : null}
             </p>
@@ -441,55 +516,108 @@ const OrgPortalPage: React.FC = () => {
 
           {isOwner ? (
             <>
-              {data?.billing?.stripeConfigured && subscriptionTiers.length > 0 ? (
-                <section className="org-portal__card">
-                  <h2>Monthly support</h2>
-                  <p>Recurring subscription — covers all hosts. Change or cancel anytime in Stripe.</p>
-                  {subscriptionActive ? (
-                    <div className="org-portal__row">
+              {data?.billing?.stripeConfigured ? (
+                <>
+                  <section className="org-portal__card">
+                    <h2>Event credits</h2>
+                    <p>
+                      One credit = one activated event night (up to 12 rounds), unlimited players. Credits are used when
+                      you print full cards or Start Game.
+                    </p>
+                    {enterpriseUnlimited ? (
+                      <p className="org-portal__muted">Enterprise — unlimited activations on your plan.</p>
+                    ) : trialActive ? (
+                      <p className="org-portal__muted">Trial active — unlimited event nights until trial ends.</p>
+                    ) : (
                       <p className="org-portal__muted">
-                        Active plan ({data?.billing?.subscriptionStatus}
-                        {subscriptionPeriodEnd ? ` · renews ${subscriptionPeriodEnd}` : ''}).
+                        Available credits: <strong>{creditTotal}</strong>
                       </p>
-                      <button type="button" className="btn-primary" disabled={busy} onClick={() => void openBillingPortal()}>
-                        Manage billing
+                    )}
+                    <div className="org-portal__row org-portal__row--custom" style={{ marginTop: 12 }}>
+                      <button type="button" className="btn-secondary" disabled={busy} onClick={() => void buySingleEvent()}>
+                        Buy one event (${singleEventUsd})
                       </button>
+                      {!trialActive && !data?.billing?.trialEndsAt ? (
+                        <button type="button" className="btn-secondary" disabled={busy} onClick={() => void buyTrial()}>
+                          7-day trial ($29)
+                        </button>
+                      ) : null}
                     </div>
-                  ) : (
-                    <>
+                  </section>
+
+                  {subscriptionTiers.length > 0 ? (
+                    <section className="org-portal__card">
+                      <h2>Monthly plans</h2>
+                      <p>Recurring subscription — includes monthly event credits. Pause or cancel in Stripe portal.</p>
+                      {subscriptionActive || subscriptionPaused ? (
+                        <div className="org-portal__row">
+                          <p className="org-portal__muted">
+                            {subscriptionPaused
+                              ? 'Subscription paused — existing credits still work. Resume in Manage billing.'
+                              : `Active (${data?.billing?.subscriptionTier || data?.billing?.subscriptionStatus}${
+                                  subscriptionPeriodEnd ? ` · renews ${subscriptionPeriodEnd}` : ''
+                                }).`}
+                          </p>
+                          <button type="button" className="btn-primary" disabled={busy} onClick={() => void openBillingPortal()}>
+                            Manage billing
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <label className="org-portal__custom-label" style={{ marginBottom: 8 }}>
+                            Promo code (optional)
+                            <input
+                              type="text"
+                              className="input"
+                              value={promoCode}
+                              onChange={(e) => setPromoCode(e.target.value)}
+                              placeholder="PARTNER20"
+                            />
+                          </label>
+                          <div className="org-portal__amounts">
+                            {subscriptionTiers.map((tier) => (
+                              <button
+                                key={tier.key}
+                                type="button"
+                                className="btn-secondary org-portal__amount-btn"
+                                disabled={busy}
+                                onClick={() => void startSubscription(tier.key)}
+                              >
+                                {tier.label}
+                                {tier.eventsPerMonth ? ` · ${tier.eventsPerMonth}/mo` : tier.unlimited ? ' · unlimited' : ''}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </section>
+                  ) : null}
+
+                  {packProducts.length > 0 ? (
+                    <section className="org-portal__card">
+                      <h2>Event packs</h2>
+                      <p>Requires active Basic or higher. Not available during trial-only or without a subscription.</p>
                       <div className="org-portal__amounts">
-                        {subscriptionTiers.map((tier) => (
+                        {packProducts.map((pack) => (
                           <button
-                            key={tier.key}
+                            key={pack.key}
                             type="button"
                             className="btn-secondary org-portal__amount-btn"
-                            disabled={busy}
-                            onClick={() => void startSubscription(tier.key)}
+                            disabled={busy || !packsEligible}
+                            title={packsEligible ? undefined : 'Subscribe to Basic+ first'}
+                            onClick={() => void buyPack(pack.key)}
                           >
-                            {tier.label}
+                            {pack.label}
                           </button>
                         ))}
                       </div>
-                      <p className="org-portal__muted">Prefer a one-time tip? Use pay-as-you-like below.</p>
-                    </>
-                  )}
-                </section>
+                    </section>
+                  ) : null}
+                </>
               ) : null}
 
-              <section className="org-portal__card">
-                <h2>
-                  <Heart aria-hidden /> Pay as you like
-                </h2>
-                <p>One-time support — covers all hosts in this organization. Stripe processes payment securely.</p>
-                {subscriptionActive ? (
-                  <p className="org-portal__muted">
-                    You have an active monthly plan.{' '}
-                    <button type="button" className="btn-secondary" disabled={busy} onClick={() => void openBillingPortal()}>
-                      Manage billing
-                    </button>
-                  </p>
-                ) : null}
-                {!data?.billing?.stripeConfigured ? (
+              {!data?.billing?.stripeConfigured ? (
+                <section className="org-portal__card">
                   <div className="org-portal__stripe-setup">
                     <p>
                       <strong>Server setup required.</strong> Add Stripe env vars on Railway (or your host), then redeploy.
@@ -513,13 +641,15 @@ const OrgPortalPage: React.FC = () => {
                         <a href="https://dashboard.stripe.com/test/webhooks" target="_blank" rel="noreferrer">
                           Stripe → Webhooks
                         </a>{' '}
-                        — endpoint below, events <code>checkout.session.completed</code>,{' '}
+                        — endpoint below, events                         <code>checkout.session.completed</code>,{' '}
                         <code>customer.subscription.updated</code>, <code>customer.subscription.deleted</code>,{' '}
-                        <code>invoice.payment_failed</code> → set <code>STRIPE_WEBHOOK_SECRET</code>
+                        <code>invoice.payment_succeeded</code>, <code>invoice.payment_failed</code> → set{' '}
+                        <code>STRIPE_WEBHOOK_SECRET</code>
                       </li>
                       <li>
-                        Create monthly Prices in Stripe → set <code>STRIPE_PRICE_MONTHLY_10</code>,{' '}
-                        <code>STRIPE_PRICE_MONTHLY_25</code>, <code>STRIPE_PRICE_MONTHLY_50</code> (optional)
+                        Create Prices in Stripe → set{' '}
+                        <code>STRIPE_PRICE_MONTHLY_BASIC</code> through <code>STRIPE_PRICE_MONTHLY_ENTERPRISE</code>,{' '}
+                        <code>STRIPE_PRICE_TRIAL_7D</code>, <code>STRIPE_PRICE_SINGLE_EVENT</code>, pack prices
                       </li>
                       <li>
                         Set <code>PUBLIC_APP_URL</code> to your app URL (where users open TEMPO)
@@ -559,41 +689,8 @@ const OrgPortalPage: React.FC = () => {
                       </div>
                     ) : null}
                   </div>
-                ) : (
-                  <>
-                    <div className="org-portal__amounts">
-                      {SUGGESTED_AMOUNTS_USD.map((usd) => (
-                        <button
-                          key={usd}
-                          type="button"
-                          className="btn-secondary org-portal__amount-btn"
-                          disabled={busy}
-                          onClick={() => startCheckout(usd)}
-                        >
-                          ${usd}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="org-portal__row org-portal__row--custom">
-                      <label className="org-portal__custom-label">
-                        Custom (USD)
-                        <input
-                          type="number"
-                          min={1}
-                          max={5000}
-                          step={1}
-                          className="input"
-                          value={customAmount}
-                          onChange={(e) => setCustomAmount(e.target.value)}
-                        />
-                      </label>
-                      <button type="button" className="btn-primary" disabled={busy} onClick={payCustom}>
-                        Pay custom amount
-                      </button>
-                    </div>
-                  </>
-                )}
-              </section>
+                </section>
+              ) : null}
 
               <section className="org-portal__card">
                 <h2>

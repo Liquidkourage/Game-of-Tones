@@ -342,6 +342,9 @@ function orgRowToSummary(row) {
     subscription_status: row.subscription_status || 'none',
     subscription_period_end: row.subscription_period_end || null,
     subscription_price_id: row.subscription_price_id || null,
+    subscription_tier: row.subscription_tier || 'none',
+    trial_ends_at: row.trial_ends_at || null,
+    subscription_paused_at: row.subscription_paused_at || null,
     venueSettings: sanitizeVenueSettings(row.venue_settings),
   };
 }
@@ -352,7 +355,8 @@ async function getOrganizationById(db, id) {
   const r = await db.query(
     `SELECT id, name, spotify_client_id, created_at, venue_settings,
             owner_user_id, billing_status, lifetime_paid_cents, last_payment_at,
-            subscription_status, subscription_period_end, subscription_price_id
+            subscription_status, subscription_period_end, subscription_price_id,
+            subscription_tier, trial_ends_at, subscription_paused_at
      FROM organizations WHERE id = $1`,
     [id]
   );
@@ -410,7 +414,8 @@ async function getUserOrganizationContext(db, userId) {
     const owned = await db.query(
       `SELECT id, name, spotify_client_id, created_at, venue_settings,
               owner_user_id, billing_status, lifetime_paid_cents, last_payment_at,
-              subscription_status, subscription_period_end, subscription_price_id
+              subscription_status, subscription_period_end, subscription_price_id,
+              subscription_tier, trial_ends_at, subscription_paused_at
        FROM organizations WHERE owner_user_id = $1 ORDER BY id ASC LIMIT 1`,
       [uid]
     );

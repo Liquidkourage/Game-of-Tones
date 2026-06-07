@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TEMPO Pricing &amp; Plans</title>
+    <style>
+      @page {
+        size: Letter portrait;
+        margin: 0;
+      }
+
+      :root {
+        --bg: #0b1020;
+        --ink: #eef2ff;
+        --muted: #b4bedf;
+        --line: rgba(255, 255, 255, 0.12);
+        --accent: #91f7d0;
+        --accent-2: #8db9ff;
+        --accent-3: #ffc86d;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: Inter, "Segoe UI", Arial, sans-serif;
+      }
+
+      body {
+        width: 8.5in;
+        background:
+          radial-gradient(circle at top right, rgba(141, 185, 255, 0.22), transparent 24%),
+          radial-gradient(circle at top left, rgba(145, 247, 208, 0.18), transparent 22%),
+          linear-gradient(180deg, #121932 0%, #0b1020 46%, #080c18 100%);
+      }
+
+      .page {
+        width: 8.5in;
+        height: 11in;
+        padding: 0.34in 0.36in 0.28in;
+        display: flex;
+        flex-direction: column;
+        gap: 0.11in;
+        page-break-after: always;
+        break-after: page;
+        background:
+          radial-gradient(circle at top right, rgba(141, 185, 255, 0.22), transparent 24%),
+          radial-gradient(circle at top left, rgba(145, 247, 208, 0.18), transparent 22%),
+          linear-gradient(180deg, #121932 0%, #0b1020 46%, #080c18 100%);
+      }
+
+      .page:last-child {
+        page-break-after: auto;
+        break-after: auto;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        font-size: 9.5px;
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: linear-gradient(180deg, var(--accent), var(--accent-2));
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 30px;
+        line-height: 0.98;
+        letter-spacing: -0.04em;
+        max-width: 7.2in;
+      }
+
+      .subhead {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.36;
+        color: var(--muted);
+        max-width: 7.1in;
+      }
+
+      .brand {
+        color: var(--accent);
+      }
+
+      .panel,
+      .feature,
+      .pricing-card,
+      .promise-band,
+      .closing,
+      .highlight-band {
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .promise-band {
+        padding: 11px 14px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04)),
+          rgba(255, 255, 255, 0.04);
+      }
+
+      .promise-text {
+        margin: 0;
+        font-size: 11.2px;
+        line-height: 1.38;
+        color: var(--ink);
+      }
+
+      .promise-text strong {
+        color: var(--accent);
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 9px;
+      }
+
+      .pill {
+        border-radius: 999px;
+        padding: 5px 8px;
+        font-size: 8px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-weight: 700;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      h2 {
+        margin: 0 0 7px;
+        font-size: 10.5px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+      }
+
+      h3 {
+        margin: 0 0 4px;
+        font-size: 10.5px;
+        color: var(--ink);
+      }
+
+      p,
+      li,
+      td,
+      th {
+        margin: 0;
+        font-size: 9.6px;
+        line-height: 1.32;
+        color: var(--muted);
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .panel {
+        padding: 12px;
+      }
+
+      .two-col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 9px;
+      }
+
+      .three-col {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .feature {
+        padding: 10px;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 7px;
+      }
+
+      .stat {
+        padding: 9px 8px;
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .stat-value {
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--accent);
+        line-height: 1.1;
+      }
+
+      .stat-label {
+        margin-top: 3px;
+        font-size: 7.5px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .highlight-band {
+        padding: 11px 13px;
+        border-color: rgba(145, 247, 208, 0.22);
+        background:
+          radial-gradient(circle at top right, rgba(145, 247, 208, 0.12), transparent 34%),
+          rgba(255, 255, 255, 0.04);
+      }
+
+      .highlight-band p {
+        color: var(--ink);
+        font-size: 10.2px;
+      }
+
+      .pricing-wrap {
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        padding: 12px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .pricing-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+
+      .pricing-note {
+        font-size: 8.5px;
+        line-height: 1.28;
+        color: var(--muted);
+        max-width: 2.9in;
+        text-align: right;
+      }
+
+      .pricing-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 7px;
+      }
+
+      .pricing-grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+        margin-top: 7px;
+      }
+
+      .pricing-card {
+        padding: 10px 10px 9px;
+      }
+
+      .pricing-card.featured {
+        border-color: rgba(145, 247, 208, 0.35);
+        background:
+          linear-gradient(180deg, rgba(145, 247, 208, 0.1), rgba(255, 255, 255, 0.03)),
+          rgba(255, 255, 255, 0.04);
+      }
+
+      .plan {
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--accent);
+        font-weight: 800;
+      }
+
+      .price {
+        margin-top: 5px;
+        font-size: 18px;
+        line-height: 1;
+        font-weight: 900;
+        letter-spacing: -0.04em;
+        color: var(--ink);
+      }
+
+      .unit {
+        font-size: 8px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .plan-meta {
+        margin-top: 6px;
+        padding-top: 5px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        padding: 6px 8px;
+        text-align: left;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        vertical-align: top;
+      }
+
+      th {
+        font-size: 8px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+        font-weight: 700;
+      }
+
+      td strong {
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .step-num {
+        font-size: 18px;
+        font-weight: 900;
+        color: var(--accent-3);
+        line-height: 1;
+        margin-bottom: 4px;
+      }
+
+      .closing {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 12px 14px;
+        border-radius: 22px;
+        border: 1px solid rgba(145, 247, 208, 0.3);
+        background: rgba(145, 247, 208, 0.08);
+        font-size: 10.2px;
+        line-height: 1.34;
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      .closing strong {
+        color: var(--accent);
+      }
+
+      .closing small {
+        margin-top: 5px;
+        font-size: 8.5px;
+        line-height: 1.28;
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .page-footer {
+        margin-top: auto;
+        padding-top: 6px;
+        font-size: 8px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: rgba(180, 190, 223, 0.72);
+      }
+
+      .comp-table th,
+      .comp-table td {
+        padding: 5px 6px;
+        font-size: 8.2px;
+        line-height: 1.26;
+      }
+
+      .comp-table th {
+        font-size: 7.2px;
+      }
+
+      .comp-table tr.tempo-row td {
+        background: rgba(145, 247, 208, 0.1);
+        color: var(--ink);
+        border-bottom-color: rgba(145, 247, 208, 0.18);
+      }
+
+      .comp-table tr.tempo-row td strong {
+        color: var(--accent);
+      }
+
+      .scenario-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 7px;
+      }
+
+      .scenario {
+        padding: 9px;
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .scenario h3 {
+        font-size: 9px;
+        margin-bottom: 5px;
+        color: var(--accent-3);
+      }
+
+      .scenario p {
+        font-size: 8.4px;
+        line-height: 1.28;
+      }
+
+      .disclaimer {
+        font-size: 7.5px;
+        line-height: 1.35;
+        color: rgba(180, 190, 223, 0.78);
+      }
+
+      .disclaimer a {
+        color: var(--accent-2);
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- PAGE 1 -->
+    <main class="page">
+      <section>
+        <div class="eyebrow"><span class="dot"></span> TEMPO pricing guide</div>
+        <h1>
+          Simple plans for <span class="brand">real event nights</span> — not per player, not per host.
+        </h1>
+        <p class="subhead" style="margin-top: 8px">
+          TEMPO is built for indie hosts, venue groups, and entertainment orgs who want music bingo that looks
+          premium in the room and stays predictable on the books. You pay for the nights you run — with room to
+          grow as your calendar fills up.
+        </p>
+      </section>
+
+      <section class="promise-band">
+        <p class="promise-text">
+          <strong>One organization. One subscription. Unlimited hosts and players on every event.</strong>
+          Your team can run paper cards, digital play, or both — with a projector-ready display that makes the night
+          feel like a show. Pricing scales when you book more event nights, not when the room gets packed.
+        </p>
+        <div class="pill-row">
+          <div class="pill">Unlimited hosts</div>
+          <div class="pill">Unlimited players</div>
+          <div class="pill">Up to 12 rounds / night</div>
+          <div class="pill">Multiple rooms OK</div>
+          <div class="pill">Paper + digital</div>
+        </div>
+      </section>
+
+      <section class="two-col">
+        <div class="panel">
+          <h2>What Counts As An Event?</h2>
+          <p style="margin-bottom: 7px">
+            One <strong style="color: var(--ink)">event credit</strong> covers one activated event night — up to
+            <strong style="color: var(--ink)">twelve rounds</strong> in the same room, whether you run a single
+            long game or a full multi-round residency-style lineup.
+          </p>
+          <ul>
+            <li>Activate when you are ready to print room-ready materials or go live.</li>
+            <li>Running two venues the same evening? Each room uses its own credit — simple and fair.</li>
+            <li>Plan ahead for free: round buckets, patterns, playlists, and a one-card preview PDF.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h2>Why Operators Love It</h2>
+          <ul>
+            <li>Packed rooms feel like upside — not a billing surprise.</li>
+            <li>Add hosts without rebuying seats every time the roster changes.</li>
+            <li>Brand the night your way; TEMPO stays behind the scenes as the engine.</li>
+            <li>Spotify and YouTube Music workflows hosts already know.</li>
+            <li>Print beautiful cards, run phones in the room, or mix both.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="highlight-band">
+        <p>
+          <strong style="color: var(--accent)">Try before you commit.</strong>
+          Start with a 7-day trial for $29 — unlimited event nights while you explore. When you subscribe to Basic or
+          higher, that $29 applies to your first invoice (monthly or annual). No gotchas on headcount.
+        </p>
+      </section>
+
+      <section class="steps">
+        <div class="feature">
+          <div class="step-num">1</div>
+          <h3>Plan free</h3>
+          <p>Build rounds, load playlists, set patterns, and preview one watermarked card — no credit needed.</p>
+        </div>
+        <div class="feature">
+          <div class="step-num">2</div>
+          <h3>Activate the night</h3>
+          <p>Your first full print or Start Game unlocks the event — cards, call sheets, live play, and projector.</p>
+        </div>
+        <div class="feature">
+          <div class="step-num">3</div>
+          <h3>Run up to 12 rounds</h3>
+          <p>One credit covers the whole evening in that room. Need more nights? Your plan includes monthly events.</p>
+        </div>
+      </section>
+
+      <section class="stats">
+        <div class="stat">
+          <div class="stat-value">1 credit</div>
+          <div class="stat-label">Per event night / room</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">12 rounds</div>
+          <div class="stat-label">Max per activated event</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">36 hours</div>
+          <div class="stat-label">Typical event window</div>
+        </div>
+      </section>
+
+      <div class="page-footer">TEMPO · Pricing &amp; Plans · Page 1 of 4</div>
+    </main>
+
+    <!-- PAGE 2 -->
+    <main class="page">
+      <section>
+        <div class="eyebrow"><span class="dot"></span> Monthly plans</div>
+        <h1>Pick the calendar that <span class="brand">matches your bookings</span>.</h1>
+        <p class="subhead" style="margin-top: 8px">
+          Every paid plan includes unlimited hosts and players. Event credits reset monthly. Unused shows can roll
+          over (see page 3). Annual billing saves <strong style="color: var(--ink)">15%</strong> on subscription
+          pricing.
+        </p>
+      </section>
+
+      <section class="pricing-wrap">
+        <div class="pricing-head">
+          <h2>Subscription Tiers</h2>
+          <p class="pricing-note">All prices USD / month. Event = one activated night, up to 12 rounds.</p>
+        </div>
+        <div class="pricing-grid">
+          <div class="pricing-card featured">
+            <div class="plan">7-day trial</div>
+            <div class="price">$29 <span class="unit">once</span></div>
+            <div class="plan-meta">
+              <p><strong style="color: var(--ink)">Unlimited events</strong> for 7 days</p>
+              <p>$29 credited toward first Basic+ subscription</p>
+            </div>
+          </div>
+          <div class="pricing-card featured">
+            <div class="plan">Basic</div>
+            <div class="price">$59 <span class="unit">/ month</span></div>
+            <div class="plan-meta">
+              <p><strong style="color: var(--ink)">5 events</strong> / month</p>
+              <p>Indie hosts &amp; small venues</p>
+            </div>
+          </div>
+          <div class="pricing-card">
+            <div class="plan">Pro</div>
+            <div class="price">$99 <span class="unit">/ month</span></div>
+            <div class="plan-meta">
+              <p><strong style="color: var(--ink)">10 events</strong> / month</p>
+              <p>Weekly rooms &amp; growing rosters</p>
+            </div>
+          </div>
+          <div class="pricing-card">
+            <div class="plan">Plus</div>
+            <div class="price">$149 <span class="unit">/ month</span></div>
+            <div class="plan-meta">
+              <p><strong style="color: var(--ink)">20 events</strong> / month</p>
+              <p>Multi-night operators</p>
+            </div>
+          </div>
+          <div class="pricing-card">
+            <div class="plan">Company</div>
+            <div class="price">$299 <span class="unit">/ month</span></div>
+            <div class="plan-meta">
+              <p><strong style="color: var(--ink)">50 events</strong> / month</p>
+              <p>Regional groups &amp; busy calendars</p>
+            </div>
+          </div>
+          <div class="pricing-card">
+            <div class="plan">Enterprise</div>
+            <div class="price">$499 <span class="unit">/ month</span></div>
+            <div class="plan-meta">
+              <p><strong style="color: var(--ink)">Unlimited events</strong></p>
+              <p>National brands &amp; high-volume teams</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="two-col">
+        <div class="panel">
+          <h2>Annual Billing Example — Basic</h2>
+          <table>
+            <tr>
+              <th>Step</th>
+              <th>Amount</th>
+            </tr>
+            <tr>
+              <td>Monthly list × 12</td>
+              <td>$708</td>
+            </tr>
+            <tr>
+              <td>Annual discount (15%)</td>
+              <td><strong>−$106.20</strong></td>
+            </tr>
+            <tr>
+              <td>Year one subtotal</td>
+              <td><strong>$601.80</strong></td>
+            </tr>
+            <tr>
+              <td>Trial credit (if applicable)</td>
+              <td><strong>−$29.00</strong></td>
+            </tr>
+            <tr>
+              <td><strong>First year due</strong></td>
+              <td><strong style="color: var(--accent)">$572.80</strong></td>
+            </tr>
+          </table>
+          <p style="margin-top: 7px">Trial credit applies once per organization, toward the first paid invoice.</p>
+        </div>
+        <div class="panel">
+          <h2>When You Need One More Night</h2>
+          <ul>
+            <li>
+              <strong style="color: var(--ink)">Extra event — $15</strong>
+              Add a single event credit when your month is full and the room is booked.
+            </li>
+            <li>
+              <strong style="color: var(--ink)">Event packs (Basic+ only)</strong>
+              Buy ahead and save: 5 for $60 · 10 for $100 · 25 for $200.
+            </li>
+            <li>
+              Packs require an active Basic (or higher) subscription — perfect for seasonal spikes, not a
+              substitute for a plan.
+            </li>
+            <li>At zero credits, TEMPO pauses live activation until you upgrade, add $15, or apply a pack.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="highlight-band">
+        <p>
+          <strong style="color: var(--accent)">Growing orgs stay in control.</strong>
+          Monthly credits match how you sell. Rollover cushions a slow week. Packs cover the busy month. Enterprise
+          removes the ceiling for teams running events at scale — same great product, no activation limits.
+        </p>
+      </section>
+
+      <section class="three-col">
+        <div class="feature">
+          <h3>Extra event</h3>
+          <p class="price" style="font-size: 16px; margin: 4px 0">$15</p>
+          <p>One additional activated night when you need it.</p>
+        </div>
+        <div class="feature">
+          <h3>5-pack</h3>
+          <p class="price" style="font-size: 16px; margin: 4px 0">$60</p>
+          <p>$12 per event · Basic+ subscribers</p>
+        </div>
+        <div class="feature">
+          <h3>10 / 25 packs</h3>
+          <p class="price" style="font-size: 16px; margin: 4px 0">$100 / $200</p>
+          <p>Best value for recurring operators · Basic+ only</p>
+        </div>
+      </section>
+
+      <div class="page-footer">TEMPO · Pricing &amp; Plans · Page 2 of 4</div>
+    </main>
+
+    <!-- PAGE 3 -->
+    <main class="page">
+      <section>
+        <div class="eyebrow"><span class="dot"></span> Fair, flexible, venue-ready</div>
+        <h1>Built for <span class="brand">how you actually run shows</span>.</h1>
+        <p class="subhead" style="margin-top: 8px">
+          TEMPO pricing is designed to reward success in the room — not punish it. Here is how credits, rollover, and
+          refunds work in plain language.
+        </p>
+      </section>
+
+      <section class="two-col">
+        <div class="panel">
+          <h2>Included With Every Event</h2>
+          <ul>
+            <li>Up to twelve rounds in one activated night (same room).</li>
+            <li>Full printable PDFs — bingo cards and host call sheets.</li>
+            <li>Live digital play with unlimited players on their phones.</li>
+            <li>Projector / public display with professional call flow.</li>
+            <li>Round planner: patterns, free space, snippets, saved prep.</li>
+            <li>Multiple simultaneous events across rooms — each uses its own credit.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h2>Free Before You Activate</h2>
+          <ul>
+            <li>Build round buckets and drag in playlists.</li>
+            <li>Set bingo patterns and host preferences.</li>
+            <li>Save prep locally in your browser.</li>
+            <li>Preview layout with <strong style="color: var(--ink)">one watermarked sample card</strong> per round.</li>
+            <li>No credit used until you print the full deck or start the live game.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Credits &amp; Rollover — Quick Reference</h2>
+        <table>
+          <tr>
+            <th>Topic</th>
+            <th>How it works</th>
+          </tr>
+          <tr>
+            <td><strong>Consumption order</strong></td>
+            <td>Monthly plan credits first → rollover credits (oldest first) → pack inventory → block with upgrade options.</td>
+          </tr>
+          <tr>
+            <td><strong>Rollover</strong></td>
+            <td>Up to <strong>3 unused monthly events</strong> roll forward. They expire after <strong>1 month</strong> and apply only while your subscription is active.</td>
+          </tr>
+          <tr>
+            <td><strong>Event window</strong></td>
+            <td>An activated event stays open for up to <strong>36 hours</strong> or until you end it — enough time for afternoon prep and evening showtime.</td>
+          </tr>
+          <tr>
+            <td><strong>Accidental activation</strong></td>
+            <td>If a show never really started (≤3 songs, no players, no full PDF printed), the credit can auto-refund. Printed materials mean the night was delivered — no refund.</td>
+          </tr>
+          <tr>
+            <td><strong>Enterprise</strong></td>
+            <td>Unlimited activations. Same workflow and reporting — no per-event billing.</td>
+          </tr>
+        </table>
+      </section>
+
+      <section class="two-col">
+        <div class="panel">
+          <h2>Questions Clients Ask</h2>
+          <ul>
+            <li><strong style="color: var(--ink)">Do we pay per player?</strong> No. Fill the room.</li>
+            <li><strong style="color: var(--ink)">Per host seat?</strong> No. Add your whole roster.</li>
+            <li><strong style="color: var(--ink)">Two bars tonight?</strong> Two credits — one per room.</li>
+            <li><strong style="color: var(--ink)">Paper only?</strong> Yes. Digital only? Also yes.</li>
+            <li><strong style="color: var(--ink)">Outgrow Basic?</strong> Move up a tier or add packs — we grow with you.</li>
+          </ul>
+        </div>
+        <div class="closing">
+          <strong>TEMPO turns music bingo into a signature night — with pricing you can explain in one sentence.</strong>
+          <small>
+            One event credit = one activated night, up to twelve rounds, unlimited hosts and players. Start with a $29
+            trial, subscribe when the room loves it, and scale your plan as the calendar fills.
+          </small>
+        </div>
+      </section>
+
+      <section class="promise-band">
+        <p class="promise-text">
+          <strong>Ready to pitch?</strong>
+          “TEMPO gives you unlimited hosts and players, a premium projector experience, and paper-or-digital play —
+          you only pay for the event nights you run.” That is the whole story. Simple to say yes today. Polished
+          enough to feel premium tonight.
+        </p>
+      </section>
+
+      <div class="page-footer">TEMPO · Pricing &amp; Plans · Page 3 of 4</div>
+    </main>
+
+    <!-- PAGE 4 -->
+    <main class="page">
+      <section>
+        <div class="eyebrow"><span class="dot"></span> Market comparison</div>
+        <h1>How TEMPO stacks up against <span class="brand">other music bingo platforms</span>.</h1>
+        <p class="subhead" style="margin-top: 8px">
+          Competitors price in different shapes — flat unlimited, per-player seats, or per-show passes. TEMPO is built
+          for operators who want <strong style="color: var(--ink)">predictable event-night billing</strong>, unlimited
+          players, and room to run multiple venues without seat math.
+        </p>
+      </section>
+
+      <section class="panel" style="padding: 10px 11px">
+        <h2>Published Pricing At A Glance</h2>
+        <table class="comp-table">
+          <tr>
+            <th>Platform</th>
+            <th>How they charge</th>
+            <th>Published starting price</th>
+            <th>Player cap</th>
+            <th>Typical monthly capacity</th>
+            <th>Multi-room same night</th>
+          </tr>
+          <tr class="tempo-row">
+            <td><strong>TEMPO</strong></td>
+            <td><strong>Per event night</strong> (org pool; unlimited hosts)</td>
+            <td><strong>$59/mo Basic · 5 events</strong><br />Trial $29 / 7 days</td>
+            <td><strong>Unlimited</strong></td>
+            <td><strong>5+ nights</strong> (rollover &amp; packs)</td>
+            <td><strong>Yes</strong> (1 credit per room)</td>
+          </tr>
+          <tr>
+            <td>Hitmix Bingo</td>
+            <td>Flat subscription</td>
+            <td>$22/mo unlimited events</td>
+            <td>Unlimited</td>
+            <td>Unlimited nights*</td>
+            <td>One concurrent game typical</td>
+          </tr>
+          <tr>
+            <td>Jindo</td>
+            <td>Flat subscription</td>
+            <td>$30/mo · $240/yr</td>
+            <td>Unlimited</td>
+            <td>Unlimited games*</td>
+            <td>One host workflow</td>
+          </tr>
+          <tr>
+            <td>Mixtape Music Bingo</td>
+            <td>Time-window access</td>
+            <td>$49/mo · $99 / 3 mo</td>
+            <td>Up to ~140 players cited</td>
+            <td>Unlimited in paid window</td>
+            <td>Not multi-room focused</td>
+          </tr>
+          <tr>
+            <td>Rockstar Bingo</td>
+            <td><strong>Per seat</strong> (min 20 Pro)</td>
+            <td>~$3/seat · ~$48–60/mo @ 20 seats</td>
+            <td>Your purchased max</td>
+            <td>Unlimited games in cap*</td>
+            <td><strong>No</strong> — one game at a time</td>
+          </tr>
+          <tr>
+            <td>Singo</td>
+            <td>Per show or venue sub</td>
+            <td>$55/show · $150/mo (6 shows)</td>
+            <td>Plan-dependent</td>
+            <td>6 shows/mo on sub</td>
+            <td>Per-venue licensing</td>
+          </tr>
+          <tr>
+            <td>Jukebox Bingo</td>
+            <td>Pay per game</td>
+            <td>~$6/game (£5 · 24 hr access)</td>
+            <td>Unlimited per game</td>
+            <td>Buy as needed</td>
+            <td>Per-game purchase</td>
+          </tr>
+        </table>
+        <p class="disclaimer" style="margin-top: 6px">
+          *Where competitors advertise “unlimited games,” caps often still apply to concurrent events, playlist
+          libraries, or seat counts — read their terms. Competitor prices from public sites; verify before quoting clients.
+        </p>
+      </section>
+
+      <section class="scenario-grid">
+        <div class="scenario">
+          <h3>Scenario A · 4 nights / month, ~80 players</h3>
+          <p>
+            <strong style="color: var(--ink)">TEMPO Basic:</strong> $59 — full room, no seat upgrade.<br />
+            <strong style="color: var(--ink)">Rockstar @ 80 seats:</strong> ~$240/mo ($3 × 80).<br />
+            <strong style="color: var(--ink)">Hitmix / Jindo:</strong> $22–30 flat unlimited.<br />
+            <strong style="color: var(--ink)">Mixtape:</strong> $49/mo (player cap ~140).
+          </p>
+        </div>
+        <div class="scenario">
+          <h3>Scenario B · One big night, 120 players</h3>
+          <p>
+            <strong style="color: var(--ink)">TEMPO:</strong> 1 event credit (~$12–15 effective on Basic).<br />
+            <strong style="color: var(--ink)">Rockstar:</strong> ~$330+/mo tier for 120 seats.<br />
+            <strong style="color: var(--ink)">Singo:</strong> $55 pay-per-show.<br />
+            <strong style="color: var(--ink)">Flat-unlimited subs:</strong> full month to host once.
+          </p>
+        </div>
+        <div class="scenario">
+          <h3>Scenario C · Two venues, same Saturday</h3>
+          <p>
+            <strong style="color: var(--ink)">TEMPO:</strong> 2 credits — both rooms live.<br />
+            <strong style="color: var(--ink)">Rockstar:</strong> cannot run two games simultaneously.<br />
+            <strong style="color: var(--ink)">Seat-based tools:</strong> buy headroom you may not use.<br />
+            <strong style="color: var(--ink)">TEMPO org:</strong> one bill, unlimited hosts.
+          </p>
+        </div>
+      </section>
+
+      <section class="two-col">
+        <div class="highlight-band">
+          <p>
+            <strong style="color: var(--accent)">Where TEMPO wins the conversation</strong><br />
+            No per-player math when the room fills up. No rebuying host seats as your roster grows. Up to
+            <strong>twelve rounds count as one event night</strong>. Paper cards, phones, and a projector-ready display
+            in one platform — priced for how venues actually book, not how many phones join Wi‑Fi.
+          </p>
+        </div>
+        <div class="panel">
+          <h2>When Flat Unlimited Fits Better</h2>
+          <p>
+            If you run music bingo almost every night, a flat $22–49 unlimited tool can look cheaper on paper. TEMPO is
+            the better fit when you want <strong style="color: var(--ink)">org-scale billing</strong>, packed rooms
+            without seat tiers, multi-room Saturdays, and a premium in-room display — plus rollover and packs when the
+            calendar spikes.
+          </p>
+        </div>
+      </section>
+
+      <section class="promise-band">
+        <p class="promise-text">
+          <strong>The pitch in one line:</strong> “Other platforms tax you for every player or lock you to one room.
+          TEMPO charges for the nights you run — unlimited hosts and players, up to twelve rounds a night, and you can
+          scale from a $29 trial to Enterprise without changing how your team works.”
+        </p>
+      </section>
+
+      <p class="disclaimer">
+        Sources: TEMPO pricing per this guide; Hitmix Bingo (hitmixbingo.com/pricing); Jindo (playjindo.com); Mixtape
+        Music Bingo (mixtapemusicbingo.com); Rockstar Bingo (rockstar.bingo/pricing, help.rockstar.bingo); Singo
+        (singo.co); Jukebox Bingo (musicbingo.co.uk). USD equivalents shown where sites quote other currencies.
+        Competitor offers change — confirm live pricing before contracts. Last reviewed May 2026.
+      </p>
+
+      <div class="page-footer">TEMPO · Pricing &amp; Plans · Page 4 of 4</div>
+    </main>
+  </body>
+</html>

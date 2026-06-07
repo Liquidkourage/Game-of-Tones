@@ -61,6 +61,8 @@ export type PrintablePdfOpts = {
   roomLabel?: string;
   /** Venue logo URL (absolute or path) — centered on the 5×5 grid at ~10% opacity, fit inside grid bounds. */
   logoUrl?: string | null;
+  /** Diagonal PREVIEW watermark (free sample card). */
+  previewWatermark?: boolean;
 };
 
 export type PrintablePdfSection = {
@@ -362,6 +364,13 @@ function drawBingoCardPage(
       doc.setDrawColor(BORDER.r, BORDER.g, BORDER.b);
       doc.rect(x, y, cell, cell, 'S');
     }
+  }
+
+  if (opts.previewWatermark) {
+    doc.setTextColor(190, 190, 190);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(42);
+    doc.text('PREVIEW', pageW / 2, pageH * 0.52, { align: 'center', angle: 35 });
   }
 }
 

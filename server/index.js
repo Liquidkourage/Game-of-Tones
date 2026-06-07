@@ -746,6 +746,7 @@ function markNextSongCalledAndNotify(roomId, room, song, songIndex) {
   emitSongPlayingToRoom(roomId, room, song, songIndex);
   syncRoomStateAfterSongStart(roomId, room);
   sendPlayerCardUpdates(roomId, true);
+  syncEventStatsForRoom(room);
 }
 
 /**
@@ -3897,6 +3898,7 @@ io.on('connection', (socket) => {
           room.finalizedSongOrder = rebuiltCapped;
           room.finalizedSongs = rebuiltCapped;
           routineServerLog(`📝 Refinalize rebuild (${rebuiltCapped.length} tracks) — same playlists, build pool (shuffle at Start Game)`);
+          if (!(await requireEventCreditGate(room, roomId, socket, 'finalize-mix-failed'))) return;
           const bingoOk = await generateBingoCards(roomId, playlists, rebuiltCapped);
           if (!bingoOk) {
             socket.emit('finalize-mix-failed', {
@@ -3999,6 +4001,8 @@ io.on('connection', (socket) => {
       room.finalizedSongs = poolForCards;
       routineServerLog(`📝 Stored ${poolForCards.length} finalized songs (build pool) for room ${roomId}`);
 
+      if (!(await requireEventCreditGate(room, roomId, socket, 'finalize-mix-failed'))) return;
+
       const bingoOk = await generateBingoCards(roomId, playlists, poolForCards);
       if (
         Array.isArray(playlists) &&
@@ -4064,6 +4068,7 @@ io.on('connection', (socket) => {
         const roomId = data.roomId;
         const raw = Number(data.count);
         const count = Number.isFinite(raw) ? Math.min(200, Math.max(1, Math.floor(raw))) : 30;
+        const isPreviewOnly = data.previewOnly === true && count === 1;
         const room = rooms.get(roomId);
         if (!room) {
           socket.emit('printable-cards-error', { message: 'Room not found.' });
@@ -4074,6 +4079,9 @@ io.on('connection', (socket) => {
         if (!isCurrentHost) {
           socket.emit('printable-cards-error', { message: 'Only the host can export printable cards.' });
           return;
+        }
+        if (!isPreviewOnly) {
+          if (!(await requireEventCreditGate(room, roomId, socket, 'printable-cards-error'))) return;
         }
         ensureRoomOwnerFromHostSocket(room);
         try {
@@ -4129,9 +4137,19 @@ io.on('connection', (socket) => {
           }
           cards.push(card);
         }
+        if (!isPreviewOnly && room.dbOrganizationId && db) {
+          const activeEv =
+            room.activeOrgEventId != null
+              ? { id: room.activeOrgEventId }
+              : await billingStore.eventCredits.getActiveEventForRoom(db, room.dbOrganizationId, roomId);
+          if (activeEv?.id) {
+            await billingStore.eventCredits.markFullPdfIssued(db, activeEv.id);
+          }
+        }
         socket.emit('printable-cards-result', {
           cards,
           roomId,
+          previewOnly: isPreviewOnly,
           freeSpace: useFreeSpace,
           venueBranding: venueBrandingForRoom(room),
         });
@@ -5616,6 +5634,15 @@ io.on('connection', (socket) => {
     
     if (room && isCurrentHost) {
       try {
+        if (!(await requireEventCreditGate(room, roomId, socket, 'error'))) return;
+        const orgRowForRound = await resolveOrgBillingRowForRoom(room);
+        if (orgRowForRound && billingStore.isBillingReady()) {
+          const roundGate = await billingStore.eventCredits.incrementEventRound(db, orgRowForRound.id, roomId);
+          if (roundGate?.error) {
+            socket.emit('error', { message: roundGate.message });
+            return;
+          }
+        }
         routineServerLog('✅ Starting game for room:', roomId);
       room.gameState = 'playing';
       room.snippetLength = snippetLength;
@@ -10566,8 +10593,11 @@ app.get('/api/auth/me', async (req, res) => {
     }
     const billing =
       organization != null
-        ? billingStore.billingSummaryFromOrg(organization)
-        : billingStore.billingSummaryFromOrg(null);
+        ? await billingStore.billingSummaryFromOrg(
+            db,
+            await billingStore.getOrganizationBillingRow(db, organization.id),
+          )
+        : await billingStore.billingSummaryFromOrg(db, null);
     return res.json({
       user: row ? { id: row.id, email: row.email, displayName: row.display_name } : { id: uid },
       organization: organization
@@ -10890,7 +10920,10 @@ app.get('/api/org/me', async (req, res) => {
     if (!uid) return;
     if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
     const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
-    const billing = billingStore.billingSummaryFromOrg(ctx.organization);
+    const orgRow = ctx.organization
+      ? await billingStore.getOrganizationBillingRow(db, ctx.organization.id)
+      : null;
+    const billing = await billingStore.billingSummaryFromOrg(db, orgRow || ctx.organization);
     const payments =
       ctx.organization && ctx.role === 'owner'
         ? await billingStore.listOrgPayments(db, ctx.organization.id, 15)
@@ -11076,6 +11109,7 @@ app.post('/api/org/billing/subscribe', async (req, res) => {
       orgName: ctx.organization.name,
       priceId,
       hostUserId: uid,
+      promoCode: body.promoCode || body.promo_code || '',
     });
     return res.json({ ok: true, ...checkout });
   } catch (e) {
@@ -11103,6 +11137,151 @@ app.post('/api/org/billing/portal', async (req, res) => {
     console.error('POST /api/org/billing/portal:', e);
     const msg = e?.message || 'Failed';
     res.status(400).json({ error: 'failed', message: msg });
+  }
+});
+
+app.post('/api/org/billing/trial', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    if (!ctx.organization || ctx.role !== 'owner') {
+      return res.status(403).json({ error: 'forbidden', message: 'Only the organization owner can purchase a trial.' });
+    }
+    const checkout = await billingStore.createTrialCheckout(db, {
+      organizationId: ctx.organization.id,
+      orgName: ctx.organization.name,
+      hostUserId: uid,
+    });
+    return res.json({ ok: true, ...checkout });
+  } catch (e) {
+    console.error('POST /api/org/billing/trial:', e);
+    res.status(400).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.post('/api/org/billing/single-event', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    if (!ctx.organization || ctx.role !== 'owner') {
+      return res.status(403).json({ error: 'forbidden', message: 'Only the organization owner can purchase event credits.' });
+    }
+    const checkout = await billingStore.createSingleEventCheckout(db, {
+      organizationId: ctx.organization.id,
+      orgName: ctx.organization.name,
+      hostUserId: uid,
+    });
+    return res.json({ ok: true, ...checkout });
+  } catch (e) {
+    console.error('POST /api/org/billing/single-event:', e);
+    res.status(400).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.post('/api/org/billing/pack', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    if (!ctx.organization || ctx.role !== 'owner') {
+      return res.status(403).json({ error: 'forbidden', message: 'Only the organization owner can purchase packs.' });
+    }
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const packKey = String(body.packKey || body.pack_key || '').trim();
+    if (!packKey) return res.status(400).json({ error: 'invalid', message: 'packKey is required' });
+    const checkout = await billingStore.createPackCheckout(db, {
+      organizationId: ctx.organization.id,
+      orgName: ctx.organization.name,
+      hostUserId: uid,
+      packKey,
+    });
+    return res.json({ ok: true, ...checkout });
+  } catch (e) {
+    console.error('POST /api/org/billing/pack:', e);
+    const msg = e?.message || 'Failed';
+    res.status(msg.includes('Basic') || msg.includes('pack') ? 403 : 400).json({ error: 'failed', message: msg });
+  }
+});
+
+app.get('/api/org/billing/products', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    return res.json({
+      ok: true,
+      tiers: billingStore.getSubscriptionTiers(),
+      packs: billingStore.getPackProducts(),
+      oneTime: billingStore.getOneTimeProducts(),
+      singleEventUsd: billingStore.SINGLE_EVENT_USD,
+    });
+  } catch (e) {
+    console.error('GET /api/org/billing/products:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.post('/api/admin/organizations/:id/credits', async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'invalid_id', message: 'Invalid organization id.' });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const delta = Math.round(Number(body.delta));
+    if (!Number.isFinite(delta) || delta === 0) {
+      return res.status(400).json({ error: 'invalid', message: 'delta must be a non-zero number' });
+    }
+    if (delta > 0) {
+      const bucket = await billingStore.eventCredits.grantCredits(db, id, {
+        amount: delta,
+        source: 'admin',
+        note: String(body.reason || body.note || 'Admin grant').slice(0, 500),
+      });
+      return res.json({ ok: true, bucket, credits: await billingStore.eventCredits.getCreditSummary(db, id) });
+    }
+    return res.status(400).json({ error: 'invalid', message: 'Manual debit not supported in v1 — use positive delta only.' });
+  } catch (e) {
+    console.error('POST /api/admin/organizations/:id/credits:', e);
+    res.status(400).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.get('/api/admin/promo-codes', async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const codes = await billingStore.eventCredits.listPromoCodes(db);
+    return res.json({ ok: true, promoCodes: codes });
+  } catch (e) {
+    console.error('GET /api/admin/promo-codes:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
+app.post('/api/admin/promo-codes', async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const promo = await billingStore.eventCredits.createPromoCode(db, {
+      code: body.code,
+      stripePromotionCodeId: body.stripePromotionCodeId || body.stripe_promotion_code_id,
+      percentOff: body.percentOff ?? body.percent_off,
+      amountOffCents: body.amountOffCents ?? body.amount_off_cents,
+      bonusEventCredits: body.bonusEventCredits ?? body.bonus_event_credits ?? 0,
+      maxRedemptions: body.maxRedemptions ?? body.max_redemptions,
+      redeemBy: body.redeemBy ?? body.redeem_by,
+      active: body.active,
+    });
+    return res.json({ ok: true, promo });
+  } catch (e) {
+    console.error('POST /api/admin/promo-codes:', e);
+    res.status(400).json({ error: 'failed', message: e?.message || 'Failed' });
   }
 });
 
@@ -11165,10 +11344,11 @@ async function requireHostOrgBillingAccess(uid, res) {
     });
     return false;
   }
-  if (!billingStore.isOrgBillingActive(ctx.organization)) {
+  const orgRow = await billingStore.getOrganizationBillingRow(db, ctx.organization.id);
+  if (!(await billingStore.isOrgBillingActive(db, orgRow))) {
     res.status(402).json({
       error: 'org_billing_required',
-      message: 'Your organization needs to complete pay-as-you-like support before hosting.',
+      message: 'Your organization needs an active plan, trial, or event credits before hosting.',
       orgPortalUrl: '/org',
     });
     return false;
@@ -11378,6 +11558,48 @@ async function resolveRoomVenueBranding(room) {
     }
   }
   room.venueBranding = b;
+}
+
+async function resolveOrgBillingRowForRoom(room) {
+  if (!db || !room) return null;
+  ensureRoomOwnerFromHostSocket(room);
+  if (room.dbOrganizationId == null && room.ownerUserId != null) {
+    try {
+      await resolveRoomVenueBranding(room);
+    } catch {
+      /* ignore */
+    }
+  }
+  if (room.dbOrganizationId == null) return null;
+  return billingStore.getOrganizationBillingRow(db, room.dbOrganizationId);
+}
+
+/** Gate printable / finalize / start-game when Stripe billing is ready. */
+async function requireEventCreditGate(room, roomId, socket, emitEvent) {
+  if (!billingStore.isBillingReady()) return true;
+  const orgRow = await resolveOrgBillingRowForRoom(room);
+  if (!orgRow) return true;
+  const gate = await billingStore.gateHostedEventAction(db, orgRow, roomId, { billingReady: true });
+  if (!gate.ok) {
+    socket.emit(emitEvent, {
+      code: gate.code || 'no_credits',
+      message: gate.message || 'No event credits available.',
+      orgPortalUrl: gate.orgPortalUrl || '/org',
+    });
+    return false;
+  }
+  if (gate.event?.id) room.activeOrgEventId = gate.event.id;
+  return true;
+}
+
+function syncEventStatsForRoom(room) {
+  if (!db || !room?.dbOrganizationId || !room.id) return;
+  const playerCount = room.players ? room.players.size : 0;
+  const songsPlayed =
+    typeof room.currentSongIndex === 'number' && room.currentSongIndex >= 0 ? room.currentSongIndex + 1 : 0;
+  void billingStore.eventCredits
+    .updateEventStats(db, room.dbOrganizationId, room.id, { songsPlayed, playerCount })
+    .catch((e) => console.warn('syncEventStatsForRoom:', e?.message || e));
 }
 
 function venueBrandingForRoom(room) {

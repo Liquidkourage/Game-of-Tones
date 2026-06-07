@@ -107,6 +107,8 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   onPrintPdf?: (roundIndex: number) => void;
   /** One PDF: call lists + printable cards for every saved round. */
   onPrintAllPreShow?: () => void;
+  /** Free watermarked 1-card preview (no credit). */
+  onPreviewPrint?: () => void;
   savedRoundCount?: number;
   onCallSheet?: (roundIndex: number) => void;
   onOpenComposite?: (roundIndex: number) => void;
@@ -161,6 +163,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   snapshotMeetsSave,
   onPrintPdf,
   onPrintAllPreShow,
+  onPreviewPrint,
   savedRoundCount = 0,
   onCallSheet,
   onOpenComposite,
@@ -646,6 +649,17 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
             onChange={(e) => onPrintableCardCountChange(Number(e.target.value))}
           />
         </label>
+        {onPreviewPrint ? (
+          <button
+            type="button"
+            className="round-planner-btn round-planner-btn--ghost"
+            disabled={printablePdfLoading}
+            title="One watermarked sample card — no event credit"
+            onClick={onPreviewPrint}
+          >
+            Preview card
+          </button>
+        ) : null}
         {onPrintAllPreShow ? (
           <button
             type="button"
