@@ -62,7 +62,7 @@ const HostOrgBillingCard: React.FC = () => {
             <p>Venue org, co-host invites, and billing. One org covers every host on your team.</p>
           </ContextHelp>
         </h2>
-        <Link to="/org" className="btn-primary host-org-billing-card__open">
+        <Link to="/org" target="_blank" rel="noopener noreferrer" className="btn-primary host-org-billing-card__open">
           {data?.organization ? 'Open' : 'Set up'}
         </Link>
       </div>

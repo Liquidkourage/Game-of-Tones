@@ -155,7 +155,10 @@ const HostEventActivationBar: React.FC<HostEventActivationBarProps> = ({ roomId 
         </p>
       ) : (
         <p className="host-event-activation__lead">
-          Inactive · <Link to="/org">Account</Link>
+          Inactive ·{' '}
+          <Link to="/org" target="_blank" rel="noopener noreferrer">
+            Account
+          </Link>
         </p>
       )}
       {message ? <p className="host-event-activation__msg">{message}</p> : null}

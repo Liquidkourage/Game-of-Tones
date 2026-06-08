@@ -5,6 +5,7 @@ import { Sparkles, Play, UserPlus, Crown, CheckCircle2, AlertTriangle, ListOrder
 import { API_BASE } from '../config';
 import { hostFetch, setHostJwt, browserGoogleLoginUrl, clearHostJwt, postHostLogout } from '../utils/hostFetch';
 import type { HostGlassNavId } from '../host/hostGlassNav';
+import { clearActiveHostRoom, readActiveHostRoom } from '../utils/hostRoomRecovery';
 
 /** Express/HTML error pages are not JSON; show a short message instead of raw markup. */
 function formatHttpErrorBody(raw: string, status: number): string {
@@ -48,6 +49,7 @@ const Home: React.FC = () => {
   const [isCreatingHostRoom, setIsCreatingHostRoom] = useState(false);
   const [hostSignInPageUrl, setHostSignInPageUrl] = useState('');
   const [hostSignInUrlCopied, setHostSignInUrlCopied] = useState(false);
+  const [resumeHostRoom, setResumeHostRoom] = useState<{ roomId: string } | null>(null);
 
   /** Player / QR links: ?join, ?mode=player, ?player=1 — hide host path unless explicitly opened */
   const joinOnly = useMemo(() => {
@@ -140,6 +142,47 @@ const Home: React.FC = () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!hostSession) {
+      setResumeHostRoom(null);
+      return;
+    }
+    const ptr = readActiveHostRoom();
+    if (!ptr?.roomId) {
+      setResumeHostRoom(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE || ''}/api/rooms/${encodeURIComponent(ptr.roomId)}`);
+        if (cancelled) return;
+        if (!res.ok) {
+          if (res.status === 404) clearActiveHostRoom();
+          setResumeHostRoom(null);
+          return;
+        }
+        const data = (await res.json()) as { gameState?: string };
+        const gs = data.gameState;
+        if (gs === 'ended') {
+          clearActiveHostRoom();
+          setResumeHostRoom(null);
+          return;
+        }
+        if (gs === 'playing' || gs === 'paused_for_verification') {
+          setResumeHostRoom({ roomId: ptr.roomId });
+        } else {
+          setResumeHostRoom(null);
+        }
+      } catch {
+        if (!cancelled) setResumeHostRoom(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hostSession]);
 
   const hostDisplayName = useMemo(
     () => (hostSession ? hostDisplayNameFromSession(hostSession) : ''),
@@ -638,6 +681,18 @@ const Home: React.FC = () => {
                 <UserCircle className="btn-icon" aria-hidden />
                 Account
               </Link>
+            ) : null}
+
+            {hostSession && resumeHostRoom ? (
+              <button
+                type="button"
+                className="btn btn-primary home-host-actions__secondary"
+                style={{ width: '100%', marginBottom: 10 }}
+                onClick={() => goToHostRoom(resumeHostRoom.roomId, hostDisplayName)}
+              >
+                <Play className="btn-icon" aria-hidden />
+                Resume active game · {resumeHostRoom.roomId}
+              </button>
             ) : null}
 
             <div className="home-host-actions">

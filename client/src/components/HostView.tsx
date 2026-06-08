@@ -126,6 +126,11 @@ import HostPlaylistAvailabilityWarnings, {
 import type { HostGlassNavId } from '../host/hostGlassNav';
 import { HOST_GLASS_NAV_ITEMS, parseHostGlassNavTab } from '../host/hostGlassNav';
 import { appendHostActivity, type HostActivityEntry } from '../host/hostActivityLog';
+import {
+  clearActiveHostRoom,
+  hostRoomExpectsLiveRecovery,
+  writeActiveHostRoom,
+} from '../utils/hostRoomRecovery';
 import HostPlayersPanel from './host/HostPlayersPanel';
 import HostSettingsPanel from './host/HostSettingsPanel';
 import HostPreShowChecklist, { type PreShowCheckItem } from './host/HostPreShowChecklist';
@@ -733,9 +738,20 @@ const HostView: React.FC = () => {
   const [socket, setSocket] = useState<any>(null);
   const [gameState, setGameState] = useState<'waiting' | 'playing' | 'ended'>('waiting');
   const gameStateRef = useRef<'waiting' | 'playing' | 'ended'>('waiting');
+  const [hostRoomHydrated, setHostRoomHydrated] = useState(false);
+  const hostExpectsLiveRecovery = useMemo(() => hostRoomExpectsLiveRecovery(roomId), [roomId]);
+  const hostRoomHydrating = !hostRoomHydrated && hostExpectsLiveRecovery;
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
+  useEffect(() => {
+    setHostRoomHydrated(false);
+  }, [roomId]);
+  useEffect(() => {
+    if (!roomId || hostRoomHydrated) return;
+    const t = window.setTimeout(() => setHostRoomHydrated(true), 12_000);
+    return () => window.clearTimeout(t);
+  }, [roomId, hostRoomHydrated]);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   /** YouTube Music playlists (API); merged into Playlist library table and Round planner. */
@@ -2706,6 +2722,9 @@ const HostView: React.FC = () => {
           setIsPlaying(false);
           setCurrentSong(null);
           setGameState('waiting');
+          if (roomId) {
+            writeActiveHostRoom({ roomId, gameState: 'waiting', updatedAt: Date.now() });
+          }
           addLog(`Round ${data.roundNumber} complete - ${data.playerName} wins!`, 'info');
           console.log('Round complete, showing options to host');
         } else if (data.gameEnded) {
@@ -2725,6 +2744,9 @@ const HostView: React.FC = () => {
     newSocket.on('game-started', (data: any) => {
       console.log('?? GAME-STARTED EVENT RECEIVED:', data);
       setGameState('playing');
+      if (roomId) {
+        writeActiveHostRoom({ roomId, gameState: 'playing', updatedAt: Date.now() });
+      }
       console.log('?? SET GAME STATE TO PLAYING');
       setIsStartingGame(false);
       setBingoColumnPlaylistNames([]);
@@ -3070,6 +3092,7 @@ const HostView: React.FC = () => {
       console.log('Game session ended:', data);
       setRoundComplete(null);
       setGameState('ended');
+      clearActiveHostRoom();
       setIsPlaying(false);
       void disconnectSpotifySocketRef.current();
       if (data.roundWinners) {
@@ -3080,8 +3103,9 @@ const HostView: React.FC = () => {
 
     newSocket.on('sync-state-response', (data: any) => {
       console.log('Sync state response:', data);
+      setHostRoomHydrated(true);
       if (data.gameState) {
-        setGameState(data.gameState);
+        setGameState(normalizeRoomGameStateForHost(data.gameState));
         addLog(`Synced game state to: ${data.gameState}`, 'info');
       }
       if (data.currentSong) {
@@ -3166,6 +3190,17 @@ const HostView: React.FC = () => {
     });
 
     newSocket.on('room-state', (payload: any) => {
+      setHostRoomHydrated(true);
+      if (roomId) {
+        writeActiveHostRoom({
+          roomId,
+          gameState: payload?.gameState != null ? String(payload.gameState) : undefined,
+          updatedAt: Date.now(),
+        });
+        if (normalizeRoomGameStateForHost(payload?.gameState) === 'playing') {
+          setHostGlassNav('game');
+        }
+      }
       if (payload?.gameState !== undefined) {
         setGameState(normalizeRoomGameStateForHost(payload.gameState));
       }
@@ -3462,7 +3497,7 @@ const HostView: React.FC = () => {
       showToast('Connection restored', 'success');
       lastReconnectAtRef.current = Date.now();
       ignorePollingUntilRef.current = Date.now() + 15000; // ignore polling flips for 15s
-      if (roomId && gameState === 'playing') {
+      if (roomId && gameStateRef.current === 'playing') {
         const now = Date.now();
         if (now - lastResumePingAtRef.current > 10000) {
           lastResumePingAtRef.current = now;
@@ -3512,6 +3547,7 @@ const HostView: React.FC = () => {
     newSocket.on('game-reset', () => {
       setIsPlaying(false);
       setGameState('waiting');
+      clearActiveHostRoom();
       setCurrentSong(null);
       setWinners([]);
       setMixFinalized(false);
@@ -6793,6 +6829,20 @@ const HostView: React.FC = () => {
     }
   }, []);
 
+  const resyncHostRoomState = useCallback(() => {
+    if (!socket || !roomId) return;
+    if (hostRoomExpectsLiveRecovery(roomId)) {
+      setHostRoomHydrated(false);
+    }
+    try {
+      socket.emit('sync-state', { roomId });
+      socket.emit('request-finalized-order', { roomId });
+      socket.emit('request-player-cards', { roomId });
+    } catch {
+      /* ignore */
+    }
+  }, [socket, roomId]);
+
   useEffect(() => {
     if (!socket || !roomId) return;
 
@@ -6803,6 +6853,9 @@ const HostView: React.FC = () => {
       lastForegroundResyncAtRef.current = now;
       ignorePollingUntilRef.current = now + 8000;
 
+      if (hostRoomExpectsLiveRecovery(roomId)) {
+        setHostRoomHydrated(false);
+      }
       try {
         socket.emit('sync-state', { roomId });
         socket.emit('request-finalized-order', { roomId });
@@ -6814,6 +6867,11 @@ const HostView: React.FC = () => {
       }
     };
 
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      resyncFromForeground();
+    };
+
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         resyncFromForeground();
@@ -6821,9 +6879,11 @@ const HostView: React.FC = () => {
     };
 
     window.addEventListener('focus', resyncFromForeground);
+    window.addEventListener('pageshow', onPageShow);
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       window.removeEventListener('focus', resyncFromForeground);
+      window.removeEventListener('pageshow', onPageShow);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [socket, roomId]);
@@ -9628,6 +9688,8 @@ const HostView: React.FC = () => {
           <div className="room-info host-header__toolbar">
             <Link
               to="/org"
+              target="_blank"
+              rel="noopener noreferrer"
               className="btn-secondary host-org-toolbar-btn"
               style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}
               title="Account and billing"
@@ -9776,9 +9838,15 @@ const HostView: React.FC = () => {
                   callLog={callLogRows}
                   canUndoSkip={canUndoSkip}
                   onUndoSkip={undoLastSkip}
+                  hostRoomHydrating={hostRoomHydrating}
+                  onResyncRoomState={resyncHostRoomState}
                 />
 
-                {gameState === 'waiting' && !currentSong && !hasFinalizedSongPool && !gameTabRoundBuilderReady && (
+                {gameState === 'waiting' &&
+                  !hostRoomHydrating &&
+                  !currentSong &&
+                  !hasFinalizedSongPool &&
+                  !gameTabRoundBuilderReady && (
                   <div className="host-r4-alert host-glass-panel">
                     <p className="host-r4-alert__title">No song mix yet</p>
                     <p className="host-r4-alert__body">

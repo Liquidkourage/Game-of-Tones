@@ -93,6 +93,8 @@ export type HostGameDashboardProps = {
   callLog: CallLogRow[];
   canUndoSkip: boolean;
   onUndoSkip: () => void;
+  hostRoomHydrating?: boolean;
+  onResyncRoomState?: () => void;
 };
 
 function ProgressRing({
@@ -232,6 +234,8 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
     callLog,
     canUndoSkip,
     onUndoSkip,
+    hostRoomHydrating = false,
+    onResyncRoomState,
   } = props;
 
   const totalTracks = poolCount > 0 ? poolCount : playbackTrackTotal ?? 75;
@@ -417,6 +421,22 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
                     className="host-range host-range--volume"
                     aria-label="Volume"
                   />
+                </div>
+              </>
+            ) : hostRoomHydrating ? (
+              <>
+                <p className="host-r4-card__eyebrow">Live game</p>
+                <h2 className="host-r4-track-title">Resuming controls…</h2>
+                <p className="host-r4-track-meta">Syncing with the server — your round is still running.</p>
+                <div className="host-r4-go-live-actions">
+                  <button
+                    type="button"
+                    className="btn-primary host-r4-btn-primary host-r4-btn-primary--wide"
+                    onClick={() => onResyncRoomState?.()}
+                  >
+                    <RotateCw className="w-5 h-5" aria-hidden />
+                    Resume active game
+                  </button>
                 </div>
               </>
             ) : (
