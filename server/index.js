@@ -1771,6 +1771,49 @@ function readCatalogPacksServerCacheTtlMs() {
   return 7 * 86400000;
 }
 
+/** Cooldown between host manual official-pack refreshes (`TEMPO_CATALOG_PACKS_MANUAL_REFRESH_COOLDOWN_MS`). Default 5m; min 60s unless env is `0`. */
+function readCatalogPacksManualRefreshCooldownMs() {
+  const raw = process.env.TEMPO_CATALOG_PACKS_MANUAL_REFRESH_COOLDOWN_MS;
+  if (raw === '0') return 0;
+  const n = Number(raw);
+  if (Number.isFinite(n) && n >= 0) {
+    if (n === 0) return 0;
+    return Math.max(60000, Math.floor(n));
+  }
+  return 300000;
+}
+
+/** @type {number} */
+let catalogPacksManualRefreshLastAtMs = 0;
+
+function catalogPacksManualRefreshState(now = Date.now()) {
+  const cooldownMs = readCatalogPacksManualRefreshCooldownMs();
+  if (cooldownMs <= 0) {
+    return { cooldownMs, allowed: true, remainingMs: 0 };
+  }
+  if (catalogPacksManualRefreshLastAtMs <= 0) {
+    return { cooldownMs, allowed: true, remainingMs: 0 };
+  }
+  const elapsed = now - catalogPacksManualRefreshLastAtMs;
+  if (elapsed >= cooldownMs) {
+    return { cooldownMs, allowed: true, remainingMs: 0 };
+  }
+  return {
+    cooldownMs,
+    allowed: false,
+    remainingMs: Math.ceil(cooldownMs - elapsed),
+  };
+}
+
+function markCatalogPacksManualRefreshAttempt() {
+  catalogPacksManualRefreshLastAtMs = Date.now();
+}
+
+function formatCatalogPacksCooldownMessage(remainingMs) {
+  const mins = Math.max(1, Math.ceil(remainingMs / 60000));
+  return `Official packs were refreshed recently. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`;
+}
+
 /** Optional background refresh interval for Postgres catalog pack snapshots (`TEMPO_CATALOG_PACKS_BACKGROUND_WARM_MS`). Minimum 300000 (5m); unset or lower disables. */
 function readCatalogPacksBackgroundWarmIntervalMs() {
   const raw = process.env.TEMPO_CATALOG_PACKS_BACKGROUND_WARM_MS;
@@ -13470,8 +13513,118 @@ app.get('/api/spotify/catalog/packs', async (req, res) => {
       return res.json({ success: true, configured: false, packs: [] });
     }
 
+    const forceRefresh = req.query.force === '1' || req.query.refresh === '1';
     const cacheKey = catalogSpotify.getCatalogPackSummariesCacheKey();
     const ttlMs = readCatalogPacksServerCacheTtlMs();
+    const manualRefreshCooldownMs = readCatalogPacksManualRefreshCooldownMs();
+
+    const respondFromPostgresCache = async (extra = {}) => {
+      if (!db) return null;
+      const cached = await loadCatalogPackSummariesCacheRow(cacheKey);
+      if (!cached || !Array.isArray(cached.data.packs)) return null;
+      return res.json({
+        success: true,
+        configured: true,
+        packs: cached.data.packs,
+        catalogPrefixDiscoverySkipped: cached.data.catalogPrefixDiscoverySkipped,
+        fromCatalogServerCache: true,
+        catalogCacheUpdatedAt: cached.updatedAtIso,
+        manualRefreshCooldownMs,
+        ...extra,
+      });
+    };
+
+    if (forceRefresh) {
+      const cd = catalogPacksManualRefreshState();
+      if (!cd.allowed) {
+        routineServerLog(
+          `[catalog] GET /api/spotify/catalog/packs?force=1: cooldown active (${Math.round(cd.remainingMs / 1000)}s remaining) — not calling Spotify`
+        );
+        const skipped = await respondFromPostgresCache({
+          refreshSkipped: true,
+          cooldownRemainingMs: cd.remainingMs,
+          message: formatCatalogPacksCooldownMessage(cd.remainingMs),
+        });
+        if (skipped) return skipped;
+        return res.json({
+          success: true,
+          configured: true,
+          packs: [],
+          refreshSkipped: true,
+          cooldownRemainingMs: cd.remainingMs,
+          message: formatCatalogPacksCooldownMessage(cd.remainingMs),
+          manualRefreshCooldownMs,
+        });
+      }
+
+      catalogSpotify.invalidateCatalogPrefixDiscoveryCache();
+      markCatalogPacksManualRefreshAttempt();
+      routineServerLog('[catalog] GET /api/spotify/catalog/packs?force=1: manual refresh — live Spotify fetch');
+
+      let catalogResult;
+      try {
+        catalogResult = await catalogSpotify.loadCatalogPackSummariesForApi();
+      } catch (fetchErr) {
+        if (db) {
+          const stale = await loadCatalogPackSummariesCacheRow(cacheKey);
+          if (stale && Array.isArray(stale.data.packs) && stale.data.packs.length > 0) {
+            const is429 = isSpotifyHttp429(fetchErr);
+            routineServerLog(
+              `[catalog] GET /api/spotify/catalog/packs?force=1: live fetch failed — returning stale Postgres cache${is429 ? ' (429)' : ''}`
+            );
+            return res.json({
+              success: true,
+              configured: true,
+              packs: stale.data.packs,
+              catalogPrefixDiscoverySkipped: stale.data.catalogPrefixDiscoverySkipped,
+              fromCatalogServerCache: true,
+              catalogCacheStale: true,
+              catalogCacheUpdatedAt: stale.updatedAtIso,
+              manualRefresh: true,
+              refreshFailed: true,
+              manualRefreshCooldownMs,
+              message: is429
+                ? 'Spotify is rate-limiting catalog discovery. Showing the last saved official packs list — try again after cooldown.'
+                : 'Could not refresh official packs from Spotify. Showing the last saved list.',
+            });
+          }
+        }
+        throw fetchErr;
+      }
+
+      if (db && catalogResult && Array.isArray(catalogResult.packs)) {
+        await persistCatalogPackSummariesToPostgresIfAllowed(catalogResult);
+      }
+
+      const packs = catalogResult.packs;
+      const catalogPrefixDiscoverySkipped = catalogResult.catalogPrefixDiscoverySkipped === true;
+      if (packs.length === 0) {
+        routineServerLog(
+          catalogPrefixDiscoverySkipped
+            ? '[catalog] GET /api/spotify/catalog/packs?force=1: 0 packs — prefix discovery skipped (Spotify rate limit / quarantine)'
+            : '[catalog] GET /api/spotify/catalog/packs?force=1: configured but 0 packs after manual refresh'
+        );
+      } else {
+        routineServerLog(
+          `[catalog] GET /api/spotify/catalog/packs?force=1: returning ${packs.length} pack(s) from Spotify`
+        );
+      }
+      return res.json({
+        success: true,
+        configured: true,
+        packs,
+        catalogPrefixDiscoverySkipped,
+        fromCatalogServerCache: false,
+        manualRefresh: true,
+        manualRefreshCooldownMs,
+        ...(catalogPrefixDiscoverySkipped
+          ? {
+              message:
+                'Spotify blocked catalog playlist discovery (rate limit / quarantine). Pack list may be incomplete — static allowlist ids still work.',
+            }
+          : {}),
+      });
+    }
 
     if (db && ttlMs > 0) {
       const cached = await loadCatalogPackSummariesCacheRow(cacheKey);
@@ -13488,6 +13641,7 @@ app.get('/api/spotify/catalog/packs', async (req, res) => {
             catalogPrefixDiscoverySkipped: cached.data.catalogPrefixDiscoverySkipped,
             fromCatalogServerCache: true,
             catalogCacheUpdatedAt: cached.updatedAtIso,
+            manualRefreshCooldownMs,
           });
         }
       }
@@ -13511,6 +13665,7 @@ app.get('/api/spotify/catalog/packs', async (req, res) => {
             fromCatalogServerCache: true,
             catalogCacheStale: true,
             catalogCacheUpdatedAt: stale.updatedAtIso,
+            manualRefreshCooldownMs,
           });
         }
       }
@@ -13538,6 +13693,7 @@ app.get('/api/spotify/catalog/packs', async (req, res) => {
       packs,
       catalogPrefixDiscoverySkipped,
       fromCatalogServerCache: false,
+      manualRefreshCooldownMs,
     });
   } catch (error) {
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;

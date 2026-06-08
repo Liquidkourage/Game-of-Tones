@@ -824,6 +824,11 @@ const HostView: React.FC = () => {
   const [catalogPacksFetchUnauthorized, setCatalogPacksFetchUnauthorized] = useState(false);
   /** Server skipped prefix crawl (e.g. Spotify 429) — empty packs is not always “wrong prefix”. */
   const [catalogPrefixDiscoverySkipped, setCatalogPrefixDiscoverySkipped] = useState(false);
+  const [catalogPacksRefreshing, setCatalogPacksRefreshing] = useState(false);
+  /** Client-side countdown mirror of server manual-refresh cooldown (ms). */
+  const [catalogPacksCooldownRemainingMs, setCatalogPacksCooldownRemainingMs] = useState(0);
+  const [catalogPacksRefreshHint, setCatalogPacksRefreshHint] = useState<string | null>(null);
+  const catalogPacksRefreshInFlightRef = useRef(false);
   const [selectedCatalogPlaylists, setSelectedCatalogPlaylists] = useState<Playlist[]>([]);
   /** Debounce catalog /packs so it doesn’t fire in the same burst as host GET /v1/me/playlists (reduces Spotify 429). */
   const catalogPacksLoadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1603,62 +1608,196 @@ const HostView: React.FC = () => {
   }, [hostAckNotification]);
 
   /** Official packs — uses Google host session; safe to call whenever playlists refresh too (rail against stale bundles / bootstrap timing). */
-  const loadCatalogPacks = useCallback(async () => {
-    if (!readHostSpotifyWebEnabled()) {
-      setCatalogPacksProbeDone(true);
-      setCatalogPacksFetchOk(false);
-      setCatalogPacksConfigured(false);
-      setCatalogPackOptions([]);
-      setCatalogPacksFetchUnauthorized(false);
-      setCatalogPrefixDiscoverySkipped(false);
-      return;
-    }
-    try {
-      const res = await hostFetch(`${API_BASE || ''}/api/spotify/catalog/packs`);
-      if (!res.ok) {
-        setCatalogPacksFetchOk(false);
-        setCatalogPacksConfigured(false);
-        setCatalogPackOptions([]);
-        setCatalogPacksFetchUnauthorized(res.status === 401);
-        setCatalogPrefixDiscoverySkipped(false);
+  const loadCatalogPacks = useCallback(
+    async (opts?: { forceRefresh?: boolean }) => {
+      const forceRefresh = opts?.forceRefresh === true;
+      if (forceRefresh) {
+        if (catalogPacksRefreshInFlightRef.current) return;
+        catalogPacksRefreshInFlightRef.current = true;
+        setCatalogPacksRefreshing(true);
+      }
+      if (!readHostSpotifyWebEnabled()) {
+        if (!forceRefresh) {
+          setCatalogPacksProbeDone(true);
+          setCatalogPacksFetchOk(false);
+          setCatalogPacksConfigured(false);
+          setCatalogPackOptions([]);
+          setCatalogPacksFetchUnauthorized(false);
+          setCatalogPrefixDiscoverySkipped(false);
+        }
+        if (forceRefresh) {
+          catalogPacksRefreshInFlightRef.current = false;
+          setCatalogPacksRefreshing(false);
+        }
         return;
       }
-      setCatalogPacksFetchUnauthorized(false);
-      const data = (await res.json()) as {
-        success?: boolean;
-        configured?: boolean;
-        packs?: Array<{ id: string; name: string; tracks: number; catalog?: boolean }>;
-        catalogPrefixDiscoverySkipped?: boolean;
-      };
-      if (!data.success) {
-        setCatalogPacksFetchOk(false);
-        setCatalogPacksConfigured(false);
-        setCatalogPackOptions([]);
-        setCatalogPrefixDiscoverySkipped(false);
-        return;
+      try {
+        const url = forceRefresh
+          ? `${API_BASE || ''}/api/spotify/catalog/packs?force=1`
+          : `${API_BASE || ''}/api/spotify/catalog/packs`;
+        const res = await hostFetch(url);
+        if (!res.ok) {
+          if (forceRefresh) {
+            let warnMsg = 'Could not refresh official packs.';
+            if (res.status === 429) {
+              try {
+                const d = (await res.json()) as { message?: string; retryAfterSec?: number };
+                const retryMin =
+                  typeof d.retryAfterSec === 'number' && d.retryAfterSec > 0
+                    ? ` Try again in about ${Math.max(1, Math.ceil(d.retryAfterSec / 60))} min.`
+                    : '';
+                warnMsg = (d.message || 'Spotify is rate-limiting catalog requests.') + retryMin;
+              } catch {
+                warnMsg = 'Spotify is rate-limiting catalog requests. Wait and try again.';
+              }
+            }
+            setCatalogPacksRefreshHint(warnMsg);
+            showHostAckNotification({
+              id: 'catalog-packs-refresh-failed',
+              title: 'Official packs refresh',
+              variant: 'warning',
+              message: warnMsg,
+            });
+          } else {
+            setCatalogPacksFetchOk(false);
+            setCatalogPacksConfigured(false);
+            setCatalogPackOptions([]);
+            setCatalogPacksFetchUnauthorized(res.status === 401);
+            setCatalogPrefixDiscoverySkipped(false);
+          }
+          return;
+        }
+        setCatalogPacksFetchUnauthorized(false);
+        const data = (await res.json()) as {
+          success?: boolean;
+          configured?: boolean;
+          packs?: Array<{ id: string; name: string; tracks: number; catalog?: boolean }>;
+          catalogPrefixDiscoverySkipped?: boolean;
+          refreshSkipped?: boolean;
+          cooldownRemainingMs?: number;
+          manualRefreshCooldownMs?: number;
+          message?: string;
+          refreshFailed?: boolean;
+          catalogCacheStale?: boolean;
+          manualRefresh?: boolean;
+        };
+        if (!data.success) {
+          if (!forceRefresh) {
+            setCatalogPacksFetchOk(false);
+            setCatalogPacksConfigured(false);
+            setCatalogPackOptions([]);
+            setCatalogPrefixDiscoverySkipped(false);
+          } else {
+            showHostAckNotification({
+              id: 'catalog-packs-refresh-failed',
+              title: 'Official packs refresh',
+              variant: 'warning',
+              message: 'Could not refresh official packs.',
+            });
+          }
+          return;
+        }
+        setCatalogPacksFetchOk(true);
+        setCatalogPacksConfigured(data.configured === true);
+        setCatalogPrefixDiscoverySkipped(data.catalogPrefixDiscoverySkipped === true);
+        const packs = data.packs || [];
+        setCatalogPackOptions(
+          packs.map((row) => ({
+            id: row.id,
+            name: row.name || 'Catalog pack',
+            tracks: Math.max(0, Number(row.tracks) || 0),
+            catalog: true,
+          })),
+        );
+
+        if (typeof data.cooldownRemainingMs === 'number' && data.cooldownRemainingMs > 0) {
+          setCatalogPacksCooldownRemainingMs(Math.ceil(data.cooldownRemainingMs));
+        } else if (
+          forceRefresh &&
+          data.manualRefresh === true &&
+          typeof data.manualRefreshCooldownMs === 'number' &&
+          data.manualRefreshCooldownMs > 0
+        ) {
+          setCatalogPacksCooldownRemainingMs(Math.ceil(data.manualRefreshCooldownMs));
+        }
+
+        if (data.refreshSkipped && data.message) {
+          setCatalogPacksRefreshHint(data.message);
+          showHostAckNotification({
+            id: 'catalog-packs-refresh-cooldown',
+            title: 'Official packs refresh',
+            variant: 'warning',
+            message: data.message,
+          });
+        } else if (data.refreshFailed && data.message) {
+          setCatalogPacksRefreshHint(data.message);
+          showHostAckNotification({
+            id: 'catalog-packs-refresh-stale',
+            title: 'Official packs refresh',
+            variant: 'warning',
+            message: data.message,
+          });
+        } else if (data.catalogPrefixDiscoverySkipped && data.message) {
+          setCatalogPacksRefreshHint(data.message);
+          showHostAckNotification({
+            id: 'catalog-packs-prefix-skipped',
+            title: 'Official packs refresh',
+            variant: 'warning',
+            message: data.message,
+          });
+        } else if (forceRefresh && data.manualRefresh) {
+          setCatalogPacksRefreshHint(null);
+          showHostAckNotification({
+            id: 'catalog-packs-refresh-ok',
+            title: 'Official packs refreshed',
+            variant: 'info',
+            message:
+              packs.length > 0
+                ? `Loaded ${packs.length} official pack${packs.length === 1 ? '' : 's'} from the catalog.`
+                : 'Catalog refresh completed — no matching packs found yet.',
+          });
+        } else if (data.message) {
+          setCatalogPacksRefreshHint(data.message);
+        }
+      } catch {
+        if (!forceRefresh) {
+          setCatalogPacksFetchOk(false);
+          setCatalogPacksConfigured(false);
+          setCatalogPackOptions([]);
+          setCatalogPacksFetchUnauthorized(false);
+          setCatalogPrefixDiscoverySkipped(false);
+        } else {
+          showHostAckNotification({
+            id: 'catalog-packs-refresh-network',
+            title: 'Official packs refresh',
+            variant: 'warning',
+            message: 'Network error while refreshing official packs. Showing the last loaded list.',
+          });
+        }
+      } finally {
+        if (!forceRefresh) {
+          setCatalogPacksProbeDone(true);
+        } else {
+          catalogPacksRefreshInFlightRef.current = false;
+          setCatalogPacksRefreshing(false);
+          setCatalogPacksProbeDone(true);
+        }
       }
-      setCatalogPacksFetchOk(true);
-      setCatalogPacksConfigured(data.configured === true);
-      setCatalogPrefixDiscoverySkipped(data.catalogPrefixDiscoverySkipped === true);
-      const packs = data.packs || [];
-      setCatalogPackOptions(
-        packs.map((row) => ({
-          id: row.id,
-          name: row.name || 'Catalog pack',
-          tracks: Math.max(0, Number(row.tracks) || 0),
-          catalog: true,
-        }))
-      );
-    } catch {
-      setCatalogPacksFetchOk(false);
-      setCatalogPacksConfigured(false);
-      setCatalogPackOptions([]);
-      setCatalogPacksFetchUnauthorized(false);
-      setCatalogPrefixDiscoverySkipped(false);
-    } finally {
-      setCatalogPacksProbeDone(true);
-    }
-  }, []);
+    },
+    [showHostAckNotification],
+  );
+
+  useEffect(() => {
+    if (catalogPacksCooldownRemainingMs <= 0) return;
+    const id = globalThis.setInterval(() => {
+      setCatalogPacksCooldownRemainingMs((prev) => {
+        const next = Math.max(0, prev - 1000);
+        if (next <= 0) setCatalogPacksRefreshHint(null);
+        return next;
+      });
+    }, 1000);
+    return () => globalThis.clearInterval(id);
+  }, [catalogPacksCooldownRemainingMs > 0]);
 
   /** Wait after host library Spotify traffic before hitting catalog (same app quota; catalog runs another full /me/playlists). */
   const scheduleCatalogPacksLoad = useCallback(
@@ -9324,15 +9463,69 @@ const HostView: React.FC = () => {
                         </p>
                       </div>
                       <div className="host-playlist-round-modal__catalog">
-                        <h4 className="host-playlist-round-modal__catalog-title">
-                          {!catalogPacksProbeDone || !catalogPacksFetchOk
-                            ? 'Official packs (catalog)'
-                            : catalogPacksConfigured
-                              ? catalogPackOptions.length > 0
-                                ? `Official packs — ${catalogPackOptions.length} from catalog`
-                                : 'Official packs (catalog)'
-                              : 'Official packs — server not configured'}
-                        </h4>
+                        <div
+                          className="host-playlist-round-modal__catalog-head"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 10,
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          <h4 className="host-playlist-round-modal__catalog-title" style={{ margin: 0 }}>
+                            {!catalogPacksProbeDone || !catalogPacksFetchOk
+                              ? 'Official packs (catalog)'
+                              : catalogPacksConfigured
+                                ? catalogPackOptions.length > 0
+                                  ? `Official packs — ${catalogPackOptions.length} from catalog`
+                                  : 'Official packs (catalog)'
+                                : 'Official packs — server not configured'}
+                          </h4>
+                          {catalogPacksConfigured ? (
+                            <button
+                              type="button"
+                              className="btn-secondary host-playlist-library-toolbar__icon-btn"
+                              disabled={
+                                catalogPacksRefreshing ||
+                                catalogPacksCooldownRemainingMs > 0 ||
+                                !catalogPacksFetchOk
+                              }
+                              aria-label={
+                                catalogPacksRefreshing
+                                  ? 'Refreshing official packs'
+                                  : catalogPacksCooldownRemainingMs > 0
+                                    ? 'Official packs refresh on cooldown'
+                                    : 'Refresh official packs'
+                              }
+                              title={
+                                catalogPacksCooldownRemainingMs > 0
+                                  ? `Refresh available in ${Math.max(1, Math.ceil(catalogPacksCooldownRemainingMs / 60000))} min`
+                                  : 'Refresh official packs from catalog (uses Spotify API quota; 5 min cooldown)'
+                              }
+                              onClick={() => void loadCatalogPacks({ forceRefresh: true })}
+                            >
+                              <RotateCcw
+                                className={`w-4 h-4${catalogPacksRefreshing ? ' host-playlist-library-toolbar__spin' : ''}`}
+                                aria-hidden
+                              />
+                            </button>
+                          ) : null}
+                        </div>
+                        {catalogPacksRefreshHint || catalogPacksCooldownRemainingMs > 0 ? (
+                          <p
+                            style={{
+                              margin: '8px 0 0',
+                              fontSize: '0.74rem',
+                              color: 'rgba(255,255,255,0.55)',
+                              lineHeight: 1.45,
+                            }}
+                            role="status"
+                          >
+                            {catalogPacksRefreshHint ||
+                              `Official packs refresh available in ${Math.max(1, Math.ceil(catalogPacksCooldownRemainingMs / 60000))} min.`}
+                          </p>
+                        ) : null}
                         <div
                           style={{
                             marginTop: 10,

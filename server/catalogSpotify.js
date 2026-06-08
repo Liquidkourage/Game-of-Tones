@@ -13,6 +13,8 @@
  * - TEMPO_CATALOG_PREFIX_OWNER_ONLY — default true: prefix matches must be owned by the catalog user
  *   (avoids followed playlists that 403 on /items).
  * - TEMPO_CATALOG_PREFIX_CACHE_MS — ms to cache prefix discovery in-memory per process (default 300000).
+ * - TEMPO_CATALOG_PACKS_MANUAL_REFRESH_COOLDOWN_MS — server cooldown between host `?force=1` catalog pack
+ *   refreshes (default 300000; minimum 60000 unless set to 0 for dev/test).
  * - TEMPO_CATALOG_PACKS_SERVER_CACHE_MS — Postgres TTL for `/api/spotify/catalog/packs` snapshots (default 604800000 = 7d).
  *   Set to 0 to always try live Spotify for packs (still uses stale DB row on hard failure).
  * - TEMPO_CATALOG_PACKS_BACKGROUND_WARM_MS — optional interval (ms) to refresh that Postgres snapshot in the
@@ -285,6 +287,11 @@ async function resolveCatalogAllowlistEntries() {
   return { entries: merged, meta: {} };
 }
 
+/** Host manual refresh (`?force=1`) — bypass in-memory prefix discovery cache for the next resolve. */
+function invalidateCatalogPrefixDiscoveryCache() {
+  catalogAllowlistResolveCache = null;
+}
+
 let catalogServiceSingleton = null;
 
 /** When primed at startup, catalog refresh uses these instead of env-only SPOTIFY_* (see TEMPO_CATALOG_SPOTIFY_CREDENTIALS_USER_ID). */
@@ -515,6 +522,7 @@ module.exports = {
   getCatalogPackSummariesCacheKey,
   parseCatalogAllowlistEntries,
   resolveCatalogAllowlistEntries,
+  invalidateCatalogPrefixDiscoveryCache,
   loadCatalogPackSummariesForApi,
   fetchCatalogPlaylistTracks,
   assertCatalogPlaylistAllowlisted,
