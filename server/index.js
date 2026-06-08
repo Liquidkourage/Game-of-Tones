@@ -644,6 +644,31 @@ function isDisplayConnectionPlayer(player) {
   return typeof player?.name === 'string' && /display/i.test(player.name);
 }
 
+/** Keep in-memory live rounds when the host tab closes/refreshes — do not wipe playback/display state. */
+function shouldRetainRoomAfterHostDisconnect(room) {
+  if (!room) return false;
+  const gs = room.gameState;
+  if (
+    gs === 'playing' ||
+    gs === 'paused_for_verification' ||
+    gs === 'paused' ||
+    gs === 'round_complete'
+  ) {
+    return true;
+  }
+  const called = Array.isArray(room.calledSongIds) ? room.calledSongIds.length : 0;
+  if (called > 0) return true;
+  if (room.mixFinalized && room.bingoCards && room.bingoCards.size > 0) return true;
+  if (
+    room.mixFinalized &&
+    Array.isArray(room.playlistSongs) &&
+    room.playlistSongs.length > 0
+  ) {
+    return true;
+  }
+  return false;
+}
+
 const DISPLAY_PRESENCE_STALE_MS = 25000;
 
 function buildDisplayPresencePayload(room) {
@@ -6817,13 +6842,21 @@ io.on('connection', (socket) => {
               );
             }
           } else {
-            // No players left, remove the room
-            void finalizeOrgEventForRoom(room);
-            rooms.delete(roomId);
-            routineServerLog(`Removed empty room: ${roomId}`);
+            room.host = null;
+            if (shouldRetainRoomAfterHostDisconnect(room)) {
+              routineServerLog(
+                `Host disconnected from room ${roomId}; retaining live session in memory until host reconnects (state=${room.gameState})`,
+              );
+            } else {
+              void finalizeOrgEventForRoom(room);
+              rooms.delete(roomId);
+              routineServerLog(`Removed empty room: ${roomId}`);
+            }
           }
         }
-        
+
+        if (!rooms.has(roomId)) break;
+
         // Notify remaining players
         io.to(roomId).emit('player-left', {
           playerId: socket.id,

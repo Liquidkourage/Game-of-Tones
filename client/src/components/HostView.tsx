@@ -135,6 +135,7 @@ import {
   shouldClearHostAwaitingLiveSync,
   writeActiveHostRoom,
 } from '../utils/hostRoomRecovery';
+import { acquireHostRoomSocket, scheduleReleaseHostRoomSocket } from '../utils/hostRoomSocket';
 import HostPlayersPanel from './host/HostPlayersPanel';
 import HostSettingsPanel from './host/HostSettingsPanel';
 import HostPreShowChecklist, { type PreShowCheckItem } from './host/HostPreShowChecklist';
@@ -765,10 +766,7 @@ const HostView: React.FC = () => {
         });
         if (cancelled) return;
         if (!r.ok) {
-          if (r.status === 404 && hostRoomExpectsLiveRecovery(roomId)) {
-            setHostAwaitingLiveSync(false);
-            clearActiveHostRoom();
-          }
+          // Room may still exist server-side until the socket reconnects; keep the live-sync gate open.
           return;
         }
         const data = await r.json();
@@ -2578,17 +2576,19 @@ const HostView: React.FC = () => {
     setSavedCustomPatterns(getSavedCustomPatterns());
     setSavedCompositePatterns(getSavedCompositePatterns());
     
-    // Initialize socket connection
+    // Initialize socket connection (shared per room; deferred release on unmount for Strict Mode remounts)
     const hostJwt = getHostJwt();
-    const newSocket = io(SOCKET_URL || undefined, {
-      transports: ['websocket'],
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000,
-      auth: { token: hostJwt || '' },
-    });
+    const { socket: newSocket, gen: hostSocketGeneration } = acquireHostRoomSocket(roomId || '', () =>
+      io(SOCKET_URL || undefined, {
+        transports: ['websocket'],
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 20000,
+        auth: { token: hostJwt || '' },
+      }),
+    );
     setSocket(newSocket);
     /** One retry if first host join failed host-secret check (e.g. JWT not ready yet). */
     let hostSecretRetryOnce = false;
@@ -3902,11 +3902,11 @@ const HostView: React.FC = () => {
 
     checkSpotifyStatus();
 
-    // Cleanup socket on unmount
+    // Cleanup socket listeners; defer close so refresh/remount does not instantly drop a live server room
     return () => {
       newSocket.off('connect', onConnectJoin);
       if (playerCardsRefreshTimer) clearTimeout(playerCardsRefreshTimer);
-      newSocket.close();
+      scheduleReleaseHostRoomSocket(hostSocketGeneration);
       spotifyStatusCheckInFlightRef.current = false;
       // Clear any pending volume timeout
       if (volumeTimeout) {
