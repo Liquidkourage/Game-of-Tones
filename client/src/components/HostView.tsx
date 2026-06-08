@@ -523,6 +523,13 @@ function roundSnapshotMatchesCurrentPlaylists(round: EventRound): boolean {
   return roundPlaylistIdsKey(atSave) === roundPlaylistIdsKey(round.playlistIds);
 }
 
+/** Playlist column order frozen at Save round — required for 5×15 printable card geometry. */
+function playlistIdsForRoundExport(round: EventRound): string[] {
+  const atSave = round.savedMixSnapshot?.playlistIdsAtSave;
+  if (atSave?.length) return [...atSave];
+  return [...(round.playlistIds || [])];
+}
+
 /** Saved mix is tied to a specific playlist set — clear when buckets change after Save. */
 function clearSnapshotIfPlaylistsChanged(next: EventRound, prev?: EventRound): EventRound {
   if (!prev?.savedMixSnapshot?.songs?.length) return next;
@@ -4363,13 +4370,14 @@ const HostView: React.FC = () => {
         };
         const onErr = (payload: any) => {
           cleanup();
-          reject(
-            new Error(
-              typeof payload?.message === 'string'
-                ? payload.message
-                : 'Could not generate printable cards.',
-            ),
-          );
+          let msg =
+            typeof payload?.message === 'string'
+              ? payload.message
+              : 'Could not generate printable cards.';
+          if (typeof payload?.orgPortalUrl === 'string' && payload.orgPortalUrl.trim()) {
+            msg += `\n\nOpen Account: ${payload.orgPortalUrl.trim()}`;
+          }
+          reject(new Error(msg));
         };
         timeoutId = globalThis.setTimeout(() => {
           cleanup();
@@ -4503,8 +4511,9 @@ const HostView: React.FC = () => {
 
   /** Printable PDF from saved round snapshot (pre-show) — not the live room pool. */
   const handleDownloadRoundPrintablePdf = useCallback(
-    (round: EventRound) => {
-      const ids = round.playlistIds || [];
+    (round: EventRound | undefined) => {
+      if (!round) return;
+      const ids = playlistIdsForRoundExport(round);
       if (ids.length === 0) return;
       if (!eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled)) {
         window.alert(
@@ -4540,7 +4549,7 @@ const HostView: React.FC = () => {
       window.alert('Connect to the room first.');
       return;
     }
-    const saved = eventRounds.filter((r) =>
+    const saved = eventRoundsRef.current.filter((r) =>
       eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled),
     );
     if (saved.length === 0) {
@@ -4552,26 +4561,31 @@ const HostView: React.FC = () => {
       const count = Math.min(200, Math.max(1, Math.floor(Number(printableCardCount)) || 30));
       setPrintablePdfLoading(true);
       try {
-        const callSections = saved.map((round) => ({
-          roundName: round.name,
-          roomLabel: `Room ${roomId}`,
-          tracks: round.savedMixSnapshot!.songs.map((s) => ({
-            name: s.name,
-            artist: s.artist,
-          })),
-        }));
+        const callSections = saved.map((round) => {
+          const meta = roundPrintMetaFor(round);
+          return {
+            roundName: round.name,
+            roomLabel: `Room ${roomId}`,
+            patternLabel: roundPatternLabelForPrint(meta),
+            tracks: round.savedMixSnapshot!.songs.map((s) => ({
+              name: s.name,
+              artist: s.artist,
+            })),
+          };
+        });
         const cardSections: PrintablePdfSection[] = [];
         for (const round of saved) {
           const snap = round.savedMixSnapshot!;
           const fs =
             round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : freeSpaceEnabled;
           const meta = roundPrintMetaFor(round);
+          const exportPlaylistIds = playlistIdsForRoundExport(round);
           const { cards, freeSpace, logoUrl } = await fetchPrintableCardsFromServer(count, {
             freeSpace: fs,
             roundExport: {
               songs: snap.songs.map(cloneSongForSnapshot),
               mixGeometry: snap.mixGeometry,
-              playlistIds: round.playlistIds || [],
+              playlistIds: exportPlaylistIds,
               freeSpace: fs,
             },
           });
@@ -4606,7 +4620,6 @@ const HostView: React.FC = () => {
   }, [
     socket,
     roomId,
-    eventRounds,
     freeSpaceEnabled,
     printableCardCount,
     fetchPrintableCardsFromServer,
@@ -4614,7 +4627,8 @@ const HostView: React.FC = () => {
   ]);
 
   const handleDownloadRoundCallSheetPdf = useCallback(
-    (round: EventRound) => {
+    (round: EventRound | undefined) => {
+      if (!round) return;
       const songs = round.savedMixSnapshot?.songs;
       if (!eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled)) {
         window.alert(
@@ -4627,9 +4641,11 @@ const HostView: React.FC = () => {
         return;
       }
       try {
+        const meta = roundPrintMetaFor(round);
         const blob = buildRoundCallSheetPdfBlob({
           roundName: round.name,
           roomLabel: `Room ${roomId}`,
+          patternLabel: roundPatternLabelForPrint(meta),
           tracks: songs.map((s) => ({ name: s.name, artist: s.artist })),
         });
         const safeSlug = (round.name || 'round').replace(/[^\w\-]+/g, '_').slice(0, 48);
@@ -4644,7 +4660,7 @@ const HostView: React.FC = () => {
         window.alert('Could not build call sheet PDF. Try again or use a shorter round name.');
       }
     },
-    [roomId, freeSpaceEnabled],
+    [roomId, freeSpaceEnabled, roundPrintMetaFor],
   );
 
   const startGame = async (opts?: { roundOverride?: EventRound | null; playlistsOverride?: Playlist[] | null }) => {
@@ -8642,13 +8658,13 @@ const HostView: React.FC = () => {
       onSaveRound={(idx) => void handleSaveRoundAtIndex(idx)}
       saveRoundBusy={saveRoundBusy}
       snapshotMeetsSave={(r) => eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled)}
-      onPrintPdf={(idx) => handleDownloadRoundPrintablePdf(eventRounds[idx])}
+      onPrintPdf={(idx) => handleDownloadRoundPrintablePdf(eventRoundsRef.current[idx])}
       onPrintAllPreShow={handlePrintAllPreShowPdf}
       onPreviewPrint={handlePreviewPrintPdf}
       savedRoundCount={eventRounds.filter((r) =>
         eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled),
       ).length}
-      onCallSheet={(idx) => handleDownloadRoundCallSheetPdf(eventRounds[idx])}
+      onCallSheet={(idx) => handleDownloadRoundCallSheetPdf(eventRoundsRef.current[idx])}
       onOpenComposite={openCompositeForRound}
       onNewCustomPattern={handleNewCustomPattern}
       printablePdfLoading={printablePdfLoading}

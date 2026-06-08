@@ -13,6 +13,8 @@ function sanitizePdfText(s: string): string {
 export type RoundCallSheetPdfOpts = {
   roundName: string;
   roomLabel: string;
+  /** Winning pattern for this saved round (shown under the round name). */
+  patternLabel?: string;
   tracks: CallSheetTrack[];
 };
 
@@ -104,7 +106,12 @@ function drawDocumentTitle(state: CallSheetDocState, title: string, subtitle: st
   state.y += 8;
 }
 
-function drawRoundHeading(state: CallSheetDocState, roundName: string, roomLabel: string) {
+function drawRoundHeading(
+  state: CallSheetDocState,
+  roundName: string,
+  roomLabel: string,
+  patternLabel?: string,
+) {
   state.doc.setFont('helvetica', 'bold');
   state.doc.setFontSize(ROUND_PT);
   state.doc.setTextColor(26, 26, 28);
@@ -112,7 +119,9 @@ function drawRoundHeading(state: CallSheetDocState, roundName: string, roomLabel
   state.doc.text(sanitizePdfText(roundName), MARGIN, state.y);
   state.y += TITLE_LH;
 
-  const subLines = state.doc.splitTextToSize(sanitizePdfText(roomLabel), state.maxW);
+  const subParts = [roomLabel];
+  if (patternLabel?.trim()) subParts.push(`Pattern: ${patternLabel.trim()}`);
+  const subLines = state.doc.splitTextToSize(sanitizePdfText(subParts.join(' · ')), state.maxW);
   drawWrapped(state, subLines, 'helvetica', 'normal', SUB_PT, [72, 72, 76]);
   state.y += 6;
 }
@@ -148,7 +157,7 @@ export function appendMultiRoundCallSheetsToDoc(
     } else {
       state.y += 4;
     }
-    drawRoundHeading(state, opts.roundName, opts.roomLabel);
+    drawRoundHeading(state, opts.roundName, opts.roomLabel, opts.patternLabel);
     drawTrackList(state, opts.tracks);
     if (i < sections.length - 1) {
       state.y += 8;
@@ -162,7 +171,10 @@ export function appendMultiRoundCallSheetsToDoc(
 export function buildRoundCallSheetPdfBlob(opts: RoundCallSheetPdfOpts): Blob {
   const doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
   const state = createCallSheetDocState(doc);
-  drawDocumentTitle(state, 'TEMPO — Host call sheet', `${opts.roundName} · ${opts.roomLabel}`);
+  const titleSub = opts.patternLabel?.trim()
+    ? `${opts.roundName} · ${opts.roomLabel} · Pattern: ${opts.patternLabel.trim()}`
+    : `${opts.roundName} · ${opts.roomLabel}`;
+  drawDocumentTitle(state, 'TEMPO — Host call sheet', titleSub);
   drawPlaybackHint(state);
   drawTrackList(state, opts.tracks);
   return doc.output('blob');
