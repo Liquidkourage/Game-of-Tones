@@ -132,6 +132,7 @@ import {
   mergeHostGameStateFromRoomPayload,
   persistActiveHostRoomFromPayload,
   roomPayloadIndicatesLiveRound,
+  shouldClearHostAwaitingLiveSync,
   writeActiveHostRoom,
 } from '../utils/hostRoomRecovery';
 import HostPlayersPanel from './host/HostPlayersPanel';
@@ -752,6 +753,44 @@ const HostView: React.FC = () => {
   useEffect(() => {
     setHostAwaitingLiveSync(hostRoomExpectsLiveRecovery(roomId));
   }, [roomId]);
+
+  /** Authoritative in-memory room snapshot (same source as socket sync-state). Runs before socket connects. */
+  useEffect(() => {
+    if (!roomId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await fetch(`${API_BASE || ''}/api/rooms/${encodeURIComponent(roomId)}`, {
+          cache: 'no-store',
+        });
+        if (cancelled) return;
+        if (!r.ok) {
+          if (r.status === 404 && hostRoomExpectsLiveRecovery(roomId)) {
+            setHostAwaitingLiveSync(false);
+            clearActiveHostRoom();
+          }
+          return;
+        }
+        const data = await r.json();
+        const merged = mergeHostGameStateFromRoomPayload(gameStateRef.current, data);
+        gameStateRef.current = merged;
+        setGameState(merged);
+        persistActiveHostRoomFromPayload(roomId, data);
+        if (merged === 'playing') {
+          setHostAwaitingLiveSync(false);
+          setHostGlassNav('game');
+        } else if (shouldClearHostAwaitingLiveSync(roomId, merged, data)) {
+          setHostAwaitingLiveSync(false);
+        }
+      } catch {
+        /* socket sync remains primary */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId]);
+
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   /** YouTube Music playlists (API); merged into Playlist library table and Round planner. */
@@ -2722,6 +2761,7 @@ const HostView: React.FC = () => {
           setIsPlaying(false);
           setCurrentSong(null);
           setGameState('waiting');
+          gameStateRef.current = 'waiting';
           if (roomId) {
             writeActiveHostRoom({ roomId, gameState: 'waiting', updatedAt: Date.now() });
           }
@@ -2743,6 +2783,7 @@ const HostView: React.FC = () => {
 
     newSocket.on('game-started', (data: any) => {
       console.log('?? GAME-STARTED EVENT RECEIVED:', data);
+      gameStateRef.current = 'playing';
       setGameState('playing');
       if (roomId) {
         writeActiveHostRoom({ roomId, gameState: 'playing', updatedAt: Date.now() });
@@ -3106,6 +3147,7 @@ const HostView: React.FC = () => {
     newSocket.on('sync-state-response', (data: any) => {
       console.log('Sync state response:', data);
       const merged = mergeHostGameStateFromRoomPayload(gameStateRef.current, data);
+      gameStateRef.current = merged;
       setGameState(merged);
       if (roomId) {
         persistActiveHostRoomFromPayload(roomId, data);
@@ -3113,7 +3155,7 @@ const HostView: React.FC = () => {
       if (merged === 'playing') {
         setHostAwaitingLiveSync(false);
         setHostGlassNav('game');
-      } else if (merged === 'ended' || !roomPayloadIndicatesLiveRound(data)) {
+      } else if (shouldClearHostAwaitingLiveSync(roomId, merged, data)) {
         setHostAwaitingLiveSync(false);
       }
       if (data.gameState) {
@@ -3202,6 +3244,7 @@ const HostView: React.FC = () => {
 
     newSocket.on('room-state', (payload: any) => {
       const merged = mergeHostGameStateFromRoomPayload(gameStateRef.current, payload);
+      gameStateRef.current = merged;
       setGameState(merged);
       if (roomId) {
         persistActiveHostRoomFromPayload(roomId, payload);
@@ -3209,7 +3252,7 @@ const HostView: React.FC = () => {
       if (merged === 'playing') {
         setHostAwaitingLiveSync(false);
         setHostGlassNav('game');
-      } else if (merged === 'ended' || !roomPayloadIndicatesLiveRound(payload)) {
+      } else if (shouldClearHostAwaitingLiveSync(roomId, merged, payload)) {
         setHostAwaitingLiveSync(false);
       }
       if (payload?.isPlaying !== undefined) {
@@ -3556,6 +3599,7 @@ const HostView: React.FC = () => {
 
     newSocket.on('game-reset', () => {
       setIsPlaying(false);
+      gameStateRef.current = 'waiting';
       setGameState('waiting');
       clearActiveHostRoom();
       setCurrentSong(null);
@@ -6073,6 +6117,7 @@ const HostView: React.FC = () => {
   const dismissRoundCompleteModal = useCallback(() => {
     setRoundComplete(null);
     setGamePaused(true);
+    gameStateRef.current = 'waiting';
     setGameState('waiting');
     showToast('Round complete — host screen restored. Start the next round when you\'re ready.', 'info');
     addLog('Round complete modal dismissed — host controls available', 'info');

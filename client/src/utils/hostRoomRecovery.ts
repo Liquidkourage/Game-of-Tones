@@ -7,6 +7,8 @@ export type HostActiveRoomPointer = {
   updatedAt: number;
 };
 
+export type HostGameState = 'waiting' | 'playing' | 'ended';
+
 export function readActiveHostRoom(): HostActiveRoomPointer | null {
   try {
     const raw = sessionStorage.getItem(HOST_ACTIVE_ROOM_KEY);
@@ -50,6 +52,7 @@ export function roomPayloadIndicatesLiveRound(payload: unknown): boolean {
   const p = payload as Record<string, unknown>;
   const gs = p.gameState;
   if (gs === 'playing' || gs === 'paused_for_verification' || gs === 'paused') return true;
+  if (gs === 'round_complete') return true;
   if (p.isPlaying === true) return true;
   if (p.currentSong != null) return true;
   if (typeof p.totalPlayedCount === 'number' && p.totalPlayedCount > 0) return true;
@@ -58,13 +61,13 @@ export function roomPayloadIndicatesLiveRound(payload: unknown): boolean {
   return false;
 }
 
-export function hostGameStateFromRoomPayload(payload: unknown): 'waiting' | 'playing' | 'ended' {
+export function hostGameStateFromRoomPayload(payload: unknown): HostGameState {
   if (!payload || typeof payload !== 'object') return 'waiting';
   const gs = (payload as Record<string, unknown>).gameState;
   if (gs === 'ended') return 'ended';
   if (gs === 'playing' || gs === 'paused_for_verification' || gs === 'paused') return 'playing';
-  if (gs === 'round_complete') return 'waiting';
   if (roomPayloadIndicatesLiveRound(payload)) return 'playing';
+  if (gs === 'round_complete') return 'waiting';
   return 'waiting';
 }
 
@@ -73,14 +76,28 @@ export function hostGameStateFromRoomPayload(payload: unknown): 'waiting' | 'pla
  * Room-state may broadcast empty call-log resets while the round is still live — never downgrade playing → waiting here.
  */
 export function mergeHostGameStateFromRoomPayload(
-  previous: 'waiting' | 'playing' | 'ended',
+  previous: HostGameState,
   payload: unknown,
-): 'waiting' | 'playing' | 'ended' {
+): HostGameState {
   const derived = hostGameStateFromRoomPayload(payload);
   if (derived === 'ended') return 'ended';
   if (derived === 'playing') return 'playing';
   if (previous === 'playing') return 'playing';
   return 'waiting';
+}
+
+/**
+ * End the "awaiting live sync" gate only when authoritative state confirms live, ended, or a settled idle room.
+ * Do not treat a bare waiting label as "not started" while this tab recently had a live round here.
+ */
+export function shouldClearHostAwaitingLiveSync(
+  roomId: string | undefined,
+  merged: HostGameState,
+  payload: unknown,
+): boolean {
+  if (merged === 'playing' || merged === 'ended') return true;
+  if (!hostRoomExpectsLiveRecovery(roomId)) return true;
+  return !roomPayloadIndicatesLiveRound(payload);
 }
 
 export function persistActiveHostRoomFromPayload(roomId: string, payload: unknown): void {

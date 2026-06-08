@@ -10242,14 +10242,18 @@ app.get('/api/rooms', (req, res) => {
 app.get('/api/rooms/:roomId', (req, res) => {
   const room = rooms.get(req.params.roomId);
   if (room) {
+    const playedSongIds = syncCalledSongIdsFromPlaybackIndex(room);
     res.json({
       id: room.id,
       playerCount: getNonHostPlayerCount(room),
       gameState: room.gameState,
+      isPlaying: room.gameState === 'playing',
       currentSong: room.currentSong,
       mixFinalized: !!room.mixFinalized,
       snippetLength: room.snippetLength,
-      hasPlaylist: Array.isArray(room.playlistSongs) && room.playlistSongs.length > 0
+      hasPlaylist: Array.isArray(room.playlistSongs) && room.playlistSongs.length > 0,
+      playedSongIds,
+      totalPlayedCount: playedSongIds.length,
     });
   } else {
     res.status(404).json({ error: 'Room not found' });
