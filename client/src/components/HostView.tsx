@@ -103,7 +103,7 @@ import {
   type PrintableCard,
   type PrintablePdfSection,
 } from '../utils/printableBingoPdf';
-import { roundPatternLabelForPrint, roundPrintablePdfSubtitle } from '../utils/roundPrintLabels';
+import { roundPatternLabelForPrint, roundPrintablePdfSubtitle, printablePlaylistLabelsFromNames } from '../utils/roundPrintLabels';
 import { buildRoundCallSheetPdfBlob } from '../utils/printRoundCallSheetPdf';
 import {
   normalizePublicDisplayTitleRevealMode,
@@ -528,6 +528,18 @@ function playlistIdsForRoundExport(round: EventRound): string[] {
   const atSave = round.savedMixSnapshot?.playlistIdsAtSave;
   if (atSave?.length) return [...atSave];
   return [...(round.playlistIds || [])];
+}
+
+/** Stem playlist labels for printable PDF headers (5×15 columns or 1×75 title). */
+function playlistStemPrintLabelsForRound(
+  round: EventRound,
+): { columnLabels?: string[]; singlePlaylistTitle?: string } {
+  const ids = playlistIdsForRoundExport(round);
+  const names = ids.map((id) => {
+    const i = round.playlistIds.indexOf(id);
+    return i >= 0 ? round.playlistNames[i] || '' : '';
+  });
+  return printablePlaylistLabelsFromNames(names);
 }
 
 /** Saved mix is tied to a specific playlist set — clear when buckets change after Save. */
@@ -4430,6 +4442,8 @@ const HostView: React.FC = () => {
       roundName?: string;
       patternLabel?: string;
       roomLabel?: string;
+      columnLabels?: string[];
+      singlePlaylistTitle?: string;
       roundExport?: {
         songs: Song[];
         mixGeometry: SavedMixGeometry;
@@ -4469,6 +4483,8 @@ const HostView: React.FC = () => {
             roundName: opts.roundName,
             patternLabel: opts.patternLabel,
             roomLabel: opts.roomLabel ?? `Room ${roomId}`,
+            columnLabels: opts.columnLabels,
+            singlePlaylistTitle: opts.singlePlaylistTitle,
             logoUrl,
           });
           const url = URL.createObjectURL(blob);
@@ -4532,6 +4548,7 @@ const HostView: React.FC = () => {
         roundName: round.name,
         patternLabel: roundPatternLabelForPrint(meta),
         roomLabel: meta.roomLabel,
+        ...playlistStemPrintLabelsForRound(round),
         roundExport: {
           songs: snap.songs,
           mixGeometry: snap.mixGeometry,
@@ -4597,6 +4614,7 @@ const HostView: React.FC = () => {
               roundName: round.name,
               patternLabel: roundPatternLabelForPrint(meta),
               roomLabel: meta.roomLabel,
+              ...playlistStemPrintLabelsForRound(round),
               logoUrl,
             },
           });

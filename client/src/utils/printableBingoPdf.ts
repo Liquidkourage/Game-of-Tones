@@ -59,6 +59,10 @@ export type PrintablePdfOpts = {
   roundName?: string;
   patternLabel?: string;
   roomLabel?: string;
+  /** 5×15: stem playlist name under each B-I-N-G-O column header. */
+  columnLabels?: string[];
+  /** 1×75: stem playlist name in the card header meta block. */
+  singlePlaylistTitle?: string;
   /** Venue logo URL (absolute or path) — centered on the 5×5 grid at ~10% opacity, fit inside grid bounds. */
   logoUrl?: string | null;
   /** Diagonal PREVIEW watermark (free sample card). */
@@ -245,18 +249,22 @@ type PageLayout = {
   bingoBaseline: number;
 };
 
-function computePageLayout(doc: jsPDF, headerLineCount: number): PageLayout {
+const COLUMN_LABEL_PT = 7;
+const COLUMN_LABEL_MAX_LINES = 2;
+const COLUMN_LABEL_RESERVE_PT = 22;
+
+function computePageLayout(doc: jsPDF, opts: PrintablePdfOpts): PageLayout {
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const margin = 40;
   const marginBottom = 40;
-  const titleFontPt = 17;
   const metaFontPt = 10;
   const titleBaseline = margin + 20;
-  const metaBlockH = Math.max(0, headerLineCount - 1) * (metaFontPt * 1.35);
-  const bingoFontPt = 13;
+  const metaBlockH = headerMetaLines(opts).length * (metaFontPt * 1.35);
   const bingoBaseline = titleBaseline + metaBlockH + 28;
-  const gridTop = bingoBaseline + 16;
+  const hasColumnLabels = opts.columnLabels?.length === 5;
+  const columnLabelReserve = hasColumnLabels ? COLUMN_LABEL_RESERVE_PT : 0;
+  const gridTop = bingoBaseline + 16 + columnLabelReserve;
   const availW = pageW - margin * 2;
   const availH = pageH - gridTop - marginBottom;
   const cell = Math.min(availW / 5, availH / 5);
@@ -270,9 +278,33 @@ function headerMetaLines(opts: PrintablePdfOpts): string[] {
   if (opts.roundName?.trim()) lines.push(opts.roundName.trim());
   else if (opts.subtitle?.trim()) lines.push(opts.subtitle.trim());
   if (opts.patternLabel?.trim()) lines.push(`Pattern: ${opts.patternLabel.trim()}`);
+  if (opts.singlePlaylistTitle?.trim()) {
+    lines.push(`Playlist: ${opts.singlePlaylistTitle.trim()}`);
+  }
   if (opts.roomLabel?.trim() && !opts.subtitle?.includes(opts.roomLabel.trim())) {
     lines.push(opts.roomLabel.trim());
   }
+  return lines;
+}
+
+function fitColumnLabel(
+  doc: jsPDF,
+  raw: string,
+  maxW: number,
+  maxLines: number,
+  fontPt: number,
+): string[] {
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(fontPt);
+  const text = raw.trim() || '—';
+  let lines = doc.splitTextToSize(text, maxW);
+  if (lines.length <= maxLines) return lines;
+  lines = lines.slice(0, maxLines);
+  let last = lines[maxLines - 1];
+  while (last.length > 1 && doc.getTextWidth(`${last}…`) > maxW) {
+    last = last.slice(0, -1);
+  }
+  lines[maxLines - 1] = `${last}…`;
   return lines;
 }
 
@@ -305,6 +337,25 @@ function drawPageHeader(doc: jsPDF, layout: PageLayout, opts: PrintablePdfOpts):
   for (let c = 0; c < 5; c++) {
     const cx = gridX + c * cell + cell / 2;
     doc.text(BINGO_LETTERS[c], cx, bingoBaseline, { align: 'center' });
+  }
+
+  const colLabels = opts.columnLabels;
+  if (colLabels?.length === 5) {
+    const labelLh = COLUMN_LABEL_PT * 1.12;
+    const textW = Math.max(8, cell - 6);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(COLUMN_LABEL_PT);
+    doc.setTextColor(INK_MUTED.r, INK_MUTED.g, INK_MUTED.b);
+    let labelY = bingoBaseline + 6;
+    for (let c = 0; c < 5; c++) {
+      const cx = gridX + c * cell + cell / 2;
+      const lines = fitColumnLabel(doc, colLabels[c] || '', textW, COLUMN_LABEL_MAX_LINES, COLUMN_LABEL_PT);
+      let y = labelY + COLUMN_LABEL_PT * 0.85;
+      for (const line of lines) {
+        doc.text(line, cx, y, { align: 'center' });
+        y += labelLh;
+      }
+    }
   }
 }
 
@@ -391,8 +442,7 @@ export async function buildPrintableBingoPdfBlob(
   opts: PrintablePdfOpts = {},
 ): Promise<Blob> {
   const doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
-  const headerLines = 1 + headerMetaLines(opts).length;
-  const layout = computePageLayout(doc, headerLines);
+  const layout = computePageLayout(doc, opts);
   const logoForGrid = await prepareLogoForGrid(opts, layout.gridW);
 
   for (let i = 0; i < cards.length; i++) {
@@ -413,8 +463,7 @@ export async function appendMultiRoundPrintableCardsToDoc(
 ): Promise<void> {
   for (const section of sections) {
     if (!section.cards.length) continue;
-    const headerLines = 1 + headerMetaLines(section.opts).length;
-    const layout = computePageLayout(doc, headerLines);
+    const layout = computePageLayout(doc, section.opts);
     const logoForGrid = await prepareLogoForGrid(section.opts, layout.gridW);
 
     for (const card of section.cards) {
