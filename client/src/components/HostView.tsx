@@ -128,7 +128,10 @@ import { HOST_GLASS_NAV_ITEMS, parseHostGlassNavTab } from '../host/hostGlassNav
 import { appendHostActivity, type HostActivityEntry } from '../host/hostActivityLog';
 import {
   clearActiveHostRoom,
+  hostGameStateFromRoomPayload,
   hostRoomExpectsLiveRecovery,
+  persistActiveHostRoomFromPayload,
+  roomPayloadIndicatesLiveRound,
   writeActiveHostRoom,
 } from '../utils/hostRoomRecovery';
 import HostPlayersPanel from './host/HostPlayersPanel';
@@ -205,7 +208,9 @@ function normalizeSyncedSongForHost(song: any): Song | null {
 
 function normalizeRoomGameStateForHost(gameState: unknown): 'waiting' | 'playing' | 'ended' {
   if (gameState === 'ended') return 'ended';
-  if (gameState === 'playing' || gameState === 'paused_for_verification') return 'playing';
+  if (gameState === 'playing' || gameState === 'paused_for_verification' || gameState === 'paused') {
+    return 'playing';
+  }
   return 'waiting';
 }
 
@@ -738,20 +743,15 @@ const HostView: React.FC = () => {
   const [socket, setSocket] = useState<any>(null);
   const [gameState, setGameState] = useState<'waiting' | 'playing' | 'ended'>('waiting');
   const gameStateRef = useRef<'waiting' | 'playing' | 'ended'>('waiting');
-  const [hostRoomHydrated, setHostRoomHydrated] = useState(false);
-  const hostExpectsLiveRecovery = useMemo(() => hostRoomExpectsLiveRecovery(roomId), [roomId]);
-  const hostRoomHydrating = !hostRoomHydrated && hostExpectsLiveRecovery;
+  const [hostAwaitingLiveSync, setHostAwaitingLiveSync] = useState(() => hostRoomExpectsLiveRecovery(roomId));
+  const hostRoomHydrating =
+    hostAwaitingLiveSync && gameState !== 'playing' && gameState !== 'ended';
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
   useEffect(() => {
-    setHostRoomHydrated(false);
+    setHostAwaitingLiveSync(hostRoomExpectsLiveRecovery(roomId));
   }, [roomId]);
-  useEffect(() => {
-    if (!roomId || hostRoomHydrated) return;
-    const t = window.setTimeout(() => setHostRoomHydrated(true), 12_000);
-    return () => window.clearTimeout(t);
-  }, [roomId, hostRoomHydrated]);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   /** YouTube Music playlists (API); merged into Playlist library table and Round planner. */
@@ -2747,6 +2747,7 @@ const HostView: React.FC = () => {
       if (roomId) {
         writeActiveHostRoom({ roomId, gameState: 'playing', updatedAt: Date.now() });
       }
+      setHostAwaitingLiveSync(false);
       console.log('?? SET GAME STATE TO PLAYING');
       setIsStartingGame(false);
       setBingoColumnPlaylistNames([]);
@@ -3093,6 +3094,7 @@ const HostView: React.FC = () => {
       setRoundComplete(null);
       setGameState('ended');
       clearActiveHostRoom();
+      setHostAwaitingLiveSync(false);
       setIsPlaying(false);
       void disconnectSpotifySocketRef.current();
       if (data.roundWinners) {
@@ -3103,9 +3105,18 @@ const HostView: React.FC = () => {
 
     newSocket.on('sync-state-response', (data: any) => {
       console.log('Sync state response:', data);
-      setHostRoomHydrated(true);
+      const derived = hostGameStateFromRoomPayload(data);
+      setGameState(derived);
+      if (roomId) {
+        persistActiveHostRoomFromPayload(roomId, data);
+      }
+      if (derived === 'playing') {
+        setHostAwaitingLiveSync(false);
+        setHostGlassNav('game');
+      } else if (derived === 'ended' || !roomPayloadIndicatesLiveRound(data)) {
+        setHostAwaitingLiveSync(false);
+      }
       if (data.gameState) {
-        setGameState(normalizeRoomGameStateForHost(data.gameState));
         addLog(`Synced game state to: ${data.gameState}`, 'info');
       }
       if (data.currentSong) {
@@ -3190,19 +3201,18 @@ const HostView: React.FC = () => {
     });
 
     newSocket.on('room-state', (payload: any) => {
-      setHostRoomHydrated(true);
+      const derived = hostGameStateFromRoomPayload(payload);
       if (roomId) {
-        writeActiveHostRoom({
-          roomId,
-          gameState: payload?.gameState != null ? String(payload.gameState) : undefined,
-          updatedAt: Date.now(),
-        });
-        if (normalizeRoomGameStateForHost(payload?.gameState) === 'playing') {
-          setHostGlassNav('game');
-        }
+        persistActiveHostRoomFromPayload(roomId, payload);
+      }
+      if (derived === 'playing') {
+        setHostAwaitingLiveSync(false);
+        setHostGlassNav('game');
+      } else if (derived === 'ended' || !roomPayloadIndicatesLiveRound(payload)) {
+        setHostAwaitingLiveSync(false);
       }
       if (payload?.gameState !== undefined) {
-        setGameState(normalizeRoomGameStateForHost(payload.gameState));
+        setGameState(derived);
       }
       if (payload?.isPlaying !== undefined) {
         setIsPlaying(!!payload.isPlaying);
@@ -3216,6 +3226,7 @@ const HostView: React.FC = () => {
         payload?.isPlaying === true ||
         payload?.gameState === 'playing' ||
         payload?.gameState === 'paused_for_verification' ||
+        payload?.gameState === 'paused' ||
         payload?.currentSong != null;
       if (shouldHydrateLiveSnippetLength && payload?.snippetLength !== undefined) {
         const nextSnippetLength = Number(payload.snippetLength);
@@ -6831,8 +6842,8 @@ const HostView: React.FC = () => {
 
   const resyncHostRoomState = useCallback(() => {
     if (!socket || !roomId) return;
-    if (hostRoomExpectsLiveRecovery(roomId)) {
-      setHostRoomHydrated(false);
+    if (hostRoomExpectsLiveRecovery(roomId) || gameStateRef.current === 'playing') {
+      setHostAwaitingLiveSync(true);
     }
     try {
       socket.emit('sync-state', { roomId });
@@ -6853,8 +6864,8 @@ const HostView: React.FC = () => {
       lastForegroundResyncAtRef.current = now;
       ignorePollingUntilRef.current = now + 8000;
 
-      if (hostRoomExpectsLiveRecovery(roomId)) {
-        setHostRoomHydrated(false);
+      if (hostRoomExpectsLiveRecovery(roomId) || gameStateRef.current === 'playing') {
+        setHostAwaitingLiveSync(true);
       }
       try {
         socket.emit('sync-state', { roomId });
@@ -8615,6 +8626,7 @@ const HostView: React.FC = () => {
       onResetEvent={resetEvent}
       onClearPrepCache={clearRoomRoundPrepStorage}
       onEndRound={handleEndRound}
+      hostControlsHydrating={hostRoomHydrating}
       onResetCurrentRound={resetCurrentRound}
       onStartNextPlanned={() => {
         const next = getNextPlannedRound();

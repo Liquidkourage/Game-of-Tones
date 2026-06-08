@@ -41,5 +41,43 @@ export function hostRoomExpectsLiveRecovery(roomId: string | undefined): boolean
   const ptr = readActiveHostRoom();
   if (!ptr || ptr.roomId !== roomId) return false;
   const gs = ptr.gameState;
-  return gs === 'playing' || gs === 'paused_for_verification';
+  return gs === 'playing' || gs === 'paused_for_verification' || gs === 'paused';
+}
+
+/** Server payload still has an in-progress round (authoritative over transient waiting labels). */
+export function roomPayloadIndicatesLiveRound(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object') return false;
+  const p = payload as Record<string, unknown>;
+  const gs = p.gameState;
+  if (gs === 'playing' || gs === 'paused_for_verification' || gs === 'paused') return true;
+  if (p.isPlaying === true) return true;
+  if (p.currentSong != null) return true;
+  if (typeof p.totalPlayedCount === 'number' && p.totalPlayedCount > 0) return true;
+  if (Array.isArray(p.playedSongIds) && p.playedSongIds.length > 0) return true;
+  if (Array.isArray(p.playedSongs) && p.playedSongs.length > 0) return true;
+  return false;
+}
+
+export function hostGameStateFromRoomPayload(payload: unknown): 'waiting' | 'playing' | 'ended' {
+  if (!payload || typeof payload !== 'object') return 'waiting';
+  const gs = (payload as Record<string, unknown>).gameState;
+  if (gs === 'ended') return 'ended';
+  if (gs === 'playing' || gs === 'paused_for_verification' || gs === 'paused') return 'playing';
+  if (roomPayloadIndicatesLiveRound(payload)) return 'playing';
+  return 'waiting';
+}
+
+export function persistActiveHostRoomFromPayload(roomId: string, payload: unknown): void {
+  const derived = hostGameStateFromRoomPayload(payload);
+  const raw = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).gameState : undefined;
+  writeActiveHostRoom({
+    roomId,
+    gameState:
+      derived === 'playing'
+        ? 'playing'
+        : raw != null
+          ? String(raw)
+          : derived,
+    updatedAt: Date.now(),
+  });
 }

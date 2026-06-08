@@ -426,17 +426,10 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
             ) : hostRoomHydrating ? (
               <>
                 <p className="host-r4-card__eyebrow">Live game</p>
-                <h2 className="host-r4-track-title">Resuming controls…</h2>
-                <p className="host-r4-track-meta">Syncing with the server — your round is still running.</p>
-                <div className="host-r4-go-live-actions">
-                  <button
-                    type="button"
-                    className="btn-primary host-r4-btn-primary host-r4-btn-primary--wide"
-                    onClick={() => onResyncRoomState?.()}
-                  >
-                    <RotateCw className="w-5 h-5" aria-hidden />
-                    Resume active game
-                  </button>
+                <h2 className="host-r4-track-title">Syncing…</h2>
+                <p className="host-r4-track-meta">Loading live round controls from the server.</p>
+                <div className="host-r4-go-live-actions" aria-busy="true">
+                  <Loader2 className="w-5 h-5 host-r4-spin" aria-hidden />
                 </div>
               </>
             ) : (

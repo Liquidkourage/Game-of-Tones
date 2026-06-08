@@ -141,6 +141,8 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   poolTrackCountForRound?: (roundIndex: number) => number;
   /** @deprecated Use poolTrackCountForRound */
   focusedPoolTrackCount?: number;
+  /** Host is reloading live round state — hide start/setup controls until hydrated. */
+  hostControlsHydrating?: boolean;
 }
 
 const MAX_ROUND_BUCKETS = 12;
@@ -188,6 +190,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   hasNextPlanned,
   poolTrackCountForRound,
   focusedPoolTrackCount = 0,
+  hostControlsHydrating = false,
 }: RoundPlannerProps<TRound>) {
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [dragOverBucket, setDragOverBucket] = useState(false);
@@ -879,7 +882,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
         ) : null}
 
         <div className="round-planner-bucket__actions">
-          {!isLive && focused.status !== 'completed' && canStartRound(focused) ? (
+          {!hostControlsHydrating && !isLive && focused.status !== 'completed' && canStartRound(focused) ? (
             <button
               type="button"
               className="round-planner-btn round-planner-btn--grow round-planner-btn--start"
