@@ -63,21 +63,40 @@ export function hostGameStateFromRoomPayload(payload: unknown): 'waiting' | 'pla
   const gs = (payload as Record<string, unknown>).gameState;
   if (gs === 'ended') return 'ended';
   if (gs === 'playing' || gs === 'paused_for_verification' || gs === 'paused') return 'playing';
+  if (gs === 'round_complete') return 'waiting';
   if (roomPayloadIndicatesLiveRound(payload)) return 'playing';
+  return 'waiting';
+}
+
+/**
+ * Merge server room-state into host gameState.
+ * Room-state may broadcast empty call-log resets while the round is still live — never downgrade playing → waiting here.
+ */
+export function mergeHostGameStateFromRoomPayload(
+  previous: 'waiting' | 'playing' | 'ended',
+  payload: unknown,
+): 'waiting' | 'playing' | 'ended' {
+  const derived = hostGameStateFromRoomPayload(payload);
+  if (derived === 'ended') return 'ended';
+  if (derived === 'playing') return 'playing';
+  if (previous === 'playing') return 'playing';
   return 'waiting';
 }
 
 export function persistActiveHostRoomFromPayload(roomId: string, payload: unknown): void {
   const derived = hostGameStateFromRoomPayload(payload);
+  const ptr = readActiveHostRoom();
+  const merged =
+    ptr?.roomId === roomId && ptr.gameState === 'playing' && derived === 'waiting' ? 'playing' : derived;
   const raw = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).gameState : undefined;
   writeActiveHostRoom({
     roomId,
     gameState:
-      derived === 'playing'
+      merged === 'playing'
         ? 'playing'
         : raw != null
           ? String(raw)
-          : derived,
+          : merged,
     updatedAt: Date.now(),
   });
 }

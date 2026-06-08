@@ -128,8 +128,8 @@ import { HOST_GLASS_NAV_ITEMS, parseHostGlassNavTab } from '../host/hostGlassNav
 import { appendHostActivity, type HostActivityEntry } from '../host/hostActivityLog';
 import {
   clearActiveHostRoom,
-  hostGameStateFromRoomPayload,
   hostRoomExpectsLiveRecovery,
+  mergeHostGameStateFromRoomPayload,
   persistActiveHostRoomFromPayload,
   roomPayloadIndicatesLiveRound,
   writeActiveHostRoom,
@@ -3105,15 +3105,15 @@ const HostView: React.FC = () => {
 
     newSocket.on('sync-state-response', (data: any) => {
       console.log('Sync state response:', data);
-      const derived = hostGameStateFromRoomPayload(data);
-      setGameState(derived);
+      const merged = mergeHostGameStateFromRoomPayload(gameStateRef.current, data);
+      setGameState(merged);
       if (roomId) {
         persistActiveHostRoomFromPayload(roomId, data);
       }
-      if (derived === 'playing') {
+      if (merged === 'playing') {
         setHostAwaitingLiveSync(false);
         setHostGlassNav('game');
-      } else if (derived === 'ended' || !roomPayloadIndicatesLiveRound(data)) {
+      } else if (merged === 'ended' || !roomPayloadIndicatesLiveRound(data)) {
         setHostAwaitingLiveSync(false);
       }
       if (data.gameState) {
@@ -3201,18 +3201,16 @@ const HostView: React.FC = () => {
     });
 
     newSocket.on('room-state', (payload: any) => {
-      const derived = hostGameStateFromRoomPayload(payload);
+      const merged = mergeHostGameStateFromRoomPayload(gameStateRef.current, payload);
+      setGameState(merged);
       if (roomId) {
         persistActiveHostRoomFromPayload(roomId, payload);
       }
-      if (derived === 'playing') {
+      if (merged === 'playing') {
         setHostAwaitingLiveSync(false);
         setHostGlassNav('game');
-      } else if (derived === 'ended' || !roomPayloadIndicatesLiveRound(payload)) {
+      } else if (merged === 'ended' || !roomPayloadIndicatesLiveRound(payload)) {
         setHostAwaitingLiveSync(false);
-      }
-      if (payload?.gameState !== undefined) {
-        setGameState(derived);
       }
       if (payload?.isPlaying !== undefined) {
         setIsPlaying(!!payload.isPlaying);
@@ -3355,8 +3353,9 @@ const HostView: React.FC = () => {
             deduped.map(({ id, name, artist }: Song) => ({ id, name, artist })),
           );
         } else if (
-          (typeof payload?.totalPlayedCount === 'number' && payload.totalPlayedCount === 0) ||
-          (Array.isArray(payload?.playedSongIds) && payload.playedSongIds.length === 0)
+          gameStateRef.current !== 'playing' &&
+          ((typeof payload?.totalPlayedCount === 'number' && payload.totalPlayedCount === 0) ||
+            (Array.isArray(payload?.playedSongIds) && payload.playedSongIds.length === 0))
         ) {
           setPlayedInOrder([]);
         }
@@ -6842,7 +6841,7 @@ const HostView: React.FC = () => {
 
   const resyncHostRoomState = useCallback(() => {
     if (!socket || !roomId) return;
-    if (hostRoomExpectsLiveRecovery(roomId) || gameStateRef.current === 'playing') {
+    if (hostRoomExpectsLiveRecovery(roomId)) {
       setHostAwaitingLiveSync(true);
     }
     try {
@@ -6864,7 +6863,7 @@ const HostView: React.FC = () => {
       lastForegroundResyncAtRef.current = now;
       ignorePollingUntilRef.current = now + 8000;
 
-      if (hostRoomExpectsLiveRecovery(roomId) || gameStateRef.current === 'playing') {
+      if (hostRoomExpectsLiveRecovery(roomId)) {
         setHostAwaitingLiveSync(true);
       }
       try {
