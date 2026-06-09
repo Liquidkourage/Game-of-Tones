@@ -176,6 +176,10 @@ const PlayerView: React.FC = () => {
   const [songsPlayed, setSongsPlayed] = useState<number>(0);
   /** 5×15 mode: playlist name per column (from server `fiveby15-pool`). */
   const [bingoColumnPlaylistNames, setBingoColumnPlaylistNames] = useState<string[]>([]);
+  /** 1×75 mode: stem playlist title(s) from server `oneby75-pool`. */
+  const [oneBy75PlaylistNames, setOneBy75PlaylistNames] = useState<string[]>([]);
+  const bingoHoldPointerIdRef = useRef<number | null>(null);
+  const bingoHoldSubmittedRef = useRef(false);
   const [venueBranding, setVenueBranding] = useState<VenueBranding | null>(null);
   const [cardTextFitReady, setCardTextFitReady] = useState(false);
 
@@ -592,12 +596,21 @@ const PlayerView: React.FC = () => {
     newSocket.on('fiveby15-pool', (data: any) => {
       if (Array.isArray(data?.names) && data.names.length === 5) {
         setBingoColumnPlaylistNames(data.names);
+        setOneBy75PlaylistNames([]);
+      }
+    });
+
+    newSocket.on('oneby75-pool', (data: any) => {
+      if (Array.isArray(data?.names) && data.names.length > 0) {
+        setOneBy75PlaylistNames(data.names.map((n: unknown) => String(n || '')));
+        setBingoColumnPlaylistNames([]);
       }
     });
 
     newSocket.on('game-started', (data: any) => {
       console.log('Game started:', data);
       setBingoColumnPlaylistNames([]);
+      setOneBy75PlaylistNames([]);
       const lr =
         data?.pattern === 'line' && data?.linesRequired != null ? normalizeLinesRequired(data.linesRequired) : undefined;
       const cre =
@@ -1604,13 +1617,16 @@ const PlayerView: React.FC = () => {
     }
   };
 
-  const startBingoHold = () => {
-    // TEMPORARILY DISABLED: Allow bingo calls even without valid pattern (host will verify)
-    // if (!hasValidBingo) {
-    //   setBingoMessage('No valid bingo pattern completed!');
-    //   setTimeout(() => setBingoMessage(''), 2000);
-    //   return;
-    // }
+  const startBingoHold = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    bingoHoldSubmittedRef.current = false;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      bingoHoldPointerIdRef.current = e.pointerId;
+    } catch {
+      /* ignore */
+    }
 
     if (bingoHoldTimer.current) window.clearTimeout(bingoHoldTimer.current);
     if (holdRafRef.current) cancelAnimationFrame(holdRafRef.current as any);
@@ -1623,13 +1639,12 @@ const PlayerView: React.FC = () => {
       const p = Math.min(1, elapsed / 1000);
       setHoldProgress(p);
       if (p >= 1) {
-        // Completed hold
-        if (socket) {
+        if (socket && !bingoHoldSubmittedRef.current) {
+          bingoHoldSubmittedRef.current = true;
           setBingoStatus('checking');
           setBingoMessage('Checking your bingo...');
           socket.emit('player-bingo', { roomId });
         }
-        // Removed premature haptic - only vibrate on actual bingo success/failure
         setBingoHolding(false);
         holdStartRef.current = null;
         holdRafRef.current = null;
@@ -1640,7 +1655,19 @@ const PlayerView: React.FC = () => {
     holdRafRef.current = requestAnimationFrame(tick) as any;
   };
 
-  const cancelBingoHold = () => {
+  const cancelBingoHold = (e?: React.PointerEvent<HTMLButtonElement>) => {
+    if (e) {
+      try {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+      } catch {
+        /* ignore */
+      }
+      if (bingoHoldPointerIdRef.current === e.pointerId) {
+        bingoHoldPointerIdRef.current = null;
+      }
+    }
     if (bingoHoldTimer.current) { window.clearTimeout(bingoHoldTimer.current); bingoHoldTimer.current = null; }
     if (holdRafRef.current) { cancelAnimationFrame(holdRafRef.current as any); holdRafRef.current = null; }
     holdStartRef.current = null;
@@ -1966,6 +1993,13 @@ const PlayerView: React.FC = () => {
   const currentPatternLabel = patternLabelMap[gameState.pattern] || 'Pattern live';
 
   const renderBingoCard = () => {
+    const singleOneBy75Playlist =
+      oneBy75PlaylistNames.length === 1
+        ? stripGotPlaylistPrefix(oneBy75PlaylistNames[0])
+        : oneBy75PlaylistNames.length > 1
+          ? oneBy75PlaylistNames.map(stripGotPlaylistPrefix).filter(Boolean).join(' · ')
+          : '';
+
     const headerCells = (['B', 'I', 'N', 'G', 'O'] as const).map((letter, colIdx) => {
       const raw = bingoColumnPlaylistNames[colIdx] || '';
       const playlistLabel = stripGotPlaylistPrefix(raw);
@@ -1987,6 +2021,11 @@ const PlayerView: React.FC = () => {
     if (!bingoCard) {
       return (
         <div className="bingo-card bingo-card--empty bingo-card--fit-ready" aria-busy="true">
+          {singleOneBy75Playlist ? (
+            <div className="bingo-card-playlist-title" title={singleOneBy75Playlist}>
+              {singleOneBy75Playlist}
+            </div>
+          ) : null}
           <div className="bingo-column-headers" aria-hidden="true">
             {headerCells}
           </div>
@@ -2005,6 +2044,11 @@ const PlayerView: React.FC = () => {
         className={`bingo-card ${cardTextFitReady ? 'bingo-card--fit-ready' : 'bingo-card--fit-pending'}`}
         aria-busy={!cardTextFitReady}
       >
+        {singleOneBy75Playlist ? (
+          <div className="bingo-card-playlist-title" title={singleOneBy75Playlist}>
+            {singleOneBy75Playlist}
+          </div>
+        ) : null}
         <div className="bingo-column-headers" aria-hidden="true">
           {headerCells}
         </div>
@@ -2172,11 +2216,9 @@ const PlayerView: React.FC = () => {
                   onPointerDown={startBingoHold}
                   onPointerUp={cancelBingoHold}
                   onPointerCancel={cancelBingoHold}
-                  onTouchStart={(e) => { e.preventDefault(); startBingoHold(); }}
-                  onTouchEnd={(e) => { e.preventDefault(); cancelBingoHold(); }}
-                  onTouchCancel={(e) => { e.preventDefault(); cancelBingoHold(); }}
+                  onPointerLeave={cancelBingoHold}
+                  onClick={(e) => e.preventDefault()}
                   onContextMenu={(e) => { e.preventDefault(); return false; }}
-                  onMouseDown={(e) => { e.preventDefault(); }}
                   title={hasValidBingo ? 'Hold to call BINGO' : 'Hold to call BINGO'}
                   style={{
                     zIndex: 2,

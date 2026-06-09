@@ -606,6 +606,18 @@ export function unionCompositeHighlightPositions(spec: PatternCompositeSpec | nu
   return Array.from(u).sort();
 }
 
+/** Shape-only composite (e.g. T + painted box) — projector/player highlight the union, not one clause at a time. */
+export function compositeShapeClausesUseUnionHighlight(
+  spec: PatternCompositeSpec | null | undefined,
+): boolean {
+  if (!spec?.clauses?.length) return false;
+  return spec.clauses.every((c) => {
+    if (c.kind === 'mask') return Boolean(c.positions?.length);
+    if (c.kind === 'preset') return c.preset !== 'line' && c.preset !== 'full_card';
+    return false;
+  });
+}
+
 type SquareLite = { position: string; marked?: boolean; songId?: string; isFreeSpace?: boolean };
 
 function maskVisualComplete(card: { squares: SquareLite[] }, positions: readonly string[]): boolean {

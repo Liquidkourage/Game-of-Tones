@@ -2923,6 +2923,18 @@ const HostView: React.FC = () => {
           if (roomId) {
             writeActiveHostRoom({ roomId, gameState: 'waiting', updatedAt: Date.now() });
           }
+          setEventRounds((prev) => {
+            const cur = currentRoundIndexRef.current;
+            if (cur < 0 || cur >= prev.length || prev[cur].status === 'completed') return prev;
+            const next = [...prev];
+            next[cur] = { ...next[cur], status: 'completed', completedAt: Date.now() };
+            try {
+              localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(next));
+            } catch {
+              /* ignore */
+            }
+            return next;
+          });
           addLog(`Round ${data.roundNumber} complete - ${data.playerName} wins!`, 'info');
           console.log('Round complete, showing options to host');
         } else if (data.gameEnded) {
@@ -6288,13 +6300,25 @@ const HostView: React.FC = () => {
 
   /** Close round-complete celebration without starting the next round or ending the session. */
   const dismissRoundCompleteModal = useCallback(() => {
+    setEventRounds((prev) => {
+      const cur = currentRoundIndexRef.current;
+      if (cur < 0 || cur >= prev.length || prev[cur].status === 'completed') return prev;
+      const next = [...prev];
+      next[cur] = { ...next[cur], status: 'completed', completedAt: Date.now() };
+      try {
+        if (roomId) localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
     setRoundComplete(null);
     setGamePaused(true);
     gameStateRef.current = 'waiting';
     setGameState('waiting');
-    showToast('Round complete — host screen restored. Start the next round when you\'re ready.', 'info');
-    addLog('Round complete modal dismissed — host controls available', 'info');
-  }, [showToast, addLog]);
+    showToast('Round marked complete — use Round Planner to prep or start the next round when ready.', 'info');
+    addLog('Round complete modal dismissed — current round marked complete', 'info');
+  }, [showToast, addLog, roomId]);
 
 
 
@@ -7793,17 +7817,25 @@ const HostView: React.FC = () => {
   }, [eventRounds, handleStartRound]);
 
   const completeCurrentRound = useCallback(() => {
-    if (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length) {
-      const updatedRounds = [...eventRounds];
-      updatedRounds[currentRoundIndex] = {
-        ...updatedRounds[currentRoundIndex],
+    setEventRounds((prev) => {
+      const cur = currentRoundIndexRef.current;
+      if (cur < 0 || cur >= prev.length) return prev;
+      if (prev[cur].status === 'completed') return prev;
+      const next = [...prev];
+      next[cur] = {
+        ...next[cur],
         status: 'completed',
-        completedAt: Date.now()
+        completedAt: Date.now(),
       };
-      handleUpdateRounds(updatedRounds);
-      addLog(`Completed ${updatedRounds[currentRoundIndex].name}`, 'info');
-    }
-  }, [currentRoundIndex, eventRounds, handleUpdateRounds]);
+      try {
+        if (roomId) localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      addLog(`Completed ${next[cur].name}`, 'info');
+      return next;
+    });
+  }, [roomId, addLog]);
 
   const emitRoundPlaybackReset = useCallback(() => {
     if (!socket || !roomId) return false;
@@ -7886,6 +7918,26 @@ const HostView: React.FC = () => {
     });
   }, [socket, roomId]);
 
+  const handlePrepareNextPlannedRound = useCallback(() => {
+    const nextIndex = getNextPlannedRound();
+    if (nextIndex < 0) {
+      showToast('No planned round with playlists found.', 'info');
+      return;
+    }
+    const round = eventRoundsRef.current[nextIndex];
+    completeCurrentRound();
+    jumpToRound(nextIndex);
+    setRoundComplete(null);
+    setGamePaused(true);
+    gameStateRef.current = 'waiting';
+    setGameState('waiting');
+    showToast(
+      `${round?.name || 'Next round'} loaded for prep — review the mix, then tap Start Game when ready.`,
+      'info',
+    );
+    addLog(`Prepared ${round?.name || 'next round'} for host review (no auto-start)`, 'info');
+  }, [getNextPlannedRound, completeCurrentRound, jumpToRound, showToast, addLog]);
+
   const handleStartNextPlannedRound = useCallback(async () => {
     const nextIndex = getNextPlannedRound();
     if (nextIndex < 0) {
@@ -7920,6 +7972,11 @@ const HostView: React.FC = () => {
       addLog(`Loaded ${round.name} for prep — save the round snapshot to auto-start it next time`, 'warn');
       return;
     }
+
+    const confirmed = window.confirm(
+      `Start "${round.name}" now?\n\nThis clears the finished round, loads that round's saved mix, and begins playback.`,
+    );
+    if (!confirmed) return;
 
     const needsHostSpotifyForRound = mixRows.some((p) => p.youtubeMusic !== true && p.catalog !== true);
     if (needsHostSpotifyForRound && !isSpotifyConnected) {
@@ -11464,8 +11521,38 @@ const HostView: React.FC = () => {
                   e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
                 }}
               >
-                Back to host
+                Back to host (mark round complete)
               </button>
+
+              {getNextPlannedRound() >= 0 ? (
+                <button
+                  type="button"
+                  onClick={handlePrepareNextPlannedRound}
+                  style={{
+                    background: 'rgba(0, 170, 255, 0.12)',
+                    border: '2px solid rgba(0, 170, 255, 0.55)',
+                    borderRadius: '10px',
+                    padding: '14px 24px',
+                    fontSize: '1.05rem',
+                    fontWeight: 700,
+                    color: '#8edcff',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 10,
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.background = 'rgba(0, 170, 255, 0.2)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.background = 'rgba(0, 170, 255, 0.12)';
+                  }}
+                >
+                  Prepare next round (no auto-start)
+                </button>
+              ) : null}
 
               <button
                 onClick={getNextPlannedRound() >= 0 ? () => void handleStartNextPlannedRound() : handleStartNextRound}
@@ -11495,7 +11582,7 @@ const HostView: React.FC = () => {
                 }}
               >
                 <SkipForward className="w-5 h-5" aria-hidden />
-                {getNextPlannedRound() >= 0 ? 'Start Next Planned Round' : 'Start Next Round'}
+                {getNextPlannedRound() >= 0 ? 'Start next planned round now' : 'Start next round'}
               </button>
 
               {getNextPlannedRound() >= 0 ? (
@@ -11562,8 +11649,10 @@ const HostView: React.FC = () => {
               marginTop: '20px',
               fontStyle: 'italic'
             }}>
-              Playback is paused. Use <strong style={{ color: '#ccc', fontStyle: 'normal' }}>Back to host</strong> to
-              return to the host screen now, or pick a next-round option when you&apos;re ready.
+              Bingo approved and playback paused. <strong style={{ color: '#ccc', fontStyle: 'normal' }}>Back to host</strong>{' '}
+              marks this round complete. Use <strong style={{ color: '#ccc', fontStyle: 'normal' }}>Prepare next round</strong>{' '}
+              to load the next bucket without starting playback, or{' '}
+              <strong style={{ color: '#ccc', fontStyle: 'normal' }}>Start next planned round now</strong> when you are ready to go live.
             </p>
           </motion.div>
         </div>

@@ -405,6 +405,19 @@ body {
   max-width: 100%;
 }
 
+.App .call-columns-header--1x75-single {
+  justify-items: center;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.App .call-columns-header--1x75-single .call-playlist-name {
+  font-size: clamp(1.15rem, 2.5vmin, 1.95rem);
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+
 .App .call-list-content > .call-carousel-viewport,
 .App .call-list-content > .call-carousel-viewport--static-grid,
 .App .call-list-content > .call-list {
@@ -5741,6 +5754,24 @@ button.conn-chip.conn-chip-compact {
   color: var(--player-v2-header-playlist) !important;
   letter-spacing: 0.035em !important;
   text-transform: uppercase;
+}
+
+.player-container--v2 .bingo-card-playlist-title {
+  flex-shrink: 0;
+  margin: 0 0 clamp(6px, 1vmin, 8px);
+  padding: clamp(6px, 1.2vmin, 8px) clamp(8px, 1.6vmin, 12px);
+  text-align: center;
+  font-size: clamp(11px, min(3.2vw, 2.9vmin), 15px);
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  color: var(--player-v2-text-primary);
+  background: var(--player-v2-header-bg);
+  border: 1px solid var(--player-v2-header-border-strong);
+  border-radius: clamp(10px, 1.8vmin, 12px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .player-container--v2 .bingo-card-grid,

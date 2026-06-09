@@ -45,6 +45,7 @@ import type { PatternCompositeSpec, PatternCompositeClause } from '../patternDef
 import {
   normalizePatternComposite,
   unionCompositeHighlightPositions,
+  compositeShapeClausesUseUnionHighlight,
   normalizeLinesRequired,
   customMaskHighlightPositions,
   LINE_PATTERN_MAX_LINES,
@@ -3229,6 +3230,22 @@ const PublicDisplay: React.FC = () => {
   const carouselScrollEnabled =
     !columnCallListLayout && countPlayOrderColumns(playedOrderForDisplay) > visibleCols;
 
+  /** After song 26+ (6th column), static grid swaps to scroll track — measure width before first slide. */
+  useLayoutEffect(() => {
+    if (!carouselScrollEnabled) return;
+    remeasureCarouselViewport();
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      remeasureCarouselViewport();
+      setAnimating(false);
+      raf2 = requestAnimationFrame(() => setAnimating(true));
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    };
+  }, [carouselScrollEnabled, playedOrderRevision, remeasureCarouselViewport]);
+
   // Measure viewport width for pixel-perfect slides (one column per step)
   useEffect(() => {
     const el = carouselViewportRef.current;
@@ -3658,7 +3675,10 @@ const PublicDisplay: React.FC = () => {
       return true;
     }
     if (pattern === 'composite' && patternComposite) {
-      // Cycle one concrete demo frame at a time (never union whole-board line/full-card outlines).
+      if (compositeShapeClausesUseUnionHighlight(patternComposite)) {
+        return unionCompositeHighlightPositions(patternComposite).includes(`${row}-${col}`);
+      }
+      // Cycle one concrete demo frame at a time (line / multi-example clauses).
       if (compositeDemoSequences.length >= 2) {
         const frame =
           compositeDemoSequences[
@@ -3814,7 +3834,14 @@ const PublicDisplay: React.FC = () => {
           let compositeClauseColorClass = '';
           if (pattern === 'composite' && patternComposite && isWinningLine) {
             const posKey = `${row}-${col}`;
-            if (compositeDemoSequences.length >= 2) {
+            if (compositeShapeClausesUseUnionHighlight(patternComposite)) {
+              patternComposite.clauses.forEach((clause, clauseIndex) => {
+                if (compositeClauseColorClass) return;
+                if (clauseHighlightPositions(clause).includes(posKey)) {
+                  compositeClauseColorClass = ` composite-clause-color-${clauseIndex % COMPOSITE_CLAUSE_COLOR_SLOTS}`;
+                }
+              });
+            } else if (compositeDemoSequences.length >= 2) {
               const frame =
                 compositeDemoSequences[
                   compositeDemoSequences.length === 0 ? 0 : compositePatternDemoIndex % compositeDemoSequences.length
@@ -3832,7 +3859,10 @@ const PublicDisplay: React.FC = () => {
           const pulseShapeGlow =
             isWinningLine &&
             !pulseFullCardFamily &&
-            (pattern === 'custom' || (pattern === 'composite' && compositeDemoSequences.length < 2));
+            (pattern === 'custom' ||
+              (pattern === 'composite' &&
+                (compositeShapeClausesUseUnionHighlight(patternComposite) ||
+                  compositeDemoSequences.length < 2)));
 
           const fullCardPulseDelay = pulseFullCardFamily ? fullCardPulseDelaySec(row, col) : 0;
 
@@ -3932,12 +3962,13 @@ const PublicDisplay: React.FC = () => {
 
     return (
       <div
-        className="call-columns-header"
+        className={`call-columns-header${singleOneBy75 ? ' call-columns-header--1x75-single' : ''}`}
         style={{
           display: 'grid',
           gridTemplateColumns: singleOneBy75 ? '1fr' : `repeat(${slotCount}, minmax(0, 1fr))`,
           gap: 4,
           alignItems: 'center',
+          justifyItems: singleOneBy75 ? 'center' : undefined,
         }}
       >
         {Array.from({ length: slotCount }, (_, i) => {
