@@ -229,11 +229,10 @@ const HostScreenTour: React.FC<HostScreenTourProps> = ({
         <h2 id="host-screen-tour-title" className="host-screen-tour__title">
           {step.title}
         </h2>
-        <p id="host-screen-tour-body" className="host-screen-tour__body">
-          {step.body}
-        </p>
-        {!targetRect ? (
-          <p className="host-screen-tour__missing">This part isn&apos;t visible right now — use Next to continue.</p>
+        {step.body.trim() ? (
+          <p id="host-screen-tour-body" className="host-screen-tour__body">
+            {step.body}
+          </p>
         ) : null}
         <div className="host-screen-tour__actions">
           <button type="button" className="btn-secondary host-screen-tour__btn" disabled={isFirst} onClick={() => onStepIndexChange(stepIndex - 1)}>

@@ -74,11 +74,6 @@ const RoundBuilderPlaybackPanel: React.FC<RoundBuilderPlaybackPanelProps> = ({
           Random
         </label>
       </div>
-      <p className="round-builder-playback__note">
-        During live play, snippet length updates the current clip timer. Random start mode applies from the{' '}
-        <strong>next</strong> song. Between rounds, settings are saved with <strong>Save round</strong> and sent at{' '}
-        <strong>Start Game</strong>. Connection & playback device stay under <strong>Connection</strong> in the header.
-      </p>
     </div>
   </section>
 );

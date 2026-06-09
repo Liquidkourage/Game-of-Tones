@@ -309,7 +309,6 @@ const SongReplacementModal: React.FC<SongReplacementModalProps> = ({
               <div className="text-center text-gray-400 py-8">
                 <Music size={48} className="mx-auto mb-4 opacity-50" />
                 <p>No songs found for "{searchQuery}"</p>
-                <p className="text-sm">Try a different search term</p>
               </div>
             )}
 
@@ -317,7 +316,6 @@ const SongReplacementModal: React.FC<SongReplacementModalProps> = ({
               <div className="text-center text-gray-400 py-8">
                 <Search size={48} className="mx-auto mb-4 opacity-50" />
                 <p>Search for a song to replace "{currentSong.name}"</p>
-                <p className="text-sm">This will update both the game and the original playlist</p>
               </div>
             )}
           </div>

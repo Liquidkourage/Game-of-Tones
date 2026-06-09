@@ -3,8 +3,6 @@ import { Link } from 'react-router-dom';
 import { CalendarCheck, CalendarX, Loader2 } from 'lucide-react';
 import { API_BASE } from '../../config';
 import { hostFetch } from '../../utils/hostFetch';
-import ContextHelp from '../ContextHelp';
-import '../ContextHelp.css';
 
 type EventStatus = {
   billingReady?: boolean;
@@ -135,9 +133,6 @@ const HostEventActivationBar: React.FC<HostEventActivationBarProps> = ({ roomId 
       <div className="host-event-activation__head">
         <h3 className="host-event-activation__title">
           Event
-          <ContextHelp title="Event">
-            <p>Activate before full print or Start Game. One credit per event night (up to 12 rounds). Auto-refund if ≤3 songs, no players, no full print.</p>
-          </ContextHelp>
         </h3>
         {status.trialActive ? (
           <span className="host-event-activation__badge">Trial</span>

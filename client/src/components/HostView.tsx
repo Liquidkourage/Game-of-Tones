@@ -88,7 +88,6 @@ import { buildHostScreenTourSteps } from '../hostScreenTourSteps';
 import BingoPoolList from './BingoPoolList';
 import { loadHostPreferences, saveHostPreferences } from '../utils/hostPreferences';
 import { isSpotifyJamDevice, pickPreferredPlaybackDevice } from '../utils/spotifyDevices';
-import { computeOptimalPublicDisplayFontMultiplier } from '../utils/publicDisplayFontScale';
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
 import { HostYoutubeMusicPlaylistLibrary, type YoutubeMixPlaylistRow } from './HostYoutubeMusicPlaylistLibrary';
 import { HostYoutubeIframePlayer, primeYoutubeHostPlaybackAudioUnlock } from './HostYoutubeIframePlayer';
@@ -8637,16 +8636,6 @@ const HostView: React.FC = () => {
           Disconnect
         </button>
       </div>
-      <p style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.65)', marginBottom: 12, lineHeight: 1.4 }}>
-        {venueSpotifyJamMode
-          ? 'Venue Jam mode: start a Jam session on the venue Spotify account, then refresh devices and select the Jam entry. Tempo controls playback through that session.'
-          : 'Choose where Spotify should play. Open Spotify on your computer, phone, or speaker so it appears in the list. Use '}
-        {!venueSpotifyJamMode && (
-          <>
-            <strong style={{ color: '#cfcfcf' }}>Refresh devices</strong> if the list is empty.
-          </>
-        )}
-      </p>
       <label
         style={{
           display: 'flex',
@@ -8666,9 +8655,6 @@ const HostView: React.FC = () => {
         />
         <span>
           <strong>Venue uses Spotify Jam</strong>
-          <span style={{ display: 'block', fontSize: '0.78rem', color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>
-            Required when the PA is controlled through the venue account&apos;s Jam session (common at bars and clubs).
-          </span>
         </span>
       </label>
       {venueSpotifyJamMode && !spotifyJamActive && devices.length > 0 && (
@@ -8768,20 +8754,6 @@ const HostView: React.FC = () => {
                 <Music className="w-6 h-6" style={{ color: '#1ed760' }} aria-hidden />
                 Spotify Connection
               </h2>
-              <p className="host-spotify-guide">
-                Sign in with the <strong>Spotify account</strong> that should play music and own playlists for this show (e.g. your
-                event or work account). You only need a normal Spotify login — not a developer account. After this, pick a{' '}
-                <strong>playback device</strong> below.
-              </p>
-              {showYoutubeMusicInConnectionModal ? (
-                <p
-                  className="host-spotify-guide"
-                  style={{ marginTop: 10, fontSize: '0.84rem', color: 'rgba(220,230,240,0.88)' }}
-                >
-                  <strong style={{ color: '#cfcfcf' }}>YouTube-only show?</strong> You can skip Spotify if every playlist in your mix is from{' '}
-                  <strong style={{ color: '#cfcfcf' }}>YouTube Music</strong> (link Google under Music &amp; rounds). Spotify is only required when the mix includes Spotify playlists or catalog packs that need it.
-                </p>
-              ) : null}
               <div className="spotify-connection-section">
                 {spotifyError && (
                   <div className="spotify-error">
@@ -8920,11 +8892,6 @@ const HostView: React.FC = () => {
                 }
                 data-mobile-pane={playlistRoundModalPane}
               >
-              {!isSpotifyConnected && showYoutubeMusicInConnectionModal ? (
-                <p className="host-playlist-round-modal__banner" role="status">
-                  YouTube playlists work without Spotify — use <strong>Connection</strong> for the full Spotify grid.
-                </p>
-              ) : null}
               <div
                 className="host-playlist-round-modal__pane-switch"
                 role="tablist"
@@ -8957,10 +8924,6 @@ const HostView: React.FC = () => {
                   Rounds
                 </button>
               </div>
-              <p className="host-playlist-round-modal__library-hint">
-                <strong>Drag</strong> playlists into round buckets, or use <strong>Add to round…</strong> on each row.
-                On smaller screens, switch to <strong>Rounds</strong> to drop. Patterns and Save are on each bucket.
-              </p>
             <div className="host-music-two-pane">
               <div className="host-music-two-pane__library">
           <motion.div
@@ -9510,15 +9473,6 @@ const HostView: React.FC = () => {
                     {playlistByLinkError ? (
                       <p style={{ fontSize: '0.82rem', color: '#ff9e6e', margin: '0 0 10px' }}>{playlistByLinkError}</p>
                     ) : null}
-                      <div className="host-playlist-round-modal__fine-print">
-                        <p className="host-playlist-round-modal__fine-print-title">
-                          When does the Mix column show explicit-song badges?
-                        </p>
-                        <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)', margin: 0, lineHeight: 1.45, maxWidth: 640 }}>
-                          After Tempo loads tracks for playlists in your mix (selection debounce or Finalize), playlists that contain a Spotify explicit track show{' '}
-                          <SpotifyExplicitBadge size="sm" title="At least one explicit track in this playlist" /> next to their counts — without extra Spotify calls.
-                        </p>
-                      </div>
                       <div className="host-playlist-round-modal__catalog">
                         <div
                           className="host-playlist-round-modal__catalog-head"
@@ -9622,10 +9576,6 @@ const HostView: React.FC = () => {
                           </p>
                         ) : (
                           <>
-                            <p style={{ margin: '0 0 12px', fontSize: '0.76rem', color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
-                              Loaded with Tempo&apos;s allowlisted Spotify account — not your personal library token. Your
-                              Spotify is still used for playback. Appended after your own playlist selections.
-                            </p>
                             {catalogPackOptions.length > 0 ? (
                               <div className="host-catalog-pack-list">
                                 {catalogPackOptions.map((pack) => {
@@ -9706,7 +9656,6 @@ const HostView: React.FC = () => {
                         </div>
                       </div>
                     <div className="host-manager-playlist-export">
-                      <p>Export a Spotify playlist from songs used this session (after finalize or play).</p>
                       <button
                         type="button"
                         onClick={createOutputPlaylist}
@@ -10055,7 +10004,6 @@ const HostView: React.FC = () => {
                 setHostTourOpen(true);
               }}
               aria-label="Show host screen tour"
-              title="Walk through each part of the host screen"
               style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
             >
               <HelpCircle className="w-4 h-4" aria-hidden />
@@ -10291,11 +10239,6 @@ const HostView: React.FC = () => {
                         <ListMusic className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
                         Rounds &amp; playlists
                       </h2>
-                      <p className="host-rounds-panel__lead">
-                        Rounds, patterns, playlists, and Save live here. Open <strong>Playlist library</strong> to browse
-                        and drag into buckets (or <strong>Add to round…</strong>). <strong>Start Game</strong> is above
-                        when ready.
-                      </p>
                     </div>
                     <button
                       type="button"
@@ -10308,14 +10251,7 @@ const HostView: React.FC = () => {
                     </button>
                   </div>
                   <div className="host-rounds-panel__planner" data-host-tour="round-setlist">
-                    {showPlaylistRoundModal ? (
-                      <p className="host-rounds-panel__modal-open-hint">
-                        Round buckets are in the open <strong>Playlist library</strong> window — drag there or use{' '}
-                        <strong>Add to round…</strong>.
-                      </p>
-                    ) : (
-                      hostRoundPlanner
-                    )}
+                    {showPlaylistRoundModal ? null : hostRoundPlanner}
                   </div>
                 </section>
                 <section
@@ -10327,10 +10263,6 @@ const HostView: React.FC = () => {
                     <ListPlus className="w-5 h-5" aria-hidden />
                     Playlist library
                   </h2>
-                  <p className="host-inline-library__lead">
-                    Drag playlists into round buckets below, or use <strong>Add to round…</strong> on each row. You can
-                    also open the floating library window for a larger view.
-                  </p>
                   <button
                     type="button"
                     className="btn-secondary host-inline-library__popout"
@@ -10338,11 +10270,7 @@ const HostView: React.FC = () => {
                   >
                     Open in window
                   </button>
-                  {showPlaylistRoundModal ? (
-                    <p className="host-rounds-panel__modal-open-hint">
-                      The library is open in the floating window — close it to use this workspace.
-                    </p>
-                  ) : (
+                  {showPlaylistRoundModal ? null : (
                     <div className="host-inline-library__body">{playlistRoundBuilderBody}</div>
                   )}
                 </section>
@@ -10367,9 +10295,6 @@ const HostView: React.FC = () => {
             <h2 id="host-prefs-title" className="host-manager-section__title">
               Saved host preferences
             </h2>
-            <p className="host-manager-section__lead">
-              Projector title reveal syncs to the room. Snippet length and hybrid rules are under Settings.
-            </p>
             <div className="host-host-prefs__grid">
               <label className="host-host-prefs__field">
                 <span className="host-host-prefs__label">Reveal titles on projector</span>
@@ -10423,9 +10348,6 @@ const HostView: React.FC = () => {
             <h2 className="host-manager-section__title host-event-settings__hidden-heading">
               Event rules
             </h2>
-            <p className="host-manager-section__lead" style={{ marginTop: 0, marginBottom: 0 }}>
-              Save, print, reset event, and clear prep cache: use <strong>Event actions</strong> in the Rounds planner.
-            </p>
           </motion.section>
 
           <HostDisplayExtrasPanel
@@ -10463,14 +10385,7 @@ const HostView: React.FC = () => {
               <Monitor className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
               Public display
             </h2>
-            <p className="host-manager-section__lead">
-              Projector / TV — text size and which screen to show.
-            </p>
             <p className="host-manager-display__sub">Title &amp; artist size</p>
-            <p style={{ fontSize: '0.82rem', color: '#9a9a9a', marginBottom: 10, lineHeight: 1.45, maxWidth: 520 }}>
-              <strong style={{ color: '#c8e8d8' }}>100%</strong> = best fit for a 1080p projector (computed from viewport).
-              The display scales automatically; adjust if the venue screen needs larger or smaller type.
-            </p>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
               <button
                 onClick={() => updatePublicDisplayFontSize(publicDisplayFontSize - 0.1)}
@@ -10531,10 +10446,6 @@ const HostView: React.FC = () => {
                 +
               </button>
             </div>
-            <div style={{ marginTop: '10px', fontSize: '0.82rem', color: '#b3b3b3', textAlign: 'center' }}>
-              Reference auto-fit at 1080p:{' '}
-              {(computeOptimalPublicDisplayFontMultiplier(1920, 1080) * 100).toFixed(0)}% baseline on projector
-            </div>
             <div className="host-manager-display__divider" />
             <p className="host-manager-display__sub">Screen modes</p>
             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
@@ -10590,15 +10501,8 @@ const HostView: React.FC = () => {
             transition={{ delay: 0.35 }}
             aria-labelledby="host-manager-display-title"
           >
-            <p className="host-manager-section__lead host-manager-display-pane__continued-lead">
-              Production uses <strong style={{ color: '#00ff88' }}>Auto</strong> call layout (5×15 for five playlists, 1×75
-              for one). Reveal timing is under <strong>Saved host preferences</strong> above.
-            </p>
             <details className="host-display-testing">
               <summary>Testing: force call list layout</summary>
-              <p style={{ fontSize: '0.78rem', color: '#9a9a9a', margin: '10px 0', lineHeight: 1.4 }}>
-                Override Auto only while debugging. Five playlists → 5×15 columns; one playlist → 1×75 carousel.
-              </p>
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
                 {(
                   [
@@ -10636,10 +10540,6 @@ const HostView: React.FC = () => {
               <>
                 <div className="host-manager-display__divider" style={{ marginTop: 14 }} />
                 <p className="host-manager-display__sub">YouTube playback window</p>
-                <p style={{ fontSize: '0.78rem', color: '#9a9a9a', marginBottom: 10, lineHeight: 1.4, maxWidth: 520 }}>
-                  Separate window for clip audio so you can keep the projector tab focused. Allow popups for this site.
-                  The corner mini-player is hidden while this window stays open.
-                </p>
                 <button
                   type="button"
                   className="btn-secondary"
@@ -10738,33 +10638,6 @@ const HostView: React.FC = () => {
               </button>
             </div>
             <div className="host-connection-modal__body host-connection-modal__body--bingo-pool">
-              <p className="host-bingo-pool-modal__intro">
-                {mixFinalized ? (
-                  gameState === 'playing' ? (
-                    <>
-                      Numbered #1–#{finalizedPoolSongs.length || 75} is the exact playback sequence and
-                      matches call numbers on the projector.
-                    </>
-                  ) : (
-                    <>
-                      Build pool for cards. Order shuffles once when you Start Game; #1 is the first song
-                      played.
-                    </>
-                  )
-                ) : (
-                  <>
-                    Preview of the tracks that match your bingo layout (same trimming and dedupe rules as
-                    the server). Finalize to build the pool; playback order is set when you Start Game.
-                  </>
-                )}{' '}
-                You can edit titles to make them more recognizable for players.
-                {' '}
-                <span className="host-bingo-pool-modal__explicit-note">
-                  Tracks with the Spotify explicit label
-                  <SpotifyExplicitBadge size="lg" title="Spotify explicit content label" />
-                  are flagged explicit in Spotify.
-                </span>
-              </p>
               {bingoPoolUiShowsPreFinalizeSubset && (
                 <p className="host-bingo-pool-modal__subset-warn">
                   {songList.length - finalizedPoolSongs.length} more song
@@ -10806,14 +10679,6 @@ const HostView: React.FC = () => {
                   <ListPlus className="host-glass-modal__title-icon" aria-hidden />
                   Playlist library
                 </h2>
-                <button
-                  type="button"
-                  className="host-playlist-round-modal__help"
-                  aria-label="How the playlist library works"
-                  title="Drag playlists into round buckets in this modal (Library + Rounds), or use Add to round…. Patterns and Save are on each bucket. Event-wide actions stay on the main host page."
-                >
-                  <HelpCircle className="w-4 h-4" aria-hidden />
-                </button>
               </div>
               <button
                 type="button"

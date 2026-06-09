@@ -3,8 +3,6 @@ import { Link } from 'react-router-dom';
 import { Crown, Heart, Loader2, UserCircle, Users } from 'lucide-react';
 import { API_BASE } from '../../config';
 import { hostFetch } from '../../utils/hostFetch';
-import ContextHelp from '../ContextHelp';
-import '../ContextHelp.css';
 
 type OrgMe = {
   role: 'owner' | 'host' | null;
@@ -58,9 +56,6 @@ const HostOrgBillingCard: React.FC = () => {
         <h2 id="host-org-billing-title" className="host-settings-workspace__title">
           <UserCircle className="host-settings-workspace__title-icon" aria-hidden />
           Account
-          <ContextHelp title="Account">
-            <p>Venue org, co-host invites, and billing. One org covers every host on your team.</p>
-          </ContextHelp>
         </h2>
         <Link to="/org" target="_blank" rel="noopener noreferrer" className="btn-primary host-org-billing-card__open">
           {data?.organization ? 'Open' : 'Set up'}

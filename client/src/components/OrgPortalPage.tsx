@@ -7,15 +7,10 @@ import {
   Users,
   ArrowLeft,
   AlertCircle,
-  Copy,
-  Check,
-  ExternalLink,
   UserCircle,
 } from 'lucide-react';
 import { API_BASE } from '../config';
 import { browserGoogleLoginUrl, hostFetch } from '../utils/hostFetch';
-import ContextHelp from './ContextHelp';
-import './ContextHelp.css';
 
 type OrgMember = { id: number; email: string | null; displayName: string | null; createdAt?: string };
 type OrgInvite = { email: string; created_at?: string };
@@ -102,15 +97,6 @@ async function billingCheckoutPost(path: string, body: Record<string, unknown> =
   window.location.href = j.url;
 }
 
-type BillingSetup = {
-  stripeSecretConfigured: boolean;
-  stripeWebhookConfigured: boolean;
-  stripeKeyMode: string | null;
-  publicAppUrl: string;
-  webhookUrl: string;
-  ready: boolean;
-};
-
 const OrgPortalPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<OrgMe | null>(null);
@@ -122,22 +108,10 @@ const OrgPortalPage: React.FC = () => {
   const [customAmount, setCustomAmount] = useState('25');
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
-  const [billingSetup, setBillingSetup] = useState<BillingSetup | null>(null);
-  const [copiedField, setCopiedField] = useState<string | null>(null);
   const [promoCode, setPromoCode] = useState('');
   const [planInterval, setPlanInterval] = useState<'month' | 'year'>('month');
 
   const billingNotice = searchParams.get('billing');
-
-  const copyText = async (label: string, text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedField(label);
-      window.setTimeout(() => setCopiedField(null), 2000);
-    } catch {
-      alert('Copy failed — select the text and copy manually.');
-    }
-  };
 
   const refresh = useCallback(async () => {
     setLoadError(null);
@@ -168,26 +142,6 @@ const OrgPortalPage: React.FC = () => {
   useEffect(() => {
     refresh();
   }, [refresh]);
-
-  useEffect(() => {
-    if (!data?.billing?.stripeConfigured && data?.role === 'owner') {
-      let cancelled = false;
-      (async () => {
-        try {
-          const res = await hostFetch(`${API_BASE || ''}/api/org/billing/setup`);
-          if (!res.ok || cancelled) return;
-          const j = (await res.json()) as { setup?: BillingSetup };
-          if (!cancelled && j.setup) setBillingSetup(j.setup);
-        } catch {
-          /* ignore */
-        }
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }
-    setBillingSetup(null);
-  }, [data?.billing?.stripeConfigured, data?.role]);
 
   useEffect(() => {
     if (billingNotice === 'success') {
@@ -472,9 +426,6 @@ const OrgPortalPage: React.FC = () => {
         <section className="org-portal__card">
           <div className="org-portal__section-head">
             <h2>Create org</h2>
-            <ContextHelp title="Create org">
-              <p>Venue, school, or team name. You become owner and can invite co-hosts.</p>
-            </ContextHelp>
           </div>
           <div className="org-portal__row">
             <input
@@ -535,9 +486,6 @@ const OrgPortalPage: React.FC = () => {
                   <section className="org-portal__card">
                     <div className="org-portal__section-head">
                       <h2>Plans</h2>
-                      <ContextHelp title="Plans">
-                        <p>Monthly or annual subscription. Includes event credits each month. Pause or cancel in Stripe.</p>
-                      </ContextHelp>
                     </div>
                     {subscriptionActive || subscriptionPaused ? (
                       <div className="org-portal__row">
@@ -616,9 +564,6 @@ const OrgPortalPage: React.FC = () => {
                     <section className="org-portal__card">
                       <div className="org-portal__section-head">
                         <h2>Packs</h2>
-                        <ContextHelp title="Packs">
-                          <p>Requires active Basic+ subscription. Not available during trial-only.</p>
-                        </ContextHelp>
                       </div>
                       <div className="org-portal__amounts">
                         {packProducts.map((pack) => (
@@ -639,92 +584,11 @@ const OrgPortalPage: React.FC = () => {
                 </>
               ) : null}
 
-              {!data?.billing?.stripeConfigured ? (
-                <section className="org-portal__card">
-                  <details>
-                    <summary>Stripe setup</summary>
-                    <div className="org-portal__stripe-setup">
-                      <p>
-                        Guide:{' '}
-                        <a
-                          href="https://github.com/Liquidkourage/Game-of-Tones/blob/main/STRIPE_SETUP.md"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          STRIPE_SETUP.md <ExternalLink size={14} aria-hidden style={{ verticalAlign: 'middle' }} />
-                        </a>
-                      </p>
-                    <ol className="org-portal__setup-steps">
-                      <li>
-                        <a href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noreferrer">
-                          Stripe → API keys
-                        </a>{' '}
-                        — set <code>STRIPE_SECRET_KEY</code> (<code>sk_test_…</code> while testing)
-                      </li>
-                      <li>
-                        <a href="https://dashboard.stripe.com/test/webhooks" target="_blank" rel="noreferrer">
-                          Stripe → Webhooks
-                        </a>{' '}
-                        — endpoint below, events                         <code>checkout.session.completed</code>,{' '}
-                        <code>customer.subscription.updated</code>, <code>customer.subscription.deleted</code>,{' '}
-                        <code>invoice.payment_succeeded</code>, <code>invoice.payment_failed</code> → set{' '}
-                        <code>STRIPE_WEBHOOK_SECRET</code>
-                      </li>
-                      <li>
-                        Create Prices in Stripe → set{' '}
-                        <code>STRIPE_PRICE_MONTHLY_BASIC</code> through <code>STRIPE_PRICE_MONTHLY_ENTERPRISE</code>,{' '}
-                        <code>STRIPE_PRICE_TRIAL_7D</code>, <code>STRIPE_PRICE_SINGLE_EVENT</code>, pack prices
-                      </li>
-                      <li>
-                        Set <code>PUBLIC_APP_URL</code> to your app URL (where users open TEMPO)
-                      </li>
-                    </ol>
-                    {billingSetup ? (
-                      <div className="org-portal__setup-vars">
-                        <div className="org-portal__setup-row">
-                          <span className="org-portal__setup-label">Webhook URL</span>
-                          <code className="org-portal__setup-value">{billingSetup.webhookUrl}</code>
-                          <button
-                            type="button"
-                            className="btn-secondary org-portal__copy-btn"
-                            onClick={() => void copyText('webhook', billingSetup.webhookUrl)}
-                          >
-                            {copiedField === 'webhook' ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
-                            Copy
-                          </button>
-                        </div>
-                        <div className="org-portal__setup-row">
-                          <span className="org-portal__setup-label">PUBLIC_APP_URL</span>
-                          <code className="org-portal__setup-value">{billingSetup.publicAppUrl}</code>
-                          <button
-                            type="button"
-                            className="btn-secondary org-portal__copy-btn"
-                            onClick={() => void copyText('app', billingSetup.publicAppUrl)}
-                          >
-                            {copiedField === 'app' ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
-                            Copy
-                          </button>
-                        </div>
-                        <p className="org-portal__muted org-portal__setup-status">
-                          Secret key: {billingSetup.stripeSecretConfigured ? 'set' : 'missing'} · Webhook secret:{' '}
-                          {billingSetup.stripeWebhookConfigured ? 'set' : 'missing'}
-                          {billingSetup.stripeKeyMode ? ` · Mode: ${billingSetup.stripeKeyMode}` : ''}
-                        </p>
-                      </div>
-                    ) : null}
-                    </div>
-                  </details>
-                </section>
-              ) : null}
-
               <section className="org-portal__card">
                 <div className="org-portal__section-head">
                   <h2>
                     <Mail aria-hidden /> Invites
                   </h2>
-                  <ContextHelp title="Invites">
-                    <p>Co-hosts sign in with Google using this exact email. Your org billing covers them.</p>
-                  </ContextHelp>
                 </div>
                 <div className="org-portal__row">
                   <input
@@ -749,10 +613,6 @@ const OrgPortalPage: React.FC = () => {
             </>
           ) : (
             <section className="org-portal__card">
-              <p>
-                Billing and invites are managed by the organization owner. If you set up this venue and you&apos;re the
-                only host listed below, claim ownership to unlock those controls.
-              </p>
               {(data?.members?.length ?? 0) <= 1 ? (
                 <button
                   type="button"
@@ -814,9 +674,6 @@ const OrgPortalPage: React.FC = () => {
           <footer className="org-portal__card org-portal__credits-footer">
             <div className="org-portal__section-head">
               <h2>Credits</h2>
-              <ContextHelp title="Credits">
-                <p>One credit = one event night (up to 12 rounds). Used when you print full cards or Start Game.</p>
-              </ContextHelp>
             </div>
             {enterpriseUnlimited ? (
               <p className="org-portal__muted">Unlimited</p>

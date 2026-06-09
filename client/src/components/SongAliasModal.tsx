@@ -79,7 +79,6 @@ const SongAliasModal: React.FC<SongAliasModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="Alias track"
-      subtitle="Shown on bingo cards, the projector, and printouts. Playback still uses the original track."
       titleId="host-song-alias-title"
       maxWidth="520px"
     >
@@ -132,8 +131,6 @@ const SongAliasModal: React.FC<SongAliasModalProps> = ({
             <div className="host-song-alias__error">Artist is required.</div>
           ) : null}
         </div>
-
-        <p className="host-song-alias__hint">Ctrl+Enter to save · Escape to cancel</p>
 
         <div className="host-song-alias__actions">
           <button

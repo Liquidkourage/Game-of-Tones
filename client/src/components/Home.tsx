@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Sparkles, Play, UserPlus, Crown, CheckCircle2, AlertTriangle, ListOrdered, UserCircle, ListMusic } from 'lucide-react';
+import { Sparkles, Play, UserPlus, Crown, CheckCircle2, AlertTriangle, UserCircle, ListMusic } from 'lucide-react';
 import { API_BASE } from '../config';
 import { hostFetch, setHostJwt, browserGoogleLoginUrl, clearHostJwt, postHostLogout } from '../utils/hostFetch';
 import type { HostGlassNavId } from '../host/hostGlassNav';
@@ -349,13 +349,6 @@ const Home: React.FC = () => {
             <h2 id="home-room-reuse-title" className="home-modal__title">
               Room already running
             </h2>
-            <p className="home-modal__body">
-              Your room code <strong>{hostRoomReuseModal.roomId}</strong> is already active on the server (for example another tab
-              may still be connected as host). Opening it again can fail if that session is still there.
-            </p>
-            <p className="home-modal__body home-modal__body--muted">
-              Continue to try the host screen for this code, or create a <strong>new</strong> room with a different code.
-            </p>
             <div className="home-modal__actions">
               <button
                 type="button"
@@ -452,8 +445,6 @@ const Home: React.FC = () => {
           </div>
         )}
 
-        {joinOnly && <p className="home-join-only-hint">Name and room code from your host.</p>}
-
         <div className="options-grid options-grid--single">
           {(joinOnly || homeMode === 'join') && (
           <motion.div 
@@ -465,8 +456,6 @@ const Home: React.FC = () => {
               <UserPlus className="card-icon" />
               <h3>Join</h3>
             </div>
-            <p className="home-card-lead">Room code from the host.</p>
-            
             <div className="input-group">
               <input
                 type="text"
@@ -497,7 +486,7 @@ const Home: React.FC = () => {
                 onChange={(e) => setJoinAsRemote(e.target.checked)}
               />
               <span>
-                Playing <strong>online</strong> (hybrid events: prize goes to in-person winner first)
+                Playing <strong>online</strong>
               </span>
             </label>
 
@@ -527,24 +516,6 @@ const Home: React.FC = () => {
               <Crown className="card-icon" />
               <h3>Host</h3>
             </div>
-            <p className="home-card-lead">Sign in, connect Spotify, run your show.</p>
-
-            <details className="home-host-guide">
-              <summary>
-                <ListOrdered className="home-host-guide__icon" size={18} aria-hidden />
-                <span>Help</span>
-              </summary>
-              <ol>
-                <li>Sign in with Google (allowlisted email).</li>
-                <li>
-                  <Link to="/org">Account</Link> — org, invites, billing.
-                </li>
-                <li>Create room or plan rounds.</li>
-                <li>Connect Spotify and pick playback device.</li>
-                <li>Players join with room code.</li>
-              </ol>
-            </details>
-
             {hostSession !== undefined && (
               <div
                 className="home-host-session-bar"
@@ -663,9 +634,6 @@ const Home: React.FC = () => {
               </div>
             ) : (
               <div className="home-host-signin" role="region" aria-label="Host sign in">
-                <p className="home-card-lead" style={{ marginBottom: 14, opacity: 0.95, lineHeight: 1.5 }}>
-                  Sign in with Google to host.
-                </p>
                 <button
                   type="button"
                   className="btn btn-primary"
@@ -722,15 +690,6 @@ const Home: React.FC = () => {
         </div>
       </motion.main>
 
-      <footer className="home-playbook" aria-label="How it works">
-        <p className="home-playbook__title">How it works</p>
-        <ol className="home-playbook__flow">
-          <li><span className="home-playbook__n">1</span> Host builds playlists & room</li>
-          <li><span className="home-playbook__n">2</span> Players join with the code</li>
-          <li><span className="home-playbook__n">3</span> Snippets play — mark your card</li>
-          <li><span className="home-playbook__n">4</span> Call bingo — host verifies</li>
-        </ol>
-      </footer>
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 
 type PoolSong = { id: string; name?: string; artist?: string; explicit?: boolean };
 
@@ -41,12 +41,7 @@ const HostPoolQualityReport: React.FC<HostPoolQualityReportProps> = ({
         {mixFinalized ? 'Finalized mix' : 'Preview'} · {report.total} tracks
         {report.explicit > 0 ? ` · ${report.explicit} explicit` : ''}
       </p>
-      {issues.length === 0 ? (
-        <p className="host-pool-quality__ok">
-          <CheckCircle2 className="w-4 h-4" aria-hidden />
-          No issues flagged for this pool.
-        </p>
-      ) : (
+      {issues.length === 0 ? null : (
         <ul className="host-pool-quality__issues">
           {issues.map((line) => (
             <li key={line}>

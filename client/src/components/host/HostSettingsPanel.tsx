@@ -55,11 +55,7 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
         </label>
         {showAdvancedConnection ? (
           <div className="host-settings-workspace__connection-body">{connectionPanel}</div>
-        ) : (
-          <p className="host-settings-workspace__hint">
-            Use <strong>Connection</strong> in the header.
-          </p>
-        )}
+        ) : null}
       </section>
 
       <section className="host-glass-panel host-settings-workspace__prefs">
@@ -105,7 +101,7 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
             onChange={(e) => onHybridChange(e.target.checked)}
           />
           <span>
-            <strong>Hybrid</strong> — in-person wins prizes first.
+            <strong>Hybrid</strong>
           </span>
         </label>
       </section>

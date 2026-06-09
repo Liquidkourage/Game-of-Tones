@@ -494,11 +494,6 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
                       </>
                     ) : null}
                   </p>
-                ) : !gameTabRoundBuilderReady ? (
-                  <p className="host-r4-hint host-go-live__hint">
-                    Start game will <strong>finalize the mix automatically</strong> if needed. Use Show playlists to
-                    preview playlist names on the display.
-                  </p>
                 ) : null}
                 {playlistAvailabilityIssues.length > 0 ? (
                   <HostPlaylistAvailabilityWarnings issues={playlistAvailabilityIssues} compact />

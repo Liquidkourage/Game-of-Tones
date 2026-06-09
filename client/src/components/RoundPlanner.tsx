@@ -3,7 +3,6 @@ import './RoundPlanner.css';
 import type { BingoPattern, PatternCompositeSpec, SavedCustomPattern } from '../patternDefinitions';
 import RoundBucketSettings, { type RoundBucketBingoPatch } from './RoundBucketSettings';
 import RoundBuilderPlaybackPanel from './RoundBuilderPlaybackPanel';
-import RoundBuilderPrepHints from './RoundBuilderPrepHints';
 import {
   ArrowDown,
   ArrowUp,
@@ -583,16 +582,6 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
         </div>
       ) : null}
 
-      {prepHints ? (
-        <RoundBuilderPrepHints
-          spotifyNeeded={prepHints.spotifyNeeded}
-          spotifyConnected={prepHints.spotifyConnected}
-          deviceNeeded={prepHints.deviceNeeded}
-          deviceSelected={prepHints.deviceSelected}
-          onOpenConnection={onOpenConnection}
-        />
-      ) : null}
-
       {onResetEvent || onClearPrepCache || onCompleteCurrentRound ? (
         <section className="round-planner__event-actions" aria-labelledby="round-planner-event-actions-title">
           <h4 id="round-planner-event-actions-title" className="round-planner__event-actions-title">
@@ -711,9 +700,6 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
         <div className="round-planner-bucket__drop">
           {playlistIds.length >= 2 && !isLive && focused.status !== 'completed' ? (
             <div className="round-planner-bucket__playlist-tools">
-              <p className="round-planner-bucket__playlist-tools-hint">
-                Top = <strong>B</strong> column, then <strong>I N G O</strong> in 5×15. Drag stems or sort below.
-              </p>
               <button
                 type="button"
                 className="round-planner-btn round-planner-btn--ghost"
@@ -729,7 +715,6 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
               <span className="round-planner-bucket__empty-title">
                 {dragOverBucket ? 'Drop to add' : 'Empty'}
               </span>
-              <span>Drag from library or use Add to round</span>
             </div>
           ) : (
             <div className="round-planner-bucket__chips">

@@ -2477,11 +2477,6 @@ const PlayerView: React.FC = () => {
                     ) : null}
 
                     <div className="player-v2-sheet-row">
-                      <div className="player-v2-sheet-copy">
-                        <div className="player-v2-sheet-note">
-                          Sign out to switch accounts or continue as a guest on this device.
-                        </div>
-                      </div>
                       <button
                         type="button"
                         className="btn-secondary"
@@ -2502,9 +2497,6 @@ const PlayerView: React.FC = () => {
                   <div className="player-v2-sheet-row">
                     <div className="player-v2-sheet-copy">
                       <div className="player-v2-sheet-label">Player account</div>
-                      <div className="player-v2-sheet-note">
-                        Sign in to save stats across games. Playing as guest: {playerName}
-                      </div>
                     </div>
                     <button type="button" className="btn-secondary" onClick={() => setJoinReady(false)}>
                       Sign in
@@ -2515,9 +2507,6 @@ const PlayerView: React.FC = () => {
                 <div className="player-v2-sheet-row">
                   <div className="player-v2-sheet-copy">
                     <div className="player-v2-sheet-label">Card appearance</div>
-                    <div className="player-v2-sheet-note">
-                      Dark or light styling for the card and controls.
-                    </div>
                   </div>
                   <div className="player-v2-theme-toggle" role="group" aria-label="Card appearance">
                     <button
@@ -2542,11 +2531,6 @@ const PlayerView: React.FC = () => {
                 <div className="player-v2-sheet-row">
                   <div className="player-v2-sheet-copy">
                     <div className="player-v2-sheet-label">Text size</div>
-                    <div className="player-v2-sheet-note">
-                      {compactCardCells
-                        ? 'Long titles on a narrow screen? Tap − to shrink text, or hover / long-press a square for the full name.'
-                        : 'Adjust square text without changing the overall card layout.'}
-                    </div>
                   </div>
                   <div className="player-v2-font-controls">
                     <button
@@ -2582,13 +2566,6 @@ const PlayerView: React.FC = () => {
                 {venueBranding?.logoUrl ? (
                   <div className="player-v2-sheet-venue">
                     <img src={venueBranding.logoUrl} alt="" className="player-v2-sheet-venue-logo" />
-                  </div>
-                ) : null}
-
-                {hybridPrizeInPersonOnly && !inPersonJoin ? (
-                  <div className="player-v2-sheet-note-block">
-                    <strong>Online player:</strong> you can play along; when the host enables hybrid mode, the prize and
-                    round only finish when an <strong>in-person</strong> player wins.
                   </div>
                 ) : null}
 

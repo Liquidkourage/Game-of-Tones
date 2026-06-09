@@ -41,9 +41,6 @@ const HostPlayersPanel: React.FC<HostPlayersPanelProps> = ({
           <QrCode className="host-players-workspace__title-icon" aria-hidden />
           Join room
         </h2>
-        <p className="host-players-workspace__lead">
-          Share the player link or QR so guests get bingo cards on their phones.
-        </p>
         <div className="host-players-workspace__join-grid">
           {qrSrc ? (
             <img className="host-players-workspace__qr" src={qrSrc} alt="" width={160} height={160} />

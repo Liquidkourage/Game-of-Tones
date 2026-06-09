@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Grid3x3 } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import {
   BINGO_PATTERNS,
   PRESET_SHAPE_PATTERNS,
@@ -55,18 +55,6 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
   getPatternDisplayName,
 }) => (
   <div className="host-round-hub-pattern">
-    <p className="host-round-hub-pattern__lead">
-      <Grid3x3 className="w-4 h-4" aria-hidden />
-      {targetRoundLabel ? (
-        <>
-          Pattern for <strong>{targetRoundLabel}</strong> — use <strong>Load for prep</strong> on a bucket so the mix
-          matches.
-        </>
-      ) : (
-        <>Pick a round on <strong>Build</strong> (Load for prep) before changing pattern here.</>
-      )}
-    </p>
-
     <div className="host-round-hub-pattern__main">
       {(['line', 'full_card', 'composite'] as const).map((key) => {
         const def = BINGO_PATTERNS[key];
@@ -91,7 +79,6 @@ const HostRoundHubPatternPanel: React.FC<HostRoundHubPatternPanelProps> = ({
             }}
           >
             <span className="host-round-hub-pattern__opt-label">{def.label}</span>
-            <span className="host-round-hub-pattern__opt-desc">{def.description}</span>
           </button>
         );
       })}

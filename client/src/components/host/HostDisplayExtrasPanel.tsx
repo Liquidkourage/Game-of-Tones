@@ -83,7 +83,6 @@ const HostDisplayExtrasPanel: React.FC<HostDisplayExtrasPanelProps> = ({
 
       <div className="host-display-extras__presets">
         <h3 className="host-display-extras__sub">Venue presets</h3>
-        <p className="host-display-extras__hint">Save font scale for this room layout (stored on this device).</p>
         <div className="host-display-extras__save-row">
           <input
             type="text"

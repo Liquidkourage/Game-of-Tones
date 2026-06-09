@@ -70,17 +70,11 @@ const CombinedPatternModal: React.FC<CombinedPatternModalProps> = (props) => {
       isOpen={isOpen}
       onClose={onClose}
       title="Combined pattern"
-      subtitle="Configure AND/OR clauses and painted shapes. Changes apply to this round immediately."
       titleId="host-combined-pattern-title"
       maxWidth="600px"
     >
       <div className="host-ui host-combined-pattern">
           <div className="host-combined-pattern__panel">
-            <p className="host-combined-pattern__lead">
-              {patternComposite.op === 'or'
-                ? 'Win if any clause completes'
-                : 'Win only when every clause completes'}
-            </p>
             <div className="host-combined-pattern__op-row">
               <span className="host-field-label">Combine with</span>
               <div className="host-segmented" role="group" aria-label="Combine clauses with">
@@ -336,11 +330,6 @@ const CombinedPatternModal: React.FC<CombinedPatternModalProps> = (props) => {
                             )}
                             {clauseSupportsMatchVariants(clause) && (
                               <div className="host-combined-pattern__variants">
-                                <p className="host-combined-pattern__variants-hint">
-                                  After you choose this clause&apos;s shape, optionally allow the{' '}
-                                  <strong>same marked squares</strong> to count when the pattern appears oriented
-                                  differently:
-                                </p>
                                 <label className="host-check-row">
                                   <input
                                     type="checkbox"
@@ -452,22 +441,6 @@ const CombinedPatternModal: React.FC<CombinedPatternModalProps> = (props) => {
             </div>
 
             <div className="host-combined-pattern__paint-section">
-              <p className="host-muted host-combined-pattern__paint-hint">
-                {editingMaskClauseIndex !== null ? (
-                  <>
-                    <span className="host-combined-pattern__paint-hint-accent">
-                      Editing painted clause {editingMaskClauseIndex + 1}
-                    </span>
-                    {' — '}
-                    change squares below, then apply (or cancel).
-                  </>
-                ) : (
-                  <>
-                    Paint one reference shape below. Rotations / mirrors are only the checkboxes on each clause — not
-                    separate buttons here.
-                  </>
-                )}
-              </p>
               <div className="host-actions-row" style={{ marginBottom: 10 }}>
                 <button
                   type="button"

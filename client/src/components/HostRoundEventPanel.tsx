@@ -143,9 +143,6 @@ const HostRoundEventPanel: React.FC<HostRoundEventPanelProps> = ({
         <Printer className="w-4 h-4" aria-hidden />
         Printable dauber cards (PDF)
       </h4>
-      <p className="host-round-hub-event__hint">
-        Cards per PDF applies to <strong>Print PDF</strong> on each round and <strong>Download PDF</strong> on the host screen.
-      </p>
       <label className="host-round-hub-event__cards-label">
         Cards per PDF
         <input
@@ -163,10 +160,6 @@ const HostRoundEventPanel: React.FC<HostRoundEventPanelProps> = ({
 
     <div className="host-round-hub-event__rounds-section">
       <h4>All rounds</h4>
-      <p className="host-round-hub-event__hint">
-        Pattern and free center are on each bucket under <strong>Build</strong>. Use <strong>Pattern</strong> for custom
-        shapes and combined rules. After <strong>Save round</strong>, use Print PDF or Call sheet.
-      </p>
       <div className="host-round-manager-rounds">
         {rounds.map((round, index) => {
           const isCurrentRound = index === currentRoundIndex;

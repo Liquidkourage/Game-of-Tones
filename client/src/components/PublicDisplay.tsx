@@ -5679,32 +5679,8 @@ const PublicDisplay: React.FC = () => {
                   >
                     <div className="public-display-rules-step__badge">{step.n}</div>
                     <h3 className="public-display-rules-step__title">{step.title}</h3>
-                    <p className="public-display-rules-step__body">{step.body}</p>
                   </motion.div>
                 ))}
-              </div>
-
-              <motion.p
-                className="public-display-rules-overlay__tip"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.35, delay: 0.28 }}
-                style={{
-                  background:
-                    'linear-gradient(135deg, rgba(255,160,60,0.22) 0%, rgba(80,40,10,0.35) 100%)',
-                  border: '2px solid rgba(255,200,120,0.45)',
-                  color: 'rgba(255,245,220,0.98)',
-                  fontWeight: 800,
-                  textAlign: 'center',
-                }}
-              >
-                Only daub songs you heard this round. The host decides every BINGO.
-              </motion.p>
-
-              <div className="public-display-rules-overlay__footer">
-                <Music style={{ width: 22, height: 22, opacity: 0.95 }} aria-hidden />
-                Good luck &amp; have fun
-                <Music style={{ width: 22, height: 22, opacity: 0.95 }} aria-hidden />
               </div>
             </div>
           </motion.div>

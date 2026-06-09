@@ -10,7 +10,6 @@ export type PreShowCheckItem = {
 };
 
 const HostPreShowChecklist: React.FC<{ items: PreShowCheckItem[] }> = ({ items }) => {
-  const ready = items.every((i) => i.ok);
   return (
     <section className="host-preshow-checklist host-glass-panel" aria-label="Pre-show checklist">
       <h2 className="host-preshow-checklist__title">Pre-show checklist</h2>
@@ -40,9 +39,6 @@ const HostPreShowChecklist: React.FC<{ items: PreShowCheckItem[] }> = ({ items }
           </li>
         ))}
       </ul>
-      <p className={`host-preshow-checklist__summary${ready ? ' host-preshow-checklist__summary--ready' : ''}`}>
-        {ready ? 'Ready to go live from the Game tab.' : 'Complete the items above, then start from Game.'}
-      </p>
     </section>
   );
 };

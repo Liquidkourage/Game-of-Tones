@@ -572,9 +572,6 @@ const AdminPage: React.FC = () => {
           >
             Sign in with Google
           </a>
-          <p className="admin-page__hint">
-            After Google redirects back here, open <strong>/admin</strong> again.
-          </p>
           <Link to="/" className="admin-page__back">
             <ArrowLeft size={18} aria-hidden /> Home
           </Link>
@@ -638,11 +635,6 @@ const AdminPage: React.FC = () => {
 
         <section className="admin-page__table-wrap admin-page__tenant-section" style={{ marginBottom: '2rem' }}>
           <h2 className="admin-page__h2">Tenant Spotify apps (enterprise)</h2>
-          <p className="admin-page__muted" style={{ marginBottom: '0.75rem' }}>
-            Each approved tenant uses their own Spotify Developer <strong>Client ID</strong> and <strong>Client Secret</strong>. Hosts
-            without an organization still use the server&apos;s default <code>SPOTIFY_CLIENT_ID</code> /{' '}
-            <code>SPOTIFY_CLIENT_SECRET</code>.
-          </p>
 
           {spotifySetup && !spotifySetup.orgEncryptionKeyConfigured && (
             <p className="admin-page__banner admin-page__banner--on" style={{ marginBottom: '1rem' }}>
@@ -657,39 +649,7 @@ const AdminPage: React.FC = () => {
             </p>
           )}
 
-          <details className="admin-page__tenant-guide" open>
-            <summary className="admin-page__tenant-guide-summary">Step-by-step: Spotify app for a tenant</summary>
-            <ol className="admin-page__tenant-steps">
-              <li>
-                Open the{' '}
-                <a href={spotifySetup?.spotifyDashboardUrl || 'https://developer.spotify.com/dashboard'} target="_blank" rel="noreferrer">
-                  Spotify Developer Dashboard
-                </a>{' '}
-                (tenant or your team signs in).
-              </li>
-              <li>
-                Click <strong>Create app</strong>, name it, accept terms, then open the app&apos;s <strong>Settings</strong>.
-              </li>
-              <li>
-                Under <strong>Redirect URIs</strong>, add <em>every</em> URI below that matches how users open this game (production
-                and local dev if needed). Use <strong>Add</strong>, paste exactly, then <strong>Save</strong> at the bottom of the
-                dashboard page.
-              </li>
-              <li>
-                Copy the app&apos;s <strong>Client ID</strong> and <strong>Client secret</strong> (View client secret).
-              </li>
-              <li>
-                In this admin page, create the tenant and paste those values. Then assign the host&apos;s numeric user id to that
-                organization.
-              </li>
-              <li>
-                The host opens a room and uses <strong>Connect Spotify</strong> again so tokens are issued for the tenant&apos;s app.
-              </li>
-            </ol>
-            <div className="admin-page__tenant-uris">
-              <p className="admin-page__muted admin-page__tenant-uris-lead">
-                Register these redirect URIs in the tenant&apos;s Spotify app (exact match, including <code>https</code> and path):
-              </p>
+          <div className="admin-page__tenant-uris">
               {spotifySetup === null && !spotifySetupError && (
                 <p className="admin-page__muted">Loading redirect URIs from server…</p>
               )}
@@ -719,7 +679,6 @@ const AdminPage: React.FC = () => {
                   </div>
                 ))}
             </div>
-          </details>
 
           {orgError && <p className="admin-page__error">{orgError}</p>}
           <form className="admin-page__add" onSubmit={(e) => void createOrganization(e)} style={{ marginBottom: '1rem' }}>
@@ -805,10 +764,6 @@ const AdminPage: React.FC = () => {
 
         <section className="admin-page__table-wrap" style={{ marginBottom: '2rem' }}>
           <h2 className="admin-page__h2">Venue &amp; corporate branding</h2>
-          <p className="admin-page__muted" style={{ marginBottom: '0.75rem' }}>
-            Saved per organization. Applies to player and public display when hosts in that org run a room (logo, colors, event copy,
-            optional runbook link). Snippet length and volume cap are stored for future host defaults.
-          </p>
           {venueError && <p className="admin-page__error">{venueError}</p>}
           {venueSavedAt != null && (
             <p className="admin-page__muted" style={{ marginBottom: '0.5rem' }}>
@@ -937,11 +892,6 @@ const AdminPage: React.FC = () => {
 
         <section className="admin-page__table-wrap" style={{ marginBottom: '2rem' }}>
           <h2 className="admin-page__h2">Promo codes</h2>
-          <p className="admin-page__muted" style={{ marginBottom: '0.75rem' }}>
-            Create a coupon + promotion code in Stripe first, then register the same customer-facing code here. Owners enter it on{' '}
-            <Link to="/org">/org</Link> when subscribing. Link the Stripe <code>promo_…</code> id for checkout discounts; set bonus
-            credits for extra event nights TEMPO grants after checkout.
-          </p>
           {promoError && <p className="admin-page__error">{promoError}</p>}
           {promoSavedAt != null && (
             <p className="admin-page__muted" style={{ marginBottom: '0.5rem' }}>
@@ -1054,10 +1004,6 @@ const AdminPage: React.FC = () => {
 
         <section className="admin-page__table-wrap" style={{ marginBottom: '2rem' }}>
           <h2 className="admin-page__h2">Grant event credits</h2>
-          <p className="admin-page__muted" style={{ marginBottom: '0.75rem' }}>
-            Manually add event credits to an organization (launch partners, make-goods, support). Credits appear on{' '}
-            <Link to="/org">/org</Link> and are consumed when the host activates an event.
-          </p>
           {grantError && <p className="admin-page__error">{grantError}</p>}
           {grantSavedAt != null && (
             <p className="admin-page__muted" style={{ marginBottom: '0.5rem' }}>

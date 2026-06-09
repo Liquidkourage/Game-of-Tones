@@ -77,9 +77,6 @@ const PlayerAccountGate: React.FC<Props> = ({ onGuestContinue, onAccountReady, i
         }}
       >
         <h3 style={{ margin: '0 0 6px', fontSize: '1.35rem' }}>Join the game</h3>
-        <p style={{ margin: '0 0 16px', opacity: 0.85, fontSize: '0.95rem', lineHeight: 1.45 }}>
-          Sign in to track your stats across nights, or continue as a guest.
-        </p>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           {(['login', 'signup', 'guest'] as Mode[]).map((m) => (
@@ -124,9 +121,6 @@ const PlayerAccountGate: React.FC<Props> = ({ onGuestContinue, onAccountReady, i
             >
               Continue as guest
             </button>
-            <p style={{ margin: '12px 0 0', fontSize: '0.82rem', opacity: 0.7 }}>
-              Guest play works, but stats are not saved to an account.
-            </p>
           </>
         ) : (
           <>

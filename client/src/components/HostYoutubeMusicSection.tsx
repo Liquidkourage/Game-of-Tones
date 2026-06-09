@@ -135,16 +135,6 @@ export function HostYoutubeMusicSection({ roomId }: { roomId: string }) {
           <Youtube className="w-6 h-6" style={{ color: '#ff4444' }} aria-hidden />
           YouTube Music
         </h2>
-        <p className="host-spotify-guide">
-          This deployment hasn&apos;t configured YouTube Music OAuth yet. Add{' '}
-          <code style={{ fontSize: '0.82em', whiteSpace: 'nowrap' }}>YOUTUBE_MUSIC_GOOGLE_CLIENT_ID</code> and{' '}
-          <code style={{ fontSize: '0.82em', whiteSpace: 'nowrap' }}>YOUTUBE_MUSIC_GOOGLE_CLIENT_SECRET</code> to the{' '}
-          <strong>server</strong> environment (e.g. Railway), redeploy, then register redirect URI{' '}
-          <code style={{ fontSize: '0.78em', wordBreak: 'break-all' }}>
-            …/api/youtube/music/callback
-          </code>{' '}
-          on your Google Cloud OAuth client.
-        </p>
       </div>
     );
   }
@@ -157,10 +147,6 @@ export function HostYoutubeMusicSection({ roomId }: { roomId: string }) {
         <Youtube className="w-6 h-6" style={{ color: '#ff4444' }} aria-hidden />
         YouTube Music
       </h2>
-      <p className="host-spotify-guide" style={{ marginBottom: 12 }}>
-        Connect the same Google account you use in <strong>YouTube Music</strong>. We sync your Music library playlists for hosting;
-        in-browser playback is wired separately.
-      </p>
       {error ? (
         <div className="spotify-error" style={{ marginBottom: 10 }}>
           <p>{error}</p>

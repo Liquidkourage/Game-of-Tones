@@ -82,7 +82,6 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={modalTitle}
-      subtitle="Paint squares on the 5×5 grid, then save to use this shape on the current round."
       titleId="host-custom-pattern-title"
       maxWidth="520px"
     >
@@ -111,9 +110,6 @@ const CustomPatternModal: React.FC<CustomPatternModalProps> = ({
           </div>
 
           <div className="host-custom-pattern__variants">
-            <p className="host-custom-pattern__variants-lead">
-              After you paint the shape, optional match rules (same idea as combined-pattern painted clauses):
-            </p>
             <label className="host-check-row">
               <input
                 type="checkbox"
