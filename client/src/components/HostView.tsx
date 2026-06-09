@@ -11,18 +11,15 @@ import {
   X,
   Gamepad2,
   Link2,
-  Grid3x3,
   Monitor,
   BookOpen,
   Image as ImageIcon,
   ListMusic,
-  List,
   ListPlus,
   ListChecks,
   CalendarRange,
   RotateCcw,
   Trash2,
-  Sliders,
   Volume2,
   VolumeX,
   Users,
@@ -41,7 +38,6 @@ import {
   Printer,
   Save,
   Eraser,
-  HelpCircle,
   Settings,
   Building2,
 } from 'lucide-react';
@@ -83,8 +79,6 @@ import {
   type SongAliases,
 } from '../utils/songAliasDisplay';
 import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModal';
-import HostScreenTour from './HostScreenTour';
-import { buildHostScreenTourSteps } from '../hostScreenTourSteps';
 import BingoPoolList from './BingoPoolList';
 import { loadHostPreferences, saveHostPreferences } from '../utils/hostPreferences';
 import { isSpotifyJamDevice, pickPreferredPlaybackDevice } from '../utils/spotifyDevices';
@@ -1162,8 +1156,6 @@ const HostView: React.FC = () => {
   /** In-person + online: only in-person verified bingos end the round / prize */
   const [hybridInPersonPlusOnline, setHybridInPersonPlusOnline] = useState(false);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
-  const [hostTourOpen, setHostTourOpen] = useState(false);
-  const [hostTourStep, setHostTourStep] = useState(0);
   const showConnectionModalScrollRef = useRef(showConnectionModal);
   showConnectionModalScrollRef.current = showConnectionModal;
   /** Server has YTM OAuth env; shows Connection UI even when REACT_APP_ENABLE_YOUTUBE_MUSIC was not set at client build time. */
@@ -8492,43 +8484,6 @@ const HostView: React.FC = () => {
     getDisplaySongTitle,
   ]);
 
-  const hostTourSteps = useMemo(
-    () =>
-      buildHostScreenTourSteps({
-        gameState,
-        hasCurrentSong: Boolean(currentSong),
-        showGoLive: gameState === 'waiting' && !currentSong,
-        showLiveDock: gameState === 'playing' || Boolean(currentSong),
-        showFinalizeMix: false,
-      }),
-    [gameState, currentSong],
-  );
-
-  useEffect(() => {
-    if (hostTourStep >= hostTourSteps.length && hostTourSteps.length > 0) {
-      setHostTourStep(0);
-    }
-  }, [hostTourStep, hostTourSteps.length]);
-
-  useEffect(() => {
-    if (!hostTourOpen) return;
-    const step = hostTourSteps[hostTourStep];
-    if (!step) return;
-    if (step.id === 'rounds-panel' || step.id === 'round-builder' || step.id === 'round-setlist') {
-      setHostGlassNav('rounds');
-    } else if (step.id === 'players-panel') {
-      setHostGlassNav('players');
-    } else if (step.id === 'settings-panel') {
-      setHostGlassNav('settings');
-    } else if (step.id === 'projector-settings') {
-      setHostGlassNav('display');
-      const el = document.querySelector<HTMLDetailsElement>('[data-host-tour="projector-settings"]');
-      if (el) el.open = true;
-    } else if (step.id === 'go-live' || step.id === 'live-dock') {
-      setHostGlassNav('game');
-    }
-  }, [hostTourOpen, hostTourStep, hostTourSteps]);
-
   const showPrimaryFinalizeMixButton =
     !mixFinalized && !savedRoundSnapshotMakesFinalizeRedundant && mixPlaylistSelection.length > 0;
   /** Round builder saved this round — host screen is go-live only (no mix/finalize/PDF chrome). */
@@ -9952,7 +9907,7 @@ const HostView: React.FC = () => {
           <div className="host-shell__main" ref={hostShellMainRef}>
         {/* Header */}
         <div className="host-header host-header--r4">
-          <div className="host-header__brand" data-host-tour="header-brand">
+          <div className="host-header__brand">
             <h1 className="host-header__title">
               <Gamepad2 className="host-header__icon" aria-hidden />
               <span className="host-header__title-text">
@@ -9989,25 +9944,11 @@ const HostView: React.FC = () => {
             <button
               type="button"
               className="btn-secondary host-connection-toolbar-btn"
-              data-host-tour="connection"
               onClick={() => setShowConnectionModal(true)}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
             >
               <Link2 className="w-4 h-4" aria-hidden />
               Connection
-            </button>
-            <button
-              type="button"
-              className="btn-secondary host-tour-launcher"
-              onClick={() => {
-                setHostTourStep(0);
-                setHostTourOpen(true);
-              }}
-              aria-label="Show host screen tour"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-            >
-              <HelpCircle className="w-4 h-4" aria-hidden />
-              Tour
             </button>
             {hostAccount ? (
               <span
@@ -10166,7 +10107,7 @@ const HostView: React.FC = () => {
             )}
 
             {hostGlassNav === 'players' && roomId ? (
-              <div data-host-tour="players-panel">
+              <div>
                 <HostPlayersPanel
                   roomId={roomId}
                   playerCardsCount={playerCards.size}
@@ -10178,7 +10119,7 @@ const HostView: React.FC = () => {
             ) : null}
 
             {hostGlassNav === 'settings' ? (
-              <div data-host-tour="settings-panel">
+              <div>
               <HostSettingsPanel
                 connectionPanel={hostConnectionPanel}
                 onOpenConnectionModal={() => setShowConnectionModal(true)}
@@ -10230,7 +10171,6 @@ const HostView: React.FC = () => {
                 <section
                   ref={roundsPanelRef}
                   className="host-rounds-panel host-manager-section"
-                  data-host-tour="rounds-panel"
                   aria-labelledby="host-rounds-panel-title"
                 >
                   <div className="host-rounds-panel__header">
@@ -10243,14 +10183,13 @@ const HostView: React.FC = () => {
                     <button
                       type="button"
                       className="btn-primary host-rounds-panel__library-btn"
-                      data-host-tour="round-builder"
                       onClick={() => openPlaylistLibrary()}
                     >
                       <ListPlus className="w-5 h-5" aria-hidden />
                       Playlist library
                     </button>
                   </div>
-                  <div className="host-rounds-panel__planner" data-host-tour="round-setlist">
+                  <div className="host-rounds-panel__planner">
                     {showPlaylistRoundModal ? null : hostRoundPlanner}
                   </div>
                 </section>
@@ -10279,7 +10218,7 @@ const HostView: React.FC = () => {
 
                   {hostGlassNav === 'display' ? (
                   <div className="host-manager-col host-manager-col--wide">
-          <details ref={displaySettingsRef} className="host-event-settings" data-host-tour="projector-settings" open>
+          <details ref={displaySettingsRef} className="host-event-settings" open>
             <summary className="host-event-settings__summary">
               <Monitor className="w-5 h-5" aria-hidden />
               Projector &amp; event rules
@@ -10494,6 +10433,7 @@ const HostView: React.FC = () => {
             </div>
           </motion.section>
 
+          {showYoutubeMusicInConnectionModal ? (
           <motion.section
             className="host-manager-section host-manager-section--display host-manager-display-pane host-manager-display-pane--continued font-size-section"
             initial={{ opacity: 0 }}
@@ -10501,42 +10441,6 @@ const HostView: React.FC = () => {
             transition={{ delay: 0.35 }}
             aria-labelledby="host-manager-display-title"
           >
-            <details className="host-display-testing">
-              <summary>Testing: force call list layout</summary>
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-                {(
-                  [
-                    { mode: 'auto' as const, label: 'Auto (show)', Icon: Sliders },
-                    { mode: '5x15' as const, label: '5×15 columns', Icon: Grid3x3 },
-                    { mode: 'grouped' as const, label: '1×75 carousel', Icon: List },
-                  ]
-                ).map(({ mode, label, Icon }) => {
-                  const active = publicDisplayCallListMode === mode;
-                  return (
-                    <button
-                      key={mode}
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => updatePublicDisplayCallListMode(mode)}
-                      style={{
-                        fontSize: '0.88rem',
-                        padding: '10px 14px',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        border: active ? '1px solid rgba(0,255,136,0.65)' : undefined,
-                        background: active ? 'rgba(0,255,136,0.14)' : undefined,
-                        color: active ? '#00ff88' : undefined,
-                      }}
-                    >
-                      <Icon className="w-4 h-4" aria-hidden />
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </details>
-            {showYoutubeMusicInConnectionModal ? (
               <>
                 <div className="host-manager-display__divider" style={{ marginTop: 14 }} />
                 <p className="host-manager-display__sub">YouTube playback window</p>
@@ -10562,8 +10466,8 @@ const HostView: React.FC = () => {
                   </p>
                 ) : null}
               </>
-            ) : null}
           </motion.section>
+          ) : null}
             </div>
           </details>
                   </div>
@@ -11249,23 +11153,6 @@ const HostView: React.FC = () => {
                   </button>
                 </div>
 
-            {/* Debug Info - Only show in debug mode */}
-            {pendingVerification.debugInfo && (() => {
-              const searchParams = new URLSearchParams(window.location.search);
-              const debugMode = searchParams.get('debug') === '1' || searchParams.get('dbg') === '1';
-              return debugMode ? (
-                <div style={{ 
-                  marginTop: '16px', 
-                  padding: '8px', 
-                  background: 'rgba(0,0,0,0.2)', 
-                  borderRadius: '4px',
-                  fontSize: '0.8rem',
-                  color: '#ccc'
-                }}>
-                  <strong>Debug:</strong> {pendingVerification.debugInfo.totalMarkedSquares} marked, {pendingVerification.debugInfo.totalPlayedSongs} played songs
-                </div>
-              ) : null;
-            })()}
                   </div>
               </div>
       )}
@@ -11572,14 +11459,6 @@ const HostView: React.FC = () => {
           aliasArtist={songAliases[editingSong.id]?.artist}
         />
       )}
-
-      <HostScreenTour
-        open={hostTourOpen && hostTourSteps.length > 0}
-        stepIndex={hostTourStep}
-        steps={hostTourSteps}
-        onStepIndexChange={setHostTourStep}
-        onClose={() => setHostTourOpen(false)}
-      />
 
     </div>
   );

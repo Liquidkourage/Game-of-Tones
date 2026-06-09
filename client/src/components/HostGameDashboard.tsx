@@ -293,8 +293,6 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
     node.scrollTop = node.scrollHeight;
   }, [callLog]);
 
-  const tourGoLive = gameState === 'waiting' && !currentSong;
-  const tourLiveDock = gameState === 'playing';
   const showPlaylistsLabel = finalizeMixBusy
     ? finalizeMixElapsedSec > 0
       ? `Loading playlists… ${finalizeMixElapsedSec}s`
@@ -306,11 +304,10 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
       {/* Now playing / Ready */}
       <section
         className={
-          tourLiveDock
+          gameState === 'playing'
             ? 'host-r4-card host-glass-panel host-r4-now-playing host-r4-now-playing--live'
             : 'host-r4-card host-glass-panel host-r4-now-playing'
         }
-        data-host-tour={tourLiveDock ? 'live-dock' : tourGoLive ? 'go-live' : undefined}
         aria-label={gameState === 'playing' ? 'Now playing' : 'Ready to play'}
       >
         {gamePaused && (

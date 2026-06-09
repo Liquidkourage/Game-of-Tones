@@ -3191,18 +3191,6 @@
   flex-wrap: wrap;
 }
 
-.host-view .host-tour-launcher {
-  border-color: rgba(0, 255, 163, 0.35);
-  color: #b8f5d8;
-  font-weight: 600;
-}
-
-.host-view .host-tour-launcher:hover:not(:disabled) {
-  border-color: rgba(0, 255, 163, 0.55);
-  color: #00ffa3;
-  background: rgba(0, 255, 163, 0.1);
-}
-
 .host-view .host-manager-hero--dashboard {
   display: flex;
   flex-direction: column;
@@ -3671,18 +3659,4 @@
 .host-view .host-host-prefs__field--checkbox input[type='checkbox']:disabled {
   cursor: not-allowed;
   opacity: 0.45;
-}
-
-.host-view .host-display-testing {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px dashed rgba(255, 255, 255, 0.2);
-  background: rgba(0, 0, 0, 0.15);
-}
-
-.host-view .host-display-testing summary {
-  cursor: pointer;
-  font-weight: 700;
-  color: rgba(255, 200, 120, 0.95);
 }
