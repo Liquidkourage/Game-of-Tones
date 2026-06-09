@@ -6865,7 +6865,7 @@ const HostView: React.FC = () => {
     }, 15000);
   }, [socket, roomId, pendingVerification, addLog]);
 
-  const rejectBingo = useCallback(async (reason: string) => {
+  const rejectBingo = useCallback(async () => {
     if (!socket || !pendingVerification) return;
     if (verificationTimeoutRef.current) {
       clearTimeout(verificationTimeoutRef.current);
@@ -6877,7 +6877,7 @@ const HostView: React.FC = () => {
       playerId: pendingVerification.playerId,
       playerName: pendingVerification.playerName,
       approved: false,
-      reason: reason || 'Invalid bingo pattern'
+      reason: 'Invalid bingo pattern',
     });
     verificationTimeoutRef.current = setTimeout(() => {
       verificationTimeoutRef.current = null;
@@ -11366,10 +11366,7 @@ const HostView: React.FC = () => {
                   </button>
                   
                   <button
-                onClick={() => {
-                  const reason = prompt('Reason for rejection (optional):') || 'Invalid pattern';
-                  rejectBingo(reason);
-                }}
+                onClick={() => void rejectBingo()}
                 disabled={isProcessingVerification}
                     style={{
                       background: 'linear-gradient(135deg, #ff4444, #cc3333)',
