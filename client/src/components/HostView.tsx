@@ -140,7 +140,7 @@ import HostSetupCockpit from './host/HostSetupCockpit';
 import HostSetupPlaylistStep from './host/HostSetupPlaylistStep';
 import HostSetupPlayStep from './host/HostSetupPlayStep';
 import HostPlaylistRoundAssignMenu from './host/HostPlaylistRoundAssignMenu';
-import HostRoundAssignmentSummary from './host/HostRoundAssignmentSummary';
+import HostSelectedRoundPanel from './host/HostSelectedRoundPanel';
 import HostRoundsTabWorkspace from './host/HostRoundsTabWorkspace';
 import HostTutorial from './host/HostTutorial';
 import { HOST_TUTORIAL_STEPS } from '../host/hostTutorialSteps';
@@ -747,6 +747,19 @@ function filterBasePlaylistsForMix(playlists: Playlist[], showAllPlaylists: bool
     spotifyPart = rest;
   }
   return [...spotifyPart, ...ytm];
+}
+
+/** GoT label = eligibility tag for the shared Tempo Library (public playlists for all hosts). */
+function isGotLabeledPlaylist(name: string): boolean {
+  const nameLower = (name || '').toLowerCase();
+  if (nameLower.includes('game of tones output') || nameLower.includes('gameoftones output')) {
+    return false;
+  }
+  return (
+    /^got\s*[-–:]*\s*/i.test(name || '') ||
+    nameLower.includes('game of tones') ||
+    nameLower.includes('gameoftones')
+  );
 }
 
 const HostView: React.FC = () => {
@@ -1406,16 +1419,16 @@ const HostView: React.FC = () => {
   // Playlists state
   const [visiblePlaylists, setVisiblePlaylists] = useState<Playlist[]>([]);
   const [playlistQuery, setPlaylistQuery] = useState('');
-  /** false = GoT-oriented picks only; true = full Spotify library list */
-  const [showAllPlaylists, setShowAllPlaylists] = useState<boolean>(false);
+  /** "My Spotify" shows the host's full connected library; GoT labeling only gates the shared Tempo Library. */
+  const [showAllPlaylists, setShowAllPlaylists] = useState<boolean>(true);
   /** Playlist table: Spotify order until user sorts by name or track count */
   const [playlistSort, setPlaylistSort] = useState<{
     key: 'none' | 'name' | 'tracks';
     dir: 'asc' | 'desc';
   }>({ key: 'none', dir: 'asc' });
   const [playlistLibraryPage, setPlaylistLibraryPage] = useState(0);
-  /** Playlist-round modal table: all sources, personal Spotify only, or YouTube only. */
-  const [playlistLibrarySource, setPlaylistLibrarySource] = useState<'all' | 'spotify' | 'youtube'>(
+  /** Library source: host's own Spotify, shared Tempo Library (GoT-labeled catalog), or YouTube. */
+  const [playlistLibrarySource, setPlaylistLibrarySource] = useState<'spotify' | 'tempo' | 'youtube'>(
     'spotify'
   );
   // const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]); // duplicate removed
@@ -1958,8 +1971,8 @@ const HostView: React.FC = () => {
         // Fresh library fetch: load Official packs shortly after (another GET /me/playlists on catalog token).
         // Stale/cache response: Spotify is already rate-limiting — defer catalog to avoid an immediate second burst (same app quota); Official packs still loads after cooldown.
         scheduleCatalogPacksLoad(data.fromSpotifyListCache === true ? 60_000 : 7500);
-        // Reset filter to GoT-only by default when playlists are reloaded
-        setShowAllPlaylists(false);
+        // "My Spotify" always shows the full connected library (GoT label only gates the Tempo Library)
+        setShowAllPlaylists(true);
         // Don't set visiblePlaylists here - let the useEffect handle it to ensure consistency
       } else {
         setSpotifyMyPlaylistsTotal(null);
@@ -2076,14 +2089,24 @@ const HostView: React.FC = () => {
   }, [filteredPlaylists, playlistSort]);
 
   const libraryTablePlaylists = useMemo(() => {
-    if (playlistLibrarySource === 'spotify') {
-      return sortedFilteredPlaylists.filter((p) => !p.youtubeMusic && !p.catalog);
-    }
     if (playlistLibrarySource === 'youtube') {
       return sortedFilteredPlaylists.filter((p) => p.youtubeMusic);
     }
-    return sortedFilteredPlaylists;
+    // 'spotify' (My Spotify). The 'tempo' source renders the shared catalog list instead of this table.
+    return sortedFilteredPlaylists.filter((p) => !p.youtubeMusic && !p.catalog);
   }, [sortedFilteredPlaylists, playlistLibrarySource]);
+
+  /** Shared Tempo Library: catalog packs, strictly filtered by the GoT label (eligibility tag). */
+  const tempoLibraryPacks = useMemo(() => {
+    const gotOnly = catalogPackOptions.filter((p) => isGotLabeledPlaylist(p.name));
+    const q = playlistQuery.trim().toLowerCase();
+    if (!q) return gotOnly;
+    return gotOnly.filter(
+      (p) =>
+        (p.name || '').toLowerCase().includes(q) ||
+        (p.description || '').toLowerCase().includes(q),
+    );
+  }, [catalogPackOptions, playlistQuery]);
 
   const playlistLibraryPageCount = useMemo(
     () => Math.max(1, Math.ceil(libraryTablePlaylists.length / PLAYLIST_LIBRARY_PAGE_SIZE)),
@@ -2113,8 +2136,8 @@ const HostView: React.FC = () => {
   const playlistLibrarySourceCounts = useMemo(() => {
     const spotify = sortedFilteredPlaylists.filter((p) => !p.youtubeMusic && !p.catalog).length;
     const youtube = sortedFilteredPlaylists.filter((p) => p.youtubeMusic).length;
-    return { all: sortedFilteredPlaylists.length, spotify, youtube };
-  }, [sortedFilteredPlaylists]);
+    return { spotify, youtube, tempo: tempoLibraryPacks.length };
+  }, [sortedFilteredPlaylists, tempoLibraryPacks.length]);
 
   useEffect(() => {
     setPlaylistLibraryPage(0);
@@ -2143,30 +2166,17 @@ const HostView: React.FC = () => {
     const q = playlistQuery.trim();
     if (q) return 'No playlists match your search.';
     const merged = [...playlists, ...youtubeMusicPlaylists];
-    const base = filterBasePlaylistsForMix(merged, showAllPlaylists);
     if (merged.length === 0) {
       if (isSpotifyConnected && spotifyMyPlaylistsTotal === 0) {
         return 'Spotify reports 0 playlists for the connected account. Create playlists in Spotify or connect YouTube Music under Connection, then refresh.';
       }
       return 'No playlists loaded yet. Connect Spotify and/or YouTube Music under Connection, then refresh your library.';
     }
-    if (base.length === 0) {
-      const spotifyBase = filterBasePlaylistsForMix(playlists, showAllPlaylists);
-      if (
-        playlists.length > 0 &&
-        spotifyBase.length === 0 &&
-        !showAllPlaylists &&
-        youtubeMusicPlaylists.length === 0
-      ) {
-        return `Spotify returned ${playlists.length} playlist(s), but none match GoT picks (name starts with "GoT" or contains "Game of Tones"). Use "All my playlists" to see your full library.`;
-      }
-    }
     return 'No playlists in this view.';
   }, [
     playlistQuery,
     playlists,
     youtubeMusicPlaylists,
-    showAllPlaylists,
     spotifyMyPlaylistsTotal,
     isSpotifyConnected,
   ]);
@@ -7460,23 +7470,25 @@ const HostView: React.FC = () => {
     setRoundBuilderFocusIndex(roundIndex);
   }, []);
 
-  const roundAssignmentSummaryRows = useMemo(
-    () =>
-      eventRounds.map((round, index) => {
-        const playlistCount = round.playlistIds?.length ?? 0;
-        const songCount = round.songCount ?? 0;
-        return {
-          index,
-          name: round.name,
-          playlistCount,
-          songCount,
-          isCurrent: index === currentRoundIndex,
-          isEmpty: playlistCount === 0,
-          isLowSongs: playlistCount > 0 && songCount > 0 && songCount < 15,
-        };
-      }),
-    [eventRounds, currentRoundIndex],
-  );
+  /** Round shown in the selected-round details panel on the Rounds tab (falls back to Round 1). */
+  const selectedRoundForPanel = useMemo(() => {
+    if (eventRounds.length === 0) return null;
+    const idx =
+      currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length ? currentRoundIndex : 0;
+    const round = eventRounds[idx];
+    const ids = round.playlistIds || [];
+    const names = round.playlistNames || [];
+    return {
+      index: idx,
+      name: round.name,
+      status: round.status,
+      songCount: round.songCount ?? 0,
+      playlists: ids.map((id, i) => ({
+        id: String(id),
+        name: stripGotPlaylistPrefix(String(names[i] ?? id)),
+      })),
+    };
+  }, [eventRounds, currentRoundIndex]);
 
   /** Pick a round for advance prep: sync mix + pattern/snippet UI without marking rounds active/completed or leaving Manager. */
   const handleSelectRoundForPrep = useCallback(
@@ -8982,6 +8994,229 @@ const HostView: React.FC = () => {
 
   const hostRoundPlanner = renderHostRoundPlanner('full');
 
+  /** Tempo Library tab: shared catalog playlists, restricted to the GoT label (eligibility tag for all hosts). */
+  const tempoLibrarySection = (
+    <div className="host-playlist-round-modal__catalog host-tempo-library">
+      <div
+        className="host-playlist-round-modal__catalog-head"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+          flexWrap: 'wrap',
+        }}
+      >
+        <p
+          style={{ margin: 0, fontSize: '0.8rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}
+        >
+          Public playlists available to every host, filtered to the GoT label.
+        </p>
+        {catalogPacksConfigured ? (
+          <button
+            type="button"
+            className="btn-secondary host-playlist-library-toolbar__icon-btn"
+            disabled={
+              catalogPacksRefreshing ||
+              catalogPacksCooldownRemainingMs > 0 ||
+              !catalogPacksFetchOk
+            }
+            aria-label={
+              catalogPacksRefreshing
+                ? 'Refreshing Tempo Library'
+                : catalogPacksCooldownRemainingMs > 0
+                  ? 'Tempo Library refresh on cooldown'
+                  : 'Refresh Tempo Library'
+            }
+            title={
+              catalogPacksCooldownRemainingMs > 0
+                ? `Refresh available in ${Math.max(1, Math.ceil(catalogPacksCooldownRemainingMs / 60000))} min`
+                : 'Refresh Tempo Library from the shared catalog (uses Spotify API quota; 5 min cooldown)'
+            }
+            onClick={() => void loadCatalogPacks({ forceRefresh: true })}
+          >
+            <RotateCcw
+              className={`w-4 h-4${catalogPacksRefreshing ? ' host-playlist-library-toolbar__spin' : ''}`}
+              aria-hidden
+            />
+          </button>
+        ) : null}
+      </div>
+      {catalogPacksRefreshHint || catalogPacksCooldownRemainingMs > 0 ? (
+        <p
+          style={{
+            margin: '8px 0 0',
+            fontSize: '0.74rem',
+            color: 'rgba(255,255,255,0.55)',
+            lineHeight: 1.45,
+          }}
+          role="status"
+        >
+          {catalogPacksRefreshHint ||
+            `Tempo Library refresh available in ${Math.max(1, Math.ceil(catalogPacksCooldownRemainingMs / 60000))} min.`}
+        </p>
+      ) : null}
+      <div
+        style={{
+          marginTop: 10,
+          padding: '12px 14px',
+          borderRadius: 10,
+          border: '1px solid rgba(120, 180, 255, 0.35)',
+          background: 'rgba(60, 120, 200, 0.12)',
+        }}
+      >
+        {!catalogPacksProbeDone ? (
+          <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+            Contacting server…
+          </p>
+        ) : !catalogPacksFetchOk ? (
+          <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+            {catalogPacksFetchUnauthorized ? (
+              <>
+                Host session required — sign in with <strong style={{ color: '#c8dcff' }}>Google</strong> as
+                host, then retry <strong style={{ color: '#c8dcff' }}>Refresh</strong> on your library (or reload).
+              </>
+            ) : (
+              <>
+                Couldn&apos;t load the Tempo Library (network or server error). Reload the page or use{' '}
+                <strong style={{ color: '#c8dcff' }}>Retry loading playlists</strong> if Spotify failed.
+              </>
+            )}
+          </p>
+        ) : !catalogPacksConfigured ? (
+          <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+            <strong style={{ color: '#c8dcff' }}>Not enabled on this server.</strong> Set{' '}
+            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_SPOTIFY_REFRESH_TOKEN</code> plus{' '}
+            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_NAME_PREFIX</code> or{' '}
+            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> /{' '}
+            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code> on the API host (e.g.
+            Railway), then redeploy. <strong style={{ color: '#c8dcff' }}>My Spotify</strong> is only your
+            personal library — it is not the shared Tempo Library.
+          </p>
+        ) : (
+          <>
+            {tempoLibraryPacks.length > 0 ? (
+              <div className="host-catalog-pack-list">
+                {tempoLibraryPacks.map((pack) => {
+                  const isSel = selectedCatalogPlaylists.some((p) => p.id === pack.id);
+                  return (
+                    <div
+                      key={pack.id}
+                      className="host-catalog-pack-row"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        fontSize: '0.88rem',
+                        flexWrap: 'wrap',
+                      }}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('text/plain', pack.id);
+                        e.dataTransfer.effectAllowed = 'copy';
+                        setLibraryPlaylistDragActive(true);
+                      }}
+                      onDragEnd={() => setLibraryPlaylistDragActive(false)}
+                    >
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          cursor: 'pointer',
+                          flex: 1,
+                          minWidth: 0,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSel}
+                          aria-label={`Include in game mix: ${pack.name}`}
+                          onChange={() => {
+                            setSelectedCatalogPlaylists((prev) =>
+                              isSel ? prev.filter((p) => p.id !== pack.id) : [...prev, { ...pack, catalog: true }]
+                            );
+                          }}
+                        />
+                        <span style={{ color: '#fff', flex: 1, minWidth: 0 }}>
+                          {stripGoTPrefix ? stripGotPlaylistPrefix(pack.name) : pack.name}
+                        </span>
+                        <span style={{ color: '#8899aa', fontSize: '0.78rem', flexShrink: 0 }}>
+                          {pack.tracks} songs
+                        </span>
+                      </label>
+                      <HostPlaylistRoundAssignMenu
+                        playlistId={pack.id}
+                        playlistName={stripGoTPrefix ? stripGotPlaylistPrefix(pack.name) : pack.name}
+                        rounds={eventRounds}
+                        onAssign={(roundIndex) => addPlaylistToRoundBucket(roundIndex, pack.id)}
+                        onUnassign={(roundIndex) =>
+                          removePlaylistFromRoundBucket(roundIndex, pack.id)
+                        }
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : playlistQuery.trim() ? (
+              <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+                No Tempo Library playlists match your search.
+              </p>
+            ) : catalogPackOptions.length > 0 ? (
+              <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+                The catalog returned {catalogPackOptions.length} playlist(s), but none carry the{' '}
+                <strong style={{ color: '#c8dcff' }}>GoT</strong> label, so none are eligible for the shared
+                Tempo Library.
+              </p>
+            ) : catalogPrefixDiscoverySkipped ? (
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: '0.78rem',
+                  color: 'rgba(255,255,255,0.65)',
+                  lineHeight: 1.5,
+                }}
+              >
+                <strong style={{ color: '#ffc857' }}>Spotify blocked catalog discovery</strong> (rate limit /
+                quarantine on the Web API). Tempo could not list playlists for the{' '}
+                <strong style={{ color: '#c8dcff' }}>catalog</strong> token, so{' '}
+                <strong style={{ color: '#c8dcff' }}>prefix-based packs</strong> won&apos;t appear until Spotify
+                accepts <code style={{ fontSize: '0.72rem' }}>GET /v1/me/playlists</code> again. This is the same
+                quota pressure as the library warning if host and catalog share one Spotify app.{' '}
+                <strong style={{ color: '#c8dcff' }}>Workarounds:</strong> set{' '}
+                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> or{' '}
+                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code> (no listing call); or use
+                a <strong style={{ color: '#c8dcff' }}>second Spotify Developer app</strong> for catalog (
+                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_SPOTIFY_CLIENT_ID</code>
+                ). Refresh the Tempo Library after cooldown.
+              </p>
+            ) : (
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: '0.78rem',
+                  color: 'rgba(255,255,255,0.65)',
+                  lineHeight: 1.5,
+                }}
+              >
+                No shared playlists matched yet. If you use{' '}
+                <strong style={{ color: '#c8dcff' }}>TEMPO_CATALOG_PLAYLIST_NAME_PREFIX</strong>, playlist
+                titles on the <strong style={{ color: '#c8dcff' }}>catalog</strong> Spotify account must{' '}
+                <strong style={{ color: '#c8dcff' }}>start with that exact prefix</strong> (e.g.{' '}
+                <code style={{ fontSize: '0.72rem' }}>GoT Friday Hits</code>, not{' '}
+                <code style={{ fontSize: '0.72rem' }}>TEMPO — …</code>
+                ). Or set{' '}
+                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> /{' '}
+                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code>. New matches can take
+                up to the prefix cache window unless the server restarts.
+              </p>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+
   const playlistRoundBuilderBody = (
               <div className="host-playlist-round-modal-root host-playlist-library-inline">
           <motion.div
@@ -8998,17 +9233,17 @@ const HostView: React.FC = () => {
                       >
                         {(
                           [
-                            ['spotify', 'Spotify', playlistLibrarySourceCounts.spotify],
-                            ['youtube', 'YouTube', playlistLibrarySourceCounts.youtube],
-                            ['all', 'All', playlistLibrarySourceCounts.all],
+                            ['spotify', 'My Spotify', playlistLibrarySourceCounts.spotify, 'Playlists from your connected Spotify account'],
+                            ['tempo', 'Tempo Library', playlistLibrarySourceCounts.tempo, 'Shared GoT-labeled playlists available to all hosts'],
+                            ['youtube', 'YouTube', playlistLibrarySourceCounts.youtube, 'YouTube Music playlists'],
                           ] as const
-                        ).map(([id, label, count]) => (
+                        ).map(([id, label, count, hint]) => (
                           <button
                             key={id}
                             type="button"
                             role="tab"
                             aria-selected={playlistLibrarySource === id}
-                            title={`${count} playlists`}
+                            title={`${hint} (${count})`}
                             className={
                               playlistLibrarySource === id
                                 ? 'host-playlist-library-toolbar__tab host-playlist-library-toolbar__tab--active'
@@ -9023,36 +9258,6 @@ const HostView: React.FC = () => {
                           </button>
                         ))}
                       </div>
-                      {playlistLibrarySource !== 'youtube' ? (
-                        <div
-                          role="group"
-                          aria-label="Spotify library scope"
-                          className="host-playlist-library-toolbar__scope"
-                        >
-                          <button
-                            type="button"
-                            className={!showAllPlaylists ? 'is-active' : ''}
-                            title="Curated Game of Tones playlists"
-                            onClick={() => {
-                              setShowAllPlaylists(false);
-                              setPlaylistQuery('');
-                            }}
-                          >
-                            GoT
-                          </button>
-                          <button
-                            type="button"
-                            className={showAllPlaylists ? 'is-active' : ''}
-                            title="Your full Spotify library"
-                            onClick={() => {
-                              setShowAllPlaylists(true);
-                              setPlaylistQuery('');
-                            }}
-                          >
-                            All
-                          </button>
-                        </div>
-                      ) : null}
                       <input
                         type="search"
                         className="host-playlist-library-toolbar__search"
@@ -9125,7 +9330,16 @@ const HostView: React.FC = () => {
                       </div>
                     )}
                     <div className="host-playlist-library-table-zone">
-                    <h3 className="host-playlist-library-table-zone__title">Your Spotify playlists</h3>
+                    <h3 className="host-playlist-library-table-zone__title">
+                      {playlistLibrarySource === 'tempo'
+                        ? 'Tempo Library — shared playlists for all hosts'
+                        : playlistLibrarySource === 'youtube'
+                          ? 'YouTube playlists'
+                          : 'My Spotify playlists'}
+                    </h3>
+                    {playlistLibrarySource === 'tempo' ? (
+                      tempoLibrarySection
+                    ) : (
                         <div className="host-playlist-library-table">
                       <div className="host-playlist-library-table-head">
                       <div className="host-playlist-library-table-head__cols">
@@ -9262,11 +9476,9 @@ const HostView: React.FC = () => {
                       <div className="host-playlist-library-table__rows">
                       {libraryTablePlaylists.length === 0 ? (
                           <div className="host-playlist-library-table__empty">
-                            {playlistLibrarySource === 'spotify'
-                              ? 'No Spotify playlists in this view — try All playlists, YouTube, or widen search.'
-                              : playlistLibrarySource === 'youtube'
-                                ? 'No YouTube playlists loaded — connect under Connection, then refresh in More options.'
-                                : playlistLibraryEmptyMessage}
+                            {playlistLibrarySource === 'youtube'
+                              ? 'No YouTube playlists loaded — connect under Connection, then refresh in More options.'
+                              : playlistLibraryEmptyMessage}
                         </div>
                         ) : (
                           paginatedPlaylists.map((p) => {
@@ -9344,11 +9556,7 @@ const HostView: React.FC = () => {
                                     </span>
                                   ) : null}
                                   {!p.youtubeMusic &&
-                                    !showAllPlaylists &&
-                                    stripGoTPrefix &&
-                                    (/^got\s*[-�:]*\s*/i.test(p.name) ||
-                                      p.name.toLowerCase().includes('game of tones') ||
-                                      p.name.toLowerCase().includes('gameoftones')) && (
+                                    isGotLabeledPlaylist(p.name) && (
                                       <span
                                         style={{
                                           fontSize: '0.7rem',
@@ -9461,6 +9669,7 @@ const HostView: React.FC = () => {
                         )}
                       </div>
                         </div>
+                    )}
                     </div>
                     <div className="host-playlist-round-modal__tools">
                       <h3 className="host-playlist-round-modal__tools-title">More options</h3>
@@ -9517,209 +9726,6 @@ const HostView: React.FC = () => {
                     {playlistByLinkError ? (
                       <p style={{ fontSize: '0.82rem', color: '#ff9e6e', margin: '0 0 10px' }}>{playlistByLinkError}</p>
                     ) : null}
-                      <div className="host-playlist-round-modal__catalog">
-                        <div
-                          className="host-playlist-round-modal__catalog-head"
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: 10,
-                            flexWrap: 'wrap',
-                          }}
-                        >
-                          <h4 className="host-playlist-round-modal__catalog-title" style={{ margin: 0 }}>
-                            {!catalogPacksProbeDone || !catalogPacksFetchOk
-                              ? 'Official packs (catalog)'
-                              : catalogPacksConfigured
-                                ? catalogPackOptions.length > 0
-                                  ? `Official packs — ${catalogPackOptions.length} from catalog`
-                                  : 'Official packs (catalog)'
-                                : 'Official packs — server not configured'}
-                          </h4>
-                          {catalogPacksConfigured ? (
-                            <button
-                              type="button"
-                              className="btn-secondary host-playlist-library-toolbar__icon-btn"
-                              disabled={
-                                catalogPacksRefreshing ||
-                                catalogPacksCooldownRemainingMs > 0 ||
-                                !catalogPacksFetchOk
-                              }
-                              aria-label={
-                                catalogPacksRefreshing
-                                  ? 'Refreshing official packs'
-                                  : catalogPacksCooldownRemainingMs > 0
-                                    ? 'Official packs refresh on cooldown'
-                                    : 'Refresh official packs'
-                              }
-                              title={
-                                catalogPacksCooldownRemainingMs > 0
-                                  ? `Refresh available in ${Math.max(1, Math.ceil(catalogPacksCooldownRemainingMs / 60000))} min`
-                                  : 'Refresh official packs from catalog (uses Spotify API quota; 5 min cooldown)'
-                              }
-                              onClick={() => void loadCatalogPacks({ forceRefresh: true })}
-                            >
-                              <RotateCcw
-                                className={`w-4 h-4${catalogPacksRefreshing ? ' host-playlist-library-toolbar__spin' : ''}`}
-                                aria-hidden
-                              />
-                            </button>
-                          ) : null}
-                        </div>
-                        {catalogPacksRefreshHint || catalogPacksCooldownRemainingMs > 0 ? (
-                          <p
-                            style={{
-                              margin: '8px 0 0',
-                              fontSize: '0.74rem',
-                              color: 'rgba(255,255,255,0.55)',
-                              lineHeight: 1.45,
-                            }}
-                            role="status"
-                          >
-                            {catalogPacksRefreshHint ||
-                              `Official packs refresh available in ${Math.max(1, Math.ceil(catalogPacksCooldownRemainingMs / 60000))} min.`}
-                          </p>
-                        ) : null}
-                        <div
-                          style={{
-                            marginTop: 10,
-                            padding: '12px 14px',
-                            borderRadius: 10,
-                            border: '1px solid rgba(120, 180, 255, 0.35)',
-                            background: 'rgba(60, 120, 200, 0.12)',
-                          }}
-                        >
-                        {!catalogPacksProbeDone ? (
-                          <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
-                            Contacting server…
-                          </p>
-                        ) : !catalogPacksFetchOk ? (
-                          <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
-                            {catalogPacksFetchUnauthorized ? (
-                              <>
-                                Host session required — sign in with <strong style={{ color: '#c8dcff' }}>Google</strong> as
-                                host, then retry <strong style={{ color: '#c8dcff' }}>Refresh</strong> on your library (or reload).
-                              </>
-                            ) : (
-                              <>
-                                Couldn&apos;t load Official packs (network or server error). Reload the page or use{' '}
-                                <strong style={{ color: '#c8dcff' }}>Retry loading playlists</strong> above if Spotify failed.
-                              </>
-                            )}
-                          </p>
-                        ) : !catalogPacksConfigured ? (
-                          <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
-                            <strong style={{ color: '#c8dcff' }}>Not enabled on this server.</strong> Set{' '}
-                            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_SPOTIFY_REFRESH_TOKEN</code> plus{' '}
-                            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_NAME_PREFIX</code> or{' '}
-                            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> /{' '}
-                            <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code> on the API host (e.g.
-                            Railway), then redeploy. Your <strong style={{ color: '#c8dcff' }}>GoT picks</strong> list above is
-                            only your personal Spotify library — it is not the catalog.
-                          </p>
-                        ) : (
-                          <>
-                            {catalogPackOptions.length > 0 ? (
-                              <div className="host-catalog-pack-list">
-                                {catalogPackOptions.map((pack) => {
-                                  const isSel = selectedCatalogPlaylists.some((p) => p.id === pack.id);
-                                  return (
-                                    <div
-                                      key={pack.id}
-                                      className="host-catalog-pack-row"
-                                      style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 10,
-                                        fontSize: '0.88rem',
-                                        flexWrap: 'wrap',
-                                      }}
-                                    >
-                                      <label
-                                        style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: 10,
-                                          cursor: 'pointer',
-                                          flex: 1,
-                                          minWidth: 0,
-                                        }}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={isSel}
-                                          onChange={() => {
-                                            setSelectedCatalogPlaylists((prev) =>
-                                              isSel ? prev.filter((p) => p.id !== pack.id) : [...prev, { ...pack, catalog: true }]
-                                            );
-                                          }}
-                                        />
-                                        <span style={{ color: '#fff', flex: 1, minWidth: 0 }}>{pack.name}</span>
-                                        <span style={{ color: '#8899aa', fontSize: '0.78rem', flexShrink: 0 }}>
-                                          {pack.tracks} songs
-                                        </span>
-                                      </label>
-                                      <HostPlaylistRoundAssignMenu
-                                        playlistId={pack.id}
-                                        playlistName={pack.name}
-                                        rounds={eventRounds}
-                                        onAssign={(roundIndex) => addPlaylistToRoundBucket(roundIndex, pack.id)}
-                                        onUnassign={(roundIndex) =>
-                                          removePlaylistFromRoundBucket(roundIndex, pack.id)
-                                        }
-                                      />
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            ) : catalogPrefixDiscoverySkipped ? (
-                              <p
-                                style={{
-                                  margin: 0,
-                                  fontSize: '0.78rem',
-                                  color: 'rgba(255,255,255,0.65)',
-                                  lineHeight: 1.5,
-                                }}
-                              >
-                                <strong style={{ color: '#ffc857' }}>Spotify blocked catalog discovery</strong> (rate limit /
-                                quarantine on the Web API). Tempo could not list playlists for the{' '}
-                                <strong style={{ color: '#c8dcff' }}>catalog</strong> token, so{' '}
-                                <strong style={{ color: '#c8dcff' }}>prefix-based packs</strong> won&apos;t appear until Spotify
-                                accepts <code style={{ fontSize: '0.72rem' }}>GET /v1/me/playlists</code> again. This is the same
-                                quota pressure as the library warning above if host and catalog share one Spotify app.{' '}
-                                <strong style={{ color: '#c8dcff' }}>Workarounds:</strong> set{' '}
-                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> or{' '}
-                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code> (no listing call); or use
-                                a <strong style={{ color: '#c8dcff' }}>second Spotify Developer app</strong> for catalog (
-                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_SPOTIFY_CLIENT_ID</code>
-                                ). Reload Official packs after cooldown.
-                              </p>
-                            ) : (
-                              <p
-                                style={{
-                                  margin: 0,
-                                  fontSize: '0.78rem',
-                                  color: 'rgba(255,255,255,0.65)',
-                                  lineHeight: 1.5,
-                                }}
-                              >
-                                No catalog packs matched yet. If you use{' '}
-                                <strong style={{ color: '#c8dcff' }}>TEMPO_CATALOG_PLAYLIST_NAME_PREFIX</strong>, playlist
-                                titles on the <strong style={{ color: '#c8dcff' }}>catalog</strong> Spotify account must{' '}
-                                <strong style={{ color: '#c8dcff' }}>start with that exact prefix</strong> (e.g.{' '}
-                                <code style={{ fontSize: '0.72rem' }}>GoT Friday Hits</code>, not{' '}
-                                <code style={{ fontSize: '0.72rem' }}>TEMPO — …</code>
-                                ). Or set{' '}
-                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLIST_IDS</code> /{' '}
-                                <code style={{ fontSize: '0.72rem' }}>TEMPO_CATALOG_PLAYLISTS_JSON</code>. New matches can take
-                                up to the prefix cache window unless the server restarts.
-                              </p>
-                            )}
-                          </>
-                        )}
-                        </div>
-                      </div>
                     <div className="host-manager-playlist-export">
                       <button
                         type="button"
@@ -9827,6 +9833,7 @@ const HostView: React.FC = () => {
         status: r.status,
         playlistCount: r.playlistIds?.length ?? 0,
         songCount: r.songCount ?? 0,
+        playlistNames: (r.playlistNames || []).map((n) => stripGotPlaylistPrefix(String(n || ''))),
         saved: Boolean(r.savedMixSnapshot?.songs?.length),
         isCurrent: index === currentRoundIndex,
       })),
@@ -10392,10 +10399,18 @@ const HostView: React.FC = () => {
                 }
                 library={<div data-host-tutorial="playlist">{playlistRoundBuilderBody}</div>}
                 summary={
-                  <HostRoundAssignmentSummary
-                    rows={roundAssignmentSummaryRows}
-                    onSelectRound={handleFocusRoundForLibrary}
-                  />
+                  selectedRoundForPanel ? (
+                    <HostSelectedRoundPanel
+                      roundName={selectedRoundForPanel.name}
+                      status={selectedRoundForPanel.status}
+                      songCount={selectedRoundForPanel.songCount}
+                      playlists={selectedRoundForPanel.playlists}
+                      canEdit={gameState !== 'playing'}
+                      onRemovePlaylist={(playlistId) =>
+                        removePlaylistFromRoundBucket(selectedRoundForPanel.index, playlistId)
+                      }
+                    />
+                  ) : null
                 }
                 footer={
                   gameState === 'waiting' ? (

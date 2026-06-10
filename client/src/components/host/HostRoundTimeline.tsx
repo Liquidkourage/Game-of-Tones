@@ -7,9 +7,12 @@ export type RoundTimelineRow = {
   status: 'completed' | 'active' | 'planned' | 'unplanned';
   playlistCount: number;
   songCount?: number;
+  playlistNames?: string[];
   saved: boolean;
   isCurrent: boolean;
 };
+
+const MAX_CHIP_PLAYLIST_NAMES = 3;
 
 type HostRoundTimelineProps = {
   rounds: RoundTimelineRow[];
@@ -131,6 +134,14 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
                 )}
                 {r.saved ? ' · saved' : ''}
               </span>
+              {r.playlistNames && r.playlistNames.length > 0 ? (
+                <span className="host-round-timeline__playlists" title={r.playlistNames.join(', ')}>
+                  {r.playlistNames.slice(0, MAX_CHIP_PLAYLIST_NAMES).join(' · ')}
+                  {r.playlistNames.length > MAX_CHIP_PLAYLIST_NAMES
+                    ? ` +${r.playlistNames.length - MAX_CHIP_PLAYLIST_NAMES}`
+                    : ''}
+                </span>
+              ) : null}
             </button>
             {onDuplicateRound ? (
               <button

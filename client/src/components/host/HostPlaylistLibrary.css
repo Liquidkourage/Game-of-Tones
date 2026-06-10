@@ -113,28 +113,86 @@
   color: #ffd9a0;
 }
 
-.host-round-assign-summary {
+.host-selected-round {
   padding: 14px 16px;
   height: fit-content;
   position: sticky;
   top: 8px;
 }
 
-.host-round-assign-summary__head {
+.host-selected-round__head {
   margin-bottom: 10px;
 }
 
-.host-round-assign-summary__title {
+.host-selected-round__eyebrow {
+  margin: 0 0 2px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.host-selected-round__title {
   margin: 0;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 700;
   color: #fff;
 }
 
-.host-round-assign-summary__list {
+.host-selected-round__status {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.host-selected-round__status--active {
+  border-color: rgba(0, 255, 136, 0.45);
+  background: rgba(0, 255, 136, 0.12);
+  color: #b8f0d4;
+}
+
+.host-selected-round__status--planned {
+  border-color: rgba(120, 180, 255, 0.45);
+  background: rgba(120, 180, 255, 0.1);
+  color: #c8dcff;
+}
+
+.host-selected-round__status--completed {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.host-selected-round__meta {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.host-selected-round__warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #ffd9a0;
+  background: rgba(255, 179, 71, 0.1);
+  border: 1px solid rgba(255, 179, 71, 0.28);
+}
+
+.host-selected-round__list {
   margin: 0;
   padding: 0;
   list-style: none;
@@ -143,60 +201,51 @@
   gap: 6px;
 }
 
-.host-round-assign-summary__row {
-  width: 100%;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-rows: auto auto;
-  gap: 2px 8px;
-  padding: 10px 12px;
-  border-radius: 10px;
+.host-selected-round__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(0, 0, 0, 0.2);
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-  color: inherit;
+  font-size: 0.84rem;
+  color: rgba(255, 255, 255, 0.92);
 }
 
-.host-round-assign-summary__row:hover {
-  border-color: rgba(0, 255, 136, 0.28);
-  background: rgba(0, 255, 136, 0.06);
+.host-selected-round__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.host-round-assign-summary__row--current {
-  border-color: rgba(139, 92, 246, 0.45);
-  background: rgba(139, 92, 246, 0.12);
-}
-
-.host-round-assign-summary__round-name {
-  grid-column: 1;
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: #fff;
-}
-
-.host-round-assign-summary__meta {
-  grid-column: 1;
-  font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.62);
-}
-
-.host-round-assign-summary__empty {
-  color: rgba(255, 255, 255, 0.45);
-  font-style: italic;
-}
-
-.host-round-assign-summary__warn {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  align-self: center;
+.host-selected-round__remove {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 0.68rem;
-  font-weight: 600;
-  color: #ffb347;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+}
+
+.host-selected-round__remove:hover {
+  border-color: rgba(255, 110, 110, 0.5);
+  background: rgba(255, 110, 110, 0.12);
+  color: #ffb4b4;
+}
+
+.host-selected-round__empty {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.5);
+  font-style: italic;
 }
 
 .host-playlist-library-row__assign {
@@ -214,7 +263,7 @@
 }
 
 @media (max-width: 900px) {
-  .host-round-assign-summary {
+  .host-selected-round {
     position: static;
   }
 
