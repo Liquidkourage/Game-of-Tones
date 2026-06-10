@@ -222,3 +222,19 @@
 .round-planner--criteria .round-planner-bucket__drop {
   display: none;
 }
+
+/* Criteria step inside the setup cockpit: size to content. The Rounds-tab
+   .host-rounds-panel min-height (72vh) left dead space and pushed Back/Next
+   below the fold. */
+.host-view .host-setup-flow__panel .host-rounds-panel {
+  min-height: 0;
+}
+
+.host-view .host-setup-flow__panel .host-rounds-panel__planner {
+  flex: 0 0 auto;
+}
+
+.host-view .host-setup-flow__panel .host-rounds-panel__planner .round-planner {
+  min-height: 0;
+  height: auto;
+}

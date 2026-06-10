@@ -5002,54 +5002,6 @@ const PublicDisplay: React.FC = () => {
               </div>
               <div style={{ fontSize: 'clamp(1.8rem, 3.8vw, 2.6rem)', opacity: 0.98, marginTop: 18, display: 'none' }}>The game is on, the volume is up, the win is yours.</div>
               <PublicDisplayTempoBallRow seeds={ballAnimSeedsRef.current} variant="splash" />
-              <motion.div
-                initial={{ opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.1 }}
-                style={{
-                  marginTop: 'clamp(6px, 1.5vmin, 18px)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 'clamp(8px, 1.8vmin, 18px)',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <Sparkles
-                  style={{
-                    width: 'clamp(26px, 4.5vmin, 52px)',
-                    height: 'clamp(26px, 4.5vmin, 52px)',
-                    color: pdGlass.violet,
-                    filter: 'drop-shadow(0 0 16px rgba(0,255,200,0.65))',
-                  }}
-                  strokeWidth={2.2}
-                  aria-hidden
-                />
-                <div
-                  style={{
-                    fontSize: 'clamp(2.5rem, min(12vmin, 10vh), 9.5rem)',
-                    fontWeight: 1000,
-                    letterSpacing: '0.02em',
-                    backgroundImage: pdGlass.titleGradient,
-                    WebkitBackgroundClip: 'text',
-                    backgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    filter: 'drop-shadow(0 8px 28px rgba(123,255,217,0.4))',
-                  }}
-                >
-                  TEMPO
-                </div>
-                <Sparkles
-                  style={{
-                    width: 'clamp(26px, 4.5vmin, 52px)',
-                    height: 'clamp(26px, 4.5vmin, 52px)',
-                    color: pdGlass.violet,
-                    filter: 'drop-shadow(0 0 16px rgba(0,255,200,0.65))',
-                  }}
-                  strokeWidth={2.2}
-                  aria-hidden
-                />
-              </motion.div>
               <div
                 style={{
                   fontSize: 'clamp(1.35rem, min(4.5vmin, 3.2vh), 4rem)',

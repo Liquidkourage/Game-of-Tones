@@ -195,8 +195,8 @@ function App() {
   return (
     <div className="App">
       <div className="app-container">
-        {!isAdmin && !isYoutubeHostPlayback && <AppHeader />}
-        {isDisplay && <div style={{ height: 73 }} />}
+        {/* Projector/display gets no site header — the splash's animated TEMPO balls carry the branding. */}
+        {!isAdmin && !isYoutubeHostPlayback && !isDisplay && <AppHeader />}
         <main className="app-main">
           <ErrorBoundary>
             <Routes>
