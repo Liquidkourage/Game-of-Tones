@@ -2032,6 +2032,16 @@ const HostView: React.FC = () => {
             variant: 'warning',
             message: `Spotify is rate-limiting this app or the server is cooling down${retryMin}. Wait and tap Refresh, or check the Developer Dashboard.`,
           });
+        } else if (data && data.error === 'spotify_upstream_unavailable') {
+          // Transient Spotify outage — Spotify stays connected; do not show reconnect copy.
+          setSpotifyError(null);
+          showHostAckNotification({
+            id: 'playlists-spotify_upstream_unavailable',
+            title: 'Spotify API temporarily unavailable',
+            variant: 'warning',
+            message:
+              'Spotify is connected, but Spotify’s API is temporarily unavailable while loading your library. Your saved library is shown — try Refresh in a moment (no need to reconnect).',
+          });
         }
       }
     } catch (error) {
@@ -2613,6 +2623,8 @@ const HostView: React.FC = () => {
   const songListRef = useRef<Song[]>([]);
   /** Playlist ids we have already fully loaded track lists for. */
   const fullyLoadedPlaylistIdsRef = useRef<Set<string>>(new Set());
+  /** Playlist id -> epoch ms until which auto track hydration is skipped after a Spotify 5xx (mirrors server cooldown; manual Refresh bypasses). */
+  const playlistTracksUnavailableUntilRef = useRef<Map<string, number>>(new Map());
   /** Extra debounce once after Spotify OAuth / reconnect before setlist import (ms). */
   const setlistDebounceExtraAfterSpotifyConnectMsRef = useRef(0);
   const webApiQuarantineRef = useRef(webApiQuarantine);
@@ -6543,15 +6555,26 @@ const HostView: React.FC = () => {
           return [];
         }
 
+        let skippedForUpstreamCooldown = 0;
         for (let i = 0; i < toFetch.length; i++) {
           if (genRef.current !== myBuild) {
             return [];
+          }
+          const playlist = toFetch[i];
+          // Recent Spotify 5xx for this playlist: skip auto-rehydration until the cooldown
+          // passes (stable warning instead of a request/banner loop). Manual Refresh (force)
+          // bypasses this; the server still enforces its own org+playlist cooldown.
+          if (!opts?.force && playlist.catalog !== true && playlist.youtubeMusic !== true) {
+            const unavailableUntil = playlistTracksUnavailableUntilRef.current.get(playlist.id) || 0;
+            if (unavailableUntil > Date.now()) {
+              skippedForUpstreamCooldown += 1;
+              continue;
+            }
           }
           const gapMs = delayMsBetweenPlaylistTrackFetches(i, toFetch.length);
           if (gapMs > 0) {
             await new Promise((r) => setTimeout(r, gapMs));
           }
-          const playlist = toFetch[i];
           const qs = new URLSearchParams();
           if (playlist.name) qs.set('playlistName', playlist.name);
           if (opts?.force) qs.set('refresh', '1');
@@ -6571,6 +6594,7 @@ const HostView: React.FC = () => {
             webApiQuarantine?: unknown;
             error?: string;
             message?: string;
+            retryAfterSec?: number;
             upstreamUnavailable?: boolean;
             cacheMessage?: string;
           };
@@ -6592,14 +6616,17 @@ const HostView: React.FC = () => {
             break;
           }
           if (response.status === 503 && data.error === 'spotify_upstream_unavailable') {
-            // Transient Spotify outage, not an auth problem — no reconnect prompt; other playlists may still load from cache.
+            // Transient Spotify outage, not an auth problem — Spotify stays connected, no reconnect prompt.
+            // Remember the cooldown so this playlist is not auto-refetched in a loop.
+            const waitSec =
+              typeof data.retryAfterSec === 'number' && data.retryAfterSec > 0 ? data.retryAfterSec : 45;
+            playlistTracksUnavailableUntilRef.current.set(playlist.id, Date.now() + waitSec * 1000);
             showHostAckNotification({
               id: 'setlist-playlist-tracks-503',
-              title: 'Spotify temporarily unavailable',
+              title: 'Spotify API temporarily unavailable',
               variant: 'warning',
               message:
-                data.message ||
-                'Spotify is temporarily unavailable while loading this playlist. Try again in a moment.',
+                'Spotify is connected, but Spotify’s API is temporarily unavailable while loading playlist tracks. Cached tracks are used where possible — try again in a moment (no need to reconnect).',
             });
             continue;
           }
@@ -6628,6 +6655,7 @@ const HostView: React.FC = () => {
             );
             allSongs.push(...rows);
             fullyLoadedPlaylistIdsRef.current.add(playlist.id);
+            playlistTracksUnavailableUntilRef.current.delete(playlist.id);
             if (!catalog && !yt) {
               applyPlaylistExplicitKnowledge(playlist.id, data.tracks, setPlaylists, setSelectedPlaylists);
             }
@@ -6635,6 +6663,17 @@ const HostView: React.FC = () => {
               applyPlaylistLoadStats(playlist.id, data.loadStats);
             }
           }
+        }
+
+        if (skippedForUpstreamCooldown > 0) {
+          showHostAckNotification({
+            id: 'setlist-playlist-tracks-503',
+            title: 'Spotify API temporarily unavailable',
+            variant: 'warning',
+            message: `Spotify is connected, but Spotify’s API is temporarily unavailable for ${skippedForUpstreamCooldown} playlist${
+              skippedForUpstreamCooldown !== 1 ? 's' : ''
+            }. TEMPO will retry automatically on the next build — or tap Refresh to retry now.`,
+          });
         }
 
         const shuffledSongs = dedupeAndShuffle(allSongs);
