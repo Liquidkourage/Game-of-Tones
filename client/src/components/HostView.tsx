@@ -10514,6 +10514,8 @@ const HostView: React.FC = () => {
                 onSnippetLengthChange={handleSnippetLengthChange}
                 randomStarts={randomStarts}
                 onRandomStartsChange={handleRandomStartsChange}
+                playlistTitleFlags={playlistTitleFlags}
+                onPlaylistTitleFlagsChange={setPlaylistTitleFlags}
               />
               </div>
             ) : null}
@@ -10633,21 +10635,6 @@ const HostView: React.FC = () => {
                     onChange={(e) => updatePublicDisplayLetterRevealToast(e.target.checked)}
                   />
                   Show &ldquo;Revealed:&hellip;&rdquo; banner on projector
-                </span>
-              </label>
-              <label className="host-host-prefs__field">
-                <span className="host-host-prefs__label">Playlist title flags</span>
-                <input
-                  type="text"
-                  className="host-host-prefs__input"
-                  value={playlistTitleFlags}
-                  maxLength={200}
-                  placeholder={DEFAULT_PLAYLIST_TITLE_FLAGS}
-                  onChange={(e) => setPlaylistTitleFlags(e.target.value)}
-                />
-                <span className="host-host-prefs__hint">
-                  Comma-separated. The library&rsquo;s &ldquo;{playlistTitleFlagLabel} / All&rdquo;
-                  toggle shows only playlists whose titles contain one of these flags.
                 </span>
               </label>
             </div>

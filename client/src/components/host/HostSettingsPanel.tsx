@@ -3,6 +3,7 @@ import { Download, Link2 } from 'lucide-react';
 import HostActivityFeed from './HostActivityFeed';
 import HostOrgBillingCard from './HostOrgBillingCard';
 import type { HostActivityEntry } from '../../host/hostActivityLog';
+import { DEFAULT_PLAYLIST_TITLE_FLAGS } from '../../utils/hostPreferences';
 
 type HostSettingsPanelProps = {
   connectionPanel: React.ReactNode;
@@ -15,6 +16,8 @@ type HostSettingsPanelProps = {
   onSnippetLengthChange: (n: number) => void;
   randomStarts: 'none' | 'early' | 'random';
   onRandomStartsChange: (v: 'none' | 'early' | 'random') => void;
+  playlistTitleFlags: string;
+  onPlaylistTitleFlagsChange: (v: string) => void;
 };
 
 const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
@@ -28,6 +31,8 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
   onSnippetLengthChange,
   randomStarts,
   onRandomStartsChange,
+  playlistTitleFlags,
+  onPlaylistTitleFlagsChange,
 }) => {
   const [showAdvancedConnection, setShowAdvancedConnection] = useState(true);
 
@@ -102,6 +107,21 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
           />
           <span>
             <strong>Hybrid</strong>
+          </span>
+        </label>
+        <label className="host-host-prefs__field">
+          <span className="host-host-prefs__label">Playlist title flags</span>
+          <input
+            type="text"
+            className="host-host-prefs__input"
+            value={playlistTitleFlags}
+            maxLength={200}
+            placeholder={DEFAULT_PLAYLIST_TITLE_FLAGS}
+            onChange={(e) => onPlaylistTitleFlagsChange(e.target.value)}
+          />
+          <span className="host-host-prefs__hint">
+            Comma-separated. The playlist library&rsquo;s picks/All toggle shows only playlists whose
+            titles contain one of these flags.
           </span>
         </label>
       </section>
