@@ -1298,6 +1298,8 @@ const HostView: React.FC = () => {
     displayName?: string | null;
   } | null | undefined>(undefined);
   const hostPrefsHydratedRef = useRef(false);
+  /** Bumped after each prefs hydration (localStorage, then DB) so the room push re-runs with fresh values. */
+  const [hostPrefsHydrationNonce, setHostPrefsHydrationNonce] = useState(0);
   const hostPrefsPutTimerRef = useRef<number | null>(null);
   /** After /api/auth/me finishes (and optional hostToken → localStorage), socket can use Bearer + hostToken. */
   const [hostAuthBootstrapDone, setHostAuthBootstrapDone] = useState(false);
@@ -8465,6 +8467,7 @@ const HostView: React.FC = () => {
     };
     apply(loadHostPreferences(hostId));
     hostPrefsHydratedRef.current = true;
+    setHostPrefsHydrationNonce((n) => n + 1);
 
     let cancelled = false;
     if (getHostJwt()) {
@@ -8477,6 +8480,7 @@ const HostView: React.FC = () => {
           if (cancelled || Object.values(serverPrefs).every((v) => v == null)) return;
           apply(serverPrefs);
           saveHostPreferences(hostId, serverPrefs);
+          setHostPrefsHydrationNonce((n) => n + 1);
         } catch {
           /* offline or server without DB — localStorage copy stands */
         }
@@ -8561,16 +8565,22 @@ const HostView: React.FC = () => {
     }
   }, [venueSpotifyJamMode]); // eslint-disable-line react-hooks/exhaustive-deps -- intentional: only on mode toggle
 
-  /** Push loaded prefs to the room once socket is ready. */
+  /**
+   * Push loaded prefs to the room once socket is ready, and again after each prefs hydration
+   * (nonce). Read saved prefs from storage instead of state: this effect's closure can predate
+   * the hydration setState (same commit), and pushing the stale defaults (15s letter reveal)
+   * to the room made the room-state echo overwrite the host's saved values.
+   */
   useEffect(() => {
-    if (!socket || !roomId || !hostPrefsHydratedRef.current) return;
-    updatePublicDisplayFontSize(publicDisplayFontSize);
-    updatePublicDisplayTitleRevealMode(publicDisplayTitleRevealMode);
-    updatePublicDisplayLetterRevealInterval(letterRevealIntervalSec);
-    updatePublicDisplayLetterRevealToast(publicDisplayLetterRevealToast);
+    if (!socket || !roomId || !hostAccount?.id || !hostPrefsHydratedRef.current) return;
+    const saved = loadHostPreferences(hostAccount.id);
+    updatePublicDisplayFontSize(saved.publicDisplayFontSize ?? publicDisplayFontSize);
+    updatePublicDisplayTitleRevealMode(saved.publicDisplayTitleRevealMode ?? publicDisplayTitleRevealMode);
+    updatePublicDisplayLetterRevealInterval(saved.letterRevealIntervalSec ?? letterRevealIntervalSec);
+    updatePublicDisplayLetterRevealToast(saved.publicDisplayLetterRevealToast ?? publicDisplayLetterRevealToast);
     updatePublicDisplayCallListMode('auto');
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot room sync after prefs hydrate
-  }, [socket, roomId, hostAccount?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- room sync after socket ready / prefs hydrate
+  }, [socket, roomId, hostAccount?.id, hostPrefsHydrationNonce]);
 
   /** Autosave prep to Tempo account (debounced). */
   useEffect(() => {

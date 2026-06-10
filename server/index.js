@@ -3781,6 +3781,40 @@ io.on('connection', (socket) => {
         return;
       }
     }
+
+    /**
+     * Seed projector defaults from the host's saved DB preferences the first time the owner
+     * joins this room. Rooms otherwise start at hard-coded defaults (e.g. 15s letter reveal),
+     * and the join room-state echo could overwrite the host's saved value (e.g. 10s) before
+     * the client pushed its preferences — making saved defaults appear to never apply.
+     */
+    if (wantsHost && room.ownerUserId != null && db && !room.hostProjectorPrefsSeeded) {
+      room.hostProjectorPrefsSeeded = true;
+      try {
+        const prefRow = await hostPreferencesStore.getHostPreferences(db, room.ownerUserId);
+        const p = prefRow?.payload;
+        if (p && typeof p === 'object') {
+          if (p.letterRevealIntervalSec != null && Number.isFinite(Number(p.letterRevealIntervalSec))) {
+            room.letterRevealIntervalSec = clampLetterRevealIntervalSec(Number(p.letterRevealIntervalSec));
+          }
+          if (
+            p.publicDisplayTitleRevealMode === 'letter' ||
+            p.publicDisplayTitleRevealMode === 'track_start' ||
+            p.publicDisplayTitleRevealMode === 'track_end'
+          ) {
+            room.publicDisplayTitleRevealMode = p.publicDisplayTitleRevealMode;
+          }
+          if (typeof p.publicDisplayLetterRevealToast === 'boolean') {
+            room.publicDisplayLetterRevealToast = p.publicDisplayLetterRevealToast;
+          }
+          routineServerLog(
+            `🔤 Seeded projector defaults from saved host prefs for room ${roomId} (letter reveal ${letterRevealIntervalSecForRoom(room)}s)`,
+          );
+        }
+      } catch (e) {
+        console.warn('Projector prefs seed failed (using room defaults):', e?.message || e);
+      }
+    }
     
     // Join the socket room
     socket.join(roomId);
