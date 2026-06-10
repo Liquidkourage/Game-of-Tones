@@ -1,5 +1,5 @@
 import React from 'react';
-import { ListPlus, ListMusic } from 'lucide-react';
+import { ArrowRight, ListMusic } from 'lucide-react';
 import './HostSetupCockpit.css';
 
 export type HostSetupPlaylistStepProps = {
@@ -7,8 +7,7 @@ export type HostSetupPlaylistStepProps = {
   playlistNames: string[];
   playlistReady: boolean;
   spotifyCacheInfo: string | null;
-  onOpenLibrary: () => void;
-  roundPlanner: React.ReactNode;
+  onGoToRounds: () => void;
 };
 
 const HostSetupPlaylistStep: React.FC<HostSetupPlaylistStepProps> = ({
@@ -16,8 +15,7 @@ const HostSetupPlaylistStep: React.FC<HostSetupPlaylistStepProps> = ({
   playlistNames,
   playlistReady,
   spotifyCacheInfo,
-  onOpenLibrary,
-  roundPlanner,
+  onGoToRounds,
 }) => {
   return (
     <div className="host-setup-step">
@@ -41,11 +39,11 @@ const HostSetupPlaylistStep: React.FC<HostSetupPlaylistStepProps> = ({
           <button
             type="button"
             className="btn-primary host-setup-playlist__library-btn"
-            onClick={onOpenLibrary}
+            onClick={onGoToRounds}
             data-host-tutorial="playlist"
           >
-            <ListPlus className="w-5 h-5" aria-hidden />
-            {playlistReady ? 'Add or change playlists' : 'Choose playlists'}
+            <ArrowRight className="w-5 h-5" aria-hidden />
+            Assign on Rounds tab
           </button>
         </div>
         {playlistNames.length > 0 ? (
@@ -59,8 +57,8 @@ const HostSetupPlaylistStep: React.FC<HostSetupPlaylistStepProps> = ({
           </ul>
         ) : (
           <p className="host-setup-playlist__empty" role="status">
-            Open the playlist library to browse Spotify, YouTube, or official packs and assign them to this
-            round.
+            Use the Rounds tab to browse Spotify, YouTube, or official packs and assign playlists to
+            each round.
           </p>
         )}
         {spotifyCacheInfo ? (
@@ -68,13 +66,9 @@ const HostSetupPlaylistStep: React.FC<HostSetupPlaylistStepProps> = ({
         ) : null}
       </div>
 
-      <section className="host-setup-playlist__planner" aria-label="Round playlist assignment">
-        {roundPlanner}
-      </section>
-
       {!playlistReady ? (
         <p className="host-setup-play__hint" role="status">
-          Assign at least one playlist to continue to Criteria.
+          Assign at least one playlist on the Rounds tab to continue to Criteria.
         </p>
       ) : null}
     </div>

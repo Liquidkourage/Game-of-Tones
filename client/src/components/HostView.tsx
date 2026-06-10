@@ -141,6 +141,7 @@ import HostSetupPlaylistStep from './host/HostSetupPlaylistStep';
 import HostSetupPlayStep from './host/HostSetupPlayStep';
 import HostPlaylistRoundAssignMenu from './host/HostPlaylistRoundAssignMenu';
 import HostRoundAssignmentSummary from './host/HostRoundAssignmentSummary';
+import HostRoundsTabWorkspace from './host/HostRoundsTabWorkspace';
 import HostTutorial from './host/HostTutorial';
 import { HOST_TUTORIAL_STEPS } from '../host/hostTutorialSteps';
 import {
@@ -153,6 +154,7 @@ import {
 import './host/HostSetupFlow.css';
 import './host/HostSetupCockpit.css';
 import './host/HostPlaylistLibrary.css';
+import './host/HostRoundsTabWorkspace.css';
 import './host/HostTutorial.css';
 import './HostFormControls.css';
 
@@ -298,6 +300,12 @@ function normalizeWebApiQuarantine(raw: unknown): WebApiQuarantineState {
     inProcessMaxCooldownSec: typeof o.inProcessMaxCooldownSec === 'number' ? o.inProcessMaxCooldownSec : 900,
     spotifyRetryCapped: o.spotifyRetryCapped === true,
   };
+}
+
+const MAX_EVENT_ROUNDS = 12;
+
+function ensureEventRoundNames(rounds: EventRound[]): EventRound[] {
+  return rounds.map((round, index) => ({ ...round, name: `Round ${index + 1}` }));
 }
 
 interface Song {
@@ -1125,13 +1133,9 @@ const HostView: React.FC = () => {
   const displaySettingsRef = useRef<HTMLDetailsElement>(null);
   /** 5�15 mode: playlist title per column (from `fiveby15-pool`, else five selected playlists). */
   const [bingoColumnPlaylistNames, setBingoColumnPlaylistNames] = useState<string[]>([]);
-  const [showPlaylistRoundModal, setShowPlaylistRoundModal] = useState(false);
   const [roundBuilderFocusIndex, setRoundBuilderFocusIndex] = useState(0);
   const compositeEditRoundIndexRef = useRef(0);
   const [libraryPlaylistDragActive, setLibraryPlaylistDragActive] = useState(false);
-  const openPlaylistLibrary = useCallback(() => {
-    setShowPlaylistRoundModal(true);
-  }, []);
 
   const onHostGlassNav = useCallback((id: HostGlassNavId) => {
     setHostGlassNav(id);
@@ -1142,6 +1146,10 @@ const HostView: React.FC = () => {
       }, 50);
     }
   }, []);
+
+  const openPlaylistLibrary = useCallback(() => {
+    onHostGlassNav('rounds');
+  }, [onHostGlassNav]);
 
   const openHostTutorial = useCallback((step = 0) => {
     resetHostTutorialProgress();
@@ -1191,10 +1199,8 @@ const HostView: React.FC = () => {
         ? focusIndex
         : Math.max(0, currentRoundIndexRef.current >= 0 ? currentRoundIndexRef.current : 0);
     setRoundBuilderFocusIndex(idx);
-    setShowPlaylistRoundModal(true);
-  }, []);
-  const showPlaylistRoundModalScrollRef = useRef(showPlaylistRoundModal);
-  showPlaylistRoundModalScrollRef.current = showPlaylistRoundModal;
+    onHostGlassNav('rounds');
+  }, [onHostGlassNav]);
   /** In-person + online: only in-person verified bingos end the round / prize */
   const [hybridInPersonPlusOnline, setHybridInPersonPlusOnline] = useState(false);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
@@ -2311,37 +2317,15 @@ const HostView: React.FC = () => {
   }, [showConnectionModal, dismissConnectionModal]);
 
   useEffect(() => {
-    const needLock = showConnectionModal || showPlaylistRoundModal;
-    if (!needLock) return;
+    if (!showConnectionModal) return;
     const restoreTo = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
-      if (
-        !showConnectionModalScrollRef.current &&
-        !showPlaylistRoundModalScrollRef.current
-      ) {
+      if (!showConnectionModalScrollRef.current) {
         document.body.style.overflow = restoreTo;
       }
     };
-  }, [showConnectionModal, showPlaylistRoundModal]);
-
-  useEffect(() => {
-    if (!showPlaylistRoundModal) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (combinedPatternModalOpen) {
-        setCombinedPatternModalOpen(false);
-        return;
-      }
-      if (showCustomPatternModal) {
-        setShowCustomPatternModal(false);
-        return;
-      }
-      setShowPlaylistRoundModal(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [showPlaylistRoundModal, combinedPatternModalOpen, showCustomPatternModal]);
+  }, [showConnectionModal]);
 
   const refreshRooms = useCallback(async () => {
     try {
@@ -5871,7 +5855,6 @@ const HostView: React.FC = () => {
     setWinners([]);
     setRoundComplete(null);
     setRoundWinners([]);
-    setShowPlaylistRoundModal(false);
     showToast('Prep cache cleared — fresh Round 1 (this browser)', 'success');
     addLog('Cleared room round prep storage (localStorage + UI)', 'info');
   };
@@ -7908,7 +7891,6 @@ const HostView: React.FC = () => {
       const round = eventRounds[roundIndex];
       if (round.status !== 'completed' && (round.playlistIds || []).length > 0) {
         handleStartRound(roundIndex);
-        setShowPlaylistRoundModal(false);
         addLog(`Jumped to ${round.name}`, 'info');
       }
     }
@@ -8614,9 +8596,7 @@ const HostView: React.FC = () => {
   const setupCriteriaReady = setupPlaylistReady;
 
   const showHostSetupCockpit =
-    gameState === 'waiting' &&
-    !hostRoomHydrating &&
-    (hostGlassNav === 'game' || hostGlassNav === 'rounds');
+    gameState === 'waiting' && !hostRoomHydrating && hostGlassNav === 'game';
 
   const getBingoPoolTrackCountForRound = useCallback(
     (roundIndex: number) => {
@@ -9003,15 +8983,7 @@ const HostView: React.FC = () => {
   const hostRoundPlanner = renderHostRoundPlanner('full');
 
   const playlistRoundBuilderBody = (
-              <div
-                className={
-                  libraryPlaylistDragActive
-                    ? 'host-playlist-round-modal-root host-playlist-round-modal-root--library-drag host-playlist-round-modal-root--assign-focus'
-                    : 'host-playlist-round-modal-root host-playlist-round-modal-root--assign-focus'
-                }
-              >
-            <div className="host-music-two-pane">
-              <div className="host-music-two-pane__library">
+              <div className="host-playlist-round-modal-root host-playlist-library-inline">
           <motion.div
                     className="playlists-section host-playlist-library-panel"
             initial={{ opacity: 0 }}
@@ -9773,14 +9745,6 @@ const HostView: React.FC = () => {
                     </div>
 
                   </motion.div>
-              </div>
-              <div className="host-music-two-pane__rounds">
-                <HostRoundAssignmentSummary
-                  rows={roundAssignmentSummaryRows}
-                  onSelectRound={handleFocusRoundForLibrary}
-                />
-              </div>
-            </div>
             </div>
   );
 
@@ -9862,6 +9826,7 @@ const HostView: React.FC = () => {
         name: r.name,
         status: r.status,
         playlistCount: r.playlistIds?.length ?? 0,
+        songCount: r.songCount ?? 0,
         saved: Boolean(r.savedMixSnapshot?.songs?.length),
         isCurrent: index === currentRoundIndex,
       })),
@@ -9918,6 +9883,25 @@ const HostView: React.FC = () => {
     },
     [eventRounds, handleUpdateRounds, addLog],
   );
+
+  const handleAddRound = useCallback(() => {
+    if (eventRounds.length >= MAX_EVENT_ROUNDS) return;
+    const newRound: EventRound = {
+      id: `round-${Date.now()}`,
+      name: `Round ${eventRounds.length + 1}`,
+      playlistIds: [],
+      playlistNames: [],
+      songCount: 0,
+      status: 'unplanned',
+      bingoPattern: 'line',
+    };
+    const updated = ensureEventRoundNames([...eventRounds, newRound]);
+    handleUpdateRounds(updated);
+    const newIndex = updated.length - 1;
+    setCurrentRoundIndex(newIndex);
+    setRoundBuilderFocusIndex(newIndex);
+    addLog(`Added ${newRound.name}`, 'info');
+  }, [eventRounds, handleUpdateRounds, addLog]);
 
   const handleExportEventRecap = useCallback(() => {
     const payload = {
@@ -10191,10 +10175,7 @@ const HostView: React.FC = () => {
                     playlistNames={hostActiveRoundSummary.playlistNames}
                     playlistReady={setupPlaylistReady}
                     spotifyCacheInfo={spotifyListCacheInfo}
-                    onOpenLibrary={openPlaylistLibrary}
-                    roundPlanner={
-                      showPlaylistRoundModal ? null : renderHostRoundPlanner('playlists')
-                    }
+                    onGoToRounds={() => onHostGlassNav('rounds')}
                   />
                 ) : null}
                 {hostSetupStep === 'criteria' ? (
@@ -10209,7 +10190,7 @@ const HostView: React.FC = () => {
                       data-host-tutorial="criteria"
                     >
                       <div className="host-rounds-panel__planner">
-                        {showPlaylistRoundModal ? null : renderHostRoundPlanner('criteria')}
+                        {renderHostRoundPlanner('criteria')}
                       </div>
                     </section>
                   </div>
@@ -10395,64 +10376,57 @@ const HostView: React.FC = () => {
               </div>
             ) : null}
 
-            {(hostGlassNav === 'display' || (hostGlassNav === 'rounds' && !showHostSetupCockpit)) && (
-            <div
-              className={
-                hostGlassNav === 'display'
-                  ? 'host-manager host-manager-setup-flow host-glass-view host-glass-view--display'
-                  : 'host-manager host-manager-setup-flow host-glass-view host-glass-view--rounds'
-              }
-            >
-                <div className="host-manager-grid host-manager-grid--split host-manager-grid--balanced">
-                  {hostGlassNav === 'rounds' && !showHostSetupCockpit ? (
-                  <div className="host-manager-col host-rounds-workspace-col">
-                <section className="host-setup-advanced-page host-glass-panel">
-                  <h2 className="host-setup-advanced-page__title">Advanced round tools</h2>
-                  <p className="host-setup-advanced-page__lead">
-                    Round prep uses the Game setup flow while the event is in pre-show. These tools remain
-                    available during live play.
-                  </p>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => onHostGlassNav('game')}
-                  >
-                    Go to Game
-                  </button>
-                </section>
-                <HostRoundTimeline
-                  rounds={roundTimelineRows}
-                  summary={roundTimelineSummary}
-                  onSelectRound={handleSelectRoundForPrep}
-                  onDuplicateRound={handleDuplicateRound}
-                />
-                <details className="host-setup-advanced-details host-glass-panel">
-                  <summary>Pool quality report</summary>
-                  <HostPoolQualityReport
-                    songs={finalizedPoolSongs.length > 0 ? finalizedPoolSongs : songList}
-                    playlistCount={mixPlaylistSelection.length}
-                    mixFinalized={mixFinalized}
+            {hostGlassNav === 'rounds' ? (
+              <HostRoundsTabWorkspace
+                timeline={
+                  <HostRoundTimeline
+                    className="host-round-timeline--rounds-tab"
+                    rounds={roundTimelineRows}
+                    summary={roundTimelineSummary}
+                    onSelectRound={handleFocusRoundForLibrary}
+                    onDuplicateRound={handleDuplicateRound}
+                    onAddRound={gameState !== 'playing' ? handleAddRound : undefined}
+                    canAddRound={eventRounds.length < MAX_EVENT_ROUNDS}
+                    onDropPlaylist={gameState !== 'playing' ? addPlaylistToRoundBucket : undefined}
                   />
-                </details>
-                <details className="host-setup-advanced-details host-glass-panel">
-                  <summary>Full round planner</summary>
-                  <div className="host-rounds-panel__planner">
-                    {showPlaylistRoundModal ? null : hostRoundPlanner}
-                  </div>
-                </details>
-                <button
-                  type="button"
-                  className="btn-primary host-rounds-panel__library-btn"
-                  onClick={() => openPlaylistLibrary()}
-                >
-                  <ListPlus className="w-5 h-5" aria-hidden />
-                  Open playlist library
-                </button>
-                  </div>
-                  ) : null}
+                }
+                library={<div data-host-tutorial="playlist">{playlistRoundBuilderBody}</div>}
+                summary={
+                  <HostRoundAssignmentSummary
+                    rows={roundAssignmentSummaryRows}
+                    onSelectRound={handleFocusRoundForLibrary}
+                  />
+                }
+                footer={
+                  gameState === 'waiting' ? (
+                    <p className="host-rounds-tab-workspace__continue" role="status">
+                      Assign playlists here, then continue on the <strong>Game</strong> tab for Criteria and
+                      Play.
+                    </p>
+                  ) : null
+                }
+                advanced={
+                  gameState === 'playing' ? (
+                    <>
+                      <details className="host-setup-advanced-details host-glass-panel">
+                        <summary>Pool quality report</summary>
+                        <HostPoolQualityReport
+                          songs={finalizedPoolSongs.length > 0 ? finalizedPoolSongs : songList}
+                          playlistCount={mixPlaylistSelection.length}
+                          mixFinalized={mixFinalized}
+                        />
+                      </details>
+                      <details className="host-setup-advanced-details host-glass-panel">
+                        <summary>Full round planner</summary>
+                        <div className="host-rounds-panel__planner">{hostRoundPlanner}</div>
+                      </details>
+                    </>
+                  ) : null
+                }
+              />
+            ) : null}
 
-                  {hostGlassNav === 'display' ? (
-                  <div className="host-manager-col host-manager-col--wide">
+            {hostGlassNav === 'display' && (
           <details ref={displaySettingsRef} className="host-event-settings" open data-host-tutorial="display">
             <summary className="host-event-settings__summary">
               <Monitor className="w-5 h-5" aria-hidden />
@@ -10705,10 +10679,6 @@ const HostView: React.FC = () => {
           ) : null}
             </div>
           </details>
-                  </div>
-                  ) : null}
-                </div>
-            </div>
             )}
 
           </div>
@@ -10795,41 +10765,6 @@ const HostView: React.FC = () => {
                 getDisplaySongArtist={getDisplaySongArtist}
                 onEditSongAlias={handleEditSongAlias}
               />
-            </div>
-          </div>
-        </div>
-      )}
-      {showPlaylistRoundModal && (
-        <div
-          className="host-connection-modal-backdrop"
-          onClick={() => setShowPlaylistRoundModal(false)}
-          role="presentation"
-        >
-          <div
-            className="host-connection-modal host-glass-modal host-connection-modal--round-hub"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="host-round-hub-modal-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="host-connection-modal__header host-connection-modal__header--round-hub">
-              <div className="host-playlist-round-modal__title-block">
-                <h2 id="host-round-hub-modal-title" className="host-glass-modal__title">
-                  <ListPlus className="host-glass-modal__title-icon" aria-hidden />
-                  Playlist library
-                </h2>
-              </div>
-              <button
-                type="button"
-                className="host-connection-modal__close"
-                aria-label="Close"
-                onClick={() => setShowPlaylistRoundModal(false)}
-              >
-                <X className="w-5 h-5" aria-hidden />
-              </button>
-            </div>
-            <div className="host-connection-modal__body host-connection-modal__body--round-hub">
-              {playlistRoundBuilderBody}
             </div>
           </div>
         </div>
