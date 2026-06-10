@@ -1702,9 +1702,50 @@ async function deleteHostPlaylistTracksCacheForOrg(organizationId) {
   }
 }
 
+/** Spotify upstream blip (502/503/504) — transient; never an auth/token problem. Distinct from 429 quarantine. */
+function isSpotifyTransient5xx(e) {
+  const sc = Number(e?.statusCode ?? e?.body?.error?.status ?? 0);
+  return sc === 502 || sc === 503 || sc === 504;
+}
+
+const SPOTIFY_TRACKS_5XX_COOLDOWN_MS = 45000;
+/** `${orgId}:${playlistId}` -> epoch ms until which live Spotify track fetches are skipped after a 5xx. */
+const hostPlaylistTracks5xxCooldownUntil = new Map();
+
+function playlistTracks5xxCooldownRemainingSec(orgId, playlistId) {
+  const key = `${orgId || 'anon'}:${playlistId}`;
+  const until = hostPlaylistTracks5xxCooldownUntil.get(key) || 0;
+  const remainMs = until - Date.now();
+  if (remainMs <= 0) {
+    if (until) hostPlaylistTracks5xxCooldownUntil.delete(key);
+    return 0;
+  }
+  return Math.ceil(remainMs / 1000);
+}
+
+function markPlaylistTracks5xxCooldown(orgId, playlistId) {
+  hostPlaylistTracks5xxCooldownUntil.set(
+    `${orgId || 'anon'}:${playlistId}`,
+    Date.now() + SPOTIFY_TRACKS_5XX_COOLDOWN_MS,
+  );
+}
+
+const SPOTIFY_UPSTREAM_UNAVAILABLE_MESSAGE =
+  'Spotify is temporarily unavailable while loading this playlist. Try again in a moment.';
+const SPOTIFY_UPSTREAM_CACHE_MESSAGE =
+  'Using cached tracks because Spotify is temporarily unavailable.';
+
+function makeSpotifyUpstreamUnavailableError(retryAfterSec) {
+  const err = new Error(SPOTIFY_UPSTREAM_UNAVAILABLE_MESSAGE);
+  err.statusCode = 503;
+  err.code = 'spotify_upstream_unavailable';
+  if (retryAfterSec != null && retryAfterSec > 0) err.retryAfterSec = retryAfterSec;
+  return err;
+}
+
 /**
  * Host playlist-tracks route: DB seed + quarantine fallback + persist after live fetch.
- * @returns {{ tracks: object[], fromTracksCache?: boolean, stale?: boolean, cacheUpdatedAt?: Date }}
+ * @returns {{ tracks: object[], fromTracksCache?: boolean, stale?: boolean, cacheUpdatedAt?: Date, upstreamUnavailable?: boolean, cacheMessage?: string }}
  */
 async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { forceRefresh }) {
   const uid = hostAuth.getHostUserIdFromRequest(req);
@@ -1769,6 +1810,24 @@ async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { fo
     throw err;
   }
 
+  // Recent Spotify 5xx for this org+playlist: don't hammer upstream — serve DB cache or friendly 503.
+  const cooldownRemainingSec = playlistTracks5xxCooldownRemainingSec(orgId, playlistId);
+  if (cooldownRemainingSec > 0) {
+    const cooldownRow =
+      dbRow || (orgId ? await loadHostPlaylistTracksCache(orgId, playlistId) : null);
+    if (cooldownRow && Array.isArray(cooldownRow.tracks) && cooldownRow.tracks.length > 0) {
+      return {
+        tracks: mapTracks(cooldownRow.tracks),
+        fromTracksCache: true,
+        stale: true,
+        cacheUpdatedAt: cooldownRow.updatedAt,
+        upstreamUnavailable: true,
+        cacheMessage: SPOTIFY_UPSTREAM_CACHE_MESSAGE,
+      };
+    }
+    throw makeSpotifyUpstreamUnavailableError(cooldownRemainingSec);
+  }
+
   try {
     const fetched = await svc.getPlaylistTracks(playlistId, playlistInfo, {
       forceRefresh: force,
@@ -1799,6 +1858,31 @@ async function fetchHostPlaylistTracksForApi(req, playlistId, playlistInfo, { fo
         stale: true,
         cacheUpdatedAt: dbRow.updatedAt,
       };
+    }
+    if (isSpotifyTransient5xx(error)) {
+      // Transient upstream outage: short per-org+playlist cooldown; never an auth problem, never clears tokens.
+      markPlaylistTracks5xxCooldown(orgId, playlistId);
+      // forceRefresh skipped the DB read above — try it now before failing.
+      const fallbackRow =
+        dbRow || (orgId ? await loadHostPlaylistTracksCache(orgId, playlistId) : null);
+      if (fallbackRow && Array.isArray(fallbackRow.tracks) && fallbackRow.tracks.length > 0) {
+        if (spotifyPipelineLog.isEnabled()) {
+          spotifyPipelineLog.log('playlist_tracks_serving_from_db_cache', {
+            org_key: orgId,
+            playlist_id: String(playlistId),
+            reason: `spotify_${error?.statusCode || '5xx'}`,
+          });
+        }
+        return {
+          tracks: mapTracks(fallbackRow.tracks),
+          fromTracksCache: true,
+          stale: true,
+          cacheUpdatedAt: fallbackRow.updatedAt,
+          upstreamUnavailable: true,
+          cacheMessage: SPOTIFY_UPSTREAM_CACHE_MESSAGE,
+        };
+      }
+      throw makeSpotifyUpstreamUnavailableError(Math.ceil(SPOTIFY_TRACKS_5XX_COOLDOWN_MS / 1000));
     }
     throw error;
   }
@@ -12819,6 +12903,25 @@ function sendSpotify429IfNeeded(res, error) {
   return true;
 }
 
+/**
+ * Friendly 503 for Spotify upstream blips (502/503/504) on playlist-track loading.
+ * Separate from 429 quarantine; returns true if a response was sent.
+ */
+function sendSpotifyUpstreamUnavailableIfNeeded(res, error) {
+  const isFlagged = error?.code === 'spotify_upstream_unavailable';
+  if (!isFlagged && !isSpotifyTransient5xx(error)) return false;
+  const retryAfterSec =
+    error?.retryAfterSec != null && Number(error.retryAfterSec) > 0
+      ? Number(error.retryAfterSec)
+      : Math.ceil(SPOTIFY_TRACKS_5XX_COOLDOWN_MS / 1000);
+  res.status(503).json({
+    error: 'spotify_upstream_unavailable',
+    message: SPOTIFY_UPSTREAM_UNAVAILABLE_MESSAGE,
+    retryAfterSec,
+  });
+  return true;
+}
+
 /** Map Web API / HTTP layer errors to JSON for clients; returns true if response was sent. */
 function sendSpotifyWebApiErrorIfNeeded(res, error) {
   if (sendSpotify429IfNeeded(res, error)) return true;
@@ -13074,9 +13177,18 @@ app.get('/api/spotify/playlists/:playlistId/tracks', async (req, res) => {
         message: 'This playlist id is a server snapshot, not a Spotify playlist.',
       });
     }
-    const tracks = await spotifyForRequest(req).getPlaylistTracks(playlistId);
-    res.json(tracks);
+    // Same resilient path as /api/spotify/playlist-tracks (DB cache fallback + 5xx cooldown).
+    const result = await fetchHostPlaylistTracksForApi(req, playlistId, null, {
+      forceRefresh: false,
+    });
+    res.json(result.tracks);
   } catch (error) {
+    if (sendSpotifyUpstreamUnavailableIfNeeded(res, error)) {
+      console.warn(
+        `⚠️ Spotify upstream unavailable for playlist ${req.params?.playlistId || '?'} — served friendly 503`,
+      );
+      return;
+    }
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('Error getting playlist tracks:', error);
     res.status(500).json({ error: 'Failed to get playlist tracks' });
@@ -13582,9 +13694,17 @@ app.get('/api/spotify/playlist-tracks/:playlistId', async (req, res) => {
       ...(result.fromTracksCache ? { fromTracksCache: true } : {}),
       ...(result.stale ? { stale: true } : {}),
       ...(result.cacheUpdatedAt ? { cacheUpdatedAt: result.cacheUpdatedAt } : {}),
+      ...(result.upstreamUnavailable ? { upstreamUnavailable: true } : {}),
+      ...(result.cacheMessage ? { cacheMessage: result.cacheMessage } : {}),
       webApiQuarantine: svc.getWebApiQuarantineInfo(),
     });
   } catch (error) {
+    if (sendSpotifyUpstreamUnavailableIfNeeded(res, error)) {
+      console.warn(
+        `⚠️ Spotify upstream unavailable for playlist ${req.params?.playlistId || '?'} — served friendly 503`,
+      );
+      return;
+    }
     if (sendSpotifyWebApiErrorIfNeeded(res, error)) return;
     console.error('❌ Error getting playlist tracks:', error);
     res.status(500).json({ error: 'Failed to get playlist tracks' });

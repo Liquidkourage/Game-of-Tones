@@ -348,6 +348,12 @@ class SpotifyService {
     return (error?.body?.error?.status || error?.statusCode) === 429;
   }
 
+  /** Spotify upstream blip (502/503/504) — transient, never an auth/token problem. */
+  isTransientUpstreamError(error) {
+    const status = Number(error?.body?.error?.status || error?.statusCode || 0);
+    return status === 502 || status === 503 || status === 504;
+  }
+
   getRetryAfterSecFromError(error) {
     const h = error?.headers || {};
     const v = h['retry-after'] ?? h['Retry-After'];
@@ -1202,10 +1208,12 @@ class SpotifyService {
     }
 
     let snapshotId = null;
+    let snapshotUpstream5xx = false;
     try {
       snapshotId = await this._getPlaylistSnapshotId(playlistId);
-    } catch {
+    } catch (snapErr) {
       /* non-fatal — omit snapshot skip optimization */
+      snapshotUpstream5xx = this.isTransientUpstreamError(snapErr);
     }
 
     const cached = this._playlistTracksCache.get(cacheKey);
@@ -1228,10 +1236,11 @@ class SpotifyService {
     if (
       !snapshotId &&
       cached &&
-      now - cached.at < PLAYLIST_TRACKS_CACHE_TTL_MS &&
+      (now - cached.at < PLAYLIST_TRACKS_CACHE_TTL_MS || snapshotUpstream5xx) &&
       Array.isArray(cached.tracks) &&
       cached.tracks.length > 0
     ) {
+      // Spotify 5xx on the snapshot check alone must not force a full /items refetch when we have tracks.
       return this._playlistTracksPayloadFromCache(cached, playlistId, playlistInfo, mapRow);
     }
 
@@ -1325,7 +1334,14 @@ class SpotifyService {
       return { tracks: tracks.map(mapRow), loadStats };
     } catch (error) {
       this._rethrowIfRateLimited(error, 'getPlaylistTracks');
-      console.error('Error getting playlist tracks:', error);
+      if (this.isTransientUpstreamError(error)) {
+        // Expected upstream blip — concise warn, no stack; route layer serves DB cache / friendly 503.
+        console.warn(
+          `[getPlaylistTracks] playlist ${playlistId}: Spotify upstream ${error?.statusCode || '5xx'} (transient)`,
+        );
+      } else {
+        console.error('Error getting playlist tracks:', error);
+      }
       throw error;
     }
   }

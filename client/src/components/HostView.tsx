@@ -6569,6 +6569,10 @@ const HostView: React.FC = () => {
             tracks?: Song[];
             loadStats?: PlaylistLoadStats;
             webApiQuarantine?: unknown;
+            error?: string;
+            message?: string;
+            upstreamUnavailable?: boolean;
+            cacheMessage?: string;
           };
 
           if (genRef.current !== myBuild) {
@@ -6586,6 +6590,26 @@ const HostView: React.FC = () => {
                 'Stopped importing playlist tracks — Spotify is rate-limiting. Loaded tracks are kept; wait and retry.',
             });
             break;
+          }
+          if (response.status === 503 && data.error === 'spotify_upstream_unavailable') {
+            // Transient Spotify outage, not an auth problem — no reconnect prompt; other playlists may still load from cache.
+            showHostAckNotification({
+              id: 'setlist-playlist-tracks-503',
+              title: 'Spotify temporarily unavailable',
+              variant: 'warning',
+              message:
+                data.message ||
+                'Spotify is temporarily unavailable while loading this playlist. Try again in a moment.',
+            });
+            continue;
+          }
+          if (data.success && data.tracks && data.upstreamUnavailable) {
+            showHostAckNotification({
+              id: 'setlist-playlist-tracks-stale-cache',
+              title: 'Using cached tracks',
+              variant: 'warning',
+              message: data.cacheMessage || 'Using cached tracks because Spotify is temporarily unavailable.',
+            });
           }
           if (data.success && data.tracks) {
             const plCanon = canonicalPlaylistIdForMatch(playlist.id);
