@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AlertTriangle, ListMusic, X } from 'lucide-react';
 import './HostPlaylistLibrary.css';
 
@@ -14,6 +14,8 @@ export type HostSelectedRoundPanelProps = {
   playlists: SelectedRoundPlaylistRow[];
   canEdit: boolean;
   onRemovePlaylist: (playlistId: string) => void;
+  /** Drop a dragged library playlist here to assign it to this round. */
+  onDropPlaylist?: (playlistId: string) => void;
 };
 
 const statusLabel: Record<HostSelectedRoundPanelProps['status'], string> = {
@@ -35,11 +37,44 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
   playlists,
   canEdit,
   onRemovePlaylist,
+  onDropPlaylist,
 }) => {
   const lowSongs = playlists.length > 0 && songCount > 0 && songCount < 15;
+  const [dragOver, setDragOver] = useState(false);
 
   return (
-    <section className="host-selected-round host-glass-panel" aria-label="Selected round details">
+    <section
+      className={[
+        'host-selected-round host-glass-panel',
+        dragOver ? 'host-selected-round--drag-over' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      aria-label="Selected round details"
+      onDragEnter={(e) => {
+        if (!onDropPlaylist) return;
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragOver={(e) => {
+        if (!onDropPlaylist) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        setDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (!onDropPlaylist) return;
+        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+        setDragOver(false);
+      }}
+      onDrop={(e) => {
+        if (!onDropPlaylist) return;
+        e.preventDefault();
+        const playlistId = e.dataTransfer.getData('text/plain');
+        if (playlistId) onDropPlaylist(playlistId);
+        setDragOver(false);
+      }}
+    >
       <header className="host-selected-round__head">
         <p className="host-selected-round__eyebrow">Selected round</p>
         <h3 className="host-selected-round__title">
@@ -86,8 +121,9 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
         </ul>
       ) : (
         <p className="host-selected-round__empty" role="status">
-          Drag a playlist from the library onto a round above, or use the Rounds button on a playlist
-          row.
+          {onDropPlaylist
+            ? 'Drag a playlist from the library here (or onto a round above), or use the Rounds button on a playlist row.'
+            : 'Drag a playlist from the library onto a round above, or use the Rounds button on a playlist row.'}
         </p>
       )}
     </section>

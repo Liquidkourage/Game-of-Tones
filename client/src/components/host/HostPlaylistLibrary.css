@@ -120,6 +120,12 @@
   top: 8px;
 }
 
+.host-selected-round--drag-over {
+  outline: 2px solid rgba(0, 255, 136, 0.55);
+  outline-offset: 2px;
+  background: rgba(0, 255, 136, 0.08);
+}
+
 .host-selected-round__head {
   margin-bottom: 10px;
 }

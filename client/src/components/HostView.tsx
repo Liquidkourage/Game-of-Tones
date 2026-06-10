@@ -10606,6 +10606,12 @@ const HostView: React.FC = () => {
                       onRemovePlaylist={(playlistId) =>
                         removePlaylistFromRoundBucket(selectedRoundForPanel.index, playlistId)
                       }
+                      onDropPlaylist={
+                        gameState !== 'playing'
+                          ? (playlistId) =>
+                              addPlaylistToRoundBucket(selectedRoundForPanel.index, playlistId)
+                          : undefined
+                      }
                     />
                   ) : null
                 }
