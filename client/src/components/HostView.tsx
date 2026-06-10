@@ -39,7 +39,6 @@ import {
   Save,
   Eraser,
   Settings,
-  Building2,
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL, ENABLE_YOUTUBE_MUSIC } from '../config';
@@ -10246,17 +10245,6 @@ const HostView: React.FC = () => {
             </p>
           </div>
           <div className="room-info host-header__toolbar">
-            <Link
-              to="/org"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-secondary host-org-toolbar-btn"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}
-              title="Account and billing"
-            >
-              <Building2 className="w-4 h-4" aria-hidden />
-              Account
-            </Link>
             <button
               type="button"
               className="btn-secondary host-connection-toolbar-btn"

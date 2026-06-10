@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Download, Link2 } from 'lucide-react';
 import HostActivityFeed from './HostActivityFeed';
-import HostOrgBillingCard from './HostOrgBillingCard';
 import type { HostActivityEntry } from '../../host/hostActivityLog';
 import { DEFAULT_PLAYLIST_TITLE_FLAGS } from '../../utils/hostPreferences';
 import type { PublicDisplayTitleRevealMode } from '../../utils/publicDisplayTitleReveal';
@@ -51,8 +50,6 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
 
   return (
     <div className="host-settings-workspace">
-      <HostOrgBillingCard />
-
       <section className="host-glass-panel host-settings-workspace__connection">
         <div className="host-settings-workspace__head">
           <h2 className="host-settings-workspace__title">
