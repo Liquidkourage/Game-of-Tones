@@ -1003,6 +1003,14 @@ const HostView: React.FC = () => {
     venueSpotifyJamMode,
   ]);
 
+  /** Selected device is online (in the list) but not Spotify's active playback target — honest readiness, not a blocker. */
+  const selectedDeviceInactive = useMemo(() => {
+    if (!mixNeedsHostSpotify || !isSpotifyConnected || isLoadingDevices) return false;
+    if (!selectedDevice?.id) return false;
+    const d = devices.find((x) => x.id === selectedDevice.id);
+    return !!d && d.is_active === false;
+  }, [mixNeedsHostSpotify, isSpotifyConnected, isLoadingDevices, selectedDevice, devices]);
+
   const selectablePlaybackDevices = useMemo(() => {
     if (venueSpotifyJamMode) {
       return devices.filter((d) => isSpotifyJamDevice(d));
@@ -8914,6 +8922,12 @@ const HostView: React.FC = () => {
           then select it again before Start Game.
         </p>
       )}
+      {!playbackDeviceNotInList && selectedDeviceInactive && selectedDevice && (
+        <p style={{ marginTop: 10, fontSize: '0.8rem', color: '#ffb347', fontWeight: 600 }}>
+          “{selectedDevice.name}” is selected but currently inactive. Open Spotify on {selectedDevice.name} and
+          press play/pause once, then tap Refresh devices. Playback will be transferred there at Start Game.
+        </p>
+      )}
     </>
   ) : null;
 
@@ -9973,6 +9987,25 @@ const HostView: React.FC = () => {
         warn: !hostPlaybackSystemsReady,
         detail: hostPlaybackSystemsReady ? undefined : 'Open Connection in the header',
       },
+      ...(mixNeedsHostSpotify && isSpotifyConnected
+        ? [
+            {
+              id: 'device',
+              label: 'Spotify device active',
+              ok:
+                !!selectedDevice?.id && !playbackDeviceNotInList && !selectedDeviceInactive,
+              warn:
+                !!selectedDevice?.id && (playbackDeviceNotInList || selectedDeviceInactive),
+              detail: !selectedDevice?.id
+                ? 'Pick a device in Connection'
+                : playbackDeviceNotInList
+                  ? `${selectedDevice.name} is offline — refresh devices`
+                  : selectedDeviceInactive
+                    ? `Open Spotify on ${selectedDevice.name}, then refresh devices`
+                    : selectedDevice.name,
+            } satisfies PreShowCheckItem,
+          ]
+        : []),
       {
         id: 'display',
         label: 'Projector display connected',
@@ -9997,6 +10030,11 @@ const HostView: React.FC = () => {
     return items;
   }, [
     hostPlaybackSystemsReady,
+    mixNeedsHostSpotify,
+    isSpotifyConnected,
+    selectedDevice,
+    playbackDeviceNotInList,
+    selectedDeviceInactive,
     displayPresence,
     displaySyncLabel,
     hasFinalizedSongPool,

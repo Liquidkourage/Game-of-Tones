@@ -670,6 +670,46 @@ function shouldRetainRoomAfterHostDisconnect(room) {
   return false;
 }
 
+/**
+ * Grace period before removing a setup-state room after its host disconnects.
+ * Covers host page refreshes, Spotify OAuth redirects, and normal navigation —
+ * deleting immediately wiped round/playlist setup and recreated the room empty.
+ */
+const HOST_DISCONNECT_ROOM_GRACE_MS = 10 * 60 * 1000;
+/** roomId -> timeout handle for pending delayed cleanup. */
+const pendingRoomCleanupTimers = new Map();
+
+function cancelPendingRoomCleanup(roomId, reason) {
+  const t = pendingRoomCleanupTimers.get(roomId);
+  if (!t) return;
+  clearTimeout(t);
+  pendingRoomCleanupTimers.delete(roomId);
+  routineServerLog(`Cancelled pending cleanup for room ${roomId}${reason ? ` (${reason})` : ''}`);
+}
+
+function scheduleRoomCleanupAfterHostDisconnect(roomId) {
+  const existing = pendingRoomCleanupTimers.get(roomId);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    pendingRoomCleanupTimers.delete(roomId);
+    const room = rooms.get(roomId);
+    if (!room) return;
+    const hostSocket = room.host ? io.sockets.sockets.get(room.host) : null;
+    if (hostSocket && hostSocket.connected) return; // host returned
+    if (room.players.size > 0) return; // someone joined during the grace period
+    void finalizeOrgEventForRoom(room);
+    rooms.delete(roomId);
+    routineServerLog(`Removed abandoned room after grace period: ${roomId}`);
+  }, HOST_DISCONNECT_ROOM_GRACE_MS);
+  if (typeof timer.unref === 'function') timer.unref();
+  pendingRoomCleanupTimers.set(roomId, timer);
+  routineServerLog(
+    `Host disconnected from room ${roomId}; retaining setup state for ${Math.round(
+      HOST_DISCONNECT_ROOM_GRACE_MS / 60000,
+    )} min pending host return`,
+  );
+}
+
 const DISPLAY_PRESENCE_STALE_MS = 25000;
 
 function buildDisplayPresencePayload(room) {
@@ -3558,7 +3598,12 @@ io.on('connection', (socket) => {
     logger.info(`Player ${playerName} (${wantsHost ? 'host' : 'player'}) joining room: ${roomId}`, 'player-join');
 
     let organizationId = 'DEFAULT';
-    
+
+    // Any join into an existing room means it is not abandoned — keep it alive.
+    if (rooms.has(roomId)) {
+      cancelPendingRoomCleanup(roomId, wantsHost ? 'host rejoined' : 'player joined');
+    }
+
     // Create room if it doesn't exist
     if (!rooms.has(roomId)) {
       logger.info(`Creating new room: ${roomId} for organization: ${organizationId}`, 'room-create');
@@ -6893,9 +6938,8 @@ io.on('connection', (socket) => {
                 `Host disconnected from room ${roomId}; retaining live session in memory until host reconnects (state=${room.gameState})`,
               );
             } else {
-              void finalizeOrgEventForRoom(room);
-              rooms.delete(roomId);
-              routineServerLog(`Removed empty room: ${roomId}`);
+              // Setup-state room: keep it through refreshes/OAuth redirects; delete only if the host never returns.
+              scheduleRoomCleanupAfterHostDisconnect(roomId);
             }
           }
         }
@@ -11577,10 +11621,12 @@ function allocateHostOwnedRoom(uid, options = {}) {
     const owner = room.ownerUserId;
     if (owner == null) {
       room.ownerUserId = uid;
+      cancelPendingRoomCleanup(code, 'room claimed by host');
       return { code, mode: 'claim' };
     }
     if (Number(owner) === Number(uid)) {
       if (!forceNew) {
+        cancelPendingRoomCleanup(code, 'room reused by owner');
         return { code, mode: 'reuse' };
       }
       continue;
