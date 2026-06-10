@@ -36,8 +36,9 @@ const Home: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [playerName, setPlayerName] = useState('');
   const [roomId, setRoomId] = useState('');
-  /** Join as remote/online (host can enable hybrid mode so prize waits for in-person bingo) */
-  const [joinAsRemote, setJoinAsRemote] = useState(() => searchParams.get('remote') === '1');
+  const [joinBusy, setJoinBusy] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [hybridPrompt, setHybridPrompt] = useState<{ roomCode: string; name: string } | null>(null);
   const [hostSession, setHostSession] = useState<{ id: number; email?: string | null; displayName?: string | null } | null | undefined>(undefined);
   /**
    * Server `POST /api/host/rooms` returns `mode: 'reuse'` when your default code already exists in RAM.
@@ -333,19 +334,82 @@ const Home: React.FC = () => {
     }
   };
 
-  const joinGame = () => {
+  const completeJoin = (code: string, name: string, asRemote: boolean) => {
+    const q = new URLSearchParams();
+    q.set('name', name.trim());
+    if (asRemote) q.set('remote', '1');
+    navigate(`/player/${encodeURIComponent(code.trim().toUpperCase())}?${q.toString()}`);
+  };
+
+  const joinGame = async () => {
     if (!playerName.trim() || !roomId.trim()) {
       alert('Please enter both your name and room ID!');
       return;
     }
-    const q = new URLSearchParams();
-    q.set('name', playerName.trim());
-    if (joinAsRemote) q.set('remote', '1');
-    navigate(`/player/${roomId}?${q.toString()}`);
+    setJoinError(null);
+    setJoinBusy(true);
+    try {
+      const code = roomId.trim().toUpperCase();
+      const res = await fetch(`${API_BASE || ''}/api/rooms/${encodeURIComponent(code)}`);
+      if (res.status === 404) {
+        setJoinError('Room not found. Check the code and try again.');
+        return;
+      }
+      if (!res.ok) {
+        setJoinError('Could not look up room. Try again.');
+        return;
+      }
+      const data = (await res.json()) as { hybridInPersonPlusOnline?: boolean };
+      const name = playerName.trim();
+      if (data.hybridInPersonPlusOnline) {
+        setHybridPrompt({ roomCode: code, name });
+        return;
+      }
+      completeJoin(code, name, false);
+    } catch {
+      setJoinError('Could not reach the server. Check your connection.');
+    } finally {
+      setJoinBusy(false);
+    }
+  };
+
+  const confirmHybridJoin = (asRemote: boolean) => {
+    if (!hybridPrompt) return;
+    const { roomCode, name } = hybridPrompt;
+    setHybridPrompt(null);
+    completeJoin(roomCode, name, asRemote);
   };
 
   return (
     <div className="home-container">
+      {hybridPrompt ? (
+        <div
+          className="home-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-hybrid-title"
+        >
+          <div className="home-modal home-modal--hybrid">
+            <h2 id="home-hybrid-title" className="home-modal__title">
+              Are you playing remotely?
+            </h2>
+            <p className="home-modal__body">
+              This room has hybrid mode on. In-person bingos count for prizes; online players can still play along.
+            </p>
+            <div className="home-modal__actions home-modal__actions--stack">
+              <button type="button" className="btn btn-primary" onClick={() => confirmHybridJoin(true)}>
+                Yes, I&apos;m remote
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => confirmHybridJoin(false)}>
+                No, I&apos;m in the room
+              </button>
+              <button type="button" className="btn btn-secondary home-modal__cancel" onClick={() => setHybridPrompt(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {hostRoomReuseModal && hostSession && (
         <div
           className="home-modal-backdrop"
@@ -487,23 +551,21 @@ const Home: React.FC = () => {
               />
             </div>
 
-            <label className="home-remote-opt">
-              <input
-                type="checkbox"
-                checked={joinAsRemote}
-                onChange={(e) => setJoinAsRemote(e.target.checked)}
-              />
-              <span>
-                Playing <strong>online</strong>
-              </span>
-            </label>
+            {joinError ? (
+              <p className="home-join-error" role="alert">
+                {joinError}
+              </p>
+            ) : null}
 
-            <button 
-              onClick={joinGame}
+            <button
+              type="button"
+              onClick={() => void joinGame()}
               className="btn btn-pink"
+              disabled={joinBusy}
+              aria-busy={joinBusy}
             >
               <UserPlus className="btn-icon" />
-              Join Game
+              {joinBusy ? 'Checking room…' : 'Join Game'}
             </button>
           </motion.div>
           )}

@@ -10327,6 +10327,7 @@ app.get('/api/rooms/:roomId', (req, res) => {
       currentSong: room.currentSong,
       mixFinalized: !!room.mixFinalized,
       snippetLength: room.snippetLength,
+      hybridInPersonPlusOnline: !!room.hybridInPersonPlusOnline,
       hasPlaylist: Array.isArray(room.playlistSongs) && room.playlistSongs.length > 0,
       playedSongIds,
       totalPlayedCount: playedSongIds.length,
