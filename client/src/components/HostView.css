@@ -3640,6 +3640,22 @@
   max-width: 100%;
 }
 
+.host-view .host-host-prefs__input {
+  font-size: 0.92rem;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  max-width: 100%;
+}
+
+.host-view .host-host-prefs__hint {
+  font-size: 0.74rem;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.55);
+}
+
 .host-view .host-host-prefs__checkbox-row {
   display: inline-flex;
   align-items: center;

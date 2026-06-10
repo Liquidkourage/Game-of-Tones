@@ -80,7 +80,11 @@ import {
 } from '../utils/songAliasDisplay';
 import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModal';
 import BingoPoolList from './BingoPoolList';
-import { loadHostPreferences, saveHostPreferences } from '../utils/hostPreferences';
+import {
+  DEFAULT_PLAYLIST_TITLE_FLAGS,
+  loadHostPreferences,
+  saveHostPreferences,
+} from '../utils/hostPreferences';
 import { isSpotifyJamDevice, pickPreferredPlaybackDevice } from '../utils/spotifyDevices';
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
 import { HostYoutubeMusicPlaylistLibrary, type YoutubeMixPlaylistRow } from './HostYoutubeMusicPlaylistLibrary';
@@ -728,24 +732,33 @@ function normalizeSpotifyPlaylistId(id: unknown): string {
   return String(id).trim();
 }
 
-/** GoT mix library filter (same rules as visible playlist effect). YouTube Music playlists always pass through. */
-function filterBasePlaylistsForMix(playlists: Playlist[], showAllPlaylists: boolean): Playlist[] {
+/** Host-configured title flags ("GoT, Game of Tones") → trimmed list for matching. */
+function parsePlaylistTitleFlags(raw: string): string[] {
+  return (raw || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** True when a playlist title carries one of the host's flags (auto-created "<flag> output" playlists excluded). */
+function playlistMatchesTitleFlags(name: string, flags: string[]): boolean {
+  if (flags.length === 0) return true;
+  const nameLower = (name || '').toLowerCase();
+  if (flags.some((flag) => nameLower.includes(`${flag.toLowerCase()} output`))) return false;
+  return flags.some((flag) => nameLower.includes(flag.toLowerCase()));
+}
+
+/** Picks/All library filter (same rules as visible playlist effect). YouTube Music playlists always pass through. */
+function filterBasePlaylistsForMix(
+  playlists: Playlist[],
+  showAllPlaylists: boolean,
+  titleFlags: string[],
+): Playlist[] {
   const ytm = playlists.filter((p: Playlist) => !!p.youtubeMusic);
   const rest = playlists.filter((p: Playlist) => !p.youtubeMusic);
-  let spotifyPart: Playlist[];
-  if (!showAllPlaylists) {
-    spotifyPart = rest.filter((p: Playlist) => {
-      const nameLower = p.name.toLowerCase();
-      if (nameLower.includes('game of tones output') || nameLower.includes('gameoftones output')) {
-        return false;
-      }
-      const startsWithGot = /^got\s*[-�:]*\s*/i.test(p.name);
-      const containsGameOfTones = nameLower.includes('game of tones') || nameLower.includes('gameoftones');
-      return startsWithGot || containsGameOfTones;
-    });
-  } else {
-    spotifyPart = rest;
-  }
+  const spotifyPart = showAllPlaylists
+    ? rest
+    : rest.filter((p: Playlist) => playlistMatchesTitleFlags(p.name, titleFlags));
   return [...spotifyPart, ...ytm];
 }
 
@@ -1419,8 +1432,10 @@ const HostView: React.FC = () => {
   // Playlists state
   const [visiblePlaylists, setVisiblePlaylists] = useState<Playlist[]>([]);
   const [playlistQuery, setPlaylistQuery] = useState('');
-  /** "My Spotify" shows the host's full connected library; GoT labeling only gates the shared Tempo Library. */
-  const [showAllPlaylists, setShowAllPlaylists] = useState<boolean>(true);
+  /** false = only playlists matching the host's title flags; true = full Spotify library list. */
+  const [showAllPlaylists, setShowAllPlaylists] = useState<boolean>(false);
+  /** Host-configurable, comma-separated title flags for the picks/All toggle (saved per host account). */
+  const [playlistTitleFlags, setPlaylistTitleFlags] = useState<string>(DEFAULT_PLAYLIST_TITLE_FLAGS);
   /** Playlist table: Spotify order until user sorts by name or track count */
   const [playlistSort, setPlaylistSort] = useState<{
     key: 'none' | 'name' | 'tracks';
@@ -1971,8 +1986,8 @@ const HostView: React.FC = () => {
         // Fresh library fetch: load Official packs shortly after (another GET /me/playlists on catalog token).
         // Stale/cache response: Spotify is already rate-limiting — defer catalog to avoid an immediate second burst (same app quota); Official packs still loads after cooldown.
         scheduleCatalogPacksLoad(data.fromSpotifyListCache === true ? 60_000 : 7500);
-        // "My Spotify" always shows the full connected library (GoT label only gates the Tempo Library)
-        setShowAllPlaylists(true);
+        // Reset to flagged picks by default when playlists are reloaded
+        setShowAllPlaylists(false);
         // Don't set visiblePlaylists here - let the useEffect handle it to ensure consistency
       } else {
         setSpotifyMyPlaylistsTotal(null);
@@ -2062,6 +2077,14 @@ const HostView: React.FC = () => {
 
 
 
+  const parsedPlaylistTitleFlags = useMemo(
+    () => parsePlaylistTitleFlags(playlistTitleFlags),
+    [playlistTitleFlags],
+  );
+
+  /** Toggle label for the host's curated picks (first flag, e.g. "GoT"). */
+  const playlistTitleFlagLabel = parsedPlaylistTitleFlags[0] ?? 'Flagged';
+
   // Filter playlists by query (assigned playlists remain visible for reuse/caution UI)
   const filteredPlaylists = useMemo(() => {
     if (!playlistQuery) return visiblePlaylists;
@@ -2141,7 +2164,7 @@ const HostView: React.FC = () => {
 
   useEffect(() => {
     setPlaylistLibraryPage(0);
-  }, [playlistQuery, showAllPlaylists, playlistSort.key, playlistSort.dir, playlistLibrarySource]);
+  }, [playlistQuery, showAllPlaylists, parsedPlaylistTitleFlags, playlistSort.key, playlistSort.dir, playlistLibrarySource]);
 
   useEffect(() => {
     setPlaylistLibraryPage((p) => Math.min(p, Math.max(0, playlistLibraryPageCount - 1)));
@@ -2172,11 +2195,23 @@ const HostView: React.FC = () => {
       }
       return 'No playlists loaded yet. Connect Spotify and/or YouTube Music under Connection, then refresh your library.';
     }
+    if (!showAllPlaylists && playlists.length > 0) {
+      const flagged = playlists.filter((p) =>
+        playlistMatchesTitleFlags(p.name, parsedPlaylistTitleFlags),
+      );
+      if (flagged.length === 0) {
+        return `Spotify returned ${playlists.length} playlist(s), but none match your title flags (${
+          parsedPlaylistTitleFlags.join(', ') || 'none set'
+        }). Switch to "All", or change your flags under Saved host preferences.`;
+      }
+    }
     return 'No playlists in this view.';
   }, [
     playlistQuery,
     playlists,
     youtubeMusicPlaylists,
+    showAllPlaylists,
+    parsedPlaylistTitleFlags,
     spotifyMyPlaylistsTotal,
     isSpotifyConnected,
   ]);
@@ -2244,14 +2279,14 @@ const HostView: React.FC = () => {
   useEffect(() => {
     const merged = [...playlists, ...youtubeMusicPlaylists];
     if (merged.length > 0) {
-      const basePlaylists = filterBasePlaylistsForMix(merged, showAllPlaylists);
+      const basePlaylists = filterBasePlaylistsForMix(merged, showAllPlaylists, parsedPlaylistTitleFlags);
       setVisiblePlaylists(
         basePlaylists.filter((p: Playlist) => normalizeSpotifyPlaylistId(p.id) !== ''),
       );
     } else {
       setVisiblePlaylists([]);
     }
-  }, [playlists, youtubeMusicPlaylists, showAllPlaylists]);
+  }, [playlists, youtubeMusicPlaylists, showAllPlaylists, parsedPlaylistTitleFlags]);
 
   /** YouTube Music connection status (for auto-open connection when no system is linked). */
   useEffect(() => {
@@ -8316,6 +8351,7 @@ const HostView: React.FC = () => {
     }
     if (p.freeSpaceEnabled != null) setFreeSpaceEnabled(p.freeSpaceEnabled);
     if (p.venueSpotifyJamMode != null) setVenueSpotifyJamMode(p.venueSpotifyJamMode);
+    if (p.playlistTitleFlags != null) setPlaylistTitleFlags(p.playlistTitleFlags);
     hostPrefsHydratedRef.current = true;
   }, [hostAccount?.id]);
 
@@ -8331,6 +8367,7 @@ const HostView: React.FC = () => {
       publicDisplayLetterRevealToast,
       freeSpaceEnabled,
       venueSpotifyJamMode,
+      playlistTitleFlags,
     });
     try {
       localStorage.setItem('game-snippet-length', String(snippetLength));
@@ -8349,6 +8386,7 @@ const HostView: React.FC = () => {
     publicDisplayLetterRevealToast,
     freeSpaceEnabled,
     venueSpotifyJamMode,
+    playlistTitleFlags,
   ]);
 
   /** Sync venue Jam mode to server when pref or socket changes. */
@@ -9258,6 +9296,38 @@ const HostView: React.FC = () => {
                           </button>
                         ))}
                       </div>
+                      {playlistLibrarySource === 'spotify' ? (
+                        <div
+                          role="group"
+                          aria-label="My Spotify scope"
+                          className="host-playlist-library-toolbar__scope"
+                        >
+                          <button
+                            type="button"
+                            className={!showAllPlaylists ? 'is-active' : ''}
+                            title={`Only playlists whose titles match your flags (${
+                              parsedPlaylistTitleFlags.join(', ') || 'none set'
+                            }) — edit flags under Saved host preferences`}
+                            onClick={() => {
+                              setShowAllPlaylists(false);
+                              setPlaylistQuery('');
+                            }}
+                          >
+                            {playlistTitleFlagLabel}
+                          </button>
+                          <button
+                            type="button"
+                            className={showAllPlaylists ? 'is-active' : ''}
+                            title="Your full Spotify library"
+                            onClick={() => {
+                              setShowAllPlaylists(true);
+                              setPlaylistQuery('');
+                            }}
+                          >
+                            All
+                          </button>
+                        </div>
+                      ) : null}
                       <input
                         type="search"
                         className="host-playlist-library-toolbar__search"
@@ -9556,7 +9626,8 @@ const HostView: React.FC = () => {
                                     </span>
                                   ) : null}
                                   {!p.youtubeMusic &&
-                                    isGotLabeledPlaylist(p.name) && (
+                                    parsedPlaylistTitleFlags.length > 0 &&
+                                    playlistMatchesTitleFlags(p.name, parsedPlaylistTitleFlags) && (
                                       <span
                                         style={{
                                           fontSize: '0.7rem',
@@ -9566,8 +9637,9 @@ const HostView: React.FC = () => {
                                           color: '#00ff88',
                                           border: '1px solid rgba(0, 255, 136, 0.3)',
                                         }}
+                                        title={`Matches your title flags (${parsedPlaylistTitleFlags.join(', ')})`}
                                       >
-                                        GoT
+                                        {playlistTitleFlagLabel}
                                       </span>
                                     )}
                                 </span>
@@ -10498,6 +10570,21 @@ const HostView: React.FC = () => {
                     onChange={(e) => updatePublicDisplayLetterRevealToast(e.target.checked)}
                   />
                   Show &ldquo;Revealed:&hellip;&rdquo; banner on projector
+                </span>
+              </label>
+              <label className="host-host-prefs__field">
+                <span className="host-host-prefs__label">Playlist title flags</span>
+                <input
+                  type="text"
+                  className="host-host-prefs__input"
+                  value={playlistTitleFlags}
+                  maxLength={200}
+                  placeholder={DEFAULT_PLAYLIST_TITLE_FLAGS}
+                  onChange={(e) => setPlaylistTitleFlags(e.target.value)}
+                />
+                <span className="host-host-prefs__hint">
+                  Comma-separated. The library&rsquo;s &ldquo;{playlistTitleFlagLabel} / All&rdquo;
+                  toggle shows only playlists whose titles contain one of these flags.
                 </span>
               </label>
             </div>

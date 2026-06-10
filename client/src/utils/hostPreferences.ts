@@ -13,7 +13,11 @@ export type HostPreferencesV1 = {
   publicDisplayLetterRevealToast: boolean;
   freeSpaceEnabled: boolean;
   venueSpotifyJamMode: boolean;
+  /** Comma-separated title flags that mark this host's curated playlists (library picks toggle). */
+  playlistTitleFlags: string;
 };
+
+export const DEFAULT_PLAYLIST_TITLE_FLAGS = 'GoT, Game of Tones';
 
 const STORAGE_PREFIX = 'got-host-prefs-v1';
 
@@ -32,6 +36,7 @@ export function defaultHostPreferences(): HostPreferencesV1 {
     publicDisplayLetterRevealToast: true,
     freeSpaceEnabled: false,
     venueSpotifyJamMode: false,
+    playlistTitleFlags: DEFAULT_PLAYLIST_TITLE_FLAGS,
   };
 }
 
@@ -74,6 +79,10 @@ export function loadHostPreferences(
         typeof parsed.freeSpaceEnabled === 'boolean' ? parsed.freeSpaceEnabled : undefined,
       venueSpotifyJamMode:
         typeof parsed.venueSpotifyJamMode === 'boolean' ? parsed.venueSpotifyJamMode : undefined,
+      playlistTitleFlags:
+        typeof parsed.playlistTitleFlags === 'string'
+          ? parsed.playlistTitleFlags.slice(0, 200)
+          : undefined,
     };
   } catch {
     return {};
