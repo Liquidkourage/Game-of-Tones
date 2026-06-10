@@ -86,7 +86,6 @@ import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
 import { HostYoutubeMusicPlaylistLibrary, type YoutubeMixPlaylistRow } from './HostYoutubeMusicPlaylistLibrary';
 import { HostYoutubeIframePlayer, primeYoutubeHostPlaybackAudioUnlock } from './HostYoutubeIframePlayer';
 import RoundPlanner from './RoundPlanner';
-import HostEventActivationBar from './host/HostEventActivationBar';
 import { SpotifyExplicitBadge } from './SpotifyExplicitBadge';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
 import { youtubeTrackDisplayFields, youtubeBingoSquareDisplay } from '../utils/youtubeTrackDisplay';
@@ -140,6 +139,8 @@ import type { HostSetupStep } from './host/HostSetupFlow';
 import HostSetupCockpit from './host/HostSetupCockpit';
 import HostSetupPlaylistStep from './host/HostSetupPlaylistStep';
 import HostSetupPlayStep from './host/HostSetupPlayStep';
+import HostPlaylistRoundAssignMenu from './host/HostPlaylistRoundAssignMenu';
+import HostRoundAssignmentSummary from './host/HostRoundAssignmentSummary';
 import HostTutorial from './host/HostTutorial';
 import { HOST_TUTORIAL_STEPS } from '../host/hostTutorialSteps';
 import {
@@ -151,6 +152,7 @@ import {
 } from '../host/hostTutorialStorage';
 import './host/HostSetupFlow.css';
 import './host/HostSetupCockpit.css';
+import './host/HostPlaylistLibrary.css';
 import './host/HostTutorial.css';
 import './HostFormControls.css';
 
@@ -1126,11 +1128,8 @@ const HostView: React.FC = () => {
   const [showPlaylistRoundModal, setShowPlaylistRoundModal] = useState(false);
   const [roundBuilderFocusIndex, setRoundBuilderFocusIndex] = useState(0);
   const compositeEditRoundIndexRef = useRef(0);
-  const [playlistRoundModalPane, setPlaylistRoundModalPane] = useState<'library' | 'rounds'>('library');
-  /** Keeps library + rounds panes visible during a library drag (avoids mid-drag pane swap). */
   const [libraryPlaylistDragActive, setLibraryPlaylistDragActive] = useState(false);
   const openPlaylistLibrary = useCallback(() => {
-    setPlaylistRoundModalPane('library');
     setShowPlaylistRoundModal(true);
   }, []);
 
@@ -1139,7 +1138,7 @@ const HostView: React.FC = () => {
     hostShellMainRef.current?.scrollTo({ top: 0 });
     if (id === 'rounds') {
       setTimeout(() => {
-        document.getElementById('host-library-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        hostShellMainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
       }, 50);
     }
   }, []);
@@ -1192,7 +1191,6 @@ const HostView: React.FC = () => {
         ? focusIndex
         : Math.max(0, currentRoundIndexRef.current >= 0 ? currentRoundIndexRef.current : 0);
     setRoundBuilderFocusIndex(idx);
-    setPlaylistRoundModalPane('rounds');
     setShowPlaylistRoundModal(true);
   }, []);
   const showPlaylistRoundModalScrollRef = useRef(showPlaylistRoundModal);
@@ -2044,28 +2042,19 @@ const HostView: React.FC = () => {
   }, [playlistByLinkInput, showHostAckNotification]);
 
 
-  /** Assigned-to-round ids as strings so Spotify id === round id always matches. */
-  const assignedPlaylistIds = useMemo(
-    () => new Set(eventRounds.flatMap((round) => round.playlistIds || []).map((id) => String(id))),
-    [eventRounds]
-  );
 
-  // Filter playlists by query and exclude already assigned playlists
+  // Filter playlists by query (assigned playlists remain visible for reuse/caution UI)
   const filteredPlaylists = useMemo(() => {
-    if (playlistQuery) {
-      const q = playlistQuery.toLowerCase();
-      return visiblePlaylists.filter((p) => {
-        const pid = normalizeSpotifyPlaylistId(p.id);
-        return (
-          !assignedPlaylistIds.has(pid) &&
-          ((p.name || '').toLowerCase().includes(q) ||
-            (p.owner || '').toLowerCase().includes(q) ||
-            (p.description || '').toLowerCase().includes(q))
-        );
-      });
-    }
-    return visiblePlaylists.filter((p) => !assignedPlaylistIds.has(normalizeSpotifyPlaylistId(p.id)));
-  }, [visiblePlaylists, playlistQuery, assignedPlaylistIds]);
+    if (!playlistQuery) return visiblePlaylists;
+    const q = playlistQuery.toLowerCase();
+    return visiblePlaylists.filter((p) => {
+      return (
+        (p.name || '').toLowerCase().includes(q) ||
+        (p.owner || '').toLowerCase().includes(q) ||
+        (p.description || '').toLowerCase().includes(q)
+      );
+    });
+  }, [visiblePlaylists, playlistQuery]);
 
   const sortedFilteredPlaylists = useMemo(() => {
     const rows = [...filteredPlaylists];
@@ -2143,23 +2132,19 @@ const HostView: React.FC = () => {
     return Array.from(m.values());
   }, [playlists, youtubeMusicPlaylists]);
 
-  /** Shown when the library table has no rows (search, filter, or all assigned to rounds). */
+  /** Shown when the library table has no rows (search or filter). */
   const playlistLibraryEmptyMessage = useMemo(() => {
     const q = playlistQuery.trim();
     if (q) return 'No playlists match your search.';
     const merged = [...playlists, ...youtubeMusicPlaylists];
     const base = filterBasePlaylistsForMix(merged, showAllPlaylists);
-    const visibleApprox = base.filter((p) => {
-      const pid = normalizeSpotifyPlaylistId(p.id);
-      return pid !== '' && !assignedPlaylistIds.has(pid);
-    });
     if (merged.length === 0) {
       if (isSpotifyConnected && spotifyMyPlaylistsTotal === 0) {
         return 'Spotify reports 0 playlists for the connected account. Create playlists in Spotify or connect YouTube Music under Connection, then refresh.';
       }
       return 'No playlists loaded yet. Connect Spotify and/or YouTube Music under Connection, then refresh your library.';
     }
-    if (visibleApprox.length === 0) {
+    if (base.length === 0) {
       const spotifyBase = filterBasePlaylistsForMix(playlists, showAllPlaylists);
       if (
         playlists.length > 0 &&
@@ -2169,15 +2154,13 @@ const HostView: React.FC = () => {
       ) {
         return `Spotify returned ${playlists.length} playlist(s), but none match GoT picks (name starts with "GoT" or contains "Game of Tones"). Use "All my playlists" to see your full library.`;
       }
-      return 'Every playlist in this view is already assigned to a round (or filtered out). Remove one from a round bucket, widen filters, or add playlists.';
     }
-    return 'No available playlists.';
+    return 'No playlists in this view.';
   }, [
     playlistQuery,
     playlists,
     youtubeMusicPlaylists,
     showAllPlaylists,
-    assignedPlaylistIds,
     spotifyMyPlaylistsTotal,
     isSpotifyConnected,
   ]);
@@ -2241,20 +2224,18 @@ const HostView: React.FC = () => {
     setCatalogPrefixDiscoverySkipped(false);
   }, [hostAuthBootstrapDone, spotifyInitialCheckDone, isSpotifyConnected]);
 
-  // Update visible playlists when rounds change to exclude newly assigned playlists, or when filter mode changes
+  // Update visible playlists when library loads or filter mode changes (keep assigned rows visible)
   useEffect(() => {
     const merged = [...playlists, ...youtubeMusicPlaylists];
     if (merged.length > 0) {
       const basePlaylists = filterBasePlaylistsForMix(merged, showAllPlaylists);
-      const availablePlaylists = basePlaylists.filter((p: Playlist) => {
-        const pid = normalizeSpotifyPlaylistId(p.id);
-        return pid !== '' && !assignedPlaylistIds.has(pid);
-      });
-      setVisiblePlaylists(availablePlaylists);
+      setVisiblePlaylists(
+        basePlaylists.filter((p: Playlist) => normalizeSpotifyPlaylistId(p.id) !== ''),
+      );
     } else {
       setVisiblePlaylists([]);
     }
-  }, [assignedPlaylistIds, playlists, youtubeMusicPlaylists, showAllPlaylists]);
+  }, [playlists, youtubeMusicPlaylists, showAllPlaylists]);
 
   /** YouTube Music connection status (for auto-open connection when no system is linked). */
   useEffect(() => {
@@ -2346,7 +2327,6 @@ const HostView: React.FC = () => {
 
   useEffect(() => {
     if (!showPlaylistRoundModal) return;
-    setPlaylistRoundModalPane('library');
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (combinedPatternModalOpen) {
@@ -7398,12 +7378,26 @@ const HostView: React.FC = () => {
     [applyRoundPlaylistsToMixSelection, resolveMixPlaylistRowsForRound],
   );
 
+  /** Resolve a library, YouTube, or catalog pack row for round bucket add/remove. */
+  const resolvePlaylistForRoundAssign = useCallback(
+    (playlistId: string): Playlist | undefined => {
+      const canon = canonicalPlaylistIdForMatch(String(playlistId));
+      const fromLibrary = playlistsForRoundPlanner.find(
+        (p) => canonicalPlaylistIdForMatch(String(p.id)) === canon,
+      );
+      if (fromLibrary) return fromLibrary;
+      const fromCatalog = catalogPackOptions.find(
+        (p) => canonicalPlaylistIdForMatch(String(p.id)) === canon,
+      );
+      return fromCatalog ? { ...fromCatalog, catalog: true } : undefined;
+    },
+    [playlistsForRoundPlanner, catalogPackOptions],
+  );
+
   /** Same behavior as dragging a library row into a round bucket (RoundPlanner drop). */
   const addPlaylistToRoundBucket = useCallback(
     (roundIndex: number, playlistId: string) => {
-      const playlist = playlistsForRoundPlanner.find(
-        (p) => canonicalPlaylistIdForMatch(String(p.id)) === canonicalPlaylistIdForMatch(String(playlistId)),
-      );
+      const playlist = resolvePlaylistForRoundAssign(playlistId);
       if (!playlist) return;
       const prev = eventRoundsRef.current;
       if (roundIndex < 0 || roundIndex >= prev.length) return;
@@ -7435,7 +7429,70 @@ const HostView: React.FC = () => {
       });
       syncMixFromRound(roundIndex, updated);
     },
-    [playlistsForRoundPlanner, roomId, syncMixFromRound],
+    [resolvePlaylistForRoundAssign, playlistsForRoundPlanner, roomId, syncMixFromRound],
+  );
+
+  const removePlaylistFromRoundBucket = useCallback(
+    (roundIndex: number, playlistId: string) => {
+      const prev = eventRoundsRef.current;
+      if (roundIndex < 0 || roundIndex >= prev.length) return;
+      const round = prev[roundIndex];
+      const canon = canonicalPlaylistIdForMatch(String(playlistId));
+      const playlistIndex = round.playlistIds.findIndex(
+        (id) => canonicalPlaylistIdForMatch(String(id)) === canon,
+      );
+      if (playlistIndex === -1) return;
+
+      const playlist = resolvePlaylistForRoundAssign(playlistId);
+      const playlistTracks = Math.max(0, Number(playlist?.tracks) || 0);
+      let updated: EventRound = {
+        ...round,
+        playlistIds: round.playlistIds.filter((_, i) => i !== playlistIndex),
+        playlistNames: round.playlistNames.filter((_, i) => i !== playlistIndex),
+        songCount: Math.max(0, round.songCount - playlistTracks),
+        status: round.playlistIds.length === 1 ? 'unplanned' : round.status,
+      };
+      updated = clearSnapshotIfPlaylistsChanged(updated, round);
+
+      setEventRounds((cur) => {
+        if (roundIndex < 0 || roundIndex >= cur.length) return cur;
+        const newRounds = [...cur];
+        newRounds[roundIndex] = updated;
+        try {
+          localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(newRounds));
+        } catch (error) {
+          console.warn('Failed to save rounds to localStorage:', error);
+        }
+        return newRounds;
+      });
+      if (updated.playlistIds.length > 0) {
+        syncMixFromRound(roundIndex, updated);
+      }
+    },
+    [resolvePlaylistForRoundAssign, roomId, syncMixFromRound],
+  );
+
+  const handleFocusRoundForLibrary = useCallback((roundIndex: number) => {
+    setCurrentRoundIndex(roundIndex);
+    setRoundBuilderFocusIndex(roundIndex);
+  }, []);
+
+  const roundAssignmentSummaryRows = useMemo(
+    () =>
+      eventRounds.map((round, index) => {
+        const playlistCount = round.playlistIds?.length ?? 0;
+        const songCount = round.songCount ?? 0;
+        return {
+          index,
+          name: round.name,
+          playlistCount,
+          songCount,
+          isCurrent: index === currentRoundIndex,
+          isEmpty: playlistCount === 0,
+          isLowSongs: playlistCount > 0 && songCount > 0 && songCount < 15,
+        };
+      }),
+    [eventRounds, currentRoundIndex],
   );
 
   /** Pick a round for advance prep: sync mix + pattern/snippet UI without marking rounds active/completed or leaving Manager. */
@@ -8949,43 +9006,10 @@ const HostView: React.FC = () => {
               <div
                 className={
                   libraryPlaylistDragActive
-                    ? 'host-playlist-round-modal-root host-playlist-round-modal-root--library-drag'
-                    : 'host-playlist-round-modal-root'
+                    ? 'host-playlist-round-modal-root host-playlist-round-modal-root--library-drag host-playlist-round-modal-root--assign-focus'
+                    : 'host-playlist-round-modal-root host-playlist-round-modal-root--assign-focus'
                 }
-                data-mobile-pane={playlistRoundModalPane}
               >
-              <div
-                className="host-playlist-round-modal__pane-switch"
-                role="tablist"
-                aria-label="Playlist library panels"
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={playlistRoundModalPane === 'library'}
-                  className={
-                    playlistRoundModalPane === 'library'
-                      ? 'host-playlist-round-modal__pane-tab host-playlist-round-modal__pane-tab--active'
-                      : 'host-playlist-round-modal__pane-tab'
-                  }
-                  onClick={() => setPlaylistRoundModalPane('library')}
-                >
-                  Library
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={playlistRoundModalPane === 'rounds'}
-                  className={
-                    playlistRoundModalPane === 'rounds'
-                      ? 'host-playlist-round-modal__pane-tab host-playlist-round-modal__pane-tab--active'
-                      : 'host-playlist-round-modal__pane-tab'
-                  }
-                  onClick={() => setPlaylistRoundModalPane('rounds')}
-                >
-                  Rounds
-                </button>
-              </div>
             <div className="host-music-two-pane">
               <div className="host-music-two-pane__library">
           <motion.div
@@ -9424,32 +9448,18 @@ const HostView: React.FC = () => {
                               </span>
                               <span
                                 role="presentation"
+                                className="host-playlist-library-row__assign"
                                 onMouseDown={(e) => e.stopPropagation()}
-                                style={{ flexShrink: 0, alignSelf: 'flex-start', paddingTop: 2 }}
                               >
-                                <select
-                                  className="host-playlist-add-to-round"
-                                  aria-label={`Add playlist to round: ${stripGoTPrefix ? stripGotPlaylistPrefix(p.name) : p.name}`}
-                                  value=""
-                                  title="Add this playlist to a round bucket (same as dragging into a bucket)"
-                                  onChange={(e) => {
-                                    const v = e.target.value;
-                                    if (v !== '') {
-                                      addPlaylistToRoundBucket(Number(v), p.id);
-                                      e.target.value = '';
-                                    }
-                                  }}
-                                >
-                                  <option value="">Add to round…</option>
-                                  {eventRounds.map((r, i) => (
-                                    <option key={r.id} value={String(i)}>
-                                      {r.name}
-                                      {(r.playlistIds?.length ?? 0) > 0
-                                        ? ` (${r.playlistIds!.length})`
-                                        : ''}
-                                    </option>
-                                  ))}
-                                </select>
+                                <HostPlaylistRoundAssignMenu
+                                  playlistId={p.id}
+                                  playlistName={stripGoTPrefix ? stripGotPlaylistPrefix(p.name) : p.name}
+                                  rounds={eventRounds}
+                                  onAssign={(roundIndex) => addPlaylistToRoundBucket(roundIndex, p.id)}
+                                  onUnassign={(roundIndex) =>
+                                    removePlaylistFromRoundBucket(roundIndex, p.id)
+                                  }
+                                />
                               </span>
                               {isInsufficient && (
                                 <span
@@ -9643,30 +9653,51 @@ const HostView: React.FC = () => {
                                 {catalogPackOptions.map((pack) => {
                                   const isSel = selectedCatalogPlaylists.some((p) => p.id === pack.id);
                                   return (
-                                    <label
+                                    <div
                                       key={pack.id}
+                                      className="host-catalog-pack-row"
                                       style={{
                                         display: 'flex',
                                         alignItems: 'center',
                                         gap: 10,
-                                        cursor: 'pointer',
                                         fontSize: '0.88rem',
+                                        flexWrap: 'wrap',
                                       }}
                                     >
-                                      <input
-                                        type="checkbox"
-                                        checked={isSel}
-                                        onChange={() => {
-                                          setSelectedCatalogPlaylists((prev) =>
-                                            isSel ? prev.filter((p) => p.id !== pack.id) : [...prev, { ...pack, catalog: true }]
-                                          );
+                                      <label
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 10,
+                                          cursor: 'pointer',
+                                          flex: 1,
+                                          minWidth: 0,
                                         }}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={isSel}
+                                          onChange={() => {
+                                            setSelectedCatalogPlaylists((prev) =>
+                                              isSel ? prev.filter((p) => p.id !== pack.id) : [...prev, { ...pack, catalog: true }]
+                                            );
+                                          }}
+                                        />
+                                        <span style={{ color: '#fff', flex: 1, minWidth: 0 }}>{pack.name}</span>
+                                        <span style={{ color: '#8899aa', fontSize: '0.78rem', flexShrink: 0 }}>
+                                          {pack.tracks} songs
+                                        </span>
+                                      </label>
+                                      <HostPlaylistRoundAssignMenu
+                                        playlistId={pack.id}
+                                        playlistName={pack.name}
+                                        rounds={eventRounds}
+                                        onAssign={(roundIndex) => addPlaylistToRoundBucket(roundIndex, pack.id)}
+                                        onUnassign={(roundIndex) =>
+                                          removePlaylistFromRoundBucket(roundIndex, pack.id)
+                                        }
                                       />
-                                      <span style={{ color: '#fff', flex: 1, minWidth: 0 }}>{pack.name}</span>
-                                      <span style={{ color: '#8899aa', fontSize: '0.78rem', flexShrink: 0 }}>
-                                        {pack.tracks} songs
-                                      </span>
-                                    </label>
+                                    </div>
                                   );
                                 })}
                               </div>
@@ -9744,8 +9775,10 @@ const HostView: React.FC = () => {
                   </motion.div>
               </div>
               <div className="host-music-two-pane__rounds">
-                {roomId ? <HostEventActivationBar roomId={roomId} /> : null}
-                {hostRoundPlanner}
+                <HostRoundAssignmentSummary
+                  rows={roundAssignmentSummaryRows}
+                  onSelectRound={handleFocusRoundForLibrary}
+                />
               </div>
             </div>
             </div>
