@@ -766,6 +766,10 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
           onCallSheet={onCallSheet ? () => onCallSheet(index) : undefined}
           onOpenComposite={onOpenComposite ? () => onOpenComposite(index) : undefined}
           onNewCustomPattern={onNewCustomPattern}
+          poolCount={poolCount}
+          minRequired={minRequired}
+          listedTotal={listedTotal}
+          tracksLikelyLoading={isMixTarget && poolCount === 0 && !fetchLooksComplete}
         />
         ) : null}
 

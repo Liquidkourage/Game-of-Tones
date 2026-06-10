@@ -57,6 +57,9 @@ import {
   describeCompositePatternAudienceSentence,
 } from '../patternDefinitions';
 
+/** Public-facing domain shown on the projector splash ("Go to …"). Display copy only — the QR code still encodes this deployment's real /player/:roomId URL. */
+const PUBLIC_DISPLAY_JOIN_DOMAIN = 'TempoMusicBingo.com';
+
 const FULL_CARD_PULSE_DURATION_SEC = 1.28;
 
 /** Non-row-major spread so full-card pulses don't read as a single sweep. */
@@ -1179,10 +1182,6 @@ const PublicDisplay: React.FC = () => {
   /** Same tab’s origin — correct for QR and “go to this site” when hosted on a licensee domain. */
   const playerJoinOrigin = useMemo(
     () => (typeof window !== 'undefined' ? window.location.origin : ''),
-    [],
-  );
-  const playerJoinHost = useMemo(
-    () => (typeof window !== 'undefined' ? window.location.host : ''),
     [],
   );
   const playerJoinUrl = useMemo(
@@ -5216,7 +5215,7 @@ const PublicDisplay: React.FC = () => {
                             borderBottom: 'none',
                           }}
                         >
-                          {playerJoinHost || 'this site'}
+                          {PUBLIC_DISPLAY_JOIN_DOMAIN}
                         </span>
                       </div>
                     </div>

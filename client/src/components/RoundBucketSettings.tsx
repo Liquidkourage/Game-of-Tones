@@ -48,6 +48,14 @@ interface RoundBucketSettingsProps {
   onCallSheet?: () => void;
   onOpenComposite?: () => void;
   onNewCustomPattern?: (roundIndex: number) => void;
+  /** Live deduped card-ready pool size for this round (0 = tracks not hydrated yet). */
+  poolCount?: number;
+  /** Required card-ready tracks (24/25 for MIX by Free Center; 75 for 5×15 / 1×75). */
+  minRequired?: number;
+  /** Sum of Spotify-listed track counts across assigned playlists (metadata, not loaded tracks). */
+  listedTotal?: number;
+  /** Tracks for this round are expected to be hydrating right now (round is the active mix). */
+  tracksLikelyLoading?: boolean;
 }
 
 const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
@@ -65,12 +73,36 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
   onCallSheet,
   onOpenComposite,
   onNewCustomPattern,
+  poolCount = 0,
+  minRequired,
+  listedTotal = 0,
+  tracksLikelyLoading = false,
 }) => {
   const pattern = round.bingoPattern ?? 'line';
   const hasPlaylists = (round.playlistIds || []).length > 0;
   const freeCenter =
     round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : hostDefaultFreeSpace;
-  const needTracks = freeCenter ? 24 : 25;
+  /** Card-ready tracks required to save: dynamic 24/25 by Free Center unless geometry needs 75. */
+  const requiredTracks = minRequired ?? (freeCenter ? 24 : 25);
+
+  /**
+   * Readiness copy distinguishes Spotify-listed metadata from the actual loaded/deduped
+   * card-ready pool — listed totals alone never imply the round is ready.
+   */
+  const notSavedStatus = (() => {
+    if (poolCount >= requiredTracks) {
+      return `Not saved · ${poolCount} of ${requiredTracks} card-ready tracks loaded — Save to lock`;
+    }
+    if (poolCount > 0) {
+      return `Not saved · ${poolCount} of ${requiredTracks} card-ready tracks loaded`;
+    }
+    if (tracksLikelyLoading) {
+      return 'Not saved · playlist tracks are still loading…';
+    }
+    return `Not saved · 0 of ${requiredTracks} card-ready tracks loaded${
+      listedTotal > 0 ? ` (${listedTotal} listed on Spotify — not loaded yet)` : ''
+    }`;
+  })();
 
   const openCombinedEditor = (e?: React.MouseEvent) => {
     e?.preventDefault();
@@ -283,7 +315,7 @@ const RoundBucketSettings: React.FC<RoundBucketSettingsProps> = ({
             ? 'No playlists'
             : snapshotReady
               ? `Saved · ${round.savedMixSnapshot!.songs.length} in bingo pool (${round.savedMixSnapshot!.mixGeometry})`
-              : `Not saved · need ${needTracks} tracks in the bingo pool`}
+              : notSavedStatus}
         </span>
         <div className="round-bucket-settings__actions">
           {hasPlaylists && onSaveRound ? (

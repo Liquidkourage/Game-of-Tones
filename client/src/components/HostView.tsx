@@ -7815,8 +7815,12 @@ const HostView: React.FC = () => {
           !isLiveRound && pool.length > 0 && filteredSongs.length === 0
             ? ' The finalized playback pool still looked like a different mix — tap Show Playlists once on the host screen, then Save round again.'
             : '';
+        const transientHint =
+          filteredSongs.length === 0
+            ? ' If Spotify is temporarily unavailable, cached tracks are used when possible — wait a moment and try Save again (no need to reconnect Spotify).'
+            : '';
         window.alert(
-          `This round only has ${filteredSongs.length} unique tracks from its playlists in the mix (need ${need}).${stalePoolHint} Include those playlists in the mix, finalize, then save again.`,
+          `Only ${filteredSongs.length} of ${need} card-ready tracks loaded for this round. Spotify-listed playlist totals only count once tracks are loaded and deduped.${stalePoolHint}${transientHint} Add playlists or save again after tracks finish loading.`,
         );
         return;
       }
