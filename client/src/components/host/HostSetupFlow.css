@@ -1,0 +1,234 @@
+.host-setup-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+.host-setup-flow__stepper {
+  padding: 12px 16px;
+}
+
+.host-setup-flow__steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex-wrap: wrap;
+}
+
+.host-setup-flow__step {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.host-setup-flow__connector {
+  width: clamp(24px, 4vw, 48px);
+  height: 2px;
+  margin: 0 6px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 1px;
+}
+
+.host-setup-flow__step--complete .host-setup-flow__connector {
+  background: rgba(0, 255, 136, 0.45);
+}
+
+.host-setup-flow__step-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 88px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.host-setup-flow__step-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.host-setup-flow__step-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.host-setup-flow__step--current .host-setup-flow__step-btn {
+  background: linear-gradient(
+    145deg,
+    rgba(139, 92, 246, 0.32) 0%,
+    rgba(109, 40, 217, 0.22) 100%
+  );
+  border-color: rgba(167, 139, 250, 0.38);
+  color: #c4b5fd;
+}
+
+.host-setup-flow__step--complete .host-setup-flow__step-btn {
+  color: #b8f0d4;
+}
+
+.host-setup-flow__step-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+}
+
+.host-setup-flow__step-icon svg {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.host-setup-flow__panel {
+  padding: 18px 20px;
+  min-height: 0;
+}
+
+.host-setup-flow__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 4px 8px;
+}
+
+.host-setup-flow__nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.host-setup-flow__ready-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #b8f0d4;
+}
+
+.host-setup-flow__ready-hint--muted {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.host-setup-step__header {
+  margin-bottom: 14px;
+}
+
+.host-setup-step__eyebrow {
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(167, 139, 250, 0.85);
+}
+
+.host-setup-step__title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.host-setup-play__header {
+  margin-bottom: 16px;
+}
+
+.host-setup-play__eyebrow {
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(167, 139, 250, 0.85);
+}
+
+.host-setup-play__title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.host-setup-play__summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px 20px;
+  margin: 0 0 18px;
+}
+
+.host-setup-play__summary dt {
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.host-setup-play__summary dd {
+  margin: 0;
+  font-size: 0.92rem;
+  color: rgba(255, 255, 255, 0.92);
+  line-height: 1.4;
+}
+
+.host-setup-play__playlist-list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.host-setup-play__ready {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #b8f0d4;
+}
+
+.host-setup-play__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.host-setup-play__hint {
+  margin: 12px 0 0;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.62);
+  line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+  .host-setup-flow__step-btn {
+    min-width: 72px;
+    padding: 6px 8px;
+    font-size: 0.72rem;
+  }
+
+  .host-setup-flow__connector {
+    width: 16px;
+    margin: 0 4px;
+  }
+}

@@ -136,6 +136,9 @@ import HostRoundTimeline from './host/HostRoundTimeline';
 import HostPoolQualityReport from './host/HostPoolQualityReport';
 import HostGameLivePanel from './host/HostGameLivePanel';
 import HostDisplayExtrasPanel from './host/HostDisplayExtrasPanel';
+import HostSetupFlow, { type HostSetupStep } from './host/HostSetupFlow';
+import HostSetupPlayStep from './host/HostSetupPlayStep';
+import './host/HostSetupFlow.css';
 import './HostFormControls.css';
 
 const MAX_CUSTOM_PATTERN_NAME_EMIT = 80;
@@ -1092,6 +1095,7 @@ const HostView: React.FC = () => {
   const [hostGlassNav, setHostGlassNav] = useState<HostGlassNavId>(
     () => parseHostGlassNavTab(searchParams.get('tab')) ?? 'game',
   );
+  const [hostSetupStep, setHostSetupStep] = useState<HostSetupStep>('playlist');
   const [activityLog, setActivityLog] = useState<HostActivityEntry[]>([]);
   const [youtubeMusicConnected, setYoutubeMusicConnected] = useState(false);
   const [youtubeStatusReady, setYoutubeStatusReady] = useState(false);
@@ -3287,6 +3291,7 @@ const HostView: React.FC = () => {
       }
       
       addLog(`Round ${data.roundNumber} - Fresh setup ready! Select playlists to start.`, 'info');
+      setHostSetupStep('playlist');
       console.log('? Host UI reset complete - ready for new round setup');
     });
 
@@ -8499,6 +8504,16 @@ const HostView: React.FC = () => {
   /** Saved round or finalized mix for this round's playlists — one host-facing "ready" state. */
   const prepRoundReadyForGoLive = gameTabRoundBuilderReady || mixFinalizedForCurrentPrep;
 
+  const setupPlaylistReady =
+    mixPlaylistSelection.length > 0 &&
+    currentRoundIndex >= 0 &&
+    (eventRounds[currentRoundIndex]?.playlistIds?.length ?? 0) > 0;
+
+  const setupCriteriaReady = setupPlaylistReady;
+
+  const showHostSetupFlow =
+    hostGlassNav === 'game' && gameState === 'waiting' && !hostRoomHydrating;
+
   const getBingoPoolTrackCountForRound = useCallback(
     (roundIndex: number) => {
       if (roundIndex < 0 || roundIndex >= eventRounds.length) return 0;
@@ -9996,86 +10011,184 @@ const HostView: React.FC = () => {
           <div className="tab-content host-unified host-glass-workspace">
             {hostGlassNav === 'game' && (
               <>
-                <HostRoundTimeline
-                  className="host-round-timeline--game"
-                  rounds={roundTimelineRows}
-                  summary={roundTimelineSummary}
-                  onSelectRound={handleSelectRoundForPrep}
-                  onDuplicateRound={handleDuplicateRound}
-                  onOpenRounds={() => onHostGlassNav('rounds')}
-                />
-                <HostGameDashboard
-                  gameState={gameState}
-                  currentSong={currentSong}
-                  gamePaused={gamePaused}
-                  pendingVerification={pendingVerification}
-                  onReplayClip={replayCurrentClip}
-                  onMarkPlayed={markCurrentSongPlayed}
-                  markPlayedBusy={markPlayedBusy}
-                  isPlaying={isPlaying}
-                  isMuted={isMuted}
-                  playbackState={playbackState}
-                  playbackTrackNumber={playbackTrackNumber}
-                  playbackTrackTotal={playbackTrackTotal}
-                  snippetLength={snippetLength}
-                  roundName={hostActiveRoundSummary.roundName}
-                  patternLabel={hostActiveRoundSummary.patternLabel}
-                  poolCount={hostActiveRoundSummary.poolCount}
-                  playedCount={hostActiveRoundSummary.playedCount}
-                  remainingCount={hostActiveRoundSummary.remainingCount}
-                  percentComplete={hostActiveRoundSummary.percentComplete}
-                  roundStatus={hostActiveRoundSummary.roundStatus}
-                  roundStatusLabel={hostActiveRoundSummary.roundStatusLabel}
-                  titleRevealLabel={hostActiveRoundSummary.titleRevealLabel}
-                  randomStartsLabel={hostActiveRoundSummary.randomStartsLabel}
-                  mixFinalized={hostActiveRoundSummary.mixFinalized}
-                  savedRound={hostActiveRoundSummary.savedRound}
-                  playersOnlineCount={hostActiveRoundSummary.playersOnlineCount}
-                  winnersCount={hostActiveRoundSummary.winnersCount}
-                  lastPlayed={hostActiveRoundSummary.lastPlayed}
-                  playlistNames={hostActiveRoundSummary.playlistNames}
-                  poolSongs={finalizedPoolSongs}
-                  playlistAvailabilityIssues={playlistAvailabilityIssues}
-                  prepRoundReadyForGoLive={prepRoundReadyForGoLive}
-                  showPrimaryFinalizeMixButton={showPrimaryFinalizeMixButton}
-                  mixGameActionsBlocked={mixGameActionsBlocked}
-                  finalizeMixBusy={finalizeMixBusy}
-                  finalizeMixElapsedSec={finalizeMixElapsedSec}
-                  savedRoundRoomSyncBusy={savedRoundRoomSyncBusy}
-                  isSpotifyConnecting={isSpotifyConnecting}
-                  mixNeedsHostSpotify={mixNeedsHostSpotify}
-                  gameTabRoundBuilderReady={gameTabRoundBuilderReady}
-                  hasFinalizedSongPool={hasFinalizedSongPool}
-                  playerCardsCount={playerCards.size}
-                  onPause={pauseSong}
-                  onSkip={skipSong}
-                  onMuteToggle={handleMuteToggle}
-                  onVolumeChange={handleVolumeChange}
-                  setIsMuted={setIsMuted}
-                  setPlaybackVolume={(v) => setPlaybackState((prev) => ({ ...prev, volume: v }))}
-                  onStartGame={startGame}
-                  onFinalizeMix={() => void finalizeMix()}
-                  onEndGame={endGame}
-                  onNewRoundSetup={confirmAndNewRound}
-                  onOpenLibrary={openPlaylistLibrary}
-                  onOpenPool={() => setShowBingoPoolModal(true)}
-                  onOpenPlayerCards={openPlayerCardsModal}
-                  onResetDisplayLetters={resetDisplayLetters}
-                  onResumeGame={handleManualResumeGame}
-                  getDisplaySongTitle={getDisplaySongTitle}
-                  getDisplaySongArtist={getDisplaySongArtist}
-                  callLog={callLogRows}
-                  canUndoSkip={canUndoSkip}
-                  onUndoSkip={undoLastSkip}
-                  hostRoomHydrating={hostRoomHydrating}
-                  onResyncRoomState={resyncHostRoomState}
-                />
+                {!showHostSetupFlow ? (
+                  <HostRoundTimeline
+                    className="host-round-timeline--game"
+                    rounds={roundTimelineRows}
+                    summary={roundTimelineSummary}
+                    onSelectRound={handleSelectRoundForPrep}
+                    onDuplicateRound={handleDuplicateRound}
+                    onOpenRounds={() => onHostGlassNav('rounds')}
+                  />
+                ) : null}
+                {showHostSetupFlow ? (
+                  <HostSetupFlow
+                    step={hostSetupStep}
+                    onStepChange={setHostSetupStep}
+                    playlistReady={setupPlaylistReady}
+                    criteriaReady={setupCriteriaReady}
+                    playReady={prepRoundReadyForGoLive}
+                  >
+                    {hostSetupStep === 'playlist' ? (
+                      <div className="host-setup-step">
+                        <header className="host-setup-step__header">
+                          <p className="host-setup-step__eyebrow">Step 1 · Playlist</p>
+                          <h2 className="host-setup-step__title">Choose your playlists</h2>
+                        </header>
+                        <HostRoundTimeline
+                          className="host-round-timeline--game"
+                          rounds={roundTimelineRows}
+                          summary={roundTimelineSummary}
+                          onSelectRound={handleSelectRoundForPrep}
+                          onDuplicateRound={handleDuplicateRound}
+                          onOpenRounds={() => onHostGlassNav('rounds')}
+                        />
+                        <section
+                          id="host-setup-library"
+                          className="host-inline-library host-glass-panel"
+                          aria-label="Playlist library"
+                        >
+                          <h3 className="host-inline-library__title">
+                            <ListPlus className="w-5 h-5" aria-hidden />
+                            Playlist library
+                          </h3>
+                          <button
+                            type="button"
+                            className="btn-secondary host-inline-library__popout"
+                            onClick={() => openPlaylistLibrary()}
+                          >
+                            Open in window
+                          </button>
+                          {showPlaylistRoundModal ? null : (
+                            <div className="host-inline-library__body">{playlistRoundBuilderBody}</div>
+                          )}
+                        </section>
+                        {!setupPlaylistReady ? (
+                          <p className="host-setup-play__hint" role="status">
+                            Add playlists from the library and assign them to the active round (Rounds tab in the
+                            library, or continue to Criteria).
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {hostSetupStep === 'criteria' ? (
+                      <div className="host-setup-step">
+                        <header className="host-setup-step__header">
+                          <p className="host-setup-step__eyebrow">Step 2 · Criteria</p>
+                          <h2 className="host-setup-step__title">Set how this round plays</h2>
+                        </header>
+                        <section
+                          className="host-rounds-panel host-manager-section"
+                          aria-labelledby="host-setup-criteria-title"
+                        >
+                          <h3 id="host-setup-criteria-title" className="host-rounds-panel__title">
+                            <ListMusic className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
+                            Round criteria
+                          </h3>
+                          <div className="host-rounds-panel__planner">
+                            {showPlaylistRoundModal ? null : hostRoundPlanner}
+                          </div>
+                        </section>
+                      </div>
+                    ) : null}
+                    {hostSetupStep === 'play' ? (
+                      <HostSetupPlayStep
+                        roundName={hostActiveRoundSummary.roundName}
+                        playlistNames={hostActiveRoundSummary.playlistNames}
+                        patternLabel={hostActiveRoundSummary.patternLabel}
+                        snippetLength={snippetLength}
+                        randomStartsLabel={hostActiveRoundSummary.randomStartsLabel}
+                        titleRevealLabel={hostActiveRoundSummary.titleRevealLabel}
+                        poolCount={hostActiveRoundSummary.poolCount}
+                        prepRoundReadyForGoLive={prepRoundReadyForGoLive}
+                        showPrimaryFinalizeMixButton={showPrimaryFinalizeMixButton}
+                        mixGameActionsBlocked={mixGameActionsBlocked}
+                        finalizeMixBusy={finalizeMixBusy}
+                        finalizeMixElapsedSec={finalizeMixElapsedSec}
+                        savedRoundRoomSyncBusy={savedRoundRoomSyncBusy}
+                        isSpotifyConnecting={isSpotifyConnecting}
+                        mixNeedsHostSpotify={mixNeedsHostSpotify}
+                        playlistAvailabilityIssues={playlistAvailabilityIssues}
+                        onFinalizeMix={() => void finalizeMix()}
+                        onStartGame={() => void startGame()}
+                      />
+                    ) : null}
+                  </HostSetupFlow>
+                ) : (
+                  <HostGameDashboard
+                    gameState={gameState}
+                    currentSong={currentSong}
+                    gamePaused={gamePaused}
+                    pendingVerification={pendingVerification}
+                    onReplayClip={replayCurrentClip}
+                    onMarkPlayed={markCurrentSongPlayed}
+                    markPlayedBusy={markPlayedBusy}
+                    isPlaying={isPlaying}
+                    isMuted={isMuted}
+                    playbackState={playbackState}
+                    playbackTrackNumber={playbackTrackNumber}
+                    playbackTrackTotal={playbackTrackTotal}
+                    snippetLength={snippetLength}
+                    roundName={hostActiveRoundSummary.roundName}
+                    patternLabel={hostActiveRoundSummary.patternLabel}
+                    poolCount={hostActiveRoundSummary.poolCount}
+                    playedCount={hostActiveRoundSummary.playedCount}
+                    remainingCount={hostActiveRoundSummary.remainingCount}
+                    percentComplete={hostActiveRoundSummary.percentComplete}
+                    roundStatus={hostActiveRoundSummary.roundStatus}
+                    roundStatusLabel={hostActiveRoundSummary.roundStatusLabel}
+                    titleRevealLabel={hostActiveRoundSummary.titleRevealLabel}
+                    randomStartsLabel={hostActiveRoundSummary.randomStartsLabel}
+                    mixFinalized={hostActiveRoundSummary.mixFinalized}
+                    savedRound={hostActiveRoundSummary.savedRound}
+                    playersOnlineCount={hostActiveRoundSummary.playersOnlineCount}
+                    winnersCount={hostActiveRoundSummary.winnersCount}
+                    lastPlayed={hostActiveRoundSummary.lastPlayed}
+                    playlistNames={hostActiveRoundSummary.playlistNames}
+                    poolSongs={finalizedPoolSongs}
+                    playlistAvailabilityIssues={playlistAvailabilityIssues}
+                    prepRoundReadyForGoLive={prepRoundReadyForGoLive}
+                    showPrimaryFinalizeMixButton={showPrimaryFinalizeMixButton}
+                    mixGameActionsBlocked={mixGameActionsBlocked}
+                    finalizeMixBusy={finalizeMixBusy}
+                    finalizeMixElapsedSec={finalizeMixElapsedSec}
+                    savedRoundRoomSyncBusy={savedRoundRoomSyncBusy}
+                    isSpotifyConnecting={isSpotifyConnecting}
+                    mixNeedsHostSpotify={mixNeedsHostSpotify}
+                    gameTabRoundBuilderReady={gameTabRoundBuilderReady}
+                    hasFinalizedSongPool={hasFinalizedSongPool}
+                    playerCardsCount={playerCards.size}
+                    onPause={pauseSong}
+                    onSkip={skipSong}
+                    onMuteToggle={handleMuteToggle}
+                    onVolumeChange={handleVolumeChange}
+                    setIsMuted={setIsMuted}
+                    setPlaybackVolume={(v) => setPlaybackState((prev) => ({ ...prev, volume: v }))}
+                    onStartGame={startGame}
+                    onFinalizeMix={() => void finalizeMix()}
+                    onEndGame={endGame}
+                    onNewRoundSetup={confirmAndNewRound}
+                    onOpenLibrary={openPlaylistLibrary}
+                    onOpenPool={() => setShowBingoPoolModal(true)}
+                    onOpenPlayerCards={openPlayerCardsModal}
+                    onResetDisplayLetters={resetDisplayLetters}
+                    onResumeGame={handleManualResumeGame}
+                    getDisplaySongTitle={getDisplaySongTitle}
+                    getDisplaySongArtist={getDisplaySongArtist}
+                    callLog={callLogRows}
+                    canUndoSkip={canUndoSkip}
+                    onUndoSkip={undoLastSkip}
+                    hostRoomHydrating={hostRoomHydrating}
+                    onResyncRoomState={resyncHostRoomState}
+                  />
+                )}
 
-                {gameState === 'waiting' &&
+                {!showHostSetupFlow &&
+                gameState === 'waiting' &&
                   !hostRoomHydrating &&
                   !currentSong &&
                   !hasFinalizedSongPool &&
-                  !gameTabRoundBuilderReady && (
+                  !gameTabRoundBuilderReady ? (
                   <div className="host-r4-alert host-glass-panel">
                     <p className="host-r4-alert__title">No song mix yet</p>
                     <p className="host-r4-alert__body">
@@ -10084,9 +10197,9 @@ const HostView: React.FC = () => {
                         : 'Use Show playlists or Start game to build the bingo pool.'}
                     </p>
                   </div>
-                )}
+                ) : null}
 
-                {showFinalizedButEmptyPool && (
+                {!showHostSetupFlow && showFinalizedButEmptyPool ? (
                   <div className="host-r4-alert host-r4-alert--warn host-glass-panel" role="alert">
                     <p className="host-r4-alert__title">Mix finalized, but no track list in this view</p>
                     <p className="host-r4-alert__body">
@@ -10094,7 +10207,7 @@ const HostView: React.FC = () => {
                       reload this page.
                     </p>
                   </div>
-                )}
+                ) : null}
 
                 {gameState === 'playing' && bingoVerificationCount > 0 ? (
                   <HostGameLivePanel
