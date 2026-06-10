@@ -1857,17 +1857,6 @@
   color: rgba(255, 255, 255, 0.5);
 }
 
-.host-glass-theme .host-round-timeline__dup {
-  border: none;
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 0 10px;
-  cursor: pointer;
-}
-
 .host-glass-theme .host-inline-library__body {
   margin-top: 12px;
 }

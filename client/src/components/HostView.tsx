@@ -10092,27 +10092,6 @@ const HostView: React.FC = () => {
     [playedInOrder],
   );
 
-  const handleDuplicateRound = useCallback(
-    (index: number) => {
-      const src = eventRounds[index];
-      if (!src) return;
-      const copy: EventRound = {
-        ...src,
-        id: `round-${Date.now()}`,
-        name: `${src.name} (copy)`,
-        status: 'unplanned',
-        startedAt: undefined,
-        completedAt: undefined,
-        savedMixSnapshot: src.savedMixSnapshot
-          ? { ...src.savedMixSnapshot, savedAt: Date.now() }
-          : undefined,
-      };
-      handleUpdateRounds([...eventRounds, copy]);
-      addLog(`Duplicated round "${src.name}"`, 'info');
-    },
-    [eventRounds, handleUpdateRounds, addLog],
-  );
-
   const handleAddRound = useCallback(() => {
     if (eventRounds.length >= MAX_EVENT_ROUNDS) return;
     const newRound: EventRound = {
@@ -10380,7 +10359,6 @@ const HostView: React.FC = () => {
                 rounds={roundTimelineRows}
                 roundSummary={roundTimelineSummary}
                 onSelectRound={handleSelectRoundForPrep}
-                onDuplicateRound={handleDuplicateRound}
                 step={hostSetupStep}
                 onStepChange={setHostSetupStep}
                 playlistReady={setupPlaylistReady}
@@ -10448,7 +10426,6 @@ const HostView: React.FC = () => {
                     rounds={roundTimelineRows}
                     summary={roundTimelineSummary}
                     onSelectRound={handleSelectRoundForPrep}
-                    onDuplicateRound={handleDuplicateRound}
                   />
                 </div>
                   <HostGameDashboard
@@ -10612,7 +10589,6 @@ const HostView: React.FC = () => {
                     rounds={roundTimelineRows}
                     summary={roundTimelineSummary}
                     onSelectRound={handleFocusRoundForLibrary}
-                    onDuplicateRound={handleDuplicateRound}
                     onAddRound={gameState !== 'playing' ? handleAddRound : undefined}
                     canAddRound={eventRounds.length < MAX_EVENT_ROUNDS}
                     onDropPlaylist={gameState !== 'playing' ? addPlaylistToRoundBucket : undefined}

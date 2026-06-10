@@ -9,7 +9,6 @@ export type HostSetupCockpitProps = {
   rounds: RoundTimelineRow[];
   roundSummary?: string;
   onSelectRound: (index: number) => void;
-  onDuplicateRound?: (index: number) => void;
   step: HostSetupStep;
   onStepChange: (step: HostSetupStep) => void;
   playlistReady: boolean;
@@ -23,7 +22,6 @@ const HostSetupCockpit: React.FC<HostSetupCockpitProps> = ({
   rounds,
   roundSummary,
   onSelectRound,
-  onDuplicateRound,
   step,
   onStepChange,
   playlistReady,
@@ -40,7 +38,6 @@ const HostSetupCockpit: React.FC<HostSetupCockpitProps> = ({
           rounds={rounds}
           summary={roundSummary}
           onSelectRound={onSelectRound}
-          onDuplicateRound={onDuplicateRound}
         />
       </div>
       <HostSetupFlow

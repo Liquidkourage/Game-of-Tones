@@ -17,7 +17,6 @@ const MAX_CHIP_PLAYLIST_NAMES = 3;
 type HostRoundTimelineProps = {
   rounds: RoundTimelineRow[];
   onSelectRound: (index: number) => void;
-  onDuplicateRound?: (index: number) => void;
   onAddRound?: () => void;
   canAddRound?: boolean;
   onDropPlaylist?: (roundIndex: number, playlistId: string) => void;
@@ -36,7 +35,6 @@ const statusLabel: Record<RoundTimelineRow['status'], string> = {
 const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
   rounds,
   onSelectRound,
-  onDuplicateRound,
   onAddRound,
   canAddRound = true,
   onDropPlaylist,
@@ -143,16 +141,6 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
                 </span>
               ) : null}
             </button>
-            {onDuplicateRound ? (
-              <button
-                type="button"
-                className="host-round-timeline__dup"
-                title="Duplicate round"
-                onClick={() => onDuplicateRound(r.index)}
-              >
-                Dup
-              </button>
-            ) : null}
           </div>
         ))}
       </div>
