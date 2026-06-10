@@ -1454,6 +1454,8 @@ const HostView: React.FC = () => {
   const [showAllPlaylists, setShowAllPlaylists] = useState<boolean>(false);
   /** Host-configurable, comma-separated title flags for the picks/All toggle (saved per host account). */
   const [playlistTitleFlags, setPlaylistTitleFlags] = useState<string>(DEFAULT_PLAYLIST_TITLE_FLAGS);
+  /** Inline title-flags editor in the library toolbar. */
+  const [showTitleFlagsEditor, setShowTitleFlagsEditor] = useState<boolean>(false);
   /** Playlist table: Spotify order until user sorts by name or track count */
   const [playlistSort, setPlaylistSort] = useState<{
     key: 'none' | 'name' | 'tracks';
@@ -9350,6 +9352,16 @@ const HostView: React.FC = () => {
                           >
                             All
                           </button>
+                          <button
+                            type="button"
+                            className="host-playlist-library-toolbar__flags-edit"
+                            aria-expanded={showTitleFlagsEditor}
+                            aria-label="Edit playlist title flags"
+                            title={`Edit your title flags (currently: ${playlistTitleFlags || 'none set'})`}
+                            onClick={() => setShowTitleFlagsEditor((v) => !v)}
+                          >
+                            <Settings className="w-3.5 h-3.5" aria-hidden />
+                          </button>
                         </div>
                       ) : null}
                       <input
@@ -9395,6 +9407,31 @@ const HostView: React.FC = () => {
                         </button>
                       ) : null}
                     </div>
+                    {showTitleFlagsEditor && playlistLibrarySource === 'spotify' ? (
+                      <div className="host-playlist-library-flags-editor" role="group" aria-label="Playlist title flags">
+                        <label className="host-playlist-library-flags-editor__field">
+                          <span className="host-playlist-library-flags-editor__label">Title flags</span>
+                          <input
+                            type="text"
+                            value={playlistTitleFlags}
+                            maxLength={200}
+                            placeholder={DEFAULT_PLAYLIST_TITLE_FLAGS}
+                            onChange={(e) => setPlaylistTitleFlags(e.target.value)}
+                          />
+                        </label>
+                        <span className="host-playlist-library-flags-editor__hint">
+                          Comma-separated. Playlists whose titles contain a flag show under the
+                          &ldquo;{playlistTitleFlagLabel}&rdquo; toggle. Saved to your host account.
+                        </span>
+                        <button
+                          type="button"
+                          className="btn-secondary host-playlist-library-flags-editor__done"
+                          onClick={() => setShowTitleFlagsEditor(false)}
+                        >
+                          Done
+                        </button>
+                      </div>
+                    ) : null}
                     {(spotifyError || spotifyListCacheInfo) && (
                       <div className="host-playlist-library-alerts">
                         {spotifyListCacheInfo ? (
