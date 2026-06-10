@@ -2278,8 +2278,22 @@ function publicDisplayRoomStateExtras(room) {
 }
 
 function snippetElapsedMsForRoom(room) {
+  const snippetMs = (room?.snippetLength || 30) * 1000;
+  // While paused, the clip clock is frozen at the moment the host hit pause. A newer
+  // songStartAtMs means a new clip started (skip/next while paused) — drop the stale freeze.
+  if (room?.snippetPausedElapsedMs != null && Number.isFinite(room.snippetPausedElapsedMs)) {
+    if (
+      typeof room.songStartAtMs === 'number' &&
+      typeof room.snippetPausedAtMs === 'number' &&
+      room.songStartAtMs > room.snippetPausedAtMs
+    ) {
+      room.snippetPausedElapsedMs = null;
+      room.snippetPausedAtMs = null;
+    } else {
+      return Math.min(snippetMs, Math.max(0, room.snippetPausedElapsedMs));
+    }
+  }
   if (!room?.songStartAtMs || typeof room.songStartAtMs !== 'number') return 0;
-  const snippetMs = (room.snippetLength || 30) * 1000;
   return Math.min(snippetMs, Math.max(0, Date.now() - room.songStartAtMs));
 }
 
@@ -6360,7 +6374,14 @@ io.on('connection', (socket) => {
         routineServerLog(`⏸️ PAUSE REQUESTED - Room: ${roomId}, Time: ${pauseTime}`);
         routineServerLog(`⏸️ Current Song: ${room.currentSong?.name} by ${room.currentSong?.artist}`);
         routineServerLog(`⏸️ Game State: ${room.gameState}`);
-        
+
+        // Freeze the clip clock NOW (the moment the host clicked) — the Spotify pause call lands
+        // 1–3s later, and resume re-aligns audio to this point so displays and audio stay in sync.
+        if (room.snippetPausedElapsedMs == null) {
+          room.snippetPausedElapsedMs = snippetElapsedMsForRoom(room);
+          room.snippetPausedAtMs = Date.now();
+        }
+
         // Clear the timer when pausing
         clearRoomTimer(roomId);
         const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
@@ -6416,7 +6437,10 @@ io.on('connection', (socket) => {
       } catch (error) {
         const msg = error?.body?.error?.message || error?.message || 'Failed to pause song';
         console.error('❌ Error pausing song:', msg);
-        
+        // Pause failed — audio is still running, so unfreeze the clip clock.
+        room.snippetPausedElapsedMs = null;
+        room.snippetPausedAtMs = null;
+
         // Provide specific guidance for restriction errors
         if (/restriction/i.test(msg) || error?.body?.error?.status === 403) {
           io.to(roomId).emit('playback-warning', { 
@@ -6451,7 +6475,7 @@ io.on('connection', (socket) => {
         }
 
         // Tab-focus / socket resync often emits resume while Connect is already playing — skip to avoid blips.
-        if (resumePosition === undefined && room.currentSong?.id) {
+        if (resumePosition === undefined && room.snippetPausedElapsedMs == null && room.currentSong?.id) {
           try {
             const spCheck = spotifyFor(roomId);
             const playingNow = await spCheck.getCurrentPlaybackState();
@@ -6476,11 +6500,22 @@ io.on('connection', (socket) => {
             console.warn('⚠️ Transfer playback failed before resume:', e?.message || e);
           }
 
-          if (resumePosition !== undefined) {
-            routineServerLog(`🎯 Resuming from position: ${resumePosition}ms`);
+          // Server-frozen clip clock beats the client's locally-extrapolated position: the Spotify
+          // pause API landed 1–3s after the host clicked, so seek back to the click point.
+          const pausedElapsedMs =
+            room.snippetPausedElapsedMs != null && Number.isFinite(room.snippetPausedElapsedMs)
+              ? Math.max(0, room.snippetPausedElapsedMs)
+              : null;
+          const seekPositionMs =
+            pausedElapsedMs != null
+              ? Math.max(0, Number(room.currentSongStartMs) || 0) + pausedElapsedMs
+              : resumePosition;
+
+          if (seekPositionMs !== undefined) {
+            routineServerLog(`🎯 Resuming from position: ${seekPositionMs}ms`);
           await spotifyFor(roomId).resumePlayback(deviceId);
-          await spotifyFor(roomId).seekToPosition(resumePosition, deviceId);
-            routineServerLog(`✅ Resumed and seeked to position: ${resumePosition}ms`);
+          await spotifyFor(roomId).seekToPosition(seekPositionMs, deviceId);
+            routineServerLog(`✅ Resumed and seeked to position: ${seekPositionMs}ms`);
           } else {
           await spotifyFor(roomId).resumePlayback(deviceId);
             routineServerLog('✅ Playback resumed successfully');
@@ -6496,11 +6531,22 @@ io.on('connection', (socket) => {
           }
           
           room.gameState = 'playing';
-          io.to(roomId).emit('playback-resumed');
+          // Re-anchor the clip clock so elapsed/remaining math excludes the pause duration.
+          if (pausedElapsedMs != null) {
+            room.songStartAtMs = Date.now() - pausedElapsedMs;
+            room.snippetPausedElapsedMs = null;
+            room.snippetPausedAtMs = null;
+          }
+          io.to(roomId).emit('playback-resumed', {
+            snippetElapsedMs: snippetElapsedMsForRoom(room),
+            snippetLength: room.snippetLength || 30,
+          });
           
           // Calculate remaining time and set timer
           if (room.snippetLength) {
-            const remainingTime = room.snippetLength * 1000 - (resumePosition || 0);
+            const elapsedForTimer =
+              pausedElapsedMs != null ? pausedElapsedMs : resumePosition || 0;
+            const remainingTime = room.snippetLength * 1000 - elapsedForTimer;
             if (remainingTime > 0) {
               setRoomTimer(roomId, () => {
                 playNextSong(roomId, room.selectedDeviceId);

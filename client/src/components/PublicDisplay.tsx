@@ -1232,6 +1232,8 @@ const PublicDisplay: React.FC = () => {
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   /** Snippet countdown label only (current clip timer). */
   const snippetCountdownSongIdRef = useRef<string | null>(null);
+  /** Host paused playback — freeze countdown + letter reveals so the display stays in sync with audio. */
+  const [playbackPaused, setPlaybackPaused] = useState<boolean>(false);
   const [totalPlayedCount, setTotalPlayedCount] = useState<number>(0);
   const [isVerificationPending, setIsVerificationPending] = useState<boolean>(false);
   const isVerificationPendingRef = useRef<boolean>(false);
@@ -2485,6 +2487,7 @@ const PublicDisplay: React.FC = () => {
         }
       }
       // reset countdown timer
+      setPlaybackPaused(false);
       if (countdownRef.current) {
         clearInterval(countdownRef.current);
         countdownRef.current = null;
@@ -2493,6 +2496,40 @@ const PublicDisplay: React.FC = () => {
       const elapsed = Math.max(0, Number(data.snippetElapsedMs) || 0);
       const remaining = Math.max(0, total - elapsed);
       snippetCountdownSongIdRef.current = song.id;
+      setCountdownMs(remaining);
+      if (remaining <= 0) return;
+      countdownRef.current = setInterval(() => {
+        setCountdownMs((ms) => {
+          const next = Math.max(0, ms - 100);
+          if (next === 0 && countdownRef.current) {
+            clearInterval(countdownRef.current);
+            countdownRef.current = null;
+          }
+          return next;
+        });
+      }, 100);
+    });
+
+    // Host pause/resume: freeze the snippet countdown while audio is paused, then resync from
+    // the server's clip clock on resume so projector timing matches the audio exactly.
+    newSocket.on('playback-paused', () => {
+      setPlaybackPaused(true);
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current);
+        countdownRef.current = null;
+      }
+    });
+
+    newSocket.on('playback-resumed', (data: any) => {
+      setPlaybackPaused(false);
+      const elapsed = Number(data?.snippetElapsedMs);
+      if (!Number.isFinite(elapsed)) return; // older payload without clip clock — keep frozen value
+      const total = (Number(data?.snippetLength) || 30) * 1000;
+      const remaining = Math.max(0, total - Math.max(0, elapsed));
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current);
+        countdownRef.current = null;
+      }
       setCountdownMs(remaining);
       if (remaining <= 0) return;
       countdownRef.current = setInterval(() => {
@@ -2733,6 +2770,7 @@ const PublicDisplay: React.FC = () => {
     newSocket.on('game-resumed', () => {
       setIsVerificationPending(false);
       setWinnerCardModal(null);
+      setPlaybackPaused(false);
       console.log('▶️ Game resumed (display)');
     });
 
@@ -2753,6 +2791,7 @@ const PublicDisplay: React.FC = () => {
       resetPlayedTrackingRefs();
       setShowWinnerBanner(false);
       setWinnerName('');
+      setPlaybackPaused(false);
       snippetCountdownSongIdRef.current = null;
       
       // Clear reveal state
@@ -2987,8 +3026,11 @@ const PublicDisplay: React.FC = () => {
       letterRevealIntervalSec,
       titleRevealMode,
     });
-    if (!gameState.isPlaying || isVerificationPending) {
-      console.log('🎡 Auto-reveal disabled:', !gameState.isPlaying ? 'game not playing' : 'verification pending');
+    if (!gameState.isPlaying || isVerificationPending || playbackPaused) {
+      console.log(
+        '🎡 Auto-reveal disabled:',
+        !gameState.isPlaying ? 'game not playing' : isVerificationPending ? 'verification pending' : 'playback paused',
+      );
       return;
     }
     if (titleRevealMode !== 'letter') {
@@ -3067,7 +3109,7 @@ const PublicDisplay: React.FC = () => {
       console.log('🎡 Auto-reveal interval cleared');
       clearInterval(interval);
     };
-  }, [gameState.isPlaying, isVerificationPending, letterRevealIntervalSec, titleRevealMode]);
+  }, [gameState.isPlaying, isVerificationPending, playbackPaused, letterRevealIntervalSec, titleRevealMode]);
 
   useEffect(() => {
     carouselIndexRef.current = carouselIndex;
