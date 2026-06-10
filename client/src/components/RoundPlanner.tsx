@@ -142,6 +142,10 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   focusedPoolTrackCount?: number;
   /** Host is reloading live round state — hide start/setup controls until hydrated. */
   hostControlsHydrating?: boolean;
+  /** Setup cockpit: show playlist chips only, criteria controls only, or full planner. */
+  setupSurface?: 'playlists' | 'criteria' | 'full';
+  /** Hide round picker tabs when an external timeline selects the round. */
+  hideRoundPicker?: boolean;
 }
 
 const MAX_ROUND_BUCKETS = 12;
@@ -190,6 +194,8 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   poolTrackCountForRound,
   focusedPoolTrackCount = 0,
   hostControlsHydrating = false,
+  setupSurface = 'full',
+  hideRoundPicker = false,
 }: RoundPlannerProps<TRound>) {
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [dragOverBucket, setDragOverBucket] = useState(false);
@@ -477,8 +483,13 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
     (focused.savedMixSnapshot?.mixGeometry === '1x75' ||
       (focused.bingoPattern === 'full_card' && listedOnSpotify >= 75));
 
+  const showPlaylists = setupSurface === 'playlists' || setupSurface === 'full';
+  const showCriteria = setupSurface === 'criteria' || setupSurface === 'full';
+  const showAdvanced = setupSurface === 'full';
+
   return (
-    <div className="round-planner">
+    <div className={`round-planner${setupSurface !== 'full' ? ` round-planner--${setupSurface}` : ''}`}>
+      {!hideRoundPicker ? (
       <div className="round-planner__picker" role="tablist" aria-label="Select round bucket">
         {rounds.slice(0, MAX_ROUND_BUCKETS).map((round, i) => {
           const hasPl = (round.playlistIds || []).length > 0;
@@ -516,7 +527,9 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
           </button>
         ) : null}
       </div>
+      ) : null}
 
+      {!hideRoundPicker ? (
       <div className="round-planner__picker-nav">
         <button
           type="button"
@@ -545,7 +558,16 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
           <ChevronRight className="w-4 h-4" aria-hidden />
         </button>
       </div>
-      {gameState !== 'playing' && rounds.length > 1 ? (
+      ) : hideRoundPicker ? (
+        <div className="round-planner__setup-round-label">
+          <span className="round-planner__picker-label">
+            {focused.name}
+            {isLive ? <span className="round-planner-badge round-planner-badge--active">Live</span> : null}
+            {isMixTarget ? <span className="round-planner-badge round-planner-badge--prep">Mix</span> : null}
+          </span>
+        </div>
+      ) : null}
+      {showAdvanced && gameState !== 'playing' && rounds.length > 1 ? (
         <div className="round-planner__round-order">
           <span className="round-planner__round-order-label">Round order</span>
           <button
@@ -573,7 +595,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
         </div>
       ) : null}
 
-      {statusSummary ? (
+      {showAdvanced && statusSummary ? (
         <div className="round-planner__stats" aria-label="Event overview">
           <span className="round-planner__stat round-planner__stat--done">{statusSummary.completed} done</span>
           <span className="round-planner__stat round-planner__stat--active">{statusSummary.active} live</span>
@@ -582,7 +604,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
         </div>
       ) : null}
 
-      {onResetEvent || onClearPrepCache || onCompleteCurrentRound ? (
+      {showAdvanced && (onResetEvent || onClearPrepCache || onCompleteCurrentRound) ? (
         <section className="round-planner__event-actions" aria-labelledby="round-planner-event-actions-title">
           <h4 id="round-planner-event-actions-title" className="round-planner__event-actions-title">
             Event actions
@@ -629,6 +651,8 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
       ) : null}
 
       <div className="round-planner__main">
+      {showCriteria ? (
+      showAdvanced ? (
       <div className="round-planner__cards-pdf-row">
         <label className="round-planner__cards-pdf">
           Cards per PDF
@@ -669,6 +693,52 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
           </button>
         ) : null}
       </div>
+      ) : (
+      <details className="round-planner__advanced">
+        <summary>Advanced · cards &amp; print</summary>
+        <div className="round-planner__cards-pdf-row">
+        <label className="round-planner__cards-pdf">
+          Cards per PDF
+          <input
+            type="number"
+            min={1}
+            max={200}
+            value={printableCardCount}
+            disabled={printablePdfLoading}
+            onChange={(e) => onPrintableCardCountChange(Number(e.target.value))}
+          />
+        </label>
+        {onPreviewPrint ? (
+          <button
+            type="button"
+            className="round-planner-btn round-planner-btn--ghost"
+            disabled={printablePdfLoading}
+            title="One watermarked sample card — no event credit"
+            onClick={onPreviewPrint}
+          >
+            Preview card
+          </button>
+        ) : null}
+        {onPrintAllPreShow ? (
+          <button
+            type="button"
+            className="round-planner-btn round-planner-btn--secondary"
+            disabled={printablePdfLoading || savedRoundCount < 1}
+            title={
+              savedRoundCount < 1
+                ? 'Save at least one round to export'
+                : 'One PDF: host call lists for each saved round, then printable bingo cards'
+            }
+            onClick={onPrintAllPreShow}
+          >
+            <Printer className="w-3 h-3" aria-hidden />
+            {printablePdfLoading ? 'Printing…' : `Print all pre-show (${savedRoundCount})`}
+          </button>
+        ) : null}
+        </div>
+      </details>
+      )
+      ) : null}
 
       <div
         id={`round-planner-buckets-${bucketDomId}`}
@@ -680,6 +750,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
         onDragLeave={handleBucketDragLeave}
         onDrop={handleBucketDrop}
       >
+        {showCriteria ? (
         <RoundBucketSettings
           round={focused}
           roundIndex={index}
@@ -696,7 +767,9 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
           onOpenComposite={onOpenComposite ? () => onOpenComposite(index) : undefined}
           onNewCustomPattern={onNewCustomPattern}
         />
+        ) : null}
 
+        {showPlaylists ? (
         <div className="round-planner-bucket__drop">
           {playlistIds.length >= 2 && !isLive && focused.status !== 'completed' ? (
             <div className="round-planner-bucket__playlist-tools">
@@ -809,6 +882,20 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
             </div>
           )}
         </div>
+        ) : showCriteria && playlistIds.length > 0 ? (
+          <div className="round-planner-bucket__playlist-readonly" aria-label="Assigned playlists">
+            {playlistIds.map((playlistId) => {
+              const playlist = playlists.find((p) => p.id === playlistId);
+              if (!playlist) return null;
+              const cleanName = playlist.name.replace(/^\s*GoT\s*[-–:]*\s*/i, '').trim();
+              return (
+                <span key={playlistId} className="round-planner-bucket__playlist-readonly-chip">
+                  {cleanName}
+                </span>
+              );
+            })}
+          </div>
+        ) : null}
 
         {focused.songCount > 0 || focusedPoolTrackCount > 0 ? (
           <div className="round-planner-bucket__meta">
@@ -866,6 +953,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
           </div>
         ) : null}
 
+        {showAdvanced ? (
         <div className="round-planner-bucket__actions">
           {!hostControlsHydrating && !isLive && focused.status !== 'completed' && canStartRound(focused) ? (
             <button
@@ -888,14 +976,17 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
             </button>
           ) : null}
         </div>
+        ) : null}
       </div>
 
+      {showCriteria ? (
       <RoundBuilderPlaybackPanel
         snippetLength={snippetLength}
         onSnippetLengthChange={onSnippetLengthChange}
         randomStarts={randomStarts}
         onRandomStartsChange={onRandomStartsChange}
       />
+      ) : null}
       </div>
     </div>
   );

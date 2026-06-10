@@ -2,8 +2,11 @@ import React from 'react';
 import { CheckCircle2, ListChecks, Loader2, Play } from 'lucide-react';
 import HostPlaylistAvailabilityWarnings from '../HostPlaylistAvailabilityWarnings';
 import type { PlaylistAvailabilityIssue } from '../HostPlaylistAvailabilityWarnings';
+import HostPreShowChecklist, { type PreShowCheckItem } from './HostPreShowChecklist';
+import HostEventActivationBar from './HostEventActivationBar';
 
 export type HostSetupPlayStepProps = {
+  roomId: string | null;
   roundName: string | null;
   playlistNames: string[];
   patternLabel: string;
@@ -20,11 +23,13 @@ export type HostSetupPlayStepProps = {
   isSpotifyConnecting: boolean;
   mixNeedsHostSpotify: boolean;
   playlistAvailabilityIssues: PlaylistAvailabilityIssue[];
+  preShowChecklistItems: PreShowCheckItem[];
   onFinalizeMix: () => void;
   onStartGame: () => void;
 };
 
 const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
+  roomId,
   roundName,
   playlistNames,
   patternLabel,
@@ -41,6 +46,7 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
   isSpotifyConnecting,
   mixNeedsHostSpotify,
   playlistAvailabilityIssues,
+  preShowChecklistItems,
   onFinalizeMix,
   onStartGame,
 }) => {
@@ -54,8 +60,18 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
     <div className="host-setup-play">
       <header className="host-setup-play__header">
         <p className="host-setup-play__eyebrow">Step 3 · Play</p>
-        <h2 className="host-setup-play__title">Review and start</h2>
+        <h2 className="host-setup-play__title">Readiness and start</h2>
       </header>
+
+      <div className="host-setup-play__checklist" data-host-tutorial="play">
+        <HostPreShowChecklist items={preShowChecklistItems} />
+      </div>
+
+      {roomId ? (
+        <div className="host-setup-play__activation">
+          <HostEventActivationBar roomId={roomId} />
+        </div>
+      ) : null}
 
       <dl className="host-setup-play__summary">
         <div>

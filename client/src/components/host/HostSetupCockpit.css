@@ -1,0 +1,224 @@
+.host-setup-cockpit {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+.host-setup-status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  padding: 10px 14px;
+  font-size: 0.78rem;
+}
+
+.host-setup-status-strip__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.host-setup-status-strip__item--ok {
+  color: #b8f0d4;
+}
+
+.host-setup-status-strip__item--warn {
+  color: #ffb347;
+}
+
+.host-setup-status-strip__item--muted {
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.host-setup-status-strip__label {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.host-setup-status-strip__value {
+  font-weight: 700;
+  color: #fff;
+}
+
+.host-setup-status-strip__value--live {
+  color: #00ff88;
+}
+
+.host-setup-status-strip__icon {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex-shrink: 0;
+}
+
+.host-glass-theme .host-round-timeline--cockpit {
+  padding: 16px 18px;
+}
+
+.host-glass-theme .host-round-timeline--cockpit .host-round-timeline__title {
+  font-size: 1.15rem;
+}
+
+.host-glass-theme .host-round-timeline--cockpit .host-round-timeline__track {
+  gap: 10px;
+}
+
+.host-setup-playlist__assigned {
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.host-setup-playlist__assigned-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.host-setup-playlist__assigned-title {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.host-setup-playlist__assigned-meta {
+  margin: 0;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.host-setup-playlist__library-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.host-setup-playlist__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.host-setup-playlist__list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.host-setup-playlist__empty {
+  margin: 0;
+  font-size: 0.84rem;
+  color: rgba(255, 255, 255, 0.58);
+  line-height: 1.45;
+}
+
+.host-setup-playlist__cache {
+  margin: 10px 0 0;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.host-setup-playlist__planner {
+  margin-top: 4px;
+}
+
+.host-setup-play__checklist {
+  margin-bottom: 18px;
+}
+
+.host-setup-play__activation {
+  margin-bottom: 16px;
+}
+
+.host-setup-advanced-page {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.host-setup-advanced-page__title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.host-setup-advanced-page__lead {
+  margin: 0;
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.65);
+  line-height: 1.45;
+}
+
+.round-planner__setup-round-label {
+  margin-bottom: 10px;
+}
+
+.round-planner__advanced {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.round-planner__advanced summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.round-planner-bucket__playlist-readonly {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.round-planner-bucket__playlist-readonly-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  background: rgba(0, 255, 136, 0.12);
+  border: 1px solid rgba(0, 255, 136, 0.28);
+  color: #b8f0d4;
+}
+
+.round-planner--playlists .round-planner__main {
+  margin-top: 0;
+}
+
+.host-setup-advanced-details {
+  padding: 12px 14px;
+}
+
+.host-setup-advanced-details summary {
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.host-setup-advanced-details[open] summary {
+  margin-bottom: 12px;
+}
+
+.round-planner--criteria .round-planner-bucket__drop {
+  display: none;
+}
