@@ -1177,11 +1177,15 @@ class SpotifyService {
     const work = run();
     if (!force) {
       this._playlistTracksInflight.set(cacheKey, work);
-      work.finally(() => {
+      // CRASH FIX: .finally() forks a derived promise that rejects unhandled when the fetch
+      // rejects (e.g. Spotify 503) even though the caller catches `work.then(unwrap)` —
+      // Node 18 exits on unhandledRejection. then(cb, cb) cleans up without re-rejecting.
+      const cleanup = () => {
         if (this._playlistTracksInflight.get(cacheKey) === work) {
           this._playlistTracksInflight.delete(cacheKey);
         }
-      });
+      };
+      work.then(cleanup, cleanup);
     }
     return work.then(unwrap);
   }

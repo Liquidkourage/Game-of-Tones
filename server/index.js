@@ -1704,9 +1704,24 @@ async function deleteHostPlaylistTracksCacheForOrg(organizationId) {
 
 /** Spotify upstream blip (502/503/504) — transient; never an auth/token problem. Distinct from 429 quarantine. */
 function isSpotifyTransient5xx(e) {
-  const sc = Number(e?.statusCode ?? e?.body?.error?.status ?? 0);
+  const sc = Number(e?.statusCode ?? e?.body?.error?.status ?? e?.status ?? 0);
   return sc === 502 || sc === 503 || sc === 504;
 }
+
+/**
+ * Backstop only — primary fix is call-site try/catch. A transient Spotify 5xx escaping an
+ * unawaited promise must never take down the show (Node 18 exits on unhandledRejection by
+ * default). Non-Spotify rejections are logged loudly so programming errors stay visible.
+ */
+process.on('unhandledRejection', (reason) => {
+  if (isSpotifyTransient5xx(reason)) {
+    console.warn(
+      `[Spotify] upstream ${Number(reason?.statusCode ?? reason?.body?.error?.status ?? 503)} on an unawaited call; continuing (${reason?.message || reason})`
+    );
+    return;
+  }
+  console.error('⚠️ Unhandled promise rejection (server kept alive — fix the call site):', reason);
+});
 
 const SPOTIFY_TRACKS_5XX_COOLDOWN_MS = 45000;
 /** `${orgId}:${playlistId}` -> epoch ms until which live Spotify track fetches are skipped after a 5xx. */
@@ -1731,7 +1746,7 @@ function markPlaylistTracks5xxCooldown(orgId, playlistId) {
 }
 
 const SPOTIFY_UPSTREAM_UNAVAILABLE_MESSAGE =
-  'Spotify is temporarily unavailable while loading this playlist. Try again in a moment.';
+  'Spotify is temporarily unavailable. Try again in a moment.';
 const SPOTIFY_UPSTREAM_CACHE_MESSAGE =
   'Using cached tracks because Spotify is temporarily unavailable.';
 
@@ -2026,7 +2041,9 @@ const multiTenantSpotify = new MultiTenantSpotifyManager();
     await multiTenantSpotify.setTokens('DEFAULT', defaultTokens);
     routineServerLog('✅ Restored default Spotify connection from saved tokens');
   }
-})();
+})().catch((e) => {
+  console.warn('⚠️ Restoring default Spotify tokens at startup failed (continuing):', e?.message || e);
+});
 
 // Legacy support - DEFAULT org (no host user on room)
 const spotifyServiceDefault = multiTenantSpotify.getService('DEFAULT');
@@ -12914,10 +12931,12 @@ function sendSpotifyUpstreamUnavailableIfNeeded(res, error) {
     error?.retryAfterSec != null && Number(error.retryAfterSec) > 0
       ? Number(error.retryAfterSec)
       : Math.ceil(SPOTIFY_TRACKS_5XX_COOLDOWN_MS / 1000);
+  const upstreamStatus = Number(error?.statusCode ?? error?.body?.error?.status ?? 503) || 503;
   res.status(503).json({
     error: 'spotify_upstream_unavailable',
     message: SPOTIFY_UPSTREAM_UNAVAILABLE_MESSAGE,
     retryAfterSec,
+    upstreamStatus,
   });
   return true;
 }
@@ -12925,6 +12944,8 @@ function sendSpotifyUpstreamUnavailableIfNeeded(res, error) {
 /** Map Web API / HTTP layer errors to JSON for clients; returns true if response was sent. */
 function sendSpotifyWebApiErrorIfNeeded(res, error) {
   if (sendSpotify429IfNeeded(res, error)) return true;
+  // Transient upstream outage (502/503/504) → friendly 503, distinct from 429 quarantine.
+  if (sendSpotifyUpstreamUnavailableIfNeeded(res, error)) return true;
   const sc = Number(
     error?.statusCode ?? error?.body?.error?.status ?? error?.code ?? 0
   );
