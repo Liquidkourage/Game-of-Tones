@@ -678,6 +678,24 @@ function stripGotPlaylistPrefix(raw: string): string {
   return raw.replace(/^\s*GoT\s*[-�:]*\s*/i, '').trim();
 }
 
+/** "Short" names: trim a leading title flag (e.g. "GoT - ", "Tempo: ") from a playlist name. */
+function stripTitleFlagPrefix(raw: string, flags: string[]): string {
+  const name = String(raw || '').trim();
+  const sorted = [...flags].sort((a, b) => b.length - a.length);
+  for (const flag of sorted) {
+    const f = flag.trim();
+    if (!f) continue;
+    if (name.toLowerCase().startsWith(f.toLowerCase())) {
+      const stripped = name
+        .slice(f.length)
+        .replace(/^\s*[-–:]*\s*/, '')
+        .trim();
+      return stripped || name;
+    }
+  }
+  return name;
+}
+
 /** After a full playlist-tracks fetch: playlist row shows E if any track is Spotify-explicit (no extra API). */
 function applyPlaylistExplicitKnowledge(
   playlistId: string,
@@ -2084,6 +2102,12 @@ const HostView: React.FC = () => {
 
   /** Toggle label for the host's curated picks (first flag, e.g. "GoT"). */
   const playlistTitleFlagLabel = parsedPlaylistTitleFlags[0] ?? 'Flagged';
+
+  /** "Short" names strip list: host flags plus the shared GoT label so Tempo Library names also shorten. */
+  const titleFlagStripList = useMemo(
+    () => Array.from(new Set([...parsedPlaylistTitleFlags, 'GoT', 'Game of Tones'])),
+    [parsedPlaylistTitleFlags],
+  );
 
   // Filter playlists by query (assigned playlists remain visible for reuse/caution UI)
   const filteredPlaylists = useMemo(() => {
@@ -7520,10 +7544,10 @@ const HostView: React.FC = () => {
       songCount: round.songCount ?? 0,
       playlists: ids.map((id, i) => ({
         id: String(id),
-        name: stripGotPlaylistPrefix(String(names[i] ?? id)),
+        name: stripTitleFlagPrefix(String(names[i] ?? id), titleFlagStripList),
       })),
     };
-  }, [eventRounds, currentRoundIndex]);
+  }, [eventRounds, currentRoundIndex, titleFlagStripList]);
 
   /** Pick a round for advance prep: sync mix + pattern/snippet UI without marking rounds active/completed or leaving Manager. */
   const handleSelectRoundForPrep = useCallback(
@@ -9177,7 +9201,7 @@ const HostView: React.FC = () => {
                           }}
                         />
                         <span style={{ color: '#fff', flex: 1, minWidth: 0 }}>
-                          {stripGoTPrefix ? stripGotPlaylistPrefix(pack.name) : pack.name}
+                          {stripGoTPrefix ? stripTitleFlagPrefix(pack.name, titleFlagStripList) : pack.name}
                         </span>
                         <span style={{ color: '#8899aa', fontSize: '0.78rem', flexShrink: 0 }}>
                           {pack.tracks} songs
@@ -9185,7 +9209,7 @@ const HostView: React.FC = () => {
                       </label>
                       <HostPlaylistRoundAssignMenu
                         playlistId={pack.id}
-                        playlistName={stripGoTPrefix ? stripGotPlaylistPrefix(pack.name) : pack.name}
+                        playlistName={stripGoTPrefix ? stripTitleFlagPrefix(pack.name, titleFlagStripList) : pack.name}
                         rounds={eventRounds}
                         onAssign={(roundIndex) => addPlaylistToRoundBucket(roundIndex, pack.id)}
                         onUnassign={(roundIndex) =>
@@ -9337,7 +9361,7 @@ const HostView: React.FC = () => {
                       />
                       <label
                         className="host-playlist-library-toolbar__short-names"
-                        title="Hide GoT prefix on playlist names"
+                        title={`Hide title flag prefix on playlist names (${titleFlagStripList.join(', ')})`}
                       >
                         <input
                           type="checkbox"
@@ -9609,7 +9633,7 @@ const HostView: React.FC = () => {
                                   fontSize: '0.9rem',
                                   color: isAcceptable ? '#00ff88' : '#fff',
                                 }}>
-                                  {stripGoTPrefix ? p.name.replace(/^GoT\s*[-�:]*\s*/i, '') : p.name}
+                                  {stripGoTPrefix ? stripTitleFlagPrefix(p.name, titleFlagStripList) : p.name}
                                   {p.youtubeMusic ? (
                                     <span
                                       style={{
@@ -9705,7 +9729,7 @@ const HostView: React.FC = () => {
                               >
                                 <HostPlaylistRoundAssignMenu
                                   playlistId={p.id}
-                                  playlistName={stripGoTPrefix ? stripGotPlaylistPrefix(p.name) : p.name}
+                                  playlistName={stripGoTPrefix ? stripTitleFlagPrefix(p.name, titleFlagStripList) : p.name}
                                   rounds={eventRounds}
                                   onAssign={(roundIndex) => addPlaylistToRoundBucket(roundIndex, p.id)}
                                   onUnassign={(roundIndex) =>
@@ -9905,11 +9929,13 @@ const HostView: React.FC = () => {
         status: r.status,
         playlistCount: r.playlistIds?.length ?? 0,
         songCount: r.songCount ?? 0,
-        playlistNames: (r.playlistNames || []).map((n) => stripGotPlaylistPrefix(String(n || ''))),
+        playlistNames: (r.playlistNames || []).map((n) =>
+          stripTitleFlagPrefix(String(n || ''), titleFlagStripList),
+        ),
         saved: Boolean(r.savedMixSnapshot?.songs?.length),
         isCurrent: index === currentRoundIndex,
       })),
-    [eventRounds, currentRoundIndex],
+    [eventRounds, currentRoundIndex, titleFlagStripList],
   );
 
   const roundTimelineSummary = useMemo(() => {
