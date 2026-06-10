@@ -1847,6 +1847,29 @@
   gap: 2px;
 }
 
+.host-glass-theme .host-round-timeline__remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  padding: 0 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.host-glass-theme .host-round-timeline__remove:hover:not(:disabled) {
+  background: rgba(255, 80, 80, 0.15);
+  color: #ff8080;
+}
+
+.host-glass-theme .host-round-timeline__remove:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .host-glass-theme .host-round-timeline__playlists {
   display: block;
   max-width: 260px;

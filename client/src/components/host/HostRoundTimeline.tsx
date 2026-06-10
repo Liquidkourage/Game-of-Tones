@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 
 export type RoundTimelineRow = {
   index: number;
@@ -19,6 +19,8 @@ type HostRoundTimelineProps = {
   onSelectRound: (index: number) => void;
   onAddRound?: () => void;
   canAddRound?: boolean;
+  onRemoveRound?: (index: number) => void;
+  canRemoveRound?: boolean;
   onDropPlaylist?: (roundIndex: number, playlistId: string) => void;
   summary?: string;
   onOpenRounds?: () => void;
@@ -37,6 +39,8 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
   onSelectRound,
   onAddRound,
   canAddRound = true,
+  onRemoveRound,
+  canRemoveRound = true,
   onDropPlaylist,
   summary,
   onOpenRounds,
@@ -141,6 +145,21 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
                 </span>
               ) : null}
             </button>
+            {onRemoveRound ? (
+              <button
+                type="button"
+                className="host-round-timeline__remove"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemoveRound(r.index);
+                }}
+                disabled={!canRemoveRound}
+                title={canRemoveRound ? `Delete ${r.name}` : 'Events need at least one round'}
+                aria-label={`Delete ${r.name}`}
+              >
+                <X className="w-3.5 h-3.5" aria-hidden />
+              </button>
+            ) : null}
           </div>
         ))}
       </div>

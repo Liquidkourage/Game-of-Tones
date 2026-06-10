@@ -10139,6 +10139,33 @@ const HostView: React.FC = () => {
     addLog(`Added ${newRound.name}`, 'info');
   }, [eventRounds, handleUpdateRounds, addLog]);
 
+  const handleRemoveRound = useCallback(
+    (roundIndex: number) => {
+      if (gameState === 'playing') return;
+      if (eventRounds.length <= 1) return;
+      const round = eventRounds[roundIndex];
+      if (!round) return;
+      const hasContent =
+        (round.playlistIds?.length ?? 0) > 0 || Boolean(round.savedMixSnapshot?.songs?.length);
+      if (
+        hasContent &&
+        !window.confirm(`Delete ${round.name}? Its playlist assignments and saved mix will be removed.`)
+      ) {
+        return;
+      }
+      const updated = ensureEventRoundNames(eventRounds.filter((_, i) => i !== roundIndex));
+      handleUpdateRounds(updated);
+      const clampToUpdated = (cur: number) => {
+        const next = cur > roundIndex ? cur - 1 : cur;
+        return Math.max(0, Math.min(next, updated.length - 1));
+      };
+      setCurrentRoundIndex(clampToUpdated);
+      setRoundBuilderFocusIndex(clampToUpdated);
+      addLog(`Deleted ${round.name}`, 'info');
+    },
+    [eventRounds, gameState, handleUpdateRounds, addLog],
+  );
+
   const handleExportEventRecap = useCallback(() => {
     const payload = {
       exportedAt: new Date().toISOString(),
@@ -10619,6 +10646,8 @@ const HostView: React.FC = () => {
                     onSelectRound={handleFocusRoundForLibrary}
                     onAddRound={gameState !== 'playing' ? handleAddRound : undefined}
                     canAddRound={eventRounds.length < MAX_EVENT_ROUNDS}
+                    onRemoveRound={gameState !== 'playing' ? handleRemoveRound : undefined}
+                    canRemoveRound={eventRounds.length > 1}
                     onDropPlaylist={gameState !== 'playing' ? addPlaylistToRoundBucket : undefined}
                   />
                 }
