@@ -4,6 +4,7 @@ import HostActivityFeed from './HostActivityFeed';
 import HostOrgBillingCard from './HostOrgBillingCard';
 import type { HostActivityEntry } from '../../host/hostActivityLog';
 import { DEFAULT_PLAYLIST_TITLE_FLAGS } from '../../utils/hostPreferences';
+import type { PublicDisplayTitleRevealMode } from '../../utils/publicDisplayTitleReveal';
 
 type HostSettingsPanelProps = {
   connectionPanel: React.ReactNode;
@@ -18,6 +19,12 @@ type HostSettingsPanelProps = {
   onRandomStartsChange: (v: 'none' | 'early' | 'random') => void;
   playlistTitleFlags: string;
   onPlaylistTitleFlagsChange: (v: string) => void;
+  publicDisplayTitleRevealMode: PublicDisplayTitleRevealMode;
+  onTitleRevealModeChange: (raw: string) => void;
+  letterRevealIntervalSec: number;
+  onLetterRevealIntervalChange: (sec: number) => void;
+  publicDisplayLetterRevealToast: boolean;
+  onLetterRevealToastChange: (v: boolean) => void;
 };
 
 const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
@@ -33,6 +40,12 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
   onRandomStartsChange,
   playlistTitleFlags,
   onPlaylistTitleFlagsChange,
+  publicDisplayTitleRevealMode,
+  onTitleRevealModeChange,
+  letterRevealIntervalSec,
+  onLetterRevealIntervalChange,
+  publicDisplayLetterRevealToast,
+  onLetterRevealToastChange,
 }) => {
   const [showAdvancedConnection, setShowAdvancedConnection] = useState(true);
 
@@ -122,6 +135,49 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
           <span className="host-host-prefs__hint">
             Comma-separated. The playlist library&rsquo;s picks/All toggle shows only playlists whose
             titles contain one of these flags.
+          </span>
+        </label>
+      </section>
+
+      <section className="host-glass-panel host-settings-workspace__prefs">
+        <h2 className="host-settings-workspace__title">Projector defaults</h2>
+        <label className="host-host-prefs__field">
+          <span className="host-host-prefs__label">Reveal titles on projector</span>
+          <select
+            className="host-host-prefs__select"
+            value={publicDisplayTitleRevealMode}
+            onChange={(e) => onTitleRevealModeChange(e.target.value)}
+          >
+            <option value="letter">By letter (timed)</option>
+            <option value="track_start">Full title at clip start</option>
+            <option value="track_end">Full title at clip end</option>
+          </select>
+        </label>
+        <label className="host-host-prefs__field">
+          <span className="host-host-prefs__label">Letter reveal interval</span>
+          <select
+            className="host-host-prefs__select"
+            value={letterRevealIntervalSec}
+            disabled={publicDisplayTitleRevealMode !== 'letter'}
+            onChange={(e) => onLetterRevealIntervalChange(Number(e.target.value))}
+          >
+            {[5, 10, 15, 20, 30, 45, 60, 90, 120].map((sec) => (
+              <option key={sec} value={sec}>
+                {sec} seconds
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="host-host-prefs__field host-host-prefs__field--checkbox">
+          <span className="host-host-prefs__label">Letter reveal toast</span>
+          <span className="host-host-prefs__checkbox-row">
+            <input
+              type="checkbox"
+              checked={publicDisplayLetterRevealToast}
+              disabled={publicDisplayTitleRevealMode !== 'letter'}
+              onChange={(e) => onLetterRevealToastChange(e.target.checked)}
+            />
+            Show &ldquo;Revealed:&hellip;&rdquo; banner on projector
           </span>
         </label>
       </section>

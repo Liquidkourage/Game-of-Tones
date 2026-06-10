@@ -10516,6 +10516,14 @@ const HostView: React.FC = () => {
                 onRandomStartsChange={handleRandomStartsChange}
                 playlistTitleFlags={playlistTitleFlags}
                 onPlaylistTitleFlagsChange={setPlaylistTitleFlags}
+                publicDisplayTitleRevealMode={publicDisplayTitleRevealMode}
+                onTitleRevealModeChange={(raw) =>
+                  updatePublicDisplayTitleRevealMode(normalizePublicDisplayTitleRevealMode(raw))
+                }
+                letterRevealIntervalSec={letterRevealIntervalSec}
+                onLetterRevealIntervalChange={updatePublicDisplayLetterRevealInterval}
+                publicDisplayLetterRevealToast={publicDisplayLetterRevealToast}
+                onLetterRevealToastChange={updatePublicDisplayLetterRevealToast}
               />
               </div>
             ) : null}
@@ -10585,60 +10593,6 @@ const HostView: React.FC = () => {
               Projector &amp; event rules
             </summary>
             <div className="host-event-settings__body">
-          <motion.section
-            className="host-manager-section host-host-prefs"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            aria-labelledby="host-prefs-title"
-          >
-            <h2 id="host-prefs-title" className="host-manager-section__title">
-              Saved host preferences
-            </h2>
-            <div className="host-host-prefs__grid">
-              <label className="host-host-prefs__field">
-                <span className="host-host-prefs__label">Reveal titles on projector</span>
-                <select
-                  className="host-host-prefs__select"
-                  value={publicDisplayTitleRevealMode}
-                  onChange={(e) =>
-                    updatePublicDisplayTitleRevealMode(normalizePublicDisplayTitleRevealMode(e.target.value))
-                  }
-                >
-                  <option value="letter">By letter (timed)</option>
-                  <option value="track_start">Full title at clip start</option>
-                  <option value="track_end">Full title at clip end</option>
-                </select>
-              </label>
-              <label className="host-host-prefs__field">
-                <span className="host-host-prefs__label">Letter reveal interval</span>
-                <select
-                  className="host-host-prefs__select"
-                  value={letterRevealIntervalSec}
-                  disabled={publicDisplayTitleRevealMode !== 'letter'}
-                  onChange={(e) => updatePublicDisplayLetterRevealInterval(Number(e.target.value))}
-                >
-                  {[5, 10, 15, 20, 30, 45, 60, 90, 120].map((sec) => (
-                    <option key={sec} value={sec}>
-                      {sec} seconds
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="host-host-prefs__field host-host-prefs__field--checkbox">
-                <span className="host-host-prefs__label">Letter reveal toast</span>
-                <span className="host-host-prefs__checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={publicDisplayLetterRevealToast}
-                    disabled={publicDisplayTitleRevealMode !== 'letter'}
-                    onChange={(e) => updatePublicDisplayLetterRevealToast(e.target.checked)}
-                  />
-                  Show &ldquo;Revealed:&hellip;&rdquo; banner on projector
-                </span>
-              </label>
-            </div>
-          </motion.section>
           <motion.section
             className="host-manager-round host-manager-section"
             initial={{ opacity: 0 }}
