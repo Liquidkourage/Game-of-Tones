@@ -230,6 +230,17 @@ const Home: React.FC = () => {
     setSearchParams(next, { replace: true });
   };
 
+  const showJoinSetup = () => {
+    setHomeMode('join');
+    const next = new URLSearchParams(searchParams);
+    next.delete('mode');
+    next.delete('host');
+    next.delete('player');
+    setSearchParams(next, { replace: true });
+  };
+
+  const showDevSignInLink = process.env.NODE_ENV === 'development';
+
   const goToHostRoom = (rid: string, displayName: string, opts?: { tab?: HostGlassNavId }) => {
     const q = new URLSearchParams();
     q.set('name', displayName);
@@ -420,33 +431,30 @@ const Home: React.FC = () => {
             </button>
           </div>
         )}
-        {!joinOnly && (
-          <div className="home-mode-tabs" role="tablist" aria-label="How are you joining?">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={homeMode === 'join'}
-              className={`home-mode-tab ${homeMode === 'join' ? 'home-mode-tab--active' : ''}`}
-              onClick={() => setHomeMode('join')}
-            >
-              <UserPlus className="home-mode-tab-icon" aria-hidden />
-              Join
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={homeMode === 'host'}
-              className={`home-mode-tab ${homeMode === 'host' ? 'home-mode-tab--active' : ''}`}
-              onClick={() => setHomeMode('host')}
-            >
-              <Crown className="home-mode-tab-icon" aria-hidden />
-              Host
-            </button>
-          </div>
-        )}
+
+        <nav className="home-nav" aria-label="Main navigation">
+          <button
+            type="button"
+            className={`home-nav__link${homeMode === 'join' ? ' home-nav__link--active' : ''}`}
+            aria-current={homeMode === 'join' ? 'page' : undefined}
+            onClick={showJoinSetup}
+          >
+            <UserPlus className="home-nav__icon" aria-hidden />
+            Join
+          </button>
+          <button
+            type="button"
+            className={`home-nav__link${homeMode === 'host' ? ' home-nav__link--active' : ''}`}
+            aria-current={homeMode === 'host' ? 'page' : undefined}
+            onClick={showHostSetup}
+          >
+            <Crown className="home-nav__icon" aria-hidden />
+            Host
+          </button>
+        </nav>
 
         <div className="options-grid options-grid--single">
-          {(joinOnly || homeMode === 'join') && (
+          {homeMode === 'join' && (
           <motion.div 
             className="option-card join-card"
             whileHover={{ scale: 1.01, y: -2 }}
@@ -454,7 +462,7 @@ const Home: React.FC = () => {
           >
             <div className="card-header">
               <UserPlus className="card-icon" />
-              <h3>Join</h3>
+              <h3>Join a game</h3>
             </div>
             <div className="input-group">
               <input
@@ -497,16 +505,10 @@ const Home: React.FC = () => {
               <UserPlus className="btn-icon" />
               Join Game
             </button>
-
-            {joinOnly && (
-              <button type="button" className="home-host-reveal" onClick={showHostSetup}>
-                I'm hosting — open host setup
-              </button>
-            )}
           </motion.div>
           )}
 
-          {!joinOnly && homeMode === 'host' && (
+          {homeMode === 'host' && (
           <motion.div 
             className="option-card host-card"
             whileHover={{ scale: 1.01, y: -2 }}
@@ -514,177 +516,97 @@ const Home: React.FC = () => {
           >
             <div className="card-header">
               <Crown className="card-icon" />
-              <h3>Host</h3>
+              <h3>Host a game</h3>
             </div>
-            {hostSession !== undefined && (
-              <div
-                className="home-host-session-bar"
-                style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 10,
-                  marginBottom: 14,
-                  padding: '10px 14px',
-                  borderRadius: 10,
-                  background: 'rgba(0,0,0,0.25)',
-                  border: '1px solid rgba(0,200,150,0.25)',
-                }}
-              >
-                <span style={{ fontSize: '0.88rem', color: 'rgba(255,255,255,0.9)', lineHeight: 1.4 }}>
-                  {hostSession ? (
-                    <>
-                      <strong>Host</strong> signed in as{' '}
-                      <strong style={{ color: '#a8ffd9' }}>{hostSession.email || hostDisplayName}</strong>
-                    </>
-                  ) : (
-                    <>Not signed in.</>
-                  )}
-                </span>
-                {hostSession ? (
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => void handleHostLogout()}
-                    style={{ fontSize: '0.86rem', padding: '8px 16px' }}
-                  >
-                    Sign out
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={goToHostGoogleSignIn}
-                    style={{ fontSize: '0.86rem', padding: '8px 16px' }}
-                  >
-                    Sign in with Google
-                  </button>
-                )}
-              </div>
-            )}
-
-            {hostSignInPageUrl && (
-              <details className="home-host-signin-page-url" style={{ marginBottom: 14 }}>
-                <summary style={{ cursor: 'pointer', fontSize: '0.88rem', opacity: 0.9 }}>Sign-in link</summary>
-                <div
-                  style={{
-                    marginTop: 10,
-                    padding: '12px 14px',
-                    borderRadius: 10,
-                    background: 'rgba(0,0,0,0.28)',
-                    border: '1px solid rgba(0,255,170,0.2)',
-                  }}
-                >
-                  <code
-                    style={{
-                      fontSize: '0.78rem',
-                      wordBreak: 'break-all',
-                      flex: '1 1 200px',
-                      color: '#7dffc8',
-                      background: 'rgba(0,0,0,0.35)',
-                      padding: '8px 10px',
-                      borderRadius: 8,
-                      border: '1px solid rgba(255,255,255,0.08)',
-                    }}
-                  >
-                    {hostSignInPageUrl}
-                  </code>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={copyHostSignInPageUrl}
-                    style={{ fontSize: '0.85rem', padding: '8px 14px', marginTop: 10 }}
-                  >
-                    {hostSignInUrlCopied ? 'Copied' : 'Copy'}
-                  </button>
-                </div>
-              </details>
-            )}
-
             {hostSession === undefined ? (
               <p className="home-card-lead" style={{ opacity: 0.75 }}>Checking sign-in…</p>
             ) : hostSession ? (
-              <div className="home-host-account" role="status" aria-live="polite">
-                <div className="home-host-account__title">
-                  <CheckCircle2 className="home-host-account__check" aria-hidden />
-                  <span>Signed in</span>
+              <>
+                <div className="home-host-session-bar">
+                  <span className="home-host-session-bar__label">
+                    Signed in as <strong>{hostSession.email || hostDisplayName}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-secondary home-host-session-bar__signout"
+                    onClick={() => void handleHostLogout()}
+                  >
+                    Sign out
+                  </button>
                 </div>
-                <dl className="home-host-account__meta">
-                  <div>
-                    <dt>Host ID</dt>
-                    <dd>#{hostSession.id}</dd>
+
+                {showDevSignInLink && hostSignInPageUrl ? (
+                  <details className="home-host-signin-page-url">
+                    <summary>Sign-in link (dev)</summary>
+                    <div className="home-host-signin-page-url__body">
+                      <code className="home-host-signin-page-url__code">{hostSignInPageUrl}</code>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={copyHostSignInPageUrl}
+                      >
+                        {hostSignInUrlCopied ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
+                  </details>
+                ) : null}
+
+                <div className="home-host-account" role="status" aria-live="polite">
+                  <div className="home-host-account__title">
+                    <CheckCircle2 className="home-host-account__check" aria-hidden />
+                    <span>Ready to host</span>
                   </div>
-                  {hostSession.displayName ? (
-                    <div>
-                      <dt>Name</dt>
-                      <dd>{hostSession.displayName}</dd>
-                    </div>
-                  ) : null}
-                  {hostSession.email ? (
-                    <div>
-                      <dt>Email</dt>
-                      <dd>{hostSession.email}</dd>
-                    </div>
-                  ) : null}
-                </dl>
-                <p className="home-host-account__shown-as">
-                  Shown as <strong>{hostDisplayName}</strong>
-                </p>
-              </div>
+                  <p className="home-host-account__shown-as">
+                    Shown as <strong>{hostDisplayName}</strong>
+                  </p>
+                </div>
+
+                <Link to="/org" className="home-org-link home-org-link--primary btn btn-primary">
+                  <UserCircle className="btn-icon" aria-hidden />
+                  Account
+                </Link>
+
+                {resumeHostRoom ? (
+                  <button
+                    type="button"
+                    className="btn btn-primary home-host-actions__secondary"
+                    style={{ width: '100%', marginBottom: 10 }}
+                    onClick={() => goToHostRoom(resumeHostRoom.roomId, hostDisplayName)}
+                  >
+                    <Play className="btn-icon" aria-hidden />
+                    Resume active game · {resumeHostRoom.roomId}
+                  </button>
+                ) : null}
+
+                <div className="home-host-actions">
+                  <button
+                    type="button"
+                    onClick={() => void startHosting()}
+                    className="btn btn-primary"
+                    disabled={isCreatingHostRoom}
+                  >
+                    <Play className="btn-icon" />
+                    {isCreatingHostRoom ? 'Creating…' : 'Create room & host'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void startHosting({ tab: 'rounds' })}
+                    className="btn btn-secondary home-host-actions__secondary"
+                    disabled={isCreatingHostRoom}
+                  >
+                    <ListMusic className="btn-icon" aria-hidden />
+                    Plan rounds &amp; playlists
+                  </button>
+                </div>
+              </>
             ) : (
-              <div className="home-host-signin" role="region" aria-label="Host sign in">
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={goToHostGoogleSignIn}
-                >
+              <>
+                <p className="home-card-lead">Sign in with Google to create and run bingo games.</p>
+                <button type="button" className="btn btn-primary" onClick={goToHostGoogleSignIn}>
                   Sign in with Google
                 </button>
-              </div>
+              </>
             )}
-
-            {hostSession ? (
-              <Link to="/org" className="home-org-link home-org-link--primary btn btn-primary">
-                <UserCircle className="btn-icon" aria-hidden />
-                Account
-              </Link>
-            ) : null}
-
-            {hostSession && resumeHostRoom ? (
-              <button
-                type="button"
-                className="btn btn-primary home-host-actions__secondary"
-                style={{ width: '100%', marginBottom: 10 }}
-                onClick={() => goToHostRoom(resumeHostRoom.roomId, hostDisplayName)}
-              >
-                <Play className="btn-icon" aria-hidden />
-                Resume active game · {resumeHostRoom.roomId}
-              </button>
-            ) : null}
-
-            <div className="home-host-actions">
-              <button
-                type="button"
-                onClick={() => void startHosting()}
-                className="btn btn-primary"
-                disabled={!hostSession || hostSession === undefined || isCreatingHostRoom}
-              >
-                <Play className="btn-icon" />
-                {isCreatingHostRoom ? 'Creating…' : 'Create room & host'}
-              </button>
-              {hostSession ? (
-                <button
-                  type="button"
-                  onClick={() => void startHosting({ tab: 'rounds' })}
-                  className="btn btn-secondary home-host-actions__secondary"
-                  disabled={hostSession === undefined || isCreatingHostRoom}
-                >
-                  <ListMusic className="btn-icon" aria-hidden />
-                  Plan rounds &amp; playlists
-                </button>
-              ) : null}
-            </div>
           </motion.div>
           )}
         </div>

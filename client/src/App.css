@@ -1023,6 +1023,115 @@ body {
   flex-wrap: wrap;
 }
 
+.home-nav {
+  display: flex;
+  justify-content: center;
+  gap: 0.35rem;
+  margin: 0 auto 1.25rem;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(26, 31, 40, 0.72);
+  border: 1px solid var(--border-accent-soft);
+  width: fit-content;
+  max-width: 100%;
+}
+
+.home-nav__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.65rem 1.25rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--secondary-text);
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+
+.home-nav__link:hover {
+  color: var(--primary-text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.home-nav__link--active {
+  border-color: rgba(0, 255, 136, 0.45);
+  color: var(--accent-color);
+  background: rgba(0, 255, 136, 0.08);
+  box-shadow: 0 0 14px rgba(0, 255, 136, 0.1);
+}
+
+.home-nav__icon {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.home-host-session-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(0, 200, 150, 0.25);
+}
+
+.home-host-session-bar__label {
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.4;
+}
+
+.home-host-session-bar__label strong {
+  color: #a8ffd9;
+}
+
+.home-host-session-bar__signout {
+  font-size: 0.86rem;
+  padding: 8px 16px;
+}
+
+.home-host-signin-page-url {
+  margin-bottom: 14px;
+}
+
+.home-host-signin-page-url summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  opacity: 0.75;
+}
+
+.home-host-signin-page-url__body {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(0, 255, 170, 0.2);
+}
+
+.home-host-signin-page-url__code {
+  display: block;
+  font-size: 0.78rem;
+  word-break: break-all;
+  color: #7dffc8;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.home-host-signin-page-url__body .btn {
+  margin-top: 10px;
+  font-size: 0.85rem;
+  padding: 8px 14px;
+}
+
 .home-mode-tab {
   display: inline-flex;
   align-items: center;
