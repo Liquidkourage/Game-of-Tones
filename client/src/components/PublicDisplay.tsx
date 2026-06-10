@@ -360,35 +360,43 @@ function PublicDisplayTempoBallRow({
   variant,
 }: {
   seeds: PublicDisplayBallAnimSeed[];
-  variant: 'splash' | 'rules' | 'rulesWall';
+  variant: 'splash' | 'rules' | 'rulesWall' | 'sidebar';
 }) {
   const ballWH =
     variant === 'splash'
       ? 'clamp(72px, min(18vmin, 14vh), 220px)'
       : variant === 'rulesWall'
         ? 'clamp(62px, min(16.5vmin, 13vh), 210px)'
-        : 'clamp(56px, min(15vmin, 12vh), 180px)';
+        : variant === 'sidebar'
+          ? 'clamp(30px, 3.4vw, 60px)'
+          : 'clamp(56px, min(15vmin, 12vh), 180px)';
   const letterSize =
     variant === 'splash'
       ? 'clamp(2rem, min(8vmin, 6vh), 5.25rem)'
       : variant === 'rulesWall'
         ? 'clamp(1.72rem, min(7.2vmin, 5.6vh), 4.35rem)'
-        : 'clamp(1.55rem, min(6.5vmin, 5.2vh), 3.85rem)';
+        : variant === 'sidebar'
+          ? 'clamp(0.85rem, 1.35vw, 1.55rem)'
+          : 'clamp(1.55rem, min(6.5vmin, 5.2vh), 3.85rem)';
   const rowGap =
     variant === 'splash'
       ? 'clamp(8px, 2vmin, 28px)'
       : variant === 'rulesWall'
         ? 'clamp(7px, 1.75vmin, 22px)'
-        : 'clamp(5px, 1.5vmin, 18px)';
+        : variant === 'sidebar'
+          ? 'clamp(4px, 0.6vw, 10px)'
+          : 'clamp(5px, 1.5vmin, 18px)';
   const rowMarginTop =
     variant === 'splash'
       ? 'clamp(4px, 1vmin, 12px)'
       : variant === 'rulesWall'
         ? 'clamp(2px, 0.55vmin, 10px)'
-        : 'clamp(0px, 0.35vmin, 6px)';
-  const shadowBottom = variant === 'splash' ? -28 : variant === 'rulesWall' ? -24 : -22;
-  const shadowSide = variant === 'splash' ? 28 : variant === 'rulesWall' ? 24 : 22;
-  const shadowH = variant === 'splash' ? 28 : variant === 'rulesWall' ? 24 : 22;
+        : variant === 'sidebar'
+          ? '0px'
+          : 'clamp(0px, 0.35vmin, 6px)';
+  const shadowBottom = variant === 'splash' ? -28 : variant === 'rulesWall' ? -24 : variant === 'sidebar' ? -10 : -22;
+  const shadowSide = variant === 'splash' ? 28 : variant === 'rulesWall' ? 24 : variant === 'sidebar' ? 10 : 22;
+  const shadowH = variant === 'splash' ? 28 : variant === 'rulesWall' ? 24 : variant === 'sidebar' ? 10 : 22;
 
   return (
     <div
@@ -947,30 +955,6 @@ function poolHasTracks(ids: string[] | null | undefined): ids is string[] {
   return Array.isArray(ids) && ids.length > 0;
 }
 
-type HeaderLockupLayout = { top: number; height: number; left: number; right: number };
-
-/** Place letter-reveal toast beside the centered TEMPO lockup when space allows. */
-function revealToastPlacement(
-  lockup: HeaderLockupLayout | null,
-  viewportW: number,
-): { top: number; left?: number; right?: number; transform: string } {
-  if (!lockup || viewportW < 1) {
-    return { top: 12, right: 16, transform: 'none' };
-  }
-  const gap = 12;
-  const estW = 200;
-  const centerY = lockup.top + lockup.height / 2;
-  const fitsRight = lockup.right + gap + estW <= viewportW - 8;
-  if (fitsRight) {
-    return { top: centerY, left: lockup.right + gap, transform: 'translateY(-50%)' };
-  }
-  const fitsLeft = lockup.left - gap - estW >= 8;
-  if (fitsLeft) {
-    return { top: centerY, right: viewportW - lockup.left + gap, transform: 'translateY(-50%)' };
-  }
-  return { top: lockup.top + lockup.height + 6, right: 12, transform: 'none' };
-}
-
 /** Base pause between 1×75 carousel column steps (~5s hold + ~1s slide). */
 const CAROUSEL_BASE_DWELL_MS = 6000;
 
@@ -1026,7 +1010,6 @@ const PublicDisplay: React.FC = () => {
   const debugMode = (searchParams.get('debug') === '1') || (searchParams.get('dbg') === '1');
   const displayRef = useRef<HTMLDivElement | null>(null);
   const [headerToastTopPx, setHeaderToastTopPx] = useState<number>(78);
-  const [headerLockupLayout, setHeaderLockupLayout] = useState<HeaderLockupLayout | null>(null);
 
   useEffect(() => {
     const onResize = () =>
@@ -1046,11 +1029,6 @@ const PublicDisplay: React.FC = () => {
     [displayViewport.w, displayViewport.h, fontSizeMultiplier],
   );
 
-  const letterRevealToastPlacement = useMemo(
-    () => revealToastPlacement(headerLockupLayout, displayViewport.w),
-    [headerLockupLayout, displayViewport.w],
-  );
-
   useLayoutEffect(() => {
     let raf = 0;
     const measure = () => {
@@ -1058,16 +1036,6 @@ const PublicDisplay: React.FC = () => {
       if (el) {
         const headerRect = el.getBoundingClientRect();
         setHeaderToastTopPx(Math.round(headerRect.bottom + 8));
-        const lockup = el.querySelector('.logo--display-lockup, .logo');
-        if (lockup) {
-          const lockupRect = lockup.getBoundingClientRect();
-          setHeaderLockupLayout({
-            top: lockupRect.top,
-            height: lockupRect.height,
-            left: lockupRect.left,
-            right: lockupRect.right,
-          });
-        }
       }
     };
     measure();
@@ -1105,21 +1073,13 @@ const PublicDisplay: React.FC = () => {
     };
   }, [venueBranding]);
 
-  /** Re-measure header lockup when venue co-brand text loads (changes lockup width). */
+  /** Re-measure header offset when venue co-brand text loads (changes header height). */
   useEffect(() => {
     const t = window.setTimeout(() => {
       const el = document.querySelector('.app-header');
-      const lockup = el?.querySelector('.logo--display-lockup, .logo');
-      if (el && lockup) {
+      if (el) {
         const headerRect = el.getBoundingClientRect();
         setHeaderToastTopPx(Math.round(headerRect.bottom + 8));
-        const lockupRect = lockup.getBoundingClientRect();
-        setHeaderLockupLayout({
-          top: lockupRect.top,
-          height: lockupRect.height,
-          left: lockupRect.left,
-          right: lockupRect.right,
-        });
       }
     }, 50);
     return () => window.clearTimeout(t);
@@ -4869,11 +4829,8 @@ const PublicDisplay: React.FC = () => {
             transition={{ duration: 0.25 }}
             style={{
               position: 'fixed',
-              top: letterRevealToastPlacement.top,
-              ...(letterRevealToastPlacement.left != null
-                ? { left: letterRevealToastPlacement.left, right: 'auto' }
-                : { right: letterRevealToastPlacement.right, left: 'auto' }),
-              transform: letterRevealToastPlacement.transform,
+              left: 16,
+              bottom: 14,
               zIndex: 10000,
             }}
           >
@@ -5838,6 +5795,10 @@ const PublicDisplay: React.FC = () => {
                     <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#ddd', lineHeight: 1 }}>Scan to join</div>
                 </div>
                 )}
+                {/* TEMPO ball lockup fills the spare space under the QR card */}
+                <div style={{ flexShrink: 0, paddingBottom: 4 }} aria-hidden>
+                  <PublicDisplayTempoBallRow seeds={ballAnimSeedsRef.current} variant="sidebar" />
+                </div>
               </motion.div>
             </div>
           </div>
