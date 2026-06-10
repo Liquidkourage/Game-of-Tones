@@ -3414,6 +3414,7 @@ const HostView: React.FC = () => {
 
     newSocket.on('sync-state-response', (data: any) => {
       console.log('Sync state response:', data);
+      const wasAlreadyPlaying = gameStateRef.current === 'playing';
       const merged = mergeHostGameStateFromRoomPayload(gameStateRef.current, data);
       gameStateRef.current = merged;
       setGameState(merged);
@@ -3422,7 +3423,9 @@ const HostView: React.FC = () => {
       }
       if (merged === 'playing') {
         setHostAwaitingLiveSync(false);
-        setHostGlassNav('game');
+        // Jump to Game only when entering a live game (load/reconnect) — mid-playback syncs
+        // (e.g. each new track) must not yank the host off the tab they're working on.
+        if (!wasAlreadyPlaying) setHostGlassNav('game');
       } else if (shouldClearHostAwaitingLiveSync(roomId, merged, data)) {
         setHostAwaitingLiveSync(false);
       }
@@ -3511,6 +3514,7 @@ const HostView: React.FC = () => {
     });
 
     newSocket.on('room-state', (payload: any) => {
+      const wasAlreadyPlaying = gameStateRef.current === 'playing';
       const merged = mergeHostGameStateFromRoomPayload(gameStateRef.current, payload);
       gameStateRef.current = merged;
       setGameState(merged);
@@ -3519,7 +3523,9 @@ const HostView: React.FC = () => {
       }
       if (merged === 'playing') {
         setHostAwaitingLiveSync(false);
-        setHostGlassNav('game');
+        // Server broadcasts room-state after every song start — only snap to the Game tab when
+        // first entering a live game, never while the host is browsing another tab mid-playback.
+        if (!wasAlreadyPlaying) setHostGlassNav('game');
       } else if (shouldClearHostAwaitingLiveSync(roomId, merged, payload)) {
         setHostAwaitingLiveSync(false);
       }
