@@ -283,10 +283,10 @@ body {
   min-height: 0;
 }
 
-/* Shrink app-main slightly for public display */
+/* Display routes render no site header — fill the full viewport. */
 .app-main .public-display {
-  margin-top: 52px; /* offset absolute header */
-  height: calc(100% - 52px);
+  margin-top: 0;
+  height: 100%;
   max-width: 100vw;
   overflow-x: hidden;
   width: 100%;
@@ -3956,11 +3956,11 @@ button.conn-chip.conn-chip-compact {
   overflow: hidden;
 }
 
-/* Override app-main padding for public display */
+/* Override app-main padding for public display (no site header on /display — use full viewport height) */
 .app-main .public-display {
   margin: 0;
   width: 100%;
-  height: calc(100vh - 9rem);
+  height: 100vh;
   max-width: 100vw;
   overflow-x: hidden;
 }
