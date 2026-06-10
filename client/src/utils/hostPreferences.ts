@@ -40,16 +40,11 @@ export function defaultHostPreferences(): HostPreferencesV1 {
   };
 }
 
-export function loadHostPreferences(
-  hostId: string | number | null | undefined,
-): Partial<HostPreferencesV1> {
-  if (hostId == null || String(hostId).trim() === '') return {};
-  try {
-    const raw = localStorage.getItem(storageKey(hostId));
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as Partial<HostPreferencesV1>;
-    if (parsed.v !== 1) return {};
-    return {
+/** Validate/clamp a raw preferences object (from localStorage or the server) field by field. */
+export function sanitizeHostPreferences(raw: unknown): Partial<HostPreferencesV1> {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const parsed = raw as Partial<HostPreferencesV1>;
+  return {
       snippetLength:
         typeof parsed.snippetLength === 'number'
           ? Math.min(60, Math.max(5, Math.round(parsed.snippetLength)))
@@ -84,6 +79,18 @@ export function loadHostPreferences(
           ? parsed.playlistTitleFlags.slice(0, 200)
           : undefined,
     };
+}
+
+export function loadHostPreferences(
+  hostId: string | number | null | undefined,
+): Partial<HostPreferencesV1> {
+  if (hostId == null || String(hostId).trim() === '') return {};
+  try {
+    const raw = localStorage.getItem(storageKey(hostId));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Partial<HostPreferencesV1>;
+    if (parsed.v !== 1) return {};
+    return sanitizeHostPreferences(parsed);
   } catch {
     return {};
   }

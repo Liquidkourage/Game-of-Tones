@@ -17,6 +17,7 @@ const usersStore = require('./users');
 const organizationsStore = require('./organizations');
 const billingStore = require('./billing');
 const hostRoomPrepStore = require('./hostRoomPrep');
+const hostPreferencesStore = require('./hostPreferences');
 const playersStore = require('./players');
 const playerAuth = require('./playerAuth');
 const playerAccountsStore = require('./playerAccounts');
@@ -1446,6 +1447,7 @@ async function initializeDatabase() {
     await billingStore.ensureBillingTables(db);
     await songAliasesStore.ensureSongAliasesTable(db);
     await hostRoomPrepStore.ensureHostRoomPrepTable(db);
+    await hostPreferencesStore.ensureHostPreferencesTable(db);
     await playersStore.ensurePlayerTables(db);
     await playerAccountsStore.ensurePlayerAccountTables(db);
     await db.query(`
@@ -11710,6 +11712,60 @@ app.put('/api/host/rooms/:roomId/prep', async (req, res) => {
   } catch (e) {
     console.error('PUT /api/host/rooms/:roomId/prep:', e?.message || e);
     res.status(500).json({ error: 'failed', message: e?.message || 'Failed to save prep' });
+  }
+});
+
+/** Load saved host preferences for this account (cross-device defaults). */
+app.get('/api/host/preferences', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_unavailable', message: 'DATABASE_URL required for saved preferences.' });
+    const row = await hostPreferencesStore.getHostPreferences(db, uid);
+    if (!row) return res.status(404).json({ error: 'not_found' });
+    const updatedAt =
+      row.updatedAt instanceof Date
+        ? row.updatedAt.toISOString()
+        : row.updatedAt != null
+          ? String(row.updatedAt)
+          : new Date().toISOString();
+    res.json({
+      preferences: row.payload && typeof row.payload === 'object' ? row.payload : {},
+      updatedAt,
+    });
+  } catch (e) {
+    console.error('GET /api/host/preferences:', e?.message || e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed to load preferences' });
+  }
+});
+
+/** Save host preferences for this account (debounced client uploads). */
+app.put('/api/host/preferences', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_unavailable', message: 'DATABASE_URL required for saved preferences.' });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const prefs = body.preferences;
+    if (prefs == null || typeof prefs !== 'object' || Array.isArray(prefs)) {
+      return res.status(400).json({ error: 'invalid_body', message: '`preferences` object required' });
+    }
+    let serialized;
+    try {
+      serialized = JSON.stringify(prefs);
+    } catch {
+      return res.status(400).json({ error: 'invalid_body', message: 'preferences must be JSON-serializable' });
+    }
+    if (serialized.length > 16384) {
+      return res.status(400).json({ error: 'too_large', message: 'preferences payload too large' });
+    }
+    const updatedAt = await hostPreferencesStore.upsertHostPreferences(db, uid, prefs);
+    const iso =
+      updatedAt instanceof Date ? updatedAt.toISOString() : updatedAt != null ? String(updatedAt) : new Date().toISOString();
+    res.json({ ok: true, updatedAt: iso });
+  } catch (e) {
+    console.error('PUT /api/host/preferences:', e?.message || e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed to save preferences' });
   }
 });
 

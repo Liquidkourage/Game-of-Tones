@@ -84,6 +84,8 @@ import {
   DEFAULT_PLAYLIST_TITLE_FLAGS,
   loadHostPreferences,
   saveHostPreferences,
+  sanitizeHostPreferences,
+  type HostPreferencesV1,
 } from '../utils/hostPreferences';
 import { isSpotifyJamDevice, pickPreferredPlaybackDevice } from '../utils/spotifyDevices';
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
@@ -1289,6 +1291,7 @@ const HostView: React.FC = () => {
     displayName?: string | null;
   } | null | undefined>(undefined);
   const hostPrefsHydratedRef = useRef(false);
+  const hostPrefsPutTimerRef = useRef<number | null>(null);
   /** After /api/auth/me finishes (and optional hostToken → localStorage), socket can use Bearer + hostToken. */
   const [hostAuthBootstrapDone, setHostAuthBootstrapDone] = useState(false);
 
@@ -8360,31 +8363,54 @@ const HostView: React.FC = () => {
     };
   }, [roomId, hostAccount?.id, addLog]);
 
-  /** Load saved host defaults (playback, projector reveal, font %). */
+  /** Load saved host defaults: localStorage immediately, then the DB copy (cross-device source of truth). */
   useEffect(() => {
     if (!hostAccount?.id) return;
+    const hostId = hostAccount.id;
     hostPrefsHydratedRef.current = false;
-    const p = loadHostPreferences(hostAccount.id);
-    if (p.snippetLength != null) setSnippetLength(p.snippetLength);
-    if (p.randomStarts != null) setRandomStarts(p.randomStarts);
-    if (p.publicDisplayFontSize != null) setPublicDisplayFontSize(p.publicDisplayFontSize);
-    if (p.publicDisplayTitleRevealMode != null) {
-      setPublicDisplayTitleRevealMode(p.publicDisplayTitleRevealMode);
-    }
-    if (p.letterRevealIntervalSec != null) setLetterRevealIntervalSec(p.letterRevealIntervalSec);
-    if (p.publicDisplayLetterRevealToast != null) {
-      setPublicDisplayLetterRevealToast(p.publicDisplayLetterRevealToast);
-    }
-    if (p.freeSpaceEnabled != null) setFreeSpaceEnabled(p.freeSpaceEnabled);
-    if (p.venueSpotifyJamMode != null) setVenueSpotifyJamMode(p.venueSpotifyJamMode);
-    if (p.playlistTitleFlags != null) setPlaylistTitleFlags(p.playlistTitleFlags);
+    const apply = (p: Partial<HostPreferencesV1>) => {
+      if (p.snippetLength != null) setSnippetLength(p.snippetLength);
+      if (p.randomStarts != null) setRandomStarts(p.randomStarts);
+      if (p.publicDisplayFontSize != null) setPublicDisplayFontSize(p.publicDisplayFontSize);
+      if (p.publicDisplayTitleRevealMode != null) {
+        setPublicDisplayTitleRevealMode(p.publicDisplayTitleRevealMode);
+      }
+      if (p.letterRevealIntervalSec != null) setLetterRevealIntervalSec(p.letterRevealIntervalSec);
+      if (p.publicDisplayLetterRevealToast != null) {
+        setPublicDisplayLetterRevealToast(p.publicDisplayLetterRevealToast);
+      }
+      if (p.freeSpaceEnabled != null) setFreeSpaceEnabled(p.freeSpaceEnabled);
+      if (p.venueSpotifyJamMode != null) setVenueSpotifyJamMode(p.venueSpotifyJamMode);
+      if (p.playlistTitleFlags != null) setPlaylistTitleFlags(p.playlistTitleFlags);
+    };
+    apply(loadHostPreferences(hostId));
     hostPrefsHydratedRef.current = true;
+
+    let cancelled = false;
+    if (getHostJwt()) {
+      void (async () => {
+        try {
+          const r = await hostFetch(`${API_BASE || ''}/api/host/preferences`);
+          if (!r.ok || cancelled) return;
+          const d = (await r.json()) as { preferences?: unknown };
+          const serverPrefs = sanitizeHostPreferences(d?.preferences);
+          if (cancelled || Object.values(serverPrefs).every((v) => v == null)) return;
+          apply(serverPrefs);
+          saveHostPreferences(hostId, serverPrefs);
+        } catch {
+          /* offline or server without DB — localStorage copy stands */
+        }
+      })();
+    }
+    return () => {
+      cancelled = true;
+    };
   }, [hostAccount?.id]);
 
-  /** Persist host defaults whenever controls change. */
+  /** Persist host defaults whenever controls change (localStorage cache + debounced DB save). */
   useEffect(() => {
     if (!hostAccount?.id || !hostPrefsHydratedRef.current) return;
-    saveHostPreferences(hostAccount.id, {
+    const prefs = {
       snippetLength,
       randomStarts,
       publicDisplayFontSize,
@@ -8394,7 +8420,8 @@ const HostView: React.FC = () => {
       freeSpaceEnabled,
       venueSpotifyJamMode,
       playlistTitleFlags,
-    });
+    };
+    saveHostPreferences(hostAccount.id, prefs);
     try {
       localStorage.setItem('game-snippet-length', String(snippetLength));
       localStorage.setItem('game-random-starts', randomStarts);
@@ -8402,6 +8429,29 @@ const HostView: React.FC = () => {
     } catch {
       /* ignore */
     }
+    if (getHostJwt()) {
+      if (hostPrefsPutTimerRef.current) window.clearTimeout(hostPrefsPutTimerRef.current);
+      hostPrefsPutTimerRef.current = window.setTimeout(() => {
+        hostPrefsPutTimerRef.current = null;
+        void (async () => {
+          try {
+            await hostFetch(`${API_BASE || ''}/api/host/preferences`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ preferences: { v: 1, ...prefs } }),
+            });
+          } catch {
+            /* offline — localStorage copy stands, retried on next change */
+          }
+        })();
+      }, 1200);
+    }
+    return () => {
+      if (hostPrefsPutTimerRef.current) {
+        window.clearTimeout(hostPrefsPutTimerRef.current);
+        hostPrefsPutTimerRef.current = null;
+      }
+    };
   }, [
     hostAccount?.id,
     snippetLength,
