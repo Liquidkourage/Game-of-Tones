@@ -309,6 +309,7 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
             : 'host-r4-card host-glass-panel host-r4-now-playing'
         }
         aria-label={gameState === 'playing' ? 'Now playing' : 'Ready to play'}
+        data-host-tutorial="live-controls"
       >
         {gamePaused && (
           <div className="host-r4-paused host-paused-banner">
@@ -661,7 +662,7 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
       </section>
 
       {/* Host actions */}
-      <section className="host-r4-card host-glass-panel host-r4-actions" aria-label="Host actions">
+      <section className="host-r4-card host-glass-panel host-r4-actions" aria-label="Host actions" data-host-tutorial="end-round">
         <p className="host-r4-card__eyebrow">Host actions</p>
         <div className="host-r4-action-grid">
           {gameState === 'playing' ? (

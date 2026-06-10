@@ -138,7 +138,17 @@ import HostGameLivePanel from './host/HostGameLivePanel';
 import HostDisplayExtrasPanel from './host/HostDisplayExtrasPanel';
 import HostSetupFlow, { type HostSetupStep } from './host/HostSetupFlow';
 import HostSetupPlayStep from './host/HostSetupPlayStep';
+import HostTutorial from './host/HostTutorial';
+import { HOST_TUTORIAL_STEPS } from '../host/hostTutorialSteps';
+import {
+  isHostTutorialCompleted,
+  isHostTutorialSuggestionDismissed,
+  resetHostTutorialProgress,
+  setHostTutorialCompleted,
+  setHostTutorialSuggestionDismissed,
+} from '../host/hostTutorialStorage';
 import './host/HostSetupFlow.css';
+import './host/HostTutorial.css';
 import './HostFormControls.css';
 
 const MAX_CUSTOM_PATTERN_NAME_EMIT = 80;
@@ -1096,6 +1106,11 @@ const HostView: React.FC = () => {
     () => parseHostGlassNavTab(searchParams.get('tab')) ?? 'game',
   );
   const [hostSetupStep, setHostSetupStep] = useState<HostSetupStep>('playlist');
+  const [hostTutorialOpen, setHostTutorialOpen] = useState(false);
+  const [hostTutorialStep, setHostTutorialStep] = useState(0);
+  const [showTutorialSuggestion, setShowTutorialSuggestion] = useState(
+    () => !isHostTutorialCompleted() && !isHostTutorialSuggestionDismissed(),
+  );
   const [activityLog, setActivityLog] = useState<HostActivityEntry[]>([]);
   const [youtubeMusicConnected, setYoutubeMusicConnected] = useState(false);
   const [youtubeStatusReady, setYoutubeStatusReady] = useState(false);
@@ -1125,6 +1140,28 @@ const HostView: React.FC = () => {
       }, 50);
     }
   }, []);
+
+  const openHostTutorial = useCallback((step = 0) => {
+    resetHostTutorialProgress();
+    setHostTutorialStep(step);
+    setHostTutorialOpen(true);
+  }, []);
+
+  const closeHostTutorial = useCallback((finished: boolean) => {
+    setHostTutorialOpen(false);
+    if (finished) {
+      setHostTutorialCompleted(true);
+      setShowTutorialSuggestion(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hostTutorialOpen) return;
+    const step = HOST_TUTORIAL_STEPS[hostTutorialStep];
+    if (!step) return;
+    if (step.nav) onHostGlassNav(step.nav);
+    if (step.setupStep) setHostSetupStep(step.setupStep);
+  }, [hostTutorialOpen, hostTutorialStep, onHostGlassNav]);
 
   useEffect(() => {
     const tab = parseHostGlassNavTab(searchParams.get('tab'));
@@ -9964,6 +10001,16 @@ const HostView: React.FC = () => {
             <button
               type="button"
               className="btn-secondary host-connection-toolbar-btn"
+              onClick={() => openHostTutorial(0)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+              title="Guided host training"
+            >
+              <BookOpen className="w-4 h-4" aria-hidden />
+              Guide
+            </button>
+            <button
+              type="button"
+              className="btn-secondary host-connection-toolbar-btn"
               onClick={() => setShowConnectionModal(true)}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
             >
@@ -10011,12 +10058,34 @@ const HostView: React.FC = () => {
           </div>
         ) : null}
 
+        {showTutorialSuggestion && !hostTutorialOpen ? (
+          <div className="host-tutorial-suggest" role="status">
+            <span>New to hosting? Take the guided tour.</span>
+            <div className="host-tutorial-suggest__actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  setHostTutorialSuggestionDismissed();
+                  setShowTutorialSuggestion(false);
+                }}
+              >
+                Dismiss
+              </button>
+              <button type="button" className="btn-primary" onClick={() => openHostTutorial(0)}>
+                Start guide
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {/* Main Content */}
         <div className="host-content host-content--dashboard" style={{ paddingBottom: '20px' }}>
           <div className="tab-content host-unified host-glass-workspace">
             {hostGlassNav === 'game' && (
               <>
                 {!showHostSetupFlow ? (
+                  <div data-host-tutorial="next-round">
                   <HostRoundTimeline
                     className="host-round-timeline--game"
                     rounds={roundTimelineRows}
@@ -10025,6 +10094,7 @@ const HostView: React.FC = () => {
                     onDuplicateRound={handleDuplicateRound}
                     onOpenRounds={() => onHostGlassNav('rounds')}
                   />
+                  </div>
                 ) : null}
                 {showHostSetupFlow ? (
                   <HostSetupFlow
@@ -10040,6 +10110,7 @@ const HostView: React.FC = () => {
                           <p className="host-setup-step__eyebrow">Step 1 · Playlist</p>
                           <h2 className="host-setup-step__title">Choose your playlists</h2>
                         </header>
+                        <div data-host-tutorial="next-round">
                         <HostRoundTimeline
                           className="host-round-timeline--game"
                           rounds={roundTimelineRows}
@@ -10048,10 +10119,12 @@ const HostView: React.FC = () => {
                           onDuplicateRound={handleDuplicateRound}
                           onOpenRounds={() => onHostGlassNav('rounds')}
                         />
+                        </div>
                         <section
                           id="host-setup-library"
                           className="host-inline-library host-glass-panel"
                           aria-label="Playlist library"
+                          data-host-tutorial="playlist"
                         >
                           <h3 className="host-inline-library__title">
                             <ListPlus className="w-5 h-5" aria-hidden />
@@ -10085,6 +10158,7 @@ const HostView: React.FC = () => {
                         <section
                           className="host-rounds-panel host-manager-section"
                           aria-labelledby="host-setup-criteria-title"
+                          data-host-tutorial="criteria"
                         >
                           <h3 id="host-setup-criteria-title" className="host-rounds-panel__title">
                             <ListMusic className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
@@ -10097,6 +10171,7 @@ const HostView: React.FC = () => {
                       </div>
                     ) : null}
                     {hostSetupStep === 'play' ? (
+                      <div data-host-tutorial="play">
                       <HostSetupPlayStep
                         roundName={hostActiveRoundSummary.roundName}
                         playlistNames={hostActiveRoundSummary.playlistNames}
@@ -10117,6 +10192,7 @@ const HostView: React.FC = () => {
                         onFinalizeMix={() => void finalizeMix()}
                         onStartGame={() => void startGame()}
                       />
+                      </div>
                     ) : null}
                   </HostSetupFlow>
                 ) : (
@@ -10215,17 +10291,21 @@ const HostView: React.FC = () => {
                 ) : null}
 
                 {gameState === 'playing' && bingoVerificationCount > 0 ? (
+                  <div data-host-tutorial="bingo-verify">
                   <HostGameLivePanel
                     bingoVerificationCount={bingoVerificationCount}
                     pendingPlayerName={pendingVerification?.playerName ?? null}
                     onOpenBingoVerification={openBingoVerification}
                   />
-                ) : null}
+                  </div>
+                ) : (
+                  <div data-host-tutorial="bingo-verify" className="host-tutorial-anchor" aria-hidden />
+                )}
               </>
             )}
 
             {hostGlassNav === 'players' && roomId ? (
-              <div>
+              <div data-host-tutorial="players">
                 <HostPlayersPanel
                   roomId={roomId}
                   playerCardsCount={playerCards.size}
@@ -10315,6 +10395,7 @@ const HostView: React.FC = () => {
                   id="host-library-workspace"
                   className="host-inline-library host-glass-panel"
                   aria-label="Playlist library workspace"
+                  data-host-tutorial="playlist"
                 >
                   <h2 className="host-inline-library__title">
                     <ListPlus className="w-5 h-5" aria-hidden />
@@ -10336,7 +10417,7 @@ const HostView: React.FC = () => {
 
                   {hostGlassNav === 'display' ? (
                   <div className="host-manager-col host-manager-col--wide">
-          <details ref={displaySettingsRef} className="host-event-settings" open>
+          <details ref={displaySettingsRef} className="host-event-settings" open data-host-tutorial="display">
             <summary className="host-event-settings__summary">
               <Monitor className="w-5 h-5" aria-hidden />
               Projector &amp; event rules
@@ -11577,6 +11658,13 @@ const HostView: React.FC = () => {
           aliasArtist={songAliases[editingSong.id]?.artist}
         />
       )}
+
+      <HostTutorial
+        open={hostTutorialOpen}
+        stepIndex={hostTutorialStep}
+        onStepChange={setHostTutorialStep}
+        onClose={closeHostTutorial}
+      />
 
     </div>
   );

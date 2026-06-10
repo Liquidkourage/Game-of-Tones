@@ -1,0 +1,132 @@
+.host-tutorial-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  pointer-events: none;
+}
+
+.host-tutorial-spotlight {
+  position: fixed;
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(8, 10, 18, 0.72);
+  border: 2px solid rgba(167, 139, 250, 0.85);
+  pointer-events: none;
+  transition:
+    top 0.2s ease,
+    left 0.2s ease,
+    width 0.2s ease,
+    height 0.2s ease;
+  z-index: 9501;
+}
+
+.host-tutorial-panel {
+  position: fixed;
+  z-index: 9502;
+  width: min(22rem, calc(100vw - 2rem));
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  border: 1px solid rgba(167, 139, 250, 0.38);
+  background: rgba(22, 26, 40, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.92);
+  pointer-events: auto;
+}
+
+.host-tutorial-panel--center {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.host-tutorial-panel__progress {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(167, 139, 250, 0.9);
+}
+
+.host-tutorial-panel__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.host-tutorial-panel__body {
+  margin: 0 0 0.85rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.host-tutorial-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.host-tutorial-panel__actions .btn-secondary,
+.host-tutorial-panel__actions .btn-primary {
+  font-size: 0.82rem;
+  padding: 0.45rem 0.85rem;
+}
+
+.host-tutorial-panel__skip {
+  margin-right: auto;
+  opacity: 0.85;
+}
+
+.host-tutorial-suggest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid rgba(167, 139, 250, 0.32);
+  background: rgba(72, 48, 128, 0.22);
+  font-size: 0.86rem;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.host-tutorial-suggest__actions {
+  display: flex;
+  gap: 0.45rem;
+  margin-left: auto;
+}
+
+.host-tutorial-suggest__actions .btn-secondary,
+.host-tutorial-suggest__actions .btn-primary {
+  font-size: 0.78rem;
+  padding: 0.35rem 0.7rem;
+}
+
+.host-tutorial-anchor {
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .host-tutorial-panel {
+    width: min(20rem, calc(100vw - 1.25rem));
+  }
+
+  .host-tutorial-panel__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .host-tutorial-panel__skip {
+    margin-right: 0;
+    order: 3;
+  }
+}
