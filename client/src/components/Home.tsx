@@ -222,24 +222,6 @@ const Home: React.FC = () => {
     postHostLogout();
   };
 
-  const showHostSetup = () => {
-    setHomeMode('host');
-    const next = new URLSearchParams(searchParams);
-    next.delete('join');
-    next.set('mode', 'host');
-    next.delete('player');
-    setSearchParams(next, { replace: true });
-  };
-
-  const showJoinSetup = () => {
-    setHomeMode('join');
-    const next = new URLSearchParams(searchParams);
-    next.delete('mode');
-    next.delete('host');
-    next.delete('player');
-    setSearchParams(next, { replace: true });
-  };
-
   const showDevSignInLink = process.env.NODE_ENV === 'development';
 
   const goToHostRoom = (rid: string, displayName: string, opts?: { tab?: HostGlassNavId }) => {
@@ -496,29 +478,8 @@ const Home: React.FC = () => {
           </div>
         )}
 
-        <nav className="home-nav" aria-label="Main navigation">
-          <button
-            type="button"
-            className={`home-nav__link${homeMode === 'join' ? ' home-nav__link--active' : ''}`}
-            aria-current={homeMode === 'join' ? 'page' : undefined}
-            onClick={showJoinSetup}
-          >
-            <UserPlus className="home-nav__icon" aria-hidden />
-            Join
-          </button>
-          <button
-            type="button"
-            className={`home-nav__link${homeMode === 'host' ? ' home-nav__link--active' : ''}`}
-            aria-current={homeMode === 'host' ? 'page' : undefined}
-            onClick={showHostSetup}
-          >
-            <Crown className="home-nav__icon" aria-hidden />
-            Host
-          </button>
-        </nav>
-
         <div className="options-grid options-grid--single">
-          {homeMode === 'join' && (
+          {homeMode !== 'host' && (
           <motion.div 
             className="option-card join-card"
             whileHover={{ scale: 1.01, y: -2 }}

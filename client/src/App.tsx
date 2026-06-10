@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, useLocation, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Sparkles, Shield, Home as HomeIcon, UserCircle } from 'lucide-react';
+import { Sparkles, Shield, Crown, UserCircle, UserPlus } from 'lucide-react';
 import { API_BASE } from './config';
 import { hostFetch } from './utils/hostFetch';
 import './App.css';
@@ -37,6 +37,10 @@ function AppHeader() {
   const [showOrgLink, setShowOrgLink] = useState(false);
   const [displayVenueBranding, setDisplayVenueBranding] = useState<DisplayVenueBranding>(null);
   const isDisplay = /^\/display(\/.+|$)/.test(location.pathname);
+  const isHome = location.pathname === '/';
+  const isHostEntry =
+    isHome &&
+    (location.search.includes('mode=host') || new URLSearchParams(location.search).get('host') === '1');
 
   useEffect(() => {
     const onBranding = (e: Event) => {
@@ -146,10 +150,24 @@ function AppHeader() {
           className="app-header__trailing"
           style={{ position: 'absolute', right: '2rem', top: '50%', transform: 'translateY(-50%)', zIndex: 101 }}
         >
-          <Link to="/" className="app-header__org-link" title="Home">
-            <HomeIcon size={16} aria-hidden className="app-header__org-icon" />
-            <span>Home</span>
-          </Link>
+          {isHome ? (
+            isHostEntry ? (
+              <Link to="/" className="app-header__org-link" title="Join a game">
+                <UserPlus size={16} aria-hidden className="app-header__org-icon" />
+                <span>Join</span>
+              </Link>
+            ) : (
+              <Link to="/?mode=host" className="app-header__org-link" title="Host a game">
+                <Crown size={16} aria-hidden className="app-header__org-icon" />
+                <span>Host</span>
+              </Link>
+            )
+          ) : (
+            <Link to="/" className="app-header__org-link" title="Join a game">
+              <UserPlus size={16} aria-hidden className="app-header__org-icon" />
+              <span>Join</span>
+            </Link>
+          )}
           {showOrgLink && (
             <Link to="/org" className="app-header__org-link" title="Account and billing">
               <UserCircle size={16} aria-hidden className="app-header__org-icon" />
