@@ -1889,9 +1889,14 @@ const HostView: React.FC = () => {
       
       if (data.success) {
         if (data.fromSpotifyListCache) {
-          const m = (data.cacheMessage || 'Showing a saved copy of your Spotify library list.').trim();
-          const t = data.cacheUpdatedAt ? new Date(String(data.cacheUpdatedAt)).toLocaleString() : '';
-          setSpotifyListCacheInfo(t ? `${m} (saved ${t})` : m);
+          const updated = data.cacheUpdatedAt ? new Date(String(data.cacheUpdatedAt)) : null;
+          const formatted =
+            updated && !Number.isNaN(updated.getTime())
+              ? updated.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+              : '';
+          setSpotifyListCacheInfo(
+            formatted ? `Saved library • Last updated ${formatted}` : 'Saved library',
+          );
         } else {
           setSpotifyListCacheInfo(null);
         }
@@ -9012,7 +9017,7 @@ const HostView: React.FC = () => {
                       <div className="host-playlist-library-alerts">
                         {spotifyListCacheInfo ? (
                           <p className="host-playlist-library-alerts__cache" role="status">
-                            <strong>Saved library copy</strong> — {spotifyListCacheInfo}
+                            {spotifyListCacheInfo}
                           </p>
                         ) : null}
                         {spotifyError ? (
