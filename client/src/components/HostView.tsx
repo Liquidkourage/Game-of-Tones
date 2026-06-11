@@ -9524,6 +9524,25 @@ const HostView: React.FC = () => {
     </div>
   );
 
+  /** One-click "Add to <round>" target for library rows: the round being prepped (Game tab Step 1)
+   *  or the round focused in the Rounds tab. Keeps the obvious action obvious — no dropdown needed. */
+  const libraryQuickAssignRound = useMemo(() => {
+    if (eventRounds.length === 0) return null;
+    const idx =
+      hostGlassNav === 'rounds' && selectedRoundForPanel
+        ? selectedRoundForPanel.index
+        : currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length
+          ? currentRoundIndex
+          : 0;
+    const round = eventRounds[idx];
+    if (!round) return null;
+    return {
+      index: idx,
+      name: round.name,
+      canonicalIds: (round.playlistIds || []).map((id) => canonicalPlaylistIdForMatch(String(id))),
+    };
+  }, [eventRounds, hostGlassNav, selectedRoundForPanel, currentRoundIndex]);
+
   const playlistRoundBuilderBody = (
               <div className="host-playlist-round-modal-root host-playlist-library-inline">
           <motion.div
@@ -10007,6 +10026,44 @@ const HostView: React.FC = () => {
                                 className="host-playlist-library-row__assign"
                                 onMouseDown={(e) => e.stopPropagation()}
                               >
+                                {(() => {
+                                  if (!libraryQuickAssignRound) return null;
+                                  const inQuickRound = libraryQuickAssignRound.canonicalIds.includes(
+                                    canonicalPlaylistIdForMatch(p.id),
+                                  );
+                                  return (
+                                    <button
+                                      type="button"
+                                      className={
+                                        inQuickRound
+                                          ? 'host-playlist-quick-add host-playlist-quick-add--added'
+                                          : 'host-playlist-quick-add'
+                                      }
+                                      onClick={() =>
+                                        inQuickRound
+                                          ? removePlaylistFromRoundBucket(libraryQuickAssignRound.index, p.id)
+                                          : addPlaylistToRoundBucket(libraryQuickAssignRound.index, p.id)
+                                      }
+                                      title={
+                                        inQuickRound
+                                          ? `Remove from ${libraryQuickAssignRound.name}`
+                                          : `Add to ${libraryQuickAssignRound.name}`
+                                      }
+                                    >
+                                      {inQuickRound ? (
+                                        <>
+                                          <Check className="w-3.5 h-3.5" aria-hidden />
+                                          Added
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Plus className="w-3.5 h-3.5" aria-hidden />
+                                          Add to {libraryQuickAssignRound.name}
+                                        </>
+                                      )}
+                                    </button>
+                                  );
+                                })()}
                                 <HostPlaylistRoundAssignMenu
                                   playlistId={p.id}
                                   playlistName={stripGoTPrefix ? stripTitleFlagPrefix(p.name, titleFlagStripList) : p.name}

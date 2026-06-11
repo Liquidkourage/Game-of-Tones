@@ -258,6 +258,49 @@
   flex-shrink: 0;
   align-self: flex-start;
   padding-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* One-click assign to the round being prepped — the primary action on a library row. */
+.host-playlist-quick-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 255, 136, 0.45);
+  background: rgba(0, 255, 136, 0.12);
+  color: #00ff88;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.host-playlist-quick-add:hover {
+  background: rgba(0, 255, 136, 0.22);
+  border-color: rgba(0, 255, 136, 0.7);
+}
+
+.host-playlist-quick-add--added {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.host-playlist-quick-add--added:hover {
+  border-color: rgba(255, 99, 99, 0.5);
+  background: rgba(255, 99, 99, 0.12);
+  color: #ffb4b4;
+}
+
+.host-playlist-quick-add svg {
+  width: 0.85rem;
+  height: 0.85rem;
 }
 
 .host-playlist-round-modal-root--assign-focus .host-music-two-pane__library {
