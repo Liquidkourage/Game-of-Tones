@@ -24,6 +24,8 @@ type HostRoundTimelineProps = {
   onDropPlaylist?: (roundIndex: number, playlistId: string) => void;
   summary?: string;
   onOpenRounds?: () => void;
+  /** Extra guidance shown in the read-only nothing-prepped state (e.g. "Add music below"). */
+  emptyHint?: string;
   className?: string;
 };
 
@@ -44,6 +46,7 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
   onDropPlaylist,
   summary,
   onOpenRounds,
+  emptyHint,
   className,
 }) => {
   const [dragOverRound, setDragOverRound] = useState<number | null>(null);
@@ -65,7 +68,9 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
         <div className="host-round-timeline__header">
           <div>
             <h2 className="host-round-timeline__title">Tonight&apos;s rounds</h2>
-            <p className="host-round-timeline__summary">No rounds prepped yet.</p>
+            <p className="host-round-timeline__summary">
+              No rounds prepped yet.{emptyHint ? ` ${emptyHint}` : ''}
+            </p>
           </div>
           {onOpenRounds ? (
             <div className="host-round-timeline__header-actions">

@@ -5,9 +5,9 @@ import './HostSetupFlow.css';
 export type HostSetupStep = 'playlist' | 'criteria' | 'play';
 
 const STEPS: Array<{ id: HostSetupStep; label: string; icon: React.ReactNode }> = [
-  { id: 'playlist', label: 'Playlist', icon: <ListMusic aria-hidden /> },
-  { id: 'criteria', label: 'Criteria', icon: <Settings2 aria-hidden /> },
-  { id: 'play', label: 'Play', icon: <Play aria-hidden /> },
+  { id: 'playlist', label: 'Build rounds', icon: <ListMusic aria-hidden /> },
+  { id: 'criteria', label: 'Card setup', icon: <Settings2 aria-hidden /> },
+  { id: 'play', label: 'Play game', icon: <Play aria-hidden /> },
 ];
 
 export type HostSetupFlowProps = {
@@ -31,6 +31,12 @@ const HostSetupFlow: React.FC<HostSetupFlowProps> = ({
   const canGoBack = stepIndex > 0;
   const canGoNext =
     step === 'playlist' ? playlistReady : step === 'criteria' ? criteriaReady : false;
+  const nextBlockedReason =
+    step === 'playlist' && !playlistReady
+      ? 'Add at least one playlist to continue.'
+      : step === 'criteria' && !criteriaReady
+        ? 'Finish card setup to continue.'
+        : null;
 
   const stepStatus = (id: HostSetupStep): 'complete' | 'current' | 'upcoming' => {
     const idx = STEPS.findIndex((s) => s.id === id);
@@ -90,15 +96,23 @@ const HostSetupFlow: React.FC<HostSetupFlowProps> = ({
           <span />
         )}
         {step !== 'play' ? (
-          <button
-            type="button"
-            className="btn-primary host-setup-flow__nav-btn"
-            onClick={() => onStepChange(STEPS[stepIndex + 1].id)}
-            disabled={!canGoNext}
-          >
-            Next
-            <ChevronRight className="w-4 h-4" aria-hidden />
-          </button>
+          <span className="host-setup-flow__nav-next">
+            {nextBlockedReason ? (
+              <span className="host-setup-flow__nav-reason" role="status">
+                {nextBlockedReason}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              className="btn-primary host-setup-flow__nav-btn"
+              onClick={() => onStepChange(STEPS[stepIndex + 1].id)}
+              disabled={!canGoNext}
+              title={nextBlockedReason || undefined}
+            >
+              Next
+              <ChevronRight className="w-4 h-4" aria-hidden />
+            </button>
+          </span>
         ) : playReady ? (
           <span className="host-setup-flow__ready-hint">
             <CheckCircle2 className="w-4 h-4" aria-hidden />

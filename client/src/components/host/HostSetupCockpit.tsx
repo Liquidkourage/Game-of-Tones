@@ -8,6 +8,7 @@ export type HostSetupCockpitProps = {
   status: HostSetupStatusStripProps;
   rounds: RoundTimelineRow[];
   roundSummary?: string;
+  roundsEmptyHint?: string;
   onSelectRound: (index: number) => void;
   step: HostSetupStep;
   onStepChange: (step: HostSetupStep) => void;
@@ -21,6 +22,7 @@ const HostSetupCockpit: React.FC<HostSetupCockpitProps> = ({
   status,
   rounds,
   roundSummary,
+  roundsEmptyHint,
   onSelectRound,
   step,
   onStepChange,
@@ -37,6 +39,7 @@ const HostSetupCockpit: React.FC<HostSetupCockpitProps> = ({
           className="host-round-timeline--cockpit"
           rounds={rounds}
           summary={roundSummary}
+          emptyHint={roundsEmptyHint}
           onSelectRound={onSelectRound}
         />
       </div>

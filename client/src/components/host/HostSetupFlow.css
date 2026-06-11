@@ -115,6 +115,18 @@
   gap: 6px;
 }
 
+.host-setup-flow__nav-next {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.host-setup-flow__nav-reason {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #ffd98a;
+}
+
 .host-setup-flow__ready-hint {
   display: inline-flex;
   align-items: center;

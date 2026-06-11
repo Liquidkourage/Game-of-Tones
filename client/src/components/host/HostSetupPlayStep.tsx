@@ -59,7 +59,7 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
   return (
     <div className="host-setup-play">
       <header className="host-setup-play__header">
-        <p className="host-setup-play__eyebrow">Step 3 · Play</p>
+        <p className="host-setup-play__eyebrow">Step 3 · Play game</p>
         <h2 className="host-setup-play__title">Readiness and start</h2>
       </header>
 

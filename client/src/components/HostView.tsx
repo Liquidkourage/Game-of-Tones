@@ -1013,6 +1013,22 @@ const HostView: React.FC = () => {
     return !!d && d.is_active === false;
   }, [mixNeedsHostSpotify, isSpotifyConnected, isLoadingDevices, selectedDevice, devices]);
 
+  /** Spotify Web API recently returned transient 5xx errors while tokens are valid.
+   *  Drives honest "connected, but API unavailable" status copy — never reconnect prompts. */
+  const [spotifyApiOutage, setSpotifyApiOutage] = useState(false);
+  const spotifyApiOutageTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const noteSpotifyApiOutage = useCallback(() => {
+    setSpotifyApiOutage(true);
+    if (spotifyApiOutageTimerRef.current) clearTimeout(spotifyApiOutageTimerRef.current);
+    spotifyApiOutageTimerRef.current = setTimeout(() => setSpotifyApiOutage(false), 120000);
+  }, []);
+  useEffect(
+    () => () => {
+      if (spotifyApiOutageTimerRef.current) clearTimeout(spotifyApiOutageTimerRef.current);
+    },
+    [],
+  );
+
   const selectablePlaybackDevices = useMemo(() => {
     if (venueSpotifyJamMode) {
       return devices.filter((d) => isSpotifyJamDevice(d));
@@ -1278,6 +1294,63 @@ const HostView: React.FC = () => {
     mixNeedsHostSpotify,
     selectedDevice,
     playbackDeviceNotInList,
+    showYoutubeMusicInConnectionModal,
+    youtubeMusicConnected,
+  ]);
+
+  /** Honest, host-facing playback readiness for the setup status strip. Distinguishes
+   *  account connection, transient Spotify API outages, and device selected/active states. */
+  const hostSetupPlaybackStatus = useMemo((): {
+    status: 'ready' | 'api_unavailable' | 'device_inactive' | 'device_offline' | 'no_device' | 'not_connected';
+    label: string;
+    detail?: string;
+  } => {
+    const youtubeReady = showYoutubeMusicInConnectionModal && youtubeMusicConnected;
+    if (!isSpotifyConnected) {
+      if (youtubeReady) return { status: 'ready', label: 'YouTube Music connected' };
+      return {
+        status: 'not_connected',
+        label: 'Playback not connected',
+        detail: 'Connect Spotify (or YouTube Music) under Settings → Playback & connections.',
+      };
+    }
+    if (spotifyApiOutage) {
+      return {
+        status: 'api_unavailable',
+        label: 'Spotify connected · API temporarily unavailable',
+        detail:
+          'Your Spotify account is fine — Spotify’s API is having a moment. Cached tracks are used where possible; retry shortly. No need to reconnect.',
+      };
+    }
+    if (mixNeedsHostSpotify && !selectedDevice?.id) {
+      return {
+        status: 'no_device',
+        label: 'Spotify connected · pick a playback device',
+        detail: 'Choose a playback device under Settings → Playback & connections.',
+      };
+    }
+    if (mixNeedsHostSpotify && selectedDevice?.id && playbackDeviceNotInList) {
+      return {
+        status: 'device_offline',
+        label: `Spotify connected · ${selectedDevice.name} offline`,
+        detail: `Open Spotify on ${selectedDevice.name}, then refresh devices in Settings.`,
+      };
+    }
+    if (selectedDeviceInactive && selectedDevice) {
+      return {
+        status: 'device_inactive',
+        label: `Spotify connected · ${selectedDevice.name} inactive`,
+        detail: `${selectedDevice.name} is selected but not Spotify’s active device. Open Spotify on it (play/pause once), then refresh devices.`,
+      };
+    }
+    return { status: 'ready', label: 'Spotify connected' };
+  }, [
+    isSpotifyConnected,
+    spotifyApiOutage,
+    mixNeedsHostSpotify,
+    selectedDevice,
+    playbackDeviceNotInList,
+    selectedDeviceInactive,
     showYoutubeMusicInConnectionModal,
     youtubeMusicConnected,
   ]);
@@ -2039,6 +2112,7 @@ const HostView: React.FC = () => {
         } else if (data && data.error === 'spotify_upstream_unavailable') {
           // Transient Spotify outage — Spotify stays connected; do not show reconnect copy.
           setSpotifyError(null);
+          noteSpotifyApiOutage();
           showHostAckNotification({
             id: 'playlists-spotify_upstream_unavailable',
             title: 'Spotify API temporarily unavailable',
@@ -6631,6 +6705,7 @@ const HostView: React.FC = () => {
             const waitSec =
               typeof data.retryAfterSec === 'number' && data.retryAfterSec > 0 ? data.retryAfterSec : 45;
             playlistTracksUnavailableUntilRef.current.set(playlist.id, Date.now() + waitSec * 1000);
+            noteSpotifyApiOutage();
             showHostAckNotification({
               id: 'setlist-playlist-tracks-503',
               title: 'Spotify API temporarily unavailable',
@@ -6676,6 +6751,7 @@ const HostView: React.FC = () => {
         }
 
         if (skippedForUpstreamCooldown > 0) {
+          noteSpotifyApiOutage();
           showHostAckNotification({
             id: 'setlist-playlist-tracks-503',
             title: 'Spotify API temporarily unavailable',
@@ -10489,13 +10565,18 @@ const HostView: React.FC = () => {
                 status={{
                   roomId: roomId || '',
                   gameState,
-                  playbackReady: hostPlaybackSystemsReady,
+                  playback: hostSetupPlaybackStatus,
+                  onOpenConnection: () => onHostGlassNav('settings'),
                   displayConnected: displayPresence.connected,
                   displayStale: displayPresence.stale,
                   displaySyncLabel,
+                  displayUrl: publicDisplayUrl,
+                  playerCount: hostPlayerRoster.length,
+                  onCopyJoinLink: handleCopyJoinLink,
                 }}
                 rounds={roundTimelineRows}
                 roundSummary={roundTimelineSummary}
+                roundsEmptyHint="Add music in Build rounds below — your round will show up here."
                 onSelectRound={handleSelectRoundForPrep}
                 step={hostSetupStep}
                 onStepChange={setHostSetupStep}
@@ -10508,14 +10589,16 @@ const HostView: React.FC = () => {
                     roundName={hostActiveRoundSummary.roundName}
                     playlistNames={hostActiveRoundSummary.playlistNames}
                     playlistReady={setupPlaylistReady}
+                    poolCount={hostActiveRoundSummary.poolCount}
                     spotifyCacheInfo={spotifyListCacheInfo}
+                    library={playlistRoundBuilderBody}
                     onGoToRounds={() => onHostGlassNav('rounds')}
                   />
                 ) : null}
                 {hostSetupStep === 'criteria' ? (
                   <div className="host-setup-step">
                     <header className="host-setup-step__header">
-                      <p className="host-setup-step__eyebrow">Step 2 · Criteria</p>
+                      <p className="host-setup-step__eyebrow">Step 2 · Card setup</p>
                       <h2 className="host-setup-step__title">Set how this round plays</h2>
                     </header>
                     <section

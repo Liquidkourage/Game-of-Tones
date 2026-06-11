@@ -29,8 +29,42 @@
   color: #ffb347;
 }
 
+/* Connected-but-degraded (API blip, inactive device): caution without alarm. */
+.host-setup-status-strip__item--soft-warn {
+  color: #ffd98a;
+}
+
 .host-setup-status-strip__item--muted {
   color: rgba(255, 255, 255, 0.48);
+}
+
+.host-setup-status-strip__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 2px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.host-setup-status-strip__action:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.host-setup-status-strip__action svg {
+  width: 0.75rem;
+  height: 0.75rem;
 }
 
 .host-setup-status-strip__label {
@@ -66,6 +100,33 @@
 
 .host-glass-theme .host-round-timeline--cockpit .host-round-timeline__track {
   gap: 10px;
+}
+
+.host-setup-playlist__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.host-setup-playlist__lead {
+  margin: 6px 0 0;
+  font-size: 0.86rem;
+  color: rgba(255, 255, 255, 0.65);
+  line-height: 1.45;
+}
+
+.host-setup-playlist__rounds-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: 0.8rem;
+}
+
+.host-setup-playlist__library {
+  margin-top: 14px;
 }
 
 .host-setup-playlist__assigned {
