@@ -5376,140 +5376,59 @@ const PublicDisplay: React.FC = () => {
                 const logoUrl = vb?.logoUrl;
                 const hasVenueText = !!(vb && (vb.eventTitle || vb.sponsorLine));
                 return (
-                  <>
-                    <div
-                      style={{
-                        width: '100%',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        textAlign: 'center',
-                        flexShrink: 0,
-                      }}
+                  <div className="public-display-rules-hero">
+                    <PublicDisplayTempoBallRow seeds={ballAnimSeedsRef.current} variant="rulesWall" />
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4, delay: 0.05, ease: 'easeOut' }}
+                      className="public-display-rules-hero__title-row"
                     >
-                      <PublicDisplayTempoBallRow seeds={ballAnimSeedsRef.current} variant="rulesWall" />
-                      <motion.div
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.4, delay: 0.05, ease: 'easeOut' }}
+                      <Sparkles
                         style={{
-                          marginTop: 'clamp(4px, 1vmin, 14px)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 'clamp(8px, 1.65vmin, 18px)',
-                          flexWrap: 'wrap',
+                          width: 'clamp(22px, 3.6vmin, 46px)',
+                          height: 'clamp(22px, 3.6vmin, 46px)',
+                          color: pdGlass.violet,
+                          filter: 'drop-shadow(0 0 14px rgba(0,255,200,0.6))',
                         }}
-                      >
-                        <Sparkles
-                          style={{
-                            width: 'clamp(24px, 4.2vmin, 52px)',
-                            height: 'clamp(24px, 4.2vmin, 52px)',
-                            color: pdGlass.violet,
-                            filter: 'drop-shadow(0 0 14px rgba(0,255,200,0.6))',
-                          }}
-                          strokeWidth={2.2}
-                          aria-hidden
-                        />
-                        <div
-                          style={{
-                            fontSize: 'clamp(1.75rem, min(6.8vmin, 5.8vh), 4.25rem)',
-                            fontWeight: 1000,
-                            letterSpacing: '0.02em',
-                            backgroundImage: pdGlass.titleGradient,
-                            WebkitBackgroundClip: 'text',
-                            backgroundClip: 'text',
-                            WebkitTextFillColor: 'transparent',
-                            filter: 'drop-shadow(0 6px 22px rgba(123,255,217,0.35))',
-                            lineHeight: 1.05,
-                          }}
-                        >
-                          Game of Tones
-                        </div>
-                        <Sparkles
-                          style={{
-                            width: 'clamp(24px, 4.2vmin, 52px)',
-                            height: 'clamp(24px, 4.2vmin, 52px)',
-                            color: pdGlass.violet,
-                            filter: 'drop-shadow(0 0 14px rgba(0,255,200,0.6))',
-                          }}
-                          strokeWidth={2.2}
-                          aria-hidden
-                        />
-                      </motion.div>
-                    </div>
-                    {!logoUrl && vb && hasVenueText ? (
-                      <PublicDisplayVenueBrandingHero
-                        branding={vb}
-                        marginBottom="clamp(0.25rem, 0.7vmin, 0.55rem)"
-                        rulesWall
+                        strokeWidth={2.2}
+                        aria-hidden
                       />
-                    ) : null}
-                    {logoUrl && hasVenueText ? (
                       <div
                         style={{
-                          width: '100%',
-                          textAlign: 'center',
-                          marginBottom: 'clamp(0.35rem, 1vmin, 0.85rem)',
-                          flexShrink: 0,
-                          marginTop: 'clamp(8px, 1.4vmin, 16px)',
+                          fontSize: 'clamp(1.6rem, min(5.6vmin, 4.8vh), 3.6rem)',
+                          fontWeight: 1000,
+                          letterSpacing: '0.02em',
+                          backgroundImage: pdGlass.titleGradient,
+                          WebkitBackgroundClip: 'text',
+                          backgroundClip: 'text',
+                          WebkitTextFillColor: 'transparent',
+                          filter: 'drop-shadow(0 6px 22px rgba(123,255,217,0.35))',
+                          lineHeight: 1.05,
                         }}
                       >
-                        {vb!.eventTitle ? (
-                          <div
-                            style={{
-                              fontSize: 'clamp(1.2rem, min(3.8vmin, 3.2vh), 2.15rem)',
-                              fontWeight: 800,
-                              color: 'rgba(245,250,255,0.98)',
-                              lineHeight: 1.15,
-                              letterSpacing: '0.04em',
-                            }}
-                          >
-                            {vb!.eventTitle}
-                          </div>
-                        ) : null}
-                        {vb!.sponsorLine ? (
-                          <div
-                            style={{
-                              fontSize: 'clamp(1.05rem, min(3vmin, 2.5vh), 1.5rem)',
-                              fontWeight: 600,
-                              color: 'rgba(200,215,225,0.9)',
-                              marginTop: 8,
-                              lineHeight: 1.28,
-                            }}
-                          >
-                            {vb!.sponsorLine}
-                          </div>
-                        ) : null}
+                        How to Play
                       </div>
+                      <Sparkles
+                        style={{
+                          width: 'clamp(22px, 3.6vmin, 46px)',
+                          height: 'clamp(22px, 3.6vmin, 46px)',
+                          color: pdGlass.violet,
+                          filter: 'drop-shadow(0 0 14px rgba(0,255,200,0.6))',
+                        }}
+                        strokeWidth={2.2}
+                        aria-hidden
+                      />
+                    </motion.div>
+                    {/* With a venue logo on screen the text lockup would just repeat it — logo only. */}
+                    {!logoUrl && vb && hasVenueText ? (
+                      <PublicDisplayVenueBrandingHero branding={vb} marginBottom="0" rulesWall />
                     ) : null}
-                  </>
+                  </div>
                 );
               })()}
-              <motion.div
-                className="public-display-rules-overlay__header"
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, ease: 'easeOut' }}
-              >
-                <div
-                  className="public-display-rules-overlay__title-sub"
-                  style={{
-                    fontWeight: 1000,
-                    letterSpacing: '0.03em',
-                    backgroundImage:
-                      pdGlass.titleGradient,
-                    WebkitBackgroundClip: 'text',
-                    backgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    filter: 'drop-shadow(0 4px 18px rgba(0,255,170,0.35))',
-                    lineHeight: 1.05,
-                  }}
-                >
-                  How to Play — Game of Tones
-                </div>
-              </motion.div>
 
+              <div className="public-display-rules-main">
               <div className="public-display-rules-steps">
                 {[
                   {
@@ -5544,9 +5463,10 @@ const PublicDisplay: React.FC = () => {
                     title: 'Hit the pattern → BINGO',
                     body: (
                       <>
-                        Tonight&apos;s pattern: <strong style={{ color: '#e8fff8' }}>{getPatternName()}</strong>. Complete it
-                        with called songs, then tap <strong style={{ color: '#e8fff8' }}>BINGO</strong> on your phone — the
-                        host confirms in seconds.
+                        Tonight&apos;s pattern:{' '}
+                        <strong style={{ color: '#e8fff8' }}>{getPatternName().replace(/^Pattern:\s*/i, '')}</strong>.
+                        Complete it with called songs, then tap <strong style={{ color: '#e8fff8' }}>BINGO</strong> on your
+                        phone — the host confirms in seconds.
                       </>
                     ),
                   },
@@ -5564,84 +5484,127 @@ const PublicDisplay: React.FC = () => {
                     }}
                   >
                     <div className="public-display-rules-step__badge">{step.n}</div>
-                    <h3 className="public-display-rules-step__title">{step.title}</h3>
-                    <p className="public-display-rules-step__body">{step.body}</p>
+                    <div className="public-display-rules-step__text">
+                      <h3 className="public-display-rules-step__title">{step.title}</h3>
+                      <p className="public-display-rules-step__body">{step.body}</p>
+                    </div>
                   </motion.div>
                 ))}
               </div>
 
-              <motion.div
-                className="public-display-rules-highlights-header"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.4, delay: 0.25 }}
-              >
-                Not your average music bingo
-              </motion.div>
+              <div className="public-display-rules-features">
+                <motion.div
+                  className="public-display-rules-feature"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: 0.2, ease: 'easeOut' }}
+                  style={{ borderColor: 'rgba(0,255,136,0.55)' }}
+                >
+                  <h3 className="public-display-rules-feature__title">
+                    <Eye aria-hidden /> Reading this screen
+                  </h3>
+                  <ul className="public-display-rules-feature__list">
+                    <li>
+                      <Hash className="public-display-rules-feature__li-icon" aria-hidden />
+                      <span>
+                        Every clip posts up here with a call number — <strong style={{ color: '#e8fff8' }}>#1, #2,
+                        #3…</strong> in play order. Miss one? Glance up and catch right up.
+                      </span>
+                    </li>
+                    <li>
+                      <Eye className="public-display-rules-feature__li-icon" aria-hidden />
+                      <span>
+                        Titles start <strong style={{ color: pdGlass.mint }}>hidden</strong> and fill in{' '}
+                        <strong style={{ color: pdGlass.mint }}>letter by letter</strong> while the clip plays. Stumped?
+                        Patience pays — the board gives it away a little at a time.
+                      </span>
+                    </li>
+                  </ul>
+                </motion.div>
 
-              <div className="public-display-rules-highlights">
+                <motion.div
+                  className="public-display-rules-feature"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: 0.26, ease: 'easeOut' }}
+                  style={{ borderColor: 'rgba(139,92,246,0.6)' }}
+                >
+                  {(() => {
+                    const mixNames = playlistNames.map((n) => String(n || '').trim()).filter(Boolean);
+                    const fiveMix = mixNames.length === 5;
+                    return (
+                      <>
+                        <h3 className="public-display-rules-feature__title">
+                          <Music aria-hidden /> {fiveMix ? 'Five playlists, one mix' : 'Tonight’s 75-song mix'}
+                        </h3>
+                        {fiveMix ? (
+                          <>
+                            <p className="public-display-rules-feature__body">
+                              Tonight&apos;s 75 songs blend <strong style={{ color: pdGlass.mint }}>five playlists</strong> —
+                              and your card&apos;s columns match them, one playlist per letter:
+                            </p>
+                            <ul className="public-display-rules-feature__mix">
+                              {mixNames.map((name, i) => (
+                                <li key={`${name}-${i}`}>
+                                  <span className="public-display-rules-feature__mix-letter">
+                                    {'BINGO'[i]}
+                                  </span>
+                                  <span className="public-display-rules-feature__mix-name">{name}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        ) : (
+                          <p className="public-display-rules-feature__body">
+                            Tonight&apos;s pool is one curated mix of{' '}
+                            <strong style={{ color: pdGlass.mint }}>75 songs</strong> — often blending several playlists or
+                            genres. Every card is dealt from that same pool, so if it&apos;s on your card, it&apos;s in
+                            play tonight.
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
+                </motion.div>
+              </div>
+              </div>
+
+              <div className="public-display-rules-chips">
                 {[
                   {
-                    icon: <Eye aria-hidden />,
-                    glow: 'rgba(0,255,136,0.5)',
-                    title: 'Titles reveal themselves',
-                    body: (
-                      <>
-                        Stumped? The mystery title fills in <strong style={{ color: pdGlass.mint }}>letter by letter</strong>{' '}
-                        on this screen while the clip plays. Patience pays.
-                      </>
-                    ),
-                  },
-                  {
-                    icon: <Hash aria-hidden />,
-                    glow: 'rgba(139,92,246,0.55)',
-                    title: 'Every call has a number',
-                    body: (
-                      <>
-                        Songs post up here as <strong style={{ color: '#e8fff8' }}>#1, #2, #3…</strong> in play order — glance
-                        up anytime to catch up on what you missed.
-                      </>
-                    ),
-                  },
-                  {
                     icon: <RefreshCw aria-hidden />,
-                    glow: 'rgba(0,255,136,0.45)',
-                    title: 'New round, new everything',
                     body: (
                       <>
-                        Each round deals <strong style={{ color: pdGlass.mint }}>fresh cards</strong> and can bring a{' '}
-                        <strong style={{ color: pdGlass.mint }}>new pattern</strong> — check this screen at the top of every
-                        round.
+                        <strong>New round, new everything</strong> — fresh cards and often a new pattern each round
                       </>
                     ),
                   },
                   {
                     icon: <ShieldCheck aria-hidden />,
-                    glow: 'rgba(139,92,246,0.5)',
-                    title: 'No paper, no disputes',
                     body: (
                       <>
-                        BINGO taps are checked against the <strong style={{ color: '#e8fff8' }}>actual call list</strong>{' '}
-                        instantly. False alarms don&apos;t stop the music.
+                        <strong>No paper, no disputes</strong> — BINGO is verified against the real call list in seconds
                       </>
                     ),
                   },
-                ].map((hl, i) => (
+                  {
+                    icon: <Sparkles aria-hidden />,
+                    body: (
+                      <>
+                        <strong>Fair by design</strong> — every card comes from the same 75-song pool
+                      </>
+                    ),
+                  },
+                ].map((chip, i) => (
                   <motion.div
-                    key={hl.title}
-                    className="public-display-rules-highlight"
-                    initial={{ opacity: 0, y: 10 }}
+                    key={i}
+                    className="public-display-rules-chip"
+                    initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.35, delay: 0.28 + i * 0.06, ease: 'easeOut' }}
-                    style={{ borderColor: hl.glow }}
+                    transition={{ duration: 0.3, delay: 0.34 + i * 0.05, ease: 'easeOut' }}
                   >
-                    <div className="public-display-rules-highlight__head">
-                      <span className="public-display-rules-highlight__icon" style={{ color: pdGlass.mint }}>
-                        {hl.icon}
-                      </span>
-                      <h3 className="public-display-rules-highlight__title">{hl.title}</h3>
-                    </div>
-                    <p className="public-display-rules-highlight__body">{hl.body}</p>
+                    <span className="public-display-rules-chip__icon">{chip.icon}</span>
+                    <span>{chip.body}</span>
                   </motion.div>
                 ))}
               </div>

@@ -610,9 +610,45 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(6px, 1.2vmin, 14px);
+  gap: clamp(8px, 1.4vmin, 18px);
   overflow: hidden !important;
   padding-bottom: clamp(8px, 1.5vmin, 16px) !important;
+  /* Fill the projector — no dead band under the content. */
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.App .public-display-rules-hero {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.App .public-display-rules-hero__title-row {
+  margin-top: clamp(4px, 1vmin, 14px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 1.65vmin, 18px);
+  flex-wrap: wrap;
+}
+
+/* Steps left, the two big explainers (screen + mix) right. */
+.App .public-display-rules-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  gap: clamp(10px, 1.6vmin, 20px);
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-width: min(98vw, 1640px);
+  align-items: stretch;
+  overflow: hidden;
 }
 
 .App .public-display-rules-overlay__header {
@@ -628,38 +664,46 @@ body {
   margin-bottom: clamp(0.2rem, 0.6vmin, 0.5rem) !important;
 }
 
+/* Stacked vertically in the left column of the main grid. */
 .App .public-display-rules-steps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(8px, 1.4vmin, 16px);
-  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 1.3vmin, 16px);
   min-height: 0;
-  width: 100%;
-  max-width: min(98vw, 1500px);
+  min-width: 0;
   align-items: stretch;
   overflow: hidden;
 }
 
 .App .public-display-rules-step {
   display: flex;
-  flex-direction: column;
-  gap: clamp(6px, 1vmin, 12px);
+  flex-direction: row;
+  align-items: flex-start;
+  gap: clamp(10px, 1.4vmin, 18px);
   padding: clamp(10px, 1.6vmin, 18px) clamp(12px, 1.8vmin, 20px);
   border-radius: clamp(12px, 1.8vmin, 20px);
   text-align: left;
   min-height: 0;
+  flex: 1 1 0;
   overflow: hidden;
 }
 
+.App .public-display-rules-step__text {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(4px, 0.7vmin, 8px);
+  min-width: 0;
+}
+
 .App .public-display-rules-step__badge {
-  align-self: flex-start;
-  min-width: clamp(40px, 6.5vmin, 64px);
-  height: clamp(40px, 6.5vmin, 64px);
+  flex-shrink: 0;
+  min-width: clamp(40px, 6vmin, 60px);
+  height: clamp(40px, 6vmin, 60px);
   border-radius: clamp(10px, 1.5vmin, 16px);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(1.2rem, 3.2vmin, 2rem);
+  font-size: clamp(1.2rem, 3vmin, 1.9rem);
   font-weight: 1000;
   color: #fff;
   background: linear-gradient(160deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.04) 100%);
@@ -667,7 +711,7 @@ body {
 }
 
 .App .public-display-rules-step__title {
-  font-size: clamp(1rem, 2.4vmin, 1.45rem) !important;
+  font-size: clamp(1.05rem, 2.6vmin, 1.6rem) !important;
   font-weight: 900;
   color: #f2fffb;
   line-height: 1.15;
@@ -675,95 +719,184 @@ body {
 }
 
 .App .public-display-rules-step__body {
-  font-size: clamp(0.82rem, 1.65vmin, 1.12rem) !important;
-  line-height: 1.4 !important;
+  font-size: clamp(0.92rem, 1.95vmin, 1.3rem) !important;
+  line-height: 1.42 !important;
   color: rgba(250, 255, 253, 0.96);
   font-weight: 600;
   margin: 0;
   overflow: hidden;
 }
 
-.App .public-display-rules-highlights-header {
-  flex-shrink: 0;
-  font-size: clamp(1rem, min(2.8vmin, 2.4vh), 1.6rem);
-  font-weight: 900;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(190, 255, 230, 0.92);
-  text-shadow: 0 0 18px rgba(0, 255, 170, 0.35);
-  margin-top: clamp(2px, 0.6vmin, 8px);
-}
-
-.App .public-display-rules-highlights {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: clamp(8px, 1.2vmin, 14px);
-  flex: 1 1 auto;
+/* Right column: the two big explainers — reading this screen + the playlist mix. */
+.App .public-display-rules-features {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.6vmin, 20px);
   min-height: 0;
-  width: 100%;
-  max-width: min(98vw, 1500px);
-  align-items: stretch;
+  min-width: 0;
   overflow: hidden;
 }
 
-.App .public-display-rules-highlight {
+.App .public-display-rules-feature {
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
-  gap: clamp(4px, 0.8vmin, 10px);
-  padding: clamp(8px, 1.3vmin, 16px) clamp(10px, 1.5vmin, 18px);
-  border-radius: clamp(10px, 1.5vmin, 18px);
+  gap: clamp(6px, 1vmin, 12px);
+  padding: clamp(12px, 1.8vmin, 22px) clamp(14px, 2vmin, 24px);
+  border-radius: clamp(12px, 1.8vmin, 20px);
   text-align: left;
   min-height: 0;
   overflow: hidden;
-  background: linear-gradient(150deg, rgba(255, 255, 255, 0.07) 0%, rgba(10, 10, 20, 0.55) 100%);
-  border: 1.5px solid rgba(255, 255, 255, 0.18);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05) inset, 0 10px 26px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.08) 0%, rgba(10, 10, 20, 0.6) 100%);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset, 0 12px 32px rgba(0, 0, 0, 0.35);
 }
 
-.App .public-display-rules-highlight__head {
+.App .public-display-rules-feature__title {
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 1.2vmin, 14px);
+  font-size: clamp(1.15rem, 2.9vmin, 1.85rem);
+  font-weight: 1000;
+  color: #f2fffb;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.App .public-display-rules-feature__title svg {
+  width: clamp(22px, 3.4vmin, 38px);
+  height: clamp(22px, 3.4vmin, 38px);
+  color: var(--accent-color, #00ffc8);
+  filter: drop-shadow(0 0 12px rgba(0, 255, 170, 0.55));
+  flex-shrink: 0;
+}
+
+.App .public-display-rules-feature__body {
+  font-size: clamp(0.95rem, 2vmin, 1.35rem);
+  line-height: 1.42;
+  color: rgba(250, 255, 253, 0.96);
+  font-weight: 600;
+  margin: 0;
+}
+
+.App .public-display-rules-feature__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(6px, 1.1vmin, 14px);
+}
+
+.App .public-display-rules-feature__list li {
+  display: flex;
+  align-items: flex-start;
+  gap: clamp(8px, 1.2vmin, 14px);
+  font-size: clamp(0.95rem, 2vmin, 1.35rem);
+  line-height: 1.42;
+  color: rgba(250, 255, 253, 0.96);
+  font-weight: 600;
+}
+
+.App .public-display-rules-feature__li-icon {
+  width: clamp(18px, 2.6vmin, 30px);
+  height: clamp(18px, 2.6vmin, 30px);
+  color: var(--accent-color, #00ffc8);
+  flex-shrink: 0;
+  margin-top: 0.15em;
+  filter: drop-shadow(0 0 8px rgba(0, 255, 170, 0.45));
+}
+
+/* B/I/N/G/O → playlist name rows */
+.App .public-display-rules-feature__mix {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(3px, 0.6vmin, 8px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.App .public-display-rules-feature__mix li {
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 1.2vmin, 14px);
+  min-width: 0;
+}
+
+.App .public-display-rules-feature__mix-letter {
+  flex-shrink: 0;
+  width: clamp(26px, 3.6vmin, 42px);
+  height: clamp(26px, 3.6vmin, 42px);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(0.9rem, 2vmin, 1.35rem);
+  font-weight: 1000;
+  color: #0a0a14;
+  background: linear-gradient(160deg, rgba(0, 255, 170, 0.95) 0%, rgba(0, 200, 255, 0.85) 100%);
+  box-shadow: 0 0 14px rgba(0, 255, 170, 0.4);
+}
+
+.App .public-display-rules-feature__mix-name {
+  font-size: clamp(0.95rem, 2.1vmin, 1.4rem);
+  font-weight: 800;
+  color: rgba(250, 255, 253, 0.97);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* Bottom row: quick differentiator chips. */
+.App .public-display-rules-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: clamp(8px, 1.2vmin, 16px);
+  width: 100%;
+  max-width: min(98vw, 1640px);
+  flex-shrink: 0;
+}
+
+.App .public-display-rules-chip {
   display: flex;
   align-items: center;
   gap: clamp(6px, 1vmin, 12px);
+  padding: clamp(6px, 1vmin, 12px) clamp(12px, 1.8vmin, 22px);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  font-size: clamp(0.82rem, 1.7vmin, 1.15rem);
+  line-height: 1.3;
+  color: rgba(250, 255, 253, 0.95);
+  font-weight: 600;
 }
 
-.App .public-display-rules-highlight__icon {
+.App .public-display-rules-chip strong {
+  color: #d9fff2;
+  font-weight: 900;
+}
+
+.App .public-display-rules-chip__icon {
   display: inline-flex;
   flex-shrink: 0;
 }
 
-.App .public-display-rules-highlight__icon svg {
-  width: clamp(20px, 3.2vmin, 34px);
-  height: clamp(20px, 3.2vmin, 34px);
-  filter: drop-shadow(0 0 10px rgba(0, 255, 170, 0.5));
-}
-
-.App .public-display-rules-highlight__title {
-  font-size: clamp(0.92rem, 2.1vmin, 1.3rem);
-  font-weight: 900;
-  color: #f2fffb;
-  line-height: 1.12;
-  margin: 0;
-}
-
-.App .public-display-rules-highlight__body {
-  font-size: clamp(0.78rem, 1.5vmin, 1.05rem);
-  line-height: 1.38;
-  color: rgba(250, 255, 253, 0.94);
-  font-weight: 600;
-  margin: 0;
-  overflow: hidden;
+.App .public-display-rules-chip__icon svg {
+  width: clamp(16px, 2.4vmin, 26px);
+  height: clamp(16px, 2.4vmin, 26px);
+  color: var(--accent-color, #00ffc8);
+  filter: drop-shadow(0 0 8px rgba(0, 255, 170, 0.45));
 }
 
 @media (max-width: 1100px), (max-height: 620px) {
-  .App .public-display-rules-highlights {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    overflow-y: auto;
-  }
-}
-
-@media (max-width: 700px) {
-  .App .public-display-rules-highlights {
+  .App .public-display-rules-main {
     grid-template-columns: 1fr;
+    overflow-y: auto;
   }
 }
 
@@ -781,13 +914,6 @@ body {
   flex-shrink: 0;
   font-size: clamp(0.95rem, 2vmin, 1.35rem) !important;
   padding-bottom: 0 !important;
-}
-
-@media (max-width: 900px), (max-height: 620px) {
-  .App .public-display-rules-steps {
-    grid-template-columns: 1fr;
-    overflow-y: auto;
-  }
 }
 
 .App .bingo-card-header.center { justify-content: center; }
