@@ -50,6 +50,35 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
 
   if (rounds.length === 0) return null;
 
+  // Read-only timeline (Game tab / setup cockpit) with nothing prepped: an empty
+  // draft chip has nothing to do, so say so instead of showing it.
+  const interactive = Boolean(onAddRound || onRemoveRound || onDropPlaylist);
+  const nothingPrepped = rounds.every(
+    (r) => r.status === 'unplanned' && r.playlistCount === 0 && !r.saved,
+  );
+  if (!interactive && nothingPrepped) {
+    return (
+      <section
+        className={['host-round-timeline host-glass-panel', className].filter(Boolean).join(' ')}
+        aria-label="Round timeline"
+      >
+        <div className="host-round-timeline__header">
+          <div>
+            <h2 className="host-round-timeline__title">Tonight&apos;s rounds</h2>
+            <p className="host-round-timeline__summary">No rounds prepped yet.</p>
+          </div>
+          {onOpenRounds ? (
+            <div className="host-round-timeline__header-actions">
+              <button type="button" className="host-round-timeline__manage btn-secondary" onClick={onOpenRounds}>
+                Manage in Rounds
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section
       className={['host-round-timeline host-glass-panel', className].filter(Boolean).join(' ')}
