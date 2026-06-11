@@ -9543,6 +9543,18 @@ const HostView: React.FC = () => {
     };
   }, [eventRounds, hostGlassNav, selectedRoundForPanel, currentRoundIndex]);
 
+  /** Canonical playlist id -> number of rounds it's assigned to (drives the assigned chip on library rows). */
+  const playlistAssignedRoundCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const round of eventRounds) {
+      for (const id of round.playlistIds || []) {
+        const canon = canonicalPlaylistIdForMatch(String(id));
+        counts.set(canon, (counts.get(canon) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [eventRounds]);
+
   const playlistRoundBuilderBody = (
               <div className="host-playlist-round-modal-root host-playlist-library-inline">
           <motion.div
@@ -9875,7 +9887,8 @@ const HostView: React.FC = () => {
                         </div>
                         ) : (
                           paginatedPlaylists.map((p) => {
-                          const isSelected = selectedPlaylists.some(sp => sp.id === p.id);
+                          const assignedRoundCount =
+                            playlistAssignedRoundCounts.get(canonicalPlaylistIdForMatch(p.id)) || 0;
                           const listedCount = Math.max(0, Number(p.tracks) || 0);
                           const loadedCount =
                             p.tracksLoaded != null && p.tracksLoaded > 0 ? p.tracksLoaded : null;
@@ -9902,20 +9915,36 @@ const HostView: React.FC = () => {
                               onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
                               onMouseUp={(e) => e.currentTarget.style.cursor = 'grab'}
                             >
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                aria-label={"Include in game mix: " + (p.name || "playlist")}
-                                title="Include in game mix — used when you finalize the bingo song pool"
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedPlaylists([...selectedPlaylists, p]);
-                                  } else {
-                                    setSelectedPlaylists(selectedPlaylists.filter(sp => sp.id !== p.id));
-                                  }
-                                }}
-                                style={{ marginTop: 3 }}
-                              />
+                              <span
+                                className={
+                                  assignedRoundCount > 0
+                                    ? 'host-playlist-assigned-chip host-playlist-assigned-chip--on'
+                                    : 'host-playlist-assigned-chip'
+                                }
+                                title={
+                                  assignedRoundCount > 0
+                                    ? `Assigned to ${assignedRoundCount} round${assignedRoundCount !== 1 ? 's' : ''}`
+                                    : 'Not assigned to any round yet'
+                                }
+                                aria-label={
+                                  assignedRoundCount > 0
+                                    ? `${p.name || 'Playlist'} assigned to ${assignedRoundCount} round${
+                                        assignedRoundCount !== 1 ? 's' : ''
+                                      }`
+                                    : `${p.name || 'Playlist'} not assigned to any round`
+                                }
+                              >
+                                {assignedRoundCount > 0 ? (
+                                  <>
+                                    <Check aria-hidden />
+                                    {assignedRoundCount > 1 ? (
+                                      <span className="host-playlist-assigned-chip__count">
+                                        ×{assignedRoundCount}
+                                      </span>
+                                    ) : null}
+                                  </>
+                                ) : null}
+                              </span>
                               <span style={{ 
                                 flex: 1, 
                                 minWidth: 0,

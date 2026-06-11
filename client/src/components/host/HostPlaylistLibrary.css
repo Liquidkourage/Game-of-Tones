@@ -263,6 +263,42 @@
   gap: 8px;
 }
 
+/* Assigned-to-a-round indicator (replaces the legacy mix checkbox): empty ring when
+   unassigned, green check chip once the playlist is in at least one round. */
+.host-playlist-assigned-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  padding: 0 3px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  background: transparent;
+  color: #0a0a14;
+}
+
+.host-playlist-assigned-chip--on {
+  border-color: rgba(0, 255, 136, 0.8);
+  background: linear-gradient(150deg, rgba(0, 255, 136, 0.95) 0%, rgba(0, 200, 255, 0.85) 100%);
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.35);
+}
+
+.host-playlist-assigned-chip svg {
+  width: 0.8rem;
+  height: 0.8rem;
+  stroke-width: 3;
+}
+
+.host-playlist-assigned-chip__count {
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
 /* One-click assign to the round being prepped — the primary action on a library row. */
 .host-playlist-quick-add {
   display: inline-flex;
