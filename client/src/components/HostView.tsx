@@ -1190,6 +1190,10 @@ const HostView: React.FC = () => {
     () => parseHostGlassNavTab(searchParams.get('tab')) ?? 'game',
   );
   const [hostSetupStep, setHostSetupStep] = useState<HostSetupStep>('playlist');
+  /** Round prep restored on load (refresh/cloud) skips Build rounds; set once so we never bounce the host around afterwards. */
+  const hostSetupStepAutoAdvancedRef = useRef(false);
+  /** Host assigned a playlist this session — readiness came from interaction, not hydration, so stay on Build rounds. */
+  const hostSetupUserAssignedRef = useRef(false);
   const [hostTutorialOpen, setHostTutorialOpen] = useState(false);
   const [hostTutorialStep, setHostTutorialStep] = useState(0);
   const [showTutorialSuggestion, setShowTutorialSuggestion] = useState(
@@ -7621,6 +7625,7 @@ const HostView: React.FC = () => {
       }
       const playlist = resolvePlaylistForRoundAssign(playlistId);
       if (!playlist) return;
+      hostSetupUserAssignedRef.current = true;
       const prev = eventRoundsRef.current;
       if (roundIndex < 0 || roundIndex >= prev.length) return;
       const round = prev[roundIndex];
@@ -8927,6 +8932,17 @@ const HostView: React.FC = () => {
     (eventRounds[currentRoundIndex]?.playlistIds?.length ?? 0) > 0;
 
   const setupCriteriaReady = setupPlaylistReady;
+
+  /** Round prep already exists when the cockpit loads (refresh / cloud restore): skip the
+   *  "build your first round" step and land on the next actionable one. Runs once, and never
+   *  when readiness came from this session's own assignments — no yanking the library away. */
+  useEffect(() => {
+    if (hostSetupStepAutoAdvancedRef.current || hostSetupUserAssignedRef.current) return;
+    if (gameState !== 'waiting') return;
+    if (!setupPlaylistReady) return;
+    hostSetupStepAutoAdvancedRef.current = true;
+    setHostSetupStep(prepRoundReadyForGoLive ? 'play' : 'criteria');
+  }, [gameState, setupPlaylistReady, prepRoundReadyForGoLive]);
 
   const showHostSetupCockpit =
     gameState === 'waiting' && !hostRoomHydrating && hostGlassNav === 'game';
