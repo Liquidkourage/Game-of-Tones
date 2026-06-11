@@ -34,13 +34,11 @@ const HostSetupPlaylistStep: React.FC<HostSetupPlaylistStepProps> = ({
       <header className="host-setup-step__header host-setup-playlist__header">
         <div>
           <p className="host-setup-step__eyebrow">Step 1 · Build rounds</p>
-          <h2 className="host-setup-step__title">
-            {playlistReady ? `Music for ${roundLabel}` : 'Let’s build your first round'}
-          </h2>
+          <h2 className="host-setup-step__title">Music for {roundLabel}</h2>
           <p className="host-setup-playlist__lead">
             {playlistReady
               ? 'Add or remove playlists below, then continue to Card setup.'
-              : `Rounds use 1 playlist for the whole round, or 5 playlists — one per card column. Pick from the library below to add them to ${roundLabel}.`}
+              : `Rounds use 1 playlist for the whole round, or 5 playlists — one per card column. Adjust ${roundLabel} below or in the Rounds manager.`}
           </p>
         </div>
         <button

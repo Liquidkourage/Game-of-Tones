@@ -1303,6 +1303,28 @@ const HostView: React.FC = () => {
     onHostGlassNav('rounds');
   }, [onHostGlassNav]);
 
+  /** Fresh rooms with no playlists assigned land on the Rounds tab (where rounds are built);
+   *  the Game tab is the live/cockpit view once prep exists. One-shot at mount — never yanks
+   *  the host off a tab they navigated to. Reads localStorage directly so it doesn't race
+   *  the async round-prep hydration effects. */
+  const hostInitialTabRoutedRef = useRef(false);
+  useEffect(() => {
+    if (!roomId || hostInitialTabRoutedRef.current) return;
+    hostInitialTabRoutedRef.current = true;
+    if (hostRoomExpectsLiveRecovery(roomId)) return;
+    let anyPlaylists = false;
+    try {
+      const raw = localStorage.getItem(`event-rounds-${roomId}`);
+      const rounds = raw ? JSON.parse(raw) : null;
+      anyPlaylists =
+        Array.isArray(rounds) &&
+        rounds.some((r: any) => Array.isArray(r?.playlistIds) && r.playlistIds.length > 0);
+    } catch {
+      /* unreadable prep — treat as none */
+    }
+    if (!anyPlaylists) onHostGlassNav('rounds');
+  }, [roomId, onHostGlassNav]);
+
   const openHostTutorial = useCallback((step = 0) => {
     resetHostTutorialProgress();
     setHostTutorialStep(step);
@@ -9144,6 +9166,10 @@ const HostView: React.FC = () => {
     currentRoundIndex >= 0 &&
     isValidRoundPlaylistCount(setupRoundPlaylistCount);
 
+  /** Round building lives on the Rounds tab — the cockpit's Step 1 only manages music for
+   *  rounds that already exist; with zero prep it points to Rounds instead. */
+  const anyRoundHasPlaylists = eventRounds.some((r) => (r.playlistIds?.length ?? 0) > 0);
+
   /** Why Next is blocked on Build rounds — mode-aware (0 vs 2–4 vs 6+ playlists). */
   const setupPlaylistBlockedReason = setupPlaylistReady
     ? null
@@ -11080,17 +11106,40 @@ const HostView: React.FC = () => {
                 playReady={prepRoundReadyForGoLive}
               >
                 {hostSetupStep === 'playlist' ? (
-                  <HostSetupPlaylistStep
-                    roundName={hostActiveRoundSummary.roundName}
-                    playlistNames={hostActiveRoundSummary.playlistNames}
-                    playlistReady={setupPlaylistReady}
-                    structureCopy={roundPlaylistStructureCopy(setupRoundPlaylistCount)}
-                    columnMode={setupRoundPlaylistCount === 5}
-                    poolCount={hostActiveRoundSummary.poolCount}
-                    spotifyCacheInfo={spotifyListCacheInfo}
-                    library={playlistRoundBuilderBody}
-                    onGoToRounds={() => onHostGlassNav('rounds')}
-                  />
+                  anyRoundHasPlaylists ? (
+                    <HostSetupPlaylistStep
+                      roundName={hostActiveRoundSummary.roundName}
+                      playlistNames={hostActiveRoundSummary.playlistNames}
+                      playlistReady={setupPlaylistReady}
+                      structureCopy={roundPlaylistStructureCopy(setupRoundPlaylistCount)}
+                      columnMode={setupRoundPlaylistCount === 5}
+                      poolCount={hostActiveRoundSummary.poolCount}
+                      spotifyCacheInfo={spotifyListCacheInfo}
+                      library={playlistRoundBuilderBody}
+                      onGoToRounds={() => onHostGlassNav('rounds')}
+                    />
+                  ) : (
+                    <div className="host-setup-step">
+                      <header className="host-setup-step__header">
+                        <p className="host-setup-step__eyebrow">Step 1 · Build rounds</p>
+                        <h2 className="host-setup-step__title">No rounds built yet</h2>
+                        <p className="host-setup-playlist__lead">
+                          Rounds use 1 playlist for the whole round, or 5 playlists — one per
+                          card column. Build tonight&apos;s rounds in the Rounds manager, then
+                          come back here to run the game.
+                        </p>
+                      </header>
+                      <div>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={() => onHostGlassNav('rounds')}
+                        >
+                          Open Rounds
+                        </button>
+                      </div>
+                    </div>
+                  )
                 ) : null}
                 {hostSetupStep === 'criteria' ? (
                   <div className="host-setup-step">
