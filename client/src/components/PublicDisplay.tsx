@@ -5463,7 +5463,7 @@ const PublicDisplay: React.FC = () => {
                     title: 'Hit the pattern → BINGO',
                     body: (
                       <>
-                        This round&apos;s pattern:{' '}
+                        Round 1&apos;s pattern:{' '}
                         <strong style={{ color: '#e8fff8' }}>{getPatternName().replace(/^Pattern:\s*/i, '')}</strong>.
                         Complete it with called songs, then tap <strong style={{ color: '#e8fff8' }}>BINGO</strong> on your
                         phone — verified against the real call list in seconds. No paper, no disputes.
@@ -5528,8 +5528,9 @@ const PublicDisplay: React.FC = () => {
                       ) : (
                         <span>
                           Titles start <strong style={{ color: pdGlass.mint }}>hidden</strong> and fill in{' '}
-                          <strong style={{ color: pdGlass.mint }}>letter by letter</strong> while the clip plays. Stumped?
-                          Patience pays — the board gives it away a little at a time.
+                          <strong style={{ color: pdGlass.mint }}>letter by letter</strong> — a new letter about every{' '}
+                          <strong style={{ color: pdGlass.mint }}>{letterRevealIntervalSec} seconds</strong>. Stumped?
+                          Patience pays.
                         </span>
                       )}
                     </li>
@@ -5552,15 +5553,16 @@ const PublicDisplay: React.FC = () => {
                           <Music aria-hidden /> Rounds &amp; themes
                         </h3>
                         <p className="public-display-rules-feature__body">
-                          Tonight is one or more <strong style={{ color: pdGlass.mint }}>rounds</strong>. Each round is its
-                          own game: a fresh <strong style={{ color: pdGlass.mint }}>75-song pool</strong> built from up to{' '}
-                          <strong style={{ color: pdGlass.mint }}>five playlist themes</strong>, new cards, and sometimes a
-                          new pattern.
+                          Tonight runs in <strong style={{ color: pdGlass.mint }}>rounds</strong> — usually two or more.
+                          Each round is a brand-new game: a fresh{' '}
+                          <strong style={{ color: pdGlass.mint }}>75-song pool</strong> built from up to{' '}
+                          <strong style={{ color: pdGlass.mint }}>five playlist themes</strong>, new cards for everyone,
+                          and sometimes a new pattern.
                         </p>
                         {fiveMix ? (
                           <>
                             <p className="public-display-rules-feature__body">
-                              This round&apos;s themes — your card&apos;s columns match them, one per letter:
+                              Round 1&apos;s themes — your card&apos;s columns match them, one per letter:
                             </p>
                             <ul className="public-display-rules-feature__mix">
                               {mixNames.map((name, i) => (
@@ -5575,8 +5577,8 @@ const PublicDisplay: React.FC = () => {
                           </>
                         ) : (
                           <p className="public-display-rules-feature__body">
-                            This round&apos;s pool is one curated mix — if a song is on your card, it&apos;s in play{' '}
-                            <strong style={{ color: pdGlass.mint }}>this round</strong>.
+                            Round 1&apos;s pool is one curated mix — if a song is on your card, it&apos;s in play this
+                            round.
                           </p>
                         )}
                       </>

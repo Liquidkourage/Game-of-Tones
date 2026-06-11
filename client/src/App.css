@@ -711,7 +711,7 @@ body {
 }
 
 .App .public-display-rules-step__title {
-  font-size: clamp(1.35rem, 3.4vmin, 2.25rem) !important;
+  font-size: clamp(1.25rem, 3.1vmin, 2.05rem) !important;
   font-weight: 950;
   color: #ffffff;
   line-height: 1.12;
@@ -720,8 +720,8 @@ body {
 }
 
 .App .public-display-rules-step__body {
-  font-size: clamp(1.15rem, 2.85vmin, 1.95rem) !important;
-  line-height: 1.36 !important;
+  font-size: clamp(1.1rem, 2.5vmin, 1.7rem) !important;
+  line-height: 1.32 !important;
   color: rgba(255, 255, 255, 0.98);
   font-weight: 650;
   margin: 0;
@@ -759,7 +759,7 @@ body {
   display: flex;
   align-items: center;
   gap: clamp(8px, 1.2vmin, 14px);
-  font-size: clamp(1.5rem, 4vmin, 2.6rem);
+  font-size: clamp(1.4rem, 3.6vmin, 2.35rem);
   font-weight: 1000;
   color: #ffffff;
   line-height: 1.1;
@@ -776,8 +776,8 @@ body {
 }
 
 .App .public-display-rules-feature__body {
-  font-size: clamp(1.15rem, 2.9vmin, 1.95rem);
-  line-height: 1.36;
+  font-size: clamp(1.1rem, 2.55vmin, 1.75rem);
+  line-height: 1.32;
   color: rgba(255, 255, 255, 0.98);
   font-weight: 650;
   margin: 0;
@@ -797,8 +797,8 @@ body {
   display: flex;
   align-items: flex-start;
   gap: clamp(10px, 1.4vmin, 16px);
-  font-size: clamp(1.15rem, 2.9vmin, 1.95rem);
-  line-height: 1.36;
+  font-size: clamp(1.1rem, 2.55vmin, 1.75rem);
+  line-height: 1.32;
   color: rgba(255, 255, 255, 0.98);
   font-weight: 650;
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
@@ -848,7 +848,7 @@ body {
 }
 
 .App .public-display-rules-feature__mix-name {
-  font-size: clamp(1.15rem, 2.9vmin, 1.95rem);
+  font-size: clamp(1.1rem, 2.55vmin, 1.75rem);
   font-weight: 850;
   color: #ffffff;
   white-space: nowrap;
