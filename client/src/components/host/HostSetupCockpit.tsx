@@ -13,6 +13,7 @@ export type HostSetupCockpitProps = {
   step: HostSetupStep;
   onStepChange: (step: HostSetupStep) => void;
   playlistReady: boolean;
+  playlistBlockedReason?: string | null;
   criteriaReady: boolean;
   playReady: boolean;
   children: React.ReactNode;
@@ -27,6 +28,7 @@ const HostSetupCockpit: React.FC<HostSetupCockpitProps> = ({
   step,
   onStepChange,
   playlistReady,
+  playlistBlockedReason,
   criteriaReady,
   playReady,
   children,
@@ -47,6 +49,7 @@ const HostSetupCockpit: React.FC<HostSetupCockpitProps> = ({
         step={step}
         onStepChange={onStepChange}
         playlistReady={playlistReady}
+        playlistBlockedReason={playlistBlockedReason}
         criteriaReady={criteriaReady}
         playReady={playReady}
       >

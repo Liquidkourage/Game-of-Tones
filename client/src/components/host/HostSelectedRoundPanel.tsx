@@ -41,6 +41,20 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
 }) => {
   const lowSongs = playlists.length > 0 && songCount > 0 && songCount < 15;
   const [dragOver, setDragOver] = useState(false);
+  const count = playlists.length;
+  // Tempo round rule: exactly 1 playlist (Round Mix) or exactly 5 (Column mode).
+  const columnMode = count === 5;
+  const structureValid = count === 1 || count === 5;
+  const structureCopy =
+    count === 0
+      ? 'No playlists assigned'
+      : count === 1
+        ? 'Round Mix · 1 playlist supplies the full bingo pool'
+        : columnMode
+          ? 'Column mode · one playlist per card column'
+          : count < 5
+            ? `${count} playlists — rounds need 1 or 5`
+            : `${count} playlists — rounds allow at most 5`;
 
   return (
     <section
@@ -84,24 +98,34 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
           </span>
         </h3>
         <p className="host-selected-round__meta">
-          {playlists.length === 0
-            ? 'No playlists assigned'
-            : `${playlists.length} playlist${playlists.length !== 1 ? 's' : ''}${
-                songCount > 0 ? ` · ${songCount} songs` : ''
-              }`}
+          {structureCopy}
+          {count > 0 && songCount > 0 ? ` · ${songCount} songs` : ''}
         </p>
       </header>
+      {count > 0 && !structureValid ? (
+        <p className="host-selected-round__warn" role="status">
+          <AlertTriangle className="w-3.5 h-3.5" aria-hidden />
+          {count < 5
+            ? `Add ${5 - count} more playlist${5 - count !== 1 ? 's' : ''} for column mode, or remove ${
+                count - 1 === 1 ? '1' : count - 1
+              } to use a single playlist.`
+            : `Remove ${count - 5} playlist${count - 5 !== 1 ? 's' : ''} — rounds use 1 playlist or 5.`}
+        </p>
+      ) : null}
       {lowSongs ? (
         <p className="host-selected-round__warn" role="status">
           <AlertTriangle className="w-3.5 h-3.5" aria-hidden />
-          Fewer than 15 listed songs — add another playlist for a standard round.
+          Fewer than 15 listed songs — this round may not reach the card-ready track minimum.
         </p>
       ) : null}
       {playlists.length > 0 ? (
         <ul className="host-selected-round__list">
-          {playlists.map((p) => (
+          {playlists.map((p, i) => (
             <li key={p.id} className="host-selected-round__row">
               <ListMusic className="w-3.5 h-3.5" aria-hidden />
+              {columnMode ? (
+                <span className="host-selected-round__column-label">Col {i + 1}</span>
+              ) : null}
               <span className="host-selected-round__name" title={p.name}>
                 {p.name}
               </span>
@@ -121,6 +145,7 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
         </ul>
       ) : (
         <p className="host-selected-round__empty" role="status">
+          Add 1 playlist for a round mix, or 5 playlists for column mode.{' '}
           {onDropPlaylist
             ? 'Drag a playlist from the library here (or onto a round above), or use the Rounds button on a playlist row.'
             : 'Drag a playlist from the library onto a round above, or use the Rounds button on a playlist row.'}

@@ -165,6 +165,8 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
                 ) : (
                   <>
                     {r.playlistCount} playlist{r.playlistCount !== 1 ? 's' : ''}
+                    {/* Tempo round rule: 1 playlist (mix) or 5 (columns) */}
+                    {r.playlistCount !== 1 && r.playlistCount !== 5 ? ' · needs 1 or 5' : ''}
                     {(r.songCount ?? 0) > 0 ? ` · ${r.songCount} songs` : ''}
                   </>
                 )}

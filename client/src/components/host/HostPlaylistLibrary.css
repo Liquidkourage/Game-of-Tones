@@ -227,6 +227,20 @@
   white-space: nowrap;
 }
 
+/* Column-mode (exactly 5 playlists): card-column mapping badge per row. */
+.host-selected-round__column-label {
+  flex-shrink: 0;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 255, 136, 0.35);
+  background: rgba(0, 255, 136, 0.1);
+  color: #00ff88;
+}
+
 .host-selected-round__remove {
   flex-shrink: 0;
   display: inline-flex;

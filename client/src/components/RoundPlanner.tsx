@@ -426,8 +426,11 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
     setDropChipIndex(null);
   };
 
-  const canStartRound = (round: TRound) =>
-    (round.playlistIds || []).length > 0 && round.status !== 'completed';
+  // Tempo round rule: a round starts with exactly 1 playlist (Round Mix) or exactly 5 (Column mode).
+  const canStartRound = (round: TRound) => {
+    const n = (round.playlistIds || []).length;
+    return (n === 1 || n === 5) && round.status !== 'completed';
+  };
 
   const focused =
     focusedIndex >= 0 && focusedIndex < rounds.length ? rounds[focusedIndex] : null;
@@ -858,6 +861,19 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
         {focused.songCount > 0 || focusedPoolTrackCount > 0 ? (
           <div className="round-planner-bucket__meta">
             {playlistIds.length} playlist{playlistIds.length !== 1 ? 's' : ''}
+            {playlistIds.length === 1 ? (
+              <span className="round-planner-bucket__meta-muted"> (Round Mix)</span>
+            ) : playlistIds.length === 5 ? (
+              <span className="round-planner-bucket__meta-muted"> (Column mode · one per card column)</span>
+            ) : playlistIds.length > 0 ? (
+              <span className="round-planner-bucket__meta-warn">
+                {' '}
+                · rounds need 1 or 5 playlists —{' '}
+                {playlistIds.length < 5
+                  ? `add ${5 - playlistIds.length} more or remove ${playlistIds.length - 1}`
+                  : `remove ${playlistIds.length - 5}`}
+              </span>
+            ) : null}
             {poolCount > 0 ? (
               <>
                 {' '}
@@ -888,7 +904,9 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
                   </span>
                 ) : null}
               </span>
-            ) : poolCount >= minRequired ? (
+            ) : poolCount >= minRequired &&
+              (playlistIds.length === 1 || playlistIds.length === 5) ? (
+              // "ready" requires BOTH valid playlist structure (1 or 5) and enough card-ready tracks.
               <span className="round-planner-bucket__meta-ok"> · ready</span>
             ) : null}
             {poolCount > 0 &&

@@ -6,6 +6,10 @@ export type HostSetupPlaylistStepProps = {
   roundName: string | null;
   playlistNames: string[];
   playlistReady: boolean;
+  /** Mode-aware 1-or-5 rule status ("Round Mix · …", "Column mode · …", "Add N more…"). */
+  structureCopy: string;
+  /** Exactly 5 playlists: list rows show their card-column mapping. */
+  columnMode: boolean;
   poolCount: number;
   spotifyCacheInfo: string | null;
   /** Inline playlist library (same component the Rounds tab uses). */
@@ -17,6 +21,8 @@ const HostSetupPlaylistStep: React.FC<HostSetupPlaylistStepProps> = ({
   roundName,
   playlistNames,
   playlistReady,
+  structureCopy,
+  columnMode,
   poolCount,
   spotifyCacheInfo,
   library,
@@ -34,7 +40,7 @@ const HostSetupPlaylistStep: React.FC<HostSetupPlaylistStepProps> = ({
           <p className="host-setup-playlist__lead">
             {playlistReady
               ? 'Add or remove playlists below, then continue to Card setup.'
-              : `Pick playlists below to add them to ${roundLabel}. Add music, choose card rules, then start the game.`}
+              : `Rounds use 1 playlist for the whole round, or 5 playlists — one per card column. Pick from the library below to add them to ${roundLabel}.`}
           </p>
         </div>
         <button
@@ -53,11 +59,8 @@ const HostSetupPlaylistStep: React.FC<HostSetupPlaylistStepProps> = ({
           <div>
             <h3 className="host-setup-playlist__assigned-title">{roundLabel}</h3>
             <p className="host-setup-playlist__assigned-meta" role="status">
-              {playlistReady
-                ? `${playlistNames.length} playlist${playlistNames.length !== 1 ? 's' : ''} assigned${
-                    poolCount > 0 ? ` · ${poolCount} tracks in the pool` : ''
-                  }`
-                : 'No playlists assigned yet — pick from the library below.'}
+              {structureCopy}
+              {poolCount > 0 ? ` · ${poolCount} tracks in the pool` : ''}
             </p>
           </div>
         </div>
@@ -66,6 +69,9 @@ const HostSetupPlaylistStep: React.FC<HostSetupPlaylistStepProps> = ({
             {playlistNames.map((name, i) => (
               <li key={`${name}-${i}`}>
                 <ListMusic className="w-4 h-4" aria-hidden />
+                {columnMode ? (
+                  <span className="host-setup-playlist__column-label">Column {i + 1}</span>
+                ) : null}
                 {name}
               </li>
             ))}

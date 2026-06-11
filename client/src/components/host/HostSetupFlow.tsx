@@ -14,6 +14,8 @@ export type HostSetupFlowProps = {
   step: HostSetupStep;
   onStepChange: (step: HostSetupStep) => void;
   playlistReady: boolean;
+  /** Mode-aware copy for why Build rounds is incomplete (1-or-5 playlist rule). */
+  playlistBlockedReason?: string | null;
   criteriaReady: boolean;
   playReady: boolean;
   children: React.ReactNode;
@@ -23,6 +25,7 @@ const HostSetupFlow: React.FC<HostSetupFlowProps> = ({
   step,
   onStepChange,
   playlistReady,
+  playlistBlockedReason,
   criteriaReady,
   playReady,
   children,
@@ -33,7 +36,7 @@ const HostSetupFlow: React.FC<HostSetupFlowProps> = ({
     step === 'playlist' ? playlistReady : step === 'criteria' ? criteriaReady : false;
   const nextBlockedReason =
     step === 'playlist' && !playlistReady
-      ? 'Add at least one playlist to continue.'
+      ? playlistBlockedReason || 'Add 1 playlist for a round mix, or 5 playlists for column mode.'
       : step === 'criteria' && !criteriaReady
         ? 'Finish card setup to continue.'
         : null;

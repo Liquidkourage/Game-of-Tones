@@ -4132,6 +4132,18 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // Tempo round rule: exactly 1 playlist (Round Mix) or exactly 5 (Column mode). Backend
+    // enforcement so no client path can build a pool/cards from 2–4 or 6+ playlists.
+    const finalizePlaylistCount = Array.isArray(playlists) ? playlists.length : 0;
+    if (finalizePlaylistCount !== 1 && finalizePlaylistCount !== 5) {
+      routineServerLog(`❌ finalize-mix rejected — invalid playlist count (${finalizePlaylistCount}):`, roomId);
+      socket.emit('finalize-mix-failed', {
+        code: 'invalid_playlist_count',
+        message: `Rounds require either 1 playlist or 5 playlists. This round currently has ${finalizePlaylistCount}.`,
+      });
+      return;
+    }
+
     if (socket.hostUserId != null && room.ownerUserId == null) {
       room.ownerUserId = socket.hostUserId;
     }
@@ -5901,6 +5913,16 @@ io.on('connection', (socket) => {
     
     if (room && isCurrentHost) {
       try {
+        // Tempo round rule: when playlists are supplied for this round, only 1 (Round Mix)
+        // or 5 (Column mode) may start — start-game can regenerate cards from them.
+        const startPlaylistCount = Array.isArray(playlists) ? playlists.length : 0;
+        if (startPlaylistCount > 0 && startPlaylistCount !== 1 && startPlaylistCount !== 5) {
+          routineServerLog(`❌ start-game rejected — invalid playlist count (${startPlaylistCount}):`, roomId);
+          socket.emit('error', {
+            message: `Rounds require either 1 playlist or 5 playlists. This round currently has ${startPlaylistCount}.`,
+          });
+          return;
+        }
         if (!(await requireEventCreditGate(room, roomId, socket, 'error'))) return;
         const orgRowForRound = await resolveOrgBillingRowForRoom(room);
         if (orgRowForRound && billingStore.isBillingReady()) {

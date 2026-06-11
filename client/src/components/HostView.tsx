@@ -376,6 +376,34 @@ function isLeftoversPlaylistId(id: unknown): boolean {
   return String(id ?? '').trim() === LEFTOVERS_PLAYLIST_ID;
 }
 
+/** Tempo round rule: a round uses exactly 1 playlist (Round Mix — one playlist supplies the whole
+ *  bingo pool) or exactly 5 (Column mode — one playlist per card column). 0, 2–4, and 6+ are
+ *  invalid: never silently merged, trimmed, or ignored. Enforced at add (cap at 5), Next gate,
+ *  Save round, Start, finalize (client + server). */
+function isValidRoundPlaylistCount(count: number): boolean {
+  return count === 1 || count === 5;
+}
+
+const ROUND_PLAYLIST_RULE_HINT =
+  'Use 1 playlist for the whole round (Round Mix), or 5 playlists — one per card column.';
+
+function roundPlaylistCountError(count: number): string {
+  return `Rounds require either 1 playlist or 5 playlists. This round currently has ${count}. ${ROUND_PLAYLIST_RULE_HINT}`;
+}
+
+/** Mode-aware status line for assignment surfaces (structure only — track readiness is reported separately). */
+function roundPlaylistStructureCopy(count: number): string {
+  if (count === 0) return 'Add 1 playlist for a round mix, or 5 playlists for column mode.';
+  if (count === 1) return 'Round Mix · 1 playlist supplies the full bingo pool.';
+  if (count === 5) return 'Column mode · one playlist per card column.';
+  if (count < 5) {
+    return `${count} playlists assigned — add ${5 - count} more for column mode, or remove ${
+      count - 1 === 1 ? '1' : count - 1
+    } to use a single playlist.`;
+  }
+  return `${count} playlists assigned — rounds allow 1 or 5. Remove ${count - 5}.`;
+}
+
 /** Geometry implied by mix playlist layout when the snapshot was saved (informational + reload UX). */
 type SavedMixGeometry = '5x15' | '1x75' | 'merged';
 
@@ -4568,6 +4596,11 @@ const HostView: React.FC = () => {
   }): Promise<boolean> => {
     const playlists = opts?.playlists ?? mixPlaylistSelection;
     if (!socket || playlists.length === 0) return false;
+    if (!isValidRoundPlaylistCount(playlists.length)) {
+      window.alert(roundPlaylistCountError(playlists.length));
+      addLog(`Finalize blocked: ${playlists.length} playlists selected — rounds need 1 or 5.`, 'warn');
+      return false;
+    }
     const freeSpaceForPayload = opts?.freeSpace ?? freeSpaceEnabled;
 
     const targetKey = selectionPlaylistKey(playlists);
@@ -5115,6 +5148,15 @@ const HostView: React.FC = () => {
 
     if (!useSavedRoundPlayback && playlistsForStart.length === 0) {
       alert('Please select at least one playlist or official catalog pack');
+      return false;
+    }
+
+    // Tempo round rule: 1 playlist (Round Mix) or 5 (Column mode) — no other count may start.
+    const startPlaylistCount = roundForStart
+      ? roundForStart.playlistIds?.length ?? 0
+      : playlistsForStart.length;
+    if (!isValidRoundPlaylistCount(startPlaylistCount)) {
+      alert(roundPlaylistCountError(startPlaylistCount));
       return false;
     }
 
@@ -7770,6 +7812,11 @@ const HostView: React.FC = () => {
       const round = prev[roundIndex];
       const newPid = canonicalPlaylistIdForMatch(playlist.id);
       if (round.playlistIds.some((id) => canonicalPlaylistIdForMatch(id) === newPid)) return;
+      // Tempo round rule: max 5 playlists (column mode). Never silently take a 6th.
+      if ((round.playlistIds?.length ?? 0) >= 5) {
+        showToast('This round already has 5 playlists. Remove one before adding another.', 'info');
+        return;
+      }
 
       const tracks = Math.max(0, Number(playlist.tracks) || 0);
       let updated: EventRound = {
@@ -7990,6 +8037,11 @@ const HostView: React.FC = () => {
       window.alert('Assign at least one playlist to this round before saving.');
       return;
     }
+    const savePlaylistCount = (round0.playlistIds || []).length;
+    if (!isValidRoundPlaylistCount(savePlaylistCount)) {
+      window.alert(roundPlaylistCountError(savePlaylistCount));
+      return;
+    }
 
     const mixRows = resolveMixPlaylistRowsForRound(round0);
     if (!mixRows) {
@@ -8169,6 +8221,10 @@ const HostView: React.FC = () => {
     const round = eventRounds[roundIndex];
     if (!round || round.playlistIds.length === 0) {
       alert('Please select at least one playlist for this round first.');
+      return;
+    }
+    if (!isValidRoundPlaylistCount(round.playlistIds.length)) {
+      alert(roundPlaylistCountError(round.playlistIds.length));
       return;
     }
 
@@ -8375,7 +8431,9 @@ const HostView: React.FC = () => {
     if (!rounds.length) return -1;
 
     const isPlannedRound = (round: EventRound | undefined) =>
-      !!round && round.status === 'planned' && (round.playlistIds || []).length > 0;
+      !!round &&
+      round.status === 'planned' &&
+      isValidRoundPlaylistCount((round.playlistIds || []).length);
 
     const cur = currentRoundIndexRef.current;
     if (cur >= 0) {
@@ -9073,10 +9131,22 @@ const HostView: React.FC = () => {
   /** Saved round or finalized mix for this round's playlists — one host-facing "ready" state. */
   const prepRoundReadyForGoLive = gameTabRoundBuilderReady || mixFinalizedForCurrentPrep;
 
+  const setupRoundPlaylistCount =
+    currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length
+      ? eventRounds[currentRoundIndex]?.playlistIds?.length ?? 0
+      : 0;
+
   const setupPlaylistReady =
     mixPlaylistSelection.length > 0 &&
     currentRoundIndex >= 0 &&
-    (eventRounds[currentRoundIndex]?.playlistIds?.length ?? 0) > 0;
+    isValidRoundPlaylistCount(setupRoundPlaylistCount);
+
+  /** Why Next is blocked on Build rounds — mode-aware (0 vs 2–4 vs 6+ playlists). */
+  const setupPlaylistBlockedReason = setupPlaylistReady
+    ? null
+    : !isValidRoundPlaylistCount(setupRoundPlaylistCount)
+      ? roundPlaylistStructureCopy(setupRoundPlaylistCount)
+      : 'Playlists are still loading from your library — reconnect Spotify if this persists.';
 
   const setupCriteriaReady = setupPlaylistReady;
 
@@ -10633,10 +10703,14 @@ const HostView: React.FC = () => {
       },
       {
         id: 'round',
-        label: 'Active round has playlists assigned',
+        label: 'Active round uses 1 playlist (mix) or 5 (columns)',
         ok:
           currentRoundIndex >= 0 &&
-          (eventRounds[currentRoundIndex]?.playlistIds?.length ?? 0) > 0,
+          isValidRoundPlaylistCount(eventRounds[currentRoundIndex]?.playlistIds?.length ?? 0),
+        detail:
+          currentRoundIndex >= 0
+            ? roundPlaylistStructureCopy(eventRounds[currentRoundIndex]?.playlistIds?.length ?? 0)
+            : undefined,
       },
     ];
     return items;
@@ -11013,6 +11087,7 @@ const HostView: React.FC = () => {
                 step={hostSetupStep}
                 onStepChange={setHostSetupStep}
                 playlistReady={setupPlaylistReady}
+                playlistBlockedReason={setupPlaylistBlockedReason}
                 criteriaReady={setupCriteriaReady}
                 playReady={prepRoundReadyForGoLive}
               >
@@ -11021,6 +11096,8 @@ const HostView: React.FC = () => {
                     roundName={hostActiveRoundSummary.roundName}
                     playlistNames={hostActiveRoundSummary.playlistNames}
                     playlistReady={setupPlaylistReady}
+                    structureCopy={roundPlaylistStructureCopy(setupRoundPlaylistCount)}
+                    columnMode={setupRoundPlaylistCount === 5}
                     poolCount={hostActiveRoundSummary.poolCount}
                     spotifyCacheInfo={spotifyListCacheInfo}
                     library={playlistRoundBuilderBody}
