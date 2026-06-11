@@ -7650,6 +7650,14 @@ const HostView: React.FC = () => {
         return newRounds;
       });
       syncMixFromRound(roundIndex, updated);
+      // Fresh room: currentRoundIndex starts at -1, and setup readiness (Next on Build
+      // rounds) requires a valid prep round. First assignment claims the pointer.
+      if (gameStateRef.current !== 'playing') {
+        const cur = currentRoundIndexRef.current;
+        if (cur < 0 || cur >= prev.length) {
+          setCurrentRoundIndex(roundIndex);
+        }
+      }
     },
     [resolvePlaylistForRoundAssign, playlistsForRoundPlanner, roomId, syncMixFromRound, roundLockedForLivePlay, showToast],
   );
