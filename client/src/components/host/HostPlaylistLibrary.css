@@ -263,8 +263,8 @@
   gap: 8px;
 }
 
-/* Assigned-to-a-round indicator (replaces the legacy mix checkbox): empty ring when
-   unassigned, green check chip once the playlist is in at least one round. */
+/* Assigned-to-a-round indicator (replaces the legacy mix checkbox): invisible spacer when
+   unassigned (keeps names aligned), green check chip once the playlist is in a round. */
 .host-playlist-assigned-chip {
   flex-shrink: 0;
   display: inline-flex;
@@ -276,9 +276,11 @@
   margin-top: 2px;
   padding: 0 3px;
   border-radius: 999px;
-  border: 1.5px solid rgba(255, 255, 255, 0.22);
-  background: transparent;
   color: #0a0a14;
+}
+
+.host-playlist-assigned-chip--off {
+  visibility: hidden;
 }
 
 .host-playlist-assigned-chip--on {

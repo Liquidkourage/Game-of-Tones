@@ -9919,20 +9919,21 @@ const HostView: React.FC = () => {
                                 className={
                                   assignedRoundCount > 0
                                     ? 'host-playlist-assigned-chip host-playlist-assigned-chip--on'
-                                    : 'host-playlist-assigned-chip'
+                                    : 'host-playlist-assigned-chip host-playlist-assigned-chip--off'
                                 }
                                 title={
                                   assignedRoundCount > 0
                                     ? `Assigned to ${assignedRoundCount} round${assignedRoundCount !== 1 ? 's' : ''}`
-                                    : 'Not assigned to any round yet'
+                                    : undefined
                                 }
                                 aria-label={
                                   assignedRoundCount > 0
                                     ? `${p.name || 'Playlist'} assigned to ${assignedRoundCount} round${
                                         assignedRoundCount !== 1 ? 's' : ''
                                       }`
-                                    : `${p.name || 'Playlist'} not assigned to any round`
+                                    : undefined
                                 }
+                                aria-hidden={assignedRoundCount === 0 || undefined}
                               >
                                 {assignedRoundCount > 0 ? (
                                   <>
@@ -10093,15 +10094,17 @@ const HostView: React.FC = () => {
                                     </button>
                                   );
                                 })()}
-                                <HostPlaylistRoundAssignMenu
-                                  playlistId={p.id}
-                                  playlistName={stripGoTPrefix ? stripTitleFlagPrefix(p.name, titleFlagStripList) : p.name}
-                                  rounds={eventRounds}
-                                  onAssign={(roundIndex) => addPlaylistToRoundBucket(roundIndex, p.id)}
-                                  onUnassign={(roundIndex) =>
-                                    removePlaylistFromRoundBucket(roundIndex, p.id)
-                                  }
-                                />
+                                {eventRounds.length > 1 ? (
+                                  <HostPlaylistRoundAssignMenu
+                                    playlistId={p.id}
+                                    playlistName={stripGoTPrefix ? stripTitleFlagPrefix(p.name, titleFlagStripList) : p.name}
+                                    rounds={eventRounds}
+                                    onAssign={(roundIndex) => addPlaylistToRoundBucket(roundIndex, p.id)}
+                                    onUnassign={(roundIndex) =>
+                                      removePlaylistFromRoundBucket(roundIndex, p.id)
+                                    }
+                                  />
+                                ) : null}
                               </span>
                               {isInsufficient && (
                                 <span
