@@ -15,9 +15,7 @@ import {
   Pause,
   Sparkles,
   List,
-  QrCode,
-  Eye,
-  Hash
+  QrCode
 } from 'lucide-react';
 import { API_BASE } from '../config';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
@@ -1164,8 +1162,6 @@ const PublicDisplay: React.FC = () => {
   const splashEnabled = (searchParams.get('splash') !== '0');
   const [showSplash, setShowSplash] = useState<boolean>(splashEnabled);
   
-  // Rules/instruction screen state (?rules=1 forces it on for preview/testing)
-  const [showRules, setShowRules] = useState<boolean>(searchParams.get('rules') === '1');
   
   
   /** Rotating projector demo for line pattern (one tuple of line indices per step). */
@@ -2054,7 +2050,6 @@ const PublicDisplay: React.FC = () => {
           if (payload.isPlaying && showSplash) {
             console.log('🎮 Game already playing - hiding splash screen');
             setShowSplash(false);
-            setShowRules(false);
           }
           
           console.log(`🖥️ PublicDisplay: Synced ${payload.totalPlayedCount || 0} played songs, ${payload.playerCount || 0} players`);
@@ -2560,14 +2555,6 @@ const PublicDisplay: React.FC = () => {
     });
 
     // Display control events
-    newSocket.on('display-show-rules', () => {
-      setShowRules(true);
-    });
-
-    newSocket.on('display-hide-rules', () => {
-      setShowRules(false);
-    });
-
     newSocket.on('display-show-splash', () => {
       setShowSplash(true);
     });
@@ -2697,10 +2684,9 @@ const PublicDisplay: React.FC = () => {
         const listN = Array.isArray(payload?.songList) ? payload.songList.length : 0;
         setPlaylistNames(names);
         
-        // Switch to game mode: hide splash and rules, show bingo card
+        // Switch to game mode: hide splash, show bingo card
         console.log('🎮 Mix finalized - switching to game mode');
         setShowSplash(false);
-        setShowRules(false);
       } catch {}
       ensureGrid();
     });
@@ -5269,328 +5255,6 @@ const PublicDisplay: React.FC = () => {
         )}
       </AnimatePresence>
       
-      {/* Rules/Instructions — wall-scale type + layered visuals */}
-      <AnimatePresence>
-        {showRules && (
-          <motion.div
-            key="rules"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.35 }}
-            style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 2000,
-              background: pdGlass.pageBg,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'stretch',
-              justifyContent: 'flex-start',
-              padding: 'clamp(5px, 1vmin, 12px) clamp(8px, 1.4vmin, 18px) clamp(8px, 1.6vmin, 16px)',
-              overflow: 'auto',
-              boxSizing: 'border-box',
-              maxHeight: '100dvh',
-            }}
-          >
-            <div
-              aria-hidden
-              style={{
-                position: 'absolute',
-                inset: 0,
-                pointerEvents: 'none',
-                overflow: 'hidden',
-                zIndex: 0,
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  bottom: '-15%',
-                  left: '-8%',
-                  width: 'min(70vmin, 90vw)',
-                  height: 'min(70vmin, 90vw)',
-                  borderRadius: '50%',
-                  background: 'radial-gradient(circle, rgba(0,255,180,0.18) 0%, transparent 68%)',
-                  filter: 'blur(48px)',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '-10%',
-                  right: '-5%',
-                  width: 'min(55vmin, 70vw)',
-                  height: 'min(55vmin, 70vw)',
-                  borderRadius: '50%',
-                  background: 'radial-gradient(circle, rgba(120,90,255,0.2) 0%, transparent 65%)',
-                  filter: 'blur(40px)',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  opacity: 0.07,
-                  backgroundImage:
-                    'repeating-linear-gradient(-12deg, transparent, transparent 2px, rgba(255,255,255,0.06) 2px, rgba(255,255,255,0.06) 3px)',
-                }}
-              />
-            </div>
-
-            {venueBranding?.logoUrl ? (
-              <div
-                style={{
-                  position: 'fixed',
-                  top: 'max(4px, env(safe-area-inset-top, 0px))',
-                  right: 'max(4px, env(safe-area-inset-right, 0px))',
-                  zIndex: 2001,
-                  width: 'min(72vw, 540px)',
-                  maxWidth: 540,
-                  pointerEvents: 'none',
-                }}
-              >
-                <img
-                  src={venueBranding.logoUrl}
-                  alt={venueBranding.eventTitle || 'Venue'}
-                  className="public-display-venue-logo public-display-venue-logo--hero"
-                  decoding="async"
-                  fetchPriority="high"
-                  style={{
-                    width: '100%',
-                    height: 'auto',
-                    maxHeight: 'clamp(144px, min(34vmin, 30svh), 400px)',
-                    objectFit: 'contain',
-                    display: 'block',
-                    marginLeft: 'auto',
-                  }}
-                />
-              </div>
-            ) : null}
-
-              <div className="public-display-rules-overlay__panel">
-              {(() => {
-                const vb = venueBranding;
-                const logoUrl = vb?.logoUrl;
-                const hasVenueText = !!(vb && (vb.eventTitle || vb.sponsorLine));
-                return (
-                  <div className="public-display-rules-hero">
-                    <PublicDisplayTempoBallRow seeds={ballAnimSeedsRef.current} variant="rulesWall" />
-                    <motion.div
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.4, delay: 0.05, ease: 'easeOut' }}
-                      className="public-display-rules-hero__title-row"
-                    >
-                      <Sparkles
-                        style={{
-                          width: 'clamp(22px, 3.6vmin, 46px)',
-                          height: 'clamp(22px, 3.6vmin, 46px)',
-                          color: pdGlass.violet,
-                          filter: 'drop-shadow(0 0 14px rgba(0,255,200,0.6))',
-                        }}
-                        strokeWidth={2.2}
-                        aria-hidden
-                      />
-                      <div
-                        style={{
-                          fontSize: 'clamp(1.6rem, min(5.6vmin, 4.8vh), 3.6rem)',
-                          fontWeight: 1000,
-                          letterSpacing: '0.02em',
-                          backgroundImage: pdGlass.titleGradient,
-                          WebkitBackgroundClip: 'text',
-                          backgroundClip: 'text',
-                          WebkitTextFillColor: 'transparent',
-                          filter: 'drop-shadow(0 6px 22px rgba(123,255,217,0.35))',
-                          lineHeight: 1.05,
-                        }}
-                      >
-                        How to Play
-                      </div>
-                      <Sparkles
-                        style={{
-                          width: 'clamp(22px, 3.6vmin, 46px)',
-                          height: 'clamp(22px, 3.6vmin, 46px)',
-                          color: pdGlass.violet,
-                          filter: 'drop-shadow(0 0 14px rgba(0,255,200,0.6))',
-                        }}
-                        strokeWidth={2.2}
-                        aria-hidden
-                      />
-                    </motion.div>
-                    {/* With a venue logo on screen the text lockup would just repeat it — logo only. */}
-                    {!logoUrl && vb && hasVenueText ? (
-                      <PublicDisplayVenueBrandingHero branding={vb} marginBottom="0" rulesWall />
-                    ) : null}
-                  </div>
-                );
-              })()}
-
-              <div className="public-display-rules-main">
-              <div className="public-display-rules-steps">
-                {[
-                  {
-                    n: 1,
-                    accent: 'linear-gradient(135deg, rgba(0,255,136,0.32) 0%, rgba(10,10,20,0.5) 100%)',
-                    borderGlow: 'rgba(0,255,136,0.6)',
-                    title: 'Join & get your card',
-                    body: (
-                      <>
-                        Scan the QR with your phone. Every round deals you a fresh{' '}
-                        <strong style={{ color: pdGlass.mint }}>5×5</strong> card from that round&apos;s{' '}
-                        <strong style={{ color: pdGlass.mint }}>75-song pool</strong> — same pool for everyone, every card
-                        different.
-                      </>
-                    ),
-                  },
-                  {
-                    n: 2,
-                    accent: 'linear-gradient(135deg, rgba(139,92,246,0.35) 0%, rgba(10,10,20,0.5) 100%)',
-                    borderGlow: 'rgba(139,92,246,0.6)',
-                    title: 'Listen & mark',
-                    body: (
-                      <>
-                        Clips run about <strong style={{ color: '#e8fff8' }}>{gameState.snippetLength || 30} seconds</strong>.
-                        Know it? Find it on your card and tap it. Only mark songs played{' '}
-                        <strong style={{ color: '#e8fff8' }}>this round</strong>.
-                      </>
-                    ),
-                  },
-                  {
-                    n: 3,
-                    accent: 'linear-gradient(135deg, rgba(0,255,136,0.22) 0%, rgba(139,92,246,0.28) 100%)',
-                    borderGlow: 'rgba(0,255,136,0.5)',
-                    title: 'Hit the pattern → BINGO',
-                    body: (
-                      <>
-                        Round 1&apos;s pattern:{' '}
-                        <strong style={{ color: '#e8fff8' }}>{getPatternName().replace(/^Pattern:\s*/i, '')}</strong>.
-                        Complete it with called songs, then tap <strong style={{ color: '#e8fff8' }}>BINGO</strong> on your
-                        phone — verified against the real call list in seconds. No paper, no disputes.
-                      </>
-                    ),
-                  },
-                ].map((step, i) => (
-                  <motion.div
-                    key={step.n}
-                    className="public-display-rules-step"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.35, delay: 0.05 + i * 0.06, ease: 'easeOut' }}
-                    style={{
-                      background: step.accent,
-                      border: `2px solid ${step.borderGlow}`,
-                      boxShadow: '0 0 0 1px rgba(255,255,255,0.08) inset, 0 12px 32px rgba(0,0,0,0.35)',
-                    }}
-                  >
-                    <div className="public-display-rules-step__badge">{step.n}</div>
-                    <div className="public-display-rules-step__text">
-                      <h3 className="public-display-rules-step__title">{step.title}</h3>
-                      <p className="public-display-rules-step__body">{step.body}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-
-              <div className="public-display-rules-features">
-                <motion.div
-                  className="public-display-rules-feature"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: 0.2, ease: 'easeOut' }}
-                  style={{ borderColor: 'rgba(0,255,136,0.55)' }}
-                >
-                  <h3 className="public-display-rules-feature__title">
-                    <Eye aria-hidden /> Reading this screen
-                  </h3>
-                  <ul className="public-display-rules-feature__list">
-                    <li>
-                      <Hash className="public-display-rules-feature__li-icon" aria-hidden />
-                      <span>
-                        Every clip posts up here with a call number — <strong style={{ color: '#e8fff8' }}>#1, #2,
-                        #3…</strong> in play order. Miss one? Glance up and catch right up.
-                      </span>
-                    </li>
-                    <li>
-                      <Eye className="public-display-rules-feature__li-icon" aria-hidden />
-                      {/* Mirrors the host's actual title-reveal setting — don't promise letter reveals when the host shows full titles. */}
-                      {titleRevealMode === 'track_start' ? (
-                        <span>
-                          Each clip&apos;s <strong style={{ color: pdGlass.mint }}>title &amp; artist</strong> post up here
-                          as soon as the clip starts — watch the board, then find it on your card.
-                        </span>
-                      ) : titleRevealMode === 'track_end' ? (
-                        <span>
-                          Titles stay <strong style={{ color: pdGlass.mint }}>hidden</strong> while each clip plays and
-                          reveal when the clip <strong style={{ color: pdGlass.mint }}>ends</strong> — trust your ears
-                          first, then check the board.
-                        </span>
-                      ) : (
-                        <span>
-                          Titles start <strong style={{ color: pdGlass.mint }}>hidden</strong> and fill in{' '}
-                          <strong style={{ color: pdGlass.mint }}>letter by letter</strong> — a new letter about every{' '}
-                          <strong style={{ color: pdGlass.mint }}>{letterRevealIntervalSec} seconds</strong>. Stumped?
-                          Patience pays.
-                        </span>
-                      )}
-                    </li>
-                  </ul>
-                </motion.div>
-
-                <motion.div
-                  className="public-display-rules-feature"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: 0.26, ease: 'easeOut' }}
-                  style={{ borderColor: 'rgba(139,92,246,0.6)' }}
-                >
-                  {(() => {
-                    const mixNames = playlistNames.map((n) => String(n || '').trim()).filter(Boolean);
-                    const fiveMix = mixNames.length === 5;
-                    return (
-                      <>
-                        <h3 className="public-display-rules-feature__title">
-                          <Music aria-hidden /> Rounds &amp; themes
-                        </h3>
-                        <p className="public-display-rules-feature__body">
-                          Tonight runs in <strong style={{ color: pdGlass.mint }}>rounds</strong> — usually two or more.
-                          Each round is a brand-new game: a fresh{' '}
-                          <strong style={{ color: pdGlass.mint }}>75-song pool</strong> built from up to{' '}
-                          <strong style={{ color: pdGlass.mint }}>five playlist themes</strong>, new cards for everyone,
-                          and sometimes a new pattern.
-                        </p>
-                        {fiveMix ? (
-                          <>
-                            <p className="public-display-rules-feature__body">
-                              Round 1&apos;s themes — your card&apos;s columns match them, one per letter:
-                            </p>
-                            <ul className="public-display-rules-feature__mix">
-                              {mixNames.map((name, i) => (
-                                <li key={`${name}-${i}`}>
-                                  <span className="public-display-rules-feature__mix-letter">
-                                    {'BINGO'[i]}
-                                  </span>
-                                  <span className="public-display-rules-feature__mix-name">{name}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </>
-                        ) : (
-                          <p className="public-display-rules-feature__body">
-                            Round 1&apos;s pool is one curated mix — if a song is on your card, it&apos;s in play this
-                            round.
-                          </p>
-                        )}
-                      </>
-                    );
-                  })()}
-                </motion.div>
-              </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
       
       
       {/* Confetti when winner banner shows (heavier for verified BINGO wins) */}
@@ -5836,7 +5500,7 @@ const PublicDisplay: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
             >
-              {venueBranding?.logoUrl && !showSplash && !showRules ? (
+              {venueBranding?.logoUrl && !showSplash ? (
                 <div className="public-display-venue-watermark" aria-hidden>
                   <img
                     src={venueBranding.logoUrl}

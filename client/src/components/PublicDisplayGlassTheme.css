@@ -504,28 +504,6 @@
   color: rgba(var(--pd-violet-rgb), 0.9) !important;
 }
 
-.App .public-display--glass .public-display-rules-overlay__panel {
-  background: linear-gradient(
-    165deg,
-    rgba(var(--pd-violet-rgb), 0.35) 0%,
-    rgba(10, 10, 20, 0.94) 100%
-  ) !important;
-  border: 1px solid rgba(var(--pd-mint-rgb), 0.5) !important;
-  box-shadow: 0 0 56px rgba(var(--pd-violet-rgb), 0.3) !important;
-}
-
-.App .public-display--glass .public-display-rules-step {
-  background: rgba(var(--pd-violet-rgb), 0.15) !important;
-  border: 1px solid rgba(var(--pd-violet-rgb), 0.4) !important;
-}
-
-.App .public-display--glass .public-display-rules-step__badge {
-  background: rgba(var(--pd-mint-rgb), 0.35) !important;
-  color: var(--pd-void) !important;
-  border: 1px solid rgba(var(--pd-mint-rgb), 0.65);
-  box-shadow: 0 0 16px rgba(var(--pd-mint-rgb), 0.4);
-}
-
 .App .public-display--glass .public-display-venue-watermark img {
   opacity: 0.06;
   filter: saturate(1.4) hue-rotate(15deg);

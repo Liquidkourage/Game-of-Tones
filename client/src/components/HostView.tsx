@@ -10926,20 +10926,6 @@ const HostView: React.FC = () => {
             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
               <button 
                 className="btn-secondary" 
-                onClick={() => socket?.emit('display-show-rules', { roomId })}
-                style={{ 
-                  fontSize: '0.9rem', 
-                  padding: '10px 16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-              >
-                <BookOpen className="w-4 h-4" aria-hidden />
-                Rules
-              </button>
-              <button 
-                className="btn-secondary" 
                 onClick={() => socket?.emit('display-show-splash', { roomId })}
                 style={{ 
                   fontSize: '0.9rem', 

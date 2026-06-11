@@ -6919,21 +6919,9 @@ io.on('connection', (socket) => {
   });
 
   // Display control events
-  socket.on('display-show-rules', (data) => {
-    const { roomId } = data;
-    if (roomId && rooms.has(roomId)) {
-      // Hide other screens first, then show rules
-      io.to(roomId).emit('display-hide-splash');
-      io.to(roomId).emit('display-show-rules');
-      routineServerLog(`📋 Rules screen shown for room ${roomId}`);
-    }
-  });
-
   socket.on('display-show-splash', (data) => {
     const { roomId } = data;
     if (roomId && rooms.has(roomId)) {
-      // Hide other screens first, then show splash
-      io.to(roomId).emit('display-hide-rules');
       io.to(roomId).emit('display-show-splash');
       routineServerLog(`🎬 Splash screen shown for room ${roomId}`);
     }
@@ -6943,7 +6931,6 @@ io.on('connection', (socket) => {
     const { roomId } = data;
     if (roomId && rooms.has(roomId)) {
       // Hide all overlay screens to show main display (which is the call list)
-      io.to(roomId).emit('display-hide-rules');
       io.to(roomId).emit('display-hide-splash');
       routineServerLog(`🎵 Main display (call list) shown for room ${roomId}`);
     }
