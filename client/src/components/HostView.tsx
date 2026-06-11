@@ -7529,9 +7529,18 @@ const HostView: React.FC = () => {
     [playlistsForRoundPlanner, catalogPackOptions],
   );
 
+  /** During live play, only the round currently being played is locked — all other rounds stay fully editable. */
+  const roundLockedForLivePlay = useCallback((roundIndex: number) => {
+    return gameStateRef.current === 'playing' && roundIndex === currentRoundIndexRef.current;
+  }, []);
+
   /** Same behavior as dragging a library row into a round bucket (RoundPlanner drop). */
   const addPlaylistToRoundBucket = useCallback(
     (roundIndex: number, playlistId: string) => {
+      if (roundLockedForLivePlay(roundIndex)) {
+        showToast('That round is live — end the round before changing its playlists. Other rounds stay editable.', 'info');
+        return;
+      }
       const playlist = resolvePlaylistForRoundAssign(playlistId);
       if (!playlist) return;
       const prev = eventRoundsRef.current;
@@ -7564,11 +7573,15 @@ const HostView: React.FC = () => {
       });
       syncMixFromRound(roundIndex, updated);
     },
-    [resolvePlaylistForRoundAssign, playlistsForRoundPlanner, roomId, syncMixFromRound],
+    [resolvePlaylistForRoundAssign, playlistsForRoundPlanner, roomId, syncMixFromRound, roundLockedForLivePlay, showToast],
   );
 
   const removePlaylistFromRoundBucket = useCallback(
     (roundIndex: number, playlistId: string) => {
+      if (roundLockedForLivePlay(roundIndex)) {
+        showToast('That round is live — end the round before changing its playlists. Other rounds stay editable.', 'info');
+        return;
+      }
       const prev = eventRoundsRef.current;
       if (roundIndex < 0 || roundIndex >= prev.length) return;
       const round = prev[roundIndex];
@@ -7604,19 +7617,25 @@ const HostView: React.FC = () => {
         syncMixFromRound(roundIndex, updated);
       }
     },
-    [resolvePlaylistForRoundAssign, roomId, syncMixFromRound],
+    [resolvePlaylistForRoundAssign, roomId, syncMixFromRound, roundLockedForLivePlay, showToast],
   );
 
   const handleFocusRoundForLibrary = useCallback((roundIndex: number) => {
-    setCurrentRoundIndex(roundIndex);
+    // During live play, currentRoundIndex is the live round pointer — browsing rounds for
+    // prep must not move it (it drives round-complete bookkeeping and the live dashboard).
+    if (gameStateRef.current !== 'playing') setCurrentRoundIndex(roundIndex);
     setRoundBuilderFocusIndex(roundIndex);
   }, []);
 
-  /** Round shown in the selected-round details panel on the Rounds tab (falls back to Round 1). */
+  /** Round shown in the selected-round details panel on the Rounds tab (falls back to Round 1). Uses the prep focus index so browsing/editing rounds mid-game never tracks or moves the live round pointer. */
   const selectedRoundForPanel = useMemo(() => {
     if (eventRounds.length === 0) return null;
     const idx =
-      currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length ? currentRoundIndex : 0;
+      roundBuilderFocusIndex >= 0 && roundBuilderFocusIndex < eventRounds.length
+        ? roundBuilderFocusIndex
+        : currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length
+          ? currentRoundIndex
+          : 0;
     const round = eventRounds[idx];
     const ids = round.playlistIds || [];
     const names = round.playlistNames || [];
@@ -7630,7 +7649,7 @@ const HostView: React.FC = () => {
         name: stripTitleFlagPrefix(String(names[i] ?? id), titleFlagStripList),
       })),
     };
-  }, [eventRounds, currentRoundIndex, titleFlagStripList]);
+  }, [eventRounds, roundBuilderFocusIndex, currentRoundIndex, titleFlagStripList]);
 
   /** Pick a round for advance prep: sync mix + pattern/snippet UI without marking rounds active/completed or leaving Manager. */
   const handleSelectRoundForPrep = useCallback(
@@ -10189,14 +10208,18 @@ const HostView: React.FC = () => {
     const updated = ensureEventRoundNames([...eventRounds, newRound]);
     handleUpdateRounds(updated);
     const newIndex = updated.length - 1;
-    setCurrentRoundIndex(newIndex);
+    // Mid-game, currentRoundIndex is the live round pointer — only move the prep focus.
+    if (gameState !== 'playing') setCurrentRoundIndex(newIndex);
     setRoundBuilderFocusIndex(newIndex);
     addLog(`Added ${newRound.name}`, 'info');
-  }, [eventRounds, handleUpdateRounds, addLog]);
+  }, [eventRounds, gameState, handleUpdateRounds, addLog]);
 
   const handleRemoveRound = useCallback(
     (roundIndex: number) => {
-      if (gameState === 'playing') return;
+      if (gameState === 'playing' && roundIndex === currentRoundIndex) {
+        showToast('That round is live — end the round before deleting it. Other rounds can be deleted.', 'info');
+        return;
+      }
       if (eventRounds.length <= 1) return;
       const round = eventRounds[roundIndex];
       if (!round) return;
@@ -10218,7 +10241,7 @@ const HostView: React.FC = () => {
       setRoundBuilderFocusIndex(clampToUpdated);
       addLog(`Deleted ${round.name}`, 'info');
     },
-    [eventRounds, gameState, handleUpdateRounds, addLog],
+    [eventRounds, gameState, currentRoundIndex, handleUpdateRounds, addLog, showToast],
   );
 
   const handleExportEventRecap = useCallback(() => {
@@ -10699,11 +10722,11 @@ const HostView: React.FC = () => {
                     rounds={roundTimelineRows}
                     summary={roundTimelineSummary}
                     onSelectRound={handleFocusRoundForLibrary}
-                    onAddRound={gameState !== 'playing' ? handleAddRound : undefined}
+                    onAddRound={handleAddRound}
                     canAddRound={eventRounds.length < MAX_EVENT_ROUNDS}
-                    onRemoveRound={gameState !== 'playing' ? handleRemoveRound : undefined}
+                    onRemoveRound={handleRemoveRound}
                     canRemoveRound={eventRounds.length > 1}
-                    onDropPlaylist={gameState !== 'playing' ? addPlaylistToRoundBucket : undefined}
+                    onDropPlaylist={addPlaylistToRoundBucket}
                   />
                 }
                 library={<div data-host-tutorial="playlist">{playlistRoundBuilderBody}</div>}
@@ -10714,15 +10737,14 @@ const HostView: React.FC = () => {
                       status={selectedRoundForPanel.status}
                       songCount={selectedRoundForPanel.songCount}
                       playlists={selectedRoundForPanel.playlists}
-                      canEdit={gameState !== 'playing'}
+                      canEdit={
+                        !(gameState === 'playing' && selectedRoundForPanel.index === currentRoundIndex)
+                      }
                       onRemovePlaylist={(playlistId) =>
                         removePlaylistFromRoundBucket(selectedRoundForPanel.index, playlistId)
                       }
-                      onDropPlaylist={
-                        gameState !== 'playing'
-                          ? (playlistId) =>
-                              addPlaylistToRoundBucket(selectedRoundForPanel.index, playlistId)
-                          : undefined
+                      onDropPlaylist={(playlistId) =>
+                        addPlaylistToRoundBucket(selectedRoundForPanel.index, playlistId)
                       }
                     />
                   ) : null
@@ -10736,7 +10758,7 @@ const HostView: React.FC = () => {
                   ) : null
                 }
                 advanced={
-                  gameState === 'playing' ? (
+                  gameState !== 'waiting' ? (
                     <>
                       <details className="host-setup-advanced-details host-glass-panel">
                         <summary>Pool quality report</summary>
