@@ -144,6 +144,7 @@ import HostGameLivePanel from './host/HostGameLivePanel';
 import HostDisplayExtrasPanel from './host/HostDisplayExtrasPanel';
 import type { HostSetupStep } from './host/HostSetupFlow';
 import HostSetupCockpit from './host/HostSetupCockpit';
+import HostEventActionsPanel from './host/HostEventActionsPanel';
 import HostSetupPlaylistStep from './host/HostSetupPlaylistStep';
 import HostSetupPlayStep from './host/HostSetupPlayStep';
 import HostPlaylistRoundAssignMenu from './host/HostPlaylistRoundAssignMenu';
@@ -9498,16 +9499,7 @@ const HostView: React.FC = () => {
           deviceSelected: !!selectedDevice,
         }}
         statusSummary={getRoundStatusSummary()}
-        onResetEvent={resetEvent}
-        onClearPrepCache={clearRoomRoundPrepStorage}
-        onEndRound={handleEndRound}
         hostControlsHydrating={hostRoomHydrating}
-        onResetCurrentRound={resetCurrentRound}
-        onStartNextPlanned={() => {
-          const next = getNextPlannedRound();
-          if (next >= 0) jumpToRound(next);
-        }}
-        hasNextPlanned={getNextPlannedRound() >= 0}
         poolTrackCountForRound={getBingoPoolTrackCountForRound}
         setupSurface={setupSurface}
         hideRoundPicker={setupSurface !== 'full'}
@@ -9543,13 +9535,7 @@ const HostView: React.FC = () => {
       isSpotifyConnected,
       selectedDevice,
       getRoundStatusSummary,
-      resetEvent,
-      clearRoomRoundPrepStorage,
-      handleEndRound,
       hostRoomHydrating,
-      resetCurrentRound,
-      getNextPlannedRound,
-      jumpToRound,
       getBingoPoolTrackCountForRound,
     ],
   );
@@ -11266,6 +11252,21 @@ const HostView: React.FC = () => {
                 )}
               </>
             )}
+
+            {hostGlassNav === 'game' && !hostRoomHydrating ? (
+              <HostEventActionsPanel
+                gameState={gameState}
+                onEndRound={handleEndRound}
+                onResetCurrentRound={resetCurrentRound}
+                onStartNextPlanned={() => {
+                  const next = getNextPlannedRound();
+                  if (next >= 0) jumpToRound(next);
+                }}
+                hasNextPlanned={getNextPlannedRound() >= 0}
+                onResetEvent={resetEvent}
+                onClearPrepCache={clearRoomRoundPrepStorage}
+              />
+            ) : null}
 
             {hostGlassNav === 'players' && roomId ? (
               <div data-host-tutorial="players">

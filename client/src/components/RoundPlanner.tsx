@@ -6,16 +6,12 @@ import RoundBuilderPlaybackPanel from './RoundBuilderPlaybackPanel';
 import {
   ArrowDown,
   ArrowUp,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Eraser,
   GripVertical,
   Play,
   Plus,
   Printer,
-  RotateCcw,
-  SkipForward,
   Trash2,
   Music,
 } from 'lucide-react';
@@ -129,13 +125,6 @@ interface RoundPlannerProps<TRound extends RoundPlannerRound = RoundPlannerRound
   /** Keeps host roundBuilderFocusIndex in sync when the user picks a bucket in the planner. */
   onFocusedRoundChange?: (roundIndex: number) => void;
   statusSummary?: { completed: number; active: number; planned: number; unplanned: number };
-  onResetEvent?: () => void;
-  onClearPrepCache?: () => void;
-  onCompleteCurrentRound?: () => void;
-  onEndRound?: () => void;
-  onResetCurrentRound?: () => void;
-  onStartNextPlanned?: () => void;
-  hasNextPlanned?: boolean;
   /** Live bingo pool size for a round index (deduped / geometry). */
   poolTrackCountForRound?: (roundIndex: number) => number;
   /** @deprecated Use poolTrackCountForRound */
@@ -184,13 +173,6 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
   initialFocusedIndex = 0,
   onFocusedRoundChange,
   statusSummary,
-  onResetEvent,
-  onClearPrepCache,
-  onCompleteCurrentRound,
-  onEndRound,
-  onResetCurrentRound,
-  onStartNextPlanned,
-  hasNextPlanned,
   poolTrackCountForRound,
   focusedPoolTrackCount = 0,
   hostControlsHydrating = false,
@@ -607,51 +589,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
         </div>
       ) : null}
 
-      {showAdvanced && (onResetEvent || onClearPrepCache || onCompleteCurrentRound) ? (
-        <section className="round-planner__event-actions" aria-labelledby="round-planner-event-actions-title">
-          <h4 id="round-planner-event-actions-title" className="round-planner__event-actions-title">
-            Event actions
-          </h4>
-          <div className="round-planner__event-actions-row">
-            {gameState === 'playing' && onEndRound ? (
-              <button type="button" className="round-planner-btn round-planner-btn--ghost" onClick={onEndRound}>
-                <CheckCircle2 className="w-3 h-3" aria-hidden />
-                End round
-              </button>
-            ) : null}
-            {gameState === 'playing' && onCompleteCurrentRound && !onEndRound ? (
-              <button type="button" className="round-planner-btn round-planner-btn--ghost" onClick={onCompleteCurrentRound}>
-                <CheckCircle2 className="w-3 h-3" aria-hidden />
-                Complete round
-              </button>
-            ) : null}
-            {gameState === 'playing' && onResetCurrentRound ? (
-              <button type="button" className="round-planner-btn round-planner-btn--ghost" onClick={onResetCurrentRound}>
-                <RotateCcw className="w-3 h-3" aria-hidden />
-                Reset round
-              </button>
-            ) : null}
-            {hasNextPlanned && onStartNextPlanned ? (
-              <button type="button" className="round-planner-btn round-planner-btn--ghost" onClick={onStartNextPlanned}>
-                <SkipForward className="w-3 h-3" aria-hidden />
-                Next planned
-              </button>
-            ) : null}
-            {onResetEvent ? (
-              <button type="button" className="round-planner-btn round-planner-btn--danger" onClick={onResetEvent}>
-                <Trash2 className="w-3 h-3" aria-hidden />
-                Reset event
-              </button>
-            ) : null}
-            {onClearPrepCache ? (
-              <button type="button" className="round-planner-btn round-planner-btn--ghost" onClick={onClearPrepCache}>
-                <Eraser className="w-3 h-3" aria-hidden />
-                Clear prep cache
-              </button>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
+      {/* Event actions (End/Reset round, Reset event, Clear prep cache) live on the Game tab now. */}
 
       <div className="round-planner__main">
       {showCriteria ? (
