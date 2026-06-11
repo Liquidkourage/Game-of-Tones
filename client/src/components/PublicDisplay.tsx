@@ -5513,11 +5513,25 @@ const PublicDisplay: React.FC = () => {
                     </li>
                     <li>
                       <Eye className="public-display-rules-feature__li-icon" aria-hidden />
-                      <span>
-                        Titles start <strong style={{ color: pdGlass.mint }}>hidden</strong> and fill in{' '}
-                        <strong style={{ color: pdGlass.mint }}>letter by letter</strong> while the clip plays. Stumped?
-                        Patience pays — the board gives it away a little at a time.
-                      </span>
+                      {/* Mirrors the host's actual title-reveal setting — don't promise letter reveals when the host shows full titles. */}
+                      {titleRevealMode === 'track_start' ? (
+                        <span>
+                          Each clip&apos;s <strong style={{ color: pdGlass.mint }}>title &amp; artist</strong> post up here
+                          as soon as the clip starts — watch the board, then find it on your card.
+                        </span>
+                      ) : titleRevealMode === 'track_end' ? (
+                        <span>
+                          Titles stay <strong style={{ color: pdGlass.mint }}>hidden</strong> while each clip plays and
+                          reveal when the clip <strong style={{ color: pdGlass.mint }}>ends</strong> — trust your ears
+                          first, then check the board.
+                        </span>
+                      ) : (
+                        <span>
+                          Titles start <strong style={{ color: pdGlass.mint }}>hidden</strong> and fill in{' '}
+                          <strong style={{ color: pdGlass.mint }}>letter by letter</strong> while the clip plays. Stumped?
+                          Patience pays — the board gives it away a little at a time.
+                        </span>
+                      )}
                     </li>
                   </ul>
                 </motion.div>
