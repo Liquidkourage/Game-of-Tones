@@ -6517,11 +6517,22 @@ io.on('connection', (socket) => {
   });
 
   socket.on('resume-song', async (data) => {
-    const { roomId, resumePosition } = data;
+    const { roomId, resumePosition, auto } = data;
     const room = rooms.get(roomId);
     
     if (room && room.host === socket.id) {
       try {
+        // Automatic resync nudges (e.g. socket reconnect) must never override a deliberate
+        // host pause — only an explicit host resume (no `auto` flag) lifts it.
+        if (
+          auto === true &&
+          (room.gameState === 'paused' || room.gameState === 'paused_for_verification')
+        ) {
+          routineServerLog(
+            `▶️ Auto resume nudge ignored — playback is paused (${room.gameState}) in room: ${roomId}`,
+          );
+          return;
+        }
         routineServerLog('▶️ Resuming song in room:', roomId);
         const deviceId = room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
         if (!deviceId) {

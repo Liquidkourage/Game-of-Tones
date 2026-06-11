@@ -3993,7 +3993,9 @@ const HostView: React.FC = () => {
         if (now - lastResumePingAtRef.current > 10000) {
           lastResumePingAtRef.current = now;
           setTimeout(() => {
-            try { newSocket.emit('resume-song', { roomId }); } catch {}
+            // auto: true — the server ignores this nudge while the host has playback
+            // deliberately paused, so a socket reconnect never un-pauses the room.
+            try { newSocket.emit('resume-song', { roomId, auto: true }); } catch {}
           }, 500);
         }
       }
