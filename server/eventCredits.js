@@ -499,6 +499,23 @@ async function closeActiveOrgEvent(db, organizationId, roomId, { tryRefund = tru
   return { closed: true, refunded: false };
 }
 
+/** Recent events for the account page: includes auto-expired actives (status still 'active' but past closes_at). */
+async function listRecentOrgEvents(db, organizationId, limit = 20) {
+  await ensureEntitlementTables(db);
+  const n = Math.min(100, Math.max(1, Math.round(Number(limit) || 20)));
+  const r = await db.query(
+    `SELECT id, room_id, status, credit_consumed, activated_at, closes_at, closed_at,
+            rounds_started, songs_played, player_peak,
+            (status = 'active' AND closes_at IS NOT NULL AND closes_at <= CURRENT_TIMESTAMP) AS expired
+     FROM org_events
+     WHERE organization_id = $1
+     ORDER BY activated_at DESC NULLS LAST, id DESC
+     LIMIT $2`,
+    [organizationId, n]
+  );
+  return r.rows;
+}
+
 async function startTrial(db, organizationId, days = 7) {
   const ends = addDays(new Date(), days);
   await db.query(
@@ -601,6 +618,7 @@ module.exports = {
   updateEventStats,
   tryAutoRefundEvent,
   closeActiveOrgEvent,
+  listRecentOrgEvents,
   startTrial,
   setSubscriptionTier,
   findPromoByCode,

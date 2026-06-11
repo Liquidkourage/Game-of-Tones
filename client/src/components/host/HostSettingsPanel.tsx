@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { Download, Link2 } from 'lucide-react';
 import HostActivityFeed from './HostActivityFeed';
+import HostEventActivationBar from './HostEventActivationBar';
 import type { HostActivityEntry } from '../../host/hostActivityLog';
 import { DEFAULT_PLAYLIST_TITLE_FLAGS } from '../../utils/hostPreferences';
 import type { PublicDisplayTitleRevealMode } from '../../utils/publicDisplayTitleReveal';
 
 type HostSettingsPanelProps = {
+  roomId: string | null;
   connectionPanel: React.ReactNode;
   onOpenConnectionModal: () => void;
   activityEntries: HostActivityEntry[];
@@ -27,6 +29,7 @@ type HostSettingsPanelProps = {
 };
 
 const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
+  roomId,
   connectionPanel,
   onOpenConnectionModal,
   activityEntries,
@@ -178,6 +181,9 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
           </span>
         </label>
       </section>
+
+      {/* Always-reachable event lifecycle controls — the setup cockpit's copy disappears once a round is live. */}
+      {roomId ? <HostEventActivationBar roomId={roomId} /> : null}
 
       <section className="host-glass-panel host-settings-workspace__export">
         <h2 className="host-settings-workspace__title">Recap</h2>

@@ -23,6 +23,26 @@ type OrgPayment = {
   completed_at?: string | null;
 };
 
+type OrgEventRow = {
+  id: number;
+  roomId: string;
+  status: 'active' | 'closed' | 'void' | 'expired' | string;
+  creditConsumed: boolean;
+  activatedAt: string | null;
+  closesAt: string | null;
+  closedAt: string | null;
+  roundsStarted: number;
+  songsPlayed: number;
+  playerPeak: number;
+};
+
+const EVENT_STATUS_LABELS: Record<string, string> = {
+  active: 'Active',
+  closed: 'Ended',
+  void: 'Refunded',
+  expired: 'Closed (auto)',
+};
+
 type SubscriptionPlan = {
   key: string;
   interval: 'month' | 'year';
@@ -110,6 +130,7 @@ const OrgPortalPage: React.FC = () => {
   const [banner, setBanner] = useState<string | null>(null);
   const [promoCode, setPromoCode] = useState('');
   const [planInterval, setPlanInterval] = useState<'month' | 'year'>('month');
+  const [orgEvents, setOrgEvents] = useState<OrgEventRow[]>([]);
 
   const billingNotice = searchParams.get('billing');
 
@@ -131,6 +152,15 @@ const OrgPortalPage: React.FC = () => {
       }
       setNeedsLogin(false);
       setData((await res.json()) as OrgMe);
+      try {
+        const evRes = await hostFetch(`${API_BASE || ''}/api/org/events`);
+        if (evRes.ok) {
+          const evJson = (await evRes.json()) as { events?: OrgEventRow[] };
+          setOrgEvents(Array.isArray(evJson.events) ? evJson.events : []);
+        }
+      } catch {
+        /* events list is informational — page still works without it */
+      }
     } catch (e) {
       setLoadError(String(e));
       setData(null);
@@ -657,6 +687,43 @@ const OrgPortalPage: React.FC = () => {
               ))}
             </ul>
           </section>
+
+          {orgEvents.length > 0 ? (
+            <section className="org-portal__card">
+              <h2>Recent events</h2>
+              <ul className="org-portal__list org-portal__events">
+                {orgEvents.map((ev) => (
+                  <li key={ev.id}>
+                    <strong>
+                      {ev.activatedAt ? new Date(ev.activatedAt).toLocaleDateString() : '—'}
+                    </strong>{' '}
+                    · Room {ev.roomId} ·{' '}
+                    <span
+                      className={
+                        ev.status === 'active'
+                          ? 'org-portal__event-status org-portal__event-status--active'
+                          : 'org-portal__event-status'
+                      }
+                    >
+                      {EVENT_STATUS_LABELS[ev.status] ?? ev.status}
+                    </span>
+                    <span className="org-portal__muted">
+                      {' '}
+                      — {ev.roundsStarted} round{ev.roundsStarted === 1 ? '' : 's'}, {ev.songsPlayed}{' '}
+                      song{ev.songsPlayed === 1 ? '' : 's'}, peak {ev.playerPeak} player
+                      {ev.playerPeak === 1 ? '' : 's'}
+                      {ev.creditConsumed && ev.status !== 'void' ? ' · 1 credit' : ''}
+                      {ev.status === 'void' ? ' · credit refunded' : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="org-portal__muted">
+                Active events close automatically 36 hours after activation — nothing to clean up
+                between shows.
+              </p>
+            </section>
+          ) : null}
 
           {isOwner && data?.payments && data.payments.length > 0 ? (
             <section className="org-portal__card">

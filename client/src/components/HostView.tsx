@@ -10685,6 +10685,7 @@ const HostView: React.FC = () => {
               <HostSettingsPanel
                 connectionPanel={hostConnectionPanel}
                 onOpenConnectionModal={() => setShowConnectionModal(true)}
+                roomId={roomId ?? null}
                 activityEntries={activityLog}
                 onExportEventRecap={handleExportEventRecap}
                 hybridInPersonPlusOnline={hybridInPersonPlusOnline}

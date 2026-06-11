@@ -103,6 +103,14 @@ body {
   background: rgba(0, 255, 200, 0.08);
 }
 
+/* Sign out renders as a button but must look identical to the header links. */
+.app-header__signout {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+}
+
 .app-header__admin-icon {
   flex-shrink: 0;
   opacity: 0.9;

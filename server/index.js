@@ -11324,6 +11324,37 @@ app.delete('/api/org/invites', async (req, res) => {
   }
 });
 
+/** Recent events for the signed-in host's org — lets hosts confirm past events closed (auto-expire after 36h). */
+app.get('/api/org/events', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    if (!ctx.organization) return res.json({ events: [] });
+    const rows = await billingStore.eventCredits.listRecentOrgEvents(db, ctx.organization.id, 20);
+    const toIso = (v) => (v instanceof Date ? v.toISOString() : v != null ? String(v) : null);
+    return res.json({
+      events: rows.map((r) => ({
+        id: r.id,
+        roomId: r.room_id,
+        // Auto-expired actives read as closed to hosts — nothing for them to clean up.
+        status: r.expired ? 'expired' : r.status,
+        creditConsumed: !!r.credit_consumed,
+        activatedAt: toIso(r.activated_at),
+        closesAt: toIso(r.closes_at),
+        closedAt: toIso(r.closed_at),
+        roundsStarted: Number(r.rounds_started) || 0,
+        songsPlayed: Number(r.songs_played) || 0,
+        playerPeak: Number(r.player_peak) || 0,
+      })),
+    });
+  } catch (e) {
+    console.error('GET /api/org/events:', e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
 app.get('/api/org/billing/setup', async (req, res) => {
   try {
     const uid = await requireApprovedHostUid(req, res);

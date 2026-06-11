@@ -225,6 +225,20 @@
   line-height: 1.6;
 }
 
+.org-portal__events {
+  list-style: none;
+  padding-left: 0;
+}
+
+.org-portal__event-status {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.org-portal__event-status--active {
+  color: #2bd989;
+}
+
 .org-portal__payments {
   font-size: 0.88rem;
 }

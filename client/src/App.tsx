@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, useLocation, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Sparkles, Shield, Crown, UserCircle, UserPlus } from 'lucide-react';
+import { Sparkles, Shield, Crown, UserCircle, UserPlus, LogOut } from 'lucide-react';
 import { API_BASE } from './config';
-import { hostFetch } from './utils/hostFetch';
+import { hostFetch, postHostLogout } from './utils/hostFetch';
 import './App.css';
 
 /** Mirrors PublicDisplay venue state (dispatched via window event). */
@@ -173,6 +173,19 @@ function AppHeader() {
               <UserCircle size={16} aria-hidden className="app-header__org-icon" />
               <span>Account</span>
             </Link>
+          )}
+          {showOrgLink && (
+            <button
+              type="button"
+              className="app-header__org-link app-header__signout"
+              title="Sign out of your Tempo host account"
+              onClick={() => {
+                if (window.confirm('Sign out of your Tempo host account?')) postHostLogout();
+              }}
+            >
+              <LogOut size={16} aria-hidden className="app-header__org-icon" />
+              <span>Sign out</span>
+            </button>
           )}
           {showAdminLink && (
             <Link to="/admin" className="app-header__admin-link" title="Admin">
