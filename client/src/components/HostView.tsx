@@ -8446,6 +8446,13 @@ const HostView: React.FC = () => {
             eventRoundSnapshotMeetsSaveThreshold(r, hostFsDefault),
         );
       }
+      if (pickIdx < 0) {
+        // Planned-but-unsaved rounds still count as prep — without this, a refresh
+        // resets the pointer and Step 1 pretends nothing was assigned.
+        pickIdx = withPromotedStatus.findIndex(
+          (r: EventRound) => (r.playlistIds || []).length > 0,
+        );
+      }
       if (pickIdx >= 0) {
         setCurrentRoundIndex(pickIdx);
       }
@@ -8530,6 +8537,11 @@ const HostView: React.FC = () => {
             (rr: EventRound) =>
               (rr.playlistIds || []).length > 0 &&
               eventRoundSnapshotMeetsSaveThreshold(rr, hostFsDefault),
+          );
+        }
+        if (pickIdx < 0) {
+          pickIdx = withPromoted.findIndex(
+            (rr: EventRound) => (rr.playlistIds || []).length > 0,
           );
         }
         if (pickIdx >= 0) {
