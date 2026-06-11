@@ -230,21 +230,6 @@
   margin-bottom: 10px;
 }
 
-.round-planner__advanced {
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.15);
-}
-
-.round-planner__advanced summary {
-  cursor: pointer;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.72);
-}
-
 .round-planner-bucket__playlist-readonly {
   display: flex;
   flex-wrap: wrap;

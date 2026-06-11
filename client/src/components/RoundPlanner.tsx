@@ -652,7 +652,6 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
 
       <div className="round-planner__main">
       {showCriteria ? (
-      showAdvanced ? (
       <div className="round-planner__cards-pdf-row">
         <label className="round-planner__cards-pdf">
           Cards per PDF
@@ -693,51 +692,6 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
           </button>
         ) : null}
       </div>
-      ) : (
-      <details className="round-planner__advanced">
-        <summary>Advanced · cards &amp; print</summary>
-        <div className="round-planner__cards-pdf-row">
-        <label className="round-planner__cards-pdf">
-          Cards per PDF
-          <input
-            type="number"
-            min={1}
-            max={200}
-            value={printableCardCount}
-            disabled={printablePdfLoading}
-            onChange={(e) => onPrintableCardCountChange(Number(e.target.value))}
-          />
-        </label>
-        {onPreviewPrint ? (
-          <button
-            type="button"
-            className="round-planner-btn round-planner-btn--ghost"
-            disabled={printablePdfLoading}
-            title="One watermarked sample card — no event credit"
-            onClick={onPreviewPrint}
-          >
-            Preview card
-          </button>
-        ) : null}
-        {onPrintAllPreShow ? (
-          <button
-            type="button"
-            className="round-planner-btn round-planner-btn--secondary"
-            disabled={printablePdfLoading || savedRoundCount < 1}
-            title={
-              savedRoundCount < 1
-                ? 'Save at least one round to export'
-                : 'One PDF: host call lists for each saved round, then printable bingo cards'
-            }
-            onClick={onPrintAllPreShow}
-          >
-            <Printer className="w-3 h-3" aria-hidden />
-            {printablePdfLoading ? 'Printing…' : `Print all pre-show (${savedRoundCount})`}
-          </button>
-        ) : null}
-        </div>
-      </details>
-      )
       ) : null}
 
       <div
