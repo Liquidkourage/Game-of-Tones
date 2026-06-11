@@ -357,6 +357,23 @@ interface EventRound {
   freeSpaceEnabled?: boolean;
   /** Frozen finalized subset for this round (tracks + gameplay knobs at save time). Enables offline PDF from snapshot. */
   savedMixSnapshot?: SavedRoundMixSnapshot;
+  /** Stamped when the round completes: played ids + unplayed pool tracks. Feeds the night-wide Leftovers virtual playlist. */
+  playRecap?: RoundPlayRecap;
+}
+
+interface RoundPlayRecap {
+  playedSongIds: string[];
+  /** Finalized-pool tracks that were never called in this round. */
+  leftoverSongs: Song[];
+}
+
+/** Virtual library row built from completed rounds' unplayed tracks. Server-side `isInternalPlaylistId`
+ *  (`__x__` ids) already skips Spotify fetches for it; tracks are sent embedded / via songList. */
+const LEFTOVERS_PLAYLIST_ID = '__leftovers__';
+const LEFTOVERS_PLAYLIST_NAME = 'Leftovers — unplayed tonight';
+
+function isLeftoversPlaylistId(id: unknown): boolean {
+  return String(id ?? '').trim() === LEFTOVERS_PLAYLIST_ID;
 }
 
 /** Geometry implied by mix playlist layout when the snapshot was saved (informational + reload UX). */
@@ -384,6 +401,34 @@ function cloneSongForSnapshot(s: Song): Song {
     sourcePlaylistName: s.sourcePlaylistName,
     youtubeRawTitle: s.youtubeRawTitle,
     catalogDisplayVerified: s.catalogDisplayVerified,
+  };
+}
+
+/** Round just transitioned to completed: record played ids + unplayed pool tracks for the Leftovers
+ *  virtual playlist. Pool = first candidate containing the first played id (sanity), else first non-empty. */
+function stampRoundPlayRecap(
+  round: EventRound,
+  playedIds: string[],
+  poolCandidates: Array<Song[] | null | undefined>,
+): EventRound {
+  const pools = poolCandidates
+    .map((p) => (Array.isArray(p) ? p : []))
+    .filter((p) => p.length > 0);
+  let pool = pools[0] ?? [];
+  if (playedIds.length > 0) {
+    const firstPlayed = playedIds[0];
+    const containing = pools.find((p) => p.some((s) => s?.id === firstPlayed));
+    if (containing) pool = containing;
+  }
+  const played = new Set(playedIds);
+  return {
+    ...round,
+    playRecap: {
+      playedSongIds: [...playedIds],
+      leftoverSongs: pool
+        .filter((s) => s?.id && !played.has(s.id))
+        .map(cloneSongForSnapshot),
+    },
   };
 }
 
@@ -1175,6 +1220,9 @@ const HostView: React.FC = () => {
   }, [combinedPatternModalOpen]);
 
   const [playedInOrder, setPlayedInOrder] = useState<Array<{ id: string; name: string; artist: string }>>([]);
+  /** Latest played list for round-completion recaps (completion sites run inside setState callbacks). */
+  const playedInOrderRef = useRef(playedInOrder);
+  playedInOrderRef.current = playedInOrder;
   const [showRooms, setShowRooms] = useState<boolean>(false);
   const [rooms, setRooms] = useState<Array<any>>([]);
   const [playerCards, setPlayerCards] = useState<Map<string, any>>(new Map());
@@ -3106,7 +3154,11 @@ const HostView: React.FC = () => {
             const cur = currentRoundIndexRef.current;
             if (cur < 0 || cur >= prev.length || prev[cur].status === 'completed') return prev;
             const next = [...prev];
-            next[cur] = { ...next[cur], status: 'completed', completedAt: Date.now() };
+            next[cur] = stampRoundPlayRecap(
+              { ...next[cur], status: 'completed', completedAt: Date.now() },
+              playedInOrderRef.current.map((p) => p.id),
+              [finalizedOrderRef.current, next[cur].savedMixSnapshot?.songs],
+            );
             try {
               localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(next));
             } catch {
@@ -3725,6 +3777,8 @@ const HostView: React.FC = () => {
         setPlaylists((prev) => {
           const merged = new Map(prev.map((playlist) => [normalizeSpotifyPlaylistId(playlist.id), playlist]));
           syncedPlaylists.forEach((playlist: Playlist) => {
+            // Virtual rows (Leftovers) render via their own pinned library row — never the Spotify list.
+            if (isLeftoversPlaylistId(playlist.id)) return;
             const id = normalizeSpotifyPlaylistId(playlist.id);
             const existing = merged.get(id);
             merged.set(id, existing ? { ...existing, ...playlist } : playlist);
@@ -4663,9 +4717,21 @@ const HostView: React.FC = () => {
           lastFinalizeMixSongListRef.current = listToSend;
           socket.on('mix-finalized', onFinalized);
           socket.on('finalize-mix-failed', onFailed);
+          // Internal (virtual) playlists carry their tracks embedded — the server skips Spotify
+          // for `__x__` ids and reads `songs` instead (see isInternalPlaylistId paths).
+          const playlistsForServer = playlists.map((p) =>
+            isLeftoversPlaylistId(p.id)
+              ? {
+                  ...p,
+                  songs: listToSend
+                    .filter((s) => isLeftoversPlaylistId(s.sourcePlaylistId))
+                    .map(cloneSongForSnapshot),
+                }
+              : p,
+          );
           socket.emit('finalize-mix', {
             roomId: roomId,
-            playlists,
+            playlists: playlistsForServer,
             songList: listToSend,
             freeSpace: freeSpaceForPayload,
           });
@@ -6489,7 +6555,11 @@ const HostView: React.FC = () => {
       const cur = currentRoundIndexRef.current;
       if (cur < 0 || cur >= prev.length || prev[cur].status === 'completed') return prev;
       const next = [...prev];
-      next[cur] = { ...next[cur], status: 'completed', completedAt: Date.now() };
+      next[cur] = stampRoundPlayRecap(
+        { ...next[cur], status: 'completed', completedAt: Date.now() },
+        playedInOrderRef.current.map((p) => p.id),
+        [finalizedOrderRef.current, next[cur].savedMixSnapshot?.songs],
+      );
       try {
         if (roomId) localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(next));
       } catch {
@@ -6521,6 +6591,44 @@ const HostView: React.FC = () => {
   };
 
   // Generate and shuffle song list from selected playlists. Only fetches tracks for newly selected playlists (avoids re-downloading the whole library on each click). Use { force: true } to refetch all.
+  /** Night-wide Leftovers pool: every completed round's unplayed finalized-pool tracks, minus anything
+   *  played anywhere tonight (including the live round). Live-updating until a round using it is finalized. */
+  const leftoverPoolSongs = useMemo<Song[]>(() => {
+    const playedAnywhere = new Set<string>();
+    for (const r of eventRounds) {
+      for (const id of r.playRecap?.playedSongIds ?? []) playedAnywhere.add(id);
+    }
+    for (const p of playedInOrder) playedAnywhere.add(p.id);
+    const seen = new Set<string>();
+    const out: Song[] = [];
+    for (const r of eventRounds) {
+      for (const s of r.playRecap?.leftoverSongs ?? []) {
+        if (!s?.id || seen.has(s.id) || playedAnywhere.has(s.id)) continue;
+        seen.add(s.id);
+        out.push({
+          ...s,
+          sourcePlaylistId: LEFTOVERS_PLAYLIST_ID,
+          sourcePlaylistName: LEFTOVERS_PLAYLIST_NAME,
+        });
+      }
+    }
+    return out;
+  }, [eventRounds, playedInOrder]);
+  const leftoverPoolSongsRef = useRef(leftoverPoolSongs);
+  leftoverPoolSongsRef.current = leftoverPoolSongs;
+
+  /** Virtual library row for the leftovers pool — only offered once at least one track exists. */
+  const leftoversVirtualPlaylist = useMemo<Playlist | null>(() => {
+    if (leftoverPoolSongs.length === 0) return null;
+    return {
+      id: LEFTOVERS_PLAYLIST_ID,
+      name: LEFTOVERS_PLAYLIST_NAME,
+      tracks: leftoverPoolSongs.length,
+      description:
+        'Virtual playlist — tracks from earlier rounds tonight that were never played. Updates live until you finalize a round with it.',
+    };
+  }, [leftoverPoolSongs]);
+
   const generateSongList = useCallback(
     async (opts?: {
       force?: boolean;
@@ -6560,10 +6668,15 @@ const HostView: React.FC = () => {
         }
       });
 
+      // Leftovers virtual rows are never "kept" — they are rebuilt fresh from the recap pool
+      // each build (live-updating), and never marked fully loaded.
       const kept: Song[] = opts?.force
         ? []
         : songListRef.current.filter(
-            (s) => s.sourcePlaylistId && selectedIds.has(s.sourcePlaylistId)
+            (s) =>
+              s.sourcePlaylistId &&
+              selectedIds.has(s.sourcePlaylistId) &&
+              !isLeftoversPlaylistId(s.sourcePlaylistId)
           );
 
       let toFetch = rows.filter((p) => !fullyLoadedPlaylistIdsRef.current.has(p.id));
@@ -6619,7 +6732,9 @@ const HostView: React.FC = () => {
       try {
         let allSongs: Song[] = [...kept];
 
-        const needsHostSpotifyApi = toFetch.some((p) => !p.youtubeMusic && p.catalog !== true);
+        const needsHostSpotifyApi = toFetch.some(
+          (p) => !p.youtubeMusic && p.catalog !== true && !isLeftoversPlaylistId(p.id),
+        );
         if (needsHostSpotifyApi && !readHostSpotifyWebEnabled()) {
           setSongList([]);
           return [];
@@ -6649,6 +6764,11 @@ const HostView: React.FC = () => {
             return [];
           }
           const playlist = toFetch[i];
+          // Leftovers virtual playlist: tracks come from completed-round recaps in memory — no API call.
+          if (isLeftoversPlaylistId(playlist.id)) {
+            allSongs.push(...leftoverPoolSongsRef.current.map((s) => ({ ...s })));
+            continue;
+          }
           // Recent Spotify 5xx for this playlist: skip auto-rehydration until the cooldown
           // passes (stable warning instead of a request/banner loop). Manual Refresh (force)
           // bypasses this; the server still enforces its own org+playlist cooldown.
@@ -7547,12 +7667,13 @@ const HostView: React.FC = () => {
   const resolveMixPlaylistRowsForRound = useCallback(
     (round: EventRound): Playlist[] | null => {
       const idSet = new Set((round.playlistIds || []).map((id) => String(id)));
+      const hasLeftovers = idSet.has(LEFTOVERS_PLAYLIST_ID);
       const fromLibrary = playlistsForRoundPlanner.filter((p) => idSet.has(String(p.id)));
       const libraryIdSet = new Set(fromLibrary.map((p) => String(p.id)));
       const fromCatalog = catalogPackOptions.filter(
         (p) => idSet.has(String(p.id)) && !libraryIdSet.has(String(p.id)),
       );
-      if (fromLibrary.length === 0 && fromCatalog.length === 0) return null;
+      if (fromLibrary.length === 0 && fromCatalog.length === 0 && !hasLeftovers) return null;
       const merged: Playlist[] = [...fromLibrary];
       const ids = new Set(fromLibrary.map((p) => p.id));
       for (const c of fromCatalog) {
@@ -7561,9 +7682,18 @@ const HostView: React.FC = () => {
           ids.add(c.id);
         }
       }
+      if (hasLeftovers && !ids.has(LEFTOVERS_PLAYLIST_ID)) {
+        merged.push(
+          leftoversVirtualPlaylist ?? {
+            id: LEFTOVERS_PLAYLIST_ID,
+            name: LEFTOVERS_PLAYLIST_NAME,
+            tracks: leftoverPoolSongsRef.current.length,
+          },
+        );
+      }
       return merged;
     },
-    [playlistsForRoundPlanner, catalogPackOptions],
+    [playlistsForRoundPlanner, catalogPackOptions, leftoversVirtualPlaylist],
   );
 
   /** Load a round's playlists into the host mix selection (finalize / Save round use this list). Does not change round status. */
@@ -7598,6 +7728,15 @@ const HostView: React.FC = () => {
   /** Resolve a library, YouTube, or catalog pack row for round bucket add/remove. */
   const resolvePlaylistForRoundAssign = useCallback(
     (playlistId: string): Playlist | undefined => {
+      if (isLeftoversPlaylistId(playlistId)) {
+        return (
+          leftoversVirtualPlaylist ?? {
+            id: LEFTOVERS_PLAYLIST_ID,
+            name: LEFTOVERS_PLAYLIST_NAME,
+            tracks: leftoverPoolSongsRef.current.length,
+          }
+        );
+      }
       const canon = canonicalPlaylistIdForMatch(String(playlistId));
       const fromLibrary = playlistsForRoundPlanner.find(
         (p) => canonicalPlaylistIdForMatch(String(p.id)) === canon,
@@ -7608,7 +7747,7 @@ const HostView: React.FC = () => {
       );
       return fromCatalog ? { ...fromCatalog, catalog: true } : undefined;
     },
-    [playlistsForRoundPlanner, catalogPackOptions],
+    [playlistsForRoundPlanner, catalogPackOptions, leftoversVirtualPlaylist],
   );
 
   /** During live play, only the round currently being played is locked — all other rounds stay fully editable. */
@@ -8054,14 +8193,19 @@ const HostView: React.FC = () => {
       }
     }
 
-    // Mark current round as completed if it exists
+    // Mark current round as completed if it exists (recap only on the transition — an
+    // already-completed round keeps the played/leftover recap stamped when it finished).
     if (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length) {
       const updatedRounds = [...eventRounds];
-      updatedRounds[currentRoundIndex] = {
-        ...updatedRounds[currentRoundIndex],
-        status: 'completed',
-        completedAt: Date.now()
-      };
+      const prevRound = updatedRounds[currentRoundIndex];
+      updatedRounds[currentRoundIndex] =
+        prevRound.status === 'completed'
+          ? prevRound
+          : stampRoundPlayRecap(
+              { ...prevRound, status: 'completed', completedAt: Date.now() },
+              playedInOrderRef.current.map((p) => p.id),
+              [finalizedOrderRef.current, prevRound.savedMixSnapshot?.songs],
+            );
       setEventRounds(updatedRounds);
     }
 
@@ -8170,11 +8314,11 @@ const HostView: React.FC = () => {
       if (cur < 0 || cur >= prev.length) return prev;
       if (prev[cur].status === 'completed') return prev;
       const next = [...prev];
-      next[cur] = {
-        ...next[cur],
-        status: 'completed',
-        completedAt: Date.now(),
-      };
+      next[cur] = stampRoundPlayRecap(
+        { ...next[cur], status: 'completed', completedAt: Date.now() },
+        playedInOrderRef.current.map((p) => p.id),
+        [finalizedOrderRef.current, next[cur].savedMixSnapshot?.songs],
+      );
       try {
         if (roomId) localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(next));
       } catch {
@@ -8364,11 +8508,14 @@ const HostView: React.FC = () => {
       const next = [...prev];
       const prevIndex = currentRoundIndexRef.current;
       if (prevIndex >= 0 && prevIndex < next.length && prevIndex !== nextIndex) {
-        next[prevIndex] = {
-          ...next[prevIndex],
-          status: 'completed',
-          completedAt: now,
-        };
+        next[prevIndex] =
+          next[prevIndex].status === 'completed'
+            ? next[prevIndex]
+            : stampRoundPlayRecap(
+                { ...next[prevIndex], status: 'completed', completedAt: now },
+                playedInOrderRef.current.map((p) => p.id),
+                [finalizedOrderRef.current, next[prevIndex].savedMixSnapshot?.songs],
+              );
       }
       if (nextIndex >= 0 && nextIndex < next.length) {
         next[nextIndex] = {
@@ -9915,6 +10062,166 @@ const HostView: React.FC = () => {
                       ) : null}
                       </div>
                       <div className="host-playlist-library-table__rows">
+                      {leftoversVirtualPlaylist ? (() => {
+                        const assignedRoundCount =
+                          playlistAssignedRoundCounts.get(LEFTOVERS_PLAYLIST_ID) || 0;
+                        const count = leftoversVirtualPlaylist.tracks;
+                        return (
+                          <div
+                            className="host-playlist-library-row host-playlist-library-row--virtual"
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData('text/plain', LEFTOVERS_PLAYLIST_ID);
+                              e.dataTransfer.effectAllowed = 'copy';
+                              setLibraryPlaylistDragActive(true);
+                            }}
+                            onDragEnd={() => setLibraryPlaylistDragActive(false)}
+                          >
+                            <span
+                              className={
+                                assignedRoundCount > 0
+                                  ? 'host-playlist-assigned-chip host-playlist-assigned-chip--on'
+                                  : 'host-playlist-assigned-chip host-playlist-assigned-chip--off'
+                              }
+                              title={
+                                assignedRoundCount > 0
+                                  ? `Assigned to ${assignedRoundCount} round${assignedRoundCount !== 1 ? 's' : ''}`
+                                  : undefined
+                              }
+                              aria-hidden={assignedRoundCount === 0 || undefined}
+                            >
+                              {assignedRoundCount > 0 ? <Check aria-hidden /> : null}
+                            </span>
+                            <span
+                              style={{
+                                flex: 1,
+                                minWidth: 0,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 5,
+                                alignItems: 'flex-start',
+                              }}
+                            >
+                              <span
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  flexWrap: 'wrap',
+                                  gap: 8,
+                                  fontSize: '0.9rem',
+                                  color: count >= 15 ? '#c9a6ff' : '#fff',
+                                }}
+                              >
+                                {LEFTOVERS_PLAYLIST_NAME}
+                                <span
+                                  className="host-playlist-virtual-badge"
+                                  title="Built from completed rounds — not a Spotify playlist"
+                                >
+                                  Virtual
+                                </span>
+                              </span>
+                              <span
+                                className="host-playlist-desc"
+                                title="Every track from earlier rounds' pools that was never played tonight. Refreshes live as rounds finish — the mix locks in when you finalize/save a round with it."
+                              >
+                                Unplayed tracks from tonight&rsquo;s finished rounds. Updates live until you finalize.
+                              </span>
+                            </span>
+                            <span
+                              style={{
+                                fontSize: '0.8rem',
+                                opacity: 0.85,
+                                color: count >= 15 ? '#c9a6ff' : '#b3b3b3',
+                                flexShrink: 0,
+                                paddingTop: 2,
+                                textAlign: 'right',
+                              }}
+                            >
+                              {count} unplayed
+                            </span>
+                            <span
+                              role="presentation"
+                              className="host-playlist-library-row__assign"
+                              onMouseDown={(e) => e.stopPropagation()}
+                            >
+                              {(() => {
+                                if (!libraryQuickAssignRound) return null;
+                                const inQuickRound =
+                                  libraryQuickAssignRound.canonicalIds.includes(LEFTOVERS_PLAYLIST_ID);
+                                return (
+                                  <button
+                                    type="button"
+                                    className={
+                                      inQuickRound
+                                        ? 'host-playlist-quick-add host-playlist-quick-add--added'
+                                        : 'host-playlist-quick-add'
+                                    }
+                                    onClick={() =>
+                                      inQuickRound
+                                        ? removePlaylistFromRoundBucket(
+                                            libraryQuickAssignRound.index,
+                                            LEFTOVERS_PLAYLIST_ID,
+                                          )
+                                        : addPlaylistToRoundBucket(
+                                            libraryQuickAssignRound.index,
+                                            LEFTOVERS_PLAYLIST_ID,
+                                          )
+                                    }
+                                    title={
+                                      inQuickRound
+                                        ? `Remove from ${libraryQuickAssignRound.name}`
+                                        : `Add to ${libraryQuickAssignRound.name}`
+                                    }
+                                  >
+                                    {inQuickRound ? (
+                                      <>
+                                        <Check className="w-3.5 h-3.5" aria-hidden />
+                                        Added
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Plus className="w-3.5 h-3.5" aria-hidden />
+                                        Add to {libraryQuickAssignRound.name}
+                                      </>
+                                    )}
+                                  </button>
+                                );
+                              })()}
+                              {eventRounds.length > 1 ? (
+                                <HostPlaylistRoundAssignMenu
+                                  playlistId={LEFTOVERS_PLAYLIST_ID}
+                                  playlistName={LEFTOVERS_PLAYLIST_NAME}
+                                  rounds={eventRounds}
+                                  onAssign={(roundIndex) =>
+                                    addPlaylistToRoundBucket(roundIndex, LEFTOVERS_PLAYLIST_ID)
+                                  }
+                                  onUnassign={(roundIndex) =>
+                                    removePlaylistFromRoundBucket(roundIndex, LEFTOVERS_PLAYLIST_ID)
+                                  }
+                                />
+                              ) : null}
+                            </span>
+                            {count < 15 ? (
+                              <span
+                                style={{
+                                  fontSize: '0.72rem',
+                                  color: '#ffb347',
+                                  whiteSpace: 'nowrap',
+                                  padding: '4px 8px',
+                                  borderRadius: 6,
+                                  border: '1px solid rgba(255,179,71,0.35)',
+                                  background: 'rgba(255,179,71,0.08)',
+                                  flexShrink: 0,
+                                  paddingTop: 6,
+                                }}
+                                title="Need at least 15 unplayed tracks for a standard round — finish more rounds first"
+                              >
+                                Need 15+
+                              </span>
+                            ) : null}
+                          </div>
+                        );
+                      })() : null}
                       {libraryTablePlaylists.length === 0 ? (
                           <div className="host-playlist-library-table__empty">
                             {playlistLibrarySource === 'youtube'
