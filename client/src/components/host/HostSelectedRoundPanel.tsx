@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, ListMusic, X } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, ListMusic, X } from 'lucide-react';
 import './HostPlaylistLibrary.css';
 
 export type SelectedRoundPlaylistRow = {
@@ -16,6 +16,8 @@ export type HostSelectedRoundPanelProps = {
   onRemovePlaylist: (playlistId: string) => void;
   /** Drop a dragged library playlist here to assign it to this round. */
   onDropPlaylist?: (playlistId: string) => void;
+  /** A library playlist drag is in progress: pulse this panel as a drop target. */
+  dropTargetActive?: boolean;
 };
 
 const statusLabel: Record<HostSelectedRoundPanelProps['status'], string> = {
@@ -38,6 +40,7 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
   canEdit,
   onRemovePlaylist,
   onDropPlaylist,
+  dropTargetActive = false,
 }) => {
   const lowSongs = playlists.length > 0 && songCount > 0 && songCount < 15;
   const [dragOver, setDragOver] = useState(false);
@@ -60,6 +63,7 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
     <section
       className={[
         'host-selected-round host-glass-panel',
+        onDropPlaylist && dropTargetActive ? 'host-selected-round--drop-ready' : '',
         dragOver ? 'host-selected-round--drag-over' : '',
       ]
         .filter(Boolean)
@@ -144,12 +148,19 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
           ))}
         </ul>
       ) : (
-        <p className="host-selected-round__empty" role="status">
-          Add 1 playlist for a round mix, or 5 playlists for column mode.{' '}
-          {onDropPlaylist
-            ? 'Drag a playlist from the library here (or onto a round above), or use the Rounds button on a playlist row.'
-            : 'Drag a playlist from the library onto a round above, or use the Rounds button on a playlist row.'}
-        </p>
+        <>
+          {onDropPlaylist ? (
+            <div className="host-selected-round__dropzone" aria-hidden>
+              <ArrowDownToLine className="w-5 h-5" aria-hidden />
+            </div>
+          ) : null}
+          <p className="host-selected-round__empty" role="status">
+            Add 1 playlist for a round mix, or 5 playlists for column mode.{' '}
+            {onDropPlaylist
+              ? 'Drag a playlist from the library here (or onto a round above), or use the Rounds button on a playlist row.'
+              : 'Drag a playlist from the library onto a round above, or use the Rounds button on a playlist row.'}
+          </p>
+        </>
       )}
     </section>
   );

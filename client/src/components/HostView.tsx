@@ -11324,6 +11324,7 @@ const HostView: React.FC = () => {
                     onRemoveRound={handleRemoveRound}
                     canRemoveRound={eventRounds.length > 1}
                     onDropPlaylist={addPlaylistToRoundBucket}
+                    dropTargetsActive={libraryPlaylistDragActive}
                   />
                 }
                 library={<div data-host-tutorial="playlist">{playlistRoundBuilderBody}</div>}
@@ -11343,6 +11344,7 @@ const HostView: React.FC = () => {
                       onDropPlaylist={(playlistId) =>
                         addPlaylistToRoundBucket(selectedRoundForPanel.index, playlistId)
                       }
+                      dropTargetActive={libraryPlaylistDragActive}
                     />
                   ) : null
                 }

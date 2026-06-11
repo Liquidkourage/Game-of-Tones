@@ -22,6 +22,8 @@ type HostRoundTimelineProps = {
   onRemoveRound?: (index: number) => void;
   canRemoveRound?: boolean;
   onDropPlaylist?: (roundIndex: number, playlistId: string) => void;
+  /** A library playlist drag is in progress: pulse every droppable round chip. */
+  dropTargetsActive?: boolean;
   summary?: string;
   onOpenRounds?: () => void;
   /** Extra guidance shown in the read-only nothing-prepped state (e.g. "Add music below"). */
@@ -44,6 +46,7 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
   onRemoveRound,
   canRemoveRound = true,
   onDropPlaylist,
+  dropTargetsActive = false,
   summary,
   onOpenRounds,
   emptyHint,
@@ -126,6 +129,10 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
               r.isCurrent
                 ? 'host-round-timeline__chip host-round-timeline__chip--current'
                 : 'host-round-timeline__chip',
+              // Visual drop affordances: dashed ring on empty buckets at rest, pulse on all
+              // droppable buckets while a playlist drag is in progress.
+              onDropPlaylist && r.playlistCount === 0 ? 'host-round-timeline__chip--drop-idle' : '',
+              onDropPlaylist && dropTargetsActive ? 'host-round-timeline__chip--drop-ready' : '',
               dragOverRound === r.index ? 'host-round-timeline__chip--drag-over' : '',
             ]
               .filter(Boolean)
