@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Download, Link2 } from 'lucide-react';
 import HostActivityFeed from './HostActivityFeed';
 import HostEventActivationBar from './HostEventActivationBar';
@@ -9,7 +9,6 @@ import type { PublicDisplayTitleRevealMode } from '../../utils/publicDisplayTitl
 type HostSettingsPanelProps = {
   roomId: string | null;
   connectionPanel: React.ReactNode;
-  onOpenConnectionModal: () => void;
   activityEntries: HostActivityEntry[];
   onExportEventRecap: () => void;
   hybridInPersonPlusOnline: boolean;
@@ -31,7 +30,6 @@ type HostSettingsPanelProps = {
 const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
   roomId,
   connectionPanel,
-  onOpenConnectionModal,
   activityEntries,
   onExportEventRecap,
   hybridInPersonPlusOnline,
@@ -49,8 +47,6 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
   publicDisplayLetterRevealToast,
   onLetterRevealToastChange,
 }) => {
-  const [showAdvancedConnection, setShowAdvancedConnection] = useState(true);
-
   return (
     <div className="host-settings-workspace">
       <section className="host-glass-panel host-settings-workspace__connection">
@@ -59,21 +55,8 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
             <Link2 className="host-settings-workspace__title-icon" aria-hidden />
             Playback &amp; connections
           </h2>
-          <button type="button" className="btn-secondary" onClick={onOpenConnectionModal}>
-            Panel
-          </button>
         </div>
-        <label className="host-settings-workspace__toggle">
-          <input
-            type="checkbox"
-            checked={showAdvancedConnection}
-            onChange={(e) => setShowAdvancedConnection(e.target.checked)}
-          />
-          Details
-        </label>
-        {showAdvancedConnection ? (
-          <div className="host-settings-workspace__connection-body">{connectionPanel}</div>
-        ) : null}
+        <div className="host-settings-workspace__connection-body">{connectionPanel}</div>
       </section>
 
       <section className="host-glass-panel host-settings-workspace__prefs">

@@ -4978,7 +4978,7 @@ const HostView: React.FC = () => {
       connectionModalOpenedByUserRef.current = false;
       setShowConnectionModal(true);
       alert(
-        'Please select a Spotify playback device first.\n\nOpen Connection (header button), pick a device in Playback device, or open Spotify on your target device and tap Refresh devices.'
+        'Please select a Spotify playback device first.\n\nPick a device under Playback device in the Connection panel (also under Settings), or open Spotify on your target device and tap Refresh devices.'
       );
       return false;
     }
@@ -8246,7 +8246,7 @@ const HostView: React.FC = () => {
       connectionModalOpenedByUserRef.current = false;
       setShowConnectionModal(true);
       window.alert(
-        'Please select a Spotify playback device first.\n\nOpen Connection (header button), pick a device in Playback device, or open Spotify on your target device and tap Refresh devices.',
+        'Please select a Spotify playback device first.\n\nPick a device under Playback device in the Connection panel (also under Settings), or open Spotify on your target device and tap Refresh devices.',
       );
       return;
     }
@@ -10419,15 +10419,6 @@ const HostView: React.FC = () => {
               <BookOpen className="w-4 h-4" aria-hidden />
               Guide
             </button>
-            <button
-              type="button"
-              className="btn-secondary host-connection-toolbar-btn"
-              onClick={() => setShowConnectionModal(true)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-            >
-              <Link2 className="w-4 h-4" aria-hidden />
-              Connection
-            </button>
             {hostAccount ? (
               <span
                 className="host-account-chip"
@@ -10698,7 +10689,6 @@ const HostView: React.FC = () => {
               <div>
               <HostSettingsPanel
                 connectionPanel={hostConnectionPanel}
-                onOpenConnectionModal={() => setShowConnectionModal(true)}
                 roomId={roomId ?? null}
                 activityEntries={activityLog}
                 onExportEventRecap={handleExportEventRecap}
