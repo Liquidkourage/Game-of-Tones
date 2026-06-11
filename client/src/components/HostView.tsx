@@ -1033,6 +1033,8 @@ const HostView: React.FC = () => {
   /** Printable PDF export (physical daubers) — count capped server-side at 200. */
   const [printableCardCount, setPrintableCardCount] = useState(30);
   const [saveRoundBusy, setSaveRoundBusy] = useState(false);
+  const [saveAllRoundsBusy, setSaveAllRoundsBusy] = useState(false);
+  const [saveAllRoundsProgress, setSaveAllRoundsProgress] = useState<string | null>(null);
   const [printablePdfLoading, setPrintablePdfLoading] = useState(false);
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
   /** Server served playlist list from DB (429/quarantine, or normal cache-first load without hitting Spotify). */
@@ -8241,6 +8243,94 @@ const HostView: React.FC = () => {
     }
   };
 
+  /** Rounds tab "Save all & go to Game": snapshot every round that needs it (valid 1-or-5
+   *  playlist count, not completed, not already saved for the same playlists), then return
+   *  to the Game tab. Rounds with invalid counts are skipped with a warning; if any save
+   *  fails we stay on the Rounds tab so the host can see what went wrong. */
+  const handleSaveAllAndReturnToGame = async () => {
+    if (saveAllRoundsBusy || saveRoundBusy) return;
+
+    const isSnapshotCurrent = (r: EventRound | undefined): boolean =>
+      !!r &&
+      eventRoundSnapshotMeetsSaveThreshold(r, freeSpaceEnabled) &&
+      JSON.stringify(r.savedMixSnapshot?.playlistIdsAtSave || []) ===
+        JSON.stringify(r.playlistIds || []);
+
+    const rounds = eventRoundsRef.current;
+    const eligible: number[] = [];
+    const needsFix: string[] = [];
+    rounds.forEach((r, i) => {
+      const n = (r.playlistIds || []).length;
+      if (r.status === 'completed' || n === 0) return;
+      if (!isValidRoundPlaylistCount(n)) {
+        needsFix.push(`${r.name} (${n} playlists)`);
+        return;
+      }
+      if (isSnapshotCurrent(r)) return;
+      eligible.push(i);
+    });
+
+    if (eligible.length === 0) {
+      if (needsFix.length > 0) {
+        showToast(`Need 1 or 5 playlists before saving: ${needsFix.join(', ')}`, 'warn');
+        return;
+      }
+      onHostGlassNav('game');
+      return;
+    }
+
+    const wasLive = gameStateRef.current === 'playing';
+    const priorRoundIndex = currentRoundIndexRef.current;
+
+    setSaveAllRoundsBusy(true);
+    const failed: string[] = [];
+    try {
+      for (const idx of eligible) {
+        const name = eventRoundsRef.current[idx]?.name || `Round ${idx + 1}`;
+        setSaveAllRoundsProgress(`Saving ${name}…`);
+        await handleSaveRoundAtIndex(idx);
+        // Let React commit the snapshot write so eventRoundsRef reflects the save.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        if (!isSnapshotCurrent(eventRoundsRef.current[idx])) failed.push(name);
+      }
+    } finally {
+      setSaveAllRoundsBusy(false);
+      setSaveAllRoundsProgress(null);
+    }
+
+    /** Single-round save leaves currentRoundIndex on the saved round; after a batch, restore
+     *  the host's prior round so the Game tab doesn't open on the last round saved. */
+    if (!wasLive) {
+      const restoreIdx =
+        priorRoundIndex >= 0
+          ? priorRoundIndex
+          : eventRoundsRef.current.findIndex(
+              (r) => r.status !== 'completed' && (r.playlistIds || []).length > 0,
+            );
+      if (restoreIdx >= 0 && restoreIdx < eventRoundsRef.current.length) {
+        setCurrentRoundIndex(restoreIdx);
+        applyRoundPlaylistsToMixSelection(eventRoundsRef.current[restoreIdx]);
+      }
+    }
+
+    const savedCount = eligible.length - failed.length;
+    if (failed.length > 0) {
+      showToast(
+        `Saved ${savedCount} of ${eligible.length} rounds — could not save ${failed.join(', ')}.`,
+        'warn',
+      );
+      return;
+    }
+    if (needsFix.length > 0) {
+      showToast(
+        `Saved ${savedCount} round${savedCount === 1 ? '' : 's'} — skipped ${needsFix.join(', ')} (need 1 or 5 playlists).`,
+        'warn',
+      );
+    } else {
+      showToast(`Saved ${savedCount} round${savedCount === 1 ? '' : 's'}.`, 'success');
+    }
+    onHostGlassNav('game');
+  };
 
   const handleStartRound = useCallback((roundIndex: number) => {
     const round = eventRounds[roundIndex];
@@ -11401,12 +11491,31 @@ const HostView: React.FC = () => {
                   ) : null
                 }
                 footer={
-                  gameState === 'waiting' ? (
+                  <div className="host-rounds-tab-workspace__footer-row">
                     <p className="host-rounds-tab-workspace__continue" role="status">
-                      Assign playlists here, then continue on the <strong>Game</strong> tab for Criteria and
-                      Play.
+                      {saveAllRoundsProgress ? (
+                        saveAllRoundsProgress
+                      ) : gameState === 'waiting' ? (
+                        <>
+                          Assign playlists here, then save and run the game on the{' '}
+                          <strong>Game</strong> tab.
+                        </>
+                      ) : (
+                        <>
+                          Prep changes here save locally — the live round is untouched until you
+                          start it.
+                        </>
+                      )}
                     </p>
-                  ) : null
+                    <button
+                      type="button"
+                      className="btn-primary host-rounds-tab-workspace__save-all"
+                      onClick={() => void handleSaveAllAndReturnToGame()}
+                      disabled={saveAllRoundsBusy || saveRoundBusy}
+                    >
+                      {saveAllRoundsBusy ? 'Saving rounds…' : 'Save all & go to Game'}
+                    </button>
+                  </div>
                 }
                 advanced={
                   gameState !== 'waiting' ? (

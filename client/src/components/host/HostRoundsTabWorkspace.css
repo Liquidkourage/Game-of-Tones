@@ -39,6 +39,23 @@
   line-height: 1.45;
 }
 
+.host-rounds-tab-workspace__footer-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.host-rounds-tab-workspace__save-all {
+  white-space: nowrap;
+}
+
+.host-rounds-tab-workspace__save-all:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 .host-round-timeline__header-actions {
   display: flex;
   flex-wrap: wrap;
