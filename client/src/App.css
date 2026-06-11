@@ -711,7 +711,7 @@ body {
 }
 
 .App .public-display-rules-step__title {
-  font-size: clamp(1.2rem, 3vmin, 1.95rem) !important;
+  font-size: clamp(1.35rem, 3.4vmin, 2.25rem) !important;
   font-weight: 950;
   color: #ffffff;
   line-height: 1.12;
@@ -720,8 +720,8 @@ body {
 }
 
 .App .public-display-rules-step__body {
-  font-size: clamp(1.05rem, 2.45vmin, 1.65rem) !important;
-  line-height: 1.38 !important;
+  font-size: clamp(1.15rem, 2.85vmin, 1.95rem) !important;
+  line-height: 1.36 !important;
   color: rgba(255, 255, 255, 0.98);
   font-weight: 650;
   margin: 0;
@@ -759,7 +759,7 @@ body {
   display: flex;
   align-items: center;
   gap: clamp(8px, 1.2vmin, 14px);
-  font-size: clamp(1.35rem, 3.5vmin, 2.3rem);
+  font-size: clamp(1.5rem, 4vmin, 2.6rem);
   font-weight: 1000;
   color: #ffffff;
   line-height: 1.1;
@@ -768,16 +768,16 @@ body {
 }
 
 .App .public-display-rules-feature__title svg {
-  width: clamp(26px, 4vmin, 46px);
-  height: clamp(26px, 4vmin, 46px);
+  width: clamp(28px, 4.4vmin, 52px);
+  height: clamp(28px, 4.4vmin, 52px);
   color: var(--accent-color, #00ffc8);
   filter: drop-shadow(0 0 12px rgba(0, 255, 170, 0.55));
   flex-shrink: 0;
 }
 
 .App .public-display-rules-feature__body {
-  font-size: clamp(1.05rem, 2.5vmin, 1.7rem);
-  line-height: 1.38;
+  font-size: clamp(1.15rem, 2.9vmin, 1.95rem);
+  line-height: 1.36;
   color: rgba(255, 255, 255, 0.98);
   font-weight: 650;
   margin: 0;
@@ -797,8 +797,8 @@ body {
   display: flex;
   align-items: flex-start;
   gap: clamp(10px, 1.4vmin, 16px);
-  font-size: clamp(1.05rem, 2.5vmin, 1.7rem);
-  line-height: 1.38;
+  font-size: clamp(1.15rem, 2.9vmin, 1.95rem);
+  line-height: 1.36;
   color: rgba(255, 255, 255, 0.98);
   font-weight: 650;
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
@@ -848,7 +848,7 @@ body {
 }
 
 .App .public-display-rules-feature__mix-name {
-  font-size: clamp(1.05rem, 2.5vmin, 1.7rem);
+  font-size: clamp(1.15rem, 2.9vmin, 1.95rem);
   font-weight: 850;
   color: #ffffff;
   white-space: nowrap;
@@ -856,49 +856,6 @@ body {
   text-overflow: ellipsis;
   min-width: 0;
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
-}
-
-/* Bottom row: quick differentiator chips. */
-.App .public-display-rules-chips {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: clamp(8px, 1.2vmin, 16px);
-  width: 100%;
-  max-width: min(98vw, 1640px);
-  flex-shrink: 0;
-}
-
-.App .public-display-rules-chip {
-  display: flex;
-  align-items: center;
-  gap: clamp(6px, 1vmin, 12px);
-  padding: clamp(8px, 1.2vmin, 14px) clamp(14px, 2vmin, 26px);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.09);
-  border: 1.5px solid rgba(255, 255, 255, 0.25);
-  font-size: clamp(0.98rem, 2.1vmin, 1.4rem);
-  line-height: 1.3;
-  color: rgba(255, 255, 255, 0.98);
-  font-weight: 650;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
-}
-
-.App .public-display-rules-chip strong {
-  color: #d9fff2;
-  font-weight: 900;
-}
-
-.App .public-display-rules-chip__icon {
-  display: inline-flex;
-  flex-shrink: 0;
-}
-
-.App .public-display-rules-chip__icon svg {
-  width: clamp(16px, 2.4vmin, 26px);
-  height: clamp(16px, 2.4vmin, 26px);
-  color: var(--accent-color, #00ffc8);
-  filter: drop-shadow(0 0 8px rgba(0, 255, 170, 0.45));
 }
 
 @media (max-width: 1100px), (max-height: 620px) {

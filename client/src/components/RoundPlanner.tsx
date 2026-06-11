@@ -24,6 +24,10 @@ import {
   remapIndexAfterMove,
 } from '../utils/bingoColumnOrder';
 import { canonicalPlaylistIdForMatch } from '../utils/effectiveBingoPoolPreview';
+import {
+  applyPlaylistIdOrder,
+  sortRoundPlaylistsByBingoColumns,
+} from '../utils/roundPlaylistOrder';
 
 /** Minimum unique tracks in the bingo pool for this round (matches save/PDF thresholds). */
 function minBingoPoolTracksForRound(
@@ -40,10 +44,6 @@ function minBingoPoolTracksForRound(
   const fs = round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : hostDefaultFreeSpace;
   return fs ? 24 : 25;
 }
-import {
-  applyPlaylistIdOrder,
-  sortRoundPlaylistsByBingoColumns,
-} from '../utils/roundPlaylistOrder';
 
 export type RoundUpdateMeta = {
   reorder?: { from: number; to: number };

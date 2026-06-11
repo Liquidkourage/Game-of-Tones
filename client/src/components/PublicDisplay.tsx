@@ -17,9 +17,7 @@ import {
   List,
   QrCode,
   Eye,
-  Hash,
-  RefreshCw,
-  ShieldCheck
+  Hash
 } from 'lucide-react';
 import { API_BASE } from '../config';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
@@ -1166,8 +1164,8 @@ const PublicDisplay: React.FC = () => {
   const splashEnabled = (searchParams.get('splash') !== '0');
   const [showSplash, setShowSplash] = useState<boolean>(splashEnabled);
   
-  // Rules/instruction screen state
-  const [showRules, setShowRules] = useState<boolean>(false);
+  // Rules/instruction screen state (?rules=1 forces it on for preview/testing)
+  const [showRules, setShowRules] = useState<boolean>(searchParams.get('rules') === '1');
   
   
   /** Rotating projector demo for line pattern (one tuple of line indices per step). */
@@ -5438,9 +5436,10 @@ const PublicDisplay: React.FC = () => {
                     title: 'Join & get your card',
                     body: (
                       <>
-                        Scan the QR with your phone. Your <strong style={{ color: pdGlass.mint }}>5×5</strong> card is dealt
-                        from tonight&apos;s <strong style={{ color: pdGlass.mint }}>75-song pool</strong> — same pool for
-                        everyone, every card different.
+                        Scan the QR with your phone. Every round deals you a fresh{' '}
+                        <strong style={{ color: pdGlass.mint }}>5×5</strong> card from that round&apos;s{' '}
+                        <strong style={{ color: pdGlass.mint }}>75-song pool</strong> — same pool for everyone, every card
+                        different.
                       </>
                     ),
                   },
@@ -5452,7 +5451,8 @@ const PublicDisplay: React.FC = () => {
                     body: (
                       <>
                         Clips run about <strong style={{ color: '#e8fff8' }}>{gameState.snippetLength || 30} seconds</strong>.
-                        Know it? Find it on your card and tap it. Only mark songs you&apos;ve actually heard tonight.
+                        Know it? Find it on your card and tap it. Only mark songs played{' '}
+                        <strong style={{ color: '#e8fff8' }}>this round</strong>.
                       </>
                     ),
                   },
@@ -5463,10 +5463,10 @@ const PublicDisplay: React.FC = () => {
                     title: 'Hit the pattern → BINGO',
                     body: (
                       <>
-                        Tonight&apos;s pattern:{' '}
+                        This round&apos;s pattern:{' '}
                         <strong style={{ color: '#e8fff8' }}>{getPatternName().replace(/^Pattern:\s*/i, '')}</strong>.
                         Complete it with called songs, then tap <strong style={{ color: '#e8fff8' }}>BINGO</strong> on your
-                        phone — the host confirms in seconds.
+                        phone — verified against the real call list in seconds. No paper, no disputes.
                       </>
                     ),
                   },
@@ -5549,13 +5549,18 @@ const PublicDisplay: React.FC = () => {
                     return (
                       <>
                         <h3 className="public-display-rules-feature__title">
-                          <Music aria-hidden /> {fiveMix ? 'Five playlists, one mix' : 'Tonight’s 75-song mix'}
+                          <Music aria-hidden /> Rounds &amp; themes
                         </h3>
+                        <p className="public-display-rules-feature__body">
+                          Tonight is one or more <strong style={{ color: pdGlass.mint }}>rounds</strong>. Each round is its
+                          own game: a fresh <strong style={{ color: pdGlass.mint }}>75-song pool</strong> built from up to{' '}
+                          <strong style={{ color: pdGlass.mint }}>five playlist themes</strong>, new cards, and sometimes a
+                          new pattern.
+                        </p>
                         {fiveMix ? (
                           <>
                             <p className="public-display-rules-feature__body">
-                              Tonight&apos;s 75 songs blend <strong style={{ color: pdGlass.mint }}>five playlists</strong> —
-                              and your card&apos;s columns match them, one playlist per letter:
+                              This round&apos;s themes — your card&apos;s columns match them, one per letter:
                             </p>
                             <ul className="public-display-rules-feature__mix">
                               {mixNames.map((name, i) => (
@@ -5570,10 +5575,8 @@ const PublicDisplay: React.FC = () => {
                           </>
                         ) : (
                           <p className="public-display-rules-feature__body">
-                            Tonight&apos;s pool is one curated mix of{' '}
-                            <strong style={{ color: pdGlass.mint }}>75 songs</strong> — often blending several playlists or
-                            genres. Every card is dealt from that same pool, so if it&apos;s on your card, it&apos;s in
-                            play tonight.
+                            This round&apos;s pool is one curated mix — if a song is on your card, it&apos;s in play{' '}
+                            <strong style={{ color: pdGlass.mint }}>this round</strong>.
                           </p>
                         )}
                       </>
@@ -5581,46 +5584,6 @@ const PublicDisplay: React.FC = () => {
                   })()}
                 </motion.div>
               </div>
-              </div>
-
-              <div className="public-display-rules-chips">
-                {[
-                  {
-                    icon: <RefreshCw aria-hidden />,
-                    body: (
-                      <>
-                        <strong>New round, new everything</strong> — fresh cards and often a new pattern each round
-                      </>
-                    ),
-                  },
-                  {
-                    icon: <ShieldCheck aria-hidden />,
-                    body: (
-                      <>
-                        <strong>No paper, no disputes</strong> — BINGO is verified against the real call list in seconds
-                      </>
-                    ),
-                  },
-                  {
-                    icon: <Sparkles aria-hidden />,
-                    body: (
-                      <>
-                        <strong>Fair by design</strong> — every card comes from the same 75-song pool
-                      </>
-                    ),
-                  },
-                ].map((chip, i) => (
-                  <motion.div
-                    key={i}
-                    className="public-display-rules-chip"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.34 + i * 0.05, ease: 'easeOut' }}
-                  >
-                    <span className="public-display-rules-chip__icon">{chip.icon}</span>
-                    <span>{chip.body}</span>
-                  </motion.div>
-                ))}
               </div>
             </div>
           </motion.div>

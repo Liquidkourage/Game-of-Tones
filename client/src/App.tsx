@@ -6,17 +6,6 @@ import { API_BASE } from './config';
 import { hostFetch, postHostLogout } from './utils/hostFetch';
 import './App.css';
 
-/** Mirrors PublicDisplay venue state (dispatched via window event). */
-type DisplayVenueBranding = {
-  eventTitle?: string;
-  sponsorLine?: string;
-  logoUrl?: string;
-  primaryColor?: string;
-  accentColor?: string;
-} | null;
-
-const DISPLAY_VENUE_EVENT = 'tempo-display-venue-branding';
-
 // Components
 import Home from './components/Home';
 import HostView from './components/HostView';
@@ -30,6 +19,17 @@ import './components/OrgPortalPage.css';
 import DisplayHeaderInfo from './components/DisplayHeaderInfo';
 import ErrorBoundary from './components/ErrorBoundary';
 import HostYoutubePlaybackWindow from './components/HostYoutubePlaybackWindow';
+
+/** Mirrors PublicDisplay venue state (dispatched via window event). */
+type DisplayVenueBranding = {
+  eventTitle?: string;
+  sponsorLine?: string;
+  logoUrl?: string;
+  primaryColor?: string;
+  accentColor?: string;
+} | null;
+
+const DISPLAY_VENUE_EVENT = 'tempo-display-venue-branding';
 
 function AppHeader() {
   const location = useLocation();
