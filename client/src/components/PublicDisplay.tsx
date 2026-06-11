@@ -15,7 +15,11 @@ import {
   Pause,
   Sparkles,
   List,
-  QrCode
+  QrCode,
+  Eye,
+  Hash,
+  RefreshCw,
+  ShieldCheck
 } from 'lucide-react';
 import { API_BASE } from '../config';
 import { cleanSongTitle } from '../utils/songTitleCleaner';
@@ -5515,8 +5519,9 @@ const PublicDisplay: React.FC = () => {
                     title: 'Join & get your card',
                     body: (
                       <>
-                        Join this room on your phone. Your <strong style={{ color: pdGlass.mint }}>5×5</strong> card uses
-                        tonight&apos;s <strong style={{ color: pdGlass.mint }}>75 songs</strong> — same pool for everyone.
+                        Scan the QR with your phone. Your <strong style={{ color: pdGlass.mint }}>5×5</strong> card is dealt
+                        from tonight&apos;s <strong style={{ color: pdGlass.mint }}>75-song pool</strong> — same pool for
+                        everyone, every card different.
                       </>
                     ),
                   },
@@ -5527,9 +5532,8 @@ const PublicDisplay: React.FC = () => {
                     title: 'Listen & mark',
                     body: (
                       <>
-                        ~<strong style={{ color: '#e8fff8' }}>{gameState.snippetLength || 30}s</strong> clips. Projector shows
-                        calls <strong style={{ color: '#e8fff8' }}>#1, #2…</strong> in play order. Mark only songs you&apos;re sure
-                        you heard.
+                        Clips run about <strong style={{ color: '#e8fff8' }}>{gameState.snippetLength || 30} seconds</strong>.
+                        Know it? Find it on your card and tap it. Only mark songs you&apos;ve actually heard tonight.
                       </>
                     ),
                   },
@@ -5537,11 +5541,12 @@ const PublicDisplay: React.FC = () => {
                     n: 3,
                     accent: 'linear-gradient(135deg, rgba(0,255,136,0.22) 0%, rgba(139,92,246,0.28) 100%)',
                     borderGlow: 'rgba(0,255,136,0.5)',
-                    title: 'Pattern & BINGO',
+                    title: 'Hit the pattern → BINGO',
                     body: (
                       <>
-                        Pattern: <strong style={{ color: '#e8fff8' }}>{getPatternName()}</strong>. All marks must be songs already
-                        called. Hold <strong style={{ color: '#e8fff8' }}>BINGO</strong> — host verifies on your phone.
+                        Tonight&apos;s pattern: <strong style={{ color: '#e8fff8' }}>{getPatternName()}</strong>. Complete it
+                        with called songs, then tap <strong style={{ color: '#e8fff8' }}>BINGO</strong> on your phone — the
+                        host confirms in seconds.
                       </>
                     ),
                   },
@@ -5560,6 +5565,83 @@ const PublicDisplay: React.FC = () => {
                   >
                     <div className="public-display-rules-step__badge">{step.n}</div>
                     <h3 className="public-display-rules-step__title">{step.title}</h3>
+                    <p className="public-display-rules-step__body">{step.body}</p>
+                  </motion.div>
+                ))}
+              </div>
+
+              <motion.div
+                className="public-display-rules-highlights-header"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4, delay: 0.25 }}
+              >
+                Not your average music bingo
+              </motion.div>
+
+              <div className="public-display-rules-highlights">
+                {[
+                  {
+                    icon: <Eye aria-hidden />,
+                    glow: 'rgba(0,255,136,0.5)',
+                    title: 'Titles reveal themselves',
+                    body: (
+                      <>
+                        Stumped? The mystery title fills in <strong style={{ color: pdGlass.mint }}>letter by letter</strong>{' '}
+                        on this screen while the clip plays. Patience pays.
+                      </>
+                    ),
+                  },
+                  {
+                    icon: <Hash aria-hidden />,
+                    glow: 'rgba(139,92,246,0.55)',
+                    title: 'Every call has a number',
+                    body: (
+                      <>
+                        Songs post up here as <strong style={{ color: '#e8fff8' }}>#1, #2, #3…</strong> in play order — glance
+                        up anytime to catch up on what you missed.
+                      </>
+                    ),
+                  },
+                  {
+                    icon: <RefreshCw aria-hidden />,
+                    glow: 'rgba(0,255,136,0.45)',
+                    title: 'New round, new everything',
+                    body: (
+                      <>
+                        Each round deals <strong style={{ color: pdGlass.mint }}>fresh cards</strong> and can bring a{' '}
+                        <strong style={{ color: pdGlass.mint }}>new pattern</strong> — check this screen at the top of every
+                        round.
+                      </>
+                    ),
+                  },
+                  {
+                    icon: <ShieldCheck aria-hidden />,
+                    glow: 'rgba(139,92,246,0.5)',
+                    title: 'No paper, no disputes',
+                    body: (
+                      <>
+                        BINGO taps are checked against the <strong style={{ color: '#e8fff8' }}>actual call list</strong>{' '}
+                        instantly. False alarms don&apos;t stop the music.
+                      </>
+                    ),
+                  },
+                ].map((hl, i) => (
+                  <motion.div
+                    key={hl.title}
+                    className="public-display-rules-highlight"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.35, delay: 0.28 + i * 0.06, ease: 'easeOut' }}
+                    style={{ borderColor: hl.glow }}
+                  >
+                    <div className="public-display-rules-highlight__head">
+                      <span className="public-display-rules-highlight__icon" style={{ color: pdGlass.mint }}>
+                        {hl.icon}
+                      </span>
+                      <h3 className="public-display-rules-highlight__title">{hl.title}</h3>
+                    </div>
+                    <p className="public-display-rules-highlight__body">{hl.body}</p>
                   </motion.div>
                 ))}
               </div>
