@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, QrCode, ExternalLink, Copy } from 'lucide-react';
+import { Users, QrCode, Copy } from 'lucide-react';
 
 export type HostPlayerRosterRow = {
   playerId: string;
@@ -26,10 +26,6 @@ const HostPlayersPanel: React.FC<HostPlayersPanelProps> = ({
     typeof window !== 'undefined'
       ? `${window.location.origin}/?room=${encodeURIComponent(roomId)}`
       : '';
-  const displayUrl =
-    typeof window !== 'undefined'
-      ? `${window.location.origin}/display/${encodeURIComponent(roomId)}`
-      : '';
   const qrSrc = joinUrl
     ? `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(joinUrl)}`
     : '';
@@ -52,19 +48,6 @@ const HostPlayersPanel: React.FC<HostPlayersPanelProps> = ({
               <Copy className="w-4 h-4" aria-hidden />
               Copy join link
             </button>
-            <p className="host-players-workspace__url-label">Public display</p>
-            <code className="host-players-workspace__url">{displayUrl || '—'}</code>
-            {displayUrl ? (
-              <a
-                className="btn-secondary host-players-workspace__open-display"
-                href={displayUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <ExternalLink className="w-4 h-4" aria-hidden />
-                Open display
-              </a>
-            ) : null}
           </div>
         </div>
       </section>

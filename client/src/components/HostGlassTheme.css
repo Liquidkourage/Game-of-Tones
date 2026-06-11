@@ -1695,6 +1695,39 @@
   border: 1px solid var(--host-glass-border);
 }
 
+/* Display tab: public display link + open button (moved here from the Players tab). */
+.host-glass-theme .host-display-link-panel {
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+
+.host-glass-theme .host-display-link-panel__url {
+  display: block;
+  font-size: 0.82rem;
+  word-break: break-all;
+  color: rgba(255, 255, 255, 0.75);
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 10px;
+}
+
+.host-glass-theme .host-display-link-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.host-glass-theme .host-display-link-panel__actions .btn-primary,
+.host-glass-theme .host-display-link-panel__actions .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+}
+
 .host-glass-theme .host-players-workspace__urls {
   display: flex;
   flex-direction: column;

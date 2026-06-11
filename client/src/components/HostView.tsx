@@ -39,6 +39,8 @@ import {
   Save,
   Eraser,
   Settings,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 import io from 'socket.io-client';
 import { API_BASE, SOCKET_URL, ENABLE_YOUTUBE_MUSIC } from '../config';
@@ -10273,6 +10275,18 @@ const HostView: React.FC = () => {
     );
   }, [roomId]);
 
+  const publicDisplayUrl = roomId
+    ? `${window.location.origin}/display/${encodeURIComponent(roomId)}`
+    : '';
+
+  const handleCopyDisplayLink = useCallback(() => {
+    if (!publicDisplayUrl) return;
+    void navigator.clipboard.writeText(publicDisplayUrl).then(
+      () => showToast('Display link copied', 'success'),
+      () => showToast('Could not copy link', 'error'),
+    );
+  }, [publicDisplayUrl]);
+
   useEffect(() => {
     if (hostGlassNav !== 'game' || gameState !== 'playing') return;
     const onKey = (e: KeyboardEvent) => {
@@ -10786,6 +10800,30 @@ const HostView: React.FC = () => {
               Projector &amp; event rules
             </summary>
             <div className="host-event-settings__body">
+
+          <section className="host-glass-panel host-display-link-panel" aria-label="Public display link">
+            <h2
+              className="host-manager-section__title"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 8px' }}
+            >
+              <Monitor className="w-5 h-5" style={{ color: '#00ff88' }} aria-hidden />
+              Display link
+            </h2>
+            <code className="host-display-link-panel__url">{publicDisplayUrl || '—'}</code>
+            <div className="host-display-link-panel__actions">
+              <button type="button" className="btn-secondary" onClick={handleCopyDisplayLink}>
+                <Copy className="w-4 h-4" aria-hidden />
+                Copy link
+              </button>
+              {publicDisplayUrl ? (
+                <a className="btn-primary" href={publicDisplayUrl} target="_blank" rel="noreferrer">
+                  <ExternalLink className="w-4 h-4" aria-hidden />
+                  Open display
+                </a>
+              ) : null}
+            </div>
+          </section>
+
           <motion.section
             className="host-manager-round host-manager-section"
             initial={{ opacity: 0 }}
