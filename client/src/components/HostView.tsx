@@ -91,6 +91,7 @@ import {
   type HostPreferencesV1,
 } from '../utils/hostPreferences';
 import { isSpotifyJamDevice, pickPreferredPlaybackDevice } from '../utils/spotifyDevices';
+import { playTransitionSweep } from '../utils/transitionSweep';
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
 import { HostYoutubeMusicPlaylistLibrary, type YoutubeMixPlaylistRow } from './HostYoutubeMusicPlaylistLibrary';
 import { HostYoutubeIframePlayer, primeYoutubeHostPlaybackAudioUnlock } from './HostYoutubeIframePlayer';
@@ -3965,6 +3966,11 @@ const HostView: React.FC = () => {
       if (Array.isArray(data?.names) && data.names.length === 5) {
         setBingoColumnPlaylistNames(data.names);
       }
+    });
+
+    // Server is ducking into a track change — layer the masking sweep over it.
+    newSocket.on('track-transition', (data: any) => {
+      playTransitionSweep(Number(data?.downMs) || undefined, Number(data?.upMs) || undefined);
     });
 
     // Listen for player card updates

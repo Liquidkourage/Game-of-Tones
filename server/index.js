@@ -3077,11 +3077,14 @@ async function endGamePlaylistComplete(roomId, deviceId) {
  */
 const TRACK_DIP_DOWN_MS = 600;
 const TRACK_DIP_UP_MS = 450;
-const TRACK_DIP_STEPS = 3;
+/** More steps = smoother stairs; Spotify call latency (~150ms) paces them anyway. */
+const TRACK_DIP_DOWN_STEPS = 5;
+const TRACK_DIP_UP_STEPS = 4;
 /** Fraction of the host's baseline volume the duck bottoms out at. */
 const TRACK_DIP_FLOOR_FRAC = 0.3;
 /** Fade-to-silence ramp (game end / next track on YouTube — nothing to duck into). */
 const TRACK_FADE_OUT_MS = 800;
+const TRACK_FADE_OUT_STEPS = 4;
 
 function trackDipFloor(baseline) {
   return Math.max(Math.round(baseline * TRACK_DIP_FLOOR_FRAC), 3);
@@ -3089,15 +3092,21 @@ function trackDipFloor(baseline) {
 
 /**
  * Deadline-based stepped volume ramp: API latency counts toward each step's
- * wall-clock slot instead of stacking on top of it.
+ * wall-clock slot instead of stacking on top of it. Levels are geometrically
+ * spaced (equal loudness ratios) — perceptually smoother than linear steps,
+ * which sound like big jumps at the loud end and nothing at the quiet end.
  */
-async function rampVolume(roomId, deviceId, fromLevel, toLevel, totalMs) {
+async function rampVolume(roomId, deviceId, fromLevel, toLevel, totalMs, steps) {
   const start = Date.now();
-  for (let i = 1; i <= TRACK_DIP_STEPS; i++) {
-    const level = Math.round(fromLevel + ((toLevel - fromLevel) * i) / TRACK_DIP_STEPS);
+  const geometric = fromLevel > 0 && toLevel > 0;
+  const ratio = geometric ? Math.pow(toLevel / fromLevel, 1 / steps) : 1;
+  for (let i = 1; i <= steps; i++) {
+    const level = geometric
+      ? Math.round(fromLevel * Math.pow(ratio, i))
+      : Math.round(fromLevel + ((toLevel - fromLevel) * i) / steps);
     await spotifyFor(roomId).setVolume(level, deviceId);
-    if (i === TRACK_DIP_STEPS) break;
-    const wait = start + Math.round((totalMs * i) / TRACK_DIP_STEPS) - Date.now();
+    if (i === steps) break;
+    const wait = start + Math.round((totalMs * i) / steps) - Date.now();
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   }
 }
@@ -3134,13 +3143,21 @@ async function fadeOutBeforeTrackChange(roomId, deviceId, { toSilence = false } 
   try {
     if (!roomStillPlaying(roomId)) return false;
     if (silence) {
-      await rampVolume(roomId, targetDeviceId, baseline, 0, TRACK_FADE_OUT_MS);
+      await rampVolume(roomId, targetDeviceId, baseline, 0, TRACK_FADE_OUT_MS, TRACK_FADE_OUT_STEPS);
       try { await spotifyFor(roomId).pausePlayback(targetDeviceId); } catch (_) {}
       // Paused/silent — safe to restore so whatever plays next starts at full volume.
       await spotifyFor(roomId).setVolume(baseline, targetDeviceId);
       return true;
     }
-    await rampVolume(roomId, targetDeviceId, baseline, trackDipFloor(baseline), TRACK_DIP_DOWN_MS);
+    // Masking sweep: the host browser layers a synthesized whoosh over the duck so the
+    // stepped Spotify volume changes (and the cut itself) hide under it.
+    if (room.host) {
+      io.to(room.host).emit('track-transition', {
+        downMs: TRACK_DIP_DOWN_MS,
+        upMs: TRACK_DIP_UP_MS,
+      });
+    }
+    await rampVolume(roomId, targetDeviceId, baseline, trackDipFloor(baseline), TRACK_DIP_DOWN_MS, TRACK_DIP_DOWN_STEPS);
     // Audio keeps playing at the floor; caller cuts to the next track right now.
     room.trackDipRestore = baseline;
     return true;
@@ -3171,7 +3188,7 @@ async function fadeInAfterTrackChange(roomId, deviceId) {
   const targetDeviceId = deviceId || room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
   if (!targetDeviceId) return;
   try {
-    await rampVolume(roomId, targetDeviceId, trackDipFloor(baseline), baseline, TRACK_DIP_UP_MS);
+    await rampVolume(roomId, targetDeviceId, trackDipFloor(baseline), baseline, TRACK_DIP_UP_MS, TRACK_DIP_UP_STEPS);
   } catch (e) {
     try { await spotifyFor(roomId).setVolume(baseline, targetDeviceId); } catch (_) {}
   }
