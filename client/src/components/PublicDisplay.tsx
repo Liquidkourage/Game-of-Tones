@@ -3523,9 +3523,9 @@ const PublicDisplay: React.FC = () => {
   };
 
   /**
-   * Call number as a ghost watermark: large, low-opacity, left edge + vertically centered
-   * behind the text so the title/artist get the full card width (replaces the corner chip).
-   * Numbers line up vertically down each column for easy scanning.
+   * Call number as a ghost watermark: dead center behind the text, dark "negative" fill
+   * with a faint mint rim so it reads as carved-out space without competing with the
+   * white title/artist on top (replaces the floated corner chip).
    */
   const callNumberWatermark = (callNum: number | '', fullCard: boolean): React.ReactNode => {
     if (callNum === '' || callNum <= 0) return null;
@@ -3536,14 +3536,15 @@ const PublicDisplay: React.FC = () => {
         aria-hidden
         style={{
           position: 'absolute',
-          left: 6,
+          left: '50%',
           top: '50%',
-          transform: 'translateY(-50%)',
+          transform: 'translate(-50%, -50%)',
           fontSize: sizePx > 0 ? `${sizePx}px` : 'clamp(28px, 4.5vmin, 64px)',
           fontWeight: 900,
           lineHeight: 1,
           letterSpacing: '-0.02em',
-          color: 'rgba(0, 255, 136, 0.16)',
+          color: 'rgba(0, 0, 0, 0.85)',
+          textShadow: '0 0 1px rgba(0, 255, 136, 0.5), 0 0 10px rgba(0, 255, 136, 0.18)',
           pointerEvents: 'none',
           userSelect: 'none',
           zIndex: 0,
