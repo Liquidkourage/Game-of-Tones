@@ -91,7 +91,7 @@ import {
   type HostPreferencesV1,
 } from '../utils/hostPreferences';
 import { isSpotifyJamDevice, pickPreferredPlaybackDevice } from '../utils/spotifyDevices';
-import { playTransitionSweep } from '../utils/transitionSweep';
+import { playTrackChangeSound } from '../utils/transitionSweep';
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
 import { HostYoutubeMusicPlaylistLibrary, type YoutubeMixPlaylistRow } from './HostYoutubeMusicPlaylistLibrary';
 import { HostYoutubeIframePlayer, primeYoutubeHostPlaybackAudioUnlock } from './HostYoutubeIframePlayer';
@@ -3968,9 +3968,9 @@ const HostView: React.FC = () => {
       }
     });
 
-    // Server is ducking into a track change — layer the masking sweep over it.
-    newSocket.on('track-transition', (data: any) => {
-      playTransitionSweep(Number(data?.downMs) || undefined, Number(data?.upMs) || undefined);
+    // A track change was just triggered — play the DJ stinger over the cut.
+    newSocket.on('track-transition', () => {
+      playTrackChangeSound();
     });
 
     // Listen for player card updates
