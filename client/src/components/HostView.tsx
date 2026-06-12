@@ -91,7 +91,6 @@ import {
   type HostPreferencesV1,
 } from '../utils/hostPreferences';
 import { isSpotifyJamDevice, pickPreferredPlaybackDevice } from '../utils/spotifyDevices';
-import { playTrackChangeSound } from '../utils/transitionSweep';
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
 import { HostYoutubeMusicPlaylistLibrary, type YoutubeMixPlaylistRow } from './HostYoutubeMusicPlaylistLibrary';
 import { HostYoutubeIframePlayer, primeYoutubeHostPlaybackAudioUnlock } from './HostYoutubeIframePlayer';
@@ -3966,11 +3965,6 @@ const HostView: React.FC = () => {
       if (Array.isArray(data?.names) && data.names.length === 5) {
         setBingoColumnPlaylistNames(data.names);
       }
-    });
-
-    // A track change was just triggered — play the DJ stinger over the cut.
-    newSocket.on('track-transition', () => {
-      playTrackChangeSound();
     });
 
     // Listen for player card updates

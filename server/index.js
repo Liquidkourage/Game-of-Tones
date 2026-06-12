@@ -2459,7 +2459,6 @@ function scheduleSimpleProgressionRemaining(roomId, deviceId, remainingMs) {
       return;
     }
     routineServerLog('⏰ Timer fired (remaining reschedule) — advancing to next song');
-    emitTrackChangeSound(roomId);
     await playNextSongSimple(roomId, deviceId);
   };
 
@@ -3066,28 +3065,6 @@ async function endGamePlaylistComplete(roomId, deviceId) {
   io.to(roomId).emit('game-ended', { roomId, reason: 'playlist-complete' });
 }
 
-/**
- * Ducked-cut "crossfade". Spotify allows exactly one audio stream per account, so two
- * tracks can never overlap — the closest possible emulation is the radio-DJ duck:
- * dip the outgoing track to a low floor (audio NEVER stops), issue the track change
- * while it's still playing quietly (the hard cut hides under the low volume), then
- * ramp the incoming track up to full. Zero intentional silence; the only gap is the
- * play call's own latency, spent at floor volume instead of dead air.
- */
-/**
- * DJ track-change stinger: tell the host browser to play its synthesized transition
- * sound the moment an advance is triggered. The effect covers the hard cut and the
- * play-call latency. Playback volume is untouched — Spotify Connect volume steps
- * are too coarse to ever sound like a real fade.
- */
-function emitTrackChangeSound(roomId) {
-  try {
-    const room = rooms.get(roomId);
-    if (!room || !room.host) return;
-    io.to(room.host).emit('track-transition', {});
-  } catch (_) {}
-}
-
 // NEW: Simple timer-based song progression - let timer control everything
 function startSimpleProgression(roomId, deviceId, snippetLengthSeconds) {
   const room = rooms.get(roomId);
@@ -3116,7 +3093,6 @@ function startSimpleProgression(roomId, deviceId, snippetLengthSeconds) {
         return;
       }
       routineServerLog(`⏰ Timer fired - advancing to next song`);
-      emitTrackChangeSound(roomId);
       await playNextSongSimple(roomId, deviceId);
     },
     delaySec * 1000,
@@ -6393,7 +6369,6 @@ io.on('connection', (socket) => {
         const prevSong = room.currentSong ? { ...room.currentSong } : null;
         // Clear existing timer and immediately play next song under our control
         clearRoomTimer(roomId);
-        emitTrackChangeSound(roomId);
         await advanceToNextSongInRoom(roomId, room.selectedDeviceId);
         if (prevIndex >= 0 && prevSong?.id) {
           room.lastSkipUndo = {
@@ -6674,7 +6649,6 @@ io.on('connection', (socket) => {
             const remainingTime = room.snippetLength * 1000 - elapsedForTimer;
             if (remainingTime > 0) {
               setRoomTimer(roomId, async () => {
-                emitTrackChangeSound(roomId);
                 playNextSong(roomId, room.selectedDeviceId);
               }, remainingTime);
             } else {
@@ -9673,7 +9647,6 @@ async function playNextSong(roomId, deviceId) {
       
       // Skip-based queue clearing removed to avoid context hijacks
       clearRoomTimer(roomId);
-      emitTrackChangeSound(roomId);
       playNextSong(roomId, targetDeviceId);
     }, playbackDuration);
 
