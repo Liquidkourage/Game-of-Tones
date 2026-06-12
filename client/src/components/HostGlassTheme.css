@@ -663,12 +663,12 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 1fr);
   grid-template-rows: auto auto auto;
-  gap: 14px;
+  gap: 12px;
   align-items: start;
 }
 
 .host-glass-theme .host-r4-card {
-  padding: 18px 20px;
+  padding: 14px 16px;
   min-height: 0;
   position: relative;
   overflow: hidden;
@@ -678,7 +678,7 @@
   grid-column: 1;
   grid-row: 1;
   min-height: 0;
-  padding: 14px 16px;
+  padding: 10px 14px;
   border-color: var(--host-glass-border-violet);
   box-shadow:
     0 14px 48px rgba(0, 0, 0, 0.38),
@@ -792,7 +792,7 @@
  * define the height and the call log just grows into whatever space that gives.
  */
 .host-glass-theme .host-r4-track-feed {
-  --host-track-row-height: 54px;
+  --host-track-row-height: 50px;
   grid-column: 2;
   grid-row: 1 / span 3;
   align-self: stretch;
@@ -805,7 +805,7 @@
 .host-glass-theme .host-r4-track-feed__inner {
   position: absolute;
   inset: 0;
-  padding: 18px 20px;
+  padding: 14px 16px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -915,7 +915,7 @@
 .host-glass-theme .host-r4-track-feed__divider {
   flex-shrink: 0;
   height: 1px;
-  margin: 14px 0;
+  margin: 10px 0;
   background: linear-gradient(
     90deg,
     transparent 0%,
@@ -975,7 +975,7 @@
 }
 
 .host-glass-theme .host-r4-card__eyebrow {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -1013,10 +1013,10 @@
 }
 
 .host-glass-theme .host-r4-art {
-  width: 88px;
-  height: 88px;
+  width: 72px;
+  height: 72px;
   flex-shrink: 0;
-  border-radius: 14px;
+  border-radius: 12px;
   position: relative;
   background: linear-gradient(
     135deg,
@@ -1064,12 +1064,12 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .host-glass-theme .host-r4-track-title {
   margin: 0;
-  font-size: clamp(1.1rem, 2vw, 1.45rem);
+  font-size: clamp(1rem, 1.8vw, 1.3rem);
   font-weight: 800;
   line-height: 1.2;
   color: #fff;
@@ -1114,9 +1114,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-top: auto;
-  padding-top: 8px;
+  padding-top: 6px;
 }
 
 .host-glass-theme .host-r4-play {
@@ -1146,8 +1146,8 @@
   flex: 1 1 100%;
   min-width: 0;
   max-width: none;
-  margin-top: 4px;
-  padding: 8px 10px;
+  margin-top: 2px;
+  padding: 6px 10px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.05);
   box-sizing: border-box;
@@ -1234,7 +1234,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .host-glass-theme .host-r4-round__head .host-r4-card__eyebrow {
@@ -1294,7 +1294,7 @@
 }
 
 .host-glass-theme .host-r4-round__progress-caption {
-  margin: 0 0 12px;
+  margin: 0 0 8px;
   font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.62);
   line-height: 1.4;
@@ -1386,7 +1386,7 @@
   flex: 1;
   min-width: 0;
   margin: 0;
-  gap: 10px 12px;
+  gap: 8px 10px;
 }
 
 .host-glass-theme .host-r4-stats--round .host-r4-stats__playlists {
@@ -1394,8 +1394,8 @@
 }
 
 .host-glass-theme .host-r4-round__last {
-  margin: 10px 0 0;
-  padding: 8px 10px;
+  margin: 8px 0 0;
+  padding: 6px 10px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1556,10 +1556,10 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 72px;
-  padding: 12px 10px;
-  border-radius: 14px;
+  gap: 6px;
+  min-height: 62px;
+  padding: 10px 8px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.05);
   color: rgba(255, 255, 255, 0.9);
@@ -1621,7 +1621,7 @@
     position: static;
     display: flex;
     flex-direction: column;
-    padding: 18px 20px;
+    padding: 14px 16px;
     min-height: 0;
     max-height: min(680px, calc(100vh - 220px));
   }
