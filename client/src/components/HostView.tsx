@@ -151,6 +151,7 @@ import HostGameLivePanel from './host/HostGameLivePanel';
 import HostDisplayExtrasPanel from './host/HostDisplayExtrasPanel';
 import type { HostSetupStep } from './host/HostSetupFlow';
 import HostSetupCockpit from './host/HostSetupCockpit';
+import HostGameModeBanner from './host/HostGameModeBanner';
 import HostEventActionsPanel from './host/HostEventActionsPanel';
 import HostSetupPlaylistStep from './host/HostSetupPlaylistStep';
 import HostSetupPlayStep from './host/HostSetupPlayStep';
@@ -9440,6 +9441,27 @@ const HostView: React.FC = () => {
   const showHostSetupCockpit =
     gameState === 'waiting' && !hostRoomHydrating && hostGlassNav === 'game';
 
+  /** Game tab mode banner: same anchor in prep / live / between-rounds states. */
+  const gameModeBannerMode: 'prep' | 'live' | 'ended' =
+    gameState === 'playing' ? 'live' : gameState === 'ended' ? 'ended' : 'prep';
+  const gameModeBannerHint = (() => {
+    if (gameState === 'playing') {
+      if (bingoVerificationCount > 0) return 'Bingo call waiting — verify it below.';
+      return gamePaused
+        ? 'Paused — playback and the displays hold until you resume.'
+        : 'Clips auto-advance. Verify bingo calls as they come in.';
+    }
+    if (gameState === 'ended') {
+      return getNextPlannedRound() >= 0
+        ? 'Round complete. Start the next planned round from Event actions below.'
+        : 'Round complete. Build another round on the Rounds tab, or wrap up in Event actions.';
+    }
+    if (!anyRoundHasPlaylists) return 'Build tonight’s rounds on the Rounds tab to get started.';
+    if (!prepRoundReadyForGoLive)
+      return 'Work through Build rounds and Card setup, then finalize on the Play step.';
+    return 'Ready — Set round to deal cards and brief the room, then Start game.';
+  })();
+
   const getBingoPoolTrackCountForRound = useCallback(
     (roundIndex: number) => {
       if (roundIndex < 0 || roundIndex >= eventRounds.length) return 0;
@@ -11368,6 +11390,20 @@ const HostView: React.FC = () => {
         {/* Main Content */}
         <div className="host-content host-content--dashboard" style={{ paddingBottom: '20px' }}>
           <div className="tab-content host-unified host-glass-workspace">
+            {hostGlassNav === 'game' && !hostRoomHydrating ? (
+              <HostGameModeBanner
+                mode={gameModeBannerMode}
+                roundName={
+                  hostActiveRoundSummary.roundName ??
+                  (currentRoundIndex >= 0 ? `Round ${currentRoundIndex + 1}` : 'No round selected')
+                }
+                roundPosition={currentRoundIndex >= 0 ? currentRoundIndex + 1 : null}
+                roundTotal={eventRounds.length}
+                hint={gameModeBannerHint}
+                paused={gamePaused}
+              />
+            ) : null}
+
             {showHostSetupCockpit && (hostGlassNav === 'game' || hostGlassNav === 'rounds') ? (
               <HostSetupCockpit
                 status={{
