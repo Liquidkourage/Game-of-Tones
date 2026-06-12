@@ -3933,17 +3933,44 @@ const PublicDisplay: React.FC = () => {
               }
             >
               {name ? (
-                <div className="call-playlist-name">
-                  {singleOneBy75 ? (
+                singleOneBy75 ? (
+                  <div className="call-playlist-name">
                     <span style={{ color: '#ffffff' }}>{name}</span>
-                  ) : (
-                    <>
-                      <span style={{ color: '#00ff88', marginRight: '0.3em' }}>{bingoLetter}</span>
-                      <span style={{ color: '#ffffff', margin: '0 0.2em' }}>-</span>
-                      <span style={{ color: '#ffffff' }}>{name}</span>
-                    </>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  /* Two-line header: big BINGO letter on top, playlist name beneath (kept compact). */
+                  <div
+                    className="call-playlist-name"
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 1,
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: '#00ff88',
+                        fontSize: 'clamp(1.25rem, 2.5vmin, 2rem)',
+                        fontWeight: 900,
+                        lineHeight: 1,
+                        letterSpacing: '0.04em',
+                        textShadow: '0 0 14px rgba(0,255,136,0.45), 0 2px 4px rgba(0,0,0,0.8)',
+                      }}
+                    >
+                      {bingoLetter}
+                    </span>
+                    <span
+                      style={{
+                        color: '#ffffff',
+                        fontSize: 'clamp(0.8rem, 1.45vmin, 1.2rem)',
+                        lineHeight: 1.1,
+                      }}
+                    >
+                      {name}
+                    </span>
+                  </div>
+                )
               ) : (
                 <div className="call-playlist-name" style={{ color: '#00ff88' }}>
                   {bingoLetter}
