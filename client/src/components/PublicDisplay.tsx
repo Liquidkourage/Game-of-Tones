@@ -3483,14 +3483,14 @@ const PublicDisplay: React.FC = () => {
     fullCard: boolean,
     hasArtist: boolean,
   ): React.CSSProperties => {
+    // Block flow (not flex, no overflow BFC) so text line boxes wrap around the floated
+    // call-number chip: first line(s) clear the chip, later lines extend underneath it.
+    // Clipping still happens at the card level (.call-item has overflow:hidden + fixed row height).
     const base: React.CSSProperties = {
-      flex: 1,
       minWidth: 0,
       maxWidth: '100%',
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'flex-start',
-      overflow: fullCard ? 'visible' : 'hidden',
+      display: 'block',
+      overflow: 'visible',
     };
     if (fullCard || !typo.clampContentHeight) {
       return base;
@@ -4112,9 +4112,9 @@ const PublicDisplay: React.FC = () => {
                         boxSizing: 'border-box',
                       }}
                     >
-                      {/* Numeric badge: play order index */}
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%' }}>
-                        <div className="call-number">
+                      {/* Numeric badge: play order index — floated so text can flow under it */}
+                      <div style={{ display: 'block', width: '100%', minWidth: 0 }}>
+                        <div className="call-number" style={{ float: 'left', marginRight: 10, marginBottom: 4 }}>
                           {(() => {
                             const idx = playedOrderForDisplay.indexOf(id);
                             return idx >= 0 ? (idx + 1) : '';
@@ -4195,9 +4195,7 @@ const PublicDisplay: React.FC = () => {
           className={`call-item${isCurrent ? ' call-item--current' : ''}`}
           aria-current={isCurrent ? 'true' : undefined}
           style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 6,
+            display: 'block',
             padding: '6px 8px',
             borderRadius: 10,
             width: '100%',
@@ -4207,7 +4205,11 @@ const PublicDisplay: React.FC = () => {
             overflow: 'hidden',
           }}
         >
-          <div className="call-number" aria-label={callNum > 0 ? `Call ${callNum}` : undefined}>
+          <div
+            className="call-number"
+            style={{ float: 'left', marginRight: 8, marginBottom: 4 }}
+            aria-label={callNum > 0 ? `Call ${callNum}` : undefined}
+          >
             {callNum > 0 ? callNum : ''}
           </div>
           <div
