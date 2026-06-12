@@ -90,11 +90,6 @@ import {
   sanitizeHostPreferences,
   type HostPreferencesV1,
 } from '../utils/hostPreferences';
-import {
-  DEFAULT_CALL_NUMBER_STYLE,
-  normalizeCallNumberStyle,
-  type CallNumberStyle,
-} from '../utils/callNumberStyle';
 import { isSpotifyJamDevice, pickPreferredPlaybackDevice } from '../utils/spotifyDevices';
 import { HostYoutubeMusicSection } from './HostYoutubeMusicSection';
 import { HostYoutubeMusicPlaylistLibrary, type YoutubeMixPlaylistRow } from './HostYoutubeMusicPlaylistLibrary';
@@ -1179,8 +1174,6 @@ const HostView: React.FC = () => {
   const [publicDisplayLetterRevealToast, setPublicDisplayLetterRevealToast] = useState<boolean>(true);
   /** Five column letters for cards / call list headers (org-customizable: BINGO, TEMPO, TONES, …). */
   const [bingoColumnLetters, setBingoColumnLetters] = useState<string>(DEFAULT_BINGO_COLUMN_LETTERS);
-  /** How the call number renders on projector song cards. */
-  const [callNumberStyle, setCallNumberStyle] = useState<CallNumberStyle>(DEFAULT_CALL_NUMBER_STYLE);
 
   // Handler to update public display font size
   const updatePublicDisplayFontSize = (newSize: number) => {
@@ -1229,13 +1222,6 @@ const HostView: React.FC = () => {
     const valid = normalizeBingoColumnLetters(bingoColumnLetters) ?? DEFAULT_BINGO_COLUMN_LETTERS;
     return valid.split('');
   }, [bingoColumnLetters]);
-  const updateCallNumberStyle = (raw: string) => {
-    const style = normalizeCallNumberStyle(raw) ?? DEFAULT_CALL_NUMBER_STYLE;
-    setCallNumberStyle(style);
-    if (socket && roomId) {
-      socket.emit('set-call-number-style', { roomId, style });
-    }
-  };
   const [selectedCustomPattern, setSelectedCustomPattern] = useState<SavedCustomPattern | null>(null);
   const [savedCustomPatterns, setSavedCustomPatterns] = useState<SavedCustomPattern[]>([]);
   const [showCustomPatternModal, setShowCustomPatternModal] = useState<boolean>(false);
@@ -3973,8 +3959,6 @@ const HostView: React.FC = () => {
         // Don't clobber a partial value the host is mid-typing in Settings.
         setBingoColumnLetters((prev) => (normalizeBingoColumnLetters(prev) ? roomLetters : prev));
       }
-      const roomCallNumStyle = normalizeCallNumberStyle(payload?.callNumberStyle);
-      if (roomCallNumStyle) setCallNumberStyle(roomCallNumStyle);
     });
 
     newSocket.on('fiveby15-pool', (data: any) => {
@@ -9011,7 +8995,6 @@ const HostView: React.FC = () => {
       if (p.venueSpotifyJamMode != null) setVenueSpotifyJamMode(p.venueSpotifyJamMode);
       if (p.playlistTitleFlags != null) setPlaylistTitleFlags(p.playlistTitleFlags);
       if (p.bingoColumnLetters != null) setBingoColumnLetters(p.bingoColumnLetters);
-      if (p.callNumberStyle != null) setCallNumberStyle(p.callNumberStyle);
     };
     apply(loadHostPreferences(hostId));
     hostPrefsHydratedRef.current = true;
@@ -9053,7 +9036,6 @@ const HostView: React.FC = () => {
       venueSpotifyJamMode,
       playlistTitleFlags,
       bingoColumnLetters: normalizeBingoColumnLetters(bingoColumnLetters) ?? DEFAULT_BINGO_COLUMN_LETTERS,
-      callNumberStyle,
     };
     saveHostPreferences(hostAccount.id, prefs);
     try {
@@ -9098,7 +9080,6 @@ const HostView: React.FC = () => {
     venueSpotifyJamMode,
     playlistTitleFlags,
     bingoColumnLetters,
-    callNumberStyle,
   ]);
 
   /** Sync venue Jam mode to server when pref or socket changes. */
@@ -9131,7 +9112,6 @@ const HostView: React.FC = () => {
     updatePublicDisplayLetterRevealInterval(saved.letterRevealIntervalSec ?? letterRevealIntervalSec);
     updatePublicDisplayLetterRevealToast(saved.publicDisplayLetterRevealToast ?? publicDisplayLetterRevealToast);
     updateBingoColumnLetters(saved.bingoColumnLetters ?? bingoColumnLetters);
-    updateCallNumberStyle(saved.callNumberStyle ?? callNumberStyle);
     updatePublicDisplayCallListMode('auto');
     // eslint-disable-next-line react-hooks/exhaustive-deps -- room sync after socket ready / prefs hydrate
   }, [socket, roomId, hostAccount?.id, hostPrefsHydrationNonce]);
@@ -11692,8 +11672,6 @@ const HostView: React.FC = () => {
                 onLetterRevealToastChange={updatePublicDisplayLetterRevealToast}
                 bingoColumnLetters={bingoColumnLetters}
                 onBingoColumnLettersChange={updateBingoColumnLetters}
-                callNumberStyle={callNumberStyle}
-                onCallNumberStyleChange={updateCallNumberStyle}
               />
               </div>
             ) : null}

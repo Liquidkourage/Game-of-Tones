@@ -2274,21 +2274,6 @@ function bingoColumnLettersForRoom(room) {
   return sanitizeBingoColumnLetters(room?.bingoColumnLetters) || 'BINGO';
 }
 
-/** How the call number renders on projector song cards (host pref). */
-const CALL_NUMBER_STYLES = ['negative', 'chip', 'inline', 'stripe'];
-/** Removed styles map to the closest surviving look so stored prefs keep working. */
-const LEGACY_CALL_NUMBER_STYLES = { ghost: 'negative', outline: 'negative' };
-
-function sanitizeCallNumberStyle(raw) {
-  const s = String(raw || '').trim().toLowerCase();
-  if (CALL_NUMBER_STYLES.includes(s)) return s;
-  return LEGACY_CALL_NUMBER_STYLES[s] || null;
-}
-
-function callNumberStyleForRoom(room) {
-  return sanitizeCallNumberStyle(room?.callNumberStyle) || 'negative';
-}
-
 function publicDisplayRoomStateExtras(room) {
   const pending =
     room.gameState === 'paused_for_verification' &&
@@ -2301,7 +2286,6 @@ function publicDisplayRoomStateExtras(room) {
     bingoVerificationPlayerName: head?.playerName ? String(head.playerName) : null,
     lastDisplayWinner: room.lastDisplayWinner || null,
     bingoColumnLetters: bingoColumnLettersForRoom(room),
-    callNumberStyle: callNumberStyleForRoom(room),
   };
 }
 
@@ -3897,8 +3881,6 @@ io.on('connection', (socket) => {
           }
           const seededLetters = sanitizeBingoColumnLetters(p.bingoColumnLetters);
           if (seededLetters) room.bingoColumnLetters = seededLetters;
-          const seededCallNumStyle = sanitizeCallNumberStyle(p.callNumberStyle);
-          if (seededCallNumStyle) room.callNumberStyle = seededCallNumStyle;
           routineServerLog(
             `🔤 Seeded projector defaults from saved host prefs for room ${roomId} (letter reveal ${letterRevealIntervalSecForRoom(room)}s)`,
           );
@@ -4811,25 +4793,6 @@ io.on('connection', (socket) => {
       routineServerLog(`🔤 Column letters for room ${roomId}: ${next}`);
     } catch (e) {
       console.error('❌ Error setting column letters:', e?.message || e);
-    }
-  });
-
-  // Host: how the call number renders on projector song cards (negative/chip/inline/stripe)
-  socket.on('set-call-number-style', (data = {}) => {
-    try {
-      const { roomId, style } = data;
-      const room = rooms.get(roomId);
-      if (!room) return;
-      const isCurrentHost =
-        room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
-      if (!isCurrentHost) return;
-      const next = sanitizeCallNumberStyle(style) || 'negative';
-      if (room.callNumberStyle === next) return;
-      room.callNumberStyle = next;
-      io.to(roomId).emit('call-number-style-updated', { style: next });
-      routineServerLog(`🔢 Call number style for room ${roomId}: ${next}`);
-    } catch (e) {
-      console.error('❌ Error setting call number style:', e?.message || e);
     }
   });
 

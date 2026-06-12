@@ -330,8 +330,6 @@ export type CallCardFitOpts = {
   /** Hard px ceilings from row-height fractions (optional). */
   titleCapPx?: number;
   artistCapPx?: number;
-  /** Account for the "88 · " inline call-number prefix on the title line. */
-  inlineNumberPrefix?: boolean;
   /** Smallest acceptable scale before we give up and let it clip. */
   minScale?: number;
 };
@@ -354,7 +352,7 @@ export function fitCallCardText(
   const dfs = opts.displayFontScale > 0 ? opts.displayFontScale : 1;
   if (opts.boxWidthPx <= 8 || opts.boxHeightPx <= 8) return null;
   const minScale = opts.minScale ?? FIT_MIN_SCALE;
-  const titleText = `${opts.inlineNumberPrefix ? '88 · ' : ''}${(title || '').trim() || 'Unknown'}`;
+  const titleText = (title || '').trim() || 'Unknown';
   const artistText = (artist || '').trim();
   const hasArtist = artistText.length > 0;
 
