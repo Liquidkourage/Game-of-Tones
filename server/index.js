@@ -3067,15 +3067,24 @@ async function endGamePlaylistComplete(roomId, deviceId) {
   io.to(roomId).emit('game-ended', { roomId, reason: 'playlist-complete' });
 }
 
-/** Smooth track-change fade: snippet plays x s at full volume + 1 s linear fade to 0. */
+/** Smooth track-change fade: snippet plays x s at full volume + ~1 s linear fade to 0. */
 const TRACK_FADE_OUT_MS = 1000;
 const TRACK_FADE_STEPS = 4;
-const TRACK_FADE_SILENCE_MS = 500;
+/**
+ * Explicit post-pause beat. Kept tiny on purpose: the volume-restore round-trip and
+ * the next track's play-call latency (~0.3–0.5 s) already supply most of the gap.
+ */
+const TRACK_FADE_SILENCE_MS = 120;
 
 /**
  * Fade the current track's last extra second to zero (stepped ≈ linear), pause,
  * restore the host's baseline volume while silent, and hold a short beat so the
  * next track punches in clean at full volume.
+ *
+ * Timing is deadline-based: Spotify API latency counts toward each step's slot
+ * instead of stacking on top of it, the pause itself is the final (zero) step,
+ * and the volume restore runs in parallel with the beat — so total dead air is
+ * roughly TRACK_FADE_SILENCE_MS + the next play call, not 1.5 s+ of round-trips.
  *
  * Returns true when the fade ran. Hard-cut fallbacks (returns false, no fade):
  * YouTube-hosted tracks, no locked device, devices that reject volume control
@@ -3094,21 +3103,28 @@ async function fadeOutBeforeTrackChange(roomId, deviceId) {
   const baseline = Math.min(100, Math.max(0, Math.round(Number(room.volume) || 100)));
   if (baseline <= 0) return false;
 
-  const stepMs = Math.round(TRACK_FADE_OUT_MS / TRACK_FADE_STEPS);
   try {
-    for (let i = 1; i <= TRACK_FADE_STEPS; i++) {
+    const fadeStart = Date.now();
+    // Intermediate levels only (e.g. 75% / 50% / 25%) — the pause is the zero step.
+    for (let i = 1; i < TRACK_FADE_STEPS; i++) {
       if (!roomStillPlaying(roomId)) {
         try { await spotifyFor(roomId).setVolume(baseline, targetDeviceId); } catch (_) {}
         return false;
       }
       const level = Math.round(baseline * (1 - i / TRACK_FADE_STEPS));
       await spotifyFor(roomId).setVolume(level, targetDeviceId);
-      await new Promise((r) => setTimeout(r, stepMs));
+      // Sleep only until this step's wall-clock deadline (API latency already spent it, maybe).
+      const stepDeadline = fadeStart + Math.round((TRACK_FADE_OUT_MS * i) / TRACK_FADE_STEPS);
+      const wait = stepDeadline - Date.now();
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     }
     try { await spotifyFor(roomId).pausePlayback(targetDeviceId); } catch (_) {}
-    // Device is paused/silent — safe to restore so the next track starts at full volume.
-    await spotifyFor(roomId).setVolume(baseline, targetDeviceId);
-    await new Promise((r) => setTimeout(r, TRACK_FADE_SILENCE_MS));
+    // Device is paused/silent — restore baseline (next track starts at full volume)
+    // concurrently with the short beat instead of serially after it.
+    await Promise.all([
+      spotifyFor(roomId).setVolume(baseline, targetDeviceId),
+      new Promise((r) => setTimeout(r, TRACK_FADE_SILENCE_MS)),
+    ]);
     return true;
   } catch (e) {
     const status = e?.body?.error?.status || e?.statusCode;
