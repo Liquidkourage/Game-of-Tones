@@ -85,6 +85,9 @@ async function ensureEntitlementTables(db) {
     )
   `);
   await db.query(`
+    ALTER TABLE org_events ADD COLUMN IF NOT EXISTS round_marker_songs_played INTEGER
+  `);
+  await db.query(`
     CREATE INDEX IF NOT EXISTS idx_org_events_org_room ON org_events (organization_id, room_id, status)
   `);
   await db.query(`
@@ -446,10 +449,41 @@ async function markFullPdfIssued(db, eventId) {
 async function incrementEventRound(db, organizationId, roomId) {
   const ev = await getActiveEventForRoom(db, organizationId, roomId);
   if (!ev) return null;
-  if (Number(ev.rounds_started) >= MAX_ROUNDS_PER_EVENT) {
+  const rounds = Number(ev.rounds_started) || 0;
+  const songs = Number(ev.songs_played) || 0;
+  const marker =
+    ev.round_marker_songs_played == null ? null : Number(ev.round_marker_songs_played);
+
+  // Legacy row (created before the marker column): rounds_started accumulated one
+  // per Start Game press, counting false starts and crash recoveries. Self-heal
+  // once: this start becomes round 1 of the real count.
+  if (marker == null && rounds > 0) {
+    await db.query(
+      `UPDATE org_events SET rounds_started = 1, round_marker_songs_played = $2 WHERE id = $1`,
+      [ev.id, songs]
+    );
+    return ev;
+  }
+
+  // Restart of the current round — no songs played since the last counted start
+  // (false starts, crash recovery, repeated Start Game while prepping). Don't burn
+  // a round; just refresh the marker.
+  const isRestart = rounds > 0 && songs <= marker;
+  if (isRestart) {
+    await db.query(`UPDATE org_events SET round_marker_songs_played = $2 WHERE id = $1`, [
+      ev.id,
+      songs,
+    ]);
+    return ev;
+  }
+
+  if (rounds >= MAX_ROUNDS_PER_EVENT) {
     return { error: 'max_rounds', message: `This event supports up to ${MAX_ROUNDS_PER_EVENT} rounds.` };
   }
-  await db.query(`UPDATE org_events SET rounds_started = rounds_started + 1 WHERE id = $1`, [ev.id]);
+  await db.query(
+    `UPDATE org_events SET rounds_started = rounds_started + 1, round_marker_songs_played = $2 WHERE id = $1`,
+    [ev.id, songs]
+  );
   return ev;
 }
 

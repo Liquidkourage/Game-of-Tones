@@ -36,6 +36,7 @@ import {
   computeBingoCellTextScale,
   computeCallCardTypography,
   capCallCardTextScaleForRow,
+  fitCallCardText,
   unifyCallListTypography,
   maxHeightEm,
   PUBLIC_DISPLAY_CALL_ARTIST_BASE_PX,
@@ -1361,6 +1362,10 @@ const PublicDisplay: React.FC = () => {
 
   const vertViewportRef = useRef<HTMLDivElement | null>(null);
   const [rowHeightPx, setRowHeightPx] = useState<number>(0);
+  /** Measured 5×15 column width — drives true text fitting (not char heuristics). */
+  const [fiveBy15ColWidthPx, setFiveBy15ColWidthPx] = useState<number>(0);
+  /** Carousel / play-order fallback: measured viewport height (5 rows + gaps). */
+  const [carouselViewportHeightPx, setCarouselViewportHeightPx] = useState<number>(0);
   const fiveBy15CardRowPx = useMemo(
     () => (rowHeightPx > 0 ? rowHeightPx : 0),
     [rowHeightPx],
@@ -1369,8 +1374,65 @@ const PublicDisplay: React.FC = () => {
   const isFullTitleRevealMode =
     titleRevealMode === 'track_start' || titleRevealMode === 'track_end';
 
+  /** Re-fit card text once webfonts load (pre-load canvas measurements use the fallback font). */
+  const [fontsReadyNonce, setFontsReadyNonce] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    try {
+      (document as any).fonts?.ready?.then(() => {
+        if (!cancelled) setFontsReadyNonce((n) => n + 1);
+      });
+    } catch {}
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /**
+   * Pixel box available for title+artist text inside one call card (measured layout
+   * minus card / stripe padding). Hoisted function so earlier memos can use it.
+   * Returns null until the layout has been measured.
+   */
+  function callCardFitBox(
+    layout: '5x15' | 'carousel',
+    plainFullTitle: boolean,
+  ): {
+    boxWidthPx: number;
+    boxHeightPx: number;
+    titleCapPx?: number;
+    artistCapPx?: number;
+  } | null {
+    // Same formula as callNumberStripeWidthPx (declared later in render scope).
+    const stripeW =
+      callNumberStyle === 'stripe'
+        ? (fiveBy15CardRowPx > 0 ? Math.max(18, Math.round(fiveBy15CardRowPx * 0.24)) : 24) * 2
+        : 0;
+    if (layout === '5x15') {
+      if (fiveBy15CardRowPx <= 0 || fiveBy15ColWidthPx <= 0) return null;
+      return {
+        boxWidthPx: fiveBy15ColWidthPx - 20 - stripeW, // card padding 10px ×2
+        boxHeightPx: fiveBy15CardRowPx - 14, // card padding 7px ×2
+        titleCapPx: Math.round(fiveBy15CardRowPx * (plainFullTitle ? 0.26 : 0.34)),
+        artistCapPx: Math.round(fiveBy15CardRowPx * (plainFullTitle ? 0.17 : 0.22)),
+      };
+    }
+    if (viewportWidth <= 0 || carouselViewportHeightPx <= 0) return null;
+    const rowPx = (carouselViewportHeightPx - 4 * 6) / 5; // 5 rows, 6px grid gaps
+    return {
+      boxWidthPx: viewportWidth / visibleCols - 8 - 16 - stripeW, // col pad 4×2 + card pad 8×2
+      boxHeightPx: rowPx - 12, // card padding 6px ×2
+      ...(plainFullTitle
+        ? {
+            titleCapPx: Math.round(24 * displayFontScale),
+            artistCapPx: Math.round(17 * displayFontScale),
+          }
+        : {}),
+    };
+  }
+
   /** One typography profile for clip-start/end so mid-game mode switches don't mix letter-scale cards. */
   const unifiedFullTitleCallTypography = useMemo((): CallCardTypography | null => {
+    void fontsReadyNonce; // re-fit after webfonts load
     if (!isFullTitleRevealMode || playedOrderForDisplay.length === 0) return null;
     const typographies = playedOrderForDisplay.map((id) => {
       const meta = idMetaRef.current[id] || { name: '', artist: '' };
@@ -1378,12 +1440,33 @@ const PublicDisplay: React.FC = () => {
     });
     const unified = unifyCallListTypography(typographies);
     let textScale = unified.textScale;
-    if (columnCallListLayout && fiveBy15CardRowPx > 0) {
+    let titleMaxLines = unified.titleMaxLines;
+    let artistMaxLines = unified.artistMaxLines;
+    const fitBox = callCardFitBox(columnCallListLayout ? '5x15' : 'carousel', true);
+    if (fitBox) {
+      // Measured fit: shrink the shared board scale until the longest card fully fits.
+      for (const id of playedOrderForDisplay) {
+        const meta = idMetaRef.current[id] || { name: '', artist: '' };
+        const fit = fitCallCardText(meta.name, meta.artist, {
+          ...fitBox,
+          displayFontScale,
+          masked: false,
+          inlineNumberPrefix: callNumberStyle === 'inline',
+        });
+        if (fit) {
+          textScale = Math.min(textScale, fit.textScale);
+          titleMaxLines = Math.max(titleMaxLines, fit.titleLines);
+          artistMaxLines = Math.max(artistMaxLines, fit.artistLines);
+        }
+      }
+    } else if (columnCallListLayout && fiveBy15CardRowPx > 0) {
       textScale = capCallCardTextScaleForRow(unified, fiveBy15CardRowPx, displayFontScale);
     }
     return {
       ...unified,
       textScale,
+      titleMaxLines,
+      artistMaxLines,
       plainFullTitle: true,
       clampContentHeight: true,
     };
@@ -1392,9 +1475,14 @@ const PublicDisplay: React.FC = () => {
     playedOrderForDisplay,
     columnCallListLayout,
     fiveBy15CardRowPx,
+    fiveBy15ColWidthPx,
+    viewportWidth,
+    carouselViewportHeightPx,
+    callNumberStyle,
     displayFontScale,
     playedOrderRevision,
     titleRevealMode,
+    fontsReadyNonce,
   ]);
 
   useEffect(() => {
@@ -3199,7 +3287,10 @@ const PublicDisplay: React.FC = () => {
   useEffect(() => {
     const el = carouselViewportRef.current;
     if (!el) return;
-    const update = () => setViewportWidth(el.clientWidth || 0);
+    const update = () => {
+      setViewportWidth(el.clientWidth || 0);
+      setCarouselViewportHeightPx(el.clientHeight || 0);
+    };
     update();
     window.addEventListener('resize', update);
     const RO: any = (window as any).ResizeObserver;
@@ -3225,6 +3316,8 @@ const PublicDisplay: React.FC = () => {
     const compute = () => {
       const h = el.clientHeight || 0;
       if (h > 0) setRowHeightPx(h / 5);
+      const w = el.clientWidth || 0;
+      if (w > 0) setFiveBy15ColWidthPx(w);
     };
     compute();
     window.addEventListener('resize', compute);
@@ -3345,9 +3438,14 @@ const PublicDisplay: React.FC = () => {
             return <span key={`ws-${ti}`}>{token}</span>;
           }
           const chars = Array.from(token);
-          // Wrap each word in a no-wrap span so it never splits across lines
+          // Wrap each word in a no-wrap span so it never splits across lines.
+          // Monster words (>18 chars) are allowed to break — they can't fit one line.
+          const breakable = chars.length > 18;
           return (
-            <span key={`w-${ti}`} style={{ whiteSpace: 'nowrap', display: 'inline-block' }}>
+            <span
+              key={`w-${ti}`}
+              style={breakable ? undefined : { whiteSpace: 'nowrap', display: 'inline-block' }}
+            >
               {chars.map((ch, ci) => {
                 const u = ch.toUpperCase();
                 if (/^[A-Z0-9]$/.test(u)) {
@@ -3429,6 +3527,7 @@ const PublicDisplay: React.FC = () => {
     songId: string,
     meta: { name: string; artist: string },
     fullCard: boolean,
+    layout: '5x15' | 'carousel' = '5x15',
   ): CallCardTypography => {
     if (!fullCard && isFullTitleRevealMode && unifiedFullTitleCallTypography) {
       return unifiedFullTitleCallTypography;
@@ -3437,6 +3536,32 @@ const PublicDisplay: React.FC = () => {
     const masked = ui.kind === 'masked';
     const plainFullTitle = ui.kind === 'plain';
     let typo = computeCallCardTypography(meta.name, meta.artist, { fullCard, masked });
+
+    if (!fullCard) {
+      // Measured fit beats char heuristics: shrink until the real wrapped text fits
+      // the real card box, and let the line budget grow to whatever actually wraps.
+      const fitBox = callCardFitBox(layout, plainFullTitle);
+      const fit = fitBox
+        ? fitCallCardText(meta.name, meta.artist, {
+            ...fitBox,
+            displayFontScale,
+            masked,
+            inlineNumberPrefix: callNumberStyle === 'inline',
+          })
+        : null;
+      if (fit) {
+        typo = {
+          ...typo,
+          plainFullTitle,
+          textScale: Math.min(typo.textScale, fit.textScale),
+          titleMaxLines: Math.max(typo.titleMaxLines, fit.titleLines),
+          artistMaxLines: Math.max(typo.artistMaxLines, fit.artistLines),
+          clampContentHeight: true,
+        };
+        return typo;
+      }
+    }
+
     if (columnCallListLayout && fiveBy15CardRowPx > 0 && !fullCard) {
       typo = {
         ...typo,
@@ -4390,7 +4515,7 @@ const PublicDisplay: React.FC = () => {
       const callNum = playIdx >= 0 ? playIdx + 1 : idsToUse.indexOf(id) + 1;
       const meta = idMetaRef.current[id] || { name: '', artist: '' };
       const isCurrent = gameState.currentSong?.id === id;
-      const typo = typographyForCallCard(id, meta, isFullCardPattern);
+      const typo = typographyForCallCard(id, meta, isFullCardPattern, 'carousel');
       const { title, artist } = renderCallSongLines(id, meta, (t, s, h) =>
         renderMaskedText(t, s, h, typo.letterBoxScale),
       );
