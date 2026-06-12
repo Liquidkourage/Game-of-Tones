@@ -510,14 +510,16 @@
 }
 
 /* Compact letter-reveal chip — sits beside the TEMPO header lockup */
-.App .public-display-reveal-toast {
+/* No `.App` prefix and no --pd-* vars: this toast is portaled to document.body,
+   outside the app root where the glass-theme scope (and its variables) live. */
+.public-display-reveal-toast {
   box-sizing: border-box;
   width: fit-content;
   max-width: min(60vw, 560px);
   padding: clamp(12px, 1.6vmin, 18px) clamp(20px, 2.6vmin, 32px);
   border-radius: 16px;
   background: rgba(0, 0, 0, 0.92);
-  color: var(--pd-mint);
+  color: #00ff88;
   font-weight: 900;
   letter-spacing: 0.05em;
   font-size: clamp(1.4rem, 3.2vmin, 2.4rem);
@@ -527,10 +529,10 @@
   overflow-wrap: break-word;
   box-shadow:
     0 14px 44px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(var(--pd-mint-rgb), 0.3) inset,
-    0 0 36px rgba(var(--pd-mint-rgb), 0.45);
-  border: 2.5px solid rgba(var(--pd-mint-rgb), 0.75);
-  text-shadow: 0 0 18px rgba(var(--pd-mint-rgb), 0.55);
+    0 0 0 1px rgba(0, 255, 136, 0.3) inset,
+    0 0 36px rgba(0, 255, 136, 0.45);
+  border: 2.5px solid rgba(0, 255, 136, 0.75);
+  text-shadow: 0 0 18px rgba(0, 255, 136, 0.55);
   animation: pd-reveal-toast-pulse 1.4s ease-in-out infinite;
   pointer-events: none;
 }
@@ -539,19 +541,19 @@
   0%, 100% {
     box-shadow:
       0 14px 44px rgba(0, 0, 0, 0.6),
-      0 0 0 1px rgba(var(--pd-mint-rgb), 0.3) inset,
-      0 0 36px rgba(var(--pd-mint-rgb), 0.45);
+      0 0 0 1px rgba(0, 255, 136, 0.3) inset,
+      0 0 36px rgba(0, 255, 136, 0.45);
   }
   50% {
     box-shadow:
       0 14px 44px rgba(0, 0, 0, 0.6),
-      0 0 0 1px rgba(var(--pd-mint-rgb), 0.3) inset,
-      0 0 60px rgba(var(--pd-mint-rgb), 0.8);
+      0 0 0 1px rgba(0, 255, 136, 0.3) inset,
+      0 0 60px rgba(0, 255, 136, 0.8);
   }
 }
 
 @media (max-width: 720px) {
-  .App .public-display-reveal-toast {
+  .public-display-reveal-toast {
     max-width: min(80vw, 420px);
     font-size: clamp(1.05rem, 4.4vmin, 1.5rem);
     padding: 10px 16px;
