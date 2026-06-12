@@ -4654,7 +4654,27 @@ const HostView: React.FC = () => {
     /** Server free-center flag for this finalize (defaults to host free-center toggle). */
     freeSpace?: boolean;
   }): Promise<boolean> => {
-    const playlists = opts?.playlists ?? mixPlaylistSelection;
+    let playlists = opts?.playlists ?? mixPlaylistSelection;
+    /** Column alignment: when finalizing the prep round's selection, send playlists in the
+     *  round's stored order (host-set / B–O order). Selection state keeps personal and catalog
+     *  rows in separate arrays, which can scramble interleaved orders — and in 5-playlist
+     *  column mode the order sent here maps to card columns. */
+    if (!opts?.playlists) {
+      const ridx = currentRoundIndexRef.current;
+      const round = ridx >= 0 ? eventRoundsRef.current[ridx] : null;
+      const roundIds = (round?.playlistIds || []).map((id) => canonicalPlaylistIdForMatch(String(id)));
+      if (
+        roundIds.length === playlists.length &&
+        playlists.every((p) => roundIds.includes(canonicalPlaylistIdForMatch(String(p.id))))
+      ) {
+        const orderIndex = new Map(roundIds.map((id, i) => [id, i]));
+        playlists = [...playlists].sort(
+          (a, b) =>
+            (orderIndex.get(canonicalPlaylistIdForMatch(String(a.id))) ?? 0) -
+            (orderIndex.get(canonicalPlaylistIdForMatch(String(b.id))) ?? 0),
+        );
+      }
+    }
     if (!socket || playlists.length === 0) return false;
     if (!isValidRoundPlaylistCount(playlists.length)) {
       window.alert(roundPlaylistCountError(playlists.length));
@@ -7793,6 +7813,14 @@ const HostView: React.FC = () => {
           },
         );
       }
+      /** Return rows in the round's stored order (host-set / B–O column order), not library
+       *  order — in 5-playlist column mode the mix order sent at finalize maps to card columns. */
+      const orderIndex = new Map((round.playlistIds || []).map((id, i) => [String(id), i]));
+      merged.sort(
+        (a, b) =>
+          (orderIndex.get(String(a.id)) ?? Number.MAX_SAFE_INTEGER) -
+          (orderIndex.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER),
+      );
       return merged;
     },
     [playlistsForRoundPlanner, catalogPackOptions, leftoversVirtualPlaylist],

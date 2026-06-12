@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, X } from 'lucide-react';
+import { BINGO_COLUMN_LETTERS } from '../../utils/bingoColumnOrder';
 
 export type RoundTimelineRow = {
   index: number;
@@ -11,8 +12,6 @@ export type RoundTimelineRow = {
   saved: boolean;
   isCurrent: boolean;
 };
-
-const MAX_CHIP_PLAYLIST_NAMES = 3;
 
 type HostRoundTimelineProps = {
   rounds: RoundTimelineRow[];
@@ -179,12 +178,32 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
                 )}
                 {r.saved ? ' · saved' : ''}
               </span>
-              {r.playlistNames && r.playlistNames.length > 0 ? (
-                <span className="host-round-timeline__playlists" title={r.playlistNames.join(', ')}>
-                  {r.playlistNames.slice(0, MAX_CHIP_PLAYLIST_NAMES).join(' · ')}
-                  {r.playlistNames.length > MAX_CHIP_PLAYLIST_NAMES
-                    ? ` +${r.playlistNames.length - MAX_CHIP_PLAYLIST_NAMES}`
-                    : ''}
+              {r.playlistNames && r.playlistNames.length === 1 ? (
+                /* Round Mix: one playlist supplies all 75 — just say the title. */
+                <span className="host-round-timeline__playlists" title={r.playlistNames[0]}>
+                  {r.playlistNames[0]}
+                </span>
+              ) : r.playlistNames && r.playlistNames.length > 1 ? (
+                /* Column mode: every playlist as a small chip, in stored order (= B–O card columns). */
+                <span className="host-round-timeline__playlist-chips">
+                  {r.playlistNames.map((n, i) => (
+                    <span
+                      key={`${i}-${n}`}
+                      className="host-round-timeline__playlist-chip"
+                      title={
+                        r.playlistNames!.length === 5
+                          ? `${BINGO_COLUMN_LETTERS[i]} column · ${n}`
+                          : n
+                      }
+                    >
+                      {r.playlistNames!.length === 5 ? (
+                        <span className="host-round-timeline__playlist-chip-letter" aria-hidden>
+                          {BINGO_COLUMN_LETTERS[i]}
+                        </span>
+                      ) : null}
+                      <span className="host-round-timeline__playlist-chip-name">{n}</span>
+                    </span>
+                  ))}
                 </span>
               ) : null}
             </button>

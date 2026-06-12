@@ -1913,6 +1913,54 @@
   color: rgba(255, 255, 255, 0.5);
 }
 
+/* Column-mode rounds: one small chip per playlist, listed in B–I–N–G–O card-column order. */
+.host-glass-theme .host-round-timeline__playlist-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 320px;
+  margin-top: 4px;
+}
+
+.host-glass-theme .host-round-timeline__playlist-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 1px 7px 1px 1px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.66rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.host-glass-theme .host-round-timeline__playlist-chip-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: rgba(0, 255, 136, 0.16);
+  color: #7dffbe;
+  font-size: 0.6rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.host-glass-theme .host-round-timeline__playlist-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Chips without a letter badge need symmetric padding. */
+.host-glass-theme .host-round-timeline__playlist-chip:not(:has(.host-round-timeline__playlist-chip-letter)) {
+  padding-left: 7px;
+}
+
 .host-glass-theme .host-inline-library__body {
   margin-top: 12px;
 }
