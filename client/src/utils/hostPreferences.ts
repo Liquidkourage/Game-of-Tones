@@ -2,6 +2,11 @@ import {
   normalizePublicDisplayTitleRevealMode,
   type PublicDisplayTitleRevealMode,
 } from './publicDisplayTitleReveal';
+import {
+  DEFAULT_CALL_NUMBER_STYLE,
+  normalizeCallNumberStyle,
+  type CallNumberStyle,
+} from './callNumberStyle';
 
 export type HostPreferencesV1 = {
   v: 1;
@@ -17,6 +22,8 @@ export type HostPreferencesV1 = {
   playlistTitleFlags: string;
   /** Five column letters shown on cards / call list headers (e.g. BINGO, TEMPO, TONES). */
   bingoColumnLetters: string;
+  /** How the call number renders on projector song cards. */
+  callNumberStyle: CallNumberStyle;
 };
 
 export const DEFAULT_PLAYLIST_TITLE_FLAGS = 'GoT, Game of Tones';
@@ -48,6 +55,7 @@ export function defaultHostPreferences(): HostPreferencesV1 {
     venueSpotifyJamMode: false,
     playlistTitleFlags: DEFAULT_PLAYLIST_TITLE_FLAGS,
     bingoColumnLetters: DEFAULT_BINGO_COLUMN_LETTERS,
+    callNumberStyle: DEFAULT_CALL_NUMBER_STYLE,
   };
 }
 
@@ -90,6 +98,7 @@ export function sanitizeHostPreferences(raw: unknown): Partial<HostPreferencesV1
           ? parsed.playlistTitleFlags.slice(0, 200)
           : undefined,
       bingoColumnLetters: normalizeBingoColumnLetters(parsed.bingoColumnLetters) ?? undefined,
+      callNumberStyle: normalizeCallNumberStyle(parsed.callNumberStyle) ?? undefined,
     };
 }
 

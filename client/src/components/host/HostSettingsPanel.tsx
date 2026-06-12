@@ -5,6 +5,7 @@ import HostEventActivationBar from './HostEventActivationBar';
 import type { HostActivityEntry } from '../../host/hostActivityLog';
 import { DEFAULT_PLAYLIST_TITLE_FLAGS } from '../../utils/hostPreferences';
 import type { PublicDisplayTitleRevealMode } from '../../utils/publicDisplayTitleReveal';
+import { CALL_NUMBER_STYLE_OPTIONS, type CallNumberStyle } from '../../utils/callNumberStyle';
 
 type HostSettingsPanelProps = {
   roomId: string | null;
@@ -27,6 +28,147 @@ type HostSettingsPanelProps = {
   onLetterRevealToastChange: (v: boolean) => void;
   bingoColumnLetters: string;
   onBingoColumnLettersChange: (v: string) => void;
+  callNumberStyle: CallNumberStyle;
+  onCallNumberStyleChange: (raw: string) => void;
+};
+
+/**
+ * Mini mock of a projector call card so hosts can see exactly how each call-number
+ * style renders before picking one. Visual recipe mirrors PublicDisplay's card styles.
+ */
+const CallNumberStylePreviewCard: React.FC<{ style: CallNumberStyle }> = ({ style }) => {
+  const num = 42;
+  const centerBase: React.CSSProperties = {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    transform: 'translate(-50%, -50%)',
+    fontSize: 46,
+    fontWeight: 900,
+    lineHeight: 1,
+    letterSpacing: '-0.02em',
+    pointerEvents: 'none',
+    userSelect: 'none',
+    zIndex: 0,
+  };
+  let overlay: React.ReactNode = null;
+  if (style === 'negative') {
+    overlay = (
+      <div
+        aria-hidden
+        style={{
+          ...centerBase,
+          color: 'rgba(0, 0, 0, 0.85)',
+          textShadow: '0 0 1px rgba(0, 255, 136, 0.5), 0 0 10px rgba(0, 255, 136, 0.18)',
+        }}
+      >
+        {num}
+      </div>
+    );
+  } else if (style === 'ghost') {
+    overlay = (
+      <div aria-hidden style={{ ...centerBase, color: 'rgba(0, 255, 136, 0.16)' }}>
+        {num}
+      </div>
+    );
+  } else if (style === 'outline') {
+    overlay = (
+      <div
+        aria-hidden
+        style={{ ...centerBase, color: 'transparent', WebkitTextStroke: '2px rgba(0, 255, 136, 0.32)' }}
+      >
+        {num}
+      </div>
+    );
+  } else if (style === 'chip') {
+    overlay = (
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          top: 4,
+          left: 4,
+          background: 'rgba(0, 255, 136, 0.92)',
+          color: '#001b10',
+          fontWeight: 900,
+          fontSize: 11,
+          lineHeight: 1.3,
+          borderRadius: 6,
+          padding: '1px 7px',
+          zIndex: 2,
+          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.45)',
+        }}
+      >
+        {num}
+      </div>
+    );
+  } else if (style === 'stripe') {
+    overlay = (
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 18,
+          background: 'rgba(0, 255, 136, 0.16)',
+          borderRight: '1.5px solid rgba(0, 255, 136, 0.4)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#00ff88',
+          fontWeight: 900,
+          fontSize: 11,
+          zIndex: 0,
+        }}
+      >
+        {num}
+      </div>
+    );
+  }
+  const sidePad = style === 'stripe' ? 18 : 6;
+  return (
+    <div
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        height: 58,
+        borderRadius: 8,
+        // Matches the projector glass-theme .call-item card over its dark backdrop.
+        background:
+          'linear-gradient(145deg, rgba(139, 92, 246, 0.22) 0%, rgba(10, 10, 20, 0.65) 100%), #0a0a14',
+        border: '1px solid rgba(139, 92, 246, 0.4)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+      }}
+    >
+      {overlay}
+      <div
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          textAlign: 'center',
+          width: '100%',
+          paddingLeft: sidePad,
+          paddingRight: sidePad,
+          boxSizing: 'border-box',
+        }}
+      >
+        <div style={{ fontWeight: 700, fontSize: 12.5, color: '#e8e6ff', lineHeight: 1.25 }}>
+          {style === 'inline' && (
+            <span style={{ color: '#00ff88', marginRight: '0.35em', whiteSpace: 'nowrap' }}>{num} ·</span>
+          )}
+          Tiny Dancer
+        </div>
+        <div style={{ fontSize: 11, color: 'rgba(139, 92, 246, 0.95)', lineHeight: 1.2 }}>
+          Elton John
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
@@ -50,6 +192,8 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
   onLetterRevealToastChange,
   bingoColumnLetters,
   onBingoColumnLettersChange,
+  callNumberStyle,
+  onCallNumberStyleChange,
 }) => {
   const lettersIncomplete = bingoColumnLetters.length > 0 && bingoColumnLetters.length < 5;
   return (
@@ -178,6 +322,56 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
             ))}
           </select>
         </label>
+        <div className="host-host-prefs__field">
+          <span className="host-host-prefs__label">Call number style</span>
+          <div
+            role="radiogroup"
+            aria-label="Call number style"
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}
+          >
+            {CALL_NUMBER_STYLE_OPTIONS.map((o) => {
+              const selected = callNumberStyle === o.value;
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  title={o.description}
+                  onClick={() => onCallNumberStyleChange(o.value)}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 5,
+                    padding: 6,
+                    borderRadius: 10,
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    background: selected ? 'rgba(0, 255, 136, 0.10)' : 'rgba(255, 255, 255, 0.03)',
+                    border: selected
+                      ? '2px solid rgba(0, 255, 136, 0.75)'
+                      : '2px solid rgba(255, 255, 255, 0.10)',
+                  }}
+                >
+                  <CallNumberStylePreviewCard style={o.value} />
+                  <span
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: selected ? 700 : 500,
+                      color: selected ? '#00ff88' : 'rgba(255, 255, 255, 0.75)',
+                    }}
+                  >
+                    {selected ? '✓ ' : ''}
+                    {o.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <span className="host-host-prefs__hint">
+            How the play-order number appears on each song card on the projector call list.
+          </span>
+        </div>
         <label className="host-host-prefs__field host-host-prefs__field--checkbox">
           <span className="host-host-prefs__label">Letter reveal toast</span>
           <span className="host-host-prefs__checkbox-row">

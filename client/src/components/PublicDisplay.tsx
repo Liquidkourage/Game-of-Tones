@@ -25,6 +25,11 @@ import {
   type PublicDisplayTitleRevealMode,
 } from '../utils/publicDisplayTitleReveal';
 import { effectivePublicDisplayFontScale } from '../utils/publicDisplayFontScale';
+import {
+  DEFAULT_CALL_NUMBER_STYLE,
+  normalizeCallNumberStyle,
+  type CallNumberStyle,
+} from '../utils/callNumberStyle';
 import { pdGlass } from '../publicDisplayGlassTheme';
 import './PublicDisplayGlassTheme.css';
 import {
@@ -1217,6 +1222,8 @@ const PublicDisplay: React.FC = () => {
   const [letterRevealToastEnabled, setLetterRevealToastEnabled] = useState<boolean>(true);
   /** Five column letters for call list headers (host pref: BINGO, TEMPO, TONES, …). */
   const [bingoColumnLetters, setBingoColumnLetters] = useState<string>('BINGO');
+  /** How the call number renders on song cards (host pref). */
+  const [callNumberStyle, setCallNumberStyle] = useState<CallNumberStyle>(DEFAULT_CALL_NUMBER_STYLE);
   /** How masked titles fill in: timed letters, full at track start, or full at track end. */
   const [titleRevealMode, setTitleRevealMode] = useState<PublicDisplayTitleRevealMode>('letter');
   const titleRevealModeRef = useRef<PublicDisplayTitleRevealMode>('letter');
@@ -1875,6 +1882,11 @@ const PublicDisplay: React.FC = () => {
           if (typeof payload.bingoColumnLetters === 'string' && payload.bingoColumnLetters.length === 5) {
             setBingoColumnLetters(payload.bingoColumnLetters.toUpperCase());
           }
+
+          {
+            const style = normalizeCallNumberStyle(payload.callNumberStyle);
+            if (style) setCallNumberStyle(style);
+          }
           
           // CRITICAL: Sync currentIndexRef from server state (needed for proper display on refresh)
           if (typeof payload.currentSongIndex === 'number') {
@@ -2103,6 +2115,11 @@ const PublicDisplay: React.FC = () => {
       if (typeof data?.letters === 'string' && data.letters.length === 5) {
         setBingoColumnLetters(data.letters.toUpperCase());
       }
+    });
+
+    newSocket.on('call-number-style-updated', (data: any) => {
+      const style = normalizeCallNumberStyle(data?.style);
+      if (style) setCallNumberStyle(style);
     });
 
     newSocket.on('display-reveal-state', (data: any) => {
@@ -3495,8 +3512,9 @@ const PublicDisplay: React.FC = () => {
     fullCard: boolean,
     hasArtist: boolean,
   ): React.CSSProperties => {
-    // Full-width centered text above the ghost call-number watermark (z-index layers it).
+    // Full-width centered text above the call-number overlay (z-index layers it).
     // Clipping still happens at the card level (.call-item has overflow:hidden + fixed row height).
+    // Edge-stripe style: matching side padding keeps the text clear of (and centered around) the band.
     const base: React.CSSProperties = {
       minWidth: 0,
       maxWidth: '100%',
@@ -3506,6 +3524,13 @@ const PublicDisplay: React.FC = () => {
       textAlign: 'center',
       position: 'relative',
       zIndex: 1,
+      ...(callNumberStyle === 'stripe'
+        ? {
+            paddingLeft: callNumberStripeWidthPx,
+            paddingRight: callNumberStripeWidthPx,
+            boxSizing: 'border-box' as const,
+          }
+        : {}),
     };
     if (fullCard || !typo.clampContentHeight) {
       return base;
@@ -3522,36 +3547,138 @@ const PublicDisplay: React.FC = () => {
     };
   };
 
+  /** Edge-stripe style: width of the numbered band (text gets matching side padding). */
+  const callNumberStripeWidthPx =
+    fiveBy15CardRowPx > 0 ? Math.max(18, Math.round(fiveBy15CardRowPx * 0.24)) : 24;
+
   /**
-   * Call number as a ghost watermark: dead center behind the text, dark "negative" fill
-   * with a faint mint rim so it reads as carved-out space without competing with the
-   * white title/artist on top (replaces the floated corner chip).
+   * Call number rendered per the host's selected style. Overlay styles return a node to
+   * drop inside the (position:relative) card; the `inline` style returns null here and is
+   * handled at the title line instead.
    */
-  const callNumberWatermark = (callNum: number | '', fullCard: boolean): React.ReactNode => {
-    if (callNum === '' || callNum <= 0) return null;
-    const sizePx =
+  const renderCallNumberOverlay = (callNum: number | '', fullCard: boolean): React.ReactNode => {
+    if (callNum === '' || callNum <= 0 || callNumberStyle === 'inline') return null;
+    const watermarkPx =
       !fullCard && fiveBy15CardRowPx > 0 ? Math.round(fiveBy15CardRowPx * 0.62) : 0;
+    const watermarkFontSize =
+      watermarkPx > 0 ? `${watermarkPx}px` : 'clamp(28px, 4.5vmin, 64px)';
+    const centerBase: React.CSSProperties = {
+      position: 'absolute',
+      left: '50%',
+      top: '50%',
+      transform: 'translate(-50%, -50%)',
+      fontSize: watermarkFontSize,
+      fontWeight: 900,
+      lineHeight: 1,
+      letterSpacing: '-0.02em',
+      pointerEvents: 'none',
+      userSelect: 'none',
+      zIndex: 0,
+    };
+    switch (callNumberStyle) {
+      case 'ghost':
+        return (
+          <div aria-hidden style={{ ...centerBase, color: 'rgba(0, 255, 136, 0.16)' }}>
+            {callNum}
+          </div>
+        );
+      case 'outline':
+        return (
+          <div
+            aria-hidden
+            style={{
+              ...centerBase,
+              color: 'transparent',
+              WebkitTextStroke: '2px rgba(0, 255, 136, 0.32)',
+            }}
+          >
+            {callNum}
+          </div>
+        );
+      case 'chip': {
+        const chipFontPx =
+          !fullCard && fiveBy15CardRowPx > 0
+            ? Math.max(11, Math.round(fiveBy15CardRowPx * 0.2))
+            : 13;
+        return (
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              top: 4,
+              left: 4,
+              background: 'rgba(0, 255, 136, 0.92)',
+              color: '#001b10',
+              fontWeight: 900,
+              fontSize: `${chipFontPx}px`,
+              lineHeight: 1.3,
+              borderRadius: 6,
+              padding: '1px 7px',
+              pointerEvents: 'none',
+              userSelect: 'none',
+              zIndex: 2,
+              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.45)',
+            }}
+          >
+            {callNum}
+          </div>
+        );
+      }
+      case 'stripe': {
+        const stripeFontPx =
+          !fullCard && fiveBy15CardRowPx > 0
+            ? Math.max(10, Math.round(fiveBy15CardRowPx * 0.18))
+            : 12;
+        return (
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: callNumberStripeWidthPx,
+              background: 'rgba(0, 255, 136, 0.16)',
+              borderRight: '1.5px solid rgba(0, 255, 136, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#00ff88',
+              fontWeight: 900,
+              fontSize: `${stripeFontPx}px`,
+              pointerEvents: 'none',
+              userSelect: 'none',
+              zIndex: 0,
+            }}
+          >
+            {callNum}
+          </div>
+        );
+      }
+      case 'negative':
+      default:
+        return (
+          <div
+            aria-hidden
+            style={{
+              ...centerBase,
+              color: 'rgba(0, 0, 0, 0.85)',
+              textShadow: '0 0 1px rgba(0, 255, 136, 0.5), 0 0 10px rgba(0, 255, 136, 0.18)',
+            }}
+          >
+            {callNum}
+          </div>
+        );
+    }
+  };
+
+  /** Inline style: mint number prefix rendered at the start of the title line. */
+  const callNumberInlinePrefix = (callNum: number | ''): React.ReactNode => {
+    if (callNumberStyle !== 'inline' || callNum === '' || callNum <= 0) return null;
     return (
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          left: '50%',
-          top: '50%',
-          transform: 'translate(-50%, -50%)',
-          fontSize: sizePx > 0 ? `${sizePx}px` : 'clamp(28px, 4.5vmin, 64px)',
-          fontWeight: 900,
-          lineHeight: 1,
-          letterSpacing: '-0.02em',
-          color: 'rgba(0, 0, 0, 0.85)',
-          textShadow: '0 0 1px rgba(0, 255, 136, 0.5), 0 0 10px rgba(0, 255, 136, 0.18)',
-          pointerEvents: 'none',
-          userSelect: 'none',
-          zIndex: 0,
-        }}
-      >
-        {callNum}
-      </div>
+      <span style={{ color: '#00ff88', marginRight: '0.35em', whiteSpace: 'nowrap' }}>
+        {callNum} ·
+      </span>
     );
   };
 
@@ -4188,14 +4315,11 @@ const PublicDisplay: React.FC = () => {
                         boxSizing: 'border-box',
                       }}
                     >
-                      {/* Play order index as a ghost watermark behind the text */}
-                      {callNumberWatermark(
-                        (() => {
-                          const idx = playedOrderForDisplay.indexOf(id);
-                          return idx >= 0 ? idx + 1 : ('' as const);
-                        })(),
-                        isFullCardPattern,
-                      )}
+                      {/* Play order index, styled per host preference */}
+                      {(() => {
+                        const idx = playedOrderForDisplay.indexOf(id);
+                        return renderCallNumberOverlay(idx >= 0 ? idx + 1 : '', isFullCardPattern);
+                      })()}
                       <div style={{ display: 'block', width: '100%', minWidth: 0 }}>
                         <div
                           className={`call-song-info${typo.dense ? ' call-song-info--dense' : ''}`}
@@ -4211,6 +4335,10 @@ const PublicDisplay: React.FC = () => {
                             className="call-song-name"
                             style={callCardLineStyles(typo, 'title', isFullCardPattern)}
                           >
+                            {(() => {
+                              const idx = playedOrderForDisplay.indexOf(id);
+                              return callNumberInlinePrefix(idx >= 0 ? idx + 1 : '');
+                            })()}
                             {title}
                           </motion.div>
                           <motion.div
@@ -4283,12 +4411,13 @@ const PublicDisplay: React.FC = () => {
             overflow: 'hidden',
           }}
         >
-          {callNumberWatermark(callNum > 0 ? callNum : '', isFullCardPattern)}
+          {renderCallNumberOverlay(callNum > 0 ? callNum : '', isFullCardPattern)}
           <div
             className={`call-song-info${typo.dense ? ' call-song-info--dense' : ''}`}
             style={callSongInfoStyles(typo, isFullCardPattern, !!meta.artist?.trim())}
           >
             <div className="call-song-name" style={callCardLineStyles(typo, 'title', isFullCardPattern)}>
+              {callNumberInlinePrefix(callNum > 0 ? callNum : '')}
               {title}
             </div>
             <div className="call-song-artist" style={callCardLineStyles(typo, 'artist', isFullCardPattern)}>
