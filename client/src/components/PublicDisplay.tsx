@@ -1029,6 +1029,21 @@ const PublicDisplay: React.FC = () => {
       ),
     [displayViewport.w, displayViewport.h, fontSizeMultiplier],
   );
+  /**
+   * Auto-fit scale at neutral host zoom (100%). The measured text fitter works off
+   * this so the host slider can't be cancelled out by the fit loop: fitting happens
+   * at 100%, then `hostZoom` multiplies the result uniformly (failsafe override —
+   * >100% may intentionally overflow card boxes).
+   */
+  const autoDisplayFontScale = useMemo(
+    () => effectivePublicDisplayFontScale(displayViewport.w, displayViewport.h, 1),
+    [displayViewport.w, displayViewport.h],
+  );
+  /** Host slider as a pure multiplier on top of the auto-fit (1 = trust the fit). */
+  const hostZoom = Math.max(
+    0.5,
+    Math.min(3, Number.isFinite(fontSizeMultiplier) ? fontSizeMultiplier : 1),
+  );
 
   useLayoutEffect(() => {
     let raf = 0;
@@ -1414,8 +1429,8 @@ const PublicDisplay: React.FC = () => {
       boxHeightPx: rowPx - 12, // card padding 6px ×2
       ...(plainFullTitle
         ? {
-            titleCapPx: Math.round(24 * displayFontScale),
-            artistCapPx: Math.round(17 * displayFontScale),
+            titleCapPx: Math.round(24 * autoDisplayFontScale),
+            artistCapPx: Math.round(17 * autoDisplayFontScale),
           }
         : {}),
     };
@@ -1440,7 +1455,7 @@ const PublicDisplay: React.FC = () => {
         const meta = idMetaRef.current[id] || { name: '', artist: '' };
         const fit = fitCallCardText(meta.name, meta.artist, {
           ...fitBox,
-          displayFontScale,
+          displayFontScale: autoDisplayFontScale,
           masked: false,
         });
         if (fit) {
@@ -1450,7 +1465,7 @@ const PublicDisplay: React.FC = () => {
         }
       }
     } else if (columnCallListLayout && fiveBy15CardRowPx > 0) {
-      textScale = capCallCardTextScaleForRow(unified, fiveBy15CardRowPx, displayFontScale);
+      textScale = capCallCardTextScaleForRow(unified, fiveBy15CardRowPx, autoDisplayFontScale);
     }
     return {
       ...unified,
@@ -1468,7 +1483,7 @@ const PublicDisplay: React.FC = () => {
     fiveBy15ColWidthPx,
     viewportWidth,
     carouselViewportHeightPx,
-    displayFontScale,
+    autoDisplayFontScale,
     playedOrderRevision,
     titleRevealMode,
     fontsReadyNonce,
@@ -3523,7 +3538,7 @@ const PublicDisplay: React.FC = () => {
       const fit = fitBox
         ? fitCallCardText(meta.name, meta.artist, {
             ...fitBox,
-            displayFontScale,
+            displayFontScale: autoDisplayFontScale,
             masked,
           })
         : null;
@@ -3544,7 +3559,7 @@ const PublicDisplay: React.FC = () => {
       typo = {
         ...typo,
         plainFullTitle,
-        textScale: capCallCardTextScaleForRow(typo, fiveBy15CardRowPx, displayFontScale),
+        textScale: capCallCardTextScaleForRow(typo, fiveBy15CardRowPx, autoDisplayFontScale),
         clampContentHeight: true,
       };
     } else if (plainFullTitle) {
@@ -3568,10 +3583,12 @@ const PublicDisplay: React.FC = () => {
     if (columnCallListLayout && fiveBy15CardRowPx > 0 && !fullCard) {
       const titleFrac = typo.plainFullTitle ? 0.26 : 0.34;
       const artistFrac = typo.plainFullTitle ? 0.17 : 0.22;
+      // Caps scale with the host zoom so the failsafe slider stays a uniform
+      // multiplier — at 100% these are the same row-fraction caps the fitter saw.
       const maxPx =
         kind === 'title'
-          ? Math.round(fiveBy15CardRowPx * titleFrac)
-          : Math.round(fiveBy15CardRowPx * artistFrac);
+          ? Math.round(fiveBy15CardRowPx * titleFrac * hostZoom)
+          : Math.round(fiveBy15CardRowPx * artistFrac * hostZoom);
       if (maxPx > 0) fontSize = Math.min(fontSize, maxPx);
     } else if (!fullCard && typo.plainFullTitle) {
       const maxPx =
