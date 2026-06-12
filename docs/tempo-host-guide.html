@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>TEMPO — New Host Guide</title>
+<style>
+  :root {
+    --mint: #00b86b;
+    --mint-dark: #007a47;
+    --violet: #6d4fc4;
+    --ink: #1a1d24;
+    --ink-muted: #5a6170;
+    --panel: #f4f6f9;
+    --line: #d9dee7;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    color: var(--ink);
+    font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+    font-size: 11.5pt;
+    line-height: 1.5;
+  }
+  @page { size: letter; margin: 0.65in 0.7in; }
+  .page-break { page-break-before: always; }
+  h1, h2, h3 { line-height: 1.2; }
+  h1 { font-size: 26pt; margin: 0 0 4px; letter-spacing: 0.02em; }
+  h2 {
+    font-size: 16pt;
+    margin: 22px 0 8px;
+    color: var(--mint-dark);
+    border-bottom: 2.5px solid var(--mint);
+    padding-bottom: 4px;
+    page-break-after: avoid;
+  }
+  h3 {
+    font-size: 12.5pt;
+    margin: 16px 0 6px;
+    color: var(--violet);
+    page-break-after: avoid;
+  }
+  p { margin: 6px 0; }
+  ul, ol { margin: 6px 0 10px; padding-left: 22px; }
+  li { margin: 3px 0; }
+  strong { color: var(--ink); }
+  .cover {
+    text-align: center;
+    padding-top: 1.6in;
+  }
+  .cover .logo {
+    font-size: 44pt;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    color: var(--mint-dark);
+    margin-bottom: 0;
+  }
+  .cover .byline { color: var(--ink-muted); font-size: 13pt; margin-top: 2px; }
+  .cover .subtitle { font-size: 19pt; font-weight: 700; margin-top: 40px; }
+  .cover .scope { color: var(--ink-muted); margin-top: 8px; font-size: 12pt; }
+  .cover .flow-pill {
+    display: inline-block;
+    margin-top: 36px;
+    padding: 12px 26px;
+    border: 2px solid var(--mint);
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 12.5pt;
+    color: var(--mint-dark);
+    background: #eafff4;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--mint);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 10px 0;
+    page-break-inside: avoid;
+  }
+  .panel.violet { border-left-color: var(--violet); }
+  .panel .panel-title {
+    font-weight: 800;
+    font-size: 10.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--mint-dark);
+    margin: 0 0 4px;
+  }
+  .panel.violet .panel-title { color: var(--violet); }
+  .btn {
+    display: inline-block;
+    border: 1.5px solid var(--mint-dark);
+    border-radius: 6px;
+    padding: 0 7px;
+    font-weight: 700;
+    font-size: 10pt;
+    color: var(--mint-dark);
+    background: #eafff4;
+    white-space: nowrap;
+  }
+  .tab {
+    display: inline-block;
+    border: 1.5px solid var(--violet);
+    border-radius: 999px;
+    padding: 0 9px;
+    font-weight: 700;
+    font-size: 10pt;
+    color: var(--violet);
+    background: #f3effc;
+    white-space: nowrap;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+    font-size: 10.5pt;
+    page-break-inside: avoid;
+  }
+  th {
+    background: var(--mint-dark);
+    color: #fff;
+    text-align: left;
+    padding: 6px 9px;
+    font-size: 10pt;
+    letter-spacing: 0.03em;
+  }
+  td {
+    border: 1px solid var(--line);
+    padding: 6px 9px;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #f8fafc; }
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps > li {
+    counter-increment: step;
+    position: relative;
+    padding-left: 38px;
+    margin: 10px 0;
+    page-break-inside: avoid;
+  }
+  .steps > li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 1px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--mint);
+    color: #fff;
+    font-weight: 800;
+    font-size: 12pt;
+    text-align: center;
+    line-height: 26px;
+  }
+  .footer-note {
+    margin-top: 26px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+    color: var(--ink-muted);
+    font-size: 9.5pt;
+  }
+  .toc { margin-top: 50px; text-align: left; display: inline-block; }
+  .toc h3 { color: var(--ink); }
+  .toc ol { font-size: 12pt; }
+  .toc li { margin: 5px 0; }
+  .columns-demo {
+    display: flex;
+    gap: 6px;
+    margin: 10px 0;
+  }
+  .columns-demo .col {
+    flex: 1;
+    border: 1.5px solid var(--violet);
+    border-radius: 8px;
+    text-align: center;
+    padding: 6px 4px;
+    background: #f3effc;
+    page-break-inside: avoid;
+  }
+  .columns-demo .col .letter {
+    font-size: 16pt;
+    font-weight: 900;
+    color: var(--mint-dark);
+    display: block;
+  }
+  .columns-demo .col .pl {
+    font-size: 8.5pt;
+    color: var(--ink-muted);
+    display: block;
+    margin-top: 2px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<div class="cover">
+  <div class="logo">TEMPO</div>
+  <div class="byline">Music bingo by Liquid Kourage</div>
+  <div class="subtitle">New Host Guide</div>
+  <div class="scope">Running a full event, from prep to last call — multiple rounds included</div>
+  <div class="flow-pill">Build rounds &nbsp;→&nbsp; Set round &nbsp;→&nbsp; Start game &nbsp;→&nbsp; Verify bingo &nbsp;→&nbsp; Next round</div>
+  <div class="toc">
+    <h3>What's inside</h3>
+    <ol>
+      <li>How a TEMPO night works</li>
+      <li>One-time setup &amp; your defaults</li>
+      <li>Building rounds (playlists)</li>
+      <li>Pre-show: the Game tab cockpit</li>
+      <li>Setting and starting a round</li>
+      <li>Running live play</li>
+      <li>Bingo calls &amp; verification</li>
+      <li>Between rounds &amp; ending the night</li>
+      <li>Quick reference &amp; troubleshooting</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ============ 1. BIG PICTURE ============ -->
+<div class="page-break"></div>
+<h2>1 · How a TEMPO night works</h2>
+<p>TEMPO is music bingo. Instead of numbers, every square on a player's card is a <strong>song</strong>. You play short clips from Spotify; players who recognize a song find it on their card (on their phone) and tap it. First verified pattern wins the round.</p>
+
+<h3>The three screens</h3>
+<table>
+  <tr><th>Screen</th><th>Who sees it</th><th>What it does</th></tr>
+  <tr><td><strong>Host view</strong></td><td>You only</td><td>Build rounds, control playback, verify bingos. Tabs: <span class="tab">Game</span> <span class="tab">Rounds</span> <span class="tab">Players</span> <span class="tab">Display</span> <span class="tab">Settings</span></td></tr>
+  <tr><td><strong>Public display</strong></td><td>Projector / TV</td><td>Splash screen with QR join code before play; the live <strong>call list</strong> during play (song titles reveal gradually)</td></tr>
+  <tr><td><strong>Player view</strong></td><td>Each player's phone</td><td>Their bingo card; they tap squares as songs play and call BINGO from there</td></tr>
+</table>
+
+<h3>Nights, rounds, and playlists</h3>
+<p>A night is made of <strong>rounds</strong> (plan up to 12). Each round uses <strong>exactly 1 or exactly 5 playlists</strong> — nothing in between:</p>
+<ul>
+  <li><strong>1 playlist (Round Mix):</strong> all 75 card songs come from one big playlist. Simple, classic.</li>
+  <li><strong>5 playlists (Columns):</strong> each playlist owns one card column. Players know which theme each column is — a great hook for themed rounds.</li>
+</ul>
+<div class="columns-demo">
+  <div class="col"><span class="letter">B</span><span class="pl">80s Hits</span></div>
+  <div class="col"><span class="letter">I</span><span class="pl">One-Hit Wonders</span></div>
+  <div class="col"><span class="letter">N</span><span class="pl">Movie Themes</span></div>
+  <div class="col"><span class="letter">G</span><span class="pl">Country Gold</span></div>
+  <div class="col"><span class="letter">O</span><span class="pl">2010s Pop</span></div>
+</div>
+<div class="panel violet">
+  <p class="panel-title">Option — your own letters</p>
+  <p>The column letters don't have to be B-I-N-G-O. In <span class="tab">Settings</span> → Defaults → <strong>Column letters</strong>, set any five letters (T-E-M-P-O, T-O-N-E-S…). They appear on cards, the projector, and printed cards.</p>
+</div>
+<div class="panel">
+  <p class="panel-title">Key concept — one shuffle per round</p>
+  <p>When you press <span class="btn">Start game</span>, TEMPO shuffles the round's 75 songs into one play order (#1–75). The host list, the projector call numbers, and playback all follow that same order for the whole round.</p>
+</div>
+
+<!-- ============ 2. ONE-TIME SETUP ============ -->
+<h2>2 · One-time setup &amp; your defaults</h2>
+<ol class="steps">
+  <li><strong>Sign in</strong> with your approved host account and create a room. Your room code is what players and the projector connect to.</li>
+  <li><strong>Connect Spotify</strong> from the Connection panel (in the header, or <span class="tab">Settings</span> → Playback &amp; connections). You need <strong>Spotify Premium</strong>. Music plays on whichever Spotify device you pick — the venue PC, a tablet, your phone.</li>
+  <li><strong>Pick a playback device.</strong> Open Spotify on the device you want, then choose it in the Connection panel. An <em>idle</em> device is fine — TEMPO transfers playback to it automatically at Start game. Only <em>offline</em> devices need attention (tap Refresh devices after waking it).</li>
+  <li><strong>Set your defaults</strong> in <span class="tab">Settings</span>. These save to your account, so they follow you to every event and device.</li>
+</ol>
+
+<h3>Settings worth knowing (all optional — defaults work fine)</h3>
+<table>
+  <tr><th>Setting</th><th>What it controls</th><th>Options</th></tr>
+  <tr><td>Snippet length</td><td>How long each song clip plays</td><td>5–60 seconds (20–30s typical)</td></tr>
+  <tr><td>Snippet start</td><td>Where in the track the clip starts</td><td>From start · Early random · Random</td></tr>
+  <tr><td>Reveal titles on projector</td><td>How masked song titles fill in on the call list</td><td>By letter (timed) · Full at clip start · Full at clip end</td></tr>
+  <tr><td>Letter reveal interval</td><td>Seconds between random letter reveals (letter mode)</td><td>5–120 seconds</td></tr>
+  <tr><td>Letter reveal toast</td><td>"Revealed: …" banner on the projector</td><td>On / Off</td></tr>
+  <tr><td>Column letters</td><td>The five letters on cards &amp; call list</td><td>Any 5 letters (default BINGO)</td></tr>
+  <tr><td>Playlist title flags</td><td>Which playlists show in the shared library's "picks" filter</td><td>Comma-separated tags (e.g. GoT)</td></tr>
+  <tr><td>Hybrid</td><td>In-person + online players in one game</td><td>On / Off</td></tr>
+</table>
+
+<!-- ============ 3. BUILDING ROUNDS ============ -->
+<div class="page-break"></div>
+<h2>3 · Building rounds — the <span style="color:var(--violet)">Rounds</span> tab</h2>
+<p>This is your planning workspace. Do it before doors open — it autosaves to your account as you go.</p>
+<ol class="steps">
+  <li><strong>Browse the Playlist Library.</strong> You'll see the shared Tempo library plus your own Spotify playlists. Use the picks/All toggle to filter to curated lists.</li>
+  <li><strong>Assign playlists to rounds.</strong> Three ways:
+    <ul>
+      <li><strong>Drag</strong> a playlist onto a round chip in "Tonight's rounds"</li>
+      <li><strong>Double-click</strong> a playlist to add it to the currently focused round</li>
+      <li>Use the playlist's <strong>assign menu</strong> to pick specific rounds</li>
+    </ul>
+  </li>
+  <li><strong>Respect the 1-or-5 rule.</strong> A round must end at exactly 1 or exactly 5 playlists. With 5, the order you set = the card column order, left to right.</li>
+  <li><strong>Set each round's card rules</strong> (you can also do this later in Step 2 of the cockpit): win pattern, lines required, free space.</li>
+  <li><strong>Save your rounds.</strong> <span class="btn">Save all and return to Game</span> snapshots every eligible round so cards and pools are ready to deal instantly at showtime.</li>
+</ol>
+
+<h3>Options while planning</h3>
+<ul>
+  <li><strong>Reusing a playlist</strong> in two rounds is allowed — you'll see a caution badge so it's a deliberate choice.</li>
+  <li><strong>Leftovers</strong> is a virtual playlist of every song that <em>hasn't been played yet tonight</em> — a fun closer round.</li>
+  <li><strong>Printables:</strong> per round you can download printed card PDFs (pick how many, watermark-preview first) and a host <strong>call sheet</strong>. Useful for paper-card venues or backup.</li>
+  <li><strong>Add / remove rounds</strong> any time before they're played (up to 12).</li>
+</ul>
+
+<!-- ============ 4. PRE-SHOW ============ -->
+<h2>4 · Pre-show — the <span style="color:var(--violet)">Game</span> tab cockpit</h2>
+<p>The Game tab walks you through three steps: <strong>Playlist → Card setup → Play game</strong>. "Tonight's rounds" at the top always shows your plan — click a round to load it for prep.</p>
+
+<h3>Step 1 · Playlist</h3>
+<p>Confirms what music the focused round uses. If you planned in the Rounds tab this is already done — it just shows the round's playlists and pool size.</p>
+
+<h3>Step 2 · Card setup</h3>
+<table>
+  <tr><th>Option</th><th>Choices</th></tr>
+  <tr><td>Win pattern</td><td>Line (1+ lines, you choose how many) · Full card · Custom patterns (draw your own shape; rotation/mirror matching optional) · Combined patterns</td></tr>
+  <tr><td>Free space</td><td>On/off — center square free</td></tr>
+  <tr><td>Clip settings</td><td>Snippet length &amp; start (defaults from Settings, override per event)</td></tr>
+</table>
+
+<h3>Step 3 · Play game — the readiness check</h3>
+<p>A pre-show checklist confirms, live:</p>
+<ul>
+  <li><strong>Playback connected</strong> (Spotify linked)</li>
+  <li><strong>Spotify device ready</strong> — "idle" is OK; it activates at Start game</li>
+  <li><strong>Projector display connected</strong> — open <strong>/display/YOURROOM</strong> on the venue screen if not</li>
+  <li><strong>Bingo pool built</strong> — use <span class="btn">Build song pool</span> if you didn't save the round earlier</li>
+  <li><strong>Round structure valid</strong> (1 or 5 playlists)</li>
+</ul>
+<div class="panel">
+  <p class="panel-title">Activate the event</p>
+  <p>If your org uses event credits, activate the event from Step 3 (or Settings) before starting Round 1. Trials and unlimited plans just confirm.</p>
+</div>
+<div class="panel violet">
+  <p class="panel-title">Meanwhile, on the projector…</p>
+  <p>The splash screen shows the room QR code and join URL. Players scan, enter a name, and wait — they get cards when you set the round.</p>
+</div>
+
+<!-- ============ 5. SET ROUND / START ============ -->
+<div class="page-break"></div>
+<h2>5 · Setting and starting a round</h2>
+<ol class="steps">
+  <li><strong>Press <span class="btn">Set round</span></strong> (Step 3, once the round is ready). This deals player cards and replaces the splash with the <strong>call list</strong> — five columns with this round's playlist names as headers. Nothing is playing yet.</li>
+  <li><strong>Break down the round for the crowd.</strong> This is your mic moment: explain the themes, the win pattern, how many lines, free space, how title reveals work. Players are looking at their fresh cards while you talk.</li>
+  <li>Need the QR back? <span class="btn">Back to splash</span> returns the join screen — late arrivals can still scan. Set round again when you're ready.</li>
+  <li><strong>Press <span class="btn">Start game</span>.</strong> TEMPO shuffles the play order, transfers playback to your Spotify device, and clip #1 begins. From here the live dashboard takes over.</li>
+</ol>
+
+<!-- ============ 6. LIVE PLAY ============ -->
+<h2>6 · Running live play</h2>
+<p>During a round the Game tab becomes a live dashboard: current track, round progress (played / remaining), player count, and playback controls.</p>
+<table>
+  <tr><th>Control</th><th>What it does</th></tr>
+  <tr><td>Pause / Resume</td><td>Stops and restarts the clip clock and Spotify playback</td></tr>
+  <tr><td>Replay clip</td><td>Plays the current song's clip again</td></tr>
+  <tr><td>Mark played / skip</td><td>Logs the current song and moves to the next in order</td></tr>
+</table>
+<p><strong>What players see:</strong> each clip, they hunt their card and tap matches. <strong>What the projector shows:</strong> each played song joins the call list with its call number; titles start masked and reveal per your reveal mode, so latecomers can't just read answers.</p>
+<div class="panel">
+  <p class="panel-title">Good habits</p>
+  <ul>
+    <li>Stay on whatever tab you like — playback won't yank you back to Game.</li>
+    <li>You can keep prepping later rounds on the Rounds tab mid-game; browsing rounds never moves the live round.</li>
+    <li>If a song title is wrong or has multiple valid titles, you can edit titles/aliases from the host pool list.</li>
+  </ul>
+</div>
+
+<!-- ============ 7. BINGO ============ -->
+<h2>7 · Bingo calls &amp; verification</h2>
+<ol class="steps">
+  <li>A player taps <strong>BINGO</strong> on their phone. Playback pauses automatically and a verification alert appears for you (claims queue first-in, first-out if several land at once).</li>
+  <li><strong>Open verification.</strong> You'll see the player's full card with their marked squares, validated against the round's pattern and the songs actually played.</li>
+  <li><strong>Approve</strong> if it's legit — the round ends, the winner celebration shows, and the projector announces it. <strong>Reject</strong> if not (wrong squares, pattern not met) — play resumes where you left off.</li>
+</ol>
+<div class="panel violet">
+  <p class="panel-title">After an approved bingo — your options</p>
+  <ul>
+    <li><span class="btn">Back to host</span> — close the celebration, decide later (round is marked complete)</li>
+    <li><span class="btn">Prepare next round (no auto-start)</span> — loads the next planned round for review; start it when ready (recommended)</li>
+    <li><span class="btn">Start next planned round now</span> — jumps straight in</li>
+    <li><span class="btn">Start next round</span> (fresh) — resets to a blank setup if you want to improvise a round</li>
+  </ul>
+</div>
+
+<!-- ============ 8. BETWEEN ROUNDS / END ============ -->
+<div class="page-break"></div>
+<h2>8 · Between rounds &amp; ending the night</h2>
+<h3>The multi-round loop</h3>
+<p>For each later round, the rhythm repeats:</p>
+<div class="panel">
+  <p style="text-align:center; font-weight:700; margin:4px 0;">Prepare next round → review Step 3 checklist → <span class="btn">Set round</span> (new cards + new headers) → explain → <span class="btn">Start game</span></p>
+</div>
+<p>Players keep their connection between rounds — they get a fresh card automatically each time you set a round. The projector flips back to the new call list.</p>
+
+<h3>Event actions (bottom of the Game tab)</h3>
+<table>
+  <tr><th>Action</th><th>When to use it</th></tr>
+  <tr><td><strong>End round</strong></td><td>No bingo and the pool's run dry, or time's up — stops playback, clears cards, marks the round complete</td></tr>
+  <tr><td><strong>Reset round</strong></td><td>False start — stops playback and clears cards but keeps the same round active to start again</td></tr>
+  <tr><td><strong>Next planned</strong></td><td>Skip ahead to the next planned round</td></tr>
+  <tr><td><strong>Reset event</strong></td><td>Set every round back to unplanned (saved snapshots keep their playlists)</td></tr>
+  <tr><td><strong>Clear prep cache</strong></td><td>Wipe saved round prep for this room in this browser</td></tr>
+</table>
+
+<h3>Ending the night</h3>
+<ul>
+  <li><strong>Export a recap</strong> (Settings → Recap → Export JSON): rounds, songs played, winners — handy for prize records.</li>
+  <li><strong>Close the event</strong> from the activation bar when your org tracks credits.</li>
+  <li><strong>Sign out</strong> or just close — your preferences and saved prep live in your account for next time.</li>
+</ul>
+
+<!-- ============ 9. QUICK REFERENCE ============ -->
+<h2>9 · Quick reference &amp; troubleshooting</h2>
+<h3>The whole night on one line each</h3>
+<table>
+  <tr><th>Phase</th><th>Where</th><th>You do</th></tr>
+  <tr><td>Plan</td><td>Rounds tab</td><td>Assign 1 or 5 playlists per round · save all</td></tr>
+  <tr><td>Connect</td><td>Header / Settings</td><td>Spotify + device + projector on /display/ROOM</td></tr>
+  <tr><td>Card rules</td><td>Game · Step 2</td><td>Pattern, lines, free space, clip length</td></tr>
+  <tr><td>Ready check</td><td>Game · Step 3</td><td>Checklist green · activate event</td></tr>
+  <tr><td>Set round</td><td>Game · Step 3</td><td>Cards deal + call list on projector · explain round</td></tr>
+  <tr><td>Play</td><td>Game (live)</td><td>Start game · pause/replay/skip as needed</td></tr>
+  <tr><td>Bingo</td><td>Verification modal</td><td>Review card · approve or reject</td></tr>
+  <tr><td>Repeat</td><td>Round complete modal</td><td>Prepare next round → set → start</td></tr>
+  <tr><td>Wrap</td><td>Settings</td><td>Export recap · close event</td></tr>
+</table>
+
+<h3>Troubleshooting</h3>
+<table>
+  <tr><th>Symptom</th><th>Fix</th></tr>
+  <tr><td>Device shows "idle"</td><td>That's fine — Start game activates it. Or use the Activate device button in Connection.</td></tr>
+  <tr><td>Device missing from list</td><td>Open Spotify on it, press play/pause once, tap Refresh devices.</td></tr>
+  <tr><td>Spotify "having trouble" while loading playlists</td><td>Usually a temporary Spotify hiccup — TEMPO retries and falls back to cached tracks. Wait a moment and rebuild the pool.</td></tr>
+  <tr><td>Projector looks stale after changes</td><td>Hard-refresh the display browser tab (Ctrl+Shift+R).</td></tr>
+  <tr><td>Round won't save / start</td><td>Check the playlist count — exactly 1 or exactly 5, nothing else.</td></tr>
+  <tr><td>Player joined late, no card</td><td>Cards deal at Set round; if the round is already set, they receive a card on join for that round.</td></tr>
+</table>
+
+<p class="footer-note">TEMPO host guide · generated from the live app flow · Liquid Kourage Entertainment</p>
+
+</body>
+</html>
