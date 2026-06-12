@@ -3684,9 +3684,9 @@ const PublicDisplay: React.FC = () => {
   const renderCallNumberOverlay = (callNum: number | '', fullCard: boolean): React.ReactNode => {
     if (callNum === '' || callNum <= 0 || callNumberStyle === 'inline') return null;
     const watermarkPx =
-      !fullCard && fiveBy15CardRowPx > 0 ? Math.round(fiveBy15CardRowPx * 0.62) : 0;
+      !fullCard && fiveBy15CardRowPx > 0 ? Math.round(fiveBy15CardRowPx * 0.78) : 0;
     const watermarkFontSize =
-      watermarkPx > 0 ? `${watermarkPx}px` : 'clamp(28px, 4.5vmin, 64px)';
+      watermarkPx > 0 ? `${watermarkPx}px` : 'clamp(34px, 5.5vmin, 78px)';
     const centerBase: React.CSSProperties = {
       position: 'absolute',
       left: '50%',
@@ -3701,30 +3701,11 @@ const PublicDisplay: React.FC = () => {
       zIndex: 0,
     };
     switch (callNumberStyle) {
-      case 'ghost':
-        return (
-          <div aria-hidden style={{ ...centerBase, color: 'rgba(0, 255, 136, 0.16)' }}>
-            {callNum}
-          </div>
-        );
-      case 'outline':
-        return (
-          <div
-            aria-hidden
-            style={{
-              ...centerBase,
-              color: 'transparent',
-              WebkitTextStroke: '2px rgba(0, 255, 136, 0.32)',
-            }}
-          >
-            {callNum}
-          </div>
-        );
       case 'chip': {
         const chipFontPx =
           !fullCard && fiveBy15CardRowPx > 0
-            ? Math.max(11, Math.round(fiveBy15CardRowPx * 0.2))
-            : 13;
+            ? Math.max(14, Math.round(fiveBy15CardRowPx * 0.26))
+            : 16;
         return (
           <div
             aria-hidden
@@ -3732,17 +3713,17 @@ const PublicDisplay: React.FC = () => {
               position: 'absolute',
               top: 4,
               left: 4,
-              background: 'rgba(0, 255, 136, 0.92)',
+              background: 'linear-gradient(135deg, #00ff88 0%, #00cc6a 100%)',
               color: '#001b10',
               fontWeight: 900,
               fontSize: `${chipFontPx}px`,
-              lineHeight: 1.3,
-              borderRadius: 6,
-              padding: '1px 7px',
+              lineHeight: 1.25,
+              borderRadius: 8,
+              padding: '2px 9px',
               pointerEvents: 'none',
               userSelect: 'none',
               zIndex: 2,
-              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.45)',
+              boxShadow: '0 0 12px rgba(0, 255, 136, 0.45), 0 2px 6px rgba(0, 0, 0, 0.5)',
             }}
           >
             {callNum}
@@ -3752,8 +3733,8 @@ const PublicDisplay: React.FC = () => {
       case 'stripe': {
         const stripeFontPx =
           !fullCard && fiveBy15CardRowPx > 0
-            ? Math.max(10, Math.round(fiveBy15CardRowPx * 0.18))
-            : 12;
+            ? Math.max(13, Math.round(fiveBy15CardRowPx * 0.24))
+            : 15;
         return (
           <div
             aria-hidden
@@ -3763,12 +3744,12 @@ const PublicDisplay: React.FC = () => {
               top: 0,
               bottom: 0,
               width: callNumberStripeWidthPx,
-              background: 'rgba(0, 255, 136, 0.16)',
-              borderRight: '1.5px solid rgba(0, 255, 136, 0.4)',
+              background: 'linear-gradient(180deg, rgba(0, 255, 136, 0.95) 0%, rgba(0, 204, 106, 0.78) 100%)',
+              boxShadow: '2px 0 12px rgba(0, 255, 136, 0.3)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#00ff88',
+              color: '#001b10',
               fontWeight: 900,
               fontSize: `${stripeFontPx}px`,
               pointerEvents: 'none',
@@ -3787,8 +3768,9 @@ const PublicDisplay: React.FC = () => {
             aria-hidden
             style={{
               ...centerBase,
-              color: 'rgba(0, 0, 0, 0.85)',
-              textShadow: '0 0 1px rgba(0, 255, 136, 0.5), 0 0 10px rgba(0, 255, 136, 0.18)',
+              color: 'rgba(0, 0, 0, 0.92)',
+              textShadow:
+                '0 0 2px rgba(0, 255, 136, 0.8), 0 0 6px rgba(0, 255, 136, 0.35), 0 0 18px rgba(0, 255, 136, 0.22)',
             }}
           >
             {callNum}
@@ -3797,12 +3779,27 @@ const PublicDisplay: React.FC = () => {
     }
   };
 
-  /** Inline style: mint number prefix rendered at the start of the title line. */
+  /** Inline style: solid mint pill with a dark number at the start of the title line. */
   const callNumberInlinePrefix = (callNum: number | ''): React.ReactNode => {
     if (callNumberStyle !== 'inline' || callNum === '' || callNum <= 0) return null;
     return (
-      <span style={{ color: '#00ff88', marginRight: '0.35em', whiteSpace: 'nowrap' }}>
-        {callNum} ·
+      <span
+        style={{
+          display: 'inline-block',
+          background: 'linear-gradient(135deg, #00ff88 0%, #00cc6a 100%)',
+          color: '#001b10',
+          fontWeight: 900,
+          fontSize: '0.72em',
+          lineHeight: 1.2,
+          padding: '0.06em 0.5em',
+          borderRadius: '0.55em',
+          marginRight: '0.4em',
+          verticalAlign: '0.1em',
+          whiteSpace: 'nowrap',
+          boxShadow: '0 0 10px rgba(0, 255, 136, 0.35)',
+        }}
+      >
+        {callNum}
       </span>
     );
   };

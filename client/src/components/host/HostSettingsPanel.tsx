@@ -58,24 +58,10 @@ const CallNumberStylePreviewCard: React.FC<{ style: CallNumberStyle }> = ({ styl
         aria-hidden
         style={{
           ...centerBase,
-          color: 'rgba(0, 0, 0, 0.85)',
-          textShadow: '0 0 1px rgba(0, 255, 136, 0.5), 0 0 10px rgba(0, 255, 136, 0.18)',
+          color: 'rgba(0, 0, 0, 0.92)',
+          textShadow:
+            '0 0 2px rgba(0, 255, 136, 0.8), 0 0 6px rgba(0, 255, 136, 0.35), 0 0 18px rgba(0, 255, 136, 0.22)',
         }}
-      >
-        {num}
-      </div>
-    );
-  } else if (style === 'ghost') {
-    overlay = (
-      <div aria-hidden style={{ ...centerBase, color: 'rgba(0, 255, 136, 0.16)' }}>
-        {num}
-      </div>
-    );
-  } else if (style === 'outline') {
-    overlay = (
-      <div
-        aria-hidden
-        style={{ ...centerBase, color: 'transparent', WebkitTextStroke: '2px rgba(0, 255, 136, 0.32)' }}
       >
         {num}
       </div>
@@ -88,15 +74,15 @@ const CallNumberStylePreviewCard: React.FC<{ style: CallNumberStyle }> = ({ styl
           position: 'absolute',
           top: 4,
           left: 4,
-          background: 'rgba(0, 255, 136, 0.92)',
+          background: 'linear-gradient(135deg, #00ff88 0%, #00cc6a 100%)',
           color: '#001b10',
           fontWeight: 900,
-          fontSize: 11,
-          lineHeight: 1.3,
-          borderRadius: 6,
-          padding: '1px 7px',
+          fontSize: 13,
+          lineHeight: 1.25,
+          borderRadius: 8,
+          padding: '2px 9px',
           zIndex: 2,
-          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.45)',
+          boxShadow: '0 0 12px rgba(0, 255, 136, 0.45), 0 2px 6px rgba(0, 0, 0, 0.5)',
         }}
       >
         {num}
@@ -112,14 +98,14 @@ const CallNumberStylePreviewCard: React.FC<{ style: CallNumberStyle }> = ({ styl
           top: 0,
           bottom: 0,
           width: 18,
-          background: 'rgba(0, 255, 136, 0.16)',
-          borderRight: '1.5px solid rgba(0, 255, 136, 0.4)',
+          background: 'linear-gradient(180deg, rgba(0, 255, 136, 0.95) 0%, rgba(0, 204, 106, 0.78) 100%)',
+          boxShadow: '2px 0 12px rgba(0, 255, 136, 0.3)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#00ff88',
+          color: '#001b10',
           fontWeight: 900,
-          fontSize: 11,
+          fontSize: 13,
           zIndex: 0,
         }}
       >
@@ -159,7 +145,24 @@ const CallNumberStylePreviewCard: React.FC<{ style: CallNumberStyle }> = ({ styl
       >
         <div style={{ fontWeight: 700, fontSize: 12.5, color: '#e8e6ff', lineHeight: 1.25 }}>
           {style === 'inline' && (
-            <span style={{ color: '#00ff88', marginRight: '0.35em', whiteSpace: 'nowrap' }}>{num} ·</span>
+            <span
+              style={{
+                display: 'inline-block',
+                background: 'linear-gradient(135deg, #00ff88 0%, #00cc6a 100%)',
+                color: '#001b10',
+                fontWeight: 900,
+                fontSize: '0.72em',
+                lineHeight: 1.2,
+                padding: '0.06em 0.5em',
+                borderRadius: '0.55em',
+                marginRight: '0.4em',
+                verticalAlign: '0.1em',
+                whiteSpace: 'nowrap',
+                boxShadow: '0 0 10px rgba(0, 255, 136, 0.35)',
+              }}
+            >
+              {num}
+            </span>
           )}
           Tiny Dancer
         </div>
