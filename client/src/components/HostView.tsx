@@ -9308,8 +9308,8 @@ const HostView: React.FC = () => {
   const prepRoundReadyForGoLive = gameTabRoundBuilderReady || mixFinalizedForCurrentPrep;
 
   /** Step 3 "Set round": make sure the room has this round's cards (saved rounds may not have
-   *  been applied to the room yet), then put the round's playlist names on the projector splash
-   *  so the host can break down the round before playback. Start Game is untouched. */
+   *  been applied to the room yet), then swap the projector from splash to the call list —
+   *  column headers show this round's playlists. Start Game / playback are untouched. */
   const handleSetRoundOnDisplay = async () => {
     if (!socket || !roomId) return;
     const ridx = currentRoundIndexRef.current;
@@ -9349,17 +9349,8 @@ const HostView: React.FC = () => {
       return;
     }
 
-    const rawNames =
-      round?.playlistNames?.length ? round.playlistNames : hostActiveRoundSummary.playlistNames;
-    const columnNames = (rawNames || [])
-      .map((n) => stripTitleFlagPrefix(String(n || ''), titleFlagStripList))
-      .filter(Boolean);
-    socket.emit('display-set-round', {
-      roomId,
-      columnNames,
-      roundName: round?.name ?? hostActiveRoundSummary.roundName ?? null,
-    });
-    showToast("Round set — cards are out and the splash shows this round's music.", 'success');
+    socket.emit('display-set-round', { roomId });
+    showToast('Round set — cards are out and the projector shows the call list.', 'success');
   };
 
   const setupRoundPlaylistCount =
@@ -11430,7 +11421,7 @@ const HostView: React.FC = () => {
                     onSetRound={() => void handleSetRoundOnDisplay()}
                     onResetSplash={() => {
                       socket?.emit('display-show-splash', { roomId });
-                      showToast('Splash reset — round intro cleared.', 'info');
+                      showToast('Projector back on the splash screen.', 'info');
                     }}
                   />
                 ) : null}

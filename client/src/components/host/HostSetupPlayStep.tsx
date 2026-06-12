@@ -26,9 +26,9 @@ export type HostSetupPlayStepProps = {
   preShowChecklistItems: PreShowCheckItem[];
   onFinalizeMix: () => void;
   onStartGame: () => void;
-  /** Deal cards to the room if needed + put this round's playlists on the splash screen. */
+  /** Deal cards to the room if needed + show the call list (column headers) on the projector. */
   onSetRound?: () => void;
-  /** Clear the round intro — plain splash (QR / join) only. */
+  /** Put the splash (QR / join) screen back on the projector. */
   onResetSplash?: () => void;
 };
 
@@ -128,9 +128,9 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
       {prepRoundReadyForGoLive && onSetRound ? (
         <div className="host-setup-play__preview">
           <p className="host-setup-play__preview-copy">
-            <strong>Set round</strong> deals player cards and puts this round&apos;s playlists on the
-            splash screen, so you can break the round down before any music plays. Start game begins
-            playback whenever you&apos;re ready.
+            <strong>Set round</strong> deals player cards and puts the call list on the projector —
+            column headers show this round&apos;s playlists — so you can break the round down before
+            any music plays. Start game begins playback whenever you&apos;re ready.
           </p>
           <div className="host-setup-play__preview-actions">
             <button
@@ -145,7 +145,7 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
             {onResetSplash ? (
               <button type="button" className="btn-secondary" onClick={onResetSplash}>
                 <ImageIcon className="w-4 h-4" aria-hidden />
-                Reset splash
+                Back to splash
               </button>
             ) : null}
           </div>
