@@ -2455,7 +2455,7 @@ function scheduleSimpleProgressionRemaining(roomId, deviceId, remainingMs) {
     if (isLast) {
       routineServerLog('⏰ Final song timer fired (remaining reschedule) — ending game');
       emitFinalSongStartedIfNeeded(roomId, room, room.snippetLength || 30);
-      await fadeOutBeforeTrackChange(roomId, deviceId);
+      await fadeOutBeforeTrackChange(roomId, deviceId, { toSilence: true });
       await endGamePlaylistComplete(roomId, deviceId);
       return;
     }
@@ -3067,30 +3067,52 @@ async function endGamePlaylistComplete(roomId, deviceId) {
   io.to(roomId).emit('game-ended', { roomId, reason: 'playlist-complete' });
 }
 
-/** Smooth track-change fade: snippet plays x s at full volume + ~1 s linear fade to 0. */
-const TRACK_FADE_OUT_MS = 1000;
-const TRACK_FADE_STEPS = 4;
 /**
- * Explicit post-pause beat. Kept tiny on purpose: the volume-restore round-trip and
- * the next track's play-call latency (~0.3–0.5 s) already supply most of the gap.
+ * Ducked-cut "crossfade". Spotify allows exactly one audio stream per account, so two
+ * tracks can never overlap — the closest possible emulation is the radio-DJ duck:
+ * dip the outgoing track to a low floor (audio NEVER stops), issue the track change
+ * while it's still playing quietly (the hard cut hides under the low volume), then
+ * ramp the incoming track up to full. Zero intentional silence; the only gap is the
+ * play call's own latency, spent at floor volume instead of dead air.
  */
-const TRACK_FADE_SILENCE_MS = 120;
+const TRACK_DIP_DOWN_MS = 600;
+const TRACK_DIP_UP_MS = 450;
+const TRACK_DIP_STEPS = 3;
+/** Fraction of the host's baseline volume the duck bottoms out at. */
+const TRACK_DIP_FLOOR_FRAC = 0.3;
+/** Fade-to-silence ramp (game end / next track on YouTube — nothing to duck into). */
+const TRACK_FADE_OUT_MS = 800;
+
+function trackDipFloor(baseline) {
+  return Math.max(Math.round(baseline * TRACK_DIP_FLOOR_FRAC), 3);
+}
 
 /**
- * Fade the current track's last extra second to zero (stepped ≈ linear), pause,
- * restore the host's baseline volume while silent, and hold a short beat so the
- * next track punches in clean at full volume.
+ * Deadline-based stepped volume ramp: API latency counts toward each step's
+ * wall-clock slot instead of stacking on top of it.
+ */
+async function rampVolume(roomId, deviceId, fromLevel, toLevel, totalMs) {
+  const start = Date.now();
+  for (let i = 1; i <= TRACK_DIP_STEPS; i++) {
+    const level = Math.round(fromLevel + ((toLevel - fromLevel) * i) / TRACK_DIP_STEPS);
+    await spotifyFor(roomId).setVolume(level, deviceId);
+    if (i === TRACK_DIP_STEPS) break;
+    const wait = start + Math.round((totalMs * i) / TRACK_DIP_STEPS) - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  }
+}
+
+/**
+ * Duck the outgoing track down to the floor (or fade fully out + pause when the game
+ * is ending / the next track is YouTube-hosted). Leaves the device at floor volume
+ * with `room.trackDipRestore` set — fadeInAfterTrackChange() ramps back to baseline
+ * once the next track is playing.
  *
- * Timing is deadline-based: Spotify API latency counts toward each step's slot
- * instead of stacking on top of it, the pause itself is the final (zero) step,
- * and the volume restore runs in parallel with the beat — so total dead air is
- * roughly TRACK_FADE_SILENCE_MS + the next play call, not 1.5 s+ of round-trips.
- *
- * Returns true when the fade ran. Hard-cut fallbacks (returns false, no fade):
- * YouTube-hosted tracks, no locked device, devices that reject volume control
+ * Returns true when the duck/fade ran. Hard-cut fallbacks (returns false, no fade):
+ * YouTube-hosted current track, no locked device, devices that reject volume control
  * (403 — remembered per room so we stop retrying), or a mid-fade pause/stop.
  */
-async function fadeOutBeforeTrackChange(roomId, deviceId) {
+async function fadeOutBeforeTrackChange(roomId, deviceId, { toSilence = false } = {}) {
   const room = rooms.get(roomId);
   if (!room || room.trackFadeUnsupported) return false;
   if (!roomStillPlaying(roomId)) return false;
@@ -3103,28 +3125,24 @@ async function fadeOutBeforeTrackChange(roomId, deviceId) {
   const baseline = Math.min(100, Math.max(0, Math.round(Number(room.volume) || 100)));
   if (baseline <= 0) return false;
 
+  // Ducking only works when another Spotify track immediately replaces this one.
+  const nextSong = Array.isArray(room.playlistSongs)
+    ? room.playlistSongs[(room.currentSongIndex ?? 0) + 1]
+    : null;
+  const silence = toSilence || (nextSong && songUsesYoutubePlayback(nextSong));
+
   try {
-    const fadeStart = Date.now();
-    // Intermediate levels only (e.g. 75% / 50% / 25%) — the pause is the zero step.
-    for (let i = 1; i < TRACK_FADE_STEPS; i++) {
-      if (!roomStillPlaying(roomId)) {
-        try { await spotifyFor(roomId).setVolume(baseline, targetDeviceId); } catch (_) {}
-        return false;
-      }
-      const level = Math.round(baseline * (1 - i / TRACK_FADE_STEPS));
-      await spotifyFor(roomId).setVolume(level, targetDeviceId);
-      // Sleep only until this step's wall-clock deadline (API latency already spent it, maybe).
-      const stepDeadline = fadeStart + Math.round((TRACK_FADE_OUT_MS * i) / TRACK_FADE_STEPS);
-      const wait = stepDeadline - Date.now();
-      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    if (!roomStillPlaying(roomId)) return false;
+    if (silence) {
+      await rampVolume(roomId, targetDeviceId, baseline, 0, TRACK_FADE_OUT_MS);
+      try { await spotifyFor(roomId).pausePlayback(targetDeviceId); } catch (_) {}
+      // Paused/silent — safe to restore so whatever plays next starts at full volume.
+      await spotifyFor(roomId).setVolume(baseline, targetDeviceId);
+      return true;
     }
-    try { await spotifyFor(roomId).pausePlayback(targetDeviceId); } catch (_) {}
-    // Device is paused/silent — restore baseline (next track starts at full volume)
-    // concurrently with the short beat instead of serially after it.
-    await Promise.all([
-      spotifyFor(roomId).setVolume(baseline, targetDeviceId),
-      new Promise((r) => setTimeout(r, TRACK_FADE_SILENCE_MS)),
-    ]);
+    await rampVolume(roomId, targetDeviceId, baseline, trackDipFloor(baseline), TRACK_DIP_DOWN_MS);
+    // Audio keeps playing at the floor; caller cuts to the next track right now.
+    room.trackDipRestore = baseline;
     return true;
   } catch (e) {
     const status = e?.body?.error?.status || e?.statusCode;
@@ -3132,10 +3150,30 @@ async function fadeOutBeforeTrackChange(roomId, deviceId) {
       room.trackFadeUnsupported = true;
       routineServerLog(`🔇 Device rejects volume control — track fades disabled for room ${roomId}`);
     } else {
-      routineServerLog(`⚠️ Track fade failed (hard cut this transition): ${e?.message || e}`);
+      routineServerLog(`⚠️ Track duck failed (hard cut this transition): ${e?.message || e}`);
     }
+    room.trackDipRestore = null;
     try { await spotifyFor(roomId).setVolume(baseline, targetDeviceId); } catch (_) {}
     return false;
+  }
+}
+
+/**
+ * Second half of the ducked cut: once the next track is playing (still at floor
+ * volume from the duck), ramp it back up to the host's baseline. No-op unless a
+ * duck is pending. Never throws — worst case jumps straight to baseline.
+ */
+async function fadeInAfterTrackChange(roomId, deviceId) {
+  const room = rooms.get(roomId);
+  if (!room || room.trackDipRestore == null) return;
+  const baseline = room.trackDipRestore;
+  room.trackDipRestore = null;
+  const targetDeviceId = deviceId || room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
+  if (!targetDeviceId) return;
+  try {
+    await rampVolume(roomId, targetDeviceId, trackDipFloor(baseline), baseline, TRACK_DIP_UP_MS);
+  } catch (e) {
+    try { await spotifyFor(roomId).setVolume(baseline, targetDeviceId); } catch (_) {}
   }
 }
 
@@ -3163,7 +3201,7 @@ function startSimpleProgression(roomId, deviceId, snippetLengthSeconds) {
       if (isLast) {
         routineServerLog('⏰ Final song timer fired — notifying host and ending game');
         emitFinalSongStartedIfNeeded(roomId, room, snippetLengthSeconds);
-        await fadeOutBeforeTrackChange(roomId, deviceId);
+        await fadeOutBeforeTrackChange(roomId, deviceId, { toSilence: true });
         await endGamePlaylistComplete(roomId, deviceId);
         return;
       }
@@ -3251,6 +3289,9 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
 
     routineServerLog(`✅ Playback started successfully for: ${nextSong.name}`);
     routineServerLog(`✅ Simple advance: ${nextSong.name} by ${nextSong.artist}`);
+    // Second half of the ducked-cut crossfade — ramp the new track up to baseline.
+    // Fire-and-forget so the snippet timer anchors to the actual playback start.
+    void fadeInAfterTrackChange(roomId, resolvedDeviceId);
     if (roomStillPlaying(roomId)) {
       startSimpleProgression(roomId, resolvedDeviceId, room.snippetLength);
     }
@@ -3267,6 +3308,8 @@ async function playNextSongSimple(roomId, deviceId, options = {}) {
         console.warn('⚠️ Failed to resume playback:', showLog.spotifyErrorSummary(resumeError));
       }
     }
+    // Don't leave the room stuck at floor volume while we wait to retry.
+    void fadeInAfterTrackChange(roomId, resolvedDeviceId);
     
     routineServerLog('🔄 Retrying same call in 3 seconds (will not skip index)...');
     setTimeout(() => {
@@ -9629,20 +9672,27 @@ async function playNextSong(roomId, deviceId) {
       const playbackEndTime = Date.now();
       routineServerLog(`✅ Successfully started playback on device: ${targetDeviceId}`);
       
-      // Stabilization delay to prevent context hijacks from volume changes
-      await new Promise(resolve => setTimeout(resolve, 800));
-      if (!roomStillPlaying(roomId)) return;
-      
-      // Set initial volume to 100% (or room's saved volume) with single retry
-            try {
-              const initialVolume = room.volume || 100;
-        await spotifyFor(roomId).withRetries('setVolume(next)', () => spotifyFor(roomId).setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
-        routineServerLog(`🔊 Set initial volume to ${initialVolume}%`);
-            } catch (volumeError) {
-        console.warn('⚠️ Volume setting failed, continuing anyway:', volumeError?.message || volumeError);
+      // Ducked-cut crossfade: ramp the new track back up to baseline right away.
+      if (room.trackDipRestore != null) {
+        await fadeInAfterTrackChange(roomId, targetDeviceId);
+      } else {
+        // Stabilization delay to prevent context hijacks from volume changes
+        await new Promise(resolve => setTimeout(resolve, 800));
+        if (!roomStillPlaying(roomId)) return;
+
+        // Set initial volume to 100% (or room's saved volume) with single retry
+        try {
+          const initialVolume = room.volume || 100;
+          await spotifyFor(roomId).withRetries('setVolume(next)', () => spotifyFor(roomId).setVolume(initialVolume, targetDeviceId), { attempts: 2, backoffMs: 300 });
+          routineServerLog(`🔊 Set initial volume to ${initialVolume}%`);
+        } catch (volumeError) {
+          console.warn('⚠️ Volume setting failed, continuing anyway:', volumeError?.message || volumeError);
+        }
       }
     } catch (playbackError) {
       console.error('❌ Error starting playback:', playbackError);
+      // Don't leave the room stuck at floor volume after a failed cut.
+      void fadeInAfterTrackChange(roomId, targetDeviceId);
       
       // In strict mode, do not fallback silently
       console.error('❌ Playback error in strict mode:', playbackError?.body?.error?.message || playbackError?.message || playbackError);
