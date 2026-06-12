@@ -777,21 +777,38 @@
 }
 
 .host-glass-theme .host-r4-round {
-  grid-column: 2;
-  grid-row: 1;
+  grid-column: 1;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   text-align: left;
 }
 
+/*
+ * Call log + up next fills the whole right column and matches the left stack's
+ * height exactly: the absolutely-positioned __inner keeps the feed's content from
+ * contributing to grid row sizing, so Now playing / Round summary / Host actions
+ * define the height and the call log just grows into whatever space that gives.
+ */
 .host-glass-theme .host-r4-track-feed {
   --host-track-row-height: 54px;
   grid-column: 2;
-  grid-row: 2;
+  grid-row: 1 / span 3;
+  align-self: stretch;
+  position: relative;
+  display: block;
+  padding: 0;
+  min-height: 420px;
+}
+
+.host-glass-theme .host-r4-track-feed__inner {
+  position: absolute;
+  inset: 0;
+  padding: 18px 20px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  max-height: min(680px, calc(100vh - 220px));
   min-height: 0;
 }
 
@@ -799,7 +816,17 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  flex: 1 1 0;
+  flex: 0 1 auto;
+}
+
+/* Call log soaks up the column height; Up next stays pinned at the bottom. */
+.host-glass-theme .host-r4-track-feed__section--log {
+  flex: 1 1 auto;
+}
+
+.host-glass-theme .host-r4-track-feed__section--log .host-r4-track-feed__list {
+  flex: 1 1 auto;
+  max-height: none;
 }
 
 .host-glass-theme .host-r4-track-feed__section--log .host-call-log__title {
@@ -944,7 +971,7 @@
 
 .host-glass-theme .host-r4-actions {
   grid-column: 1;
-  grid-row: 2;
+  grid-row: 3;
 }
 
 .host-glass-theme .host-r4-card__eyebrow {
@@ -1587,6 +1614,23 @@
   .host-glass-theme .host-r4-actions {
     grid-column: 1;
     grid-row: auto;
+  }
+
+  /* Single column: the feed flows naturally again instead of filling a side column. */
+  .host-glass-theme .host-r4-track-feed {
+    position: static;
+    display: flex;
+    flex-direction: column;
+    padding: 18px 20px;
+    min-height: 0;
+    max-height: min(680px, calc(100vh - 220px));
+  }
+
+  .host-glass-theme .host-r4-track-feed__inner {
+    position: static;
+    inset: auto;
+    padding: 0;
+    flex: 1 1 auto;
   }
 
   .host-glass-theme .host-r4-round__body {

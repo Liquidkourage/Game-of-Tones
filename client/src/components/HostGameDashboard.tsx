@@ -606,6 +606,7 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
 
       {/* Call log + up next */}
       <section className="host-r4-card host-glass-panel host-r4-track-feed" aria-label="Call log and up next">
+        <div className="host-r4-track-feed__inner">
         <div className="host-r4-track-feed__section host-r4-track-feed__section--log">
           <h2 className="host-call-log__title">
             <ListOrdered className="host-call-log__icon" aria-hidden />
@@ -658,6 +659,7 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
           ) : (
             <p className="host-r4-track-feed__empty">Build the pool from your round playlists to see upcoming tracks.</p>
           )}
+        </div>
         </div>
       </section>
 
