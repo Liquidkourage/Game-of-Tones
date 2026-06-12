@@ -1067,6 +1067,8 @@
   gap: 6px;
 }
 
+/* One line, always: track-to-track metadata length must never change card height
+   (a wrapping title re-grows the left column and brings the page scrollbar back). */
 .host-glass-theme .host-r4-track-title {
   margin: 0;
   font-size: clamp(1rem, 1.8vw, 1.3rem);
@@ -1074,15 +1076,26 @@
   line-height: 1.2;
   color: #fff;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+}
+
+.host-glass-theme .host-r4-track-title__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .host-glass-theme .host-r4-track-artist {
   margin: 0;
   font-size: 1rem;
   color: rgba(255, 255, 255, 0.65);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .host-glass-theme .host-r4-track-meta {
@@ -1402,6 +1415,10 @@
   font-size: 0.8rem;
   line-height: 1.35;
   color: rgba(255, 255, 255, 0.72);
+  /* Single line: last-call length changes every track and must not move the layout. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .host-glass-theme .host-r4-round__last-label {

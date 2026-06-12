@@ -347,13 +347,21 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
                 </div>
                 {currentSong ? (
                   <>
-                    <h2 className="host-r4-track-title">
-                      {getDisplaySongTitle(currentSong.id, currentSong.name || '')}
+                    <h2
+                      className="host-r4-track-title"
+                      title={getDisplaySongTitle(currentSong.id, currentSong.name || '')}
+                    >
+                      <span className="host-r4-track-title__text">
+                        {getDisplaySongTitle(currentSong.id, currentSong.name || '')}
+                      </span>
                       {currentSong.explicit ? (
                         <SpotifyExplicitBadge size="md" title="Explicit on Spotify" />
                       ) : null}
                     </h2>
-                    <p className="host-r4-track-artist">
+                    <p
+                      className="host-r4-track-artist"
+                      title={getDisplaySongArtist(currentSong.id, currentSong.artist || '')}
+                    >
                       {getDisplaySongArtist(currentSong.id, currentSong.artist || '')}
                     </p>
                   </>
@@ -581,7 +589,10 @@ const HostGameDashboard: React.FC<HostGameDashboardProps> = (props) => {
         </div>
 
         {lastPlayed && (gameState === 'playing' || gameState === 'ended') ? (
-          <p className="host-r4-round__last">
+          <p
+            className="host-r4-round__last"
+            title={`${lastPlayed.name}${lastPlayed.artist ? ` — ${lastPlayed.artist}` : ''}`}
+          >
             <span className="host-r4-round__last-label">Last call</span>
             <span className="host-r4-round__last-title">{lastPlayed.name}</span>
             {lastPlayed.artist ? (
