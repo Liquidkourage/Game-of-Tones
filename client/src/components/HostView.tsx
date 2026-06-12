@@ -9658,6 +9658,45 @@ const HostView: React.FC = () => {
 
   const hostRoundPlanner = renderHostRoundPlanner('full');
 
+  /** One-click "Add to <round>" target for library rows: the round being prepped (Game tab Step 1)
+   *  or the round focused in the Rounds tab. Keeps the obvious action obvious — no dropdown needed. */
+  const libraryQuickAssignRound = useMemo(() => {
+    if (eventRounds.length === 0) return null;
+    const idx =
+      hostGlassNav === 'rounds' && selectedRoundForPanel
+        ? selectedRoundForPanel.index
+        : currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length
+          ? currentRoundIndex
+          : 0;
+    const round = eventRounds[idx];
+    if (!round) return null;
+    return {
+      index: idx,
+      name: round.name,
+      canonicalIds: (round.playlistIds || []).map((id) => canonicalPlaylistIdForMatch(String(id))),
+    };
+  }, [eventRounds, hostGlassNav, selectedRoundForPanel, currentRoundIndex]);
+
+  /** Double-click a library row = the quick-assign "Add to <round>" action (same target round).
+   *  Already-assigned playlists get an info toast instead of a silent no-op. Double-clicks that
+   *  land on the row's own controls (Mix checkbox, quick-add button, round menu) are ignored so
+   *  they don't fight those controls' click handlers. */
+  const handleLibraryPlaylistDoubleClick = useCallback(
+    (e: React.MouseEvent, playlistId: string) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('button, input, a, select')) return;
+      if (!libraryQuickAssignRound) return;
+      window.getSelection()?.removeAllRanges();
+      const canon = canonicalPlaylistIdForMatch(String(playlistId));
+      if (libraryQuickAssignRound.canonicalIds.includes(canon)) {
+        showToast(`Already in ${libraryQuickAssignRound.name}.`, 'info');
+        return;
+      }
+      addPlaylistToRoundBucket(libraryQuickAssignRound.index, playlistId);
+    },
+    [libraryQuickAssignRound, addPlaylistToRoundBucket],
+  );
+
   /** Tempo Library tab: shared catalog playlists, restricted to the GoT label (eligibility tag for all hosts). */
   const tempoLibrarySection = (
     <div className="host-playlist-round-modal__catalog host-tempo-library">
@@ -9781,6 +9820,7 @@ const HostView: React.FC = () => {
                         setLibraryPlaylistDragActive(true);
                       }}
                       onDragEnd={() => setLibraryPlaylistDragActive(false)}
+                      onDoubleClick={(e) => handleLibraryPlaylistDoubleClick(e, pack.id)}
                     >
                       <label
                         style={{
@@ -9880,25 +9920,6 @@ const HostView: React.FC = () => {
       </div>
     </div>
   );
-
-  /** One-click "Add to <round>" target for library rows: the round being prepped (Game tab Step 1)
-   *  or the round focused in the Rounds tab. Keeps the obvious action obvious — no dropdown needed. */
-  const libraryQuickAssignRound = useMemo(() => {
-    if (eventRounds.length === 0) return null;
-    const idx =
-      hostGlassNav === 'rounds' && selectedRoundForPanel
-        ? selectedRoundForPanel.index
-        : currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length
-          ? currentRoundIndex
-          : 0;
-    const round = eventRounds[idx];
-    if (!round) return null;
-    return {
-      index: idx,
-      name: round.name,
-      canonicalIds: (round.playlistIds || []).map((id) => canonicalPlaylistIdForMatch(String(id))),
-    };
-  }, [eventRounds, hostGlassNav, selectedRoundForPanel, currentRoundIndex]);
 
   /** Canonical playlist id -> number of rounds it's assigned to (drives the assigned chip on library rows). */
   const playlistAssignedRoundCounts = useMemo(() => {
@@ -10250,6 +10271,7 @@ const HostView: React.FC = () => {
                               setLibraryPlaylistDragActive(true);
                             }}
                             onDragEnd={() => setLibraryPlaylistDragActive(false)}
+                            onDoubleClick={(e) => handleLibraryPlaylistDoubleClick(e, LEFTOVERS_PLAYLIST_ID)}
                           >
                             <span
                               className={
@@ -10431,6 +10453,7 @@ const HostView: React.FC = () => {
                               onDragEnd={() => setLibraryPlaylistDragActive(false)}
                               onMouseDown={(e) => e.currentTarget.style.cursor = 'grabbing'}
                               onMouseUp={(e) => e.currentTarget.style.cursor = 'grab'}
+                              onDoubleClick={(e) => handleLibraryPlaylistDoubleClick(e, p.id)}
                             >
                               <span
                                 className={
