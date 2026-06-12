@@ -3523,8 +3523,9 @@ const PublicDisplay: React.FC = () => {
   };
 
   /**
-   * Call number as a ghost watermark: large, low-opacity, pinned upper-left behind the
-   * text so the title/artist get the full card width (replaces the floated corner chip).
+   * Call number as a ghost watermark: large, low-opacity, left edge + vertically centered
+   * behind the text so the title/artist get the full card width (replaces the corner chip).
+   * Numbers line up vertically down each column for easy scanning.
    */
   const callNumberWatermark = (callNum: number | '', fullCard: boolean): React.ReactNode => {
     if (callNum === '' || callNum <= 0) return null;
@@ -3536,7 +3537,8 @@ const PublicDisplay: React.FC = () => {
         style={{
           position: 'absolute',
           left: 6,
-          top: 0,
+          top: '50%',
+          transform: 'translateY(-50%)',
           fontSize: sizePx > 0 ? `${sizePx}px` : 'clamp(28px, 4.5vmin, 64px)',
           fontWeight: 900,
           lineHeight: 1,
