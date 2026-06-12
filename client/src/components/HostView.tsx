@@ -9307,6 +9307,61 @@ const HostView: React.FC = () => {
   /** Saved round or finalized mix for this round's playlists — one host-facing "ready" state. */
   const prepRoundReadyForGoLive = gameTabRoundBuilderReady || mixFinalizedForCurrentPrep;
 
+  /** Step 3 "Set round": make sure the room has this round's cards (saved rounds may not have
+   *  been applied to the room yet), then put the round's playlist names on the projector splash
+   *  so the host can break down the round before playback. Start Game is untouched. */
+  const handleSetRoundOnDisplay = async () => {
+    if (!socket || !roomId) return;
+    const ridx = currentRoundIndexRef.current;
+    const round =
+      ridx >= 0 && ridx < eventRoundsRef.current.length ? eventRoundsRef.current[ridx] : null;
+
+    const mixRows = round ? resolveMixPlaylistRowsForRound(round) : null;
+    const roundMixKey = mixRows ? selectionPlaylistKey(mixRows) : '';
+    const cardsDealt =
+      Boolean(roundMixKey) && mixFinalized && finalizedMixPlaylistKey === roundMixKey;
+    const hasSnapshot =
+      !!round &&
+      eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled) &&
+      Boolean(round.savedMixSnapshot?.songs?.length);
+
+    if (!cardsDealt && hasSnapshot && mixRows && round) {
+      setSavedRoundRoomSyncBusy(true);
+      try {
+        const pending = finalizeMixPromiseRef.current;
+        if (pending) await pending;
+        const fs =
+          round.freeSpaceEnabled !== undefined ? round.freeSpaceEnabled : freeSpaceEnabled;
+        const ok = await finalizeMix({
+          playlists: mixRows,
+          songListOverride: round.savedMixSnapshot!.songs.map(cloneSongForSnapshot),
+          freeSpace: fs,
+        });
+        if (!ok) {
+          showToast('Could not push cards to the room — try again or use Build song pool.', 'warn');
+          return;
+        }
+      } finally {
+        setSavedRoundRoomSyncBusy(false);
+      }
+    } else if (!cardsDealt && !hasSnapshot && !mixFinalized) {
+      showToast('Build the song pool (or save the round) before setting the round.', 'warn');
+      return;
+    }
+
+    const rawNames =
+      round?.playlistNames?.length ? round.playlistNames : hostActiveRoundSummary.playlistNames;
+    const columnNames = (rawNames || [])
+      .map((n) => stripTitleFlagPrefix(String(n || ''), titleFlagStripList))
+      .filter(Boolean);
+    socket.emit('display-set-round', {
+      roomId,
+      columnNames,
+      roundName: round?.name ?? hostActiveRoundSummary.roundName ?? null,
+    });
+    showToast("Round set — cards are out and the splash shows this round's music.", 'success');
+  };
+
   const setupRoundPlaylistCount =
     currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length
       ? eventRounds[currentRoundIndex]?.playlistIds?.length ?? 0
@@ -11372,13 +11427,10 @@ const HostView: React.FC = () => {
                     preShowChecklistItems={preShowChecklistItems}
                     onFinalizeMix={() => void finalizeMix()}
                     onStartGame={() => void startGame()}
-                    onPreviewRoundOnDisplay={() => {
-                      socket?.emit('display-show-call-list', { roomId });
-                      showToast('Projector now shows the call list — Start game when ready.', 'success');
-                    }}
-                    onShowSplashOnDisplay={() => {
+                    onSetRound={() => void handleSetRoundOnDisplay()}
+                    onResetSplash={() => {
                       socket?.emit('display-show-splash', { roomId });
-                      showToast('Projector back on the splash screen.', 'info');
+                      showToast('Splash reset — round intro cleared.', 'info');
                     }}
                   />
                 ) : null}

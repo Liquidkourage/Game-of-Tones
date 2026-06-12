@@ -5759,6 +5759,10 @@ io.on('connection', (socket) => {
       };
       
       Object.assign(payload, publicDisplayRoomStateExtras(room));
+      // Refreshed displays re-show the pre-start round intro on the splash (set via display-set-round).
+      if (room.displayRoundIntro && Array.isArray(room.displayRoundIntro.columnNames) && room.displayRoundIntro.columnNames.length > 0) {
+        socket.emit('display-round-intro', room.displayRoundIntro);
+      }
       if (room.fiveByFifteenColumnsIds && Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5) {
         const idToCol = {};
         room.fiveByFifteenColumnsIds.forEach((colIds, colIdx) => {
@@ -6160,6 +6164,9 @@ io.on('connection', (socket) => {
         if (showDeck.length > 0) {
           applyShowPoolOrderToRoom(room, roomId, showDeck);
         }
+
+        // Round is live — drop the pre-start splash intro so it can't rehydrate stale.
+        room.displayRoundIntro = null;
 
         emitPublicDisplayPoolLayout(roomId, room);
 
@@ -6955,6 +6962,9 @@ io.on('connection', (socket) => {
   socket.on('display-show-splash', (data) => {
     const { roomId } = data;
     if (roomId && rooms.has(roomId)) {
+      // Plain splash: clear any round intro so it doesn't rehydrate on display refresh.
+      const room = rooms.get(roomId);
+      if (room) room.displayRoundIntro = null;
       io.to(roomId).emit('display-show-splash');
       routineServerLog(`🎬 Splash screen shown for room ${roomId}`);
     }
@@ -6967,6 +6977,27 @@ io.on('connection', (socket) => {
       io.to(roomId).emit('display-hide-splash');
       routineServerLog(`🎵 Main display (call list) shown for room ${roomId}`);
     }
+  });
+
+  /** Host "Set round" (pre-start): keep the splash up but add this round's playlist names
+   *  (B–O column order for 5-playlist rounds) so the host can break the round down before
+   *  playback. Stored on the room so display refreshes re-hydrate via sync-state. */
+  socket.on('display-set-round', (data) => {
+    const { roomId, columnNames, roundName } = data || {};
+    if (!roomId || !rooms.has(roomId)) return;
+    const room = rooms.get(roomId);
+    const names = Array.isArray(columnNames)
+      ? columnNames
+          .map((n) => String(n || '').trim().slice(0, 120))
+          .filter(Boolean)
+          .slice(0, 5)
+      : [];
+    room.displayRoundIntro = {
+      columnNames: names,
+      roundName: roundName ? String(roundName).slice(0, 80) : null,
+    };
+    io.to(roomId).emit('display-round-intro', room.displayRoundIntro);
+    routineServerLog(`🎬 Round intro set on splash for room ${roomId} (${names.length} playlists)`);
   });
 
   socket.on('display-reset-letters', (data) => {

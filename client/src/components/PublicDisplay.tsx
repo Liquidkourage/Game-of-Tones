@@ -25,6 +25,7 @@ import {
   type PublicDisplayTitleRevealMode,
 } from '../utils/publicDisplayTitleReveal';
 import { effectivePublicDisplayFontScale } from '../utils/publicDisplayFontScale';
+import { BINGO_COLUMN_LETTERS } from '../utils/bingoColumnOrder';
 import { pdGlass } from '../publicDisplayGlassTheme';
 import './PublicDisplayGlassTheme.css';
 import {
@@ -1161,6 +1162,11 @@ const PublicDisplay: React.FC = () => {
   // Splash/intro overlay (can disable with ?splash=0)
   const splashEnabled = (searchParams.get('splash') !== '0');
   const [showSplash, setShowSplash] = useState<boolean>(splashEnabled);
+  /** Pre-start round intro on the splash (host "Set round"): playlist names in card-column order. */
+  const [splashRoundIntro, setSplashRoundIntro] = useState<{
+    columnNames: string[];
+    roundName: string | null;
+  } | null>(null);
   
   
   
@@ -2512,6 +2518,7 @@ const PublicDisplay: React.FC = () => {
       }));
       // Hide splash when a game starts
       setShowSplash(false);
+      setSplashRoundIntro(null);
         if (data?.pattern) {
           setPattern(data.pattern);
           if (data.pattern === 'line' && data.linesRequired != null) {
@@ -2556,11 +2563,25 @@ const PublicDisplay: React.FC = () => {
 
     // Display control events
     newSocket.on('display-show-splash', () => {
+      setSplashRoundIntro(null);
       setShowSplash(true);
     });
 
     newSocket.on('display-hide-splash', () => {
       setShowSplash(false);
+    });
+
+    /** Host "Set round": splash stays up and shows the round's playlists (column order). */
+    newSocket.on('display-round-intro', (data: any) => {
+      const names = Array.isArray(data?.columnNames)
+        ? data.columnNames.map((n: any) => String(n || '')).filter(Boolean).slice(0, 5)
+        : [];
+      setSplashRoundIntro(
+        names.length > 0
+          ? { columnNames: names, roundName: data?.roundName ? String(data.roundName) : null }
+          : null,
+      );
+      if (names.length > 0) setShowSplash(true);
     });
 
     newSocket.on('display-reset-letters', () => {
@@ -5019,6 +5040,100 @@ const PublicDisplay: React.FC = () => {
                 }}
               />
             </div>
+            {splashRoundIntro && splashRoundIntro.columnNames.length > 0 ? (
+              <motion.div
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4 }}
+                style={{
+                  width: '100%',
+                  flexShrink: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 'clamp(10px, 1.6vmin, 20px)',
+                  marginBottom: 'clamp(4px, 0.8vmin, 12px)',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 'clamp(1.15rem, 2.4vmin, 2rem)',
+                    fontWeight: 800,
+                    letterSpacing: '0.24em',
+                    textTransform: 'uppercase',
+                    color: 'rgba(170,255,215,0.92)',
+                    textShadow: '0 2px 18px rgba(0,0,0,0.4)',
+                  }}
+                >
+                  {splashRoundIntro.roundName
+                    ? `${splashRoundIntro.roundName} · The music`
+                    : 'This round · The music'}
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    justifyContent: 'center',
+                    gap: 'clamp(10px, 1.6vmin, 20px)',
+                    maxWidth: '96%',
+                  }}
+                >
+                  {splashRoundIntro.columnNames.map((name, i) => (
+                    <div
+                      key={`${i}-${name}`}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 'clamp(8px, 1.1vmin, 14px)',
+                        padding:
+                          'clamp(6px, 0.9vmin, 12px) clamp(14px, 1.8vmin, 24px) clamp(6px, 0.9vmin, 12px) clamp(8px, 1vmin, 12px)',
+                        borderRadius: 999,
+                        border: 'max(2px, 0.22vmin) solid rgba(100, 210, 200, 0.5)',
+                        background:
+                          'linear-gradient(165deg, rgba(139,92,246,0.3) 0%, rgba(0,255,136,0.16) 100%)',
+                        boxShadow: '0 10px 28px rgba(0,0,0,0.4), 0 0 24px rgba(0,255,200,0.1)',
+                      }}
+                    >
+                      {splashRoundIntro.columnNames.length === 5 ? (
+                        <span
+                          aria-hidden
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 'clamp(30px, 3.6vmin, 52px)',
+                            height: 'clamp(30px, 3.6vmin, 52px)',
+                            borderRadius: '50%',
+                            background: 'rgba(0,255,160,0.22)',
+                            border: '1px solid rgba(0,255,170,0.5)',
+                            color: '#9fffd2',
+                            fontSize: 'clamp(1.05rem, 2vmin, 1.7rem)',
+                            fontWeight: 900,
+                            flexShrink: 0,
+                          }}
+                        >
+                          {BINGO_COLUMN_LETTERS[i]}
+                        </span>
+                      ) : null}
+                      <span
+                        style={{
+                          fontSize: 'clamp(1.25rem, 2.7vmin, 2.3rem)',
+                          fontWeight: 800,
+                          color: '#f2fffb',
+                          textShadow: '0 2px 16px rgba(0,0,0,0.45)',
+                          whiteSpace: 'nowrap',
+                          maxWidth: 'min(48vw, 720px)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {name}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            ) : null}
             <div
               className="public-display-splash-bottom"
               style={{

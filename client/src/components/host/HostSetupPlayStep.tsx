@@ -26,10 +26,10 @@ export type HostSetupPlayStepProps = {
   preShowChecklistItems: PreShowCheckItem[];
   onFinalizeMix: () => void;
   onStartGame: () => void;
-  /** Show the call list on the projector before playback (splash hides; nothing plays). */
-  onPreviewRoundOnDisplay?: () => void;
-  /** Put the splash (QR / join) screen back on the projector. */
-  onShowSplashOnDisplay?: () => void;
+  /** Deal cards to the room if needed + put this round's playlists on the splash screen. */
+  onSetRound?: () => void;
+  /** Clear the round intro — plain splash (QR / join) only. */
+  onResetSplash?: () => void;
 };
 
 const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
@@ -53,8 +53,8 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
   preShowChecklistItems,
   onFinalizeMix,
   onStartGame,
-  onPreviewRoundOnDisplay,
-  onShowSplashOnDisplay,
+  onSetRound,
+  onResetSplash,
 }) => {
   const showPlaylistsLabel = finalizeMixBusy
     ? finalizeMixElapsedSec > 0
@@ -125,22 +125,27 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
         </p>
       ) : null}
 
-      {prepRoundReadyForGoLive && onPreviewRoundOnDisplay ? (
+      {prepRoundReadyForGoLive && onSetRound ? (
         <div className="host-setup-play__preview">
           <p className="host-setup-play__preview-copy">
-            Players already have their cards. Put the call list on the projector to walk the room
-            through this round before any music plays — Start game begins playback whenever you&apos;re
-            ready.
+            <strong>Set round</strong> deals player cards and puts this round&apos;s playlists on the
+            splash screen, so you can break the round down before any music plays. Start game begins
+            playback whenever you&apos;re ready.
           </p>
           <div className="host-setup-play__preview-actions">
-            <button type="button" className="btn-secondary" onClick={onPreviewRoundOnDisplay}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={onSetRound}
+              disabled={mixGameActionsBlocked}
+            >
               <ListMusic className="w-4 h-4" aria-hidden />
-              Preview round on projector
+              Set round
             </button>
-            {onShowSplashOnDisplay ? (
-              <button type="button" className="btn-secondary" onClick={onShowSplashOnDisplay}>
+            {onResetSplash ? (
+              <button type="button" className="btn-secondary" onClick={onResetSplash}>
                 <ImageIcon className="w-4 h-4" aria-hidden />
-                Back to splash
+                Reset splash
               </button>
             ) : null}
           </div>
