@@ -4810,19 +4810,24 @@ const PublicDisplay: React.FC = () => {
             key={`toast-${revealToast}-${totalPlayedCount}`}
             role="status"
             aria-live="polite"
-            className="public-display-reveal-toast"
             initial={{ opacity: 0, scale: 0.7, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9 }}
             transition={{ type: 'spring', stiffness: 420, damping: 24 }}
             style={{
+              // Centered over the sidebar column (.bottom-row is 0.45fr/1.55fr → left col ≈ 22.5vw),
+              // in the negative space between the QR/logo panel and the bottom edge.
               position: 'fixed',
-              left: 16,
-              bottom: 14,
+              left: 0,
+              bottom: '2.5vh',
+              width: '22.5vw',
+              display: 'flex',
+              justifyContent: 'center',
               zIndex: 10000,
+              pointerEvents: 'none',
             }}
           >
-            Revealed: {revealToast}
+            <div className="public-display-reveal-toast">Revealed: {revealToast}</div>
           </motion.div>
         )}
       </AnimatePresence>
