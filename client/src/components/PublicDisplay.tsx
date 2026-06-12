@@ -3498,11 +3498,13 @@ const PublicDisplay: React.FC = () => {
     // Block flow (not flex, no overflow BFC) so text line boxes wrap around the floated
     // call-number chip: first line(s) clear the chip, later lines extend underneath it.
     // Clipping still happens at the card level (.call-item has overflow:hidden + fixed row height).
+    // Centered: lines beside the chip center in the remaining width, lines under it center full-width.
     const base: React.CSSProperties = {
       minWidth: 0,
       maxWidth: '100%',
       display: 'block',
       overflow: 'visible',
+      textAlign: 'center',
     };
     if (fullCard || !typo.clampContentHeight) {
       return base;
