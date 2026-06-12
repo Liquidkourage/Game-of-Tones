@@ -61,6 +61,8 @@ export type PrintablePdfOpts = {
   roomLabel?: string;
   /** 5×15: stem playlist name under each B-I-N-G-O column header. */
   columnLabels?: string[];
+  /** Five column letters printed above the grid (host pref, e.g. TEMPO); defaults to BINGO. */
+  columnLetters?: string;
   /** 1×75: stem playlist name in the card header meta block. */
   singlePlaylistTitle?: string;
   /** Venue logo URL (absolute or path) — centered on the 5×5 grid at ~10% opacity, fit inside grid bounds. */
@@ -334,9 +336,13 @@ function drawPageHeader(doc: jsPDF, layout: PageLayout, opts: PrintablePdfOpts):
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   const { gridX, cell } = layout;
+  const letters =
+    typeof opts.columnLetters === 'string' && opts.columnLetters.length === 5
+      ? opts.columnLetters.toUpperCase().split('')
+      : BINGO_LETTERS;
   for (let c = 0; c < 5; c++) {
     const cx = gridX + c * cell + cell / 2;
-    doc.text(BINGO_LETTERS[c], cx, bingoBaseline, { align: 'center' });
+    doc.text(letters[c], cx, bingoBaseline, { align: 'center' });
   }
 
   const colLabels = opts.columnLabels;

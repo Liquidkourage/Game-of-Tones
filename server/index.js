@@ -2263,6 +2263,17 @@ function emitRoomCallLogReset(roomId, room) {
 }
 
 /** Room-state / sync-state fields for public display reconnect (letters, carousel, bingo UI). */
+/** Five column letters for cards / call list headers (host pref, e.g. BINGO / TEMPO / TONES). */
+function sanitizeBingoColumnLetters(raw) {
+  if (typeof raw !== 'string') return null;
+  const cleaned = raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+  return cleaned.length === 5 ? cleaned : null;
+}
+
+function bingoColumnLettersForRoom(room) {
+  return sanitizeBingoColumnLetters(room?.bingoColumnLetters) || 'BINGO';
+}
+
 function publicDisplayRoomStateExtras(room) {
   const pending =
     room.gameState === 'paused_for_verification' &&
@@ -2274,6 +2285,7 @@ function publicDisplayRoomStateExtras(room) {
     bingoVerificationPending: pending,
     bingoVerificationPlayerName: head?.playerName ? String(head.playerName) : null,
     lastDisplayWinner: room.lastDisplayWinner || null,
+    bingoColumnLetters: bingoColumnLettersForRoom(room),
   };
 }
 
@@ -3807,6 +3819,8 @@ io.on('connection', (socket) => {
           if (typeof p.publicDisplayLetterRevealToast === 'boolean') {
             room.publicDisplayLetterRevealToast = p.publicDisplayLetterRevealToast;
           }
+          const seededLetters = sanitizeBingoColumnLetters(p.bingoColumnLetters);
+          if (seededLetters) room.bingoColumnLetters = seededLetters;
           routineServerLog(
             `🔤 Seeded projector defaults from saved host prefs for room ${roomId} (letter reveal ${letterRevealIntervalSecForRoom(room)}s)`,
           );
@@ -4699,6 +4713,25 @@ io.on('connection', (socket) => {
       routineServerLog(`🔤 Public display letter reveal toast for room ${roomId}: ${next ? 'on' : 'off'}`);
     } catch (e) {
       console.error('❌ Error setting letter reveal toast:', e?.message || e);
+    }
+  });
+
+  // Host: custom five column letters for cards / call list headers (BINGO, TEMPO, TONES, …)
+  socket.on('set-bingo-column-letters', (data = {}) => {
+    try {
+      const { roomId, letters } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost =
+        room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+      if (!isCurrentHost) return;
+      const next = sanitizeBingoColumnLetters(letters) || 'BINGO';
+      if (room.bingoColumnLetters === next) return;
+      room.bingoColumnLetters = next;
+      io.to(roomId).emit('bingo-column-letters-updated', { letters: next });
+      routineServerLog(`🔤 Column letters for room ${roomId}: ${next}`);
+    } catch (e) {
+      console.error('❌ Error setting column letters:', e?.message || e);
     }
   });
 

@@ -181,6 +181,8 @@ const PlayerView: React.FC = () => {
   const bingoHoldPointerIdRef = useRef<number | null>(null);
   const bingoHoldSubmittedRef = useRef(false);
   const [venueBranding, setVenueBranding] = useState<VenueBranding | null>(null);
+  /** Five column letters for card headers (host pref: BINGO, TEMPO, TONES, …). */
+  const [bingoColumnLetters, setBingoColumnLetters] = useState<string>('BINGO');
   const [cardTextFitReady, setCardTextFitReady] = useState(false);
 
   /** User multiplier (70–150) on the automatic square text size (CSS: --player-card-font-scale). */
@@ -593,6 +595,12 @@ const PlayerView: React.FC = () => {
       }));
     });
 
+    newSocket.on('bingo-column-letters-updated', (data: any) => {
+      if (typeof data?.letters === 'string' && data.letters.length === 5) {
+        setBingoColumnLetters(data.letters.toUpperCase());
+      }
+    });
+
     newSocket.on('fiveby15-pool', (data: any) => {
       if (Array.isArray(data?.names) && data.names.length === 5) {
         setBingoColumnPlaylistNames(data.names);
@@ -656,6 +664,9 @@ const PlayerView: React.FC = () => {
         }
         if (typeof payload?.hybridInPersonPlusOnline === 'boolean') {
           setHybridPrizeInPersonOnly(payload.hybridInPersonPlusOnline);
+        }
+        if (typeof payload?.bingoColumnLetters === 'string' && payload.bingoColumnLetters.length === 5) {
+          setBingoColumnLetters(payload.bingoColumnLetters.toUpperCase());
         }
         // CRITICAL: Sync playedSongIds from server (single source of truth)
         // This is the ONLY place where playedSongIds should be updated
@@ -2000,12 +2011,14 @@ const PlayerView: React.FC = () => {
           ? oneBy75PlaylistNames.map(stripGotPlaylistPrefix).filter(Boolean).join(' · ')
           : '';
 
-    const headerCells = (['B', 'I', 'N', 'G', 'O'] as const).map((letter, colIdx) => {
+    const headerLetters =
+      bingoColumnLetters.length === 5 ? bingoColumnLetters.split('') : ['B', 'I', 'N', 'G', 'O'];
+    const headerCells = headerLetters.map((letter, colIdx) => {
       const raw = bingoColumnPlaylistNames[colIdx] || '';
       const playlistLabel = stripGotPlaylistPrefix(raw);
       return (
         <div
-          key={letter}
+          key={`${letter}-${colIdx}`}
           className={`bingo-column-headers__cell${playlistLabel ? ' bingo-column-headers__cell--named' : ''}`}
         >
           <span className="bingo-column-headers__letter">{letter}</span>

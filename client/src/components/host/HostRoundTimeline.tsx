@@ -27,6 +27,8 @@ type HostRoundTimelineProps = {
   onOpenRounds?: () => void;
   /** Extra guidance shown in the read-only nothing-prepped state (e.g. "Add music below"). */
   emptyHint?: string;
+  /** Five column letters (host pref, e.g. TEMPO); defaults to BINGO. */
+  columnLetters?: readonly string[];
   className?: string;
 };
 
@@ -49,8 +51,11 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
   summary,
   onOpenRounds,
   emptyHint,
+  columnLetters,
   className,
 }) => {
+  const letters =
+    columnLetters && columnLetters.length === 5 ? columnLetters : BINGO_COLUMN_LETTERS;
   const [dragOverRound, setDragOverRound] = useState<number | null>(null);
 
   if (rounds.length === 0) return null;
@@ -192,13 +197,13 @@ const HostRoundTimeline: React.FC<HostRoundTimelineProps> = ({
                       className="host-round-timeline__playlist-chip"
                       title={
                         r.playlistNames!.length === 5
-                          ? `${BINGO_COLUMN_LETTERS[i]} column · ${n}`
+                          ? `${letters[i]} column · ${n}`
                           : n
                       }
                     >
                       {r.playlistNames!.length === 5 ? (
                         <span className="host-round-timeline__playlist-chip-letter" aria-hidden>
-                          {BINGO_COLUMN_LETTERS[i]}
+                          {letters[i]}
                         </span>
                       ) : null}
                       <span className="host-round-timeline__playlist-chip-name">{n}</span>

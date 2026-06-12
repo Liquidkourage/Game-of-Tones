@@ -15,9 +15,19 @@ export type HostPreferencesV1 = {
   venueSpotifyJamMode: boolean;
   /** Comma-separated title flags that mark this host's curated playlists (library picks toggle). */
   playlistTitleFlags: string;
+  /** Five column letters shown on cards / call list headers (e.g. BINGO, TEMPO, TONES). */
+  bingoColumnLetters: string;
 };
 
 export const DEFAULT_PLAYLIST_TITLE_FLAGS = 'GoT, Game of Tones';
+export const DEFAULT_BINGO_COLUMN_LETTERS = 'BINGO';
+
+/** Uppercase A–Z/0–9 only, exactly 5 characters — otherwise null (caller falls back to BINGO). */
+export function normalizeBingoColumnLetters(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const cleaned = raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+  return cleaned.length === 5 ? cleaned : null;
+}
 
 const STORAGE_PREFIX = 'got-host-prefs-v1';
 
@@ -37,6 +47,7 @@ export function defaultHostPreferences(): HostPreferencesV1 {
     freeSpaceEnabled: false,
     venueSpotifyJamMode: false,
     playlistTitleFlags: DEFAULT_PLAYLIST_TITLE_FLAGS,
+    bingoColumnLetters: DEFAULT_BINGO_COLUMN_LETTERS,
   };
 }
 
@@ -78,6 +89,7 @@ export function sanitizeHostPreferences(raw: unknown): Partial<HostPreferencesV1
         typeof parsed.playlistTitleFlags === 'string'
           ? parsed.playlistTitleFlags.slice(0, 200)
           : undefined,
+      bingoColumnLetters: normalizeBingoColumnLetters(parsed.bingoColumnLetters) ?? undefined,
     };
 }
 

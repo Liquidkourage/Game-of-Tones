@@ -1215,6 +1215,8 @@ const PublicDisplay: React.FC = () => {
   const [letterRevealIntervalSec, setLetterRevealIntervalSec] = useState<number>(15);
   /** When false, letters still reveal on call cards but the “Revealed: …” banner is hidden. */
   const [letterRevealToastEnabled, setLetterRevealToastEnabled] = useState<boolean>(true);
+  /** Five column letters for call list headers (host pref: BINGO, TEMPO, TONES, …). */
+  const [bingoColumnLetters, setBingoColumnLetters] = useState<string>('BINGO');
   /** How masked titles fill in: timed letters, full at track start, or full at track end. */
   const [titleRevealMode, setTitleRevealMode] = useState<PublicDisplayTitleRevealMode>('letter');
   const titleRevealModeRef = useRef<PublicDisplayTitleRevealMode>('letter');
@@ -1869,6 +1871,10 @@ const PublicDisplay: React.FC = () => {
           if (payload.publicDisplayLetterRevealToast !== undefined) {
             setLetterRevealToastEnabled(payload.publicDisplayLetterRevealToast !== false);
           }
+
+          if (typeof payload.bingoColumnLetters === 'string' && payload.bingoColumnLetters.length === 5) {
+            setBingoColumnLetters(payload.bingoColumnLetters.toUpperCase());
+          }
           
           // CRITICAL: Sync currentIndexRef from server state (needed for proper display on refresh)
           if (typeof payload.currentSongIndex === 'number') {
@@ -2090,6 +2096,12 @@ const PublicDisplay: React.FC = () => {
     newSocket.on('public-display-letter-reveal-toast-updated', (data: any) => {
       if (data?.enabled !== undefined) {
         setLetterRevealToastEnabled(data.enabled !== false);
+      }
+    });
+
+    newSocket.on('bingo-column-letters-updated', (data: any) => {
+      if (typeof data?.letters === 'string' && data.letters.length === 5) {
+        setBingoColumnLetters(data.letters.toUpperCase());
       }
     });
 
@@ -3873,7 +3885,7 @@ const PublicDisplay: React.FC = () => {
     const nonEmpty = cleaned.filter(Boolean);
     if (nonEmpty.length === 0) return null;
 
-    const letters = ['B', 'I', 'N', 'G', 'O'] as const;
+    const letters = bingoColumnLetters.length === 5 ? bingoColumnLetters.split('') : ['B', 'I', 'N', 'G', 'O'];
     const slotCount =
       layoutMode === '5x15' ? 5 : Math.min(5, Math.max(1, nonEmpty.length));
     const singleOneBy75 = layoutMode === '1x75' && slotCount === 1;

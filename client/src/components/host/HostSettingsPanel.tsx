@@ -25,6 +25,8 @@ type HostSettingsPanelProps = {
   onLetterRevealIntervalChange: (sec: number) => void;
   publicDisplayLetterRevealToast: boolean;
   onLetterRevealToastChange: (v: boolean) => void;
+  bingoColumnLetters: string;
+  onBingoColumnLettersChange: (v: string) => void;
 };
 
 const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
@@ -46,7 +48,10 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
   onLetterRevealIntervalChange,
   publicDisplayLetterRevealToast,
   onLetterRevealToastChange,
+  bingoColumnLetters,
+  onBingoColumnLettersChange,
 }) => {
+  const lettersIncomplete = bingoColumnLetters.length > 0 && bingoColumnLetters.length < 5;
   return (
     <div className="host-settings-workspace">
       <section className="host-glass-panel host-settings-workspace__connection">
@@ -118,6 +123,28 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
           <span className="host-host-prefs__hint">
             Comma-separated. The playlist library&rsquo;s picks/All toggle shows only playlists whose
             titles contain one of these flags.
+          </span>
+        </label>
+        <label className="host-host-prefs__field">
+          <span className="host-host-prefs__label">Column letters</span>
+          <input
+            type="text"
+            className="host-host-prefs__input"
+            value={bingoColumnLetters}
+            maxLength={5}
+            placeholder="BINGO"
+            spellCheck={false}
+            autoCapitalize="characters"
+            style={{ textTransform: 'uppercase', letterSpacing: '0.35em', fontWeight: 800 }}
+            onChange={(e) => onBingoColumnLettersChange(e.target.value)}
+          />
+          <span
+            className="host-host-prefs__hint"
+            style={lettersIncomplete ? { color: '#f5d061' } : undefined}
+          >
+            {lettersIncomplete
+              ? 'Needs exactly 5 letters — BINGO is used until then.'
+              : 'Exactly 5 letters for card columns and the call list — e.g. BINGO, TEMPO, TONES.'}
           </span>
         </label>
       </section>

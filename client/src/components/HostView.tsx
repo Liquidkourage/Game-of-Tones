@@ -83,6 +83,8 @@ import HostAcknowledgeModal, { type HostAckVariant } from './HostAcknowledgeModa
 import BingoPoolList from './BingoPoolList';
 import {
   DEFAULT_PLAYLIST_TITLE_FLAGS,
+  DEFAULT_BINGO_COLUMN_LETTERS,
+  normalizeBingoColumnLetters,
   loadHostPreferences,
   saveHostPreferences,
   sanitizeHostPreferences,
@@ -1169,6 +1171,8 @@ const HostView: React.FC = () => {
     useState<PublicDisplayTitleRevealMode>('letter');
   /** Projector banner when a letter is revealed (letters still reveal when off). */
   const [publicDisplayLetterRevealToast, setPublicDisplayLetterRevealToast] = useState<boolean>(true);
+  /** Five column letters for cards / call list headers (org-customizable: BINGO, TEMPO, TONES, …). */
+  const [bingoColumnLetters, setBingoColumnLetters] = useState<string>(DEFAULT_BINGO_COLUMN_LETTERS);
 
   // Handler to update public display font size
   const updatePublicDisplayFontSize = (newSize: number) => {
@@ -1203,6 +1207,20 @@ const HostView: React.FC = () => {
       socket.emit('set-public-display-letter-reveal-toast', { roomId, enabled });
     }
   };
+  /** Raw text from the settings input is kept as-is locally; only valid 5-letter sets sync to the room. */
+  const updateBingoColumnLetters = (raw: string) => {
+    const cleaned = raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+    setBingoColumnLetters(cleaned);
+    const valid = normalizeBingoColumnLetters(cleaned);
+    if (valid && socket && roomId) {
+      socket.emit('set-bingo-column-letters', { roomId, letters: valid });
+    }
+  };
+  /** Letters as a 5-tuple for rendering (falls back to BINGO until input is 5 chars). */
+  const bingoColumnLettersArr = useMemo<string[]>(() => {
+    const valid = normalizeBingoColumnLetters(bingoColumnLetters) ?? DEFAULT_BINGO_COLUMN_LETTERS;
+    return valid.split('');
+  }, [bingoColumnLetters]);
   const [selectedCustomPattern, setSelectedCustomPattern] = useState<SavedCustomPattern | null>(null);
   const [savedCustomPatterns, setSavedCustomPatterns] = useState<SavedCustomPattern[]>([]);
   const [showCustomPatternModal, setShowCustomPatternModal] = useState<boolean>(false);
@@ -3935,6 +3953,11 @@ const HostView: React.FC = () => {
       if (payload?.publicDisplayLetterRevealToast !== undefined) {
         setPublicDisplayLetterRevealToast(payload.publicDisplayLetterRevealToast !== false);
       }
+      const roomLetters = normalizeBingoColumnLetters(payload?.bingoColumnLetters);
+      if (roomLetters) {
+        // Don't clobber a partial value the host is mid-typing in Settings.
+        setBingoColumnLetters((prev) => (normalizeBingoColumnLetters(prev) ? roomLetters : prev));
+      }
     });
 
     newSocket.on('fiveby15-pool', (data: any) => {
@@ -4933,6 +4956,7 @@ const HostView: React.FC = () => {
           logoUrl,
           previewWatermark: true,
           subtitle: 'Preview — watermarked sample',
+          columnLetters: normalizeBingoColumnLetters(bingoColumnLetters) ?? undefined,
         });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -4948,7 +4972,7 @@ const HostView: React.FC = () => {
         setPrintablePdfLoading(false);
       }
     })();
-  }, [socket, roomId, mixFinalized, finalizeMix, fetchPrintableCardsFromServer]);
+  }, [socket, roomId, mixFinalized, finalizeMix, fetchPrintableCardsFromServer, bingoColumnLetters]);
 
   const requestPrintablePdfDownload = useCallback(
     (opts: {
@@ -5002,6 +5026,7 @@ const HostView: React.FC = () => {
             columnLabels: opts.columnLabels,
             singlePlaylistTitle: opts.singlePlaylistTitle,
             logoUrl,
+            columnLetters: normalizeBingoColumnLetters(bingoColumnLetters) ?? undefined,
           });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
@@ -5027,6 +5052,7 @@ const HostView: React.FC = () => {
       printableCardCount,
       finalizeMix,
       fetchPrintableCardsFromServer,
+      bingoColumnLetters,
     ],
   );
 
@@ -5741,12 +5767,12 @@ const HostView: React.FC = () => {
                 }}
                 aria-hidden
               >
-                {(['B', 'I', 'N', 'G', 'O'] as const).map((letter, colIdx) => {
+                {bingoColumnLettersArr.map((letter, colIdx) => {
                   const raw = hostBingoColumnHeaders[colIdx] || '';
                   const playlistLabel = stripGotPlaylistPrefix(raw);
                   return (
                     <div
-                      key={letter}
+                      key={`${letter}-${colIdx}`}
                       style={{
                         display: 'flex',
                         flexDirection: 'column',
@@ -8967,6 +8993,7 @@ const HostView: React.FC = () => {
       if (p.freeSpaceEnabled != null) setFreeSpaceEnabled(p.freeSpaceEnabled);
       if (p.venueSpotifyJamMode != null) setVenueSpotifyJamMode(p.venueSpotifyJamMode);
       if (p.playlistTitleFlags != null) setPlaylistTitleFlags(p.playlistTitleFlags);
+      if (p.bingoColumnLetters != null) setBingoColumnLetters(p.bingoColumnLetters);
     };
     apply(loadHostPreferences(hostId));
     hostPrefsHydratedRef.current = true;
@@ -9007,6 +9034,7 @@ const HostView: React.FC = () => {
       freeSpaceEnabled,
       venueSpotifyJamMode,
       playlistTitleFlags,
+      bingoColumnLetters: normalizeBingoColumnLetters(bingoColumnLetters) ?? DEFAULT_BINGO_COLUMN_LETTERS,
     };
     saveHostPreferences(hostAccount.id, prefs);
     try {
@@ -9050,6 +9078,7 @@ const HostView: React.FC = () => {
     freeSpaceEnabled,
     venueSpotifyJamMode,
     playlistTitleFlags,
+    bingoColumnLetters,
   ]);
 
   /** Sync venue Jam mode to server when pref or socket changes. */
@@ -9081,6 +9110,7 @@ const HostView: React.FC = () => {
     updatePublicDisplayTitleRevealMode(saved.publicDisplayTitleRevealMode ?? publicDisplayTitleRevealMode);
     updatePublicDisplayLetterRevealInterval(saved.letterRevealIntervalSec ?? letterRevealIntervalSec);
     updatePublicDisplayLetterRevealToast(saved.publicDisplayLetterRevealToast ?? publicDisplayLetterRevealToast);
+    updateBingoColumnLetters(saved.bingoColumnLetters ?? bingoColumnLetters);
     updatePublicDisplayCallListMode('auto');
     // eslint-disable-next-line react-hooks/exhaustive-deps -- room sync after socket ready / prefs hydrate
   }, [socket, roomId, hostAccount?.id, hostPrefsHydrationNonce]);
@@ -11335,6 +11365,7 @@ const HostView: React.FC = () => {
                 rounds={roundTimelineRows}
                 roundSummary={roundTimelineSummary}
                 roundsEmptyHint="Add music in Build rounds below — your round will show up here."
+                columnLetters={bingoColumnLettersArr}
                 onSelectRound={handleSelectRoundForPrep}
                 step={hostSetupStep}
                 onStepChange={setHostSetupStep}
@@ -11436,6 +11467,7 @@ const HostView: React.FC = () => {
                     rounds={roundTimelineRows}
                     summary={roundTimelineSummary}
                     onSelectRound={handleSelectRoundForPrep}
+                    columnLetters={bingoColumnLettersArr}
                   />
                 </div>
                   <HostGameDashboard
@@ -11602,6 +11634,8 @@ const HostView: React.FC = () => {
                 onLetterRevealIntervalChange={updatePublicDisplayLetterRevealInterval}
                 publicDisplayLetterRevealToast={publicDisplayLetterRevealToast}
                 onLetterRevealToastChange={updatePublicDisplayLetterRevealToast}
+                bingoColumnLetters={bingoColumnLetters}
+                onBingoColumnLettersChange={updateBingoColumnLetters}
               />
               </div>
             ) : null}
@@ -11620,6 +11654,7 @@ const HostView: React.FC = () => {
                     canRemoveRound={eventRounds.length > 1}
                     onDropPlaylist={addPlaylistToRoundBucket}
                     dropTargetsActive={libraryPlaylistDragActive}
+                    columnLetters={bingoColumnLettersArr}
                   />
                 }
                 library={<div data-host-tutorial="playlist">{playlistRoundBuilderBody}</div>}
@@ -12222,12 +12257,12 @@ const HostView: React.FC = () => {
                   padding: '8px',
                   borderRadius: '8px'
                 }}>
-                  {(['B', 'I', 'N', 'G', 'O'] as const).map((letter, colIdx) => {
+                  {bingoColumnLettersArr.map((letter, colIdx) => {
                     const raw = hostBingoColumnHeaders[colIdx] || '';
                     const playlistLabel = stripGotPlaylistPrefix(raw);
                     return (
                       <div
-                        key={`hdr-${letter}`}
+                        key={`hdr-${letter}-${colIdx}`}
                         style={{
                           display: 'flex',
                           flexDirection: 'column',

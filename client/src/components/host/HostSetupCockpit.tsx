@@ -9,6 +9,8 @@ export type HostSetupCockpitProps = {
   rounds: RoundTimelineRow[];
   roundSummary?: string;
   roundsEmptyHint?: string;
+  /** Five column letters (host pref, e.g. TEMPO); defaults to BINGO. */
+  columnLetters?: readonly string[];
   onSelectRound: (index: number) => void;
   step: HostSetupStep;
   onStepChange: (step: HostSetupStep) => void;
@@ -24,6 +26,7 @@ const HostSetupCockpit: React.FC<HostSetupCockpitProps> = ({
   rounds,
   roundSummary,
   roundsEmptyHint,
+  columnLetters,
   onSelectRound,
   step,
   onStepChange,
@@ -42,6 +45,7 @@ const HostSetupCockpit: React.FC<HostSetupCockpitProps> = ({
           rounds={rounds}
           summary={roundSummary}
           emptyHint={roundsEmptyHint}
+          columnLetters={columnLetters}
           onSelectRound={onSelectRound}
         />
       </div>
