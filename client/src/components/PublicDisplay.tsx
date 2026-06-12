@@ -3914,9 +3914,12 @@ const PublicDisplay: React.FC = () => {
                       ],
                     }
                   : {
-                      backgroundColor: 'rgba(0,0,0,0)',
-                      border: '2px solid transparent',
-                      boxShadow: '0 0 0 rgba(0,0,0,0)',
+                      // Idle header chip: violet glass + mint underline so headers read as
+                      // headers (distinct from call cards) without competing with the active pulse.
+                      backgroundColor: 'rgba(139,92,246,0.14)',
+                      border: '2px solid rgba(139,92,246,0.3)',
+                      boxShadow:
+                        '0 2px 12px rgba(0,0,0,0.28), inset 0 -3px 0 rgba(0,255,136,0.45)',
                     }
               }
               transition={
