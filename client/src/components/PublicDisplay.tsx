@@ -2911,11 +2911,11 @@ const PublicDisplay: React.FC = () => {
             // Show the reveal toast
             setRevealToast(revealText);
             
-            // Auto-hide after 4 seconds
+            // Auto-hide after 5 seconds
             revealToastTimerRef.current = setTimeout(() => {
               setRevealToast(null);
               revealToastTimerRef.current = null;
-            }, 4000);
+            }, 5000);
           }
         } catch (error) {
           console.error('Error showing reveal toast:', error);
@@ -3048,7 +3048,7 @@ const PublicDisplay: React.FC = () => {
         revealToastTimerRef.current = setTimeout(() => {
           setRevealToast(null);
           revealToastTimerRef.current = null;
-        }, 3000);
+        }, 5000);
       } catch (err) {
         console.error('🎡 Auto-reveal error:', err);
       }
@@ -4811,10 +4811,10 @@ const PublicDisplay: React.FC = () => {
             role="status"
             aria-live="polite"
             className="public-display-reveal-toast"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
+            initial={{ opacity: 0, scale: 0.7, y: 16 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ type: 'spring', stiffness: 420, damping: 24 }}
             style={{
               position: 'fixed',
               left: 16,
