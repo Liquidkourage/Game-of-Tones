@@ -3523,7 +3523,7 @@ const PublicDisplay: React.FC = () => {
   };
 
   /**
-   * Call number as a ghost watermark: large, low-opacity, pinned bottom-right behind the
+   * Call number as a ghost watermark: large, low-opacity, pinned upper-left behind the
    * text so the title/artist get the full card width (replaces the floated corner chip).
    */
   const callNumberWatermark = (callNum: number | '', fullCard: boolean): React.ReactNode => {
@@ -3535,8 +3535,8 @@ const PublicDisplay: React.FC = () => {
         aria-hidden
         style={{
           position: 'absolute',
-          right: 6,
-          bottom: 0,
+          left: 6,
+          top: 0,
           fontSize: sizePx > 0 ? `${sizePx}px` : 'clamp(28px, 4.5vmin, 64px)',
           fontWeight: 900,
           lineHeight: 1,
