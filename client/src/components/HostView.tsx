@@ -1064,6 +1064,7 @@ const HostView: React.FC = () => {
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
   const [spotifyJamActive, setSpotifyJamActive] = useState(false);
   const [venueSpotifyJamMode, setVenueSpotifyJamMode] = useState(false);
+  const [activateDeviceBusy, setActivateDeviceBusy] = useState(false);
 
   const playbackDeviceNotInList = useMemo(() => {
     if (!mixNeedsHostSpotify || !isSpotifyConnected || isLoadingDevices) return false;
@@ -1444,8 +1445,8 @@ const HostView: React.FC = () => {
     if (selectedDeviceInactive && selectedDevice) {
       return {
         status: 'device_inactive',
-        label: `Spotify connected · ${selectedDevice.name} inactive`,
-        detail: `${selectedDevice.name} is selected but not Spotify’s active device. Open Spotify on it (play/pause once), then refresh devices.`,
+        label: `Spotify connected · ${selectedDevice.name} idle`,
+        detail: `${selectedDevice.name} is online but idle — Start Game activates it automatically. To activate now: Settings → Playback → Activate device.`,
       };
     }
     return { status: 'ready', label: 'Spotify connected' };
@@ -2698,6 +2699,38 @@ const HostView: React.FC = () => {
       setIsLoadingDevices(false);
     }
   }, [syncSelectedPlaybackDeviceToRoom, venueSpotifyJamMode]);
+
+  /** One-click fix for "selected but inactive": transfer playback to the selected device
+   *  (play=false, so nothing blasts at the venue) instead of making the host walk over and
+   *  press play/pause on the machine. Start Game transfers anyway — this just clears the
+   *  warning and proves the device is reachable. */
+  const activateSelectedDevice = useCallback(async () => {
+    const d = selectedDevice;
+    if (!d?.id || activateDeviceBusy) return;
+    setActivateDeviceBusy(true);
+    try {
+      const r = await hostFetch(`${API_BASE || ''}/api/spotify/transfer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId: d.id, play: false }),
+      });
+      const data = (await r.json().catch(() => ({}))) as { success?: boolean; error?: string };
+      if (r.ok && data.success) {
+        showToast(`${d.name} is now Spotify's active device.`, 'success');
+        await loadDevices({ force: true });
+      } else {
+        showToast(
+          data.error || `Couldn't activate ${d.name}. Open Spotify on it, then tap Refresh devices.`,
+          'warn',
+        );
+      }
+    } catch {
+      showToast(`Couldn't reach the server to activate ${d.name}.`, 'warn');
+    } finally {
+      setActivateDeviceBusy(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- showToast is stable enough (module-level DOM toast)
+  }, [selectedDevice, activateDeviceBusy, loadDevices]);
 
   /** After YouTube Music OAuth redirect (?youtube_music=connected), strip param and refetch merged library playlists. */
   useEffect(() => {
@@ -9475,10 +9508,28 @@ const HostView: React.FC = () => {
         </p>
       )}
       {!playbackDeviceNotInList && selectedDeviceInactive && selectedDevice && (
-        <p style={{ marginTop: 10, fontSize: '0.8rem', color: '#ffb347', fontWeight: 600 }}>
-          “{selectedDevice.name}” is selected but currently inactive. Open Spotify on {selectedDevice.name} and
-          press play/pause once, then tap Refresh devices. Playback will be transferred there at Start Game.
-        </p>
+        <div
+          style={{
+            marginTop: 10,
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: 10,
+          }}
+        >
+          <p style={{ margin: 0, flex: '1 1 260px', fontSize: '0.8rem', color: '#ffb347', fontWeight: 600 }}>
+            “{selectedDevice.name}” is online but not Spotify&apos;s active device. Start Game
+            transfers playback to it automatically — or activate it now to be sure.
+          </p>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => void activateSelectedDevice()}
+            disabled={activateDeviceBusy}
+          >
+            {activateDeviceBusy ? 'Activating…' : 'Activate device'}
+          </button>
+        </div>
       )}
     </>
   ) : null;
@@ -10800,17 +10851,17 @@ const HostView: React.FC = () => {
         ? [
             {
               id: 'device',
-              label: 'Spotify device active',
-              ok:
-                !!selectedDevice?.id && !playbackDeviceNotInList && !selectedDeviceInactive,
-              warn:
-                !!selectedDevice?.id && (playbackDeviceNotInList || selectedDeviceInactive),
+              label: 'Spotify device ready',
+              /** Idle-but-online is not a warning: Start Game transfers playback automatically.
+               *  Only offline / unselected devices need host action. */
+              ok: !!selectedDevice?.id && !playbackDeviceNotInList,
+              warn: !!selectedDevice?.id && playbackDeviceNotInList,
               detail: !selectedDevice?.id
                 ? 'Pick a device in Connection'
                 : playbackDeviceNotInList
                   ? `${selectedDevice.name} is offline — refresh devices`
                   : selectedDeviceInactive
-                    ? `Open Spotify on ${selectedDevice.name}, then refresh devices`
+                    ? `${selectedDevice.name} (idle — activates at Start Game)`
                     : selectedDevice.name,
             } satisfies PreShowCheckItem,
           ]
