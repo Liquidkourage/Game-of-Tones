@@ -663,12 +663,12 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 1fr);
   grid-template-rows: auto auto auto;
-  gap: 12px;
+  gap: 10px;
   align-items: start;
 }
 
 .host-glass-theme .host-r4-card {
-  padding: 14px 16px;
+  padding: 12px 14px;
   min-height: 0;
   position: relative;
   overflow: hidden;
@@ -678,7 +678,7 @@
   grid-column: 1;
   grid-row: 1;
   min-height: 0;
-  padding: 10px 14px;
+  padding: 8px 12px;
   border-color: var(--host-glass-border-violet);
   box-shadow:
     0 14px 48px rgba(0, 0, 0, 0.38),
@@ -792,14 +792,14 @@
  * define the height and the call log just grows into whatever space that gives.
  */
 .host-glass-theme .host-r4-track-feed {
-  --host-track-row-height: 50px;
+  --host-track-row-height: 46px;
   grid-column: 2;
   grid-row: 1 / span 3;
   align-self: stretch;
   position: relative;
   display: block;
   padding: 0;
-  min-height: 420px;
+  min-height: 360px;
 }
 
 .host-glass-theme .host-r4-track-feed__inner {
@@ -852,7 +852,7 @@
   gap: 10px;
   align-items: center;
   min-height: var(--host-track-row-height);
-  padding: 7px 0;
+  padding: 5px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   box-sizing: border-box;
 }
@@ -862,9 +862,9 @@
 }
 
 .host-glass-theme .host-r4-track-row__badge {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
   flex-shrink: 0;
   background: linear-gradient(135deg, rgba(109, 40, 217, 0.5), rgba(0, 255, 136, 0.2));
   border: 1px solid rgba(167, 139, 250, 0.28);
@@ -975,8 +975,8 @@
 }
 
 .host-glass-theme .host-r4-card__eyebrow {
-  margin: 0 0 6px;
-  font-size: 0.72rem;
+  margin: 0 0 4px;
+  font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -1013,10 +1013,10 @@
 }
 
 .host-glass-theme .host-r4-art {
-  width: 72px;
-  height: 72px;
+  width: 60px;
+  height: 60px;
   flex-shrink: 0;
-  border-radius: 12px;
+  border-radius: 10px;
   position: relative;
   background: linear-gradient(
     135deg,
@@ -1064,7 +1064,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .host-glass-theme .host-r4-track-title {
@@ -1087,7 +1087,7 @@
 
 .host-glass-theme .host-r4-track-meta {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   color: rgba(255, 255, 255, 0.55);
 }
 
@@ -1114,9 +1114,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-top: auto;
-  padding-top: 6px;
+  padding-top: 4px;
 }
 
 .host-glass-theme .host-r4-play {
@@ -1146,8 +1146,8 @@
   flex: 1 1 100%;
   min-width: 0;
   max-width: none;
-  margin-top: 2px;
-  padding: 6px 10px;
+  margin-top: 0;
+  padding: 4px 10px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.05);
   box-sizing: border-box;
@@ -1234,7 +1234,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .host-glass-theme .host-r4-round__head .host-r4-card__eyebrow {
@@ -1283,7 +1283,7 @@
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.1);
   overflow: hidden;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .host-glass-theme .host-r4-round__progress-fill {
@@ -1294,8 +1294,8 @@
 }
 
 .host-glass-theme .host-r4-round__progress-caption {
-  margin: 0 0 8px;
-  font-size: 0.8rem;
+  margin: 0 0 6px;
+  font-size: 0.78rem;
   color: rgba(255, 255, 255, 0.62);
   line-height: 1.4;
 }
@@ -1307,7 +1307,7 @@
 
 .host-glass-theme .host-r4-round__body {
   display: flex;
-  gap: 14px;
+  gap: 10px;
   align-items: flex-start;
   width: 100%;
 }
@@ -1386,7 +1386,7 @@
   flex: 1;
   min-width: 0;
   margin: 0;
-  gap: 8px 10px;
+  gap: 6px 8px;
 }
 
 .host-glass-theme .host-r4-stats--round .host-r4-stats__playlists {
@@ -1394,8 +1394,8 @@
 }
 
 .host-glass-theme .host-r4-round__last {
-  margin: 8px 0 0;
-  padding: 6px 10px;
+  margin: 6px 0 0;
+  padding: 5px 9px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1556,10 +1556,10 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: 62px;
-  padding: 10px 8px;
-  border-radius: 12px;
+  gap: 5px;
+  min-height: 54px;
+  padding: 8px 6px;
+  border-radius: 11px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.05);
   color: rgba(255, 255, 255, 0.9);
