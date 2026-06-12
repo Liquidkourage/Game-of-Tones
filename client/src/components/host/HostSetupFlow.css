@@ -218,6 +218,36 @@
   color: #b8f0d4;
 }
 
+/* Pre-start projector preview: walk the room through the round before playback. */
+.host-setup-play__preview {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.host-setup-play__preview-copy {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.host-setup-play__preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.host-setup-play__preview-actions .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.85rem;
+  padding: 8px 14px;
+}
+
 .host-setup-play__actions {
   display: flex;
   flex-wrap: wrap;

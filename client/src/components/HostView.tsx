@@ -11372,6 +11372,14 @@ const HostView: React.FC = () => {
                     preShowChecklistItems={preShowChecklistItems}
                     onFinalizeMix={() => void finalizeMix()}
                     onStartGame={() => void startGame()}
+                    onPreviewRoundOnDisplay={() => {
+                      socket?.emit('display-show-call-list', { roomId });
+                      showToast('Projector now shows the call list — Start game when ready.', 'success');
+                    }}
+                    onShowSplashOnDisplay={() => {
+                      socket?.emit('display-show-splash', { roomId });
+                      showToast('Projector back on the splash screen.', 'info');
+                    }}
                   />
                 ) : null}
               </HostSetupCockpit>

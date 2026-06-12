@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, ListChecks, Loader2, Play } from 'lucide-react';
+import { CheckCircle2, Image as ImageIcon, ListChecks, ListMusic, Loader2, Play } from 'lucide-react';
 import HostPlaylistAvailabilityWarnings from '../HostPlaylistAvailabilityWarnings';
 import type { PlaylistAvailabilityIssue } from '../HostPlaylistAvailabilityWarnings';
 import HostPreShowChecklist, { type PreShowCheckItem } from './HostPreShowChecklist';
@@ -26,6 +26,10 @@ export type HostSetupPlayStepProps = {
   preShowChecklistItems: PreShowCheckItem[];
   onFinalizeMix: () => void;
   onStartGame: () => void;
+  /** Show the call list on the projector before playback (splash hides; nothing plays). */
+  onPreviewRoundOnDisplay?: () => void;
+  /** Put the splash (QR / join) screen back on the projector. */
+  onShowSplashOnDisplay?: () => void;
 };
 
 const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
@@ -49,6 +53,8 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
   preShowChecklistItems,
   onFinalizeMix,
   onStartGame,
+  onPreviewRoundOnDisplay,
+  onShowSplashOnDisplay,
 }) => {
   const showPlaylistsLabel = finalizeMixBusy
     ? finalizeMixElapsedSec > 0
@@ -117,6 +123,28 @@ const HostSetupPlayStep: React.FC<HostSetupPlayStepProps> = ({
           <CheckCircle2 className="w-4 h-4" aria-hidden />
           Cards and playback are set for this round
         </p>
+      ) : null}
+
+      {prepRoundReadyForGoLive && onPreviewRoundOnDisplay ? (
+        <div className="host-setup-play__preview">
+          <p className="host-setup-play__preview-copy">
+            Players already have their cards. Put the call list on the projector to walk the room
+            through this round before any music plays — Start game begins playback whenever you&apos;re
+            ready.
+          </p>
+          <div className="host-setup-play__preview-actions">
+            <button type="button" className="btn-secondary" onClick={onPreviewRoundOnDisplay}>
+              <ListMusic className="w-4 h-4" aria-hidden />
+              Preview round on projector
+            </button>
+            {onShowSplashOnDisplay ? (
+              <button type="button" className="btn-secondary" onClick={onShowSplashOnDisplay}>
+                <ImageIcon className="w-4 h-4" aria-hidden />
+                Back to splash
+              </button>
+            ) : null}
+          </div>
+        </div>
       ) : null}
 
       <div className="host-setup-play__actions">
