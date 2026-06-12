@@ -2471,10 +2471,12 @@ function scheduleSimpleProgressionRemaining(roomId, deviceId, remainingMs) {
     if (isLast) {
       routineServerLog('⏰ Final song timer fired (remaining reschedule) — ending game');
       emitFinalSongStartedIfNeeded(roomId, room, room.snippetLength || 30);
+      await fadeOutBeforeTrackChange(roomId, deviceId);
       await endGamePlaylistComplete(roomId, deviceId);
       return;
     }
     routineServerLog('⏰ Timer fired (remaining reschedule) — advancing to next song');
+    await fadeOutBeforeTrackChange(roomId, deviceId);
     await playNextSongSimple(roomId, deviceId);
   };
 
@@ -3081,6 +3083,62 @@ async function endGamePlaylistComplete(roomId, deviceId) {
   io.to(roomId).emit('game-ended', { roomId, reason: 'playlist-complete' });
 }
 
+/** Smooth track-change fade: snippet plays x s at full volume + 1 s linear fade to 0. */
+const TRACK_FADE_OUT_MS = 1000;
+const TRACK_FADE_STEPS = 4;
+const TRACK_FADE_SILENCE_MS = 500;
+
+/**
+ * Fade the current track's last extra second to zero (stepped ≈ linear), pause,
+ * restore the host's baseline volume while silent, and hold a short beat so the
+ * next track punches in clean at full volume.
+ *
+ * Returns true when the fade ran. Hard-cut fallbacks (returns false, no fade):
+ * YouTube-hosted tracks, no locked device, devices that reject volume control
+ * (403 — remembered per room so we stop retrying), or a mid-fade pause/stop.
+ */
+async function fadeOutBeforeTrackChange(roomId, deviceId) {
+  const room = rooms.get(roomId);
+  if (!room || room.trackFadeUnsupported) return false;
+  if (!roomStillPlaying(roomId)) return false;
+  const currentSong = Array.isArray(room.playlistSongs)
+    ? room.playlistSongs[room.currentSongIndex]
+    : null;
+  if (currentSong && songUsesYoutubePlayback(currentSong)) return false;
+  const targetDeviceId = deviceId || room.selectedDeviceId || loadSavedDeviceForRoom(roomId)?.id;
+  if (!targetDeviceId) return false;
+  const baseline = Math.min(100, Math.max(0, Math.round(Number(room.volume) || 100)));
+  if (baseline <= 0) return false;
+
+  const stepMs = Math.round(TRACK_FADE_OUT_MS / TRACK_FADE_STEPS);
+  try {
+    for (let i = 1; i <= TRACK_FADE_STEPS; i++) {
+      if (!roomStillPlaying(roomId)) {
+        try { await spotifyFor(roomId).setVolume(baseline, targetDeviceId); } catch (_) {}
+        return false;
+      }
+      const level = Math.round(baseline * (1 - i / TRACK_FADE_STEPS));
+      await spotifyFor(roomId).setVolume(level, targetDeviceId);
+      await new Promise((r) => setTimeout(r, stepMs));
+    }
+    try { await spotifyFor(roomId).pausePlayback(targetDeviceId); } catch (_) {}
+    // Device is paused/silent — safe to restore so the next track starts at full volume.
+    await spotifyFor(roomId).setVolume(baseline, targetDeviceId);
+    await new Promise((r) => setTimeout(r, TRACK_FADE_SILENCE_MS));
+    return true;
+  } catch (e) {
+    const status = e?.body?.error?.status || e?.statusCode;
+    if (status === 403) {
+      room.trackFadeUnsupported = true;
+      routineServerLog(`🔇 Device rejects volume control — track fades disabled for room ${roomId}`);
+    } else {
+      routineServerLog(`⚠️ Track fade failed (hard cut this transition): ${e?.message || e}`);
+    }
+    try { await spotifyFor(roomId).setVolume(baseline, targetDeviceId); } catch (_) {}
+    return false;
+  }
+}
+
 // NEW: Simple timer-based song progression - let timer control everything
 function startSimpleProgression(roomId, deviceId, snippetLengthSeconds) {
   const room = rooms.get(roomId);
@@ -3105,10 +3163,12 @@ function startSimpleProgression(roomId, deviceId, snippetLengthSeconds) {
       if (isLast) {
         routineServerLog('⏰ Final song timer fired — notifying host and ending game');
         emitFinalSongStartedIfNeeded(roomId, room, snippetLengthSeconds);
+        await fadeOutBeforeTrackChange(roomId, deviceId);
         await endGamePlaylistComplete(roomId, deviceId);
         return;
       }
       routineServerLog(`⏰ Timer fired - advancing to next song`);
+      await fadeOutBeforeTrackChange(roomId, deviceId);
       await playNextSongSimple(roomId, deviceId);
     },
     delaySec * 1000,
@@ -4552,6 +4612,7 @@ io.on('connection', (socket) => {
       return;
     }
     room.selectedDeviceId = id || null;
+    room.trackFadeUnsupported = false; // new device may support volume control again
     if (id && spotifyDevices.isSpotifyJamDeviceId(id)) {
       spotifyDevices.cacheJamDeviceId(room, id);
     }
@@ -6685,7 +6746,8 @@ io.on('connection', (socket) => {
               pausedElapsedMs != null ? pausedElapsedMs : resumePosition || 0;
             const remainingTime = room.snippetLength * 1000 - elapsedForTimer;
             if (remainingTime > 0) {
-              setRoomTimer(roomId, () => {
+              setRoomTimer(roomId, async () => {
+                await fadeOutBeforeTrackChange(roomId, room.selectedDeviceId);
                 playNextSong(roomId, room.selectedDeviceId);
               }, remainingTime);
             } else {
@@ -9684,6 +9746,7 @@ async function playNextSong(roomId, deviceId) {
       
       // Skip-based queue clearing removed to avoid context hijacks
       clearRoomTimer(roomId);
+      await fadeOutBeforeTrackChange(roomId, targetDeviceId);
       playNextSong(roomId, targetDeviceId);
     }, playbackDuration);
 
