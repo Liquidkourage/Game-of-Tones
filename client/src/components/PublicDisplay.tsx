@@ -3495,16 +3495,17 @@ const PublicDisplay: React.FC = () => {
     fullCard: boolean,
     hasArtist: boolean,
   ): React.CSSProperties => {
-    // Block flow (not flex, no overflow BFC) so text line boxes wrap around the floated
-    // call-number chip: first line(s) clear the chip, later lines extend underneath it.
+    // Full-width centered text above the ghost call-number watermark (z-index layers it).
     // Clipping still happens at the card level (.call-item has overflow:hidden + fixed row height).
-    // Centered: lines beside the chip center in the remaining width, lines under it center full-width.
     const base: React.CSSProperties = {
       minWidth: 0,
       maxWidth: '100%',
+      width: '100%',
       display: 'block',
       overflow: 'visible',
       textAlign: 'center',
+      position: 'relative',
+      zIndex: 1,
     };
     if (fullCard || !typo.clampContentHeight) {
       return base;
@@ -3519,6 +3520,36 @@ const PublicDisplay: React.FC = () => {
       ...base,
       maxHeight: `${Math.round(titleBlock + artistBlock + PUBLIC_DISPLAY_CALL_TEXT_DESCENDER_PAD_PX)}px`,
     };
+  };
+
+  /**
+   * Call number as a ghost watermark: large, low-opacity, pinned bottom-right behind the
+   * text so the title/artist get the full card width (replaces the floated corner chip).
+   */
+  const callNumberWatermark = (callNum: number | '', fullCard: boolean): React.ReactNode => {
+    if (callNum === '' || callNum <= 0) return null;
+    const sizePx =
+      !fullCard && fiveBy15CardRowPx > 0 ? Math.round(fiveBy15CardRowPx * 0.62) : 0;
+    return (
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          right: 6,
+          bottom: 0,
+          fontSize: sizePx > 0 ? `${sizePx}px` : 'clamp(28px, 4.5vmin, 64px)',
+          fontWeight: 900,
+          lineHeight: 1,
+          letterSpacing: '-0.02em',
+          color: 'rgba(0, 255, 136, 0.16)',
+          pointerEvents: 'none',
+          userSelect: 'none',
+          zIndex: 0,
+        }}
+      >
+        {callNum}
+      </div>
+    );
   };
 
   const renderCallSongLines = (
@@ -4131,8 +4162,9 @@ const PublicDisplay: React.FC = () => {
                       initial={false}
                       aria-current={isCurrent ? 'true' : undefined}
                       style={{
+                        position: 'relative',
                         display: 'flex',
-                        alignItems: 'flex-start',
+                        alignItems: 'center',
                         gap: 10,
                         padding: '7px 10px',
                         borderRadius: 12,
@@ -4153,14 +4185,15 @@ const PublicDisplay: React.FC = () => {
                         boxSizing: 'border-box',
                       }}
                     >
-                      {/* Numeric badge: play order index — floated so text can flow under it */}
+                      {/* Play order index as a ghost watermark behind the text */}
+                      {callNumberWatermark(
+                        (() => {
+                          const idx = playedOrderForDisplay.indexOf(id);
+                          return idx >= 0 ? idx + 1 : ('' as const);
+                        })(),
+                        isFullCardPattern,
+                      )}
                       <div style={{ display: 'block', width: '100%', minWidth: 0 }}>
-                        <div className="call-number" style={{ float: 'left', marginRight: 10, marginBottom: 4 }}>
-                          {(() => {
-                            const idx = playedOrderForDisplay.indexOf(id);
-                            return idx >= 0 ? (idx + 1) : '';
-                          })()}
-                        </div>
                         <div
                           className={`call-song-info${typo.dense ? ' call-song-info--dense' : ''}`}
                           style={callSongInfoStyles(typo, isFullCardPattern, !!meta.artist?.trim())}
@@ -4236,6 +4269,7 @@ const PublicDisplay: React.FC = () => {
           className={`call-item${isCurrent ? ' call-item--current' : ''}`}
           aria-current={isCurrent ? 'true' : undefined}
           style={{
+            position: 'relative',
             display: 'block',
             padding: '6px 8px',
             borderRadius: 10,
@@ -4246,13 +4280,7 @@ const PublicDisplay: React.FC = () => {
             overflow: 'hidden',
           }}
         >
-          <div
-            className="call-number"
-            style={{ float: 'left', marginRight: 8, marginBottom: 4 }}
-            aria-label={callNum > 0 ? `Call ${callNum}` : undefined}
-          >
-            {callNum > 0 ? callNum : ''}
-          </div>
+          {callNumberWatermark(callNum > 0 ? callNum : '', isFullCardPattern)}
           <div
             className={`call-song-info${typo.dense ? ' call-song-info--dense' : ''}`}
             style={callSongInfoStyles(typo, isFullCardPattern, !!meta.artist?.trim())}
