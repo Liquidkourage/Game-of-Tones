@@ -4087,34 +4087,37 @@ const PublicDisplay: React.FC = () => {
     };
 
     if (spanPlaylistTitleFullWidth && playlistTitle) {
+      const showColumnLetters = layoutMode === '5x15';
       return (
         <div className="call-columns-header call-columns-header--1x75-single">
-          <div className="call-columns-header__letter-row">
-            {letters.map((bingoLetter, i) => (
-              <motion.div
-                key={`letter-${bingoLetter}-${i}`}
-                className="call-col-title call-col-title--letter-only"
-                style={{ textAlign: 'center', borderRadius: 10 }}
-                initial={false}
-                animate={idleHeaderChipStyle}
-                transition={{ duration: 0.25 }}
-              >
-                <div
-                  className="call-playlist-name"
-                  style={{
-                    color: '#00ff88',
-                    fontSize: 'clamp(1.25rem, 2.5vmin, 2rem)',
-                    fontWeight: 900,
-                    lineHeight: 1,
-                    letterSpacing: '0.04em',
-                    textShadow: '0 0 14px rgba(0,255,136,0.45), 0 2px 4px rgba(0,0,0,0.8)',
-                  }}
+          {showColumnLetters ? (
+            <div className="call-columns-header__letter-row">
+              {letters.map((bingoLetter, i) => (
+                <motion.div
+                  key={`letter-${bingoLetter}-${i}`}
+                  className="call-col-title call-col-title--letter-only"
+                  style={{ textAlign: 'center', borderRadius: 10 }}
+                  initial={false}
+                  animate={idleHeaderChipStyle}
+                  transition={{ duration: 0.25 }}
                 >
-                  {bingoLetter}
-                </div>
-              </motion.div>
-            ))}
-          </div>
+                  <div
+                    className="call-playlist-name"
+                    style={{
+                      color: '#00ff88',
+                      fontSize: 'clamp(1.25rem, 2.5vmin, 2rem)',
+                      fontWeight: 900,
+                      lineHeight: 1,
+                      letterSpacing: '0.04em',
+                      textShadow: '0 0 14px rgba(0,255,136,0.45), 0 2px 4px rgba(0,0,0,0.8)',
+                    }}
+                  >
+                    {bingoLetter}
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          ) : null}
           <motion.div
             key="playlist-span"
             className="call-col-title call-col-title--1x75-playlist-span"
@@ -4176,43 +4179,49 @@ const PublicDisplay: React.FC = () => {
               }
             >
               {name ? (
-                /* Two-line header: big letter on top, playlist name beneath (kept compact). */
-                <div
-                  className="call-playlist-name"
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 1,
-                  }}
-                >
-                  <span
+                layoutMode === '1x75' ? (
+                  <div className="call-playlist-name">
+                    <span style={{ color: '#ffffff' }}>{name}</span>
+                  </div>
+                ) : (
+                  /* Two-line header: big letter on top, playlist name beneath (kept compact). */
+                  <div
+                    className="call-playlist-name"
                     style={{
-                      color: '#00ff88',
-                      fontSize: 'clamp(1.25rem, 2.5vmin, 2rem)',
-                      fontWeight: 900,
-                      lineHeight: 1,
-                      letterSpacing: '0.04em',
-                      textShadow: '0 0 14px rgba(0,255,136,0.45), 0 2px 4px rgba(0,0,0,0.8)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 1,
                     }}
                   >
-                    {bingoLetter}
-                  </span>
-                  <span
-                    style={{
-                      color: '#ffffff',
-                      fontSize: 'clamp(0.8rem, 1.45vmin, 1.2rem)',
-                      lineHeight: 1.1,
-                    }}
-                  >
-                    {name}
-                  </span>
-                </div>
-              ) : (
+                    <span
+                      style={{
+                        color: '#00ff88',
+                        fontSize: 'clamp(1.25rem, 2.5vmin, 2rem)',
+                        fontWeight: 900,
+                        lineHeight: 1,
+                        letterSpacing: '0.04em',
+                        textShadow: '0 0 14px rgba(0,255,136,0.45), 0 2px 4px rgba(0,0,0,0.8)',
+                      }}
+                    >
+                      {bingoLetter}
+                    </span>
+                    <span
+                      style={{
+                        color: '#ffffff',
+                        fontSize: 'clamp(0.8rem, 1.45vmin, 1.2rem)',
+                        lineHeight: 1.1,
+                      }}
+                    >
+                      {name}
+                    </span>
+                  </div>
+                )
+              ) : layoutMode === '5x15' ? (
                 <div className="call-playlist-name" style={{ color: '#00ff88' }}>
                   {bingoLetter}
                 </div>
-              )}
+              ) : null}
             </motion.div>
           );
         })}
