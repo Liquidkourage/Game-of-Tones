@@ -1339,11 +1339,12 @@ const PublicDisplay: React.FC = () => {
   const columnCallListLayout = useMemo((): boolean => {
     if (callListMode === 'grouped') return false;
     if (callListMode === '5x15') return true;
+    const trimmedPlaylistCount = playlistNames.filter((n) => String(n || '').trim()).length;
+    // Auto: five-playlist mix only — ignore stale fiveBy15 refs after switching to 1×75.
+    if (trimmedPlaylistCount !== 5) return false;
     if (fiveBy15Columns && fiveBy15Columns.length === 5) return true;
     if (fiveBy15ColumnsRef.current && fiveBy15ColumnsRef.current.length === 5) return true;
-    // Five playlist columns (B–O headers): never use 1×75 play-order carousel for this mix.
-    if (playlistNames.filter((n) => String(n || '').trim()).length === 5) return true;
-    return false;
+    return true;
   }, [callListMode, fiveBy15Columns, playlistNames]);
   /** Columns to render for 5×15 layout: server fiveby15-pool only (not play-order flat ids). */
   const layoutFiveColumns = useMemo((): string[][] | null => {
@@ -2235,14 +2236,15 @@ const PublicDisplay: React.FC = () => {
         const prevPool = oneBy75IdsRef.current;
         // First pool delivery is not a "reorder" — do not wipe played songs synced from room-state.
         const poolChanged = prevPool != null && !poolsOrderEqual(prevPool, nextIds);
-        const keepFiveBy15 =
-          (fiveBy15ColumnsRef.current && fiveBy15ColumnsRef.current.length === 5) ||
-          (Array.isArray(data?.names) && data.names.filter((n: string) => String(n || '').trim()).length === 5);
+        // Authoritative: fiveby15-pool owns 5-playlist mixes; oneby75-pool clears stale column state.
+        const keepFiveBy15 = nameN === 5;
 
         if (!keepFiveBy15) {
           setOneBy75Ids(nextIds);
           oneBy75IdsRef.current = nextIds;
           poolOrderFingerprintRef.current = nextIds.join('\0');
+          setFiveBy15Columns(null);
+          fiveBy15ColumnsRef.current = null;
         }
 
         if (poolChanged && !keepFiveBy15) {
@@ -2258,15 +2260,6 @@ const PublicDisplay: React.FC = () => {
         }
 
         if (Array.isArray(data?.names)) setPlaylistNames(data.names);
-
-        if (!poolChanged && !keepFiveBy15) {
-          const hadFiveBy15 =
-            (fiveBy15ColumnsRef.current && fiveBy15ColumnsRef.current.length === 5);
-          if (!hadFiveBy15) {
-            setFiveBy15Columns(null);
-            fiveBy15ColumnsRef.current = null;
-          }
-        }
       }
     });
 
@@ -2794,6 +2787,10 @@ const PublicDisplay: React.FC = () => {
         const nameN = names.filter((x: string) => String(x || '').trim()).length;
         const listN = Array.isArray(payload?.songList) ? payload.songList.length : 0;
         setPlaylistNames(names);
+        if (nameN !== 5) {
+          setFiveBy15Columns(null);
+          fiveBy15ColumnsRef.current = null;
+        }
         
         // Switch to game mode: hide splash, show bingo card
         console.log('🎮 Mix finalized - switching to game mode');
