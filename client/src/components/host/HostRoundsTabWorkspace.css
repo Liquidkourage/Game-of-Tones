@@ -1,54 +1,61 @@
 .host-rounds-tab-workspace {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   width: 100%;
 }
 
 .host-rounds-tab-workspace__grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
-  gap: 14px;
+  gap: 10px;
   align-items: start;
 }
 
 .host-rounds-tab-workspace__library-title {
-  margin: 0 0 12px;
+  margin: 0 0 8px;
   font-size: 1rem;
   font-weight: 700;
   color: #fff;
 }
 
 .host-rounds-tab-workspace__library {
-  padding: 14px 16px;
+  padding: 12px 14px;
   min-width: 0;
 }
 
+/* Right rail: selected-round details + save card, stays in view while the library scrolls. */
 .host-rounds-tab-workspace__aside {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: sticky;
+  top: 8px;
 }
 
 .host-rounds-tab-workspace__footer {
-  padding: 0 2px;
+  padding: 12px 14px;
 }
 
 .host-rounds-tab-workspace__continue {
   margin: 0;
-  font-size: 0.84rem;
+  font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.62);
   line-height: 1.45;
 }
 
 .host-rounds-tab-workspace__footer-row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px 16px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
 }
 
 .host-rounds-tab-workspace__save-all {
   white-space: nowrap;
+  width: 100%;
+  order: -1;
 }
 
 .host-rounds-tab-workspace__save-all:disabled {
@@ -132,8 +139,48 @@
   max-height: none;
 }
 
+/* Cap the playlist rows to the viewport so the Rounds tab itself doesn't scroll;
+   overflow scrolls inside the table (the pager still pages 15 at a time). */
+.host-playlist-library-inline .host-playlist-library-table__rows {
+  max-height: clamp(260px, calc(100vh - 450px), 640px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.host-playlist-library-inline .host-tempo-library {
+  max-height: clamp(260px, calc(100vh - 430px), 680px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* Condensed timeline on the Rounds tab (it shares the screen with the library). */
+.host-glass-theme .host-round-timeline--rounds-tab {
+  padding: 12px 14px;
+}
+
+.host-glass-theme .host-round-timeline--rounds-tab .host-round-timeline__header {
+  margin-bottom: 6px;
+}
+
+.host-glass-theme .host-round-timeline--rounds-tab .host-round-timeline__drop-hint {
+  margin: 0 0 8px;
+}
+
+.host-glass-theme .host-round-timeline--rounds-tab .host-round-timeline__main {
+  padding: 8px 10px;
+}
+
 @media (max-width: 960px) {
   .host-rounds-tab-workspace__grid {
     grid-template-columns: 1fr;
+  }
+
+  .host-rounds-tab-workspace__aside {
+    position: static;
+  }
+
+  .host-playlist-library-inline .host-playlist-library-table__rows,
+  .host-playlist-library-inline .host-tempo-library {
+    max-height: none;
   }
 }

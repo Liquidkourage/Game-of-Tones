@@ -23,6 +23,7 @@ import { canonicalPlaylistIdForMatch } from '../utils/effectiveBingoPoolPreview'
 import {
   applyPlaylistIdOrder,
   sortRoundPlaylistsByBingoColumns,
+  ROUND_PLAYLIST_REORDER_MIME,
 } from '../utils/roundPlaylistOrder';
 
 /** Minimum unique tracks in the bingo pool for this round (matches save/PDF thresholds). */
@@ -44,8 +45,6 @@ function minBingoPoolTracksForRound(
 export type RoundUpdateMeta = {
   reorder?: { from: number; to: number };
 };
-
-const CHIP_REORDER_MIME = 'application/x-got-round-chip-index';
 
 interface Playlist {
   id: string;
@@ -391,7 +390,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
 
   const handleBucketDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    const chipFromRaw = e.dataTransfer.getData(CHIP_REORDER_MIME);
+    const chipFromRaw = e.dataTransfer.getData(ROUND_PLAYLIST_REORDER_MIME);
     if (chipFromRaw !== '') {
       const from = Number(chipFromRaw);
       const to = dropChipIndex ?? from;
@@ -707,7 +706,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
                     onDragStart={(e) => {
                       if (!canEditChips) return;
                       e.dataTransfer.setData('text/plain', playlistId);
-                      e.dataTransfer.setData(CHIP_REORDER_MIME, String(chipIndex));
+                      e.dataTransfer.setData(ROUND_PLAYLIST_REORDER_MIME, String(chipIndex));
                       e.dataTransfer.effectAllowed = 'move';
                       setDragChipIndex(chipIndex);
                     }}
@@ -730,7 +729,7 @@ function RoundPlanner<TRound extends RoundPlannerRound>({
                     }}
                     onDrop={(e) => {
                       if (!canEditChips) return;
-                      const fromRaw = e.dataTransfer.getData(CHIP_REORDER_MIME);
+                      const fromRaw = e.dataTransfer.getData(ROUND_PLAYLIST_REORDER_MIME);
                       if (fromRaw === '') {
                         e.preventDefault();
                         handleLibraryPlaylistDrop(e.dataTransfer.getData('text/plain'));

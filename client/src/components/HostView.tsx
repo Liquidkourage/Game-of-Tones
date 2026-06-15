@@ -116,7 +116,7 @@ import {
   effectiveBingoPoolSongsForMix,
 } from '../utils/effectiveBingoPoolPreview';
 import { getYoutubeHostPlaybackChannelName } from '../utils/youtubeHostPlaybackChannel';
-import { sortRoundPlaylistsByBingoColumns } from '../utils/roundPlaylistOrder';
+import { applyPlaylistIdOrder, sortRoundPlaylistsByBingoColumns } from '../utils/roundPlaylistOrder';
 import { validateSongTitle, validateSongTitleSync, getValidationMessage, getValidationColor } from '../utils/songTitleValidator';
 import './HostView.css';
 import './HostGlassTheme.css';
@@ -8012,6 +8012,39 @@ const HostView: React.FC = () => {
     [resolvePlaylistForRoundAssign, roomId, syncMixFromRound, roundLockedForLivePlay, showToast],
   );
 
+  const reorderPlaylistsInRoundBucket = useCallback(
+    (roundIndex: number, fromIndex: number, toIndex: number) => {
+      if (roundLockedForLivePlay(roundIndex)) {
+        showToast('That round is live — end the round before changing its playlists. Other rounds stay editable.', 'info');
+        return;
+      }
+      const prev = eventRoundsRef.current;
+      if (roundIndex < 0 || roundIndex >= prev.length) return;
+      const round = prev[roundIndex];
+      const ids = [...(round.playlistIds || [])];
+      if (fromIndex < 0 || fromIndex >= ids.length || toIndex < 0 || toIndex >= ids.length) return;
+      if (fromIndex === toIndex) return;
+      const [id] = ids.splice(fromIndex, 1);
+      ids.splice(toIndex, 0, id);
+      let updated = applyPlaylistIdOrder(round, ids, playlistsForRoundPlanner);
+      updated = clearSnapshotIfPlaylistsChanged(updated, round);
+
+      setEventRounds((cur) => {
+        if (roundIndex < 0 || roundIndex >= cur.length) return cur;
+        const newRounds = [...cur];
+        newRounds[roundIndex] = updated;
+        try {
+          localStorage.setItem(`event-rounds-${roomId}`, JSON.stringify(newRounds));
+        } catch (error) {
+          console.warn('Failed to save rounds to localStorage:', error);
+        }
+        return newRounds;
+      });
+      syncMixFromRound(roundIndex, updated);
+    },
+    [playlistsForRoundPlanner, roomId, syncMixFromRound, roundLockedForLivePlay, showToast],
+  );
+
   const handleFocusRoundForLibrary = useCallback((roundIndex: number) => {
     // During live play, currentRoundIndex is the live round pointer — browsing rounds for
     // prep must not move it (it drives round-complete bookkeeping and the live dashboard).
@@ -11710,6 +11743,14 @@ const HostView: React.FC = () => {
                       onDropPlaylist={(playlistId) =>
                         addPlaylistToRoundBucket(selectedRoundForPanel.index, playlistId)
                       }
+                      onReorderPlaylists={(fromIndex, toIndex) =>
+                        reorderPlaylistsInRoundBucket(
+                          selectedRoundForPanel.index,
+                          fromIndex,
+                          toIndex,
+                        )
+                      }
+                      columnLetters={bingoColumnLettersArr}
                       dropTargetActive={libraryPlaylistDragActive}
                     />
                   ) : null

@@ -1,5 +1,8 @@
 import { sortIdsByBingoColumnOrder } from './bingoColumnOrder';
 
+/** Drag-and-drop MIME for reordering playlists within a round bucket. */
+export const ROUND_PLAYLIST_REORDER_MIME = 'application/x-got-round-chip-index';
+
 export interface RoundPlaylistRow {
   id: string;
   name: string;

@@ -24,9 +24,13 @@ const HostRoundsTabWorkspace: React.FC<HostRoundsTabWorkspaceProps> = ({
           <h3 className="host-rounds-tab-workspace__library-title">Playlist library</h3>
           {library}
         </section>
-        <aside className="host-rounds-tab-workspace__aside">{summary}</aside>
+        <aside className="host-rounds-tab-workspace__aside">
+          {summary}
+          {footer ? (
+            <div className="host-rounds-tab-workspace__footer host-glass-panel">{footer}</div>
+          ) : null}
+        </aside>
       </div>
-      {footer ? <div className="host-rounds-tab-workspace__footer">{footer}</div> : null}
       {advanced ? <div className="host-rounds-tab-workspace__advanced">{advanced}</div> : null}
     </div>
   );

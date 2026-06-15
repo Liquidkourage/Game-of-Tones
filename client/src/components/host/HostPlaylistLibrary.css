@@ -211,6 +211,13 @@
   color: rgba(255, 255, 255, 0.62);
 }
 
+.host-selected-round__reorder-hint {
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.48);
+  line-height: 1.35;
+}
+
 .host-selected-round__warn {
   display: flex;
   align-items: flex-start;
@@ -244,6 +251,30 @@
   background: rgba(0, 0, 0, 0.2);
   font-size: 0.84rem;
   color: rgba(255, 255, 255, 0.92);
+}
+
+.host-selected-round__row--draggable {
+  cursor: grab;
+}
+
+.host-selected-round__row--draggable:active {
+  cursor: grabbing;
+}
+
+.host-selected-round__row--dragging {
+  opacity: 0.45;
+}
+
+.host-selected-round__row--drop-target {
+  border-color: rgba(0, 255, 136, 0.55);
+  box-shadow: 0 0 0 1px rgba(0, 255, 136, 0.35);
+}
+
+.host-selected-round__grip {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.35);
 }
 
 .host-selected-round__name {

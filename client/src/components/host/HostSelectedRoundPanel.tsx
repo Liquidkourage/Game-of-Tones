@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { AlertTriangle, ArrowDownToLine, ListMusic, X } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, GripVertical, ListMusic, X } from 'lucide-react';
+import { BINGO_COLUMN_LETTERS } from '../../utils/bingoColumnOrder';
+import { ROUND_PLAYLIST_REORDER_MIME } from '../../utils/roundPlaylistOrder';
 import './HostPlaylistLibrary.css';
 
 export type SelectedRoundPlaylistRow = {
@@ -14,10 +16,14 @@ export type HostSelectedRoundPanelProps = {
   playlists: SelectedRoundPlaylistRow[];
   canEdit: boolean;
   onRemovePlaylist: (playlistId: string) => void;
+  /** Reorder playlists within this round (column order left → right). */
+  onReorderPlaylists?: (fromIndex: number, toIndex: number) => void;
   /** Drop a dragged library playlist here to assign it to this round. */
   onDropPlaylist?: (playlistId: string) => void;
   /** A library playlist drag is in progress: pulse this panel as a drop target. */
   dropTargetActive?: boolean;
+  /** Five column letters for column-mode badges (defaults to BINGO). */
+  columnLetters?: readonly string[];
 };
 
 const statusLabel: Record<HostSelectedRoundPanelProps['status'], string> = {
@@ -27,10 +33,13 @@ const statusLabel: Record<HostSelectedRoundPanelProps['status'], string> = {
   unplanned: 'Draft',
 };
 
+function isPlaylistReorderDrag(e: React.DragEvent): boolean {
+  return e.dataTransfer.types.includes(ROUND_PLAYLIST_REORDER_MIME);
+}
+
 /**
  * Details for the round currently selected in "Tonight's rounds".
- * Read-mostly: it summarizes one round and allows removing a playlist; it is
- * intentionally not another assignment bucket list competing with the timeline.
+ * Summarizes one round; assign/remove/reorder playlists for column order.
  */
 const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
   roundName,
@@ -39,14 +48,20 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
   playlists,
   canEdit,
   onRemovePlaylist,
+  onReorderPlaylists,
   onDropPlaylist,
   dropTargetActive = false,
+  columnLetters,
 }) => {
   const lowSongs = playlists.length > 0 && songCount > 0 && songCount < 15;
-  const [dragOver, setDragOver] = useState(false);
+  const [libraryDragOver, setLibraryDragOver] = useState(false);
+  const [dragChipIndex, setDragChipIndex] = useState<number | null>(null);
+  const [dropChipIndex, setDropChipIndex] = useState<number | null>(null);
   const count = playlists.length;
-  // Tempo round rule: exactly 1 playlist (Round Mix) or exactly 5 (Column mode).
   const columnMode = count === 5;
+  const letters =
+    columnLetters && columnLetters.length === 5 ? columnLetters : BINGO_COLUMN_LETTERS;
+  const canReorder = canEdit && count >= 2 && Boolean(onReorderPlaylists);
   const structureValid = count === 1 || count === 5;
   const structureCopy =
     count === 0
@@ -63,34 +78,41 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
     <section
       className={[
         'host-selected-round host-glass-panel',
-        onDropPlaylist && dropTargetActive ? 'host-selected-round--drop-ready' : '',
-        dragOver ? 'host-selected-round--drag-over' : '',
+        onDropPlaylist && dropTargetActive && !dragChipIndex ? 'host-selected-round--drop-ready' : '',
+        libraryDragOver ? 'host-selected-round--drag-over' : '',
       ]
         .filter(Boolean)
         .join(' ')}
       aria-label="Selected round details"
       onDragEnter={(e) => {
-        if (!onDropPlaylist) return;
+        if (!onDropPlaylist || isPlaylistReorderDrag(e)) return;
         e.preventDefault();
-        setDragOver(true);
+        setLibraryDragOver(true);
       }}
       onDragOver={(e) => {
+        if (isPlaylistReorderDrag(e)) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          return;
+        }
         if (!onDropPlaylist) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
-        setDragOver(true);
+        setLibraryDragOver(true);
       }}
       onDragLeave={(e) => {
+        if (isPlaylistReorderDrag(e)) return;
         if (!onDropPlaylist) return;
         if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-        setDragOver(false);
+        setLibraryDragOver(false);
       }}
       onDrop={(e) => {
+        if (isPlaylistReorderDrag(e)) return;
         if (!onDropPlaylist) return;
         e.preventDefault();
         const playlistId = e.dataTransfer.getData('text/plain');
         if (playlistId) onDropPlaylist(playlistId);
-        setDragOver(false);
+        setLibraryDragOver(false);
       }}
     >
       <header className="host-selected-round__head">
@@ -105,6 +127,11 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
           {structureCopy}
           {count > 0 && songCount > 0 ? ` · ${songCount} songs` : ''}
         </p>
+        {canReorder ? (
+          <p className="host-selected-round__reorder-hint">
+            Drag playlists to set {columnMode ? 'column order left → right' : 'play order'}.
+          </p>
+        ) : null}
       </header>
       {count > 0 && !structureValid ? (
         <p className="host-selected-round__warn" role="status">
@@ -124,28 +151,87 @@ const HostSelectedRoundPanel: React.FC<HostSelectedRoundPanelProps> = ({
       ) : null}
       {playlists.length > 0 ? (
         <ul className="host-selected-round__list">
-          {playlists.map((p, i) => (
-            <li key={p.id} className="host-selected-round__row">
-              <ListMusic className="w-3.5 h-3.5" aria-hidden />
-              {columnMode ? (
-                <span className="host-selected-round__column-label">Col {i + 1}</span>
-              ) : null}
-              <span className="host-selected-round__name" title={p.name}>
-                {p.name}
-              </span>
-              {canEdit ? (
-                <button
-                  type="button"
-                  className="host-selected-round__remove"
-                  title={`Remove ${p.name} from this round`}
-                  aria-label={`Remove ${p.name} from this round`}
-                  onClick={() => onRemovePlaylist(p.id)}
-                >
-                  <X className="w-3.5 h-3.5" aria-hidden />
-                </button>
-              ) : null}
-            </li>
-          ))}
+          {playlists.map((p, i) => {
+            const isDropTarget = dropChipIndex === i && dragChipIndex !== null;
+            const isDragging = dragChipIndex === i;
+            return (
+              <li
+                key={p.id}
+                className={[
+                  'host-selected-round__row',
+                  canReorder ? 'host-selected-round__row--draggable' : '',
+                  isDropTarget ? 'host-selected-round__row--drop-target' : '',
+                  isDragging ? 'host-selected-round__row--dragging' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                draggable={canReorder}
+                onDragStart={(e) => {
+                  if (!canReorder || !onReorderPlaylists) return;
+                  e.dataTransfer.setData('text/plain', p.id);
+                  e.dataTransfer.setData(ROUND_PLAYLIST_REORDER_MIME, String(i));
+                  e.dataTransfer.effectAllowed = 'move';
+                  setDragChipIndex(i);
+                }}
+                onDragEnd={() => {
+                  setDragChipIndex(null);
+                  setDropChipIndex(null);
+                }}
+                onDragOver={(e) => {
+                  if (!canReorder || dragChipIndex === null) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.dataTransfer.dropEffect = 'move';
+                  setDropChipIndex(i);
+                }}
+                onDragLeave={() => {
+                  setDropChipIndex((cur) => (cur === i ? null : cur));
+                }}
+                onDrop={(e) => {
+                  if (!canReorder || !onReorderPlaylists) return;
+                  const fromRaw = e.dataTransfer.getData(ROUND_PLAYLIST_REORDER_MIME);
+                  if (fromRaw === '') return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const from = Number(fromRaw);
+                  if (Number.isFinite(from)) {
+                    onReorderPlaylists(from, i);
+                  }
+                  setDragChipIndex(null);
+                  setDropChipIndex(null);
+                  setLibraryDragOver(false);
+                }}
+              >
+                {canReorder ? (
+                  <GripVertical className="host-selected-round__grip" aria-hidden />
+                ) : (
+                  <ListMusic className="w-3.5 h-3.5" aria-hidden />
+                )}
+                {columnMode ? (
+                  <span
+                    className="host-selected-round__column-label"
+                    title={`${letters[i]} column`}
+                  >
+                    {letters[i]}
+                  </span>
+                ) : null}
+                <span className="host-selected-round__name" title={p.name}>
+                  {p.name}
+                </span>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    className="host-selected-round__remove"
+                    title={`Remove ${p.name} from this round`}
+                    aria-label={`Remove ${p.name} from this round`}
+                    onClick={() => onRemovePlaylist(p.id)}
+                  >
+                    <X className="w-3.5 h-3.5" aria-hidden />
+                  </button>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <>
