@@ -39,6 +39,7 @@ import {
   Save,
   Eraser,
   Settings,
+  Settings2,
   Copy,
   ExternalLink,
 } from 'lucide-react';
@@ -145,14 +146,14 @@ import HostPoolQualityReport from './host/HostPoolQualityReport';
 import HostGameLivePanel from './host/HostGameLivePanel';
 import HostDisplayExtrasPanel from './host/HostDisplayExtrasPanel';
 import type { HostSetupStep } from './host/HostSetupFlow';
-import HostSetupCockpit from './host/HostSetupCockpit';
+import HostSetupStatusStrip from './host/HostSetupStatusStrip';
 import HostGameModeBanner from './host/HostGameModeBanner';
 import HostEventActionsPanel from './host/HostEventActionsPanel';
-import HostSetupPlaylistStep from './host/HostSetupPlaylistStep';
 import HostSetupPlayStep from './host/HostSetupPlayStep';
 import HostPlaylistRoundAssignMenu from './host/HostPlaylistRoundAssignMenu';
 import HostSelectedRoundPanel from './host/HostSelectedRoundPanel';
 import HostRoundsTabWorkspace from './host/HostRoundsTabWorkspace';
+import HostSetupTabWorkspace from './host/HostSetupTabWorkspace';
 import HostTutorial from './host/HostTutorial';
 import { HOST_TUTORIAL_STEPS } from '../host/hostTutorialSteps';
 import {
@@ -166,6 +167,7 @@ import './host/HostSetupFlow.css';
 import './host/HostSetupCockpit.css';
 import './host/HostPlaylistLibrary.css';
 import './host/HostRoundsTabWorkspace.css';
+import './host/HostSetupTabWorkspace.css';
 import './host/HostTutorial.css';
 import './HostFormControls.css';
 
@@ -1382,6 +1384,7 @@ const HostView: React.FC = () => {
     () => ({
       game: <Gamepad2 aria-hidden />,
       rounds: <ListMusic aria-hidden />,
+      setup: <Settings2 aria-hidden />,
       players: <Users aria-hidden />,
       display: <Monitor aria-hidden />,
       settings: <Settings aria-hidden />,
@@ -9432,14 +9435,6 @@ const HostView: React.FC = () => {
   const anyRoundHasPlaylists = eventRounds.some((r) => (r.playlistIds?.length ?? 0) > 0);
 
   /** Why Next is blocked on Build rounds — mode-aware (0 vs 2–4 vs 6+ playlists). */
-  const setupPlaylistBlockedReason = setupPlaylistReady
-    ? null
-    : !isValidRoundPlaylistCount(setupRoundPlaylistCount)
-      ? roundPlaylistStructureCopy(setupRoundPlaylistCount)
-      : 'Playlists are still loading from your library — reconnect Spotify if this persists.';
-
-  const setupCriteriaReady = setupPlaylistReady;
-
   /** Round prep already exists when the cockpit loads (refresh / cloud restore): skip the
    *  "build your first round" step and land on the next actionable one. Runs once, and never
    *  when readiness came from this session's own assignments — no yanking the library away. */
@@ -9448,8 +9443,14 @@ const HostView: React.FC = () => {
     if (gameState !== 'waiting') return;
     if (!setupPlaylistReady) return;
     hostSetupStepAutoAdvancedRef.current = true;
-    setHostSetupStep(prepRoundReadyForGoLive ? 'play' : 'criteria');
-  }, [gameState, setupPlaylistReady, prepRoundReadyForGoLive]);
+    if (prepRoundReadyForGoLive) {
+      onHostGlassNav('game');
+      setHostSetupStep('play');
+    } else {
+      onHostGlassNav('setup');
+      setHostSetupStep('criteria');
+    }
+  }, [gameState, setupPlaylistReady, prepRoundReadyForGoLive, onHostGlassNav]);
 
   const showHostSetupCockpit =
     gameState === 'waiting' && !hostRoomHydrating && hostGlassNav === 'game';
@@ -9471,7 +9472,7 @@ const HostView: React.FC = () => {
     }
     if (!anyRoundHasPlaylists) return 'Build tonight’s rounds on the Rounds tab to get started.';
     if (!prepRoundReadyForGoLive)
-      return 'Work through Build rounds and Card setup, then finalize on the Play step.';
+      return 'Set patterns and playback on the Setup tab, then finalize on Game.';
     return 'Ready — Set round to deal cards and brief the room, then Start game.';
   })();
 
@@ -11417,86 +11418,35 @@ const HostView: React.FC = () => {
               />
             ) : null}
 
-            {showHostSetupCockpit && (hostGlassNav === 'game' || hostGlassNav === 'rounds') ? (
-              <HostSetupCockpit
-                status={{
-                  roomId: roomId || '',
-                  gameState,
-                  playback: hostSetupPlaybackStatus,
-                  onOpenConnection: () => onHostGlassNav('settings'),
-                  displayConnected: displayPresence.connected,
-                  displayStale: displayPresence.stale,
-                  displaySyncLabel,
-                  displayUrl: publicDisplayUrl,
-                  playerCount: hostPlayerRoster.length,
-                  onCopyJoinLink: handleCopyJoinLink,
-                }}
-                rounds={roundTimelineRows}
-                roundSummary={roundTimelineSummary}
-                roundsEmptyHint="Add music in Build rounds below — your round will show up here."
-                columnLetters={bingoColumnLettersArr}
-                onSelectRound={handleSelectRoundForPrep}
-                step={hostSetupStep}
-                onStepChange={setHostSetupStep}
-                playlistReady={setupPlaylistReady}
-                playlistBlockedReason={setupPlaylistBlockedReason}
-                criteriaReady={setupCriteriaReady}
-                playReady={prepRoundReadyForGoLive}
-              >
-                {hostSetupStep === 'playlist' ? (
-                  anyRoundHasPlaylists ? (
-                    <HostSetupPlaylistStep
-                      roundName={hostActiveRoundSummary.roundName}
-                      playlistNames={hostActiveRoundSummary.playlistNames}
-                      playlistReady={setupPlaylistReady}
-                      structureCopy={roundPlaylistStructureCopy(setupRoundPlaylistCount)}
-                      columnMode={setupRoundPlaylistCount === 5}
-                      poolCount={hostActiveRoundSummary.poolCount}
-                      spotifyCacheInfo={spotifyListCacheInfo}
-                      library={playlistRoundBuilderBody}
-                      onGoToRounds={() => onHostGlassNav('rounds')}
-                    />
-                  ) : (
-                    <div className="host-setup-step">
-                      <header className="host-setup-step__header">
-                        <p className="host-setup-step__eyebrow">Step 1 · Build rounds</p>
-                        <h2 className="host-setup-step__title">No rounds built yet</h2>
-                        <p className="host-setup-playlist__lead">
-                          Rounds use 1 playlist for the whole round, or 5 playlists — one per
-                          card column. Build tonight&apos;s rounds in the Rounds manager, then
-                          come back here to run the game.
-                        </p>
-                      </header>
-                      <div>
-                        <button
-                          type="button"
-                          className="btn-primary"
-                          onClick={() => onHostGlassNav('rounds')}
-                        >
-                          Open Rounds
-                        </button>
-                      </div>
-                    </div>
-                  )
-                ) : null}
-                {hostSetupStep === 'criteria' ? (
-                  <div className="host-setup-step">
-                    <header className="host-setup-step__header">
-                      <p className="host-setup-step__eyebrow">Step 2 · Card setup</p>
-                      <h2 className="host-setup-step__title">Set how this round plays</h2>
-                    </header>
-                    <section
-                      className="host-rounds-panel host-manager-section"
-                      aria-labelledby="host-setup-criteria-title"
-                      data-host-tutorial="criteria"
-                    >
-                      <div className="host-rounds-panel__planner">
-                        {renderHostRoundPlanner('criteria')}
-                      </div>
-                    </section>
-                  </div>
-                ) : null}
-                {hostSetupStep === 'play' ? (
+            {showHostSetupCockpit && hostGlassNav === 'game' ? (
+              <div className="host-setup-cockpit">
+                <HostSetupStatusStrip
+                  roomId={roomId || ''}
+                  gameState={gameState}
+                  playback={hostSetupPlaybackStatus}
+                  onOpenConnection={() => onHostGlassNav('settings')}
+                  displayConnected={displayPresence.connected}
+                  displayStale={displayPresence.stale}
+                  displaySyncLabel={displaySyncLabel}
+                  displayUrl={publicDisplayUrl}
+                  playerCount={hostPlayerRoster.length}
+                  onCopyJoinLink={handleCopyJoinLink}
+                />
+                <div data-host-tutorial="next-round">
+                  <HostRoundTimeline
+                    className="host-round-timeline--cockpit"
+                    rounds={roundTimelineRows}
+                    summary={roundTimelineSummary}
+                    emptyHint="Add music on the Rounds tab — your round will show up here."
+                    columnLetters={bingoColumnLettersArr}
+                    onSelectRound={handleSelectRoundForPrep}
+                  />
+                </div>
+                <div className="host-setup-flow__panel host-glass-panel" data-host-tutorial="play">
+                  <header className="host-setup-step__header">
+                    <p className="host-setup-step__eyebrow">Go live</p>
+                    <h2 className="host-setup-step__title">Finalize and start</h2>
+                  </header>
                   <HostSetupPlayStep
                     roomId={roomId ?? null}
                     roundName={hostActiveRoundSummary.roundName}
@@ -11524,8 +11474,23 @@ const HostView: React.FC = () => {
                       showToast('Projector back on the splash screen.', 'info');
                     }}
                   />
-                ) : null}
-              </HostSetupCockpit>
+                </div>
+              </div>
+            ) : null}
+
+            {hostGlassNav === 'setup' ? (
+              <HostSetupTabWorkspace
+                rounds={roundTimelineRows}
+                roundSummary={roundTimelineSummary}
+                columnLetters={bingoColumnLettersArr}
+                onSelectRound={handleSelectRoundForPrep}
+                playlistReady={setupPlaylistReady}
+                prepRoundReadyForGoLive={prepRoundReadyForGoLive}
+                onGoToRounds={() => onHostGlassNav('rounds')}
+                onGoToGame={() => onHostGlassNav('game')}
+              >
+                <div className="host-rounds-panel__planner">{renderHostRoundPlanner('criteria')}</div>
+              </HostSetupTabWorkspace>
             ) : null}
 
             {hostGlassNav === 'game' && !showHostSetupCockpit && (
@@ -11762,8 +11727,8 @@ const HostView: React.FC = () => {
                         saveAllRoundsProgress
                       ) : gameState === 'waiting' ? (
                         <>
-                          Assign playlists here, then save and run the game on the{' '}
-                          <strong>Game</strong> tab.
+                          Assign playlists here, then set patterns on the{' '}
+                          <strong>Setup</strong> tab and start on <strong>Game</strong>.
                         </>
                       ) : (
                         <>

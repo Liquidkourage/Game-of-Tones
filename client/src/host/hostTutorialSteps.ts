@@ -17,16 +17,14 @@ export const HOST_TUTORIAL_STEPS: HostTutorialStepDef[] = [
     title: 'Choose a playlist',
     body: 'Start with playlists. They decide which songs can appear on cards and in playback.',
     target: '[data-host-tutorial="playlist"]',
-    nav: 'game',
-    setupStep: 'playlist',
+    nav: 'rounds',
   },
   {
     id: 'criteria',
     title: 'Set criteria',
     body: 'Pick the win pattern, clip length, and other rules for this round.',
     target: '[data-host-tutorial="criteria"]',
-    nav: 'game',
-    setupStep: 'criteria',
+    nav: 'setup',
   },
   {
     id: 'play',

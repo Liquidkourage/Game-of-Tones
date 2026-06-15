@@ -1,0 +1,76 @@
+.host-setup-tab-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.host-glass-theme .host-round-timeline--setup-tab {
+  padding: 12px 14px;
+}
+
+.host-glass-theme .host-round-timeline--setup-tab .host-round-timeline__header {
+  margin-bottom: 6px;
+}
+
+.host-setup-tab-workspace__panel {
+  padding: 12px 14px;
+  min-width: 0;
+}
+
+.host-setup-tab-workspace__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-bottom: 10px;
+}
+
+.host-setup-tab-workspace__eyebrow {
+  margin: 0 0 2px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.host-setup-tab-workspace__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.host-setup-tab-workspace__lead {
+  margin: 4px 0 0;
+  max-width: 52rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.host-setup-tab-workspace__go-game {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.host-setup-tab-workspace__body {
+  min-width: 0;
+}
+
+.host-setup-tab-workspace__body .host-rounds-panel {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.host-setup-tab-workspace__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
