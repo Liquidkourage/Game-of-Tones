@@ -4073,18 +4073,72 @@ const PublicDisplay: React.FC = () => {
     const slotCount =
       layoutMode === '5x15' ? 5 : Math.min(5, Math.max(1, nonEmpty.length));
     const singleOneBy75 = layoutMode === '1x75' && slotCount === 1;
+    /** Round mix (one playlist) still uses five carousel columns — title spans the full width. */
+    const spanPlaylistTitleFullWidth =
+      singleOneBy75 || (layoutMode === '5x15' && nonEmpty.length === 1);
     const labels =
       layoutMode === '5x15' ? cleaned : singleOneBy75 ? [nonEmpty[0]] : nonEmpty.slice(0, slotCount);
+    const playlistTitle = spanPlaylistTitleFullWidth ? nonEmpty[0] : '';
+
+    const idleHeaderChipStyle = {
+      backgroundColor: 'rgba(139,92,246,0.14)',
+      border: '2px solid rgba(139,92,246,0.3)',
+      boxShadow: '0 2px 12px rgba(0,0,0,0.28), inset 0 -3px 0 rgba(0,255,136,0.45)',
+    };
+
+    if (spanPlaylistTitleFullWidth && playlistTitle) {
+      return (
+        <div className="call-columns-header call-columns-header--1x75-single">
+          <div className="call-columns-header__letter-row">
+            {letters.map((bingoLetter, i) => (
+              <motion.div
+                key={`letter-${bingoLetter}-${i}`}
+                className="call-col-title call-col-title--letter-only"
+                style={{ textAlign: 'center', borderRadius: 10 }}
+                initial={false}
+                animate={idleHeaderChipStyle}
+                transition={{ duration: 0.25 }}
+              >
+                <div
+                  className="call-playlist-name"
+                  style={{
+                    color: '#00ff88',
+                    fontSize: 'clamp(1.25rem, 2.5vmin, 2rem)',
+                    fontWeight: 900,
+                    lineHeight: 1,
+                    letterSpacing: '0.04em',
+                    textShadow: '0 0 14px rgba(0,255,136,0.45), 0 2px 4px rgba(0,0,0,0.8)',
+                  }}
+                >
+                  {bingoLetter}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+          <motion.div
+            key="playlist-span"
+            className="call-col-title call-col-title--1x75-playlist-span"
+            style={{ textAlign: 'center', borderRadius: 10 }}
+            initial={false}
+            animate={idleHeaderChipStyle}
+            transition={{ duration: 0.25 }}
+          >
+            <div className="call-playlist-name">
+              <span style={{ color: '#ffffff' }}>{playlistTitle}</span>
+            </div>
+          </motion.div>
+        </div>
+      );
+    }
 
     return (
       <div
         className={`call-columns-header${singleOneBy75 ? ' call-columns-header--1x75-single' : ''}`}
         style={{
           display: 'grid',
-          gridTemplateColumns: singleOneBy75 ? '1fr' : `repeat(${slotCount}, minmax(0, 1fr))`,
+          gridTemplateColumns: `repeat(${slotCount}, minmax(0, 1fr))`,
           gap: 4,
           alignItems: 'center',
-          justifyItems: singleOneBy75 ? 'center' : undefined,
         }}
       >
         {Array.from({ length: slotCount }, (_, i) => {
@@ -4109,14 +4163,7 @@ const PublicDisplay: React.FC = () => {
                         '0 0 14px rgba(0,255,136,0.35)',
                       ],
                     }
-                  : {
-                      // Idle header chip: violet glass + mint underline so headers read as
-                      // headers (distinct from call cards) without competing with the active pulse.
-                      backgroundColor: 'rgba(139,92,246,0.14)',
-                      border: '2px solid rgba(139,92,246,0.3)',
-                      boxShadow:
-                        '0 2px 12px rgba(0,0,0,0.28), inset 0 -3px 0 rgba(0,255,136,0.45)',
-                    }
+                  : idleHeaderChipStyle
               }
               transition={
                 isActiveColumn
@@ -4129,44 +4176,38 @@ const PublicDisplay: React.FC = () => {
               }
             >
               {name ? (
-                singleOneBy75 ? (
-                  <div className="call-playlist-name">
-                    <span style={{ color: '#ffffff' }}>{name}</span>
-                  </div>
-                ) : (
-                  /* Two-line header: big BINGO letter on top, playlist name beneath (kept compact). */
-                  <div
-                    className="call-playlist-name"
+                /* Two-line header: big letter on top, playlist name beneath (kept compact). */
+                <div
+                  className="call-playlist-name"
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 1,
+                  }}
+                >
+                  <span
                     style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 1,
+                      color: '#00ff88',
+                      fontSize: 'clamp(1.25rem, 2.5vmin, 2rem)',
+                      fontWeight: 900,
+                      lineHeight: 1,
+                      letterSpacing: '0.04em',
+                      textShadow: '0 0 14px rgba(0,255,136,0.45), 0 2px 4px rgba(0,0,0,0.8)',
                     }}
                   >
-                    <span
-                      style={{
-                        color: '#00ff88',
-                        fontSize: 'clamp(1.25rem, 2.5vmin, 2rem)',
-                        fontWeight: 900,
-                        lineHeight: 1,
-                        letterSpacing: '0.04em',
-                        textShadow: '0 0 14px rgba(0,255,136,0.45), 0 2px 4px rgba(0,0,0,0.8)',
-                      }}
-                    >
-                      {bingoLetter}
-                    </span>
-                    <span
-                      style={{
-                        color: '#ffffff',
-                        fontSize: 'clamp(0.8rem, 1.45vmin, 1.2rem)',
-                        lineHeight: 1.1,
-                      }}
-                    >
-                      {name}
-                    </span>
-                  </div>
-                )
+                    {bingoLetter}
+                  </span>
+                  <span
+                    style={{
+                      color: '#ffffff',
+                      fontSize: 'clamp(0.8rem, 1.45vmin, 1.2rem)',
+                      lineHeight: 1.1,
+                    }}
+                  >
+                    {name}
+                  </span>
+                </div>
               ) : (
                 <div className="call-playlist-name" style={{ color: '#00ff88' }}>
                   {bingoLetter}
@@ -5776,14 +5817,24 @@ const PublicDisplay: React.FC = () => {
                   return renderSimplePlayedCallList();
                 }
 
-                // Pool ready, no songs yet — still show playlist headers for Show playlists / pre-game.
-                if (columnCallListLayout && hasPool && layoutFiveColumns) {
+                // Pre-game: playlist loaded, no songs yet — headers + empty five-column grid.
+                const trimmedPlaylistCount = playlistNames.filter((n) => String(n || '').trim()).length;
+                if (trimmedPlaylistCount > 0 && played.length === 0) {
+                  const headerLayout =
+                    trimmedPlaylistCount <= 1 && !columnCallListLayout ? '1x75' : '5x15';
                   return (
                     <div className="call-list-content">
-                      {renderPlaylistNamesHeaderRow('5x15')}
-                      <div className="call-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, flex: 1, minHeight: 0 }}>
+                      {renderPlaylistNamesHeaderRow(headerLayout)}
+                      <div
+                        className="call-carousel-viewport call-carousel-viewport--static-grid"
+                        style={{
+                          gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+                          flex: 1,
+                          minHeight: 0,
+                        }}
+                      >
                         {[0, 1, 2, 3, 4].map((ci) => (
-                          <div key={ci} className="call-list-column" style={{ minHeight: 0 }} aria-hidden />
+                          <div key={ci} className="call-carousel-col-static" style={{ minHeight: 0 }} aria-hidden />
                         ))}
                       </div>
                     </div>

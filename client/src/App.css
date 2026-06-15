@@ -395,6 +395,7 @@ body {
 
 .App .call-columns-header {
   flex: 0 0 auto;
+  width: 100%;
   margin-bottom: 4px;
 }
 
@@ -414,16 +415,37 @@ body {
 }
 
 .App .call-columns-header--1x75-single {
-  justify-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
   text-align: center;
   margin-bottom: 8px;
 }
 
-.App .call-columns-header--1x75-single .call-playlist-name {
+.App .call-columns-header--1x75-single .call-columns-header__letter-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  width: 100%;
+}
+
+.App .call-columns-header--1x75-single .call-col-title--letter-only {
+  padding: 4px 6px !important;
+}
+
+.App .call-columns-header--1x75-single .call-col-title--1x75-playlist-span {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.App .call-columns-header--1x75-single .call-col-title--1x75-playlist-span .call-playlist-name {
   font-size: clamp(1.15rem, 2.5vmin, 1.95rem);
   font-weight: 900;
   letter-spacing: 0.02em;
   text-align: center;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .App .call-list-content > .call-carousel-viewport,
