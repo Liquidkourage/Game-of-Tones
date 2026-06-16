@@ -564,6 +564,7 @@ body {
   overflow: visible;
   display: block;
   line-height: 1.28;
+  margin-top: clamp(2px, 0.35vmin, 4px);
 }
 
 .App .public-display .call-song-info--dense .call-song-name,
@@ -621,6 +622,7 @@ body {
 .App .public-display .call-carousel-col-inner .call-song-info {
   overflow: hidden;
   justify-content: flex-start;
+  gap: clamp(2px, 0.35vmin, 5px);
 }
 
 .App .call-carousel-col-inner > .call-item:hover {
@@ -5240,7 +5242,7 @@ button.conn-chip.conn-chip-compact {
   --player-v2-accent-glow: rgba(0, 255, 136, 0.2);
   --player-v2-accent-soft-text: #c7ffe5;
   --player-v2-text-primary: rgba(248, 249, 255, 0.98);
-  --player-v2-text-secondary: rgba(238, 236, 255, 0.84);
+  --player-v2-text-secondary: rgba(210, 218, 232, 0.94);
   --player-v2-text-muted: rgba(232, 230, 255, 0.62);
   --player-v2-meta-accent: rgba(0, 255, 136, 0.82);
   --player-v2-page-bg:
@@ -5848,7 +5850,7 @@ button.conn-chip.conn-chip-compact {
   width: 100% !important;
   grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
   grid-template-rows: repeat(5, minmax(0, 1fr)) !important;
-  gap: clamp(4px, 0.9vmin, 6px) !important;
+  gap: clamp(5px, 1vmin, 8px) !important;
   aspect-ratio: unset !important;
   margin: 0 !important;
   overflow: hidden;
@@ -5944,7 +5946,7 @@ button.conn-chip.conn-chip-compact {
   min-height: 100%;
   justify-content: center;
   align-items: center;
-  gap: clamp(2px, 0.5vmin, 4px);
+  gap: clamp(3px, 0.65vmin, 6px);
   text-align: center;
 }
 

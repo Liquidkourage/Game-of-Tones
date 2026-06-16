@@ -120,7 +120,17 @@ const PlayerView: React.FC = () => {
     const fromUrl = searchParams.get('name') || '';
     return fromUrl.trim() || fromStorage.trim();
   });
-  const [joinReady, setJoinReady] = useState(false);
+  const [joinReady, setJoinReady] = useState(() => {
+    const fromStorage = (() => {
+      try {
+        return localStorage.getItem('player_name') || '';
+      } catch {
+        return '';
+      }
+    })();
+    const fromUrl = searchParams.get('name') || '';
+    return (fromUrl.trim() || fromStorage.trim()).length > 0;
+  });
   const [playerAccount, setPlayerAccount] = useState<PlayerAccountUser | null>(null);
   const [playerStats, setPlayerStats] = useState<PlayerStats | null>(null);
   const [playerRecentRounds, setPlayerRecentRounds] = useState<PlayerRoundHistory[]>([]);
@@ -151,6 +161,7 @@ const PlayerView: React.FC = () => {
   const [longPressTooltip, setLongPressTooltip] = useState<{
     title: string;
     artist: string;
+    isFreeSpace?: boolean;
   } | null>(null);
   const [bingoHolding, setBingoHolding] = useState<boolean>(false);
   const bingoHoldTimer = useRef<number | null>(null);
@@ -357,13 +368,21 @@ const PlayerView: React.FC = () => {
     return {};
   };
 
+  const isPlayerFreeSpaceSquare = (square: BingoSquare): boolean =>
+    !!(
+      square.isFreeSpace ||
+      square.songId === '__FREE_SPACE__' ||
+      (square.position === '2-2' &&
+        (square.customSongName === 'FREE' || square.songName === 'FREE'))
+    );
+
   const normalizeCardFreeSpaces = (card: BingoCard | null): BingoCard | null => {
     if (!card) return card;
     return {
       ...card,
       squares: card.squares.map((square) =>
-        square.isFreeSpace || square.songId === '__FREE_SPACE__'
-          ? { ...square, marked: true, isFreeSpace: true }
+        isPlayerFreeSpaceSquare(square)
+          ? { ...square, marked: true, isFreeSpace: true, songId: '__FREE_SPACE__' }
           : square,
       ),
     };
@@ -535,8 +554,7 @@ const PlayerView: React.FC = () => {
         newSocket.emit('join-room', buildJoinPayload(playerName.trim()));
       }
       // Ask server for state in case game already started
-      // This will trigger room-state which will calculate missed songs
-      newSocket.emit('sync-state', { roomId });
+      newSocket.emit('sync-state', { roomId, clientId });
       
       // Show reconnected toast if we were reconnecting
       if (wasReconnectingRef.current && gameState.isPlaying) {
@@ -554,8 +572,10 @@ const PlayerView: React.FC = () => {
     newSocket.on('reconnect', () => {
       setConnectionStatus('connected');
       setReconnectAttempts(0);
-      // Request sync to get latest state and calculate missed songs
-      newSocket.emit('sync-state', { roomId });
+      if (joinReady && playerName && playerName.trim()) {
+        newSocket.emit('join-room', buildJoinPayload(playerName.trim()));
+      }
+      newSocket.emit('sync-state', { roomId, clientId });
     });
     newSocket.on('disconnect', () => {
       setConnectionStatus('disconnected');
@@ -790,6 +810,13 @@ const PlayerView: React.FC = () => {
       }));
       // Increment songs played counter
       setSongsPlayed(prev => prev + 1);
+    });
+
+    newSocket.on('bingo-card-error', (data: any) => {
+      console.warn('bingo-card-error:', data);
+      if (joinReady && playerName?.trim() && newSocket.connected) {
+        newSocket.emit('join-room', buildJoinPayload(playerName.trim()));
+      }
     });
 
     newSocket.on('bingo-card', (data: any) => {
@@ -1094,7 +1121,7 @@ const PlayerView: React.FC = () => {
     // Request sync every 30 seconds during gameplay
     const syncInterval = setInterval(() => {
       if (socket && socket.connected && gameState.isPlaying) {
-        socket.emit('sync-state', { roomId });
+        socket.emit('sync-state', { roomId, clientId });
         console.log('🔄 Periodic sync requested');
       }
     }, 30000); // 30 seconds
@@ -1464,10 +1491,12 @@ const PlayerView: React.FC = () => {
 
   // Long-press (touch) / hover (mouse): full title + artist in fixed panel.
   const squareTooltipContent = (square: BingoSquare) => {
-    const free = square.isFreeSpace || square.songId === '__FREE_SPACE__';
+    const free = isPlayerFreeSpaceSquare(square);
     const vis = youtubeBingoSquareDisplay(square);
+    const eventTitle = venueBranding?.eventTitle?.trim();
     return {
-      title: free ? 'Free space' : vis.title,
+      isFreeSpace: free,
+      title: free ? (eventTitle || 'Free space') : vis.title,
       artist: free ? '' : vis.artist,
     };
   };
@@ -2332,10 +2361,22 @@ const PlayerView: React.FC = () => {
 
         {longPressTooltip && (
           <div className="player-longpress-tooltip" role="status" aria-live="polite">
-            <div className="player-longpress-tooltip-heading">Title</div>
-            <div className="player-longpress-tooltip-line player-longpress-tooltip-primary">{longPressTooltip.title}</div>
-            <div className="player-longpress-tooltip-heading">Artist</div>
-            <div className="player-longpress-tooltip-line player-longpress-tooltip-artist">{longPressTooltip.artist}</div>
+            {longPressTooltip.isFreeSpace ? (
+              <div className="player-longpress-tooltip-line player-longpress-tooltip-primary">
+                {longPressTooltip.title}
+              </div>
+            ) : (
+              <>
+                <div className="player-longpress-tooltip-heading">Title</div>
+                <div className="player-longpress-tooltip-line player-longpress-tooltip-primary">{longPressTooltip.title}</div>
+                {longPressTooltip.artist ? (
+                  <>
+                    <div className="player-longpress-tooltip-heading">Artist</div>
+                    <div className="player-longpress-tooltip-line player-longpress-tooltip-artist">{longPressTooltip.artist}</div>
+                  </>
+                ) : null}
+              </>
+            )}
           </div>
         )}
           </div>

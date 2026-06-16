@@ -484,6 +484,50 @@ async function tryRestorePlayerCardFromDb(room, clientId) {
   }
 }
 
+/** Re-bind stored card to the current socket and emit (refresh / sync-state / re-join). */
+async function restoreAndEmitBingoCardForJoiner(room, socket, clientIdOpt) {
+  if (!room || !socket) return false;
+  const player = room.players.get(socket.id);
+  if (!player || player.isHost) return false;
+
+  if (!room.bingoCards) room.bingoCards = new Map();
+  const clientId = clientIdOpt || player.clientId;
+
+  const bySocket = room.bingoCards.get(socket.id);
+  if (bySocket) {
+    player.bingoCard = bySocket;
+    io.to(socket.id).emit('bingo-card', bySocket);
+    return true;
+  }
+
+  if (clientId && room.clientCards && room.clientCards.has(clientId)) {
+    const existingCard = room.clientCards.get(clientId);
+    for (const [pid, c] of room.bingoCards.entries()) {
+      if (pid !== socket.id && c === existingCard) {
+        room.bingoCards.delete(pid);
+      }
+    }
+    room.bingoCards.set(socket.id, existingCard);
+    player.bingoCard = existingCard;
+    io.to(socket.id).emit('bingo-card', existingCard);
+    void persistPlayerDataCard(room, player, existingCard);
+    return true;
+  }
+
+  if (clientId && db) {
+    const dbCard = await tryRestorePlayerCardFromDb(room, clientId);
+    if (dbCard) {
+      if (!room.clientCards) room.clientCards = new Map();
+      room.clientCards.set(clientId, dbCard);
+      room.bingoCards.set(socket.id, dbCard);
+      player.bingoCard = dbCard;
+      io.to(socket.id).emit('bingo-card', dbCard);
+      return true;
+    }
+  }
+  return false;
+}
+
 async function clearPlayerDataForRoom(roomId) {
   if (!db || !roomId) return;
   try {
@@ -4056,41 +4100,7 @@ io.on('connection', (socket) => {
           emitCurrentSongPlayingToSocket(socket, room);
         }
 
-        // Ensure bingo card exists for ALL players (including hosts) if cards are available
-        if (!room.bingoCards) room.bingoCards = new Map();
-        const bySocket = room.bingoCards.get(socket.id);
-        if (bySocket) {
-          player.bingoCard = bySocket; // Ensure it's also on the player object
-          // Card already has marks preserved from room.bingoCards
-          // Don't send isNewCard flag on reconnect - this is an existing card with marks
-          io.to(socket.id).emit('bingo-card', bySocket);
-        } else if (clientId && room.clientCards && room.clientCards.has(clientId)) {
-          const existingCard = room.clientCards.get(clientId);
-          // Drop stale socket-keyed copies so host card view does not show ghost players
-          if (room.bingoCards) {
-            for (const [pid, c] of room.bingoCards.entries()) {
-              if (pid !== socket.id && c === existingCard) {
-                room.bingoCards.delete(pid);
-              }
-            }
-          }
-          // CRITICAL: Restore card to room.bingoCards with preserved marks
-          room.bingoCards.set(socket.id, existingCard);
-          player.bingoCard = existingCard; // Set on player object
-          // Card already has marks preserved from clientCards
-          // Don't send isNewCard flag on reconnect - this is an existing card with marks
-          io.to(socket.id).emit('bingo-card', existingCard);
-          void persistPlayerDataCard(room, player, existingCard);
-        } else if (clientId && db) {
-          const dbCard = await tryRestorePlayerCardFromDb(room, clientId);
-          if (dbCard) {
-            if (!room.clientCards) room.clientCards = new Map();
-            room.clientCards.set(clientId, dbCard);
-            room.bingoCards.set(socket.id, dbCard);
-            player.bingoCard = dbCard;
-            io.to(socket.id).emit('bingo-card', dbCard);
-          }
-        }
+        await restoreAndEmitBingoCardForJoiner(room, socket, clientId);
         if (
           !room.bingoCards?.get(socket.id) &&
           (room.playlistSongs?.length || room.playlists?.length || room.finalizedPlaylists?.length)
@@ -5828,6 +5838,10 @@ io.on('connection', (socket) => {
       emitCurrentSongPlayingToSocket(socket, room);
       socket.emit('display-reveal-state', publicDisplayRevealStateForClient(room));
       io.to(socket.id).emit('room-state', payload);
+      const syncClientId = data.clientId || room.players.get(socket.id)?.clientId;
+      if (syncClientId) {
+        await restoreAndEmitBingoCardForJoiner(room, socket, syncClientId);
+      }
       showLog.routineLogThrottled(
         `sync-state:${roomId}`,
         `✅ SYNC-STATE room ${roomId}: ${payload.totalPlayedCount} played, ${payload.playerCount} players → ${socket.id}`,

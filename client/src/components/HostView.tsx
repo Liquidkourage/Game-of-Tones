@@ -438,6 +438,57 @@ function cloneSongForSnapshot(s: Song): Song {
   };
 }
 
+/** Normalize title/artist for night-wide leftovers dedup (same song, different Spotify ids). */
+function normalizeTrackLabelForDedup(raw: string): string {
+  return String(raw || '')
+    .toLowerCase()
+    .replace(/^\s*got\s*[-–:]*\s*/i, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function trackTitleArtistDedupKey(s: {
+  id?: string;
+  name?: string;
+  artist?: string;
+  customSongName?: string;
+  customArtistName?: string;
+}): string | null {
+  const title = normalizeTrackLabelForDedup(s.customSongName || s.name || '');
+  const artist = normalizeTrackLabelForDedup(s.customArtistName || s.artist || '');
+  if (title && artist) return `${title}\0${artist}`;
+  const id = String(s.id || '').trim();
+  return id || null;
+}
+
+function buildPlayedAnywhereKeys(eventRounds: EventRound[], livePlayed: Song[]): Set<string> {
+  const keys = new Set<string>();
+  const addSong = (s: Song | null | undefined) => {
+    if (!s) return;
+    if (s.id) keys.add(`id:${s.id}`);
+    const label = trackTitleArtistDedupKey(s);
+    if (label) keys.add(`ta:${label}`);
+  };
+  for (const r of eventRounds) {
+    const pool = r.savedMixSnapshot?.songs ?? [];
+    for (const id of r.playRecap?.playedSongIds ?? []) {
+      if (id) keys.add(`id:${id}`);
+      addSong(pool.find((s) => s.id === id) ?? { id, name: '', artist: '' });
+    }
+  }
+  for (const p of livePlayed) addSong(p);
+  return keys;
+}
+
+function isTrackPlayedAnywhere(
+  s: Song,
+  playedKeys: Set<string>,
+): boolean {
+  if (s.id && playedKeys.has(`id:${s.id}`)) return true;
+  const label = trackTitleArtistDedupKey(s);
+  return !!(label && playedKeys.has(`ta:${label}`));
+}
+
 /** Round just transitioned to completed: record played ids + unplayed pool tracks for the Leftovers
  *  virtual playlist. Pool = first candidate containing the first played id (sanity), else first non-empty. */
 function stampRoundPlayRecap(
@@ -455,12 +506,23 @@ function stampRoundPlayRecap(
     if (containing) pool = containing;
   }
   const played = new Set(playedIds);
+  const playedLabels = new Set<string>();
+  for (const id of playedIds) {
+    const match = pool.find((s) => s?.id === id);
+    const label = trackTitleArtistDedupKey(match ?? { id });
+    if (label) playedLabels.add(label);
+  }
   return {
     ...round,
     playRecap: {
       playedSongIds: [...playedIds],
       leftoverSongs: pool
-        .filter((s) => s?.id && !played.has(s.id))
+        .filter((s) => {
+          if (!s?.id || played.has(s.id)) return false;
+          const label = trackTitleArtistDedupKey(s);
+          if (label && playedLabels.has(label)) return false;
+          return true;
+        })
         .map(cloneSongForSnapshot),
     },
   };
@@ -6746,17 +6808,16 @@ const HostView: React.FC = () => {
   /** Night-wide Leftovers pool: every completed round's unplayed finalized-pool tracks, minus anything
    *  played anywhere tonight (including the live round). Live-updating until a round using it is finalized. */
   const leftoverPoolSongs = useMemo<Song[]>(() => {
-    const playedAnywhere = new Set<string>();
-    for (const r of eventRounds) {
-      for (const id of r.playRecap?.playedSongIds ?? []) playedAnywhere.add(id);
-    }
-    for (const p of playedInOrder) playedAnywhere.add(p.id);
+    const playedKeys = buildPlayedAnywhereKeys(eventRounds, playedInOrder);
     const seen = new Set<string>();
     const out: Song[] = [];
     for (const r of eventRounds) {
       for (const s of r.playRecap?.leftoverSongs ?? []) {
-        if (!s?.id || seen.has(s.id) || playedAnywhere.has(s.id)) continue;
-        seen.add(s.id);
+        if (!s?.id || isTrackPlayedAnywhere(s, playedKeys)) continue;
+        const label = trackTitleArtistDedupKey(s);
+        const seenKey = label ? `ta:${label}` : `id:${s.id}`;
+        if (seen.has(seenKey)) continue;
+        seen.add(seenKey);
         out.push({
           ...s,
           sourcePlaylistId: LEFTOVERS_PLAYLIST_ID,
@@ -8490,8 +8551,8 @@ const HostView: React.FC = () => {
 
     // Mark current round as completed if it exists (recap only on the transition — an
     // already-completed round keeps the played/leftover recap stamped when it finished).
-    if (currentRoundIndex >= 0 && currentRoundIndex < eventRounds.length) {
-      const updatedRounds = [...eventRounds];
+    const updatedRounds = [...eventRounds];
+    if (currentRoundIndex >= 0 && currentRoundIndex < updatedRounds.length) {
       const prevRound = updatedRounds[currentRoundIndex];
       updatedRounds[currentRoundIndex] =
         prevRound.status === 'completed'
@@ -8501,15 +8562,12 @@ const HostView: React.FC = () => {
               playedInOrderRef.current.map((p) => p.id),
               [finalizedOrderRef.current, prevRound.savedMixSnapshot?.songs],
             );
-      setEventRounds(updatedRounds);
     }
 
-    // Set new round as active
-    const updatedRounds = [...eventRounds];
     updatedRounds[roundIndex] = {
       ...updatedRounds[roundIndex],
       status: 'active',
-      startedAt: Date.now()
+      startedAt: Date.now(),
     };
     setEventRounds(updatedRounds);
     setCurrentRoundIndex(roundIndex);

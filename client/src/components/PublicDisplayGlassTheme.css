@@ -467,7 +467,7 @@
 }
 
 .App .public-display--glass .call-song-artist {
-  color: rgba(var(--pd-violet-rgb), 0.85) !important;
+  color: rgba(228, 234, 244, 0.9) !important;
 }
 
 .App .public-display--glass .call-playlist-name span[style*='#00ff88'],
