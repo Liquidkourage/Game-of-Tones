@@ -1789,6 +1789,16 @@ const PublicDisplay: React.FC = () => {
       syncRevealStateToServer({ forceClear: true });
     };
 
+    const clearPoolLayoutState = () => {
+      setOneBy75Ids(null);
+      oneBy75IdsRef.current = null;
+      poolOrderFingerprintRef.current = null;
+      setFiveBy15Columns(null);
+      fiveBy15ColumnsRef.current = null;
+      setPlaylistNames([]);
+      clearCallListSessionState();
+    };
+
     // Connection event handlers
 
     newSocket.on('connect', () => {
@@ -2648,7 +2658,7 @@ const PublicDisplay: React.FC = () => {
           window.dispatchEvent(new CustomEvent('display-pattern', { detail: { pattern: data.pattern } }));
         }
       snippetCountdownSongIdRef.current = null;
-      clearCallListSessionState();
+      clearPoolLayoutState();
       ensureGrid();
       // Always request sync to ensure we have columns and latest state
       // Use longer delay to ensure server has finished generating cards and emitting columns
@@ -2922,6 +2932,7 @@ const PublicDisplay: React.FC = () => {
       });
       setTotalPlayedCount(0);
       resetPlayedTrackingRefs();
+      clearPoolLayoutState();
       ensureGrid();
       snippetCountdownSongIdRef.current = null;
       console.log('🔁 Game reset (display)');
@@ -2932,6 +2943,12 @@ const PublicDisplay: React.FC = () => {
         localStorage.removeItem(`display_revealed_letters_${roomId}`);
         localStorage.removeItem(`display_baselines_${roomId}`);
       } catch {}
+    });
+
+    newSocket.on('round-pool-cleared', () => {
+      clearPoolLayoutState();
+      ensureGrid();
+      console.log('🔁 Round pool cleared (display)');
     });
 
     // Staged reveal event: show name/artist hints without changing the bingo grid

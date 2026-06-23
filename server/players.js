@@ -22,6 +22,8 @@ function normalizeDisplayName(raw) {
 /** Stable round fingerprint from current room playback pool — survives reconnect and server restart. */
 function buildRoundTokenFromRoom(room) {
   if (!room?.id) return 'unknown';
+  const roundNum = typeof room.round === 'number' && Number.isFinite(room.round) ? room.round : 0;
+  const roundPrefix = `${room.id}:r${roundNum}`;
   const playback = Array.isArray(room.playlistSongs) ? room.playlistSongs : [];
   if (playback.length > 0) {
     const head = playback
@@ -29,7 +31,7 @@ function buildRoundTokenFromRoom(room) {
       .map((s) => s?.id)
       .filter(Boolean)
       .join('.');
-    return `${room.id}:play:${playback.length}:${head}`;
+    return `${roundPrefix}:play:${playback.length}:${head}`;
   }
   const order = Array.isArray(room.finalizedSongOrder) ? room.finalizedSongOrder : [];
   if (order.length > 0) {
@@ -38,7 +40,7 @@ function buildRoundTokenFromRoom(room) {
       .map((s) => (typeof s === 'string' ? s : s?.id))
       .filter(Boolean)
       .join('.');
-    return `${room.id}:finalized:${order.length}:${head}`;
+    return `${roundPrefix}:finalized:${order.length}:${head}`;
   }
   const pool = Array.isArray(room.oneBySeventyFivePool) ? room.oneBySeventyFivePool : [];
   if (pool.length > 0) {
@@ -47,9 +49,9 @@ function buildRoundTokenFromRoom(room) {
       .map((s) => s?.id)
       .filter(Boolean)
       .join('.');
-    return `${room.id}:pool75:${pool.length}:${head}`;
+    return `${roundPrefix}:pool75:${pool.length}:${head}`;
   }
-  return `${room.id}:prep:${room.mixFinalized ? '1' : '0'}`;
+  return `${roundPrefix}:prep:${room.mixFinalized ? '1' : '0'}`;
 }
 
 function sanitizePreferences(raw) {

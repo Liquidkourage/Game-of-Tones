@@ -4193,6 +4193,8 @@ const HostView: React.FC = () => {
       setWinners([]);
       setMixFinalized(false);
       lastFinalizePlaylistKeyRef.current = null;
+      finalizedOrderRef.current = [];
+      setFinalizedOrder([]);
       setSongList([]);
       invalidateSetlistBuildCacheSocketRef.current();
       console.log('?? Game reset');
@@ -8758,12 +8760,34 @@ const HostView: React.FC = () => {
         resolve(ok);
       };
       const onReset = () => finish(true);
-      const timeoutId = window.setTimeout(() => finish(false), 8000);
+      const timeoutId = window.setTimeout(() => finish(false), 12000);
 
       socket.on('game-reset', onReset);
       socket.emit('reset-game', { roomId, stopPlayback: true });
     });
   }, [socket, roomId]);
+
+  const waitForGameStartedAck = useCallback(async () => {
+    if (!socket) return false;
+
+    return await new Promise<boolean>((resolve) => {
+      let settled = false;
+      const cleanup = () => {
+        socket.off('game-started', onStarted);
+        window.clearTimeout(timeoutId);
+      };
+      const finish = (ok: boolean) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(ok);
+      };
+      const onStarted = () => finish(true);
+      const timeoutId = window.setTimeout(() => finish(false), 20000);
+
+      socket.on('game-started', onStarted);
+    });
+  }, [socket]);
 
   const handlePrepareNextPlannedRound = useCallback(() => {
     const nextIndex = getNextPlannedRound();
@@ -8896,11 +8920,19 @@ const HostView: React.FC = () => {
       return;
     }
 
+    const liveAck = waitForGameStartedAck();
     const started = await startGame({ roundOverride: round, playlistsOverride: mixRows });
-    if (started) {
-      setRoundComplete(null);
-      addLog(`Started ${round.name}`, 'info');
+    if (!started) return;
+
+    const liveOk = await liveAck;
+    if (!liveOk) {
+      showToast('Start Game was sent but the room did not confirm playback. Check host + projector, then retry.', 'error');
+      addLog('Timed out waiting for game-started after advancing to next planned round', 'error');
+      return;
     }
+
+    setRoundComplete(null);
+    addLog(`Started ${round.name}`, 'info');
   }, [
     addLog,
     applyRoundBingoToHost,
@@ -8917,6 +8949,7 @@ const HostView: React.FC = () => {
     selectedDevice,
     showToast,
     startGame,
+    waitForGameStartedAck,
   ]);
 
   const getRoundStatusSummary = useCallback(() => {
