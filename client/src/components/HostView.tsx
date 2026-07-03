@@ -62,7 +62,7 @@ import {
   normalizePatternComposite,
   normalizeLinesRequired,
   LINE_PATTERN_MAX_LINES,
-  compositeLegitProgressPct,
+  hostPatternLegitProgress,
   clauseSupportsMatchVariants,
   describeCompositePatternAudienceSentence,
   type SavedCompositePattern,
@@ -5516,14 +5516,14 @@ const HostView: React.FC = () => {
     playedSongs: string[] = [],
     compositeSpec?: PatternCompositeSpec | null,
   ) => {
-    if (!card || !card.squares) return { marked: 0, legitimate: 0, needed: 5, progress: 0, patternProgress: 0 };
-    
-    const squares = card.squares;
+    if (!card || !card.squares) {
+      return { marked: 0, legitimate: 0, needed: 5, progress: 0, patternProgress: 0, totalNeeded: 5 };
+    }
+
     let markedCount = 0;
     let legitimateMarkedCount = 0;
-    
-    // Count all marked squares and legitimate marks
-    squares.forEach((square: any) => {
+
+    card.squares.forEach((square: any) => {
       if (square.marked) {
         markedCount++;
         if (square.isFreeSpace || square.songId === '__FREE_SPACE__' || playedSongs.includes(square.songId)) {
@@ -5531,142 +5531,24 @@ const HostView: React.FC = () => {
         }
       }
     });
-    
-    // Helper function to check if a square is legitimately marked
-    const isLegitimatelyMarked = (square: any) => {
-      if (!square?.marked) return false;
-      if (square.isFreeSpace || square.songId === '__FREE_SPACE__') return true;
-      return playedSongs.includes(square.songId);
-    };
-    
-    // Calculate pattern-specific progress
-    let patternProgress = 0;
-    let totalNeeded = 5;
-    let bestProgress = 0;
-    
-    if (currentPattern === 'line') {
-      // Check rows, columns, and diagonals for the best progress
-      let maxProgress = 0;
-      
-      // Check rows
-      for (let row = 0; row < 5; row++) {
-        let rowProgress = 0;
-        for (let col = 0; col < 5; col++) {
-          const square = squares.find((s: any) => s.position === `${row}-${col}`);
-          if (square && isLegitimatelyMarked(square)) {
-            rowProgress++;
-          }
-        }
-        maxProgress = Math.max(maxProgress, rowProgress);
-      }
-      
-      // Check columns
-      for (let col = 0; col < 5; col++) {
-        let colProgress = 0;
-        for (let row = 0; row < 5; row++) {
-          const square = squares.find((s: any) => s.position === `${row}-${col}`);
-          if (square && isLegitimatelyMarked(square)) {
-            colProgress++;
-          }
-        }
-        maxProgress = Math.max(maxProgress, colProgress);
-      }
-      
-      // Check diagonals
-      let diag1Progress = 0;
-      let diag2Progress = 0;
-      for (let i = 0; i < 5; i++) {
-        const square1 = squares.find((s: any) => s.position === `${i}-${i}`);
-        const square2 = squares.find((s: any) => s.position === `${i}-${4-i}`);
-        
-        if (square1 && isLegitimatelyMarked(square1)) diag1Progress++;
-        if (square2 && isLegitimatelyMarked(square2)) diag2Progress++;
-      }
-      maxProgress = Math.max(maxProgress, diag1Progress, diag2Progress);
-      
-      patternProgress = maxProgress;
-      bestProgress = maxProgress;
-    } else if (currentPattern === 'full_card' || currentPattern === 'blackout') {
-      patternProgress = legitimateMarkedCount;
-      totalNeeded = 25;
-      bestProgress = legitimateMarkedCount;
-    } else if (currentPattern === 'four_corners') {
-      const corners = ['0-0', '0-4', '4-0', '4-4'];
-      let cornerProgress = 0;
-      corners.forEach(pos => {
-        const square = squares.find((s: any) => s.position === pos);
-        if (square && isLegitimatelyMarked(square)) {
-          cornerProgress++;
-        }
-      });
-      patternProgress = cornerProgress;
-      totalNeeded = 4;
-      bestProgress = cornerProgress;
-    } else if (currentPattern === 'x') {
-      const xp = BINGO_PATTERNS.x.positions;
-      patternProgress = xp.filter((pos) => {
-        const square = squares.find((s: any) => s.position === pos);
-        return square && isLegitimatelyMarked(square);
-      }).length;
-      totalNeeded = xp.length;
-      bestProgress = patternProgress;
-    } else if (currentPattern === 't') {
-      const pts = BINGO_PATTERNS.t.positions;
-      patternProgress = pts.filter((pos) => {
-        const square = squares.find((s: any) => s.position === pos);
-        return square && isLegitimatelyMarked(square);
-      }).length;
-      totalNeeded = pts.length;
-      bestProgress = patternProgress;
-    } else if (currentPattern === 'l') {
-      const pts = BINGO_PATTERNS.l.positions;
-      patternProgress = pts.filter((pos) => {
-        const square = squares.find((s: any) => s.position === pos);
-        return square && isLegitimatelyMarked(square);
-      }).length;
-      totalNeeded = pts.length;
-      bestProgress = patternProgress;
-    } else if (currentPattern === 'u') {
-      const pts = BINGO_PATTERNS.u.positions;
-      patternProgress = pts.filter((pos) => {
-        const square = squares.find((s: any) => s.position === pos);
-        return square && isLegitimatelyMarked(square);
-      }).length;
-      totalNeeded = pts.length;
-      bestProgress = patternProgress;
-    } else if (currentPattern === 'plus') {
-      const pts = BINGO_PATTERNS.plus.positions;
-      patternProgress = pts.filter((pos) => {
-        const square = squares.find((s: any) => s.position === pos);
-        return square && isLegitimatelyMarked(square);
-      }).length;
-      totalNeeded = pts.length;
-      bestProgress = patternProgress;
-    } else if (currentPattern === 'composite' && compositeSpec && compositeSpec.clauses.length > 0) {
-      const pct = compositeLegitProgressPct(card, compositeSpec, playedSongs);
-      patternProgress = pct;
-      totalNeeded = 100;
-      bestProgress = pct;
-    } else if (currentPattern === 'custom') {
-      // For custom patterns, we'd need the custom mask from the server
-      // For now, fall back to line logic
-      patternProgress = legitimateMarkedCount;
-      bestProgress = legitimateMarkedCount;
-    }
-    
-    const needed =
-      currentPattern === 'composite'
-        ? Math.max(0, 100 - bestProgress)
-        : Math.max(0, totalNeeded - bestProgress);
-    const progress = totalNeeded > 0 ? Math.round((bestProgress / totalNeeded) * 100) : 0;
-    
-    return { 
-      marked: markedCount, 
+
+    const toward = hostPatternLegitProgress(card, currentPattern, playedSongs, {
+      linesRequired,
+      customMask: currentPattern === 'custom' ? customMask : undefined,
+      customMatchAllowRotation,
+      customMatchAllowMirror,
+      patternComposite: currentPattern === 'composite' ? compositeSpec : undefined,
+    });
+
+    const needed = toward.winComplete ? 0 : Math.max(0, toward.total - toward.hit);
+
+    return {
+      marked: markedCount,
       legitimate: legitimateMarkedCount,
-      needed, 
-      progress,
-      patternProgress: bestProgress,
-      totalNeeded
+      needed,
+      progress: toward.pct,
+      patternProgress: toward.hit,
+      totalNeeded: toward.total,
     };
   };
 
@@ -5748,7 +5630,12 @@ const HostView: React.FC = () => {
                     ? '1 more needed!'
                     : `${progress.needed} more needed`;
               const cheatingCount = progress.marked - progress.legitimate;
-              const patternText = `${progress.patternProgress}/${progress.totalNeeded} in pattern (${progress.progress}%)`;
+              const patternText =
+                pattern === 'line' && linesRequired > 1
+                  ? `${progress.patternProgress}/${progress.totalNeeded} lines (${progress.progress}%)`
+                  : pattern === 'composite'
+                    ? `${progress.progress}% combined pattern`
+                    : `${progress.patternProgress}/${progress.totalNeeded} in pattern (${progress.progress}%)`;
 
               return (
                 <div
@@ -7606,35 +7493,6 @@ const HostView: React.FC = () => {
     }, debounceMs);
     return () => window.clearTimeout(t);
   }, [playlistSelectionKey, isSpotifyConnected, mixNeedsHostSpotify]);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyPress = (event: KeyboardEvent) => {
-      if (!currentSong) return;
-      
-             switch (event.code) {
-         case 'Space':
-           event.preventDefault();
-           playSong(currentSong);
-           break;
-         case 'ArrowLeft':
-           event.preventDefault();
-           handleSkipToPrevious();
-           break;
-         case 'ArrowRight':
-           event.preventDefault();
-           handleSkipToNext();
-           break;
-         case 'KeyM':
-           event.preventDefault();
-           handleMuteToggle();
-           break;
-       }
-    };
-
-         document.addEventListener('keydown', handleKeyPress);
-     return () => document.removeEventListener('keydown', handleKeyPress);
-   }, [currentSong, handleMuteToggle]);
 
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = React.useRef<string | null>(null);
@@ -11297,40 +11155,6 @@ const HostView: React.FC = () => {
       () => showToast('Could not copy link', 'error'),
     );
   }, [publicDisplayUrl]);
-
-  useEffect(() => {
-    if (hostGlassNav !== 'game' || gameState !== 'playing') return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === ' ' || e.code === 'Space') {
-        e.preventDefault();
-        void pauseSong();
-      } else if (e.key === 'n' || e.key === 'N') {
-        e.preventDefault();
-        void skipSong();
-      } else if (e.key === 'r' || e.key === 'R') {
-        e.preventDefault();
-        replayCurrentClip();
-      } else if (e.key === 'm' || e.key === 'M') {
-        e.preventDefault();
-        markCurrentSongPlayed();
-      } else if (e.key === 'b' || e.key === 'B') {
-        e.preventDefault();
-        if (pendingVerification) openBingoVerification();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [
-    hostGlassNav,
-    gameState,
-    pauseSong,
-    skipSong,
-    replayCurrentClip,
-    markCurrentSongPlayed,
-    pendingVerification,
-    openBingoVerification,
-  ]);
 
   return (
     <div className="host-view host-glass-theme">

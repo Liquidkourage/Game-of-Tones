@@ -1379,6 +1379,16 @@ const PublicDisplay: React.FC = () => {
     () => (rowHeightPx > 0 ? rowHeightPx : 0),
     [rowHeightPx],
   );
+  /** 1×75 carousel: five equal rows with 6px gaps inside the measured viewport. */
+  const carouselCardRowPx = useMemo(() => {
+    if (carouselViewportHeightPx <= 0) return 0;
+    return Math.max(1, (carouselViewportHeightPx - 4 * 6) / 5);
+  }, [carouselViewportHeightPx]);
+  /** One play-order column width (includes column side padding). */
+  const carouselColWidthPx = useMemo(() => {
+    if (viewportWidth <= 0 || visibleCols <= 0) return 0;
+    return viewportWidth / visibleCols;
+  }, [viewportWidth, visibleCols]);
 
   const isFullTitleRevealMode =
     titleRevealMode === 'track_start' || titleRevealMode === 'track_end';
@@ -1411,29 +1421,18 @@ const PublicDisplay: React.FC = () => {
     titleCapPx?: number;
     artistCapPx?: number;
   } | null {
+    const rowPx = layout === '5x15' ? fiveBy15CardRowPx : carouselCardRowPx;
+    const colWidthPx = layout === '5x15' ? fiveBy15ColWidthPx : carouselColWidthPx;
     // Same formula as callNumberStripeWidthPx (declared later in render scope).
     // Text sits right of the stripe (paddingLeft only), so width loses one band.
-    const stripeW = fiveBy15CardRowPx > 0 ? Math.max(18, Math.round(fiveBy15CardRowPx * 0.24)) : 24;
-    if (layout === '5x15') {
-      if (fiveBy15CardRowPx <= 0 || fiveBy15ColWidthPx <= 0) return null;
-      return {
-        boxWidthPx: fiveBy15ColWidthPx - 20 - stripeW, // card padding 10px ×2
-        boxHeightPx: fiveBy15CardRowPx - 14, // card padding 7px ×2
-        titleCapPx: Math.round(fiveBy15CardRowPx * (plainFullTitle ? 0.26 : 0.34)),
-        artistCapPx: Math.round(fiveBy15CardRowPx * (plainFullTitle ? 0.17 : 0.22)),
-      };
-    }
-    if (viewportWidth <= 0 || carouselViewportHeightPx <= 0) return null;
-    const rowPx = (carouselViewportHeightPx - 4 * 6) / 5; // 5 rows, 6px grid gaps
+    const stripeW = rowPx > 0 ? Math.max(18, Math.round(rowPx * 0.24)) : 24;
+    if (rowPx <= 0 || colWidthPx <= 0) return null;
+    const colSidePadPx = layout === '5x15' ? 0 : 8; // carousel columns: padding 0 4px ×2
     return {
-      boxWidthPx: viewportWidth / visibleCols - 8 - 16 - stripeW, // col pad 4×2 + card pad 8×2
-      boxHeightPx: rowPx - 12, // card padding 6px ×2
-      ...(plainFullTitle
-        ? {
-            titleCapPx: Math.round(24 * autoDisplayFontScale),
-            artistCapPx: Math.round(17 * autoDisplayFontScale),
-          }
-        : {}),
+      boxWidthPx: colWidthPx - colSidePadPx - 20 - stripeW, // card padding 10px ×2
+      boxHeightPx: rowPx - 14, // card padding 7px ×2
+      titleCapPx: Math.round(rowPx * (plainFullTitle ? 0.26 : 0.34)),
+      artistCapPx: Math.round(rowPx * (plainFullTitle ? 0.17 : 0.22)),
     };
   }
 
@@ -1465,8 +1464,11 @@ const PublicDisplay: React.FC = () => {
           artistMaxLines = Math.max(artistMaxLines, fit.artistLines);
         }
       }
-    } else if (columnCallListLayout && fiveBy15CardRowPx > 0) {
-      textScale = capCallCardTextScaleForRow(unified, fiveBy15CardRowPx, autoDisplayFontScale);
+    } else {
+      const rowPx = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
+      if (rowPx > 0) {
+        textScale = capCallCardTextScaleForRow(unified, rowPx, autoDisplayFontScale);
+      }
     }
     return {
       ...unified,
@@ -1482,6 +1484,8 @@ const PublicDisplay: React.FC = () => {
     columnCallListLayout,
     fiveBy15CardRowPx,
     fiveBy15ColWidthPx,
+    carouselCardRowPx,
+    carouselColWidthPx,
     viewportWidth,
     carouselViewportHeightPx,
     autoDisplayFontScale,
@@ -3569,11 +3573,12 @@ const PublicDisplay: React.FC = () => {
       }
     }
 
-    if (columnCallListLayout && fiveBy15CardRowPx > 0 && !fullCard) {
+    const rowPx = layout === '5x15' ? fiveBy15CardRowPx : carouselCardRowPx;
+    if (rowPx > 0 && !fullCard) {
       typo = {
         ...typo,
         plainFullTitle,
-        textScale: capCallCardTextScaleForRow(typo, fiveBy15CardRowPx, autoDisplayFontScale),
+        textScale: capCallCardTextScaleForRow(typo, rowPx, autoDisplayFontScale),
         clampContentHeight: true,
       };
     } else if (plainFullTitle) {
@@ -3594,22 +3599,17 @@ const PublicDisplay: React.FC = () => {
         ? PUBLIC_DISPLAY_CALL_TITLE_LINE_HEIGHT
         : PUBLIC_DISPLAY_CALL_ARTIST_LINE_HEIGHT;
     let fontSize = Math.round(basePx * displayFontScale * typo.textScale);
-    if (columnCallListLayout && fiveBy15CardRowPx > 0 && !fullCard) {
+    const rowPx = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
+    if (rowPx > 0 && !fullCard) {
       const titleFrac = typo.plainFullTitle ? 0.26 : 0.34;
       const artistFrac = typo.plainFullTitle ? 0.17 : 0.22;
       // Caps scale with the host zoom so the failsafe slider stays a uniform
       // multiplier — at 100% these are the same row-fraction caps the fitter saw.
       const maxPx =
         kind === 'title'
-          ? Math.round(fiveBy15CardRowPx * titleFrac * hostZoom)
-          : Math.round(fiveBy15CardRowPx * artistFrac * hostZoom);
+          ? Math.round(rowPx * titleFrac * hostZoom)
+          : Math.round(rowPx * artistFrac * hostZoom);
       if (maxPx > 0) fontSize = Math.min(fontSize, maxPx);
-    } else if (!fullCard && typo.plainFullTitle) {
-      const maxPx =
-        kind === 'title'
-          ? Math.round(24 * displayFontScale)
-          : Math.round(17 * displayFontScale);
-      fontSize = Math.min(fontSize, maxPx);
     }
     /** Pull title cap-height up so it lines with the top edge of the call # badge (line-height half-leading). */
     const titleTopNudgePx =
@@ -3677,8 +3677,9 @@ const PublicDisplay: React.FC = () => {
   };
 
   /** Edge-stripe style: width of the numbered band (text gets matching side padding). */
+  const callCardRowPxForLayout = columnCallListLayout ? fiveBy15CardRowPx : carouselCardRowPx;
   const callNumberStripeWidthPx =
-    fiveBy15CardRowPx > 0 ? Math.max(18, Math.round(fiveBy15CardRowPx * 0.24)) : 24;
+    callCardRowPxForLayout > 0 ? Math.max(18, Math.round(callCardRowPxForLayout * 0.24)) : 24;
 
   /**
    * Edge-stripe call number: bright numbered band down the card's left edge.
@@ -4482,26 +4483,43 @@ const PublicDisplay: React.FC = () => {
           aria-current={isCurrent ? 'true' : undefined}
           style={{
             position: 'relative',
-            display: 'block',
-            padding: '6px 8px',
-            borderRadius: 10,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '7px 10px',
+            borderRadius: 12,
+            marginBottom: 0,
             width: '100%',
             maxWidth: '100%',
             minWidth: 0,
             boxSizing: 'border-box',
-            overflow: 'hidden',
+            height: isFullCardPattern
+              ? 'auto'
+              : carouselCardRowPx > 0
+                ? `${carouselCardRowPx}px`
+                : undefined,
+            minHeight: isFullCardPattern
+              ? carouselCardRowPx > 0
+                ? carouselCardRowPx
+                : undefined
+              : carouselCardRowPx > 0
+                ? carouselCardRowPx
+                : 44,
+            overflow: isFullCardPattern ? 'visible' : 'hidden',
           }}
         >
           {renderCallNumberOverlay(callNum > 0 ? callNum : '', isFullCardPattern)}
-          <div
-            className={`call-song-info${typo.dense ? ' call-song-info--dense' : ''}`}
-            style={callSongInfoStyles(typo, isFullCardPattern, !!meta.artist?.trim())}
-          >
-            <div className="call-song-name" style={callCardLineStyles(typo, 'title', isFullCardPattern)}>
-              {title}
-            </div>
-            <div className="call-song-artist" style={callCardLineStyles(typo, 'artist', isFullCardPattern)}>
-              {artist}
+          <div style={{ display: 'block', width: '100%', minWidth: 0 }}>
+            <div
+              className={`call-song-info${typo.dense ? ' call-song-info--dense' : ''}`}
+              style={callSongInfoStyles(typo, isFullCardPattern, !!meta.artist?.trim())}
+            >
+              <div className="call-song-name" style={callCardLineStyles(typo, 'title', isFullCardPattern)}>
+                {title}
+              </div>
+              <div className="call-song-artist" style={callCardLineStyles(typo, 'artist', isFullCardPattern)}>
+                {artist}
+              </div>
             </div>
           </div>
         </div>

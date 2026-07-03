@@ -766,6 +766,121 @@ export function compositeLegitProgressPct(
   return Math.round(Math.max(0, Math.min(1, agg)) * 100);
 }
 
+export type HostPatternProgressOpts = {
+  linesRequired?: number;
+  customMask?: readonly string[];
+  customMatchAllowRotation?: boolean;
+  customMatchAllowMirror?: boolean;
+  patternComposite?: PatternCompositeSpec | null;
+};
+
+export type HostPatternProgress = {
+  hit: number;
+  total: number;
+  pct: number;
+  winComplete: boolean;
+};
+
+function maskLegitRatioBest(
+  card: { squares: SquareLite[] },
+  base: readonly string[],
+  transforms: GridTransform[] | undefined,
+  legit: (sq: SquareLite | undefined) => boolean,
+): { hit: number; total: number; pct: number } {
+  if (!base.length) return { hit: 0, total: 0, pct: 0 };
+  const variants = expandMaskOrientations(base, transforms?.length ? transforms : []);
+  let bestHit = 0;
+  let bestTotal = base.length;
+  let bestRatio = 0;
+  for (const mask of variants) {
+    let hit = 0;
+    for (const pos of mask) {
+      if (legit(card.squares.find((s) => s.position === pos))) hit++;
+    }
+    const ratio = mask.length > 0 ? hit / mask.length : 0;
+    if (ratio > bestRatio || (ratio === bestRatio && hit > bestHit)) {
+      bestRatio = ratio;
+      bestHit = hit;
+      bestTotal = mask.length;
+    }
+  }
+  return {
+    hit: bestHit,
+    total: bestTotal,
+    pct: Math.round(Math.max(0, Math.min(1, bestRatio)) * 100),
+  };
+}
+
+/** Host player-card proximity to bingo — mirrors server win rules (legitimate marks only). */
+export function hostPatternLegitProgress(
+  card: { squares: SquareLite[] } | null | undefined,
+  pattern: BingoPattern | string,
+  playedSongIds: readonly string[],
+  opts: HostPatternProgressOpts = {},
+): HostPatternProgress {
+  if (!card?.squares?.length) {
+    return { hit: 0, total: 5, pct: 0, winComplete: false };
+  }
+
+  const legit = (sq: SquareLite | undefined) => {
+    if (!sq?.marked) return false;
+    if (sq.isFreeSpace || sq.songId === '__FREE_SPACE__') return true;
+    return playedSongIds.includes(sq.songId || '');
+  };
+
+  const canonical = pattern === 'blackout' ? 'full_card' : pattern;
+
+  if (canonical === 'composite') {
+    const pct = compositeLegitProgressPct(card, opts.patternComposite, playedSongIds);
+    return { hit: pct, total: 100, pct, winComplete: pct >= 100 };
+  }
+
+  if (canonical === 'line') {
+    const need = normalizeLinesRequired(opts.linesRequired);
+    const done = countCompletedLinesStrict(card, playedSongIds);
+    const hit = Math.min(done, need);
+    const pct = need > 0 ? Math.round((hit / need) * 100) : 0;
+    return { hit, total: need, pct, winComplete: done >= need };
+  }
+
+  if (canonical === 'full_card') {
+    let hit = 0;
+    for (const pos of STANDARD_BINGO_POSITIONS) {
+      if (legit(card.squares.find((s) => s.position === pos))) hit++;
+    }
+    const pct = Math.round((hit / 25) * 100);
+    return { hit, total: 25, pct, winComplete: hit >= 25 };
+  }
+
+  if (canonical === 'custom' && opts.customMask?.length) {
+    const transforms = hostOrientationTransforms({
+      matchAllowRotation: opts.customMatchAllowRotation,
+      matchAllowMirror: opts.customMatchAllowMirror,
+    });
+    const { hit, total, pct } = maskLegitRatioBest(card, opts.customMask, transforms, legit);
+    return { hit, total, pct, winComplete: pct >= 100 };
+  }
+
+  if (PRESET_SHAPE_PATTERNS.includes(canonical as BingoPattern)) {
+    const pts = BINGO_PATTERNS[canonical as BingoPattern]?.positions;
+    if (pts?.length) {
+      const { hit, total, pct } = maskLegitRatioBest(card, pts, undefined, legit);
+      return { hit, total, pct, winComplete: pct >= 100 };
+    }
+  }
+
+  // Unknown — best single-line progress as fallback
+  const need = 1;
+  const done = countCompletedLinesStrict(card, playedSongIds);
+  const hit = Math.min(done, need);
+  return {
+    hit,
+    total: need,
+    pct: Math.round((hit / need) * 100),
+    winComplete: done >= need,
+  };
+}
+
 // Helper function to check if a position is part of a pattern
 export function isPositionInPattern(position: string, pattern: BingoPattern, customPositions?: string[]): boolean {
   if (pattern === 'custom') {
