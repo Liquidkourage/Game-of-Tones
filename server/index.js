@@ -488,7 +488,7 @@ async function tryRestorePlayerCardFromDb(room, clientId) {
 async function restoreAndEmitBingoCardForJoiner(room, socket, clientIdOpt) {
   if (!room || !socket) return false;
   const player = room.players.get(socket.id);
-  if (!player || player.isHost) return false;
+  if (!player || player.isHost || isDisplayConnectionPlayer(player)) return false;
 
   if (!room.bingoCards) room.bingoCards = new Map();
   const clientId = clientIdOpt || player.clientId;
@@ -496,8 +496,9 @@ async function restoreAndEmitBingoCardForJoiner(room, socket, clientIdOpt) {
   const bySocket = room.bingoCards.get(socket.id);
   if (bySocket) {
     if (!bingoCardMatchesCurrentRoundPool(room, bySocket)) {
-      room.bingoCards.delete(socket.id);
-      player.bingoCard = null;
+      routineServerLog(
+        `🔄 Skipping stale in-memory card for ${player.name} — songs not in current round pool (not deleted)`,
+      );
     } else {
       player.bingoCard = bySocket;
       io.to(socket.id).emit('bingo-card', bySocket);
@@ -508,7 +509,8 @@ async function restoreAndEmitBingoCardForJoiner(room, socket, clientIdOpt) {
   if (clientId && room.clientCards && room.clientCards.has(clientId)) {
     const existingCard = room.clientCards.get(clientId);
     if (!bingoCardMatchesCurrentRoundPool(room, existingCard)) {
-      room.clientCards.delete(clientId);
+      const stillLive = Array.from(room.bingoCards.values()).includes(existingCard);
+      if (!stillLive) room.clientCards.delete(clientId);
       routineServerLog(
         `🔄 Dropped stale clientCards entry for ${player.name} — card songs not in current round pool`,
       );
@@ -2363,23 +2365,28 @@ function clearRoundScopedRoomState(room, roomId, opts = {}) {
 function currentRoundPoolIdSet(room) {
   const ids = new Set();
   if (!room) return ids;
-  if (Array.isArray(room.playlistSongs) && room.playlistSongs.length > 0) {
-    for (const s of room.playlistSongs) {
-      if (s?.id) ids.add(String(s.id));
+
+  const addId = (raw) => {
+    if (raw != null && String(raw).trim() !== '') ids.add(String(raw));
+  };
+  const addFromSongs = (list) => {
+    if (!Array.isArray(list)) return;
+    for (const s of list) {
+      if (typeof s === 'string') addId(s);
+      else if (s?.id) addId(s.id);
     }
-  } else if (Array.isArray(room.oneBySeventyFivePool) && room.oneBySeventyFivePool.length > 0) {
-    for (const s of room.oneBySeventyFivePool) {
-      if (s?.id) ids.add(String(s.id));
-    }
-  } else if (
-    Array.isArray(room.fiveByFifteenColumnsIds) &&
-    room.fiveByFifteenColumnsIds.length === 5
-  ) {
+  };
+
+  addFromSongs(room.playlistSongs);
+  addFromSongs(room.finalizedSongOrder);
+  addFromSongs(room.finalizedSongs);
+  if (Array.isArray(room.oneBySeventyFivePool)) {
+    for (const s of room.oneBySeventyFivePool) addId(s?.id);
+  }
+  if (Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5) {
     for (const col of room.fiveByFifteenColumnsIds) {
       if (Array.isArray(col)) {
-        for (const id of col) {
-          if (id) ids.add(String(id));
-        }
+        for (const id of col) addId(id);
       }
     }
   }
@@ -2392,7 +2399,7 @@ function bingoCardMatchesCurrentRoundPool(room, card) {
   if (poolIds.size < 25) return true;
   for (const sq of card.squares) {
     const sid = sq?.songId;
-    if (!sid || sid === 'FREE') continue;
+    if (!sid || sid === 'FREE' || sid === '__FREE_SPACE__' || sq?.isFreeSpace) continue;
     if (!poolIds.has(String(sid))) return false;
   }
   return true;
@@ -6321,6 +6328,14 @@ io.on('connection', (socket) => {
                 : [];
         const deckSourceIds = deckSource.map((s) => (typeof s === 'string' ? s : s?.id)).filter(Boolean);
         let showDeck = buildShowPoolDeck(room, deckSource, useSavedRoundPlayback);
+        showDeck = normalizeShowDeckForRoom(room, showDeck, { alignToPool: true });
+        if (showDeck.length === 0) {
+          socket.emit('error', {
+            message:
+              'Could not build a valid playback pool (need at least 25 tracks after deduplication). Check playlists and try Show Playlists / Save round again.',
+          });
+          return;
+        }
 
         routineServerLog('🎵 Generating bingo cards...');
         const forceRegenerateCards = shouldRegenerateBingoCardsOnStartGame(
@@ -6399,6 +6414,7 @@ io.on('connection', (socket) => {
                 : room.finalizedSongOrder ||
                   (Array.isArray(songList) && songList.length > 0 ? songList : null);
           }
+          applyShowPoolOrderToRoom(room, roomId, showDeck);
           const cardsOk = await generateBingoCards(roomId, playlistsToUse, songOrderForCards);
           if (!cardsOk) {
             const playersNeedingCards = Array.from(room.players.values()).filter(
@@ -6459,9 +6475,9 @@ io.on('connection', (socket) => {
           }
         }
 
-        showDeck = normalizeShowDeckForRoom(room, showDeck, { alignToPool: true });
+        // Re-sync pool after card generation (generateBingoCards may adjust 1×75 / 5×15 layout).
+        applyShowPoolOrderToRoom(room, roomId, showDeck);
 
-        // Sync projector + host pool to shuffled playback order before game-started (host may request-finalized-order immediately).
         const hasFiveBy15Start =
           Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5;
         const hasOneBy75Start =
@@ -6472,21 +6488,10 @@ io.on('connection', (socket) => {
           room.fiveByFifteenPlaylistNames = null;
           room.fiveByFifteenMeta = null;
         }
-        if (showDeck.length === 0) {
-          socket.emit('error', {
-            message:
-              'Could not build a valid playback pool (need at least 25 tracks after deduplication). Check playlists and try Show Playlists / Save round again.',
-          });
-          return;
-        }
 
         routineServerLog(
           `🎲 Start-game playback order (${showDeck.length} tracks, shuffled) — play 1→${showDeck.length}${useSavedRoundPlayback ? ' [saved round]' : ''}`,
         );
-
-        if (showDeck.length > 0) {
-          applyShowPoolOrderToRoom(room, roomId, showDeck);
-        }
 
         persistAllDealtCardsRoundToken(room);
         emitPublicDisplayPoolLayout(roomId, room);
@@ -8385,6 +8390,7 @@ async function generateBingoCards(roomId, playlists, songOrder = null) {
 
   for (const [playerId, player] of room.players) {
     try {
+      if (!player || player.isHost || isDisplayConnectionPlayer(player)) continue;
       routineServerLog(`🎲 Generating card for player: ${player.name} (${playerId})`);
       let chosen25 = [];
       if (mode === '1x75') {
