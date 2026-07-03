@@ -546,6 +546,58 @@ async function restoreAndEmitBingoCardForJoiner(room, socket, clientIdOpt) {
   return false;
 }
 
+async function restoreOrDealBingoCardForJoiner(room, roomId, socket, clientIdOpt, opts = {}) {
+  const { allowDeal = true } = opts;
+  const player = room?.players?.get(socket.id);
+  if (!player || player.isHost || player.name === 'Display') return false;
+
+  rebindBingoCardsToActivePlayers(room);
+  const bound = resolveActivePlayerCard(room, player, socket.id);
+  if (bound) {
+    player.bingoCard = bound;
+    room.bingoCards.set(socket.id, bound);
+    if (player.clientId) {
+      if (!room.clientCards) room.clientCards = new Map();
+      room.clientCards.set(player.clientId, bound);
+    }
+    io.to(socket.id).emit('bingo-card', bound);
+    return true;
+  }
+
+  const restored = await restoreAndEmitBingoCardForJoiner(room, socket, clientIdOpt);
+  if (restored) return true;
+  if (!allowDeal) return false;
+
+  const live =
+    room.gameState === 'playing' || room.gameState === 'paused_for_verification';
+  const hasPool =
+    (Array.isArray(room.playlistSongs) && room.playlistSongs.length > 0) ||
+    (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) ||
+    (Array.isArray(room.oneBySeventyFivePool) && room.oneBySeventyFivePool.length > 0) ||
+    (Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5) ||
+    (Array.isArray(room.playlists) && room.playlists.length > 0) ||
+    (Array.isArray(room.finalizedPlaylists) && room.finalizedPlaylists.length > 0);
+
+  if (!live || !hasPool) return false;
+
+  routineServerLog(`🎲 Dealing card after failed restore for ${player.name}`);
+  const card = await generateBingoCardForPlayer(roomId, socket.id);
+  if (card && player.clientId) {
+    if (!room.clientCards) room.clientCards = new Map();
+    room.clientCards.set(player.clientId, card);
+  }
+  return !!card;
+}
+
+function findPriorPlayerByClientId(room, clientId, excludeSocketId) {
+  if (!room?.players || !clientId) return null;
+  for (const [pid, p] of room.players.entries()) {
+    if (pid === excludeSocketId || !p || p.isHost) continue;
+    if (p.clientId === clientId) return p;
+  }
+  return null;
+}
+
 async function clearPlayerDataForRoom(roomId) {
   if (!db || !roomId) return;
   try {
@@ -2346,6 +2398,98 @@ function bingoCardMatchesCurrentRoundPool(room, card) {
   return true;
 }
 
+/** Resolve a player's live card from socket map, player object, or stable clientId cache. */
+function resolveActivePlayerCard(room, player, playerId) {
+  if (!room || !player || player.isHost || player.name === 'Display') return null;
+
+  const bySocket = room.bingoCards?.get(playerId);
+  if (bySocket && bingoCardMatchesCurrentRoundPool(room, bySocket)) {
+    return bySocket;
+  }
+
+  if (player.bingoCard && bingoCardMatchesCurrentRoundPool(room, player.bingoCard)) {
+    return player.bingoCard;
+  }
+
+  const clientId = player.clientId;
+  if (clientId && room.clientCards?.has(clientId)) {
+    const byClient = room.clientCards.get(clientId);
+    if (byClient && bingoCardMatchesCurrentRoundPool(room, byClient)) {
+      return byClient;
+    }
+  }
+
+  return null;
+}
+
+/** Re-key in-memory cards onto current player socket ids (survives disconnect/reconnect). */
+function rebindBingoCardsToActivePlayers(room) {
+  if (!room?.players) return 0;
+  if (!room.bingoCards) room.bingoCards = new Map();
+  if (!room.clientCards) room.clientCards = new Map();
+
+  let rebound = 0;
+  for (const [playerId, player] of room.players.entries()) {
+    if (!player || player.isHost || player.name === 'Display') continue;
+
+    const card = resolveActivePlayerCard(room, player, playerId);
+    if (!card) continue;
+
+    player.bingoCard = card;
+    room.bingoCards.set(playerId, card);
+    if (player.clientId) {
+      room.clientCards.set(player.clientId, card);
+    }
+    rebound++;
+  }
+  return rebound;
+}
+
+function buildHostPlayerCardsData(room) {
+  rebindBingoCardsToActivePlayers(room);
+  const playedSongs = playedSongIdsForHostPlayerCards(room);
+  const playerCardsData = {};
+
+  if (room?.players) {
+    for (const [playerId, player] of room.players.entries()) {
+      if (!player || player.isHost || player.name === 'Display') continue;
+      const card = resolveActivePlayerCard(room, player, playerId);
+      if (!card) continue;
+      playerCardsData[playerId] = hostPlayerCardEmitPayload(room, playerId, card, playedSongs);
+    }
+  }
+
+  return playerCardsData;
+}
+
+async function ensureActivePlayersHaveCards(roomId, room) {
+  if (!room?.players) return 0;
+  const live =
+    room.gameState === 'playing' || room.gameState === 'paused_for_verification';
+  if (!live) return 0;
+
+  const hasPool =
+    (Array.isArray(room.playlistSongs) && room.playlistSongs.length > 0) ||
+    (Array.isArray(room.finalizedSongOrder) && room.finalizedSongOrder.length > 0) ||
+    (Array.isArray(room.oneBySeventyFivePool) && room.oneBySeventyFivePool.length > 0) ||
+    (Array.isArray(room.fiveByFifteenColumnsIds) && room.fiveByFifteenColumnsIds.length === 5);
+  if (!hasPool) return 0;
+
+  let dealt = 0;
+  for (const [playerId, player] of room.players.entries()) {
+    if (!player || player.isHost || player.name === 'Display') continue;
+    if (resolveActivePlayerCard(room, player, playerId)) continue;
+    try {
+      routineServerLog(`🔄 Dealing missing card for ${player.name} (active player recovery)`);
+      const card = await generateBingoCardForPlayer(roomId, playerId);
+      if (card) dealt++;
+    } catch (e) {
+      console.error(`❌ Failed recovery deal for ${player.name}:`, e?.message || e);
+    }
+  }
+  return dealt;
+}
+
 function refreshRoomRoundToken(room) {
   if (!room) return;
   room.playerDataRoundToken = playersStore.buildRoundTokenFromRoom(room);
@@ -4047,15 +4191,24 @@ io.on('connection', (socket) => {
     const inPerson = data.inPerson !== false;
     const joinedPlayerUserId = !effectiveIsHost ? resolvePlayerUserIdFromJoin(socket, data) : null;
     if (joinedPlayerUserId != null) socket.playerUserId = joinedPlayerUserId;
+
+    const priorPlayer =
+      !effectiveIsHost && clientId ? findPriorPlayerByClientId(room, clientId, socket.id) : null;
+    if (priorPlayer && priorPlayer.id !== socket.id) {
+      room.players.delete(priorPlayer.id);
+    }
+
     const player = {
       id: socket.id,
       name: playerName,
       isHost: effectiveIsHost,
-      hasBingo: false,
+      hasBingo: priorPlayer?.hasBingo === true,
       clientId: clientId || null,
       /** false = joined as remote/online when host enables hybrid mode */
       inPerson,
       playerUserId: joinedPlayerUserId,
+      bingoCard: priorPlayer?.bingoCard || null,
+      patternComplete: priorPlayer?.patternComplete === true,
     };
     
     room.players.set(socket.id, player);
@@ -4192,7 +4345,12 @@ io.on('connection', (socket) => {
           }
           
           // Immediately send player cards to reconnecting host
-          sendPlayerCardUpdates(roomId, true); // Immediate update for reconnecting host
+          void ensureActivePlayersHaveCards(roomId, room).then((recovered) => {
+            if (recovered > 0) {
+              routineServerLog(`✅ Host reconnect: recovered ${recovered} missing player card(s)`);
+            }
+            sendPlayerCardUpdates(roomId, true);
+          });
           emitRoomPlayersRosterToHosts(roomId, room);
 
           if (Array.isArray(room.bingoVerificationQueue) && room.bingoVerificationQueue.length > 0) {
@@ -4211,13 +4369,14 @@ io.on('connection', (socket) => {
           emitCurrentSongPlayingToSocket(socket, room);
         }
 
-        await restoreAndEmitBingoCardForJoiner(room, socket, clientId);
+        await restoreOrDealBingoCardForJoiner(room, roomId, socket, clientId, { allowDeal: true });
         if (
           !room.bingoCards?.get(socket.id) &&
+          !effectiveIsHost &&
           (room.playlistSongs?.length || room.playlists?.length || room.finalizedPlaylists?.length)
         ) {
-          // Generate card for any player (host or not) if playlists exist
-          routineServerLog(`🎲 Generating bingo card for ${effectiveIsHost ? 'host' : 'player'} ${playerName}`);
+          // Non-host only — host does not need a bingo card
+          routineServerLog(`🎲 Generating bingo card for player ${playerName}`);
           const card = await generateBingoCardForPlayer(roomId, socket.id);
           if (card && clientId) {
             if (!room.clientCards) room.clientCards = new Map();
@@ -5951,7 +6110,7 @@ io.on('connection', (socket) => {
       io.to(socket.id).emit('room-state', payload);
       const syncClientId = data.clientId || room.players.get(socket.id)?.clientId;
       if (syncClientId) {
-        await restoreAndEmitBingoCardForJoiner(room, socket, syncClientId);
+        await restoreOrDealBingoCardForJoiner(room, roomId, socket, syncClientId, { allowDeal: false });
       }
       showLog.routineLogThrottled(
         `sync-state:${roomId}`,
@@ -5964,8 +6123,22 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('update-player-preferences', (data = {}) => {
+    try {
+      const { roomId, clientId, playerPreferences } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const player = room.players.get(socket.id);
+      if (!player || player.isHost || player.name === 'Display') return;
+      if (clientId && player.clientId && player.clientId !== clientId) return;
+      void recordPlayerDataJoin(room, player, playerPreferences);
+    } catch (e) {
+      console.error('❌ update-player-preferences:', e?.message || e);
+    }
+  });
+
   // Host requests to view all player cards
-  socket.on('request-player-cards', (data = {}) => {
+  socket.on('request-player-cards', async (data = {}) => {
     try {
       const { roomId } = data;
       const room = rooms.get(roomId);
@@ -5974,26 +6147,13 @@ io.on('connection', (socket) => {
       // Verify this is the host
       const isHost = room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
       if (!isHost) return;
-      
-      const playedSongs = playedSongIdsForHostPlayerCards(room);
-      
-      const playerCardsData = {};
-      if (room.bingoCards) {
-        room.bingoCards.forEach((card, playerId) => {
-          const player = room.players.get(playerId);
-          if (player && card) {
-            // Only include actual players (not hosts or public display)
-            if (!player.isHost && player.name !== 'Display') {
-              playerCardsData[playerId] = hostPlayerCardEmitPayload(
-                room,
-                playerId,
-                card,
-                playedSongs,
-              );
-            }
-          }
-        });
+
+      const recovered = await ensureActivePlayersHaveCards(roomId, room);
+      if (recovered > 0) {
+        routineServerLog(`✅ Host card view: recovered ${recovered} missing player card(s)`);
       }
+
+      const playerCardsData = buildHostPlayerCardsData(room);
       
       socket.emit('player-cards-update', playerCardsData);
       if (room.players.get(socket.id)?.isHost) {
@@ -6171,12 +6331,12 @@ io.on('connection', (socket) => {
         );
         if (forceRegenerateCards || useSavedRoundPlayback) {
           io.to(roomId).emit('round-pool-cleared', { roomId });
-          clearRoundScopedRoomState(room, roomId, {
-            clearPlayerSessions: forceRegenerateCards,
-            resetPlayerCardState: false,
-          });
         }
         if (forceRegenerateCards) {
+          clearRoundScopedRoomState(room, roomId, {
+            clearPlayerSessions: true,
+            resetPlayerCardState: false,
+          });
           if (freeSpace !== undefined) {
             room.freeSpaceEnabled = !!freeSpace;
           }
@@ -9844,25 +10004,9 @@ function clearPlayerCardUpdateTimer(roomId) {
 function sendPlayerCardUpdatesNow(roomId) {
   try {
     const room = rooms.get(roomId);
-    if (!room || !room.bingoCards) return;
-    
-    const playedSongs = playedSongIdsForHostPlayerCards(room);
-    
-    const playerCardsData = {};
-    room.bingoCards.forEach((card, playerId) => {
-      const player = room.players.get(playerId);
-      if (player && card) {
-        // Only include actual players (not hosts or public display)
-        if (!player.isHost && player.name !== 'Display') {
-          playerCardsData[playerId] = hostPlayerCardEmitPayload(
-            room,
-            playerId,
-            card,
-            playedSongs,
-          );
-        }
-      }
-    });
+    if (!room) return;
+
+    const playerCardsData = buildHostPlayerCardsData(room);
     
     // Send to all hosts in the room
     room.players.forEach((player, playerId) => {

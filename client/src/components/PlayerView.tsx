@@ -1136,7 +1136,21 @@ const PlayerView: React.FC = () => {
         socket.emit('join-room', buildJoinPayload(playerName.trim()));
       } catch {}
     }
-  }, [socket, joinReady, playerName, roomId, clientId, inPersonJoin, cardFontPercent, cardTheme]);
+  }, [socket, joinReady, playerName, roomId, clientId, inPersonJoin]);
+
+  // Card appearance prefs — do not re-join (that would risk a new bingo card)
+  useEffect(() => {
+    if (!socket?.connected || !joinReady || !playerName?.trim()) return;
+    try {
+      socket.emit('update-player-preferences', {
+        roomId,
+        clientId,
+        playerPreferences: { cardFontPercent, cardTheme },
+      });
+    } catch {
+      /* ignore */
+    }
+  }, [socket, joinReady, playerName, roomId, clientId, cardFontPercent, cardTheme]);
 
   useEffect(() => {
     if (!optionsOpen) return undefined;
