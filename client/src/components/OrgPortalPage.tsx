@@ -144,6 +144,7 @@ const OrgPortalPage: React.FC = () => {
       name?: string;
       status?: string;
       playlistIds?: string[];
+      playlistNames?: string[];
       savedMixSnapshot?: unknown;
     }>;
   } | null>(null);
@@ -825,7 +826,14 @@ const OrgPortalPage: React.FC = () => {
                                     const ids = Array.isArray(round.playlistIds)
                                       ? round.playlistIds
                                       : [];
+                                    const names = Array.isArray(round.playlistNames)
+                                      ? round.playlistNames
+                                      : [];
                                     const hasSnap = !!round.savedMixSnapshot;
+                                    const labels = ids.map((id, i) => {
+                                      const label = (names[i] || '').trim();
+                                      return label || id;
+                                    });
                                     return (
                                       <div key={`prep-round-${idx}`} style={{ marginBottom: 6 }}>
                                         <strong>
@@ -834,8 +842,8 @@ const OrgPortalPage: React.FC = () => {
                                         {round.status ? ` · ${round.status}` : ''}
                                         {hasSnap ? ' · has saved mix snapshot' : ' · no mix snapshot'}
                                         <div>
-                                          {ids.length
-                                            ? `Playlists (${ids.length}): ${ids.join(', ')}`
+                                          {labels.length
+                                            ? `Playlists (${labels.length}): ${labels.join(' · ')}`
                                             : 'No playlists assigned'}
                                         </div>
                                       </div>
