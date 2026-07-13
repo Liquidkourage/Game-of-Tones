@@ -131,6 +131,22 @@ const OrgPortalPage: React.FC = () => {
   const [promoCode, setPromoCode] = useState('');
   const [planInterval, setPlanInterval] = useState<'month' | 'year'>('month');
   const [orgEvents, setOrgEvents] = useState<OrgEventRow[]>([]);
+  const [prepViewRoomId, setPrepViewRoomId] = useState<string | null>(null);
+  const [prepViewBusy, setPrepViewBusy] = useState(false);
+  const [prepViewError, setPrepViewError] = useState<string | null>(null);
+  const [prepViewData, setPrepViewData] = useState<{
+    roomId: string;
+    hostEmail: string | null;
+    hostDisplayName: string | null;
+    updatedAt: string | null;
+    currentRoundIndex: number;
+    rounds: Array<{
+      name?: string;
+      status?: string;
+      playlistIds?: string[];
+      savedMixSnapshot?: unknown;
+    }>;
+  } | null>(null);
 
   const billingNotice = searchParams.get('billing');
 
@@ -428,6 +444,36 @@ const OrgPortalPage: React.FC = () => {
   const org = data?.organization;
   const isOwner = data?.role === 'owner';
 
+  const viewEventPrep = async (roomId: string) => {
+    if (!isOwner || !roomId) return;
+    setPrepViewRoomId(roomId);
+    setPrepViewBusy(true);
+    setPrepViewError(null);
+    setPrepViewData(null);
+    try {
+      const res = await hostFetch(
+        `${API_BASE || ''}/api/org/events/${encodeURIComponent(roomId)}/prep`,
+      );
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPrepViewError((j && j.message) || `Could not load prep (${res.status})`);
+        return;
+      }
+      setPrepViewData({
+        roomId: String(j.roomId || roomId),
+        hostEmail: typeof j.hostEmail === 'string' ? j.hostEmail : null,
+        hostDisplayName: typeof j.hostDisplayName === 'string' ? j.hostDisplayName : null,
+        updatedAt: typeof j.updatedAt === 'string' ? j.updatedAt : null,
+        currentRoundIndex: typeof j.currentRoundIndex === 'number' ? j.currentRoundIndex : -1,
+        rounds: Array.isArray(j.rounds) ? j.rounds : [],
+      });
+    } catch (e) {
+      setPrepViewError(String(e));
+    } finally {
+      setPrepViewBusy(false);
+    }
+  };
+
   return (
     <div className="org-portal">
       <Link to="/" className="org-portal__back">
@@ -715,6 +761,94 @@ const OrgPortalPage: React.FC = () => {
                       {ev.creditConsumed && ev.status !== 'void' ? ' · 1 credit' : ''}
                       {ev.status === 'void' ? ' · credit refunded' : ''}
                     </span>
+                    {isOwner ? (
+                      <>
+                        {' '}
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          style={{ marginLeft: 8, padding: '2px 10px', fontSize: '0.85rem' }}
+                          disabled={prepViewBusy && prepViewRoomId === ev.roomId}
+                          onClick={() => {
+                            if (prepViewRoomId === ev.roomId && prepViewData) {
+                              setPrepViewRoomId(null);
+                              setPrepViewData(null);
+                              setPrepViewError(null);
+                            } else {
+                              void viewEventPrep(ev.roomId);
+                            }
+                          }}
+                        >
+                          {prepViewRoomId === ev.roomId && prepViewData ? 'Hide prep' : 'View prep'}
+                        </button>
+                      </>
+                    ) : null}
+                    {isOwner && prepViewRoomId === ev.roomId ? (
+                      <div
+                        className="org-portal__muted"
+                        style={{
+                          marginTop: 8,
+                          padding: 10,
+                          border: '1px solid rgba(255,255,255,0.12)',
+                          borderRadius: 8,
+                          whiteSpace: 'pre-wrap',
+                        }}
+                      >
+                        {prepViewBusy ? (
+                          <span>Loading cloud prep…</span>
+                        ) : prepViewError ? (
+                          <span>{prepViewError}</span>
+                        ) : prepViewData ? (
+                          <>
+                            <div>
+                              Host:{' '}
+                              {prepViewData.hostDisplayName ||
+                                prepViewData.hostEmail ||
+                                'Unknown'}
+                              {prepViewData.hostEmail && prepViewData.hostDisplayName
+                                ? ` (${prepViewData.hostEmail})`
+                                : ''}
+                            </div>
+                            <div>
+                              Saved:{' '}
+                              {prepViewData.updatedAt
+                                ? new Date(prepViewData.updatedAt).toLocaleString()
+                                : '—'}
+                              {prepViewData.currentRoundIndex >= 0
+                                ? ` · current round index ${prepViewData.currentRoundIndex}`
+                                : ''}
+                            </div>
+                            <div style={{ marginTop: 8 }}>
+                              {prepViewData.rounds.length === 0
+                                ? 'No rounds in cloud backup.'
+                                : prepViewData.rounds.map((round, idx) => {
+                                    const ids = Array.isArray(round.playlistIds)
+                                      ? round.playlistIds
+                                      : [];
+                                    const hasSnap = !!round.savedMixSnapshot;
+                                    return (
+                                      <div key={`prep-round-${idx}`} style={{ marginBottom: 6 }}>
+                                        <strong>
+                                          {round.name || `Round ${idx + 1}`}
+                                        </strong>
+                                        {round.status ? ` · ${round.status}` : ''}
+                                        {hasSnap ? ' · has saved mix snapshot' : ' · no mix snapshot'}
+                                        <div>
+                                          {ids.length
+                                            ? `Playlists (${ids.length}): ${ids.join(', ')}`
+                                            : 'No playlists assigned'}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                            </div>
+                            <p style={{ marginTop: 8, marginBottom: 0 }}>
+                              Read-only cloud backup — does not open or change the live host room.
+                            </p>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </li>
                 ))}
               </ul>

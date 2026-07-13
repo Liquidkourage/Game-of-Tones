@@ -11716,6 +11716,54 @@ app.get('/api/org/events', async (req, res) => {
   }
 });
 
+/**
+ * Org owner read-only: cloud prep backup for a room hosted by a member of this org.
+ * Does not join the room, mutate prep, or affect live host/player/display sessions.
+ */
+app.get('/api/org/events/:roomId/prep', async (req, res) => {
+  try {
+    const uid = await requireApprovedHostUid(req, res);
+    if (!uid) return;
+    if (!db) return res.status(503).json({ error: 'database_required', message: 'DATABASE_URL is required.' });
+    const ctx = await organizationsStore.getUserOrganizationContext(db, uid);
+    if (!ctx.organization || ctx.role !== 'owner') {
+      return res.status(403).json({
+        error: 'forbidden',
+        message: 'Only the organization owner can view another host’s saved prep.',
+      });
+    }
+    const roomId = sanitizeHostPrepRoomId(req.params.roomId);
+    if (!roomId) return res.status(400).json({ error: 'invalid_room_id' });
+
+    const row = await hostRoomPrepStore.getOrgMemberPrepByRoomId(db, ctx.organization.id, roomId);
+    if (!row) {
+      return res.status(404).json({
+        error: 'not_found',
+        message: 'No cloud prep backup found for this room from a host in your organization.',
+      });
+    }
+    const p = row.payload && typeof row.payload === 'object' ? row.payload : {};
+    const updatedAt =
+      row.updatedAt instanceof Date
+        ? row.updatedAt.toISOString()
+        : row.updatedAt != null
+          ? String(row.updatedAt)
+          : null;
+    return res.json({
+      roomId,
+      hostUserId: row.userId,
+      hostEmail: row.hostEmail,
+      hostDisplayName: row.hostDisplayName,
+      updatedAt,
+      currentRoundIndex: typeof p.currentRoundIndex === 'number' ? p.currentRoundIndex : -1,
+      rounds: Array.isArray(p.rounds) ? p.rounds : [],
+    });
+  } catch (e) {
+    console.error('GET /api/org/events/:roomId/prep:', e?.message || e);
+    res.status(500).json({ error: 'failed', message: e?.message || 'Failed' });
+  }
+});
+
 app.get('/api/org/billing/setup', async (req, res) => {
   try {
     const uid = await requireApprovedHostUid(req, res);

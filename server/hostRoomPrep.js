@@ -51,9 +51,38 @@ async function deleteHostRoomPrep(db, userId, roomId) {
   return true;
 }
 
+/**
+ * Org-owner audit: newest prep row for a room whose owner is in organizationId.
+ * Does not change getHostRoomPrep behavior (still keyed by caller user_id).
+ */
+async function getOrgMemberPrepByRoomId(db, organizationId, roomId) {
+  if (!db || organizationId == null || !roomId) return null;
+  const r = await db.query(
+    `SELECT p.user_id AS user_id, p.payload, p.updated_at,
+            u.email AS host_email, u.display_name AS host_display_name
+     FROM host_room_prep p
+     INNER JOIN users u ON u.id = p.user_id
+     WHERE p.room_id = $1
+       AND u.organization_id = $2
+     ORDER BY p.updated_at DESC
+     LIMIT 1`,
+    [String(roomId), organizationId],
+  );
+  if (r.rows.length === 0) return null;
+  const row = r.rows[0];
+  return {
+    userId: row.user_id,
+    payload: row.payload,
+    updatedAt: row.updated_at,
+    hostEmail: row.host_email || null,
+    hostDisplayName: row.host_display_name || null,
+  };
+}
+
 module.exports = {
   ensureHostRoomPrepTable,
   getHostRoomPrep,
   upsertHostRoomPrep,
   deleteHostRoomPrep,
+  getOrgMemberPrepByRoomId,
 };
