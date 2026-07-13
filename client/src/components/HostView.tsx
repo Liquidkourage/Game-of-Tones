@@ -6098,6 +6098,7 @@ const HostView: React.FC = () => {
         'Reset entire event?\n\n' +
           '• Ends the game if playing\n' +
           '• Clears mix selection & finalized pool in this tab\n' +
+          '• Clears Leftovers (night-wide unplayed recap)\n' +
           '• Rounds with a valid Save round snapshot keep playlists + snapshot\n' +
           '• All other rounds: buckets emptied (draft prep discarded)\n' +
           '• Every round returns to unplanned\n\n' +
@@ -6112,12 +6113,22 @@ const HostView: React.FC = () => {
       const resetRounds: EventRound[] = eventRounds.map((round) => {
         if (eventRoundSnapshotMeetsSaveThreshold(round, freeSpaceEnabled)) {
           const snapLen = round.savedMixSnapshot!.songs.length;
+          const kept = (round.playlistIds || [])
+            .map((id, i) => ({
+              id: String(id),
+              name: String(round.playlistNames?.[i] ?? ''),
+            }))
+            .filter((p) => !isLeftoversPlaylistId(p.id));
+          const { playRecap: _dropRecap, ...withoutRecap } = round;
           return {
-            ...round,
+            ...withoutRecap,
+            playlistIds: kept.map((p) => p.id),
+            playlistNames: kept.map((p) => p.name),
             status: 'unplanned' as const,
             startedAt: undefined,
             completedAt: undefined,
             songCount: snapLen,
+            playRecap: undefined,
           };
         }
         return {
@@ -6136,6 +6147,9 @@ const HostView: React.FC = () => {
       // Update rounds and reset current round index
       setEventRounds(resetRounds);
       setCurrentRoundIndex(-1);
+      setPlayedInOrder([]);
+      setRoundWinners([]);
+      setRoundComplete(null);
 
       // Save to localStorage
       if (roomId) {
@@ -6150,7 +6164,7 @@ const HostView: React.FC = () => {
       invalidateSetlistBuildCache();
       setGameState('waiting');
 
-      addLog('Event reset — saved-round snapshots kept; unsaved buckets cleared', 'info');
+      addLog('Event reset — leftovers cleared; saved-round snapshots kept; unsaved buckets cleared', 'info');
     }
   };
 
