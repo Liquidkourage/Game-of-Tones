@@ -8003,7 +8003,12 @@ const HostView: React.FC = () => {
   /** Pick a round for advance prep: sync mix + pattern/snippet UI without marking rounds active/completed or leaving Manager. */
   const handleSelectRoundForPrep = useCallback(
     (roundIndex: number) => {
-      if (gameState === 'playing') {
+      const cur = currentRoundIndexRef.current;
+      const curRound = cur >= 0 ? eventRoundsRef.current[cur] : null;
+      // After bingo approve / Back to host, the finished round is completed while the room may
+      // still briefly look "playing" — allow switching prep when that round is already done.
+      const betweenRoundsAfterBingo = curRound?.status === 'completed';
+      if (gameState === 'playing' && !betweenRoundsAfterBingo) {
         window.alert('End or pause the live game before switching which round you are prepping.');
         return;
       }
