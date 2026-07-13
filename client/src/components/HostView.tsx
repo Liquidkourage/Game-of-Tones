@@ -9417,7 +9417,7 @@ const HostView: React.FC = () => {
       if (bingoVerificationCount > 0) return 'Bingo call waiting — verify it below.';
       return gamePaused
         ? 'Paused — playback and the displays hold until you resume.'
-        : 'Clips auto-advance. Verify bingo calls as they come in.';
+        : '';
     }
     if (gameState === 'ended') {
       return getNextPlannedRound() >= 0
