@@ -11759,7 +11759,7 @@ const HostView: React.FC = () => {
                 onBingoColumnLettersChange={updateBingoColumnLetters}
                 maxPlayerBingoCards={maxPlayerBingoCards}
                 onMaxPlayerBingoCardsChange={updateMaxPlayerBingoCards}
-                maxPlayerBingoCardsLocked={gameState === 'playing'}
+                maxPlayerBingoCardsLocked={gameState === 'playing' || gamePaused}
               />
               </div>
             ) : null}
@@ -12355,6 +12355,15 @@ const HostView: React.FC = () => {
               ) : null}
               <p style={{ color: '#ccc', fontSize: '0.9rem' }}>
                 Pattern: <strong>{pendingVerification.winningPatternType || pendingVerification.requiredPattern}</strong>
+                {Number(pendingVerification.cardCount) > 1 ? (
+                  <>
+                    {' · '}
+                    Card{' '}
+                    <strong>
+                      {pendingVerification.cardIndex || 1}/{pendingVerification.cardCount}
+                    </strong>
+                  </>
+                ) : null}
               </p>
               {bingoVerificationBehindCount > 0 ? (
                 <p

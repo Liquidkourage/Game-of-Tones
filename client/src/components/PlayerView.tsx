@@ -1121,7 +1121,7 @@ const PlayerView: React.FC = () => {
       setBingoCards((prev) => {
         if (!prev.length) return prev;
         const targetIdx = cardId
-          ? prev.findIndex((c) => c.cardId === cardId || c.id === cardId)
+          ? prev.findIndex((c) => c.cardId === cardId)
           : 0;
         const i = targetIdx >= 0 ? targetIdx : 0;
         const card = prev[i];
@@ -1193,7 +1193,12 @@ const PlayerView: React.FC = () => {
 
     newSocket.on('pattern-complete', (data: any) => {
       console.log('Pattern complete:', data);
-      setGameState(prev => ({ ...prev, hasBingo: true }));
+      if (data?.hasPattern === false) {
+        setGameState((prev) => ({ ...prev, hasBingo: false }));
+        setBingoMessage('');
+        return;
+      }
+      setGameState((prev) => ({ ...prev, hasBingo: true }));
       setBingoMessage('🎯 BINGO PATTERN READY! Hold button to call it!');
       setTimeout(() => setBingoMessage(''), 5000);
     });

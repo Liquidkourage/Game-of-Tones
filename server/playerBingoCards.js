@@ -50,7 +50,8 @@ function findBingoCardInList(cardsOrCard, cardId) {
   if (!list.length) return null;
   if (cardId == null || cardId === '') return list[0];
   const id = String(cardId);
-  return list.find((c) => c.cardId === id || c.id === id) || null;
+  // Match stable cardId only — every card shares player id as `id`, so that cannot disambiguate.
+  return list.find((c) => c.cardId === id) || null;
 }
 
 /** Persist shape: single card (legacy) or { cards: [...] }. */
