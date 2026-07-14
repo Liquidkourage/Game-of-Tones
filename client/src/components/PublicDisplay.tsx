@@ -2738,7 +2738,11 @@ const PublicDisplay: React.FC = () => {
       try {
         const n = data?.playerName ? String(data.playerName) : '';
         if (n) {
-          setRemoteHybridNotice(`${n} completed the pattern online — round continues until an in-person win`);
+          const msg =
+            data?.reason === 'prior_session_win'
+              ? `${n} completed the pattern again — already won this event; round continues`
+              : `${n} completed the pattern online — round continues until an in-person win`;
+          setRemoteHybridNotice(msg);
           setTimeout(() => setRemoteHybridNotice(''), 6000);
         }
       } catch {}

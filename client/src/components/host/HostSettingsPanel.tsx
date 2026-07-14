@@ -3,7 +3,7 @@ import { Download, Link2 } from 'lucide-react';
 import HostActivityFeed from './HostActivityFeed';
 import HostEventActivationBar from './HostEventActivationBar';
 import type { HostActivityEntry } from '../../host/hostActivityLog';
-import { DEFAULT_PLAYLIST_TITLE_FLAGS } from '../../utils/hostPreferences';
+import { DEFAULT_PLAYLIST_TITLE_FLAGS, type BingoWinPolicy } from '../../utils/hostPreferences';
 import type { PublicDisplayTitleRevealMode } from '../../utils/publicDisplayTitleReveal';
 
 type HostSettingsPanelProps = {
@@ -13,6 +13,8 @@ type HostSettingsPanelProps = {
   onExportEventRecap: () => void;
   hybridInPersonPlusOnline: boolean;
   onHybridChange: (v: boolean) => void;
+  bingoWinPolicy: BingoWinPolicy;
+  onBingoWinPolicyChange: (v: BingoWinPolicy) => void;
   snippetLength: number;
   onSnippetLengthChange: (n: number) => void;
   randomStarts: 'none' | 'early' | 'random';
@@ -40,6 +42,8 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
   onExportEventRecap,
   hybridInPersonPlusOnline,
   onHybridChange,
+  bingoWinPolicy,
+  onBingoWinPolicyChange,
   snippetLength,
   onSnippetLengthChange,
   randomStarts,
@@ -117,6 +121,32 @@ const HostSettingsPanel: React.FC<HostSettingsPanelProps> = ({
             <strong>Hybrid</strong>
           </span>
         </label>
+        <fieldset className="host-host-prefs__field">
+          <legend className="host-host-prefs__label">Official wins</legend>
+          <div className="host-host-prefs__radios">
+            {(
+              [
+                ['any_round', 'Any round'],
+                ['one_win', 'One win only'],
+              ] as const
+            ).map(([val, label]) => (
+              <label key={val} className="host-host-prefs__radio">
+                <input
+                  type="radio"
+                  name="settings-prefs-bingo-win-policy"
+                  checked={bingoWinPolicy === val}
+                  onChange={() => onBingoWinPolicyChange(val)}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          <span className="host-host-prefs__hint">
+            {bingoWinPolicy === 'one_win'
+              ? 'After a verified win, later pattern completes get a shout-out but do not pause the round.'
+              : 'Players can call an official (pausing) bingo each round.'}
+          </span>
+        </fieldset>
         <label className="host-host-prefs__field">
           <span className="host-host-prefs__label">Cards per player</span>
           <select

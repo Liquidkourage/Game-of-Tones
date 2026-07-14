@@ -1049,8 +1049,11 @@ const PlayerView: React.FC = () => {
       if (data.success) {
         setBingoStatus('success');
         setBingoMessage(
-          data.hybridUnofficial
-            ? data.message || 'Pattern complete! (Online — round continues for in-person prize.)'
+          data.hybridUnofficial || data.priorWinUnofficial
+            ? data.message ||
+              (data.priorWinUnofficial
+                ? 'Pattern complete! (You already won this event — round continues.)'
+                : 'Pattern complete! (Online — round continues for in-person prize.)')
             : data.message || 'BINGO! You win!'
         );
         setGameState(prev => ({ ...prev, hasBingo: true }));

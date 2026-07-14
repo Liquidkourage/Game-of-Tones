@@ -86,10 +86,12 @@ import {
   DEFAULT_PLAYLIST_TITLE_FLAGS,
   DEFAULT_BINGO_COLUMN_LETTERS,
   normalizeBingoColumnLetters,
+  normalizeBingoWinPolicy,
   normalizeMaxPlayerBingoCards,
   loadHostPreferences,
   saveHostPreferences,
   sanitizeHostPreferences,
+  type BingoWinPolicy,
   type HostPreferencesV1,
 } from '../utils/hostPreferences';
 import { isSpotifyJamDevice, pickPreferredPlaybackDevice } from '../utils/spotifyDevices';
@@ -1263,6 +1265,7 @@ const HostView: React.FC = () => {
   const [bingoColumnLetters, setBingoColumnLetters] = useState<string>(DEFAULT_BINGO_COLUMN_LETTERS);
   /** Cards dealt per player at round start (1–3); locked while live. */
   const [maxPlayerBingoCards, setMaxPlayerBingoCards] = useState(1);
+  const [bingoWinPolicy, setBingoWinPolicy] = useState<BingoWinPolicy>('any_round');
 
   // Handler to update public display font size
   const updatePublicDisplayFontSize = (newSize: number) => {
@@ -1311,6 +1314,13 @@ const HostView: React.FC = () => {
     setMaxPlayerBingoCards(next);
     if (socket && roomId) {
       socket.emit('set-max-player-bingo-cards', { roomId, maxCards: next });
+    }
+  };
+  const updateBingoWinPolicy = (raw: BingoWinPolicy) => {
+    const next = normalizeBingoWinPolicy(raw, 'any_round');
+    setBingoWinPolicy(next);
+    if (socket && roomId) {
+      socket.emit('set-bingo-win-policy', { roomId, bingoWinPolicy: next });
     }
   };
   /** Letters as a 5-tuple for rendering (falls back to BINGO until input is 5 chars). */
@@ -4074,11 +4084,20 @@ const HostView: React.FC = () => {
       if (payload?.maxPlayerBingoCards != null) {
         setMaxPlayerBingoCards(normalizeMaxPlayerBingoCards(payload.maxPlayerBingoCards, 1));
       }
+      if (payload?.bingoWinPolicy != null) {
+        setBingoWinPolicy(normalizeBingoWinPolicy(payload.bingoWinPolicy, 'any_round'));
+      }
     });
 
     newSocket.on('max-player-bingo-cards-updated', (data: any) => {
       if (data?.maxCards != null) {
         setMaxPlayerBingoCards(normalizeMaxPlayerBingoCards(data.maxCards, 1));
+      }
+    });
+
+    newSocket.on('bingo-win-policy-updated', (data: any) => {
+      if (data?.bingoWinPolicy != null) {
+        setBingoWinPolicy(normalizeBingoWinPolicy(data.bingoWinPolicy, 'any_round'));
       }
     });
 
@@ -9149,6 +9168,7 @@ const HostView: React.FC = () => {
       if (p.playlistTitleFlags != null) setPlaylistTitleFlags(p.playlistTitleFlags);
       if (p.bingoColumnLetters != null) setBingoColumnLetters(p.bingoColumnLetters);
       if (p.maxPlayerBingoCards != null) setMaxPlayerBingoCards(p.maxPlayerBingoCards);
+      if (p.bingoWinPolicy != null) setBingoWinPolicy(p.bingoWinPolicy);
     };
     apply(loadHostPreferences(hostId));
     hostPrefsHydratedRef.current = true;
@@ -9191,6 +9211,7 @@ const HostView: React.FC = () => {
       playlistTitleFlags,
       bingoColumnLetters: normalizeBingoColumnLetters(bingoColumnLetters) ?? DEFAULT_BINGO_COLUMN_LETTERS,
       maxPlayerBingoCards,
+      bingoWinPolicy,
     };
     saveHostPreferences(hostAccount.id, prefs);
     try {
@@ -9236,6 +9257,7 @@ const HostView: React.FC = () => {
     playlistTitleFlags,
     bingoColumnLetters,
     maxPlayerBingoCards,
+    bingoWinPolicy,
   ]);
 
   /** Sync venue Jam mode to server when pref or socket changes. */
@@ -9269,6 +9291,7 @@ const HostView: React.FC = () => {
     updatePublicDisplayLetterRevealToast(saved.publicDisplayLetterRevealToast ?? publicDisplayLetterRevealToast);
     updateBingoColumnLetters(saved.bingoColumnLetters ?? bingoColumnLetters);
     updateMaxPlayerBingoCards(saved.maxPlayerBingoCards ?? maxPlayerBingoCards);
+    updateBingoWinPolicy(saved.bingoWinPolicy ?? bingoWinPolicy);
     updatePublicDisplayCallListMode('auto');
     // eslint-disable-next-line react-hooks/exhaustive-deps -- room sync after socket ready / prefs hydrate
   }, [socket, roomId, hostAccount?.id, hostPrefsHydrationNonce]);
@@ -11741,6 +11764,8 @@ const HostView: React.FC = () => {
                     /* ignore */
                   }
                 }}
+                bingoWinPolicy={bingoWinPolicy}
+                onBingoWinPolicyChange={updateBingoWinPolicy}
                 snippetLength={snippetLength}
                 onSnippetLengthChange={handleSnippetLengthChange}
                 randomStarts={randomStarts}

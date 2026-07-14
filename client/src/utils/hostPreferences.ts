@@ -3,6 +3,8 @@ import {
   type PublicDisplayTitleRevealMode,
 } from './publicDisplayTitleReveal';
 
+export type BingoWinPolicy = 'any_round' | 'one_win';
+
 export type HostPreferencesV1 = {
   v: 1;
   snippetLength: number;
@@ -19,6 +21,12 @@ export type HostPreferencesV1 = {
   bingoColumnLetters: string;
   /** How many bingo cards each player is dealt at round start (1–3). Default 1. */
   maxPlayerBingoCards: number;
+  /**
+   * any_round — each Start Game, players can win officially again.
+   * one_win — only one official (pausing) win per player per event; later pattern completes
+   * get acknowledgment without pausing the round (same shape as hybrid online bingo).
+   */
+  bingoWinPolicy: BingoWinPolicy;
 };
 
 /** Clamp host cards-per-player to 1–3. */
@@ -26,6 +34,10 @@ export function normalizeMaxPlayerBingoCards(raw: unknown, fallback = 1): number
   const n = Math.round(Number(raw));
   if (!Number.isFinite(n)) return fallback;
   return Math.min(3, Math.max(1, n));
+}
+
+export function normalizeBingoWinPolicy(raw: unknown, fallback: BingoWinPolicy = 'any_round'): BingoWinPolicy {
+  return raw === 'one_win' || raw === 'any_round' ? raw : fallback;
 }
 
 export const DEFAULT_PLAYLIST_TITLE_FLAGS = 'GoT, Game of Tones';
@@ -58,6 +70,7 @@ export function defaultHostPreferences(): HostPreferencesV1 {
     playlistTitleFlags: DEFAULT_PLAYLIST_TITLE_FLAGS,
     bingoColumnLetters: DEFAULT_BINGO_COLUMN_LETTERS,
     maxPlayerBingoCards: 1,
+    bingoWinPolicy: 'any_round',
   };
 }
 
@@ -103,6 +116,10 @@ export function sanitizeHostPreferences(raw: unknown): Partial<HostPreferencesV1
       maxPlayerBingoCards:
         parsed.maxPlayerBingoCards != null
           ? normalizeMaxPlayerBingoCards(parsed.maxPlayerBingoCards, 1)
+          : undefined,
+      bingoWinPolicy:
+        parsed.bingoWinPolicy === 'one_win' || parsed.bingoWinPolicy === 'any_round'
+          ? parsed.bingoWinPolicy
           : undefined,
     };
 }

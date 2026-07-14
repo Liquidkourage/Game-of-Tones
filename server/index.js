@@ -499,6 +499,14 @@ function maxPlayerBingoCardsForRoom(room) {
   return playerBingoCards.normalizeMaxPlayerBingoCards(room?.maxPlayerBingoCards, 1);
 }
 
+function normalizeBingoWinPolicy(raw, fallback = 'any_round') {
+  return raw === 'one_win' || raw === 'any_round' ? raw : fallback;
+}
+
+function bingoWinPolicyForRoom(room) {
+  return normalizeBingoWinPolicy(room?.bingoWinPolicy, 'any_round');
+}
+
 async function recordPlayerDataJoin(room, player, preferences) {
   if (!db || !player?.clientId || !room?.id) return;
   try {
@@ -2446,13 +2454,55 @@ function clearPublicDisplaySessionState(room) {
   room.lastDisplayWinner = null;
 }
 
-/** Clear per-player bingo-call locks so a prior-round winner can call again. */
+/** Clear per-player bingo-call locks so a player can call again this round. */
 function clearPlayerBingoCallState(room) {
   if (!room?.players) return;
   room.players.forEach((player) => {
     player.hasBingo = false;
     player.patternComplete = false;
   });
+}
+
+/** Clear official win flags (any_round mode / end of event). */
+function clearPlayerSessionBingoWins(room) {
+  if (!room?.players) return;
+  room.players.forEach((player) => {
+    player.hasOfficialBingoWin = false;
+  });
+}
+
+/**
+ * Unofficial pattern complete: celebrate for the player, notify the room, do not pause.
+ * Used for hybrid online players and one-win prior winners.
+ */
+function emitUnofficialBingoAck(io, room, roomId, socket, player, validationResult, reason) {
+  player.hasBingo = true;
+  const isPriorWin = reason === 'prior_session_win';
+  socket.emit('bingo-result', {
+    success: true,
+    hybridUnofficial: reason === 'hybrid_remote',
+    priorWinUnofficial: isPriorWin,
+    message: isPriorWin
+      ? 'You completed the pattern! (You already won this event — the round continues.)'
+      : 'You completed the pattern! (Online — the round continues until an in-person player wins.)',
+    awaitingVerification: false,
+    isWinner: false,
+  });
+  io.to(roomId).emit('bingo-remote-unofficial', {
+    playerId: socket.id,
+    playerName: player.name,
+    patternType: validationResult.type || room.pattern,
+    timestamp: Date.now(),
+    reason,
+  });
+  routineServerLog(
+    isPriorWin
+      ? `🏅 Prior-winner unofficial bingo for ${player.name} (one_win policy)`
+      : `🌐 Remote hybrid bingo (unofficial) for ${player.name}`,
+  );
+  if (player.playerUserId != null) {
+    void playerAccountsStore.recordBingoCalled(db, player.playerUserId, playerStatsContext(room, player));
+  }
 }
 
 /** Wipe pool layout + card caches when advancing rounds (reset-game / saved-round start). */
@@ -2765,6 +2815,7 @@ function publicDisplayRoomStateExtras(room) {
     lastDisplayWinner: room.lastDisplayWinner || null,
     bingoColumnLetters: bingoColumnLettersForRoom(room),
     maxPlayerBingoCards: maxPlayerBingoCardsForRoom(room),
+    bingoWinPolicy: bingoWinPolicyForRoom(room),
   };
 }
 
@@ -4453,6 +4504,7 @@ io.on('connection', (socket) => {
         publicDisplayTitleRevealMode: DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE,
         publicDisplayLetterRevealToast: true,
         maxPlayerBingoCards: 1,
+        bingoWinPolicy: 'any_round',
         createdAt: new Date().toISOString()
       };
       rooms.set(roomId, newRoom);
@@ -4519,6 +4571,9 @@ io.on('connection', (socket) => {
               p.maxPlayerBingoCards,
               1,
             );
+          }
+          if (p.bingoWinPolicy === 'one_win' || p.bingoWinPolicy === 'any_round') {
+            room.bingoWinPolicy = p.bingoWinPolicy;
           }
           routineServerLog(
             `🔤 Seeded projector defaults from saved host prefs for room ${roomId} (letter reveal ${letterRevealIntervalSecForRoom(room)}s)`,
@@ -4603,6 +4658,7 @@ io.on('connection', (socket) => {
       name: playerName,
       isHost: effectiveIsHost,
       hasBingo: priorPlayer?.hasBingo === true,
+      hasOfficialBingoWin: priorPlayer?.hasOfficialBingoWin === true,
       clientId: clientId || null,
       /** false = joined as remote/online when host enables hybrid mode */
       inPerson,
@@ -5412,6 +5468,24 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Host: official bingo win policy (any_round | one_win)
+  socket.on('set-bingo-win-policy', (data = {}) => {
+    try {
+      const { roomId, bingoWinPolicy } = data;
+      const room = rooms.get(roomId);
+      if (!room) return;
+      const isCurrentHost =
+        room.host === socket.id || (room.players.get(socket.id) && room.players.get(socket.id).isHost);
+      if (!isCurrentHost) return;
+      const next = normalizeBingoWinPolicy(bingoWinPolicy, bingoWinPolicyForRoom(room));
+      room.bingoWinPolicy = next;
+      io.to(roomId).emit('bingo-win-policy-updated', { bingoWinPolicy: next });
+      routineServerLog(`🏅 Bingo win policy for room ${roomId}: ${next}`);
+    } catch (e) {
+      console.error('❌ Error setting bingo win policy:', e?.message || e);
+    }
+  });
+
   // Host: cards per player (1–3). Locked while a round is live / paused for verification.
   socket.on('set-max-player-bingo-cards', (data = {}) => {
     try {
@@ -5497,32 +5571,28 @@ io.on('connection', (socket) => {
 
     const hybridMode = !!room.hybridInPersonPlusOnline;
     const isRemotePlayer = hybridMode && player.inPerson === false;
+    const oneWinOnly = bingoWinPolicyForRoom(room) === 'one_win';
+    const alreadyWonSession = player.hasOfficialBingoWin === true;
+    const treatAsUnofficial =
+      isRemotePlayer || (oneWinOnly && alreadyWonSession && !isRemotePlayer);
 
-    if (isRemotePlayer) {
+    if (treatAsUnofficial) {
       if (validationResult.valid) {
-        player.hasBingo = true;
-        socket.emit('bingo-result', {
-          success: true,
-          hybridUnofficial: true,
-          message: 'You completed the pattern! (Online — the round continues until an in-person player wins.)',
-          awaitingVerification: false,
-          isWinner: false
-        });
-        io.to(roomId).emit('bingo-remote-unofficial', {
-          playerId: socket.id,
-          playerName: player.name,
-          patternType: validationResult.type || room.pattern,
-          timestamp: Date.now()
-        });
-        routineServerLog(`🌐 Remote hybrid bingo (unofficial) for ${player.name}`);
-        if (player.playerUserId != null) {
-          void playerAccountsStore.recordBingoCalled(db, player.playerUserId, playerStatsContext(room, player));
-        }
+        emitUnofficialBingoAck(
+          io,
+          room,
+          roomId,
+          socket,
+          player,
+          validationResult,
+          isRemotePlayer ? 'hybrid_remote' : 'prior_session_win',
+        );
       } else {
         socket.emit('bingo-result', {
           success: false,
           reason: validationResult.reason || 'Pattern not complete or invalid marks',
-          hybridUnofficial: true
+          hybridUnofficial: isRemotePlayer,
+          priorWinUnofficial: !isRemotePlayer,
         });
       }
       return;
@@ -5894,6 +5964,7 @@ io.on('connection', (socket) => {
     if (approved) {
       // APPROVED: Confirm the win and resume/end game
       routineServerLog(`✅ Host approved bingo for ${player.name}`);
+      player.hasOfficialBingoWin = true;
       
       // Current song already marked as played during bingo call
       
@@ -6253,10 +6324,8 @@ io.on('connection', (socket) => {
     clearPublicDisplaySessionState(room);
     
     // Reset all player bingo status but keep their cards
-    room.players.forEach((player) => {
-      player.hasBingo = false;
-      player.patternComplete = false; // Reset pattern completion flag
-    });
+    clearPlayerBingoCallState(room);
+    clearPlayerSessionBingoWins(room);
     playerBingoCards.forEachBingoCardInRoomMaps(room, resetBingoCardMarks);
     
     // Notify all clients of the restart
@@ -6379,6 +6448,9 @@ io.on('connection', (socket) => {
     
     // Reset all player states but keep them in the room
     clearPlayerBingoCallState(room);
+    if (bingoWinPolicyForRoom(room) === 'any_round') {
+      clearPlayerSessionBingoWins(room);
+    }
     room.players.forEach((player) => {
       player.bingoCard = null; // Will be regenerated with new playlists
     });
@@ -6459,6 +6531,8 @@ io.on('connection', (socket) => {
     }
     
     clearPublicDisplaySessionState(room);
+    clearPlayerBingoCallState(room);
+    clearPlayerSessionBingoWins(room);
     
     // Notify all clients that the entire game session has ended
     io.to(roomId).emit('game-session-ended', { 
@@ -6642,6 +6716,9 @@ io.on('connection', (socket) => {
       room.bingoVerificationQueue = [];
       clearPublicDisplaySessionState(room);
       clearPlayerBingoCallState(room);
+      if (bingoWinPolicyForRoom(room) === 'any_round') {
+        clearPlayerSessionBingoWins(room);
+      }
       room.bingoCards = new Map();
       room.clientCards = new Map();
       room.currentSong = null;
@@ -6721,8 +6798,11 @@ io.on('connection', (socket) => {
         room.bingoVerificationQueue = [];
         room.winners = [];
         // Hosts often Start Game for the next planned round without start-next-round;
-        // never carry a prior-round win lock into this start.
+        // never carry a prior-round call lock into this start. Session wins depend on policy.
         clearPlayerBingoCallState(room);
+        if (bingoWinPolicyForRoom(room) === 'any_round') {
+          clearPlayerSessionBingoWins(room);
+        }
         clearPublicDisplaySessionState(room);
         room.currentSongIndex = 0;
         room.currentSong = null;
@@ -7032,6 +7112,7 @@ io.on('connection', (socket) => {
           publicDisplayTitleRevealMode: DEFAULT_PUBLIC_DISPLAY_TITLE_REVEAL_MODE,
           publicDisplayLetterRevealToast: true,
           maxPlayerBingoCards: 1,
+          bingoWinPolicy: 'any_round',
         };
         rooms.set(roomId, newRoom);
         socket.join(roomId);
@@ -7128,6 +7209,7 @@ io.on('connection', (socket) => {
       room.finalizedPlaylists = undefined;
       clearPublicDisplaySessionState(room);
       clearRoundScopedRoomState(room, roomId, { resetPlayerCardState: true });
+      clearPlayerSessionBingoWins(room);
       io.to(roomId).emit('game-reset', { roomId, clearPool: true });
       io.to(roomId).emit('round-pool-cleared', { roomId });
       io.to(roomId).emit('game-restarted', {
@@ -13053,6 +13135,7 @@ app.post('/api/host/rooms', async (req, res) => {
         customPattern: undefined,
         patternComposite: undefined,
         maxPlayerBingoCards: 1,
+        bingoWinPolicy: 'any_round',
         createdAt: new Date().toISOString(),
       };
       rooms.set(code, newRoom);
