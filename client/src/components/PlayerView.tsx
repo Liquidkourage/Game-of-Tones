@@ -732,6 +732,7 @@ const PlayerView: React.FC = () => {
       setGameState((prev) => ({
         ...prev,
         isPlaying: true,
+        hasBingo: false,
         pattern: data?.pattern || 'full_card',
         customPattern:
           data?.pattern === 'custom' && Array.isArray(data?.customMask) && data.customMask.length > 0
@@ -752,6 +753,8 @@ const PlayerView: React.FC = () => {
               customMatchAllowMirror: false,
             }),
       }));
+      setBingoStatus('idle');
+      setBingoMessage('');
       // Reset songs played counter when game starts
       setSongsPlayed(0);
       // CRITICAL: Reset playedSongIds to empty array (server will sync via room-state)

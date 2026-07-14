@@ -2446,6 +2446,15 @@ function clearPublicDisplaySessionState(room) {
   room.lastDisplayWinner = null;
 }
 
+/** Clear per-player bingo-call locks so a prior-round winner can call again. */
+function clearPlayerBingoCallState(room) {
+  if (!room?.players) return;
+  room.players.forEach((player) => {
+    player.hasBingo = false;
+    player.patternComplete = false;
+  });
+}
+
 /** Wipe pool layout + card caches when advancing rounds (reset-game / saved-round start). */
 function clearRoundScopedRoomState(room, roomId, opts = {}) {
   if (!room) return;
@@ -2469,10 +2478,10 @@ function clearRoundScopedRoomState(room, roomId, opts = {}) {
     void clearPlayerDataForRoom(roomId);
   }
 
+  // Always unlock bingo calls when wiping round scope (even if card refs are kept briefly).
+  clearPlayerBingoCallState(room);
   if (resetPlayerCardState && room.players) {
     room.players.forEach((player) => {
-      player.hasBingo = false;
-      player.patternComplete = false;
       player.bingoCard = null;
     });
   }
@@ -6369,9 +6378,8 @@ io.on('connection', (socket) => {
     room.fiveByFifteenMeta = {};
     
     // Reset all player states but keep them in the room
+    clearPlayerBingoCallState(room);
     room.players.forEach((player) => {
-      player.hasBingo = false;
-      player.patternComplete = false;
       player.bingoCard = null; // Will be regenerated with new playlists
     });
     
@@ -6633,6 +6641,7 @@ io.on('connection', (socket) => {
       room.calledSongIds = [];
       room.bingoVerificationQueue = [];
       clearPublicDisplaySessionState(room);
+      clearPlayerBingoCallState(room);
       room.bingoCards = new Map();
       room.clientCards = new Map();
       room.currentSong = null;
@@ -6710,6 +6719,10 @@ io.on('connection', (socket) => {
         // Initialize call history and round
         room.calledSongIds = [];
         room.bingoVerificationQueue = [];
+        room.winners = [];
+        // Hosts often Start Game for the next planned round without start-next-round;
+        // never carry a prior-round win lock into this start.
+        clearPlayerBingoCallState(room);
         clearPublicDisplaySessionState(room);
         room.currentSongIndex = 0;
         room.currentSong = null;
