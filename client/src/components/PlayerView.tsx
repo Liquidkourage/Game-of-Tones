@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useSearchParams } from 'react-router-dom';
@@ -185,7 +185,11 @@ const PlayerView: React.FC = () => {
   const longPressTimer = useRef<number | null>(null);
   const hoverTooltipTimer = useRef<number | null>(null);
   const suppressNextClickRef = useRef(false);
-  const cardGridRef = useRef<HTMLDivElement | null>(null);
+  /** Grid node as state so text-fit re-runs after AnimatePresence remounts (multi-card). */
+  const [cardGridEl, setCardGridEl] = useState<HTMLDivElement | null>(null);
+  const bindCardGridRef = useCallback((node: HTMLDivElement | null) => {
+    setCardGridEl(node);
+  }, []);
   const [longPressTooltip, setLongPressTooltip] = useState<{
     title: string;
     artist: string;
@@ -1305,12 +1309,12 @@ const PlayerView: React.FC = () => {
   }, [cardTextFitSignature]);
 
   useLayoutEffect(() => {
-    if (!bingoCard || !cardGridRef.current) {
+    if (!bingoCard || !cardGridEl) {
       setCardTextFitReady(false);
       return undefined;
     }
 
-    const gridEl = cardGridRef.current;
+    const gridEl = cardGridEl;
     let frame = 0;
     let cancelled = false;
     let fitGeneration = 0;
@@ -1572,7 +1576,7 @@ const PlayerView: React.FC = () => {
       resizeObserver.disconnect();
       gridEl.closest<HTMLElement>('.player-container')?.removeAttribute('data-fit-measuring');
     };
-  }, [cardTextFitSignature, visualViewportHeightPx, compactCardCells]);
+  }, [cardTextFitSignature, visualViewportHeightPx, compactCardCells, cardGridEl]);
 
   // Keep screen awake during game using Wake Lock API
   useEffect(() => {
@@ -2235,7 +2239,7 @@ const PlayerView: React.FC = () => {
         <div className="bingo-column-headers" aria-hidden="true">
           {headerCells}
         </div>
-        <div ref={cardGridRef} className="bingo-card-grid">
+        <div ref={bindCardGridRef} className="bingo-card-grid">
           {bingoCard.squares.map((square) => (
             <motion.div
               key={square.position}
